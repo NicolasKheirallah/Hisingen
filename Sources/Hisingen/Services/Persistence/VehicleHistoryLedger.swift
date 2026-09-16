@@ -255,96 +255,47 @@ final class VehicleHistoryLedger: Sendable {
 
     func batteryHealthHistory(for vin: String, limit: Int = 50) -> [BatteryHealthRecord] {
         let query = """
-        SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
+        SELECT \(HistoryRowDecoder.Columns.batteryHealth)
         FROM battery_health_history
-        WHERE vin = ? AND measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')
+        WHERE vin = ? AND \(BatteryHealthRecord.measurementSourceFilter)
         ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [BatteryHealthRecord] in
-            var records: [BatteryHealthRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2),
-                      let odo = stmt.columnDouble(at: 3),
-                      let soh = stmt.columnDouble(at: 4),
-                      let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6),
-                      let source = stmt.columnText(at: 7) else { continue }
-                records.append(BatteryHealthRecord(
-                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
-                    measurementSource: source
-                ))
-            }
-            return records
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
         }) ?? []
     }
 
     func recentAirQuality(for vin: String, limit: Int = 200, since: Date? = nil) -> [AirQualityRecord] {
         let dateClause = since == nil ? "" : " AND timestamp >= ?"
         let query = """
-        SELECT id, vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent
+        SELECT \(HistoryRowDecoder.Columns.airQuality)
         FROM air_quality_history WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
-        } process: { stmt -> [AirQualityRecord] in
-            var records: [AirQualityRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                records.append(AirQualityRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    airQualityIndex: stmt.columnDouble(at: 3),
-                    particulateMatter25: stmt.columnDouble(at: 4),
-                    particulateMatter10: stmt.columnDouble(at: 5),
-                    filterRemainingPercent: stmt.columnDouble(at: 6)
-                ))
-            }
-            return records
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality)
         }) ?? []
     }
 
     func recentTelemetry(for vin: String, limit: Int = 50, since: Date? = nil) -> [HistoricalTelemetryRecord] {
-        let query = since != nil
-            ? """
-            SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit
-            FROM telemetry_logs WHERE vin = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT ?;
-            """
-            : """
-            SELECT id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit
-            FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
-            """
+        let dateClause = since == nil ? "" : " AND timestamp >= ?"
+        let query = """
+        SELECT \(HistoryRowDecoder.Columns.telemetry)
+        FROM telemetry_logs WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
+        """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(max(1, limit)), at: since != nil ? 3 : 2)
-        } process: { stmt -> [HistoricalTelemetryRecord] in
-            var records: [HistoricalTelemetryRecord] = []
-            while !Task.isCancelled, stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let rowVIN = stmt.columnText(at: 1),
-                      let timestamp = stmt.columnDate(at: 2) else { continue }
-                records.append(HistoricalTelemetryRecord(
-                    id: id, vin: rowVIN, timestamp: timestamp,
-                    odometerKm: stmt.columnDouble(at: 3),
-                    tripManualKm: stmt.columnDouble(at: 4),
-                    tripAutomaticKm: stmt.columnDouble(at: 5),
-                    averageConsumption: stmt.columnDouble(at: 6),
-                    averageConsumptionUnit: stmt.columnText(at: 10),
-                    ambientTemperatureCelsius: stmt.columnDouble(at: 7),
-                    latitude: stmt.columnDouble(at: 8),
-                    longitude: stmt.columnDouble(at: 9)
-                ))
-            }
-            return records
+        } process: { stmt in
+            // The largest table on the interactive path: a cancelled scan is discarded anyway.
+            HistoryRowDecoder.rowsUnlessCancelled(stmt, decode: HistoryRowDecoder.telemetry)
         }) ?? []
     }
 
@@ -352,7 +303,7 @@ final class VehicleHistoryLedger: Sendable {
         let filters = [vin == nil ? nil : "vin = ?", since == nil ? nil : "executed_at >= ?"].compactMap { $0 }
         let filterClause = filters.isEmpty ? "" : "WHERE \(filters.joined(separator: " AND ")) "
         let query = """
-        SELECT id, vin, command_name, status, executed_at, duration_ms, error_message
+        SELECT \(HistoryRowDecoder.Columns.commandAudit)
         FROM remote_commands_log \(filterClause)ORDER BY executed_at DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
@@ -360,22 +311,8 @@ final class VehicleHistoryLedger: Sendable {
             if let vin { try stmt.bindText(vin, at: bindIndex); bindIndex += 1 }
             if let since { try stmt.bindDate(since, at: bindIndex); bindIndex += 1 }
             try stmt.bindInt64(Int64(max(1, limit)), at: bindIndex)
-        } process: { stmt -> [RemoteCommandAuditRecord] in
-            var records: [RemoteCommandAuditRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnText(at: 0),
-                      let rowVIN = stmt.columnText(at: 1),
-                      let command = stmt.columnText(at: 2),
-                      let status = stmt.columnText(at: 3),
-                      let executedAt = stmt.columnDate(at: 4) else { continue }
-                records.append(RemoteCommandAuditRecord(
-                    id: id, vin: rowVIN, command: command, status: status,
-                    executedAt: executedAt,
-                    durationMs: stmt.columnInt64(at: 5).map(Int.init),
-                    errorMessage: stmt.columnText(at: 6)
-                ))
-            }
-            return records
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit)
         }) ?? []
     }
 
@@ -399,68 +336,40 @@ final class VehicleHistoryLedger: Sendable {
 
     func recentConnectivity(for vin: String, limit: Int = 200) -> [VehicleDatabase.ConnectivityRecord] {
         let query = """
-        SELECT id, vin, timestamp, network_type, signal_bars, wake_reason
+        SELECT \(HistoryRowDecoder.Columns.connectivity)
         FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [VehicleDatabase.ConnectivityRecord] in
-            var out: [VehicleDatabase.ConnectivityRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                out.append(VehicleDatabase.ConnectivityRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    networkType: stmt.columnText(at: 3),
-                    signalBars: stmt.columnInt64(at: 4).map(Int.init),
-                    wakeReason: stmt.columnText(at: 5)))
-            }
-            return out
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.connectivity)
         }) ?? []
     }
 
     func recentCabinClimate(for vin: String, limit: Int = 200) -> [VehicleDatabase.CabinClimateRecord] {
         let query = """
-        SELECT id, vin, timestamp, interior_c, requested_c
+        SELECT \(HistoryRowDecoder.Columns.cabinClimate)
         FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [VehicleDatabase.CabinClimateRecord] in
-            var out: [VehicleDatabase.CabinClimateRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2) else { continue }
-                out.append(VehicleDatabase.CabinClimateRecord(
-                    id: id, vin: vin, timestamp: ts,
-                    interiorCelsius: stmt.columnDouble(at: 3),
-                    requestedCelsius: stmt.columnDouble(at: 4)))
-            }
-            return out
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.cabinClimate)
         }) ?? []
     }
 
     func recentFuelEntries(for vin: String, limit: Int = 100) -> [VehicleDatabase.FuelEntry] {
         let query = """
-        SELECT id, vin, date, liters, price_per_liter, odometer_km
+        SELECT \(HistoryRowDecoder.Columns.fuelEntry)
         FROM fuel_entries WHERE vin = ? ORDER BY date DESC LIMIT ?;
         """
         return (try? sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [VehicleDatabase.FuelEntry] in
-            var out: [VehicleDatabase.FuelEntry] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let date = stmt.columnDate(at: 2), let liters = stmt.columnDouble(at: 3),
-                      let price = stmt.columnDouble(at: 4) else { continue }
-                out.append(VehicleDatabase.FuelEntry(id: id, vin: vin, date: date, liters: liters,
-                                                     pricePerLiter: price,
-                                                     odometerKm: stmt.columnDouble(at: 5)))
-            }
-            return out
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
         }) ?? []
     }
 
@@ -502,30 +411,18 @@ final class VehicleHistoryLedger: Sendable {
     }
 
     func exportBatteryHealthCSV(for vin: String? = nil) -> String {
-        let query = vin != nil
-            ? "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE vin = ? AND measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
-            : "SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source FROM battery_health_history WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate') ORDER BY timestamp DESC;"
+        let vinClause = vin == nil ? "" : "vin = ? AND "
+        let query = """
+        SELECT \(HistoryRowDecoder.Columns.batteryHealth)
+        FROM battery_health_history
+        WHERE \(vinClause)\(BatteryHealthRecord.measurementSourceFilter)
+        ORDER BY timestamp DESC;
+        """
 
         let records = (try? sql.query(sql: query) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }
-        } process: { stmt -> [BatteryHealthRecord] in
-            var list: [BatteryHealthRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2),
-                      let odo = stmt.columnDouble(at: 3),
-                      let soh = stmt.columnDouble(at: 4),
-                      let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6),
-                      let source = stmt.columnText(at: 7) else { continue }
-                list.append(BatteryHealthRecord(
-                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
-                    measurementSource: source
-                ))
-            }
-            return list
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
         }) ?? []
 
         var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"

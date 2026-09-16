@@ -1,7 +1,6 @@
 # Hisingen
 
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-000000.svg?style=flat-square&logo=apple&logoColor=white)](https://www.apple.com/macos/)
-[![Website](https://img.shields.io/badge/website-nicolaskheirallah.github.io%2FHisingen-2563eb.svg?style=flat-square)](https://nicolaskheirallah.github.io/Hisingen/)
 [![Homebrew Cask](https://img.shields.io/badge/homebrew-hisingen-f59e0b.svg?style=flat-square&logo=homebrew&logoColor=white)](https://github.com/nicolaskheirallah/homebrew-tap)
 [![CI](https://img.shields.io/github/actions/workflow/status/NicolasKheirallah/Hisingen/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/NicolasKheirallah/Hisingen/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/NicolasKheirallah/Hisingen?style=flat-square)](https://github.com/NicolasKheirallah/Hisingen/releases/latest)
@@ -13,7 +12,7 @@ Hisingen brings battery state of charge, range, charging speeds, latch states, c
 
 Built with AppKit and SwiftUI. No Electron, no telemetry middlemen, and no third-party cloud database sitting between you and your vehicle.
 
-[Website](https://nicolaskheirallah.github.io/Hisingen/) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
   <img src="assets/status-menubar-main-dashboard.png" width="460" alt="Hisingen menu bar vehicle overview on macOS">
@@ -52,7 +51,7 @@ without opening GitHub.
 
 ## Table of contents
 
-**Quick links:** [Quick start](#quick-start) · [Installation](#installation) · [Official website](https://nicolaskheirallah.github.io/Hisingen/) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg)
+**Quick links:** [Quick start](#quick-start) · [Installation](#installation) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg)
 
 **Features:** [Why Hisingen?](#why-hisingen) · [Polestar and Volvo](#polestar-and-volvo) · [What Hisingen can show](#what-hisingen-can-show) · [Remote controls](#remote-controls) · [Vehicle support](#vehicle-support) · [Product tour](#product-tour)
 
@@ -825,6 +824,28 @@ Nine themes are currently included:
 
 Monochrome Precision and Heritage Blue are independent themes based on publicly documented
 design principles from Polestar and Volvo Cars. They don't imply affiliation or endorsement.
+
+### Tabs & Cards
+
+Every card, section and banner in Hisingen is yours to place. **Settings → Tabs &
+Cards** lists them per tab, and each one can be switched off, moved up or down, dragged
+into a new position, or removed. The layout is stored once and read by the tabs
+themselves, so what that pane shows is what the panel draws.
+
+Hiding a card also stops Hisingen asking the vehicle for the data behind it — the
+provider request is gated on the same setting. Switching the card back on resumes the
+fetch. An install that predates this pane reads its existing feature toggles once as a
+starting layout, so a card that was already off does not reappear.
+
+**Tabs of your own.** *New tab* in the same pane creates a tab, names it and gives it an
+icon; *Add Cards…* places anything you want on it, from any of the shipped tabs. Cards
+are drawn by the same views the shipped tabs use, so the charging card behaves the same
+whether it is on Vehicle or on a tab you built. Cards that own a tab's own state — the
+History charts and the Info section bars — stay on the tab that gives them that state,
+and the pane names them rather than leaving them out silently.
+
+Any of Vehicle, Info, History and Controls can also be hidden from the tab bar.
+Settings is always there: it is where the list is managed.
 
 ### Panel size & content density
 

@@ -12,7 +12,7 @@ struct SettingsUpdatesCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "arrow.down.circle.fill", title: L10n.text("Hisingen Updates"), color: .blue)
+                CardHeader(symbol: "arrow.down.circle.fill", title: L10n.text("Hisingen Updates"), color: HisingenTheme.semanticActive)
                 Text(L10n.text("Updates are downloaded from Hisingen’s signed update feed and verified before installation."))
                     .hisType(.caption)
                     .hisCaptionLeading()

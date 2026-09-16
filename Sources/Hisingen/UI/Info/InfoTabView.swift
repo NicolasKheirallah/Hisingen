@@ -8,6 +8,17 @@ import SwiftUI
 /// are declared without `private`.
 @MainActor
 struct InfoTabView: View {
+
+    /// The reader's layout for this tab: what to draw, and in what order. The default draws
+    /// everything exactly as designed.
+    var layout: TabLayout = .everything
+
+    func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
+
+    func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
+        layout.ordered(entries, by: item)
+    }
+
     let state: VehicleState
     let database: VehicleDatabase
     let imageCache: CarImageCache
@@ -31,6 +42,38 @@ struct InfoTabView: View {
     @State var showAllCapabilities = false
     @State var reportError: String?
     @State private var isRefreshing = false
+    @State private var selectedCategory: InfoCategory = .all
+
+    enum InfoCategory: String, CaseIterable, Identifiable {
+        case all
+        case specs
+        case battery
+        case status
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all: return L10n.text("All")
+            case .specs: return L10n.text("Specs")
+            case .battery: return L10n.text("Battery")
+            case .status: return L10n.text("Status")
+            }
+        }
+
+        func matches(_ section: InfoSection) -> Bool {
+            switch self {
+            case .all:
+                return true
+            case .specs:
+                return section == .overview || section == .factoryBuild || section == .exterior || section == .interior || section == .software || section == .connectivity
+            case .battery:
+                return section == .powertrain || section == .batteryHealth || section == .batteryDiagnostics || section == .chargeLocations
+            case .status:
+                return section == .doors || section == .tyres || section == .fluids || section == .location || section == .weather || section == .trip || section == .airQuality || section == .service || section == .warranty || section == .capabilities || section == .activity || section == .freshness
+            }
+        }
+    }
 
     /// Declared explicitly: non-`private` `@State`/`@Environment` (needed so the split-out
     /// `InfoTabView+*.swift` extensions can reach them) otherwise perturbs the synthesized
@@ -42,7 +85,8 @@ struct InfoTabView: View {
         reverseGeocoder: ReverseGeocoder,
         onRefresh: @escaping () -> Void = {},
         onNavigateToHistory: @escaping () -> Void = {},
-        onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in }
+        onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
+        layout: TabLayout = .everything
     ) {
         self.state = state
         self.database = database
@@ -51,6 +95,7 @@ struct InfoTabView: View {
         self.onRefresh = onRefresh
         self.onNavigateToHistory = onNavigateToHistory
         self.onRemoteCommand = onRemoteCommand
+        self.layout = layout
     }
 
     /// Everything the Info tab derives from the local store lives on the Vehicle History
@@ -93,6 +138,42 @@ struct InfoTabView: View {
         }
     }
 
+
+    /// The composition identity of each section. The section list and the catalog are the same
+    /// inventory under two names, and this is the one place they are tied together.
+    static func item(for section: InfoSection) -> TabItemID {
+        switch section {
+        case .overview: return .infoOverview
+        case .doors: return .infoDoors
+        case .tyres: return .infoTyres
+        case .fluids: return .infoFluids
+        case .software: return .infoSoftware
+        case .location: return .infoLocation
+        case .weather: return .infoWeather
+        case .trip: return .infoTrip
+        case .powertrain: return .infoPowertrain
+        case .batteryHealth: return .infoBatteryHealth
+        case .batteryDiagnostics: return .infoBatteryDiagnostics
+        case .airQuality: return .infoAirQuality
+        case .connectivity: return .infoConnectivity
+        case .service: return .infoService
+        case .warranty: return .infoWarranty
+        case .exterior: return .infoExterior
+        case .interior: return .infoInterior
+        case .chargeLocations: return .infoChargeLocations
+        case .factoryBuild: return .infoFactoryBuild
+        case .capabilities: return .infoCapabilities
+        case .activity: return .infoActivity
+        case .freshness: return .infoFreshness
+        }
+    }
+
+    /// Sections this tab builds. Exposed so the catalog can verify completeness against it.
+    static var shippedSections: [InfoSection] {
+        InfoSection.allCases
+    }
+
+
     struct InfoSectionEntry: Identifiable {
         let id: InfoSection
         let view: AnyView
@@ -106,10 +187,21 @@ struct InfoTabView: View {
     }
 
     var body: some View {
-        let entries = makeSections()
+        let allEntries = makeSections()
+        let entries = selectedCategory == .all ? allEntries : allEntries.filter { selectedCategory.matches($0.id) }
         return ScrollViewReader { proxy in
             VStack(spacing: HisingenTheme.sectionSpacing) {
-                infoNavBar(proxy: proxy, entries: entries)
+                if draws(.infoNavBar) {
+                    infoNavBar(proxy: proxy, entries: allEntries)
+                    Picker("", selection: $selectedCategory) {
+                        ForEach(InfoCategory.allCases) { category in
+                            Text(category.title).tag(category)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityLabel(L10n.text("Info section category"))
+                }
                 ForEach(entries) { entry in
                     entry.view
                         .id(entry.id)
@@ -141,6 +233,9 @@ struct InfoTabView: View {
     private func makeSections() -> [InfoSectionEntry] {
         var out: [InfoSectionEntry] = []
         func add(_ id: InfoSection, _ view: some View) {
+            // The reader's layout decides what this tab draws. Hidden sections are simply not
+            // built, so a card switched off costs nothing to render.
+            guard draws(Self.item(for: id)) else { return }
             out.append(InfoSectionEntry(id: id, view: AnyView(view)))
         }
 
@@ -149,10 +244,11 @@ struct InfoTabView: View {
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {
             add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked,
-                                                 isTailgateLocked: ext.isTailgateLocked))
+                                                 isTailgateLocked: ext.isTailgateLocked,
+                                                 model: state.model))
         }
         if let tyres = state.maintenance.details?.tyres, !tyres.isEmpty {
-            add(.tyres, TireStatusCardView(tyres: tyres))
+            add(.tyres, TireStatusCardView(tyres: tyres, model: state.model))
         }
         add(.fluids, fluidsAndLightingCard)
         if softwareCardHasContent {
@@ -209,7 +305,9 @@ struct InfoTabView: View {
         } else {
             add(.activity, activityHistoryCard)
         }
-        return out
+        // The reader's order, when they have one. Sections the layout does not name — none by
+        // default — keep the position they were added in, after the ones it does.
+        return ordered(out, by: { Self.item(for: $0.id) })
     }
 
     /// The activity section's loading and empty states, matching the header the loaded card uses so

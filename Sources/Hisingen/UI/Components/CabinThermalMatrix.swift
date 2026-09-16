@@ -75,10 +75,10 @@ struct CabinThermalMatrix: View {
 
     private var activityBadgeColor: Color {
         switch activity {
-        case .heating: return .orange
-        case .cooling: return .blue
+        case .heating: return HisingenTheme.semanticWarning
+        case .cooling: return HisingenTheme.semanticActive
         case .ventilating: return .teal
-        case .active, .starting: return .green
+        case .active, .starting: return HisingenTheme.semanticGood
         case .idle, .unknown: return .secondary
         }
     }
@@ -120,7 +120,7 @@ struct CabinThermalMatrix: View {
         VStack(spacing: 4) {
             Image(systemName: symbol)
                 .hisType(.heading)
-                .foregroundStyle(active ? .orange : .secondary)
+                .foregroundStyle(active ? HisingenTheme.semanticWarning : .secondary)
             Text(title)
                 .hisType(.micro, weight: HisingenTheme.captionWeight)
                 .foregroundStyle(.secondary)
@@ -135,7 +135,7 @@ struct CabinThermalMatrix: View {
         .padding(.vertical, 6)
         // 3 % over two stacked materials is below the threshold of perception, so the matrix lost
         // its structure in exactly the state most of its cells are in. 8 % reads as a cell.
-        .background(active ? Color.orange.opacity(0.14) : Color.primary.opacity(0.08),
+        .background(active ? HisingenTheme.semanticWarning.opacity(0.14) : Color.primary.opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 6))
         .hisAnimation(Motion.stateChange, value: level)
     }

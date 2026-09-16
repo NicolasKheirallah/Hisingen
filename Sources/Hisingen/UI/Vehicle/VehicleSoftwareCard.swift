@@ -13,7 +13,7 @@ struct VehicleSoftwareCard: View {
             guard !state.isVolvo else { return nil }
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: .blue)
+                    CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
                     CapabilityBadge(title: L10n.text("Software status"), state: .unavailable)
                 }
             })
@@ -60,7 +60,7 @@ struct VehicleSoftwareCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: .blue)
+                CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 if updateInstallable {
                     Divider().opacity(HisingenTheme.dividerOpacity)
@@ -124,8 +124,8 @@ struct VehicleSoftwareCard: View {
             Divider().opacity(HisingenTheme.dividerOpacity)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: "clock.badge.exclamationmark").foregroundStyle(.orange).hisType(.caption)
-                    Text(L10n.text("Waiting for backend authorization")).hisType(.caption, weight: .medium).foregroundStyle(.orange)
+                    Image(systemName: "clock.badge.exclamationmark").foregroundStyle(HisingenTheme.semanticWarning).hisType(.caption)
+                    Text(L10n.text("Waiting for backend authorization")).hisType(.caption, weight: .medium).foregroundStyle(HisingenTheme.semanticWarning)
                 }
                 Text(L10n.text("The update has been announced but not yet authorized for download. Polestar releases major updates in batches. Your VIN may not be in the current cohort. The car downloads it automatically once the backend authorizes it."))
                     .hisType(.caption).foregroundStyle(.secondary)

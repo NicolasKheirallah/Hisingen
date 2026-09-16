@@ -36,7 +36,8 @@ struct VehicleHeroCard: View {
         let climate = state.climateStatus?.activity
         let engine = state.fuelSystem.isEngineRunning
         let fuel = state.fuelSystem.levelPercent
-        return "\(String(describing: locked))|\(state.energy.chargingState.displayName)|\(String(describing: climate))|\(String(describing: engine))|\(String(describing: fuel))"
+        let temp = state.climateStatus?.interiorTemperatureCelsius
+        return "\(String(describing: locked))|\(state.energy.chargingState.displayName)|\(String(describing: climate))|\(String(describing: engine))|\(String(describing: fuel))|\(String(describing: temp))"
     }
 
     private var heroImageData: Data? {
@@ -326,7 +327,7 @@ struct VehicleHeroCard: View {
             } else if state.powertrain.isCombustionOnly {
                 Pill(
                     text: state.fuelSystem.type ?? L10n.text("Combustion"),
-                    color: .orange,
+                    color: HisingenTheme.semanticWarning,
                     symbol: "fuelpump.fill"
                 )
                 .transition(.scale.combined(with: .opacity))
@@ -342,7 +343,7 @@ struct VehicleHeroCard: View {
             if state.fuelSystem.isEngineRunning == true {
                 Pill(
                     text: L10n.text("Engine Running"),
-                    color: .orange,
+                    color: HisingenTheme.semanticWarning,
                     symbol: "engine.combustion.fill"
                 )
                 .transition(.scale.combined(with: .opacity))
@@ -354,6 +355,14 @@ struct VehicleHeroCard: View {
                     text: climate.activity.displayName,
                     color: HisingenTheme.semanticActive,
                     symbol: "fan.fill"
+                )
+                .transition(.scale.combined(with: .opacity))
+            }
+            if let interior = state.climateStatus?.interiorTemperatureCelsius {
+                Pill(
+                    text: Format.temperature(celsius: interior, unit: preferences.temperatureUnit),
+                    color: .secondary,
+                    symbol: "thermometer.medium"
                 )
                 .transition(.scale.combined(with: .opacity))
             }

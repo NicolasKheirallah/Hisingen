@@ -132,7 +132,7 @@ struct DiagnosticLogExporterTests {
             databaseStats: ["sizeBytes": Int64(4096)])
         let output = String(decoding: data, as: UTF8.self)
 
-        #expect(output.contains("\"schemaVersion\" : 3"))
+        #expect(output.contains("\"schemaVersion\" : 4"))
         #expect(output.contains("\"refreshDiagnostics\""))
         #expect(output.contains("\"refreshAttempts\" : 12"))
         #expect(output.contains("\"commandConfirmation\""))
@@ -154,22 +154,16 @@ struct DiagnosticLogExporterTests {
 
     @Test
     func activeVDMSBackoffIsAvailableToTheDiagnosticExporter() throws {
-        let suite = "DiagnosticLogExporterTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let blockedUntil = now.addingTimeInterval(3_600)
-        defaults.set(
-            blockedUntil.timeIntervalSince1970,
-            forKey: "polestar_vdms_backoff_until_v2"
-        )
-        defaults.set("client-426", forKey: "polestar_vdms_backoff_reason_v1")
+        let backoffs = ProviderBackoffStore(database: .inMemory())
+        backoffs.block(PolestarAPI.discoveryBackoff, until: blockedUntil, reason: "client-426")
 
         let diagnostics = try #require(
-            PolestarAPI.vdmsDiscoveryDiagnostics(defaults: defaults, now: now)
+            PolestarAPI.vdmsDiscoveryDiagnostics(backoffs: backoffs, now: now)
         )
         #expect(diagnostics.blockedUntil == blockedUntil)
         #expect(diagnostics.reason == "client-426")
-        #expect(PolestarAPI.vdmsDiscoveryDiagnostics(defaults: defaults, now: blockedUntil) == nil)
+        #expect(PolestarAPI.vdmsDiscoveryDiagnostics(backoffs: backoffs, now: blockedUntil) == nil)
     }
 }

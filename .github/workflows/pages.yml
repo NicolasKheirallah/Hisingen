@@ -1,15 +1,28 @@
-name: Deploy website
+name: Deploy site
+
+# GitHub Pages hosts exactly two files, both of which are live production dependencies of the
+# shipped app. It is not a marketing site.
+#
+#   1. `oauth-callback.html` — Volvo requires an HTTPS OAuth redirect, and this URL is registered
+#      with the provider. `Sources/Hisingen/Services/API/VolvoAPI.swift` hardcodes it as the
+#      `redirect_uri`, so Volvo sign-in fails for every user if this stops being served. The file
+#      forwards the authorization result to the `hisingen://` scheme.
+#   2. `updates/appcast.xml` — the signed Sparkle feed `SUFeedURL` points at, so the app can
+#      discover updates. `release.yml` writes new revisions here and then dispatches this workflow.
+#
+# The previous marketing site and its Vite toolchain were removed. `site/` is now the Pages
+# artifact directly: two static files, no build step, no npm.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'website/**'
+      - 'site/**'
       - '.github/workflows/pages.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'website/**'
+      - 'site/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -23,30 +36,21 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: website/package-lock.json
-      - name: Install website dependencies
-        working-directory: website
-        run: npm ci
-      - name: Typecheck website
-        working-directory: website
-        run: npm run typecheck
-      - name: Build website
-        working-directory: website
-        run: npm run build
-      - name: Verify static entry points
-        working-directory: website
-        run: test -f dist/index.html && test -f dist/oauth-callback.html && test -f dist/robots.txt && test -f dist/sitemap.xml
+      # Both files are live dependencies of the shipped app, so a deploy that silently dropped one
+      # would break Volvo sign-in or the updater without failing anything else.
+      - name: Verify the live entry points are present
+        run: |
+          set -eu
+          test -f site/oauth-callback.html
+          test -f site/updates/appcast.xml
+          grep -q 'hisingen://oauth/volvo/callback' site/oauth-callback.html
+          grep -q '<rss' site/updates/appcast.xml
       - name: Configure Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -54,7 +58,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: website/dist
+          path: site
 
   deploy:
     if: github.event_name != 'pull_request'

@@ -231,7 +231,7 @@ struct ChargingCurveView: View {
                     Text(summaryText)
                         .hisType(.label, weight: .semibold)
                         .monospacedDigit()
-                        .foregroundStyle(curveMode == .power ? Color.green : HisingenTheme.accent)
+                        .foregroundStyle(curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent)
                         .hisTelemetryValue(summaryText, reduceMotion: reduceMotion)
                 }
 
@@ -247,7 +247,7 @@ struct ChargingCurveView: View {
                         if !observationGaps.isEmpty {
                             Label(L10n.format("%d observation gaps", observationGaps.count),
                                   systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(HisingenTheme.semanticWarning)
                         }
                     }
                     .hisType(.nano, weight: .medium)
@@ -320,7 +320,7 @@ struct ChargingCurveView: View {
                             let startX = xCoord(gap.startedAt, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan)
                             let endX = xCoord(gap.endedAt, horizontalInset: horizontalInset, chartWidth: chartWidth, timeStart: timeStart, totalSpan: totalSpan)
                             Rectangle()
-                                .fill(Color.orange.opacity(0.055))
+                                .fill(HisingenTheme.semanticWarning.opacity(0.055))
                                 .frame(width: max(2, endX - startX), height: chartHeight)
                                 .position(x: (startX + endX) / 2, y: verticalInset + chartHeight / 2)
                         }
@@ -406,7 +406,7 @@ struct ChargingCurveView: View {
                                 .foregroundStyle(.tertiary)
                             Text(Format.kilowatts(watts: peakWatts))
                                 .hisType(.label, weight: .bold)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(HisingenTheme.chartPositive)
                                 .hisTelemetryValue(peakWatts, reduceMotion: reduceMotion)
                         }
                         Spacer()
@@ -509,7 +509,7 @@ struct ChargingCurveView: View {
                     path.move(to: CGPoint(x: horizontalInset, y: avgY))
                     path.addLine(to: CGPoint(x: width - horizontalInset, y: avgY))
                 }
-                .stroke(Color.green.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                .stroke(HisingenTheme.chartPositive.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
             }
             .transition(.opacity)
         }
@@ -543,7 +543,7 @@ struct ChargingCurveView: View {
             .transition(.opacity)
         } else {
             Circle()
-                .fill(Color.green)
+                .fill(HisingenTheme.chartPositive)
                 .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
                 .frame(width: 7.5, height: 7.5)
                 .position(lastPowerPoint)
@@ -620,7 +620,7 @@ struct ChargingCurveView: View {
                         .addingClosedBottom(firstX: first.x, lastX: last.x, bottomY: bottomY)
                         .fill(
                             LinearGradient(
-                                colors: [Color.green.opacity(0.3), Color.green.opacity(0.02)],
+                                colors: [HisingenTheme.chartPositive.opacity(0.3), HisingenTheme.chartPositive.opacity(0.02)],
                                 startPoint: .top, endPoint: .bottom
                             )
                         )
@@ -628,10 +628,10 @@ struct ChargingCurveView: View {
 
                 smoothPath(points)
                     .stroke(
-                        Color.green,
+                        HisingenTheme.chartPositive,
                         style: StrokeStyle(lineWidth: curveMode == .dual ? 1.8 : 2.2, lineCap: .round, lineJoin: .round, dash: curveMode == .dual ? [4, 3] : [])
                     )
-                    .shadow(color: Color.green.opacity(0.35), radius: 3, y: 1)
+                    .shadow(color: HisingenTheme.chartPositive.opacity(0.35), radius: 3, y: 1)
             }
         }
     }
@@ -650,10 +650,10 @@ struct ChargingCurveView: View {
         .stroke(Color.primary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
 
         Circle()
-            .fill(curveMode == .power ? Color.green : HisingenTheme.accent)
+            .fill(curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent)
             .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
             .frame(width: 9, height: 9)
-            .shadow(color: (curveMode == .power ? Color.green : HisingenTheme.accent).opacity(0.6), radius: 4)
+            .shadow(color: (curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent).opacity(0.6), radius: 4)
             .position(info.point)
 
         HStack(spacing: 4) {
@@ -664,7 +664,7 @@ struct ChargingCurveView: View {
             if let watts = info.powerWatts, watts > 0 {
                 Text("· \(Format.kilowatts(watts: watts))")
                     .hisType(.nano, weight: .semibold)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(HisingenTheme.chartPositive)
             }
             Text("· " + Format.shortTime(date: info.date))
                 .hisType(.nano)

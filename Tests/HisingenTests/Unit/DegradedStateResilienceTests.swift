@@ -113,10 +113,8 @@ struct DegradedStateResilienceTests {
         let live = stateWithFullTelemetry()
         #expect(!(live.freshness.isCached))
         store.save(live)
-        // Persistence hands off to a detached storage pass; wait for it to land.
-        let stored = await awaitStored(timeout: 5) { store.snapshot(for: live.identity.vin) != nil }
-        #expect(stored, "snapshot never reached the database after save")
 
+        // The snapshot is durable when `save` returns, so this needs no polling.
         let restored = try #require(store.snapshot(for: live.identity.vin))
         #expect(restored.freshness.isCached)
         // Cached snapshots must not retain precise location data.
@@ -124,7 +122,7 @@ struct DegradedStateResilienceTests {
     }
 
     @Test
-    func testLegacyUserDefaultsSnapshotMigratesAndRedactsSensitiveFields() throws {
+    func testLegacySnapshotMigratesOnActivationAndRedactsSensitiveFields() throws {
         let suiteName = "HisingenTests.legacy-cache.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -134,7 +132,9 @@ struct DegradedStateResilienceTests {
         var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
 
         // Recreate the pre-clustered persisted layout: older releases wrote these flat
-        // keys, whereas current snapshots group them under fuel/service/trip objects.
+        // keys, whereas current snapshots group them under fuel/service/trip objects. The schema
+        // marker goes with them, because its absence is what makes this a pre-marker payload.
+        legacy.removeValue(forKey: "schemaVersion")
         legacy.removeValue(forKey: "fuelSystem")
         legacy.removeValue(forKey: "serviceInfo")
         legacy.removeValue(forKey: "tripComputer")
@@ -150,6 +150,14 @@ struct DegradedStateResilienceTests {
         defaults.set(cached, forKey: "cached_vehicle_snapshots_v1")
 
         let store = VehicleStateStore(defaults: defaults, database: database)
+
+        // The read is pure. Before the launch pass there is nothing in SQLite, and reading must
+        // not migrate the entry or erase the vehicle's tiers on the way – a read that writes is
+        // what made this file impossible to reason about.
+        #expect(store.snapshot(for: live.identity.vin) == nil)
+        #expect(defaults.data(forKey: "cached_vehicle_snapshots_v1") != nil)
+
+        store.activate()
         let migrated = try #require(store.snapshot(for: live.identity.vin))
         #expect(migrated.freshness.isCached)
         #expect(migrated.fuelSystem.levelPercent == 55.0)
@@ -159,9 +167,9 @@ struct DegradedStateResilienceTests {
         #expect(migrated.identity.ownerFirstName == nil)
         #expect(migrated.identity.registrationNo == nil)
 
-        let remainingData = try #require(defaults.data(forKey: "cached_vehicle_snapshots_v1"))
-        let remaining = try JSONDecoder().decode([String: VehicleState].self, from: remainingData)
-        #expect(remaining[live.identity.vin] == nil)
+        // The migration's last act is to drop the legacy blob rather than leave an empty one
+        // behind, so there is nothing stale left in the plist for a later launch to re-read.
+        #expect(defaults.data(forKey: "cached_vehicle_snapshots_v1") == nil)
         #expect(database.loadSnapshot(for: live.identity.vin)?.location == nil)
     }
 

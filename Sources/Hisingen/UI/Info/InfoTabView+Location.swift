@@ -121,7 +121,7 @@ extension InfoTabView {
         guard !locations.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Saved Charge Locations"), color: .blue)
+                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Saved Charge Locations"), color: HisingenTheme.semanticActive)
                 VStack(spacing: 8) {
                     ForEach(locations) { location in
                         VStack(alignment: .leading, spacing: 4) {
@@ -173,7 +173,7 @@ extension InfoTabView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: .blue)
+                    CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: HisingenTheme.semanticActive)
                     Spacer()
                     Menu {
                         Button {
@@ -206,8 +206,8 @@ extension InfoTabView {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3.5)
-                        .background(Color.blue.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Color.blue)
+                        .background(HisingenTheme.semanticActive.opacity(0.12), in: Capsule())
+                        .foregroundStyle(HisingenTheme.semanticActive)
                     }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
@@ -277,7 +277,7 @@ extension InfoTabView {
         case .pending:
             cleaningText = L10n.text("Pending")
             cleaningSymbol = "clock"
-            cleaningColor = .orange
+            cleaningColor = HisingenTheme.semanticWarning
         case .unknown:
             cleaningText = L10n.text("Unavailable")
             cleaningSymbol = "questionmark.circle"
@@ -367,11 +367,11 @@ extension InfoTabView {
                                 ProgressView(value: Double(filterLife), total: 100)
                                     .progressViewStyle(.linear)
                                     .frame(width: 60)
-                                    .tint(filterLife > 20 ? .teal : .orange)
+                                    .tint(filterLife > 20 ? .teal : HisingenTheme.semanticWarning)
                                     .hisAnimation(Motion.progress, value: filterLife)
                                 Text("\(filterLife)%")
                                     .hisType(.label, weight: .bold)
-                                    .foregroundStyle(filterLife > 20 ? Color.primary : Color.orange)
+                                    .foregroundStyle(filterLife > 20 ? Color.primary : HisingenTheme.semanticWarning)
                                     .hisTelemetryValue(filterLife, reduceMotion: reduceMotion)
                             }
                         }
@@ -437,7 +437,7 @@ extension InfoTabView {
                     .foregroundStyle(.teal)
                     .interpolationMethod(.monotone)
                     RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
-                        .foregroundStyle(.orange.opacity(0.35))
+                        .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.35))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
                 .chartYAxisLabel(L10n.text("AQI"))

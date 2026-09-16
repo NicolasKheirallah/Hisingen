@@ -2,12 +2,6 @@ import AppKit
 import Foundation
 import OSLog
 
-struct OptionalCapability<Value: Sendable>: Sendable {
-    let value: Value?
-    let unavailable: Bool
-    let unsupported: Bool
-}
-
 struct CapabilityCacheEntry {
     let value: (any Sendable)?
     let expiresAt: Date
@@ -66,16 +60,49 @@ actor PolestarAPI {
     let diagnosticLog: APIDiagnosticLogStore
     let keychain: KeychainStore
     let imageCache: CarImageCache
+    private var installedAlternateAccessTokenProvider = false
 
-    var accessToken: String?
-    var refreshToken: String?
-    var tokenExpiry: Date?
-    /// Lifetime advertised by the latest grant. Polestar commonly returns five-minute access
-    /// tokens, so a fixed five-minute renewal margin makes every caller refresh immediately.
-    /// The margin below scales with this value and keeps most of the token usable.
-    var tokenLifetime: TimeInterval = 0
-    var refreshTask: Task<TokenResponseDTO, Error>?
-    var refreshTaskID: UUID?
+    /// Installs the app/command grant as discovery's retry audience. Idempotent, and the
+    /// closure reads the command token lazily so it reflects whichever grant is current when
+    /// discovery runs rather than the one that existed at construction.
+    func installAlternateAccessTokenProviderIfNeeded() async {
+        guard !installedAlternateAccessTokenProvider else { return }
+        installedAlternateAccessTokenProvider = true
+        await grpc.setAlternateAccessTokenProvider { [weak self] in
+            await self?.freshCommandAccessToken()
+        }
+    }
+
+    /// The command grant's access token, but only while it is still valid. Discovery falls back
+    /// to this grant after the session grant is refused; presenting an expired one would replace
+    /// an informative 406 with a 401 (which the ladder surfaces immediately rather than retries).
+    func freshCommandAccessToken() -> String? {
+        guard let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 0,
+              let token = commandAccessToken, !token.isEmpty else { return nil }
+        return token
+    }
+
+    /// The session token lifecycle: renewal margin, single-flight grant, rotate-on-use
+    /// persistence, dead-grant classification. It stays private because it is confined to this
+    /// actor – the passthroughs below are the only way in, and they exist because the telemetry
+    /// and command extensions read the access token directly, and tests seed a near-expiry one.
+    private let tokens: TokenLifecycle
+    var accessToken: String? {
+        get { tokens.accessToken }
+        set { tokens.accessToken = newValue }
+    }
+    var refreshToken: String? {
+        get { tokens.refreshToken }
+        set { tokens.refreshToken = newValue }
+    }
+    var tokenExpiry: Date? {
+        get { tokens.tokenExpiry }
+        set { tokens.tokenExpiry = newValue }
+    }
+    var tokenLifetime: TimeInterval {
+        get { tokens.tokenLifetime }
+        set { tokens.tokenLifetime = newValue }
+    }
 
     var tokenEndpoint: URL?
     var authorizationEndpoint: URL?
@@ -103,13 +130,10 @@ actor PolestarAPI {
     func identity(for vin: String?) -> CarIdentity { vin.flatMap { identities[$0] } ?? .empty }
     var ownerFirstName: String?
     var market: String?
-    /// Set when the app-backend VDMS source rejects the request with a client error. VDMS only
-    /// enriches the primary discovery with cosmetic metadata, so it is skipped until this date
-    /// rather than retried on every discovery. The backoff is process-independent because
-    /// client-version and schema failures are not account-specific.
-    var vdmsDiscoveryBlockedUntil: Date?
-    private static let vdmsBackoffDefaultsKey = "polestar_vdms_backoff_until_v2"
-    private static let vdmsBackoffReasonDefaultsKey = "polestar_vdms_backoff_reason_v1"
+    /// Durable provider stand-downs: Polestar's secondary discovery source and Volvo's optional
+    /// endpoints share one owner, so an erase reaches them and a test can inject one. Internal so
+    /// the preparation tests can seed a stand-down without a transport round trip.
+    let backoffs: ProviderBackoffStore
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
     var capabilityBackoff: [String: [String: Date]] = [:]
@@ -133,20 +157,28 @@ actor PolestarAPI {
     }
 
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
-         preferences: PreferencesStore, diagnosticLog: APIDiagnosticLogStore = .shared) {
+         preferences: PreferencesStore, diagnosticLog: APIDiagnosticLogStore = .shared,
+         backoffs: ProviderBackoffStore = ProviderBackoffStore()) {
         self.keychain = keychain
+        self.backoffs = backoffs
         self.saveCommandToken = { try keychain.saveCommandSessionToken($0) }
         self.imageCache = imageCache
         self.preferences = preferences
         self.diagnosticLog = diagnosticLog
         self.grpc = PolestarGRPC(diagnosticLog: diagnosticLog)
+        self.tokens = TokenLifecycle(
+            policy: .init(renewalMargin: Self.tokenRenewalMargin(lifetime:)),
+            providerName: "Polestar",
+            logger: AppLog.logger("polestar-api"),
+            persist: { try keychain.saveSessionToken($0) },
+            isDeadGrant: { error in
+                if case PolestarError.authenticationRequired(.noStoredSession) = error { return true }
+                return false
+            }
+        )
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
         redirectDelegate = delegate
         session = Self.makeSession(delegate: delegate)
-        let vdmsEpoch = UserDefaults.standard.double(forKey: Self.vdmsBackoffDefaultsKey)
-        if vdmsEpoch > Date().timeIntervalSince1970 {
-            vdmsDiscoveryBlockedUntil = Date(timeIntervalSince1970: vdmsEpoch)
-        }
     }
 
     private struct OIDCDiscovery: Decodable {
@@ -462,109 +494,80 @@ actor PolestarAPI {
         let token = try await exchangeCode(code, verifier: verifier,
                                            clientID: oidcClientID, redirectURI: oidcRedirectURL)
         try requireSession(epoch)
-        try apply(token)
+        try tokens.adopt(TokenLifecycle.Grant(
+            accessToken: token.accessToken,
+            refreshToken: token.refreshToken,
+            expiresIn: TimeInterval(token.expiresIn)))
     }
 
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
     }
 
-    /// Returns early when another request has already replaced the token rejected by the
-    /// server. This closes the late-arrival race where a fan-out of 401 responses could each
-    /// force a separate refresh after the original single-flight task completed.
+    /// `replacing` is the token the server just refused. The lifecycle keeps it: when the session
+    /// no longer holds that token, another caller's grant already replaced it, which closes the
+    /// late-arrival race where a fan-out of 401 responses could each force a separate refresh
+    /// after the original single-flight grant completed.
     func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil) async throws {
         let requestEpoch = sessionEpoch
-        if force, let rejectedAccessToken, accessToken != rejectedAccessToken { return }
-        let renewalMargin = Self.tokenRenewalMargin(lifetime: tokenLifetime)
-        if !force, let expiry = tokenExpiry, accessToken != nil,
-           expiry.timeIntervalSinceNow >= renewalMargin { return }
-        if let refreshTask {
-            try await applyRefreshResult(from: refreshTask, requestEpoch: requestEpoch)
-            return
-        }
-        guard let tokenEndpoint, let refreshToken else {
-            throw PolestarError.authenticationRequired(.expiredSession)
-        }
-        var request = URLRequest(url: tokenEndpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.formBody([
-            "grant_type": "refresh_token",
-            "client_id": oidcClientID,
-            "refresh_token": refreshToken
-        ])
-        let tokenRequest = request
+        let reason: TokenLifecycle.Reason = force
+            ? .serverRefused(rejectedToken: rejectedAccessToken)
+            : .renewalWindow
+        // Captured before the closure runs so the grant does not read state the lifecycle owns;
+        // the missing-endpoint guard lives inside it, where a grant already in flight is awaited
+        // rather than failed. The lifecycle decides whether a grant is needed at all.
+        let endpoint = tokenEndpoint
+        let refresh = refreshToken
+        let clientID = oidcClientID
         let currentSession = session
         let diagnosticLog = diagnosticLog
-        let taskID = UUID()
-        let task = Task {
-            try await Self.requestToken(request: tokenRequest, session: currentSession,
-                                        invalidReason: .expiredSession,
-                                        diagnosticLog: diagnosticLog,
-                                        deadGrantReason: .noStoredSession)
-        }
-        refreshTask = task
-        refreshTaskID = taskID
-        defer {
-            if refreshTaskID == taskID {
-                refreshTask = nil
-                refreshTaskID = nil
+        let outcome = try await tokens.refresh(
+            reason,
+            epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
+            grant: {
+                guard let endpoint, let refresh else {
+                    throw PolestarError.authenticationRequired(.expiredSession)
+                }
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "POST"
+                request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                request.httpBody = Self.formBody([
+                    "grant_type": "refresh_token",
+                    "client_id": clientID,
+                    "refresh_token": refresh
+                ])
+                let token = try await Self.requestToken(request: request, session: currentSession,
+                                                        invalidReason: .expiredSession,
+                                                        diagnosticLog: diagnosticLog,
+                                                        deadGrantReason: .noStoredSession)
+                return TokenLifecycle.Grant(accessToken: token.accessToken,
+                                            refreshToken: token.refreshToken,
+                                            expiresIn: TimeInterval(token.expiresIn))
             }
-        }
-        try await applyRefreshResult(from: task, requestEpoch: requestEpoch)
-    }
-
-    private func applyRefreshResult(from task: Task<TokenResponseDTO, Error>,
-                                    requestEpoch: Int) async throws {
-        do {
-            let token = try await task.value
-            guard requestEpoch == sessionEpoch else { throw CancellationError() }
-            try apply(token)
-        } catch {
-            guard requestEpoch == sessionEpoch else { throw CancellationError() }
-            if case PolestarError.authenticationRequired(.noStoredSession) = error {
-                discardDeadRefreshToken()
-            }
-            throw error
+        )
+        if outcome == .deadGrant {
+            await discardDeadRefreshToken()
+            throw PolestarError.authenticationRequired(.noStoredSession)
         }
     }
 
     /// The IdP rejected the refresh grant with `invalid_grant`/`expired_token`: the stored
     /// token was rotated out or revoked, and every replay is a failed login against it
-    /// (lockout risk). Drop the persisted copies – memory and Keychain, plus the command
-    /// client's – so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
+    /// (lockout risk). Drop the persisted copies – memory, Keychain, and the preferences
+    /// cache – so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
     /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
     /// still resolves its own outcome (`.notAuthorized`) from the now-empty storage.
-    func discardDeadRefreshToken() {
-        accessToken = nil
-        refreshToken = nil
-        tokenExpiry = nil
-        tokenLifetime = 0
+    func discardDeadRefreshToken() async {
+        tokens.reset()
         try? keychain.deleteSessionToken()
         commandAccessToken = nil
         commandRefreshToken = nil
         commandTokenExpiry = nil
         try? keychain.deleteCommandSessionToken()
-    }
-
-    private func apply(_ token: TokenResponseDTO) throws {
-        let previousRefreshToken = refreshToken
-        let renewableToken = token.refreshToken ?? refreshToken
-        // In-memory session first, then best-effort persist: a rotated refresh token has
-        // already invalidated `previousRefreshToken`, so a Keychain write failure (an ACL
-        // denial after the code-signing identity changed between dev builds) must not leave the
-        // app replaying the dead token. A failed persist costs a restart, not the session.
-        accessToken = token.accessToken
-        refreshToken = renewableToken
-        tokenLifetime = TimeInterval(token.expiresIn)
-        tokenExpiry = Date().addingTimeInterval(tokenLifetime)
-        if let renewableToken, renewableToken != previousRefreshToken {
-            do {
-                try keychain.saveSessionToken(renewableToken)
-            } catch {
-                logger.error("Polestar rotated refresh token could not be persisted; the session will not survive a restart: \(String(describing: error), privacy: .public)")
-            }
-        }
+        // `PreferencesStore.hasResumableSession` memoises a per-brand answer. Without this the
+        // garage scanner and account cards keep believing Polestar is resumable for the rest of
+        // the process and replay the grant the IdP just refused.
+        await MainActor.run { preferences.invalidateSessionCache() }
     }
 
     /// Refresh near expiry while avoiding a margin as large as a short-lived token. Ten per
@@ -582,7 +585,8 @@ actor PolestarAPI {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: "Polestar token request", provider: .polestar,
-            diagnosticLog: diagnosticLog
+            diagnosticLog: diagnosticLog,
+            semanticError: { data, _ in Self.oauthErrorCode(in: data) }
         )
         if response.statusCode == 400 {
             // `invalid_grant`/`expired_token` mean the presented grant (a refresh token
@@ -614,6 +618,15 @@ actor PolestarAPI {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let code = body["error"] as? String else { return false }
         return code == "invalid_grant" || code == "expired_token"
+    }
+
+    /// The OAuth `error` code is a classification, not a credential, and it is the one field
+    /// that separates a dead grant from a misconfigured client. Extract it so the diagnostic
+    /// log can carry it even though the token body itself is never retained.
+    static func oauthErrorCode(in data: Data) -> String? {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = body["error"] as? String, !code.isEmpty else { return nil }
+        return "oauth:\(code)"
     }
 
 
@@ -719,7 +732,7 @@ actor PolestarAPI {
         // command authorization there is nothing usable to send it, so skip the call rather
         // than fire a request that is guaranteed to fail.
         let vdmsToken: String?
-        if vdmsDiscoveryBlockedUntil.map({ $0 > Date() }) ?? false {
+        if backoffs.blockedUntil(Self.discoveryBackoff) != nil {
             logger.info("Polestar VDMS enrichment remains in its persistent-failure backoff window")
             vdmsToken = nil
         } else if case .authorized(let commandToken) = await commandClientAuthorization() {
@@ -730,9 +743,7 @@ actor PolestarAPI {
         if let vdmsToken {
             do {
                 let vdmsCars = try await fetchAppBackendCars(token: vdmsToken)
-                vdmsDiscoveryBlockedUntil = nil
-                UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffDefaultsKey)
-                UserDefaults.standard.removeObject(forKey: Self.vdmsBackoffReasonDefaultsKey)
+                backoffs.unblock(Self.discoveryBackoff)
                 accountCars = Self.mergeDiscoveryCars(primary: legacyCars, vdms: vdmsCars)
             } catch {
                 if Self.isRequestLevelFailure(error) {
@@ -746,11 +757,10 @@ actor PolestarAPI {
                     // app-backend refuses to validate won't fix itself on the next discovery –
                     // stand down for a day.
                     if Self.vdmsFailureIsPersistent(error) {
-                        vdmsDiscoveryBlockedUntil = Date().addingTimeInterval(24 * 60 * 60)
-                        UserDefaults.standard.set(vdmsDiscoveryBlockedUntil?.timeIntervalSince1970,
-                                                  forKey: Self.vdmsBackoffDefaultsKey)
-                        UserDefaults.standard.set(Self.vdmsFailureCategory(error),
-                                                  forKey: Self.vdmsBackoffReasonDefaultsKey)
+                        backoffs.block(
+                            Self.discoveryBackoff,
+                            until: Date().addingTimeInterval(24 * 60 * 60),
+                            reason: Self.vdmsFailureCategory(error))
                     }
                     logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
                 }
@@ -883,17 +893,18 @@ actor PolestarAPI {
         }
     }
 
+    /// Polestar's secondary discovery source, which stands down per install rather than per
+    /// vehicle: a client-version or schema rejection is not account-specific.
+    static let discoveryBackoff = ProviderBackoffStore.Subject("polestar.vdms-discovery")
+
     static func vdmsDiscoveryDiagnostics(
-        defaults: UserDefaults = .standard,
+        backoffs: ProviderBackoffStore = ProviderBackoffStore(),
         now: Date = Date()
     ) -> VDMSDiscoveryDiagnostics? {
-        let blockedUntil = Date(
-            timeIntervalSince1970: defaults.double(forKey: vdmsBackoffDefaultsKey)
-        )
-        guard blockedUntil > now else { return nil }
+        guard let blockedUntil = backoffs.blockedUntil(Self.discoveryBackoff, now: now) else { return nil }
         return VDMSDiscoveryDiagnostics(
             blockedUntil: blockedUntil,
-            reason: defaults.string(forKey: vdmsBackoffReasonDefaultsKey) ?? "persistentFailure"
+            reason: backoffs.reason(for: Self.discoveryBackoff, fallback: "persistentFailure")
         )
     }
 
@@ -1071,13 +1082,7 @@ actor PolestarAPI {
         cancelImageDownloads()
         webAuthorization.invalidate()
         invalidateCommandAuthorization()
-        refreshTask?.cancel()
-        refreshTask = nil
-        refreshTaskID = nil
-        accessToken = nil
-        tokenExpiry = nil
-        tokenLifetime = 0
-        if !keepRefreshToken { refreshToken = nil }
+        tokens.reset(keepingRefreshToken: keepRefreshToken)
         cars = []
         identities = [:]
         imagePreparationAttempts = [:]

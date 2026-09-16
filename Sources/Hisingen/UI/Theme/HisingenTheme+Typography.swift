@@ -3,20 +3,12 @@ import SwiftUI
 @MainActor
 extension HisingenTheme {
 
-    /// The theme's weight ladder: heading, the reading under it, and small print.
+    /// The global weight ladder: heading, the reading under it, and small print.
     ///
-    /// `headingWeight` and `valueWeight` used to be the same seven-case switch returning the same
-    /// weights, so a card heading and the reading beneath it differed by one point and nothing
-    /// else, and there was no way to tell a deliberate choice from a pasted one. The ladder puts
-    /// them one step apart by construction, and it exists because §15 builds hierarchy from weight
-    /// and size as a set: a value earns more weight than the label introducing it.
+    /// Frozen alongside geometry so that choosing a palette alters colour only, and never
+    /// re-proportions the app's type hierarchy.
     private static var weightLadder: (heading: Font.Weight, value: Font.Weight, caption: Font.Weight) {
-        switch theme {
-        case .polestar: return (.regular, .medium, .medium)
-        case .volvo, .sandDune: return (.medium, .semibold, .semibold)
-        case .hisingen, .nordicNight, .aurora, .forest: return (.semibold, .bold, .semibold)
-        case .swedishGold, .cyanRacing: return (.bold, .heavy, .bold)
-        }
+        (.semibold, .bold, .semibold)
     }
 
     static var headingWeight: Font.Weight { weightLadder.heading }
@@ -50,37 +42,15 @@ extension HisingenTheme {
     /// than the body they sat under, which is backwards: less size has to be paid for with more
     /// weight, not less.
     static var captionWeight: Font.Weight { weightLadder.caption }
-    static var displayWeight: Font.Weight {
-        switch theme {
-        case .polestar: return .medium
-        case .volvo, .cyanRacing: return .black
-        case .nordicNight, .swedishGold: return .heavy
-        case .hisingen, .aurora, .forest, .sandDune: return .bold
-        }
-    }
+
+    /// Global display weight for large figures and titles.
+    static var displayWeight: Font.Weight { .bold }
+
     /// Display tracking, expressed as a ratio of the type size.
-    ///
-    /// It used to be one absolute point value, consumed at 40pt, 34pt and — via an undocumented
-    /// `* 0.3` — at 17pt. Because the value never changed with the size, the smaller figure came
-    /// out proportionally *tighter* than the larger one, which is the inverse of §15. It also
-    /// returned 0 for `hisingen` and `forest`, so the app's largest text carried no negative
-    /// tracking at all in the default theme.
     ///
     /// A ratio keeps the optical relationship constant: `size * ratio` is a fixed em value, so a
     /// 34pt figure tracks 15% tighter in points than a 40pt one and identically in proportion.
-    static var displayTrackingRatio: CGFloat {
-        switch theme {
-        case .polestar: return -0.030
-        case .cyanRacing: return -0.020
-        case .swedishGold: return -0.016
-        case .nordicNight: return -0.013
-        case .volvo: return -0.011
-        case .hisingen: return -0.011
-        case .forest: return -0.010
-        case .sandDune: return -0.008
-        case .aurora: return -0.006
-        }
-    }
+    static var displayTrackingRatio: CGFloat { -0.011 }
 
     /// Tracking in points for a given size. Use this rather than a raw value so the relationship
     /// to size cannot be lost at the call site.

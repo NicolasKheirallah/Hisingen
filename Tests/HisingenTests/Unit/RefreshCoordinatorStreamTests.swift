@@ -21,6 +21,7 @@ struct RefreshCoordinatorStreamTests {
 
     private func makeCoordinator(
         provider: StreamingMockProvider, defaults: UserDefaults,
+        database: VehicleDatabase? = nil,
         policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [0.1, 0.2]),
         commandWindow: TimeInterval = 5 * 60,
         commandInitialPollDelay: TimeInterval = 2,
@@ -34,13 +35,14 @@ struct RefreshCoordinatorStreamTests {
         preferences.vin = StreamingMockProvider.vinA
         return RefreshCoordinator(
             api: provider,
-            stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
+            stateStore: VehicleStateStore(defaults: defaults, database: database ?? .inMemory()),
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
             sessionManager: SessionManager(readToken: { _ in "test-session" },
                                            readPassword: { nil }, clearPassword: {}),
             liveStreamPolicy: policy,
+            streaming: provider,
             now: now,
             commandConfirmationWindow: commandWindow,
             commandConfirmationInitialPollDelay: commandInitialPollDelay,
@@ -50,8 +52,14 @@ struct RefreshCoordinatorStreamTests {
 
     /// Polls until the recorded diagnostics satisfy `condition`, with a timeout that fails
     /// the test rather than hanging it.
+    ///
+    /// The budget is generous on purpose. Every one of these tests drives real timers and stream
+    /// tasks on the main actor, and when the whole suite runs that actor is shared with ~130 other
+    /// suites, so a connect that takes under a second alone can take several under load. A tight
+    /// deadline turned that scheduling noise into a flaky failure. The loop still returns the
+    /// moment the condition holds, so a passing test never pays for the extra headroom.
     private func waitUntil(
-        _ recorder: DiagnosticsRecorder, timeout: TimeInterval = 5,
+        _ recorder: DiagnosticsRecorder, timeout: TimeInterval = 20,
         _ condition: (DiagnosticsSnapshot) -> Bool
     ) async -> DiagnosticsSnapshot? {
         let deadline = Date().addingTimeInterval(timeout)
@@ -313,9 +321,11 @@ struct RefreshCoordinatorStreamTests {
         let provider = StreamingMockProvider(script: [], recorder: recorder)
         await provider.setCharging(false)
         let events = DiagnosticsRecorder()
+        let database = VehicleDatabase.inMemory()
         let coordinator = makeCoordinator(
             provider: provider,
             defaults: defaults,
+            database: database,
             commandInitialPollDelay: 5
         )
         coordinator.onEvent = { events.record($0) }
@@ -331,7 +341,7 @@ struct RefreshCoordinatorStreamTests {
         )
 
         coordinator.beginCommandConfirmation(receipt, optimisticState: optimisticState)
-        let persistedReceipts = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let persistedReceipts = VehicleStateStore(defaults: defaults, database: database)
 
         let published = try #require(events.states.last)
         #expect(published.energy.targetPercentage == 90)
@@ -364,9 +374,11 @@ struct RefreshCoordinatorStreamTests {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let events = DiagnosticsRecorder()
+        let database = VehicleDatabase.inMemory()
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
             defaults: defaults,
+            database: database,
             commandInitialPollDelay: 5
         )
         coordinator.onEvent = { events.record($0) }
@@ -387,7 +399,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.beginCommandConfirmation(second)
 
         #expect(events.states.last?.commandState.receipts == [first, second])
-        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let store = VehicleStateStore(defaults: defaults, database: database)
         #expect(store.commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt) == [first, second])
 
         coordinator.dismissCommandReceipt(id: first.id)
@@ -623,9 +635,11 @@ struct RefreshCoordinatorStreamTests {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let events = DiagnosticsRecorder()
+        let database = VehicleDatabase.inMemory()
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
-            defaults: defaults
+            defaults: defaults,
+            database: database
         )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -641,7 +655,7 @@ struct RefreshCoordinatorStreamTests {
 
         #expect(events.states.last?.commandState.receipts.isEmpty == true)
         #expect(events.snapshots.last?.awaitingCommandReceiptCount == 0)
-        #expect(VehicleStateStore(defaults: defaults, database: .inMemory())
+        #expect(VehicleStateStore(defaults: defaults, database: database)
             .commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt.id) == [receipt.id])
         coordinator.stop()
     }
@@ -1033,7 +1047,9 @@ struct RefreshCoordinatorStreamTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let firstEvents = DiagnosticsRecorder()
         let firstProvider = StreamingMockProvider(script: [], recorder: StreamRecorder())
-        let first = makeCoordinator(provider: firstProvider, defaults: defaults)
+        // One database for both instances: the durable tier they share is what a relaunch reads.
+        let database = VehicleDatabase.inMemory()
+        let first = makeCoordinator(provider: firstProvider, defaults: defaults, database: database)
         first.onEvent = { firstEvents.record($0) }
         first.start(preferredVIN: StreamingMockProvider.vinA)
         _ = try #require(await waitUntil(firstEvents) { $0.refreshSuccesses == 1 })
@@ -1049,7 +1065,7 @@ struct RefreshCoordinatorStreamTests {
 
         let secondEvents = DiagnosticsRecorder()
         let secondProvider = StreamingMockProvider(script: [], recorder: StreamRecorder())
-        let second = makeCoordinator(provider: secondProvider, defaults: defaults)
+        let second = makeCoordinator(provider: secondProvider, defaults: defaults, database: database)
         second.onEvent = { secondEvents.record($0) }
         second.start(preferredVIN: nil)
         _ = try #require(await waitUntil(secondEvents) {
@@ -1080,7 +1096,8 @@ struct RefreshCoordinatorStreamTests {
             issuedAt: issuedAt,
             command: .lock
         )
-        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let database = VehicleDatabase.inMemory()
+        let store = VehicleStateStore(defaults: defaults, database: database)
         store.saveCommandReceipts([
             StoredCommandReceipt(receipt: confirmed, confirmationDeadline: nil),
             StoredCommandReceipt(
@@ -1092,7 +1109,8 @@ struct RefreshCoordinatorStreamTests {
         let events = DiagnosticsRecorder()
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
-            defaults: defaults
+            defaults: defaults,
+            database: database
         )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -1114,7 +1132,8 @@ struct RefreshCoordinatorStreamTests {
             issuedAt: deadline.addingTimeInterval(-30),
             command: .lock
         )
-        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let database = VehicleDatabase.inMemory()
+        let store = VehicleStateStore(defaults: defaults, database: database)
         store.saveCommandReceipt(
             StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline),
             for: StreamingMockProvider.vinA
@@ -1123,7 +1142,8 @@ struct RefreshCoordinatorStreamTests {
         let events = DiagnosticsRecorder()
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
-            defaults: defaults
+            defaults: defaults,
+            database: database
         )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -1246,9 +1266,11 @@ struct RefreshCoordinatorStreamTests {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let events = DiagnosticsRecorder()
+        let database = VehicleDatabase.inMemory()
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
-            defaults: defaults
+            defaults: defaults,
+            database: database
         )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -1272,7 +1294,7 @@ struct RefreshCoordinatorStreamTests {
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 3 })
         #expect(events.states.last?.identity.vin == StreamingMockProvider.vinA)
         #expect(events.states.last?.commandState.receipts.isEmpty == true)
-        #expect(VehicleStateStore(defaults: defaults, database: .inMemory())
+        #expect(VehicleStateStore(defaults: defaults, database: database)
             .commandReceipts(for: StreamingMockProvider.vinA).map(\.receipt.id) == [receipt.id])
         coordinator.stop()
     }

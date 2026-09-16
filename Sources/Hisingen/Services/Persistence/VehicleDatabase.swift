@@ -140,6 +140,27 @@ final class VehicleDatabase: @unchecked Sendable {
             payload BLOB NOT NULL
         );
 
+        -- One row per vehicle, like snapshots: the plist these used to live in rewrote every
+        -- vehicle's entry on every save, and no erase regime could see them.
+        CREATE TABLE IF NOT EXISTS charging_baselines (
+            vin TEXT PRIMARY KEY NOT NULL,
+            sampled_at REAL,
+            vehicle_reported_at REAL,
+            payload BLOB NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS provider_backoff (
+            subject TEXT PRIMARY KEY NOT NULL,
+            vin TEXT,
+            blocked_until REAL NOT NULL,
+            reason TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_provider_backoff_vin ON provider_backoff(vin);
+        CREATE TABLE IF NOT EXISTS command_receipts (
+            vin TEXT PRIMARY KEY NOT NULL,
+            payload BLOB NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS charging_sessions (
             id TEXT PRIMARY KEY NOT NULL,
             vin TEXT NOT NULL,
@@ -408,7 +429,7 @@ final class VehicleDatabase: @unchecked Sendable {
                 // skipped the quarantine forever. Mirrors the v2 block below.
                 do {
                     try db.execute(sql: """
-                        UPDATE battery_health_history SET measurement_source = 'legacy-estimate' WHERE measurement_source = 'measured';
+                        UPDATE battery_health_history SET measurement_source = '\(BatteryHealthRecord.legacyEstimateSource)' WHERE measurement_source = 'measured';
                         PRAGMA user_version = 1;
                         """)
                     version = 1
@@ -653,6 +674,179 @@ final class VehicleDatabase: @unchecked Sendable {
         try? db.execute(sql: "DELETE FROM vehicle_snapshots;")
     }
 
+    // MARK: - Charging Baselines
+
+    /// One vehicle's baseline, replaced in place. The plist this replaced re-encoded every
+    /// vehicle's baseline on every save; the row is also why the erase regimes can name it.
+    func saveBaseline(_ baseline: ChargingBaseline) {
+        let payload: Data
+        do {
+            payload = try JSONEncoder().encode(baseline)
+        } catch {
+            logger.error("Could not encode charging baseline for persistence: \(error, privacy: .public)")
+            return
+        }
+        let sql = """
+        INSERT INTO charging_baselines (vin, sampled_at, vehicle_reported_at, payload)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(vin) DO UPDATE SET
+            sampled_at=excluded.sampled_at,
+            vehicle_reported_at=excluded.vehicle_reported_at,
+            payload=excluded.payload;
+        """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(baseline.vin, at: 1)
+            try stmt.bindDate(baseline.sampledAt, at: 2)
+            try stmt.bindDate(baseline.vehicleReportedAt, at: 3)
+            try stmt.bindBlob(payload, at: 4)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func loadBaseline(for vin: String) -> ChargingBaseline? {
+        let sql = "SELECT payload FROM charging_baselines WHERE vin = ? LIMIT 1;"
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> ChargingBaseline? in
+            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
+            return try? JSONDecoder().decode(ChargingBaseline.self, from: blob)
+        }
+    }
+
+    func deleteBaseline(for vin: String) {
+        let sql = "DELETE FROM charging_baselines WHERE vin = ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func deleteAllBaselines() {
+        try? db.execute(sql: "DELETE FROM charging_baselines;")
+    }
+
+    /// The 7-day lifetime is a property of the baseline, not of the reader that noticed it.
+    func deleteBaselines(olderThan cutoff: Date) {
+        let sql = "DELETE FROM charging_baselines WHERE COALESCE(sampled_at, vehicle_reported_at, 0) < ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindDate(cutoff, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    /// Drops stand-downs whose window has closed. Reading one already answers nil, so keeping the
+    /// row only grows the file.
+    func deleteExpiredProviderBackoffs(now: Date) {
+        let sql = "DELETE FROM provider_backoff WHERE blocked_until <= ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindDate(now, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    // MARK: - Command Receipts
+
+    /// One vehicle's visible receipts. Durable rather than mirrored: the plist rewrite this
+    /// replaces re-encoded every vehicle's receipts on every command, and a receipt that
+    /// outlived a sign-out could reappear in the Controls tab.
+    func saveCommandReceipts(_ receipts: StoredCommandReceipts, for vin: String) {
+        guard !receipts.records.isEmpty else {
+            deleteCommandReceipts(for: vin)
+            return
+        }
+        let payload: Data
+        do {
+            payload = try JSONEncoder().encode(receipts)
+        } catch {
+            logger.error("Could not encode command receipts for persistence: \(error, privacy: .public)")
+            return
+        }
+        let sql = """
+        INSERT INTO command_receipts (vin, payload)
+        VALUES (?, ?)
+        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload;
+        """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindBlob(payload, at: 2)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func loadCommandReceipts(for vin: String) -> StoredCommandReceipts? {
+        let sql = "SELECT payload FROM command_receipts WHERE vin = ? LIMIT 1;"
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> StoredCommandReceipts? in
+            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
+            return try? JSONDecoder().decode(StoredCommandReceipts.self, from: blob)
+        }
+    }
+
+    func deleteCommandReceipts(for vin: String) {
+        let sql = "DELETE FROM command_receipts WHERE vin = ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func deleteAllCommandReceipts() {
+        try? db.execute(sql: "DELETE FROM command_receipts;")
+    }
+
+    // MARK: - Provider Backoff
+
+    func saveProviderBackoff(subject: String, vin: String?, blockedUntil: Date, reason: String?) {
+        let sql = """
+            INSERT INTO provider_backoff (subject, vin, blocked_until, reason)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(subject) DO UPDATE SET
+                vin = excluded.vin,
+                blocked_until = excluded.blocked_until,
+                reason = excluded.reason;
+            """
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(subject, at: 1)
+            try stmt.bindText(vin, at: 2)
+            try stmt.bindDouble(blockedUntil.timeIntervalSince1970, at: 3)
+            try stmt.bindText(reason, at: 4)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func providerBackoff(for subject: String) -> (blockedUntil: Date, reason: String?)? {
+        let sql = "SELECT blocked_until, reason FROM provider_backoff WHERE subject = ? LIMIT 1;"
+        return try? db.query(sql: sql) { stmt in
+            try stmt.bindText(subject, at: 1)
+        } process: { stmt -> (blockedUntil: Date, reason: String?)? in
+            guard stmt.step(), let epoch = stmt.columnDouble(at: 0) else { return nil }
+            return (Date(timeIntervalSince1970: epoch), stmt.columnText(at: 1))
+        }
+    }
+
+    func deleteProviderBackoff(subject: String) {
+        let sql = "DELETE FROM provider_backoff WHERE subject = ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(subject, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    /// The stand-downs that name a vehicle, dropped by a fleet-wide sign-out. The provider-wide
+    /// ones stay: a client-version rejection is not something a sign-out answers.
+    func deleteVehicleScopedProviderBackoffs() {
+        try? db.execute(sql: "DELETE FROM provider_backoff WHERE vin IS NOT NULL;")
+    }
+
+    func deleteProviderBackoffs(for vin: String) {
+        let sql = "DELETE FROM provider_backoff WHERE vin = ?;"
+        try? db.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
     // MARK: - Battery Health History
 
     /// What makes a battery-health row a *milestone* rather than a duplicate.
@@ -687,7 +881,7 @@ final class VehicleDatabase: @unchecked Sendable {
     @discardableResult
     func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
                                       sohPct: Double, degPct: Double, usableKwh: Double,
-                                      measurementSource: String = "calculated-v2",
+                                      measurementSource: String = BatteryHealthRecord.calculatedSource,
                                       timestamp: Date = Date()) -> Bool {
         let previous = history.batteryHealthHistory(for: vin, limit: 50)
             .first { $0.measurementSource == measurementSource }
@@ -924,7 +1118,7 @@ final class VehicleDatabase: @unchecked Sendable {
             snapshots: count(table: "vehicle_snapshots"),
             chargingSessions: count(table: "charging_sessions"),
             chargingSamples: count(table: "charging_samples"),
-            batteryHealth: count(table: "battery_health_history WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')"),
+            batteryHealth: count(table: "battery_health_history WHERE \(BatteryHealthRecord.measurementSourceFilter)"),
             telemetry: count(table: "telemetry_logs"),
             commands: count(table: "remote_commands_log")
         )
@@ -1006,23 +1200,26 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// Privacy-sensitive, error-reporting variant used by Settings. The compaction is part
     /// of the operation so deleted coordinates are not left behind in free SQLite pages.
-    func clearStoredLocationsOrThrow(for vin: String? = nil) throws {
-        if let vin {
-            try db.withTransaction {
-                try db.query(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL WHERE vin = ?;") { stmt in
-                    try stmt.bindText(vin, at: 1)
-                    try stmt.executeUpdate()
-                } process: { _ in }
-                try db.query(sql: "UPDATE charging_sessions SET location_name = NULL WHERE vin = ?;") { stmt in
-                    try stmt.bindText(vin, at: 1)
-                    try stmt.executeUpdate()
-                } process: { _ in }
-            }
-        } else {
-            try db.withTransaction {
-                try db.execute(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL;")
-                try db.execute(sql: "UPDATE charging_sessions SET location_name = NULL;")
-            }
+    func clearStoredLocationsOrThrow(for vin: String) throws {
+        try db.withTransaction {
+            try db.query(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+            try db.query(sql: "UPDATE charging_sessions SET location_name = NULL WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
+        try vacuumOrThrow()
+    }
+
+    /// The fleet-wide counterpart of `clearStoredLocationsOrThrow(for:)`, named so that
+    /// clearing every vehicle's coordinates is always a deliberate call.
+    func clearAllStoredLocationsOrThrow() throws {
+        try db.withTransaction {
+            try db.execute(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL;")
+            try db.execute(sql: "UPDATE charging_sessions SET location_name = NULL;")
         }
         try vacuumOrThrow()
     }
@@ -1036,51 +1233,60 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Wipe / Purge
 
-    func wipeAllOrThrow(for vin: String? = nil) throws {
+    func wipeVehicleOrThrow(for vin: String) throws {
         // One transaction: a crash mid-wipe previously left partially cleared history, which
         // matters most for the sign-out path where the user expects the data to be *gone*.
-        if let vin {
-            let statements = [
-                "DELETE FROM vehicle_snapshots WHERE vin = ?;",
-                "DELETE FROM vehicle_activity WHERE vin = ?;",
-                "DELETE FROM charging_sessions WHERE vin = ?;",
-                "DELETE FROM battery_health_history WHERE vin = ?;",
-                "DELETE FROM telemetry_logs WHERE vin = ?;",
-                "DELETE FROM trip_tags WHERE vin = ?;",
-                "DELETE FROM charging_samples WHERE vin = ?;",
-                "DELETE FROM remote_commands_log WHERE vin = ?;",
-                "DELETE FROM connectivity_history WHERE vin = ?;",
-                "DELETE FROM cabin_climate_history WHERE vin = ?;",
-                "DELETE FROM air_quality_history WHERE vin = ?;",
-                "DELETE FROM fuel_entries WHERE vin = ?;",
-                "DELETE FROM vehicle_images WHERE vin = ?;"
-            ]
-            try db.withTransaction {
-                for sql in statements {
-                    try db.query(sql: sql) { stmt in
-                        try stmt.bindText(vin, at: 1)
-                        try stmt.executeUpdate()
-                    } process: { _ in }
-                }
+        let statements = [
+            "DELETE FROM vehicle_snapshots WHERE vin = ?;",
+            "DELETE FROM charging_baselines WHERE vin = ?;",
+            "DELETE FROM command_receipts WHERE vin = ?;",
+            "DELETE FROM provider_backoff WHERE vin = ?;",
+            "DELETE FROM vehicle_activity WHERE vin = ?;",
+            "DELETE FROM charging_sessions WHERE vin = ?;",
+            "DELETE FROM battery_health_history WHERE vin = ?;",
+            "DELETE FROM telemetry_logs WHERE vin = ?;",
+            "DELETE FROM trip_tags WHERE vin = ?;",
+            "DELETE FROM charging_samples WHERE vin = ?;",
+            "DELETE FROM remote_commands_log WHERE vin = ?;",
+            "DELETE FROM connectivity_history WHERE vin = ?;",
+            "DELETE FROM cabin_climate_history WHERE vin = ?;",
+            "DELETE FROM air_quality_history WHERE vin = ?;",
+            "DELETE FROM fuel_entries WHERE vin = ?;",
+            "DELETE FROM vehicle_images WHERE vin = ?;"
+        ]
+        try db.withTransaction {
+            for sql in statements {
+                try db.query(sql: sql) { stmt in
+                    try stmt.bindText(vin, at: 1)
+                    try stmt.executeUpdate()
+                } process: { _ in }
             }
-        } else {
-            try db.withTransaction {
-                try db.execute(sql: """
-                DELETE FROM vehicle_snapshots;
-                DELETE FROM vehicle_activity;
-                DELETE FROM charging_sessions;
-                DELETE FROM charging_samples;
-                DELETE FROM battery_health_history;
-                DELETE FROM telemetry_logs;
-                DELETE FROM trip_tags;
-                DELETE FROM remote_commands_log;
-                DELETE FROM air_quality_history;
-                DELETE FROM connectivity_history;
-                DELETE FROM cabin_climate_history;
-                DELETE FROM fuel_entries;
-                DELETE FROM vehicle_images;
-                """)
-            }
+        }
+        try vacuumOrThrow()
+    }
+
+    /// The fleet-wide counterpart of `wipeVehicleOrThrow(for:)`. Spelled out as its own member
+    /// because "every vehicle" must never be what a missing argument means.
+    func wipeFleetOrThrow() throws {
+        try db.withTransaction {
+            try db.execute(sql: """
+            DELETE FROM vehicle_snapshots;
+            DELETE FROM charging_baselines;
+            DELETE FROM command_receipts;
+            DELETE FROM provider_backoff;
+            DELETE FROM vehicle_activity;
+            DELETE FROM charging_sessions;
+            DELETE FROM charging_samples;
+            DELETE FROM battery_health_history;
+            DELETE FROM telemetry_logs;
+            DELETE FROM trip_tags;
+            DELETE FROM remote_commands_log;
+            DELETE FROM air_quality_history;
+            DELETE FROM connectivity_history;
+            DELETE FROM cabin_climate_history;
+            DELETE FROM fuel_entries;
+            DELETE FROM vehicle_images;
+            """)
         }
         try vacuumOrThrow()
     }
@@ -1221,102 +1427,65 @@ extension VehicleDatabase {
 
     private func backupTelemetry(includeCoordinates: Bool) -> [BackupTelemetry] {
         let sql = """
-        SELECT vin, timestamp, odometer_km, avg_consumption, avg_consumption_unit, ambient_temp_c, latitude, longitude
+        SELECT \(HistoryRowDecoder.Columns.telemetry)
         FROM telemetry_logs ORDER BY timestamp DESC;
         """
         let df = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [BackupTelemetry] in
-            var out: [BackupTelemetry] = []
-            while stmt.step() {
-                guard let vin = stmt.columnText(at: 0), let ts = stmt.columnDate(at: 1) else { continue }
-                out.append(BackupTelemetry(
-                    vin: vin, timestamp: df.string(from: ts),
-                    odometerKm: stmt.columnDouble(at: 2),
-                    averageConsumption: stmt.columnDouble(at: 3),
-                    unit: stmt.columnText(at: 4),
-                    ambientTempC: stmt.columnDouble(at: 5),
-                    latitude: includeCoordinates ? stmt.columnDouble(at: 6) : nil,
-                    longitude: includeCoordinates ? stmt.columnDouble(at: 7) : nil
-                ))
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.telemetry).map { row in
+                // Coordinates are dropped here rather than at the query, which is where the
+                // guarantee has always lived: `includeCoordinates` decides what reaches the
+                // file, and the file is what leaves the machine.
+                BackupTelemetry(
+                    vin: row.vin, timestamp: df.string(from: row.timestamp),
+                    odometerKm: row.odometerKm,
+                    averageConsumption: row.averageConsumption,
+                    unit: row.averageConsumptionUnit,
+                    ambientTempC: row.ambientTemperatureCelsius,
+                    latitude: includeCoordinates ? row.latitude : nil,
+                    longitude: includeCoordinates ? row.longitude : nil
+                )
             }
-            return out
         }) ?? []
     }
 
     private func chargingSamplesAll() -> [HistoricalChargingSample] {
         let sql = """
-        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type
+        SELECT \(HistoryRowDecoder.Columns.chargingSample)
         FROM charging_samples ORDER BY timestamp ASC;
         """
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [HistoricalChargingSample] in
-            var list: [HistoricalChargingSample] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let sessionID = stmt.columnText(at: 1),
-                      let vin = stmt.columnText(at: 2),
-                      let timestamp = stmt.columnDate(at: 3),
-                      let soc = stmt.columnDouble(at: 4) else { continue }
-                list.append(HistoricalChargingSample(
-                    id: id, sessionId: sessionID, vin: vin, timestamp: timestamp, soc: soc,
-                    powerKw: stmt.columnDouble(at: 5), voltageVolts: stmt.columnDouble(at: 6),
-                    currentAmps: stmt.columnDouble(at: 7), chargingType: stmt.columnText(at: 8)))
-            }
-            return list
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.chargingSample)
         }) ?? []
     }
 
     private func connectivityAll() -> [ConnectivityRecord] {
         let sql = """
-        SELECT id, vin, timestamp, network_type, signal_bars, wake_reason
+        SELECT \(HistoryRowDecoder.Columns.connectivity)
         FROM connectivity_history ORDER BY timestamp DESC;
         """
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [ConnectivityRecord] in
-            var list: [ConnectivityRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let timestamp = stmt.columnDate(at: 2) else { continue }
-                list.append(ConnectivityRecord(
-                    id: id, vin: vin, timestamp: timestamp, networkType: stmt.columnText(at: 3),
-                    signalBars: stmt.columnInt64(at: 4).map(Int.init), wakeReason: stmt.columnText(at: 5)))
-            }
-            return list
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.connectivity)
         }) ?? []
     }
 
     private func cabinClimateAll() -> [CabinClimateRecord] {
         let sql = """
-        SELECT id, vin, timestamp, interior_c, requested_c
+        SELECT \(HistoryRowDecoder.Columns.cabinClimate)
         FROM cabin_climate_history ORDER BY timestamp DESC;
         """
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [CabinClimateRecord] in
-            var list: [CabinClimateRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let timestamp = stmt.columnDate(at: 2) else { continue }
-                list.append(CabinClimateRecord(
-                    id: id, vin: vin, timestamp: timestamp,
-                    interiorCelsius: stmt.columnDouble(at: 3), requestedCelsius: stmt.columnDouble(at: 4)))
-            }
-            return list
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.cabinClimate)
         }) ?? []
     }
 
     private func fuelEntriesAll() -> [FuelEntry] {
         let sql = """
-        SELECT id, vin, date, liters, price_per_liter, odometer_km
+        SELECT \(HistoryRowDecoder.Columns.fuelEntry)
         FROM fuel_entries ORDER BY date DESC;
         """
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [FuelEntry] in
-            var list: [FuelEntry] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
-                      let date = stmt.columnDate(at: 2), let liters = stmt.columnDouble(at: 3),
-                      let price = stmt.columnDouble(at: 4) else { continue }
-                list.append(FuelEntry(
-                    id: id, vin: vin, date: date, liters: liters, pricePerLiter: price,
-                    odometerKm: stmt.columnDouble(at: 5)))
-            }
-            return list
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
         }) ?? []
     }
 
@@ -1342,29 +1511,13 @@ extension VehicleDatabase {
 
     private func batteryHealthHistoryAllRows() -> [BatteryHealthRecord] {
         let sql = """
-        SELECT id, vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source
+        SELECT \(HistoryRowDecoder.Columns.batteryHealth)
         FROM battery_health_history
-        WHERE measurement_source IN ('full-charge-range-v1', 'calculated-v2', 'legacy-estimate')
+        WHERE \(BatteryHealthRecord.measurementSourceFilter)
         ORDER BY timestamp DESC;
         """
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [BatteryHealthRecord] in
-            var list: [BatteryHealthRecord] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let vin = stmt.columnText(at: 1),
-                      let ts = stmt.columnDate(at: 2),
-                      let odo = stmt.columnDouble(at: 3),
-                      let soh = stmt.columnDouble(at: 4),
-                      let deg = stmt.columnDouble(at: 5),
-                      let usable = stmt.columnDouble(at: 6),
-                      let source = stmt.columnText(at: 7) else { continue }
-                list.append(BatteryHealthRecord(
-                    id: id, vin: vin, timestamp: ts, odometerKm: odo,
-                    stateOfHealthPct: soh, degradationPct: deg, effectiveUsableKwh: usable,
-                    measurementSource: source
-                ))
-            }
-            return list
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
         }) ?? []
     }
 
@@ -1379,20 +1532,17 @@ extension VehicleDatabase {
 
     private func airQualityAll() -> [BackupAirQuality] {
         let sql = """
-        SELECT vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent
+        SELECT \(HistoryRowDecoder.Columns.airQuality)
         FROM air_quality_history ORDER BY timestamp DESC;
         """
         let df = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [BackupAirQuality] in
-            var out: [BackupAirQuality] = []
-            while stmt.step() {
-                guard let vin = stmt.columnText(at: 0), let ts = stmt.columnDate(at: 1) else { continue }
-                out.append(BackupAirQuality(
-                    vin: vin, timestamp: df.string(from: ts),
-                    aqi: stmt.columnDouble(at: 2), pm25: stmt.columnDouble(at: 3),
-                    pm10: stmt.columnDouble(at: 4), filterPercent: stmt.columnDouble(at: 5)))
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality).map { row in
+                BackupAirQuality(
+                    vin: row.vin, timestamp: df.string(from: row.timestamp),
+                    aqi: row.airQualityIndex, pm25: row.particulateMatter25,
+                    pm10: row.particulateMatter10, filterPercent: row.filterRemainingPercent)
             }
-            return out
         }) ?? []
     }
 
@@ -1407,24 +1557,17 @@ extension VehicleDatabase {
 
     private func commandAuditsAll() -> [BackupCommandAudit] {
         let sql = """
-        SELECT vin, command_name, status, executed_at, duration_ms, error_message
+        SELECT \(HistoryRowDecoder.Columns.commandAudit)
         FROM remote_commands_log ORDER BY executed_at DESC;
         """
         let iso = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [BackupCommandAudit] in
-            var list: [BackupCommandAudit] = []
-            while stmt.step() {
-                guard let vin = stmt.columnText(at: 0),
-                      let command = stmt.columnText(at: 1),
-                      let status = stmt.columnText(at: 2),
-                      let executedAt = stmt.columnDate(at: 3) else { continue }
-                list.append(BackupCommandAudit(
-                    vin: vin, command: command, status: status,
-                    executedAt: iso.string(from: executedAt),
-                    durationMs: stmt.columnInt64(at: 4).map(Int.init),
-                    errorMessage: stmt.columnText(at: 5)))
+        return (try? db.query(sql: sql) { _ in } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit).map { row in
+                BackupCommandAudit(
+                    vin: row.vin, command: row.command, status: row.status,
+                    executedAt: iso.string(from: row.executedAt),
+                    durationMs: row.durationMs, errorMessage: row.errorMessage)
             }
-            return list
         }) ?? []
     }
 }

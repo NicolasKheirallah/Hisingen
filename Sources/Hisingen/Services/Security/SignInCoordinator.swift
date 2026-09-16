@@ -241,6 +241,7 @@ final class SignInCoordinator {
         polestarSignInTask = Task { [weak self] in
             guard let self else { return }
             var authorizationState: String?
+            let startedAt = Date()
             do {
                 let authorizeURL = try await polestarAPI.beginCommandAuthorization()
                 authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
@@ -260,7 +261,18 @@ final class SignInCoordinator {
                 context?.refreshSettingsSurface()
             } catch {
                 await polestarAPI.cancelAuthorization(state: authorizationState)
-                guard !Task.isCancelled else { return }
+                // Dismissing the sign-in sheet is the user declining this step, not a failure
+                // worth an error banner.
+                guard !Task.isCancelled, !(error is CancellationError) else { return }
+                // This step failed silently in support diagnostics before: the exchange and
+                // account-verification rows it leaves behind say a grant was attempted, never why
+                // it did not stick.
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .polestar, request: nil,
+                    operation: "Polestar command authorization",
+                    startedAt: startedAt, error: error,
+                    semanticErrorType: "command-authorization"
+                )
                 let mapped = error as? LocalizedError
                 logger.error("Polestar command authorization failed: \(String(describing: error), privacy: .public)")
                 resultPresenter.present(

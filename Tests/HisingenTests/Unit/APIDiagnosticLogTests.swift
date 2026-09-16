@@ -132,6 +132,52 @@ struct APIDiagnosticLogTests {
     }
 
     @Test
+    func structuredGRPCFieldsKeepOperationStable() async throws {
+        let store = APIDiagnosticLogStore()
+        await store.record(
+            provider: .polestar, request: nil, operation: "gRPC /vehicle/ChargingService",
+            grpcStatus: "16", grpcMessage: "Command%20requires%20app%20pairing",
+            statusCode: 200, startedAt: Date(),
+            error: PolestarError.authenticationRequired(.expiredSession))
+        let entry = try #require(await store.snapshot().first)
+        // The status used to be folded into the label, which split one operation into many.
+        #expect(entry.operation == "gRPC /vehicle/ChargingService")
+        #expect(entry.grpcStatus == "16")
+        #expect(entry.grpcMessage == "Command requires app pairing")
+        #expect(entry.semanticErrorType == "grpc:16")
+    }
+
+    @Test
+    func explicitSemanticErrorSurvivesASensitiveBody() async throws {
+        let store = APIDiagnosticLogStore()
+        let body = Data(#"{"error":"invalid_grant","error_description":"rotated"}"#.utf8)
+        await store.record(
+            provider: .polestar, request: nil, operation: "Polestar token request",
+            statusCode: 400, responseBytes: body.count, responseData: body,
+            startedAt: Date(),
+            semanticErrorType: "oauth:invalid_grant")
+        let entry = try #require(await store.snapshot().first)
+        // The body is never retained, but the classification that explains the 400 is.
+        #expect(entry.responsePayloadJSON == nil)
+        #expect(entry.payloadOmissionReason == "sensitive")
+        #expect(entry.semanticErrorType == "oauth:invalid_grant")
+    }
+
+    @Test
+    func transportFailureIsMarkedSeparatelyFromMissingStatus() async throws {
+        let store = APIDiagnosticLogStore()
+        await store.record(provider: .polestar, request: nil, operation: "gRPC /x/GetY",
+                           startedAt: Date(), error: URLError(.timedOut))
+        let failed = try #require(await store.snapshot().first)
+        #expect(failed.statusCode == nil)
+        #expect(failed.transportError == true)
+
+        await store.record(provider: .polestar, request: nil, operation: "gRPC /x/GetY",
+                           statusCode: 200, startedAt: Date())
+        #expect(await store.snapshot().last?.transportError == nil)
+    }
+
+    @Test
     func staticLongEndpointNamesRemainVisibleWhileTransactionIDsAreRedacted() async throws {
         let store = APIDiagnosticLogStore()
         let staticURL = try #require(URL(string:

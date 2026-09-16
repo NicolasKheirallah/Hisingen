@@ -10,10 +10,10 @@ enum AutomationHandoff {
     private static var waiters: [UUID: CheckedContinuation<any RemoteCommandDispatching, Never>] = [:]
     private(set) static var context: (any RemoteCommandDispatching)?
 
-    /// One store shared by every Shortcuts entry point. `VehicleStateStore.init` runs the
-    /// launch-only legacy-summary reconciliation, so the per-invocation instances used
-    /// before re-ran a charging-history table scan (and its repair UPDATEs) on the main
-    /// actor before each intent could answer.
+    /// One store shared by every Shortcuts entry point, so per-invocation instances cannot drift
+    /// on their caches while answering. It is a pure reader: the launch maintenance
+    /// (`activate()`) belongs to `applicationDidFinishLaunching`, and `init` no longer runs
+    /// anything that a second store instance would repeat.
     static let sharedStateStore = VehicleStateStore(database: VehicleDatabase.shared)
 
     static func install(_ context: any RemoteCommandDispatching) {

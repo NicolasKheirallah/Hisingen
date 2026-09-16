@@ -165,7 +165,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Consumption Trend"), color: .orange)
+                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Consumption Trend"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     if let average {
                         Text(Format.fuelEconomy(lPer100Km: average, unit: preferences.fuelEconomyUnit))
@@ -508,7 +508,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: .orange)
+                    CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     if let rate = stats.successRatePct {
                         Text(Format.percent(rate))
@@ -583,7 +583,7 @@ extension HistoryDashboardView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "thermometer.medium", title: L10n.text("Cabin Temperature Trend"), color: .orange)
+                    CardHeader(symbol: "thermometer.medium", title: L10n.text("Cabin Temperature Trend"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
                         .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)

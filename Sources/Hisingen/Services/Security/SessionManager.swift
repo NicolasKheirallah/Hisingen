@@ -14,7 +14,9 @@ final class SessionManager {
         brand == .volvo ? try Keychain.readVolvoSessionToken() : try Keychain.readSessionToken()
     }, readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
          clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
-         configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = SessionManager.configureProvider) {
+         configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
+             try await api.prepareSession()
+         }) {
         self.readToken = readToken
         self.readPassword = readPassword
         self.clearPassword = clearPassword
@@ -39,10 +41,26 @@ final class SessionManager {
             return email.isEmpty ? nil : (email, password)
         }
 
-        if intent == .credentialsChanged, let credentials = try passwordCredentials() {
-            try await api.authenticate(email: credentials.email, password: credentials.password, preferredVIN: vin, features: features)
-            try Task.checkCancellation()
+        // Signing in with the stored password is the one path where a credential can be
+        // permanently wrong. Clear it when the IdP says so, otherwise the presence bits keep
+        // reporting the account as resumable and every launch replays a failed login against
+        // PingFederate's per-client attempt budget.
+        func signInWithStoredPassword(_ credentials: (email: String, password: String)) async throws {
+            do {
+                try await api.authenticate(email: credentials.email, password: credentials.password,
+                                           preferredVIN: vin, features: features)
+            } catch {
+                if ServiceErrorPolicy.decision(error, provider: brand).error.isRejectedCredential {
+                    clearPassword()
+                }
+                throw error
+            }
             clearPassword()
+        }
+
+        if intent == .credentialsChanged, let credentials = try passwordCredentials() {
+            try await signInWithStoredPassword(credentials)
+            try Task.checkCancellation()
         } else {
             do {
                 guard let token = try readToken(brand), !token.isEmpty else { throw missingSession }
@@ -51,23 +69,11 @@ final class SessionManager {
                 try Task.checkCancellation()
                 guard ServiceErrorPolicy.decision(error, provider: brand).error.requiresAuthentication,
                       let credentials = try passwordCredentials() else { throw error }
-                try await api.authenticate(email: credentials.email, password: credentials.password, preferredVIN: vin, features: features)
+                try await signInWithStoredPassword(credentials)
                 try Task.checkCancellation()
-                clearPassword()
             }
         }
         try Task.checkCancellation()
         return await api.cars
-    }
-
-    private static func configureProvider(_ api: any VehicleProviding, preferences: PreferencesStore) async throws {
-        guard let volvo = api as? VolvoAPI else { return }
-        let clientID = preferences.volvoClientID.isEmpty ? BuiltinVolvoSecrets.clientID : preferences.volvoClientID
-        let secret = (try Keychain.readVolvoClientSecret()) ?? BuiltinVolvoSecrets.clientSecret
-        let apiKey = (try Keychain.readVolvoApiKey()) ?? BuiltinVolvoSecrets.vccApiKey
-        guard !clientID.isEmpty, !secret.isEmpty, !apiKey.isEmpty else {
-            throw VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
-        }
-        await volvo.configure(clientID: clientID, clientSecret: secret, vccApiKey: apiKey)
     }
 }

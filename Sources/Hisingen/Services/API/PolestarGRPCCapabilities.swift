@@ -253,13 +253,30 @@ extension PolestarGRPC {
     /// version (`consumerSoftwareVersion`) – which `GetSoftwareInfo` does not provide during
     /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
-        let body = try await firstMessage(path: Self.myCarsPath, message: Self.myCarsRequest(vin: vin),
-                                          vin: vin, accessToken: accessToken)
+        let body = try await myCarsBody(vin: vin, accessToken: accessToken)
         let capabilities = Self.parseMyCars(body, vin: vin)
         // Cache the backend-reported charging bounds so command validation can use the same
         // limits the vehicle itself advertises instead of hardcoded fallbacks.
         if let capabilities { capabilityLimits[vin] = capabilities }
         return capabilities
+    }
+
+    /// Single-flight for the capability document. One sweep resolves it from more than one
+    /// consumer, and each miss was a separate `GetMyCars` round trip – two recorded failures
+    /// per launch in the diagnostic log where one explained the other.
+    func myCarsBody(vin: String, accessToken: String) async throws -> Data {
+        if let existing = myCarsInFlight[vin] { return try await existing.task.value }
+        let requestID = UUID()
+        let task = Task {
+            try await self.firstMessage(path: Self.myCarsPath,
+                                        message: Self.myCarsRequest(vin: vin),
+                                        vin: vin, accessToken: accessToken)
+        }
+        myCarsInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
+        defer {
+            if myCarsInFlight[vin]?.id == requestID { myCarsInFlight[vin] = nil }
+        }
+        return try await task.value
     }
 
     func fetchClimate(vin: String, accessToken: String) async throws -> VehicleClimateStatus? {

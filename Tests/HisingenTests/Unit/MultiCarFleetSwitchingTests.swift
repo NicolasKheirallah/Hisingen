@@ -112,6 +112,34 @@ struct MultiCarFleetSwitchingTests {
     }
 
     @Test
+    func transientTokenEndpointFailureKeepsTheStoredRefreshToken() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        defer { try? keychain.deleteSessionToken() }
+        try keychain.saveSessionToken("valid-polestar-refresh-token")
+
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
+        let polestarAPI = PolestarAPI(keychain: keychain, preferences: preferences)
+
+        // A 5xx is the IdP being unavailable, not the grant being dead. Discarding here would
+        // trade a transient outage for a credential prompt the user cannot satisfy offline.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ServerErrorTransport.self]
+        await polestarAPI.installRestoreTestSession(URLSession(configuration: configuration))
+
+        do {
+            try await polestarAPI.restoreSession(token: "valid-polestar-refresh-token", preferredVIN: nil, features: .default)
+            Issue.record("a 5xx token exchange must not restore a session")
+        } catch {
+            // expected: the caller sees a transient failure
+        }
+
+        #expect(try keychain.readSessionToken() == "valid-polestar-refresh-token",
+                "a 5xx token exchange must not discard a grant that may still be valid")
+    }
+
+    @Test
     func statusItemControllerAvailableVehiclesIncludesAllFleetVINs() {
         let cars = [
             CarSummary(vin: Self.polestarVin1, title: "Polestar 1"),
@@ -180,9 +208,13 @@ private actor MockFleetProvider: VehicleProviding {
     }
 }
 
-/// Serves a valid Polestar discovery document and answers the token exchange with the
-/// OAuth marker of a permanently dead grant (invalid_grant), deterministically.
-private final class DeadGrantTransport: URLProtocol, @unchecked Sendable {
+/// Serves a valid Polestar discovery document and answers the token exchange with a response
+/// supplied by the subclass. Separate subclasses rather than one configurable static: test
+/// suites run in parallel and a mutable static would race.
+private class TokenEndpointTransport: URLProtocol, @unchecked Sendable {
+    class var tokenStatus: Int { 400 }
+    class var tokenBody: Data { Data(#"{"error":"invalid_grant"}"#.utf8) }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
@@ -200,14 +232,28 @@ private final class DeadGrantTransport: URLProtocol, @unchecked Sendable {
              "userinfo_endpoint":"https://polestarid.eu.polestar.com/userinfo"}
             """#.utf8)
         } else {
-            status = 400
-            body = Data(#"{"error":"invalid_grant","error_description":"Token has been revoked"}"#.utf8)
+            status = Self.tokenStatus
+            body = Self.tokenBody
         }
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
+}
+
+/// The OAuth marker of a permanently dead grant (invalid_grant), deterministically.
+private final class DeadGrantTransport: TokenEndpointTransport {
+    override class var tokenStatus: Int { 400 }
+    override class var tokenBody: Data {
+        Data(#"{"error":"invalid_grant","error_description":"Token has been revoked"}"#.utf8)
+    }
+}
+
+/// The IdP answering 5xx, which says nothing about whether the grant is still valid.
+private final class ServerErrorTransport: TokenEndpointTransport {
+    override class var tokenStatus: Int { 500 }
+    override class var tokenBody: Data { Data(#"{"error":"server_error"}"#.utf8) }
 }
 
 private extension PolestarAPI {

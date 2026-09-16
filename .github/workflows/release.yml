@@ -290,7 +290,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TARGET_PATH="website/public/updates/appcast.xml"
+          TARGET_PATH="site/updates/appcast.xml"
           CONTENT=$(base64 < updates/appcast.xml | tr -d '\n')
           EXISTING_SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH?ref=main" --jq .sha 2>/dev/null || true)
           if [ -n "$EXISTING_SHA" ]; then

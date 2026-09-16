@@ -42,7 +42,10 @@ struct OpeningChipView: View {
         }
     }
 
-    private var chipFill: Color {
+    /// The row's fill for its hover / highlight / open states. Named `stateFill`, not `chipFill`:
+    /// it shadowed the real `HisingenTheme.chipFill` token, which is the inset surface, while this
+    /// is a state tint over whatever surface the row already sits on.
+    private var stateFill: Color {
         if isHovered || isHighlighted {
             return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.06)
         }
@@ -96,7 +99,7 @@ struct OpeningChipView: View {
         .padding(.vertical, 4.5)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(chipFill)
+                .fill(stateFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -127,6 +130,9 @@ struct DoorsAndOpeningsCardView: View {
     let ext: ExteriorSnapshot
     let isLocked: Bool?
     var isTailgateLocked: Bool? = nil
+    /// Drives which silhouette is drawn: a Polestar 3 or 4 owner gets their own car's panels
+    /// rather than a Polestar 2 with the highlights in roughly the right place.
+    var model: VehicleModel? = nil
 
     @State private var hoveredOpening: VehicleOpening? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -175,7 +181,7 @@ struct DoorsAndOpeningsCardView: View {
                     if let isTailgateLocked {
                         Pill(
                             text: isTailgateLocked ? L10n.text("Tailgate locked") : L10n.text("Tailgate unlocked"),
-                            color: isTailgateLocked ? HisingenTheme.semanticGood : .orange,
+                            color: isTailgateLocked ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning,
                             symbol: isTailgateLocked ? "lock.fill" : "lock.open.fill"
                         )
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
@@ -187,6 +193,7 @@ struct DoorsAndOpeningsCardView: View {
 
                 VehicleSideProfileDoorsView(
                     openings: ext.openings,
+                    model: model,
                     hoveredOpening: hoveredOpening,
                     // Two-way: hovering a chip lights the part, and hovering the part lights the
                     // chip. The chip grid is the legend now rather than the only interface.
@@ -253,6 +260,8 @@ struct DoorsAndOpeningsCardView: View {
 
 struct TireStatusCardView: View {
     let tyres: [TyrePressure]
+    /// Drives which silhouette and which wheel circles are drawn.
+    var model: VehicleModel? = nil
 
     @State private var hoveredPosition: TyrePosition? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -305,7 +314,7 @@ struct TireStatusCardView: View {
                     CardHeader(
                         symbol: "circle.grid.2x2",
                         title: L10n.text(hasValues ? "Tire Pressure" : "Tire Status (iTPMS)"),
-                        color: .blue
+                        color: HisingenTheme.semanticActive
                     )
                     Spacer()
                     Pill(text: summary.text, color: summary.color, symbol: summary.symbol)
@@ -326,7 +335,7 @@ struct TireStatusCardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                VehicleSideProfileTiresView(tyres: tyres, hoveredPosition: hoveredPosition)
+                VehicleSideProfileTiresView(tyres: tyres, model: model, hoveredPosition: hoveredPosition)
                     .padding(.horizontal, 4)
 
                 VStack(spacing: 6) {
@@ -527,12 +536,12 @@ struct LocationCardView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: .red)
+                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
                     Spacer()
                     if let parkingBrake, parkingBrake {
                         Pill(
                             text: L10n.text("Brake Set"),
-                            color: .orange,
+                            color: HisingenTheme.semanticWarning,
                             symbol: "parkingsign.circle.fill"
                         )
                     }
@@ -619,7 +628,7 @@ struct LocationCardView: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "cloud.sun.fill")
                                     .hisType(.micro)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(HisingenTheme.semanticWarning)
                                 Text(Format.temperature(celsius: temp, unit: preferences.temperatureUnit))
                                     .hisType(.micro, weight: .semibold)
                                     .foregroundStyle(HisingenTheme.ink)

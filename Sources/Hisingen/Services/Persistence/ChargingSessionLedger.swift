@@ -566,28 +566,13 @@ final class ChargingSessionLedger: Sendable {
 
     func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {
         let query = """
-        SELECT id, session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type
+        SELECT \(HistoryRowDecoder.Columns.chargingSample)
         FROM charging_samples WHERE session_id = ? ORDER BY timestamp ASC;
         """
         return (try? sql.query(sql: query) { stmt in
             try stmt.bindText(sessionId, at: 1)
-        } process: { stmt -> [HistoricalChargingSample] in
-            var list: [HistoricalChargingSample] = []
-            while stmt.step() {
-                guard let id = stmt.columnInt64(at: 0),
-                      let sess = stmt.columnText(at: 1),
-                      let vin = stmt.columnText(at: 2),
-                      let ts = stmt.columnDate(at: 3),
-                      let soc = stmt.columnDouble(at: 4) else { continue }
-                list.append(HistoricalChargingSample(
-                    id: id, sessionId: sess, vin: vin, timestamp: ts, soc: soc,
-                    powerKw: stmt.columnDouble(at: 5),
-                    voltageVolts: stmt.columnDouble(at: 6),
-                    currentAmps: stmt.columnDouble(at: 7),
-                    chargingType: stmt.columnText(at: 8)
-                ))
-            }
-            return list
+        } process: { stmt in
+            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.chargingSample)
         }) ?? []
     }
 

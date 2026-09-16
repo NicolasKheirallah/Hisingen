@@ -44,7 +44,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
                     .background(
-                        isSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                        isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                         in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                     )
                     .overlay(

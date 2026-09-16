@@ -37,7 +37,7 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
-    func signOutErasesHistoryWhenExplicitlyRequested() throws {
+    func signOutClearsHistoryWhenExplicitlyRequested() throws {
         let vin = "RETENTION_ERASE_TEST"
         let database = seededDatabase(vin: vin)
         let store = VehicleStateStore(defaults: try makeDefaults(), database: database)
@@ -51,26 +51,83 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
+    func fleetWideSignOutClearKeepsLocalHistoryByDefault() throws {
+        // The sign-out path that has no vehicle left to name: the fleet-wide clear is its own
+        // call, and it keeps the same promise – history stays unless the reader asked for it.
+        let first = "RETENTION_FLEET_ONE"
+        let second = "RETENTION_FLEET_TWO"
+        let database = VehicleDatabase.inMemory()
+        _ = database.charging.startChargingSession(vin: first, startSoc: 30)
+        _ = database.charging.startChargingSession(vin: second, startSoc: 40)
+        #expect(database.recordTelemetry(
+            vin: second, odometerKm: 1_234, tripManualKm: nil, tripAutoKm: nil,
+            avgConsumption: nil, ambientTempC: nil, latitude: nil, longitude: nil
+        ))
+        let store = VehicleStateStore(defaults: try makeDefaults(), database: database)
+
+        store.clearAll()
+
+        let counts = database.recordCounts()
+        #expect(counts.chargingSessions == 2)
+        #expect(counts.telemetry == 1)
+    }
+
+    @Test
     func localDataEraseClearsReceiptsButLocationErasePreservesThem() throws {
         let vin = "RECEIPT_RETENTION_TEST"
         let defaults = try makeDefaults()
         let preferences = PreferencesStore(defaults: defaults)
-        let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
+        let database = VehicleDatabase.inMemory()
+        let stateStore = VehicleStateStore(defaults: defaults, database: database)
         let record = StoredCommandReceipt(
             receipt: CommandReceipt(commandIdentifier: "lock", issuedAt: Date()),
             confirmationDeadline: Date().addingTimeInterval(60)
         )
         stateStore.saveCommandReceipt(record, for: vin)
 
-        preferences.clearLocalVehicleDefaults(
-            for: vin,
-            includeBaselines: false,
-            includeCommandReceipts: false
-        )
+        // A location erase names the one store it invalidates. The receipt is a row the eraser
+        // owns, not a plist entry, so this is the only path that can reach it.
+        let eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: CarImageCache())
+        try eraser.perform(.locations(.vehicle(vin)))
         #expect(stateStore.commandReceipt(for: vin) == record)
 
-        preferences.clearLocalVehicleDefaults(for: vin)
+        stateStore.clear(vin: vin)
         #expect(stateStore.commandReceipt(for: vin) == nil)
+    }
+
+    @Test
+    func legacyPlistBaselinesMigrateIntoRowsAndExpiredOnesDoNot() throws {
+        let vin = "LEGACY_BASELINE_TEST"
+        let expiredVIN = "LEGACY_BASELINE_EXPIRED"
+        let defaults = try makeDefaults()
+        let baseline = ChargingBaseline(
+            vin: vin, state: .charging, connection: .connected, batteryPercentage: 42,
+            targetPercentage: 80, vehicleReportedAt: Date(), sampledAt: Date(),
+            chargingSessionActive: true, interruptionSamples: 0, lowBatteryNotified: false)
+        // The stale one must not come forward: the retention rule is about the baseline, not
+        // about which tier it happens to be sitting in.
+        let expired = ChargingBaseline(
+            vin: expiredVIN, state: .idle, connection: .disconnected, batteryPercentage: 12,
+            targetPercentage: 80, vehicleReportedAt: Date().addingTimeInterval(-9 * 24 * 60 * 60),
+            sampledAt: Date().addingTimeInterval(-9 * 24 * 60 * 60),
+            chargingSessionActive: false, interruptionSamples: 0, lowBatteryNotified: false)
+        defaults.set(
+            try JSONEncoder().encode([vin: baseline, expiredVIN: expired]),
+            forKey: "charging_baselines_v1")
+
+        let database = VehicleDatabase.inMemory()
+        let stateStore = VehicleStateStore(defaults: defaults, database: database)
+        // The read is pure: nothing is in the row yet, and reading must not move the entry.
+        #expect(stateStore.baseline(for: vin) == nil)
+
+        stateStore.activate()
+
+        #expect(stateStore.baseline(for: vin)?.batteryPercentage == 42)
+        #expect(database.loadBaseline(for: vin)?.batteryPercentage == 42)
+        #expect(stateStore.baseline(for: expiredVIN) == nil)
+        #expect(database.loadBaseline(for: expiredVIN) == nil)
+        #expect(defaults.data(forKey: "charging_baselines_v1") == nil)
     }
 
     @Test
@@ -94,6 +151,7 @@ struct DataRetentionHardeningTests {
             forKey: "command_receipts_v1"
         )
         let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
+        stateStore.activate()
 
         #expect(stateStore.commandReceipts(for: vin) == [
             StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline)

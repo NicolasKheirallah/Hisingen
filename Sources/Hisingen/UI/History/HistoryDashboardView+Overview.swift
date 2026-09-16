@@ -431,7 +431,7 @@ extension HistoryDashboardView {
         else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "leaf.fill", title: L10n.text("Emissions vs Petrol"), color: .green)
+                CardHeader(symbol: "leaf.fill", title: L10n.text("Emissions vs Petrol"), color: HisingenTheme.semanticGood)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("CO₂ Avoided"), Format.massKg(comparison.avoidedKgCO2))
                     curveStat(L10n.text("EV Generation"), Format.massKg(comparison.electricKgCO2))

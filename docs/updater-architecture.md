@@ -69,8 +69,10 @@ One-time maintainer setup:
    `base64 < sparkle-private.key | tr -d '\n'`). CI derives the corresponding public key
    and fails before publication unless it exactly matches `SPARKLE_PUBLIC_ED_KEY`.
    Set repository variable `SPARKLE_TOOLS_SHA256` to the SHA-256 of `Sparkle-2.9.6.tar.xz`.
-3. Enable GitHub Pages. The Pages build serves `website/public/updates/appcast.xml` at the
-   `SUFeedURL` embedded in the application.
+3. Enable GitHub Pages. The Pages build serves `site/updates/appcast.xml` at the
+   `SUFeedURL` embedded in the application. Pages also serves `site/oauth-callback.html`,
+   which is Volvo's registered HTTPS OAuth redirect. Both files are live dependencies of the
+   shipped app, so `pages.yml` verifies each one is present before deploying.
 
 For every version tag CI tests, builds, signs/notarizes/staples, packages the app zip and DMG,
 generates a signed appcast and signed Markdown notes, publishes the release assets, updates the

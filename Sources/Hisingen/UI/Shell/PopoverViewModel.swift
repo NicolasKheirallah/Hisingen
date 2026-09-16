@@ -16,7 +16,6 @@ final class PopoverViewModel: ObservableObject {
         var checkingForUpdates: Bool
         var notificationPermission: NotificationPermission
         var diagnostics: DiagnosticsSnapshot?
-        var settingsMode: Bool
         var setupMode: Bool
     }
 

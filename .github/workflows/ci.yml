@@ -57,6 +57,36 @@ jobs:
       - name: Check documentation links and fences
         run: python3 Scripts/check-docs-links.py
 
+  check-vin-scoping:
+    name: check-vin-scoping
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      # A destructive member with a defaulted optional VIN can widen to every vehicle
+      # by omission — which is how "Erase local vehicle data" once ran thirteen unscoped
+      # deletes and still told the reader it had succeeded.
+      - name: Check destructive scope is named
+        run: python3 Scripts/check-vin-scoping.py
+
+  check-contrast:
+    name: check-contrast
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      # Parses the Color(light:dark:) tokens out of the theme files and recomputes every WCAG
+      # ratio the palette prose claims, so a tenth theme or a retuned token cannot silently
+      # drop below its floor. Pure Python, no toolchain needed.
+      - name: Check theme contrast floors
+        run: python3 Scripts/verify-app-contrast.py
+
   build-and-test:
     name: build-and-test (${{ matrix.os }})
     strategy:

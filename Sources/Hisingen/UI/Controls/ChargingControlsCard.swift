@@ -47,7 +47,7 @@ struct ChargingControlsCard: View {
         let chargingCommands = [RemoteCommand.setChargeTarget(80), .setAmpLimit(16), .startChargingOverride]
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: .green)
+                CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: HisingenTheme.semanticGood)
                 gate.dimReason(gate.liveAvailability(chargingCommands))
 
                 if profile.permits(.chargeTarget) && features.contains(.remoteCharging) {
@@ -182,7 +182,7 @@ struct ChargingControlsCard: View {
                             .padding(.vertical, 3)
                             .frame(maxWidth: .infinity)
                             .background(
-                                selected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05),
+                                selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05),
                                 in: RoundedRectangle(cornerRadius: 6)
                             )
                             .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
@@ -214,7 +214,7 @@ struct ChargingControlsCard: View {
                         gate.send(.setChargeTarget(rounded))
                     }
                 )
-                .tint(.green)
+                .tint(HisingenTheme.semanticGood)
                 .disabled(gate.isDisabled(.setChargeTarget(chargeTarget)))
                 .accessibilityValue(Format.percent(Double(
                     chargeTargetDraft.map { Int($0.rounded()) } ?? chargeTarget
@@ -289,7 +289,7 @@ struct ChargingControlsCard: View {
                         gate.send(.setAmpLimit(rounded))
                     }
                 )
-                .tint(.orange)
+                .tint(HisingenTheme.semanticWarning)
                 .disabled(gate.isDisabled(.setAmpLimit(ampLimit)))
                 .accessibilityValue(Format.amps(
                     ampLimitDraft.map { Int($0.rounded()) } ?? ampLimit
@@ -318,7 +318,7 @@ struct ChargingControlsCard: View {
                 .frame(maxWidth: .infinity, minHeight: 30)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(HisingenTheme.semanticGood)
             .disabled(gate.isDisabled(.startChargingOverride))
 
             Button {
@@ -434,7 +434,7 @@ struct ChargingControlsCard: View {
                     gate.send(.updateChargeLocationMinimumSoc(id: location.id, soc: rounded))
                 }
             )
-            .tint(.green)
+            .tint(HisingenTheme.semanticGood)
             .disabled(gate.isDisabled(.updateChargeLocationMinimumSoc(id: location.id, soc: 0)))
             .accessibilityLabel(L10n.text("Minimum charge at location"))
 
@@ -480,7 +480,7 @@ struct ChargingControlsCard: View {
                     gate.send(.updateChargeLocationAmpLimit(id: location.id, amps: rounded))
                 }
             )
-            .tint(.orange)
+            .tint(HisingenTheme.semanticWarning)
             // Probed with 0 A so the question is "does this vehicle support location amperage",
             // not "is the reading the vehicle last sent inside its own range".
             .disabled(gate.isDisabled(.updateChargeLocationAmpLimit(id: location.id, amps: 0)))
@@ -520,7 +520,7 @@ struct ChargingControlsCard: View {
             } label: {
                 Label(L10n.text("Delete Location"), systemImage: "trash")
                     .hisType(.caption, weight: .medium)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(HisingenTheme.semanticCritical)
             }
             .buttonStyle(.pressable)
             .disabled(gate.isDisabled(.deleteChargeLocation(id: location.id)))

@@ -46,7 +46,15 @@ enum Motion {
     /// A control reacting to the pointer or a click. Quick, no overshoot.
     static var interaction: Animation { .easeOut(duration: fast) }
     /// Selection indicators that slide rather than teleport (tab underline, chips).
-    static var selection: Animation { .spring(response: 0.30, dampingFraction: 0.86) }
+    ///
+    /// Critically damped. This was `dampingFraction: 0.86`, which overshoots — the same value
+    /// `cardChange` carried. Overshoot is only justified when the *gesture itself* carried momentum:
+    /// a card you flicked should settle with a little bounce, a tab underline that merely changed
+    /// state should not. Nothing in this app is driven by a pointer drag (there is no `DragGesture`
+    /// anywhere in the tree), so no transition here has momentum behind it and every spring is
+    /// critically damped. If a gesture layer is added, that is when a sub-1.0 damping ratio earns
+    /// its place — on the interaction that produced the velocity, not on state changes.
+    static var selection: Animation { .spring(response: 0.30, dampingFraction: 1.0) }
     /// Theme / appearance cross-fades: colors and materials soften, nothing moves.
     static var theme: Animation { .easeInOut(duration: fast) }
     /// The manual refresh sweep (the 360° icon rotation).
@@ -56,9 +64,10 @@ enum Motion {
 
     /// The vehicle's state changed. Expressive but critically damped – it
     /// settles once and stops, it never rings.
-    static var stateChange: Animation { .spring(response: 0.44, dampingFraction: 0.92) }
-    /// Cards entering or leaving a stack.
-    static var cardChange: Animation { .spring(response: 0.40, dampingFraction: 0.90) }
+    static var stateChange: Animation { .spring(response: 0.44, dampingFraction: 1.0) }
+    /// Cards entering or leaving a stack. Critically damped for the same reason as ``selection``:
+    /// a card that moved because the data changed has no velocity to carry.
+    static var cardChange: Animation { .spring(response: 0.40, dampingFraction: 1.0) }
     /// Height / layout settling with no visible ringing.
     static var layout: Animation { .spring(response: 0.50, dampingFraction: 1.0) }
 

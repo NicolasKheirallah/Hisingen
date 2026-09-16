@@ -2,46 +2,23 @@ import Foundation
 import Testing
 @testable import Hisingen
 
-/// The gRPC transport enriches diagnostic-store operation labels with the server's
-/// grpc-status/grpc-message headers; these pin that enrichment without needing a
-/// live endpoint.
+/// The gRPC transport carries `grpc-status`/`grpc-message` as structured diagnostic fields
+/// instead of folding them into the operation label, so one logical operation stays one
+/// grouping key. These pin the status mapping that used to be asserted against label text.
 struct PolestarGRPCDiagnosticsTests {
     @Test
-    func operationWithoutGrpcDetailIsUnchanged() {
-        #expect(PolestarGRPC.diagnosticOperation("gRPC /vehicle/BatteryService",
-                                                 grpcStatus: nil, grpcMessage: nil)
-                == "gRPC /vehicle/BatteryService")
-        // An empty-string status is treated as absent, same as a missing header.
-        #expect(PolestarGRPC.diagnosticOperation("gRPC x", grpcStatus: "", grpcMessage: "")
-                == "gRPC x")
-    }
-
-    @Test
-    func operationCarriesStatusAndDecodedMessage() {
-        let label = PolestarGRPC.diagnosticOperation(
-            "gRPC /vehicle/ChargingService",
-            grpcStatus: "16",
-            grpcMessage: "Command%20requires%20app%20pairing")
-        #expect(label == "gRPC /vehicle/ChargingService (grpc-status=16, grpc-message=Command requires app pairing)")
-    }
-
-    @Test
-    func undecodableMessageSurvivesVerbatim() {
-        let label = PolestarGRPC.diagnosticOperation(
-            "gRPC p", grpcStatus: "3", grpcMessage: "%E2%9C%93 invalid")
-        #expect(label.contains("grpc-message=✓ invalid"))
-    }
-
-    @Test
-    func longMessagesAreTruncated() throws {
-        let label = PolestarGRPC.diagnosticOperation(
-            "gRPC p", grpcStatus: "2",
-            grpcMessage: String(repeating: "a", count: 500))
-        let marker = try #require(label.range(of: "grpc-message="))
-        // Drop the label's closing parenthesis before measuring.
-        let messagePart = label[marker.upperBound...].dropLast()
-        #expect(messagePart.count == 120)
-        #expect(!label.contains(String(repeating: "a", count: 200)))
+    func unmappedStatusKeepsServiceAndServerMessage() {
+        let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
+        guard case .invalidResponse(let operation) = PolestarGRPC.readStatusError(
+            status: "3", message: "vin%20is%20required", path: path
+        ) else {
+            Issue.record("an unmapped status stays invalidResponse")
+            return
+        }
+        // The server's own explanation is the only clue that explains INVALID_ARGUMENT.
+        #expect(operation.contains("3"))
+        #expect(operation.contains("services.vehiclestates.dashboard.DashboardService"))
+        #expect(operation.contains("vin is required"))
     }
 
     /// Typed gRPC status mapping: unimplemented (12) is negative-cached, unavailable (14) is
@@ -177,6 +154,65 @@ struct PolestarGRPCDiagnosticsTests {
         #expect(DiscoveryV2PrimaryTransport.v1Requests() == 0, "v1 must not be requested when v2 serves a valid document")
     }
 
+    /// A telemetry sweep resolves the C3 host from a dozen concurrent readers, and they must share
+    /// one discovery request. An `await` between the single-flight check and publishing the task
+    /// let every caller pass the check before any published one, so each started its own request
+    /// and all but the last surfaced as a spurious `CancellationError` — which failed the whole
+    /// state fetch while the diagnostic log showed a clean run.
+    @Test func concurrentReadersShareOneDiscoveryRequest() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CountingDiscoveryTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "io.kheirallah.hisingen.tests.discovery-single-flight.\(UUID())"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session)
+        // A non-nil second grant makes the old window suspend for certain rather than only when
+        // the optional await happened to.
+        await grpc.setAlternateAccessTokenProvider { "command-token" as String? }
+
+        let hosts = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<10 {
+                group.addTask {
+                    let url = try await grpc.resolvedHost(.c3, accessToken: "session-token")
+                    return try #require(url.host)
+                }
+            }
+            var seen: [String] = []
+            for try await host in group { seen.append(host) }
+            return seen
+        }
+
+        #expect(hosts.count == 10)
+        #expect(Set(hosts) == ["grpc.example"])
+        #expect(CountingDiscoveryTransport.requestCount() == 1,
+                "concurrent readers must share one discovery request, saw \(CountingDiscoveryTransport.requestCount())")
+    }
+
+    /// The rejection the ladder retries is the fallback working, not a fault. It must carry the
+    /// expected classification so a support export does not report one error per launch for a
+    /// request that then succeeds.
+    @Test func retriedDiscoveryRejectionIsClassifiedNotFailed() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ClassifiedRejectionDiscoveryTransport.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "io.kheirallah.hisingen.tests.discovery-classification.\(UUID())"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let log = APIDiagnosticLogStore()
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, session: session, diagnosticLog: log)
+
+        let host = try await grpc.resolvedHost(.c3, accessToken: "token")
+        #expect(host.host == "grpc-classified.example")
+
+        let rows = await log.snapshot().filter { $0.operation == "C3 discovery" }
+        #expect(rows.count == 2, "expected one rejected v2 attempt and one accepted v1 attempt")
+        #expect(rows.first?.statusCode == 406)
+        #expect(rows.first?.semanticErrorType == "expected:discovery-retry")
+        #expect(rows.last?.statusCode == 200)
+        #expect(rows.last?.semanticErrorType == nil)
+    }
+
 }
 
 /// 406s the v2 discovery request, serves a valid v1 document, and records each Accept version.
@@ -258,6 +294,52 @@ private final class CapabilityFailureTransport: URLProtocol, @unchecked Sendable
         let data = discovery ? Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8) : Data()
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
                                        headerFields: ["Retry-After": "60"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+/// Counts discovery requests so the single-flight can be asserted. Holds the first response open
+/// briefly so the concurrent callers are genuinely in flight together.
+private final class CountingDiscoveryTransport: URLProtocol, @unchecked Sendable {
+    private static let recorder = DiscoveryRequestCounter()
+    static func requestCount() -> Int { recorder.count }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        Self.recorder.increment()
+        Thread.sleep(forTimeInterval: 0.05)
+        let data = Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private final class DiscoveryRequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+    func increment() { lock.lock(); defer { lock.unlock() }; value += 1 }
+}
+
+/// 406s the v2 document and serves a valid v1 one, with no shared recorder so it cannot interfere
+/// with the other discovery transports when tests run in parallel.
+private final class ClassifiedRejectionDiscoveryTransport: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let rejecting = (request.value(forHTTPHeaderField: "Accept") ?? "").contains("v2")
+        let data = rejecting
+            ? Data()
+            : Data(#"{"c3":{"grpcHost":"grpc-classified.example","grpcPort":443}}"#.utf8)
+        let response = HTTPURLResponse(url: request.url!, statusCode: rejecting ? 406 : 200,
+                                       httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)

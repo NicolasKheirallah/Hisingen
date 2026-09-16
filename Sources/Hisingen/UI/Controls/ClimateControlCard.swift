@@ -39,7 +39,7 @@ struct ClimateControlCard: View {
                         SpinningFanView(
                             isSpinning: climateActive && !reduceMotion,
                             size: 14,
-                            color: climateActive ? .orange : HisingenTheme.inkMuted
+                            color: climateActive ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted
                         )
                         Text(L10n.text("Climate & Conditioning"))
                             .hisType(.body, weight: .bold)
@@ -49,7 +49,7 @@ struct ClimateControlCard: View {
                     if climateActive {
                         Pill(
                             text: state.climateStatus?.activity.displayName ?? L10n.text("Active"),
-                            color: .orange,
+                            color: HisingenTheme.semanticWarning,
                             symbol: "fan.fill"
                         )
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
@@ -167,6 +167,35 @@ struct ClimateControlCard: View {
 
     private var temperatureControls: some View {
         VStack(spacing: 10) {
+            if let interior = state.climateStatus?.interiorTemperatureCelsius {
+                HStack(spacing: 6) {
+                    Image(systemName: "thermometer.medium")
+                        .foregroundStyle(HisingenTheme.accent)
+                        .hisType(.caption)
+                    Text(L10n.text("Current Cabin:"))
+                        .hisType(.caption, weight: .medium)
+                        .foregroundStyle(.secondary)
+                    Text(Format.temperature(celsius: interior, unit: preferences.temperatureUnit))
+                        .hisType(.caption, weight: .bold)
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
+                    if let exterior = state.weather?.temperatureCelsius {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(L10n.text("Outside:"))
+                            .hisType(.caption, weight: .medium)
+                            .foregroundStyle(.secondary)
+                        Text(Format.temperature(celsius: exterior, unit: preferences.temperatureUnit))
+                            .hisType(.caption, weight: .bold)
+                            .monospacedDigit()
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+
             HStack {
                 Button {
                     gate.send(maxHeatCommand)
@@ -179,7 +208,7 @@ struct ClimateControlCard: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .tint(.orange)
+                .tint(HisingenTheme.semanticWarning)
                 .disabled(gate.isDisabled(maxHeatCommand))
                 .help(L10n.text("Sends 30 °C with every heater at maximum. Does not change your saved settings."))
                 Spacer()
@@ -239,10 +268,10 @@ struct ClimateControlCard: View {
                                 .padding(.vertical, 3)
                                 .frame(maxWidth: .infinity)
                                 .background(
-                                    isSelected ? Color.orange.opacity(0.18) : Color.primary.opacity(0.05),
+                                    isSelected ? HisingenTheme.semanticWarning.opacity(0.18) : Color.primary.opacity(0.05),
                                     in: RoundedRectangle(cornerRadius: 6)
                                 )
-                                .foregroundStyle(isSelected ? Color.orange : .secondary)
+                                .foregroundStyle(isSelected ? HisingenTheme.semanticWarning : .secondary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: isSelected)
                         }
                         .buttonStyle(.pressable)
@@ -281,7 +310,7 @@ struct ClimateControlCard: View {
                     if let remaining = state.climateStatus?.timeRemainingMinutes {
                         Text(L10n.format("%d min remaining", remaining))
                             .hisType(.caption, weight: .medium)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(HisingenTheme.semanticWarning)
                     } else {
                         Text(L10n.text("Preconditions vehicle using in-car comfort settings."))
                             .hisType(.caption)
@@ -300,7 +329,7 @@ struct ClimateControlCard: View {
                 }
             }
             .padding(9)
-            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {
             HStack {
@@ -430,7 +459,7 @@ struct ClimateControlCard: View {
             .frame(maxWidth: .infinity, minHeight: 34)
         }
         .buttonStyle(.borderedProminent)
-        .tint(climateActive ? Color.red : HisingenTheme.polestarAmber)
+        .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.polestarAmber)
         .disabled(gate.isDisabled(climateActive ? .stopClimate : Self.probe))
         .hisAnimation(Motion.stateChange, value: climateActive)
     }

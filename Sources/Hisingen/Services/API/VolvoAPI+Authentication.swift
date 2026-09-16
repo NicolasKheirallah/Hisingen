@@ -10,9 +10,7 @@ extension VolvoAPI {
         // A browser authorization begins a new token generation. Cancel an older refresh so
         // its rotated token cannot land after the authorization-code grant and overwrite it.
         sessionEpoch &+= 1
-        refreshTask?.cancel()
-        refreshTask = nil
-        refreshTaskID = nil
+        cancelInFlightTokenGrant()
         let verifier = try PKCE.randomURLSafeString()
         let state = try PKCE.randomURLSafeString()
         authorizationFlow.begin(verifier: verifier, state: state)
@@ -79,14 +77,7 @@ extension VolvoAPI {
 
     func resetSession() async {
         sessionEpoch &+= 1
-        accessToken = nil
-        refreshToken = nil
-        tokenExpiry = nil
-        lastTokenGrantAt = nil
-        tokenLifetime = 0
-        refreshTask?.cancel()
-        refreshTask = nil
-        refreshTaskID = nil
+        resetTokenLifecycle()
         authorizationFlow.invalidate()
         cars = []
         selectedVIN = nil

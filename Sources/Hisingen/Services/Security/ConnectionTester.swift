@@ -57,17 +57,14 @@ enum SignInFailureKind: Equatable, Sendable {
 final class ConnectionTester {
     private let logger = AppLog.logger("connection-test")
     private let sessionManager: SessionManager
-    private let polestarAPI: PolestarAPI
-    private let volvoAPI: VolvoAPI
+    private let providers: ProviderRegistry
     private let preferences: PreferencesStore
 
     init(sessionManager: SessionManager,
-         polestarAPI: PolestarAPI,
-         volvoAPI: VolvoAPI,
+         providers: ProviderRegistry,
          preferences: PreferencesStore) {
         self.sessionManager = sessionManager
-        self.polestarAPI = polestarAPI
-        self.volvoAPI = volvoAPI
+        self.providers = providers
         self.preferences = preferences
     }
 
@@ -77,7 +74,7 @@ final class ConnectionTester {
         }
         let start = Date()
         do {
-            let provider: any VehicleProviding = brand == .volvo ? volvoAPI : polestarAPI
+            let provider = providers.provider(for: brand)
             let providerCars = try await sessionManager.restore(api: provider, preferences: preferences)
             guard !providerCars.isEmpty else {
                 return (false, L10n.text("Signed in, but no vehicles were returned."), .unspecified)

@@ -139,19 +139,18 @@ final class CarImageCache: @unchecked Sendable {
         }
     }
 
-    /// Drops the in-memory bytes for one VIN (primary, all angles, interior); a nil VIN
-    /// clears the whole tier. Called from the sign-out/clear path so a signed-out vehicle's
-    /// renders stop pinning memory; the disk and SQLite tiers remain as the durable cache.
-    func dropMemoryCache(for vin: String?) {
+    /// Drops the in-memory bytes for one VIN (primary, all angles, interior). Called from the
+    /// sign-out/clear path so a signed-out vehicle's renders stop pinning memory; the disk and
+    /// SQLite tiers remain as the durable cache.
+    ///
+    /// An empty VIN names no vehicle and drops nothing: the fleet-wide drop is
+    /// `dropAllMemoryCaches()`, so a blank identifier can never mean "every vehicle" one tier
+    /// away from a database delete that reads it as a scoped no-op.
+    func dropMemoryCache(for vin: String) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return }
         lock.lock()
         defer { lock.unlock() }
-        guard let cleanVIN = vin?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-              !cleanVIN.isEmpty else {
-            memoryCache.removeAll()
-            memoryCacheRecency.removeAll()
-            memoryCacheBytes = 0
-            return
-        }
         let stale = memoryCache.keys.filter { $0 == cleanVIN || $0.hasPrefix("\(cleanVIN)_") }
         guard !stale.isEmpty else { return }
         for key in stale {
@@ -159,6 +158,16 @@ final class CarImageCache: @unchecked Sendable {
             memoryCache.removeValue(forKey: key)
         }
         memoryCacheRecency.removeAll { stale.contains($0) }
+    }
+
+    /// The fleet-wide counterpart, named so that dropping every vehicle's renders is always a
+    /// deliberate call.
+    func dropAllMemoryCaches() {
+        lock.lock()
+        defer { lock.unlock() }
+        memoryCache.removeAll()
+        memoryCacheRecency.removeAll()
+        memoryCacheBytes = 0
     }
 
     // Callers hold `lock`.

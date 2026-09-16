@@ -87,6 +87,7 @@ struct ScheduleEditorSheet: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.pressable)
+            .accessibilityLabel(L10n.text("Close"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -125,7 +126,7 @@ struct ScheduleEditorSheet: View {
         let isEditable = sched.backendID != nil
         return HStack(spacing: 8) {
             Image(systemName: sched.kind == .climate ? "fan.fill" : "bolt.fill")
-                .foregroundStyle(sched.kind == .climate ? Color.orange : Color.green)
+                .foregroundStyle(sched.kind == .climate ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
                 .hisType(.body)
             VStack(alignment: .leading, spacing: 1) {
                 let timeStr = String(format: "%02d:%02d", sched.startHour ?? 0, sched.startMinute ?? 0)
@@ -162,7 +163,7 @@ struct ScheduleEditorSheet: View {
                 } label: {
                     Image(systemName: "trash")
                         .hisType(.label)
-                        .foregroundStyle(.red.opacity(0.8))
+                        .foregroundStyle(HisingenTheme.semanticCritical.opacity(0.8))
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
@@ -317,7 +318,7 @@ struct ScheduleEditorSheet: View {
                                 .hisType(.micro, weight: selected ? .bold : .regular)
                                 .frame(maxWidth: .infinity, minHeight: 24)
                                 .background(selected ? HisingenTheme.accent : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
-                                .foregroundStyle(selected ? Color.white : Color.primary)
+                                .foregroundStyle(selected ? HisingenTheme.accentOn : Color.primary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: selected)
                         }
                         .buttonStyle(.pressable)
@@ -341,6 +342,7 @@ struct ScheduleEditorSheet: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .keyboardShortcut(.cancelAction)
 
             Spacer()
 
@@ -350,7 +352,9 @@ struct ScheduleEditorSheet: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(HisingenTheme.accent)
+            .foregroundStyle(HisingenTheme.accentOn)
             .controlSize(.small)
+            .keyboardShortcut(.defaultAction)
             .disabled(chargingWindowInvalid || isBusy)
             .help(isBusy ? L10n.text("Another remote command is still running.") : "")
         }

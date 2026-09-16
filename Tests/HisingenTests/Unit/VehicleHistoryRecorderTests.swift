@@ -16,8 +16,9 @@ struct VehicleHistoryRecorderTests {
         )
         let state = vehicle(vin: "YSM-HISTORY", battery: 72, brand: .polestar)
 
+        recorder.saveAuthoritative(state)
         recorder.record(state)
-        await recorder.waitUntilIdle()
+        await recorder.drain()
 
         let snapshot = try #require(database.loadSnapshot(for: state.identity.vin))
         #expect(snapshot.identity.vin == state.identity.vin)
@@ -38,16 +39,18 @@ struct VehicleHistoryRecorderTests {
         var state = vehicle(vin: "YSM-SOH", battery: 100, brand: .polestar)
         state.maintenance.odometerKm = 10_000
 
+        recorder.saveAuthoritative(state)
         recorder.record(state)
-        await recorder.waitUntilIdle()
+        await recorder.drain()
         let saved = try #require(database.history.batteryHealthHistory(for: state.identity.vin).first)
         #expect(saved.measurementSource == BatteryHealthRecord.fullChargeRangeSource)
 
         state.energy.batteryPercentage = 80
         state.energy.rangeKm = 50
         state.maintenance.odometerKm = 11_000
+        recorder.saveAuthoritative(state)
         recorder.record(state)
-        await recorder.waitUntilIdle()
+        await recorder.drain()
 
         let history = database.history.batteryHealthHistory(for: state.identity.vin)
         #expect(history.count == 1)

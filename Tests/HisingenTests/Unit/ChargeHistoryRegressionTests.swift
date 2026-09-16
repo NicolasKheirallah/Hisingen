@@ -95,8 +95,9 @@ struct ChargeHistoryRegressionTests {
         // Whole seconds only: the SQLite date roundtrip truncates sub-second precision.
         let startedAt = Date(timeIntervalSince1970: Double(Int(Date().timeIntervalSince1970) - 7_200))
 
-        // Each save hands its storage pass to a detached task (PERSIST-06/07). Await the
-        // snapshot after every save so the observations reach the ledger in timeline order.
+        // The authoritative snapshot is durable when `save` returns, so the timeline order is
+        // guaranteed without polling. The ledger ingest is one of the coalesced derived passes,
+        // so drain once after the timeline before reading the sessions it produced.
         let timeline: [(soc: Double, charging: Bool, powerWatts: Int?, at: Date)] = [
             (40, true, nil, startedAt),
             (55, true, 4_000, startedAt.addingTimeInterval(3_600)),
@@ -111,11 +112,12 @@ struct ChargeHistoryRegressionTests {
                 vin: vin, soc: observation.soc, charging: observation.charging,
                 powerWatts: observation.powerWatts, at: observation.at
             ))
-            let landed = await awaitStored(timeout: 5) {
-                database.loadSnapshot(for: vin)?.freshness.fetchedAt == observation.at
-            }
-            #expect(landed, "observation at \(observation.at) never reached the database")
+            #expect(
+                database.loadSnapshot(for: vin)?.freshness.fetchedAt == observation.at,
+                "observation at \(observation.at) was not readable straight after save"
+            )
         }
+        await store.drainHistory()
 
         let session = try #require(database.charging.recentChargingSessions(for: vin).first)
         #expect(session.startSoc == 40)

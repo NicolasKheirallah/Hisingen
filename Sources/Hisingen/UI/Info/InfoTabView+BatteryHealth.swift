@@ -12,7 +12,7 @@ extension InfoTabView {
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
                     CardHeader(symbol: "battery.100.bolt",
-                               title: L10n.text("Battery Health & Longevity"), color: .green)
+                               title: L10n.text("Battery Health & Longevity"), color: HisingenTheme.semanticGood)
                     KVRow(L10n.text("Calculated State of Health (SoH)"),
                           L10n.text("Waiting for 100% charge"), symbol: "clock")
                     Text(L10n.text("Charge the vehicle to 100% to create the first SoH estimate. Hisingen saves the vehicle-reported range at full charge, divides it by the configured WLTP range, and updates the saved value only after another 100% reading."))
@@ -38,13 +38,13 @@ extension InfoTabView {
         let factoryUsable = estimate.referenceUsableCapacityKwh
         let nominal = state.factoryNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
-        let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : .red)
+        let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : HisingenTheme.semanticCritical)
         let history = asyncData.batteryHealthHistory
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "battery.100.bolt", title: L10n.text("Battery Health & Longevity"), color: .green)
+                    CardHeader(symbol: "battery.100.bolt", title: L10n.text("Battery Health & Longevity"), color: HisingenTheme.semanticGood)
                     Spacer()
                     Pill(
                         text: status,

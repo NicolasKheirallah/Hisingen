@@ -13,7 +13,8 @@ extension HisingenTheme {
     /// climate countdown, the cabin-temperature reading, the warranty header) while failing even
     /// the 3:1 large-text bar on the surface it actually sits on. The light variant is the same
     /// hue scaled to 0.70 in sRGB, which is 5.3:1 on the canvas and 5.9:1 on white.
-    /// `docs/design/verify-app-contrast.py` recomputes both from this file and fails the build.
+    /// `Scripts/verify-app-contrast.py` recomputes both appearances from this file and fails the
+    /// build; the measured values are 5.25:1 (light) and 6.20:1 (dark).
     static let polestarAmber = Color(
         light: NSColor(red: 0.6275, green: 0.3020, blue: 0.0941, alpha: 1),
         dark: NSColor(red: 0.8980, green: 0.4314, blue: 0.1373, alpha: 1)
@@ -33,95 +34,32 @@ extension HisingenTheme {
 
     // MARK: - Semantic Surface & Text Tokens
 
-    static var canvas: Color {
-        switch theme {
-        case .volvo:
-            return Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.04, green: 0.05, blue: 0.08, alpha: 1))
-        case .nordicNight:
-            return Color(light: NSColor(red: 0.95, green: 0.98, blue: 1.0, alpha: 1), dark: NSColor(red: 0.00, green: 0.00, blue: 0.00, alpha: 1))
-        case .aurora:
-            return Color(light: NSColor(red: 0.95, green: 0.99, blue: 0.97, alpha: 1), dark: NSColor(red: 0.04, green: 0.07, blue: 0.12, alpha: 1))
-        case .swedishGold:
-            return Color(light: NSColor(red: 0.99, green: 0.98, blue: 0.95, alpha: 1), dark: NSColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1))
-        case .cyanRacing:
-            return Color(light: NSColor(red: 0.94, green: 0.98, blue: 1.0, alpha: 1), dark: NSColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 1))
-        case .forest:
-            return Color(light: NSColor(red: 0.95, green: 0.98, blue: 0.95, alpha: 1), dark: NSColor(red: 0.04, green: 0.09, blue: 0.05, alpha: 1))
-        case .sandDune:
-            return Color(light: NSColor(red: 0.98, green: 0.97, blue: 0.94, alpha: 1), dark: NSColor(red: 0.09, green: 0.08, blue: 0.07, alpha: 1))
-        case .hisingen:
-            return Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1))
-        case .polestar:
-            return Color(light: NSColor(red: 0.94, green: 0.95, blue: 0.96, alpha: 1), dark: NSColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1))
-        }
-    }
+    static var canvas: Color { palette.canvas }
 
-    static var ink: Color {
-        switch theme {
-        case .polestar: return Color(light: NSColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 1), dark: NSColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1))
-        case .volvo: return Color(light: NSColor(red: 0.06, green: 0.09, blue: 0.15, alpha: 1), dark: NSColor(red: 0.97, green: 0.98, blue: 1.0, alpha: 1))
-        case .nordicNight: return Color(light: NSColor(red: 0.02, green: 0.12, blue: 0.20, alpha: 1), dark: NSColor.white)
-        case .aurora: return Color(light: NSColor(red: 0.02, green: 0.18, blue: 0.12, alpha: 1), dark: NSColor.white)
-        case .swedishGold: return Color(light: NSColor(red: 0.14, green: 0.11, blue: 0.04, alpha: 1), dark: NSColor.white)
-        case .cyanRacing: return Color(light: NSColor(red: 0.03, green: 0.12, blue: 0.22, alpha: 1), dark: NSColor.white)
-        case .forest: return Color(light: NSColor(red: 0.06, green: 0.16, blue: 0.08, alpha: 1), dark: NSColor.white)
-        case .sandDune: return Color(light: NSColor(red: 0.14, green: 0.12, blue: 0.09, alpha: 1), dark: NSColor.white)
-        case .hisingen: return Color(light: NSColor(red: 0.06, green: 0.08, blue: 0.12, alpha: 1), dark: NSColor(white: 0.98, alpha: 1))
-        }
-    }
+    static var ink: Color { palette.ink }
 
-    static var inkMuted: Color {
-        switch theme {
-        case .polestar:
-            // 4.7:1 on canvas was 4.4 % of luminance headroom under AA, and text rarely renders on
-            // `canvas`: it renders on a card material over an arbitrary desktop. Raised to 7.2:1 in
-            // light mode so the token survives a backdrop it cannot see. Dark mode was already 8.2:1.
-            return Color(light: NSColor(red: 0.31, green: 0.31, blue: 0.34, alpha: 1), dark: NSColor(red: 0.65, green: 0.65, blue: 0.70, alpha: 1))
-        case .volvo:
-            return Color(light: NSColor(red: 0.35, green: 0.42, blue: 0.50, alpha: 1), dark: NSColor(red: 0.60, green: 0.68, blue: 0.76, alpha: 1))
-        case .nordicNight:
-            return Color(light: NSColor(red: 0.08, green: 0.42, blue: 0.58, alpha: 1), dark: NSColor(red: 0.30, green: 0.75, blue: 0.95, alpha: 1))
-        case .aurora:
-            return Color(light: NSColor(red: 0.06, green: 0.45, blue: 0.32, alpha: 1), dark: NSColor(red: 0.28, green: 0.82, blue: 0.60, alpha: 1))
-        case .swedishGold:
-            return Color(light: NSColor(red: 0.48, green: 0.36, blue: 0.10, alpha: 1), dark: NSColor(red: 0.90, green: 0.82, blue: 0.55, alpha: 1))
-        case .cyanRacing:
-            return Color(light: NSColor(red: 0.08, green: 0.42, blue: 0.58, alpha: 1), dark: NSColor(red: 0.45, green: 0.80, blue: 0.98, alpha: 1))
-        case .forest:
-            return Color(light: NSColor(red: 0.18, green: 0.42, blue: 0.22, alpha: 1), dark: NSColor(red: 0.52, green: 0.88, blue: 0.65, alpha: 1))
-        case .sandDune:
-            return Color(light: NSColor(red: 0.42, green: 0.36, blue: 0.30, alpha: 1), dark: NSColor(red: 0.82, green: 0.76, blue: 0.70, alpha: 1))
-        case .hisingen:
-            // Same reasoning as `.polestar`: this is the default theme, its 4.7:1 was the thinnest
-            // margin in the palette, and it is spent on a blur. Raised to 7.1:1 in light mode.
-            return Color(light: NSColor(red: 0.29, green: 0.33, blue: 0.40, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1))
-        }
-    }
+    static var inkMuted: Color { palette.inkMuted }
 
-    static var hairline: Color {
-        switch theme {
-        case .polestar:
-            return Color(light: NSColor(red: 0.85, green: 0.86, blue: 0.88, alpha: 1), dark: NSColor(red: 0.18, green: 0.18, blue: 0.22, alpha: 1))
-        case .volvo:
-            return Color(light: NSColor(red: 0.86, green: 0.89, blue: 0.93, alpha: 1), dark: NSColor(red: 0.16, green: 0.20, blue: 0.28, alpha: 1))
-        case .nordicNight:
-            return Color(light: NSColor(red: 0.0, green: 0.60, blue: 0.80, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.90, blue: 1.0, alpha: 0.25))
-        case .aurora:
-            return Color(light: NSColor(red: 0.0, green: 0.65, blue: 0.35, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.90, blue: 0.46, alpha: 0.25))
-        case .swedishGold:
-            return Color(light: NSColor(red: 0.72, green: 0.52, blue: 0.05, alpha: 0.35), dark: NSColor(red: 0.83, green: 0.69, blue: 0.22, alpha: 0.30))
-        case .cyanRacing:
-            return Color(light: NSColor(red: 0.0, green: 0.48, blue: 0.78, alpha: 0.35), dark: NSColor(red: 0.0, green: 0.56, blue: 0.82, alpha: 0.30))
-        case .forest:
-            return Color(light: NSColor(red: 0.14, green: 0.48, blue: 0.18, alpha: 0.35), dark: NSColor(red: 0.18, green: 0.49, blue: 0.20, alpha: 0.25))
-        case .sandDune:
-            return Color(light: NSColor(red: 0.65, green: 0.50, blue: 0.25, alpha: 0.35), dark: NSColor(red: 0.77, green: 0.63, blue: 0.35, alpha: 0.30))
-        case .hisingen:
-            return Color(light: NSColor(white: 0.0, alpha: 0.08), dark: NSColor(white: 1.0, alpha: 0.12))
-        }
-    }
+    static var hairline: Color { palette.hairline }
 
-    static var accent: Color { accent(for: theme) }
+    /// The active theme's card fill: the canvas lifted toward white. See ``Palette/cardFill``.
+    static var cardFill: Color { palette.cardFill }
+
+    /// The active theme's chip fill: the card sunk toward black. See ``Palette/chipFill``.
+    ///
+    /// Opaque, not a third translucent material stacked on the card's on the panel's. §12 forbids
+    /// stacking light translucent surfaces because legibility collapses, and the worst case was the
+    /// hero badge over a photograph: a chip only has to separate from the card behind it, not from
+    /// the desktop behind that. It is the card sunk toward black rather than the card's own fill —
+    /// matching the card exactly would reproduce the "where does this end" problem the card had
+    /// against the canvas.
+    static var chipFill: Color { palette.chipFill }
+
+    static var accent: Color { palette.accent }
+
+    /// High-contrast foreground colour designed to be rendered on top of `accent`.
+    /// Returns black for light accents (Swedish Gold, Aurora, Sand Dune) and white for dark accents.
+    static var accentOn: Color { palette.accentOn }
 
     /// The accent for a specific theme rather than the active one.
     ///
@@ -131,25 +69,11 @@ extension HisingenTheme {
     /// checkmark on a near-black card: the hardest thing on the tile to see, in the card whose
     /// whole job is judging a theme.
     static func accent(for theme: AppTheme) -> Color {
-        switch theme {
-        case .polestar:
-            return Color(light: NSColor(red: 0.90, green: 0.43, blue: 0.14, alpha: 1), dark: NSColor(red: 1.0, green: 0.54, blue: 0.24, alpha: 1))
-        case .volvo:
-            return Color(light: NSColor(red: 0.0, green: 0.36, blue: 0.58, alpha: 1), dark: NSColor(red: 0.22, green: 0.74, blue: 0.97, alpha: 1))
-        case .hisingen:
-            return Color(light: NSColor(red: 0.88, green: 0.38, blue: 0.05, alpha: 1), dark: NSColor(red: 0.96, green: 0.50, blue: 0.15, alpha: 1))
-        case .nordicNight:
-            return Color(light: NSColor(red: 0.0, green: 0.55, blue: 0.75, alpha: 1), dark: NSColor(red: 0.0, green: 0.90, blue: 1.0, alpha: 1))
-        case .aurora:
-            return Color(light: NSColor(red: 0.0, green: 0.60, blue: 0.35, alpha: 1), dark: NSColor(red: 0.0, green: 0.92, blue: 0.50, alpha: 1))
-        case .swedishGold:
-            return Color(light: NSColor(red: 0.72, green: 0.52, blue: 0.05, alpha: 1), dark: NSColor(red: 0.88, green: 0.72, blue: 0.22, alpha: 1))
-        case .cyanRacing:
-            return Color(light: NSColor(red: 0.0, green: 0.48, blue: 0.78, alpha: 1), dark: NSColor(red: 0.0, green: 0.65, blue: 0.95, alpha: 1))
-        case .forest:
-            return Color(light: NSColor(red: 0.14, green: 0.48, blue: 0.18, alpha: 1), dark: NSColor(red: 0.30, green: 0.78, blue: 0.35, alpha: 1))
-        case .sandDune:
-            return Color(light: NSColor(red: 0.65, green: 0.50, blue: 0.25, alpha: 1), dark: NSColor(red: 0.82, green: 0.68, blue: 0.42, alpha: 1))
-        }
+        palette(for: theme).accent
+    }
+
+    /// The high-contrast foreground colour on top of the accent for a specific theme.
+    static func accentOn(for theme: AppTheme) -> Color {
+        palette(for: theme).accentOn
     }
 }

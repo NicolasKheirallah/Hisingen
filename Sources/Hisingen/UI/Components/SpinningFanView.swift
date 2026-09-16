@@ -3,12 +3,13 @@ import SwiftUI
 struct SpinningFanView: View {
     let isSpinning: Bool
     var size: CGFloat = 13
-    var color: Color = .orange
+    var color: Color = HisingenTheme.semanticWarning
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.ambientMotionAllowed) private var ambientMotionAllowed
     @State private var angle: Double = 0
 
-    private var shouldSpin: Bool { isSpinning && !reduceMotion }
+    private var shouldSpin: Bool { isSpinning && !reduceMotion && ambientMotionAllowed }
 
     var body: some View {
         Image(systemName: "fan.fill")

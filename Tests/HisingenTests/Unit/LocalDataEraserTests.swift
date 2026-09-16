@@ -4,7 +4,8 @@ import Testing
 
 /// The erase sequence is one call with one ordering, so it is asserted through that call rather
 /// than through each storage mechanism. The in-memory image tier is not observable through
-/// `CarImageCache`'s interface, so the drop is covered by construction, not here.
+/// `CarImageCache`'s interface, so the drop is covered by construction, not here; the registered
+/// in-memory tiers are covered in `VehicleEraseScopeTests`.
 @MainActor
 struct LocalDataEraserTests {
 
@@ -16,11 +17,29 @@ struct LocalDataEraserTests {
         database.saveSnapshot(vehicle(vin: vin))
         seedHistory(database, vin: vin)
 
-        try eraser.perform(.session, vin: vin)
+        try eraser.perform(.session(.vehicle(vin)))
 
         #expect(database.loadSnapshot(for: vin) == nil)
         #expect(database.recordCounts().chargingSessions == 1)
         _ = preferences
+    }
+
+    @Test
+    func theFleetWideSessionScopeDropsEverySnapshotAndKeepsDurableHistory() throws {
+        let (eraser, database, _, cleanup) = try makeEraser()
+        defer { cleanup() }
+        let first = "ERASER-FLEET-ONE"
+        let second = "ERASER-FLEET-TWO"
+        database.saveSnapshot(vehicle(vin: first))
+        database.saveSnapshot(vehicle(vin: second))
+        seedHistory(database, vin: first)
+        seedHistory(database, vin: second)
+
+        try eraser.perform(.session(.all))
+
+        #expect(database.loadSnapshot(for: first) == nil)
+        #expect(database.loadSnapshot(for: second) == nil)
+        #expect(database.recordCounts().chargingSessions == 2)
     }
 
     @Test
@@ -31,7 +50,7 @@ struct LocalDataEraserTests {
         database.saveSnapshot(vehicle(vin: vin))
         seedHistory(database, vin: vin)
 
-        try eraser.perform(.everything, vin: vin)
+        try eraser.perform(.everything(.vehicle(vin)))
 
         #expect(database.loadSnapshot(for: vin) == nil)
         let counts = database.recordCounts()
@@ -46,7 +65,7 @@ struct LocalDataEraserTests {
         let vin = "ERASER-SAMPLES"
         seedHistory(database, vin: vin)
 
-        try eraser.perform(.samples(olderThanDays: 0), vin: vin)
+        try eraser.perform(.samples(olderThanDays: 0))
 
         let counts = database.recordCounts()
         #expect(counts.chargingSamples == 0)
@@ -63,7 +82,7 @@ struct LocalDataEraserTests {
             avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
         preferences.persistLocationHistory = true
 
-        try eraser.perform(.locations, vin: vin)
+        try eraser.perform(.locations(.vehicle(vin)))
 
         // The preference is what keeps cleared coordinates cleared, so it belongs to the
         // sequence rather than to the button that calls it.
@@ -85,7 +104,8 @@ struct LocalDataEraserTests {
         let preferences = PreferencesStore(defaults: defaults)
         let database = VehicleDatabase.inMemory()
         let eraser = LocalDataEraser(
-            database: database, preferences: preferences, imageCache: CarImageCache())
+            database: database, preferences: preferences, imageCache: CarImageCache(),
+            memoryCaches: VehicleMemoryCacheRegistry())
         return (eraser, database, preferences, { defaults.removePersistentDomain(forName: suite) })
     }
 

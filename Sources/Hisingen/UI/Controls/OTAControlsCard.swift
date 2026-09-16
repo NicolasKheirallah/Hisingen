@@ -16,7 +16,7 @@ struct OTAControlsCard: View {
                 CardHeader(
                     symbol: "shippingbox.fill",
                     title: L10n.text("Vehicle Software & OTA"),
-                    color: .blue
+                    color: HisingenTheme.semanticActive
                 )
                 gate.dimReason(gate.liveAvailability([.installOTANow]))
                 if let software = state.softwareInfo {
@@ -48,7 +48,7 @@ struct OTAControlsCard: View {
         case .available:
             otaStatusRow(
                 symbol: "arrow.down.circle",
-                tint: .blue,
+                tint: HisingenTheme.semanticActive,
                 text: pending.map {
                     L10n.format(
                         "Software update %@ is available. The vehicle downloads it automatically; it can be installed once that finishes.",
@@ -59,21 +59,21 @@ struct OTAControlsCard: View {
         case .downloaded, .deferred:
             otaStatusRow(
                 symbol: "arrow.down.circle.fill",
-                tint: .blue,
+                tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
                     ?? L10n.text("A software update is ready to install.")
             )
         case .downloading:
             otaStatusRow(
                 symbol: "arrow.down.circle",
-                tint: .blue,
+                tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Downloading software update %@…", $0) }
                     ?? L10n.text("Downloading a software update…")
             )
         case .installing:
             otaStatusRow(
                 symbol: "gearshape.2.fill",
-                tint: .blue,
+                tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Installing software update %@…", $0) }
                     ?? L10n.text("Installing a software update…")
             )
@@ -81,7 +81,7 @@ struct OTAControlsCard: View {
             let when = software.scheduledAt.map(Format.dateTimeFormatter.string(from:))
             otaStatusRow(
                 symbol: "calendar.badge.clock",
-                tint: .blue,
+                tint: HisingenTheme.semanticActive,
                 text: when.map { L10n.format("Installation is scheduled for %@.", $0) }
                     ?? L10n.text("An installation is scheduled.")
             )
@@ -235,7 +235,7 @@ struct OTAControlsCard: View {
         if prominent {
             Button { gate.send(command) } label: { label }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .tint(HisingenTheme.semanticActive)
                 .controlSize(.regular)
                 .disabled(gate.isDisabled(command))
         } else {

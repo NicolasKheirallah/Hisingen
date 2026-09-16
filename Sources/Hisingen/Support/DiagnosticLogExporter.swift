@@ -181,8 +181,16 @@ enum DiagnosticLogExporter {
             if let semanticError = entry.semanticErrorType {
                 row["semanticErrorType"] = DiagnosticRedaction.redact(semanticError)
             }
-            if let value = entry.appVersion { row["appVersion"] = value }
-            if let value = entry.appBuild { row["appBuild"] = value }
+            if let grpcStatus = entry.grpcStatus { row["grpcStatus"] = grpcStatus }
+            if let grpcMessage = entry.grpcMessage {
+                row["grpcMessage"] = DiagnosticRedaction.redact(grpcMessage)
+            }
+            if entry.transportError == true { row["transportError"] = true }
+            // Rows survive in the 24 h ring across an upgrade, so an older row can predate
+            // the provenance fields. Say "unknown" rather than leaving a blank that reads
+            // as "not applicable" when triaging a mixed-version bundle.
+            row["appVersion"] = entry.appVersion ?? "unknown"
+            row["appBuild"] = entry.appBuild ?? "unknown"
             if let value = entry.processIdentifier { row["processIdentifier"] = value }
             if let value = entry.launchIdentifier { row["launchIdentifier"] = value }
             if let payload = entry.responsePayloadJSON {
@@ -205,7 +213,7 @@ enum DiagnosticLogExporter {
         }
 
         var report: [String: Any] = [
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "meta": meta,
             "unifiedLog": unifiedLog.map { entry in
                 [

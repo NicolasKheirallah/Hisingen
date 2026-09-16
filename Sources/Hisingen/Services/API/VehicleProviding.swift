@@ -15,6 +15,11 @@ protocol VehicleProviding: RemoteCommandExecuting {
     func resetSession() async
     func signOut() async throws
     func resolvedVIN(preferred: String?) async -> String?
+    /// Everything the adapter needs before a session can be restored, in its own terms: Volvo
+    /// assembles its client credentials here, and an adapter that needs nothing inherits the
+    /// no-op. This is what stops a security module from reaching a concrete adapter to configure
+    /// it, and what keeps the credentials where the adapter that uses them lives.
+    func prepareSession() async throws
     /// Explicitly reload optional metadata; ordinary fetches prepare their VIN internally.
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
     /// Requires a session, but no prior vehicle-selection call.
@@ -37,6 +42,11 @@ protocol VehicleLiveStreaming: Sendable {
         vin: String, purpose: VehicleLiveStreamPurpose
     ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error>
     func refreshLiveStreamAuthorization() async throws
+}
+
+extension VehicleProviding {
+    /// The default: an adapter with no configuration of its own.
+    func prepareSession() async throws {}
 }
 
 extension PolestarAPI: VehicleProviding {}

@@ -9,7 +9,11 @@ enum HTTPExchange {
         limit: Int,
         operation: String,
         provider: VehicleBrand,
-        diagnosticLog: APIDiagnosticLogStore = .shared
+        diagnosticLog: APIDiagnosticLogStore = .shared,
+        // Classifies the response even when the store must not retain its body: an OAuth
+        // `error` code, or an expected version-negotiation rejection such as a 406. Returns a
+        // short, credential-free label, or nil when there is nothing to classify.
+        semanticError: (@Sendable (Data, Int) -> String?)? = nil
     ) async throws -> (Data, HTTPURLResponse) {
         let startedAt = Date()
         let diagnosticProvider: APILogProvider = provider == .polestar ? .polestar : .volvo
@@ -42,7 +46,8 @@ enum HTTPExchange {
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
                 statusCode: http.statusCode, responseBytes: data.count,
-                responseData: data, startedAt: startedAt)
+                responseData: data, startedAt: startedAt,
+                semanticErrorType: semanticError?(data, http.statusCode))
             return (data, http)
         } catch {
             let mapped = (error as? URLError).map { Self.network($0, provider: provider) } ?? error

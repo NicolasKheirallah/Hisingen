@@ -189,9 +189,9 @@ struct APIDiagnosticInspectorView: View {
                                 Text(String(status))
                                     .font(.caption.monospacedDigit())
                                 .foregroundStyle(status >= 400 || entry.semanticErrorType != nil
-                                                 ? Color.red : Color.secondary)
+                                                 ? HisingenTheme.semanticCritical : Color.secondary)
                             } else if entry.errorType != nil {
-                                Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
+                                Image(systemName: "wifi.exclamationmark").foregroundStyle(HisingenTheme.semanticWarning)
                             }
                             Text(entry.timestamp, style: .time)
                                 .font(.caption.monospacedDigit())

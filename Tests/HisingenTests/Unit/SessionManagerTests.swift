@@ -112,6 +112,29 @@ struct SessionManagerTests {
     }
 
     @Test
+    func rejectedStoredPasswordIsClearedInsteadOfReplayedEveryLaunch() async throws {
+        let suite = "SessionManagerTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
+        preferences.email = "person@example.invalid"
+        let provider = SessionTestProvider(brand: .polestar)
+        await provider.failAuthentication(reason: .invalidCredentials)
+        var cleared = false
+        let manager = SessionManager(readToken: { _ in nil }, readPassword: { "wrong-password" },
+                                     clearPassword: { cleared = true })
+        do {
+            try await manager.restore(api: provider, preferences: preferences)
+            Issue.record("A rejected stored password must fail the restore")
+        } catch {
+            #expect(VehicleServiceError.map(error, provider: .polestar).isRejectedCredential)
+        }
+        // Without this the presence bit keeps reporting the account as resumable, so every
+        // launch replays the same rejected login against the IdP's per-client attempt budget.
+        #expect(cleared, "a credential the IdP rejected must not stay stored")
+    }
+
+    @Test
     func volvoUsesItsOwnTokenAndConfigurationWithoutReadingPolestarPassword() async throws {
         let suite = "SessionManagerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -140,15 +163,19 @@ actor SessionTestProvider: VehicleProviding {
     private(set) var calls: [String] = []
     private(set) var lastVIN: String?
     private var restoreError: VehicleServiceError?
-    private var authenticationFails = false
+    private var authenticationFailureReason: AuthFailureReason?
 
     init(brand: VehicleBrand) { self.brand = brand }
     func recordConfiguration() { calls.append("configure") }
     func failRestore(with error: VehicleServiceError) { restoreError = error }
-    func failAuthentication() { authenticationFails = true }
+    func failAuthentication(reason: AuthFailureReason = .expiredSession) {
+        authenticationFailureReason = reason
+    }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
         calls.append("authenticate:\(email):\(password)")
-        if authenticationFails { throw VehicleServiceError.authenticationRequired(provider: brand, reason: .expiredSession) }
+        if let reason = authenticationFailureReason {
+            throw VehicleServiceError.authenticationRequired(provider: brand, reason: reason)
+        }
         lastVIN = preferredVIN
     }
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {

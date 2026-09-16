@@ -167,7 +167,7 @@ struct SettingsAppearanceCard: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                                 .background(
-                                    isModeSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                    isModeSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                                     in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 )
                                 .overlay(
@@ -226,7 +226,7 @@ struct SettingsAppearanceCard: View {
                                     .padding(.vertical, 6)
                                     .padding(.horizontal, 4)
                                     .background(
-                                        isAngleSelected ? HisingenTheme.accent.opacity(0.16) : Color.primary.opacity(0.04),
+                                        isAngleSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                                         in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     )
                                     .overlay(
@@ -285,7 +285,7 @@ struct SettingsAppearanceCard: View {
                                             .hisType(.micro, weight: .bold)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 1.5)
-                                            .background(HisingenTheme.accent.opacity(0.14), in: Capsule())
+                                            .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
                                             .foregroundStyle(HisingenTheme.accent)
                                     }
                                 }
@@ -441,7 +441,7 @@ struct SettingsAppearanceCard: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background(
-                isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05),
+                isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05),
                 in: Capsule()
             )
             .overlay(

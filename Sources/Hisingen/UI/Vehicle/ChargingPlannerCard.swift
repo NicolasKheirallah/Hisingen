@@ -76,7 +76,7 @@ struct ChargingPlannerCard: View {
         let model = planModel
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: .orange)
+                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
                 if let model {
                     Group {

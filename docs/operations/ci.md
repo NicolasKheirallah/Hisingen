@@ -153,16 +153,23 @@ checklist for both.
 
 ## `pages.yml`
 
-**Trigger:** changes under `website/` on `main`, changes to the workflow itself,
-or manual dispatch. It installs the lockfile-resolved Node dependencies, runs
-the website typecheck and production build, verifies required static entry
-points, uploads the Pages artifact, and deploys it with job-scoped `pages: write`
-and `id-token: write` permissions. Every third-party action is commit-pinned and
-checkout credentials are not persisted.
+**Trigger:** changes under `site/` on `main`, changes to the workflow itself, or
+manual dispatch. There is no build step: `site/` is the Pages artifact directly,
+and it holds exactly two static files, both of which are live dependencies of the
+shipped app — `oauth-callback.html` (Volvo's registered HTTPS OAuth redirect) and
+`updates/appcast.xml` (the signed Sparkle feed). The workflow asserts both are
+present and well-formed, uploads the artifact, and deploys it with job-scoped
+`pages: write` and `id-token: write` permissions. Every third-party action is
+commit-pinned and checkout credentials are not persisted.
+
+The previous marketing site and its npm/Vite toolchain were removed. `site/` is
+deliberately not a website: deleting or renaming either file breaks shipped
+functionality (Volvo sign-in, or the updater), which is why the presence check
+runs before every deploy.
 
 ## Running ci.yml locally
 
-`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac: the ubuntu lint job (`actionlint` + `shellcheck` + the localization and docs-link checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths; CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
+`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac: the ubuntu lint job (`actionlint` + `shellcheck` + the localization, docs-link and theme-contrast checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths; CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
 
 ## Troubleshooting
 

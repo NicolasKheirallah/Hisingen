@@ -36,9 +36,6 @@ docs/api/polestar-backend-map.md
 docs/api/polestar-probe-transcripts.md
 docs/api/volvo-backend-map.md
 
-# Static website build output and local dependencies
-website/node_modules/
-website/dist/
 docs/research/api-capability-review.md
 docs/research/api-investigation-backlog.md
 docs/research/feature-opportunities.md

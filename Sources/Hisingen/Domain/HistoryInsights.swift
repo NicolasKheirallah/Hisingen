@@ -427,7 +427,7 @@ enum HistoryInsights {
             return CommandStatistics(totalCount: 0, successCount: 0, successRatePct: nil, mostUsedCommand: nil)
         }
         // Only known-good outcomes count as success (statuses written by
-        // CommandCoordinator/CommandConfirmationLedger). A vehicle that silently ignored a
+        // CommandCoordinator/CommandReceiptLedger). A vehicle that silently ignored a
         // command ends up "confirmation_timed_out" – or stays pending on "accepted"/"delivered" –
         // and neither may inflate the rate the way a plain != "failed" test allowed.
         let successCount = records.filter { ["completed", "confirmed", "acknowledged"].contains($0.status) }.count

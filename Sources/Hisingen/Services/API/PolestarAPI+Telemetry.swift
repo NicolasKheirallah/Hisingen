@@ -69,6 +69,10 @@ extension PolestarAPI {
 
         let serviceToken = accessToken ?? token
 
+        // Discovery may need to retry a 406 with the other grant, and only this actor holds
+        // both. Idempotent and cheap.
+        await installAlternateAccessTokenProviderIfNeeded()
+
         let needsChargingContext = features.contains(.chargingDetails) || features.contains(.remoteCharging)
             || battery == nil
         let modelProfile = VehicleCapabilityProfile(modelName: carIdentity.modelName)
@@ -97,62 +101,62 @@ extension PolestarAPI {
             enabled: needsChargingContext, vin: vin, token: serviceToken,
             bypassCache: bypassCommandCaches
         )
-        async let exteriorTask: OptionalCapability<ExteriorSnapshot> = optionalCapability(
+        async let exteriorTask: CapabilityState<ExteriorSnapshot> = optionalCapability(
             features.contains(.exteriorStatus) ? .exteriorStatus : .remoteLocks,
             enabled: needsExterior, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchExterior(vin: vin, accessToken: serviceToken) }
-        async let healthTask: OptionalCapability<GrpcHealthReport> = optionalCapability(
+        async let healthTask: CapabilityState<GrpcHealthReport> = optionalCapability(
             .tyreAndWarnings,
             enabled: features.contains(.tyreAndWarnings) || features.contains(.vehicleHealth), vin: vin
         ) { try await self.grpc.fetchHealth(vin: vin, accessToken: serviceToken) }
-        async let softwareTask: OptionalCapability<VehicleSoftwareInfo> = optionalCapability(
+        async let softwareTask: CapabilityState<VehicleSoftwareInfo> = optionalCapability(
             features.contains(.softwareUpdates) ? .softwareUpdates : .remoteOTA,
             enabled: needsSoftware, vin: vin
         ) {
             try await self.grpc.fetchSoftware(vin: vin, accessToken: serviceToken,
                                                locale: preferences.interfaceLanguage.effectiveLanguageCode)
         }
-        async let scheduleTask: OptionalCapability<[VehicleSchedule]> = optionalCapability(
+        async let scheduleTask: CapabilityState<[VehicleSchedule]> = optionalCapability(
             features.contains(.chargingSchedule) ? .chargingSchedule : .remoteSchedules,
             enabled: needsSchedules, vin: vin
         ) { Optional(try await self.grpc.fetchChargingSchedules(vin: vin, accessToken: serviceToken)) }
-        async let climateTask: OptionalCapability<VehicleClimateStatus> = optionalCapability(
+        async let climateTask: CapabilityState<VehicleClimateStatus> = optionalCapability(
             features.contains(.climateStatus) ? .climateStatus : .remoteClimate,
             key: "climate-status", enabled: needsClimate, vin: vin,
             bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchClimate(vin: vin, accessToken: serviceToken) }
-        async let climateTimersTask: OptionalCapability<[VehicleSchedule]> = optionalCapability(
+        async let climateTimersTask: CapabilityState<[VehicleSchedule]> = optionalCapability(
             features.contains(.climateStatus) ? .climateStatus : .remoteSchedules,
             key: "climate-timers", enabled: needsClimateTimers, vin: vin
         ) { Optional(try await self.grpc.fetchClimateTimers(vin: vin, accessToken: serviceToken)) }
-        async let tripsTask: OptionalCapability<GrpcOdometerReport> = optionalCapability(
+        async let tripsTask: CapabilityState<GrpcOdometerReport> = optionalCapability(
             .tripMeters, enabled: features.contains(.tripMeters), vin: vin
         ) { try await self.grpc.fetchOdometer(vin: vin, accessToken: serviceToken) }
-        async let connectivityTask: OptionalCapability<VehicleConnectivity> = optionalCapability(
+        async let connectivityTask: CapabilityState<VehicleConnectivity> = optionalCapability(
             .connectivityDiagnostics,
             enabled: features.contains(.connectivityDiagnostics) && modelProfile.permits(.connectivity),
             vin: vin
         ) { try await self.grpc.fetchConnectivity(vin: vin, accessToken: serviceToken) }
-        async let airTask: OptionalCapability<VehicleAirQuality> = optionalCapability(
+        async let airTask: CapabilityState<VehicleAirQuality> = optionalCapability(
             features.contains(.airQuality) ? .airQuality : .remotePreCleaning,
             enabled: needsAirQuality, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAirQuality(vin: vin, accessToken: serviceToken) }
-        async let weatherTask: OptionalCapability<VehicleWeather> = optionalCapability(
+        async let weatherTask: CapabilityState<VehicleWeather> = optionalCapability(
             .vehicleWeather, enabled: features.contains(.vehicleWeather), vin: vin
         ) { try await self.grpc.fetchWeather(vin: vin, accessToken: serviceToken) }
-        async let locationTask: OptionalCapability<VehicleLocation> = optionalCapability(
+        async let locationTask: CapabilityState<VehicleLocation> = optionalCapability(
             .vehicleLocation, enabled: features.contains(.vehicleLocation), vin: vin
         ) { try await self.grpc.fetchLocation(vin: vin, accessToken: serviceToken) }
-        async let ampLimitTask: OptionalCapability<Int> = optionalCapability(
+        async let ampLimitTask: CapabilityState<Int> = optionalCapability(
             .chargingDetails, key: "amp-limit",
             enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin,
             bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
-        async let chargeLocationsTask: OptionalCapability<[ChargeLocationSnapshot]> = optionalCapability(
+        async let chargeLocationsTask: CapabilityState<[ChargeLocationSnapshot]> = optionalCapability(
             .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
         ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
         // MyCars supplies identity fallbacks and the installed version independently of OTA discovery.
-        async let myCarsTask: OptionalCapability<VehicleOTACapabilities> = optionalCapability(
+        async let myCarsTask: CapabilityState<VehicleOTACapabilities> = optionalCapability(
             .softwareUpdates, key: "my-cars",
             enabled: features.contains(.softwareUpdates) || features.contains(.vehicleIdentity)
                 || features.contains(.batteryDiagnostics)

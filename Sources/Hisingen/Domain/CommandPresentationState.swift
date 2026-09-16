@@ -1,6 +1,9 @@
 import Foundation
 
 struct CommandPresentationState: Codable, Equatable, Sendable {
+    /// The overlay with nothing to show.
+    static let empty = CommandPresentationState()
+
     var optimisticLockUntil: Date?
     var receipts: [CommandReceipt]
 
@@ -48,18 +51,5 @@ struct CommandPresentationState: Codable, Equatable, Sendable {
         if !receipts.isEmpty {
             try values.encode(receipts, forKey: .receipts)
         }
-    }
-}
-
-extension VehicleState {
-    /// Drops the display-only command state a fresh provider read must never carry.
-    ///
-    /// Receipts and optimistic locks are Hisingen's presentation of a command, not telemetry:
-    /// persisting them would put them in durable history and in the next snapshot. One call
-    /// instead of two assignments at every point a read arrives, so adding a presentation field
-    /// cannot leave a stale copy behind at whichever site was missed.
-    mutating func stripPresentationState() {
-        commandState.receipts = []
-        commandState.optimisticLockUntil = nil
     }
 }

@@ -36,7 +36,7 @@ struct SettingsRemoteControlsCard: View {
         let isVolvo = prefs.activeBrand == .volvo
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: .blue)
+                CardHeader(symbol: "slider.horizontal.3", title: L10n.text("Remote Controls"), color: HisingenTheme.semanticActive)
 
                 Text(isVolvo
                      ? L10n.text("Climate is available with the standard API subscription. Lock, locate, engine-start, and location permissions require approval for your Volvo developer application and a new sign-in.")
@@ -70,7 +70,7 @@ struct SettingsRemoteControlsCard: View {
                             .controlSize(.small)
                         }
                         .padding(8)
-                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                     } else {
                         let authorized = prefs.hasPolestarCommandAuthorization
                         HStack(spacing: 8) {
@@ -78,7 +78,7 @@ struct SettingsRemoteControlsCard: View {
                                 HStack(spacing: 4) {
                                     Image(systemName: authorized ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                                         .hisType(.caption)
-                                        .foregroundStyle(authorized ? Color.green : Color.orange)
+                                        .foregroundStyle(authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
                                     Text(authorized ? L10n.text("Remote commands authorized")
                                                     : L10n.text("Authorize Remote Commands"))
                                         .hisType(.label, weight: .semibold)
@@ -99,7 +99,7 @@ struct SettingsRemoteControlsCard: View {
                             .controlSize(.small)
                         }
                         .padding(8)
-                        .background((authorized ? Color.green : Color.orange).opacity(0.08),
+                        .background((authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.08),
                                     in: RoundedRectangle(cornerRadius: 8))
                     }
                     row(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop), badgeText: isVolvo ? nil : commandAuthBadge(true))

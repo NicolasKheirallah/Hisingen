@@ -25,6 +25,15 @@ struct APILogEntry: Codable, Equatable, Sendable {
     /// Provider-level failure found inside an HTTP-success response (GraphQL errors,
     /// gRPC status trailers represented as JSON, or property-level API failures).
     let semanticErrorType: String?
+    /// gRPC status and server message as their own fields. Keeping them out of `operation`
+    /// leaves that field a stable grouping key instead of a per-failure label, and lets
+    /// `semanticErrorType` be derived from structure rather than parsed back out of text.
+    let grpcStatus: String?
+    let grpcMessage: String?
+    /// True when the exchange failed before any HTTP response arrived (DNS, TLS, timeout,
+    /// connection loss, cancellation-adjacent teardown). Separates "the server returned no
+    /// status" from "the status was not recorded".
+    let transportError: Bool?
     /// Provenance belongs to each row because the ring buffer survives relaunches.
     let appVersion: String?
     let appBuild: String?
@@ -35,6 +44,7 @@ struct APILogEntry: Codable, Equatable, Sendable {
          operation: String, statusCode: Int?, responseBytes: Int?,
          responsePayloadJSON: String?, payloadOmissionReason: String? = nil,
          durationMilliseconds: Int, errorType: String?, semanticErrorType: String? = nil,
+         grpcStatus: String? = nil, grpcMessage: String? = nil, transportError: Bool? = nil,
          appVersion: String? = nil, appBuild: String? = nil,
          processIdentifier: Int32? = nil, launchIdentifier: String? = nil) {
         self.timestamp = timestamp
@@ -49,6 +59,9 @@ struct APILogEntry: Codable, Equatable, Sendable {
         self.durationMilliseconds = durationMilliseconds
         self.errorType = errorType
         self.semanticErrorType = semanticErrorType
+        self.grpcStatus = grpcStatus
+        self.grpcMessage = grpcMessage
+        self.transportError = transportError
         self.appVersion = appVersion
         self.appBuild = appBuild
         self.processIdentifier = processIdentifier
@@ -65,7 +78,9 @@ struct APILogEntry: Codable, Equatable, Sendable {
             operation: operation, statusCode: statusCode, responseBytes: responseBytes,
             responsePayloadJSON: nil, payloadOmissionReason: "retentionBudget",
             durationMilliseconds: durationMilliseconds, errorType: errorType,
-            semanticErrorType: semanticErrorType, appVersion: appVersion, appBuild: appBuild,
+            semanticErrorType: semanticErrorType, grpcStatus: grpcStatus,
+            grpcMessage: grpcMessage, transportError: transportError,
+            appVersion: appVersion, appBuild: appBuild,
             processIdentifier: processIdentifier, launchIdentifier: launchIdentifier)
     }
 }
@@ -106,8 +121,10 @@ actor APIDiagnosticLogStore {
     }
 
     func record(provider: APILogProvider, request: URLRequest?, operation: String,
+                grpcStatus: String? = nil, grpcMessage: String? = nil,
                 statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
-                startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil) {
+                startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil,
+                semanticErrorType: String? = nil) {
         // A cancelled request (`URLError.cancelled`, NSURLErrorDomain -999) is normal teardown
         // – a superseded sign-in, a brand switch, app quit. Recording it as an error just adds
         // noise a support bundle then has to explain away. The providers wrap it in their own
@@ -119,6 +136,16 @@ actor APIDiagnosticLogStore {
         let redactedPayload = sensitiveResponse ? nil : Self.redactJSON(responseData)
         let omissionReason = Self.payloadOmissionReason(
             data: responseData, redactedPayload: redactedPayload, sensitive: sensitiveResponse)
+        let normalizedGRPCStatus = grpcStatus.flatMap { $0.isEmpty ? nil : $0 }
+        let normalizedGRPCMessage = grpcMessage
+            .flatMap { $0.isEmpty ? nil : ($0.removingPercentEncoding ?? $0) }
+            .map { String(DiagnosticRedaction.redact(String($0.prefix(160)))) }
+        // Callers may classify a failure that lives in a body the store must not retain (an
+        // OAuth `error` code, say). That explicit value wins over the sensitive-body gate,
+        // because it is a classification rather than the body itself.
+        let derivedSemanticError = sensitiveResponse ? nil : (
+            Self.semanticError(in: responseData) ?? Self.grpcSemanticError(status: normalizedGRPCStatus, in: operation)
+        )
         let entry = APILogEntry(
             // Request start, not completion – keeps exports correlatable with the
             // unified log's timestamps for the same request.
@@ -133,9 +160,10 @@ actor APIDiagnosticLogStore {
             payloadOmissionReason: omissionReason,
             durationMilliseconds: max(0, Int(completedAt.timeIntervalSince(startedAt) * 1_000)),
             errorType: error.map { Self.describeError($0) },
-            semanticErrorType: sensitiveResponse ? nil : (
-                Self.semanticError(in: responseData) ?? Self.grpcSemanticError(in: operation)
-            ),
+            semanticErrorType: semanticErrorType ?? derivedSemanticError,
+            grpcStatus: normalizedGRPCStatus,
+            grpcMessage: normalizedGRPCMessage,
+            transportError: (error != nil && statusCode == nil) ? true : nil,
             appVersion: Self.appVersion,
             appBuild: Self.appBuild,
             processIdentifier: ProcessInfo.processInfo.processIdentifier,
@@ -243,12 +271,15 @@ actor APIDiagnosticLogStore {
 
     // MARK: - Sanitization
 
-    private static func grpcSemanticError(in operation: String) -> String? {
+    private static func grpcSemanticError(status: String?, in operation: String) -> String? {
+        if let status, !status.isEmpty, status != "0" { return "grpc:\(status)" }
+        // Fallback for rows recorded before `grpcStatus` became its own field, and for the
+        // live-stream path that still labels its operation with the status.
         guard let marker = operation.range(of: "grpc-status=") else { return nil }
         let suffix = operation[marker.upperBound...]
-        let status = suffix.prefix { $0.isNumber }
-        guard !status.isEmpty, status != "0" else { return nil }
-        return "grpc:\(status)"
+        let parsed = suffix.prefix { $0.isNumber }
+        guard !parsed.isEmpty, parsed != "0" else { return nil }
+        return "grpc:\(parsed)"
     }
 
     /// True when `error` is (or wraps) a `URLError.cancelled` / NSURLErrorDomain -999.

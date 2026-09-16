@@ -198,7 +198,7 @@ extension InfoTabView {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isSelected ? HisingenTheme.accent.opacity(0.18) : Color.primary.opacity(0.05), in: Capsule())
+            .background(isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05), in: Capsule())
             .overlay(
                 Capsule()
                     .stroke(isSelected ? HisingenTheme.accent.opacity(0.45) : Color.clear, lineWidth: 1)

@@ -22,7 +22,7 @@ extension HistoryDashboardView {
         }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Driving Patterns"), color: .blue)
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Driving Patterns"), color: HisingenTheme.semanticActive)
                 Chart(hours) { bucket in
                     BarMark(
                         x: .value(L10n.text("Hour"), bucket.hour),
@@ -87,9 +87,9 @@ extension HistoryDashboardView {
                 if let report = selectedMileageReport {
                     HStack(spacing: 8) {
                         mileageStat(L10n.text("Business"), trips: report.businessTrips,
-                                    distance: report.businessKm, color: .blue)
+                                    distance: report.businessKm, color: HisingenTheme.semanticActive)
                         mileageStat(L10n.text("Private"), trips: report.privateTrips,
-                                    distance: report.privateKm, color: .green)
+                                    distance: report.privateKm, color: HisingenTheme.semanticGood)
                         mileageStat(L10n.text("Unclassified"), trips: report.unclassifiedTrips,
                                     distance: report.unclassifiedKm, color: .secondary)
                     }
@@ -150,7 +150,7 @@ extension HistoryDashboardView {
         let bestDay = daily.max { $0.distanceKm < $1.distanceKm }
         return Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: .blue)
+                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
                 Chart {
                     ForEach(trips) { trip in
                         BarMark(
@@ -447,7 +447,7 @@ extension HistoryDashboardView {
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
-        .tint(selected ? (purpose == .business ? .blue : .green) : .gray)
+        .tint(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : .gray)
         .hisAnimation(Motion.selection, value: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

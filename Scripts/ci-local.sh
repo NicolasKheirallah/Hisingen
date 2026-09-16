@@ -23,6 +23,12 @@ python3 Scripts/check-localization.py
 echo "==> check-docs (ci: ubuntu job)"
 python3 Scripts/check-docs-links.py
 
+echo "==> check-vin-scoping (ci: ubuntu job)"
+python3 Scripts/check-vin-scoping.py
+
+echo "==> check-contrast (ci: ubuntu job)"
+python3 Scripts/verify-app-contrast.py
+
 echo "==> check-sync (local: uncommitted build inputs CI would lose)"
 python3 Scripts/check-sync.py
 

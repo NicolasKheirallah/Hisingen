@@ -1,39 +1,50 @@
 import SwiftUI
 import AppKit
 
+/// Loads the bundled silhouette assets, one per model, on demand.
+///
+/// Keyed by asset name rather than held as a single image, so a Polestar 3 or 4 owner gets their
+/// own car and switching between models does not reload or, worse, keep drawing the first one.
 @MainActor
 final class VehicleOutlineImageProvider {
     static let shared = VehicleOutlineImageProvider()
 
-    let image: NSImage?
+    private var cache: [String: NSImage?] = [:]
 
-    init() {
+    func image(for spec: VehicleOutlineSpec) -> NSImage? {
+        if let cached = cache[spec.assetName] { return cached }
+        let loaded = Self.load(assetName: spec.assetName)
+        cache[spec.assetName] = loaded
+        return loaded
+    }
+
+    private static func load(assetName: String) -> NSImage? {
         var loaded: NSImage? = nil
 
         let rootBundlePath = Bundle.main.bundleURL.appendingPathComponent("Hisingen_Hisingen.bundle").path
         if FileManager.default.fileExists(atPath: rootBundlePath),
            let resBundle = Bundle(path: rootBundlePath),
-           let url = resBundle.url(forResource: "polestar_outline", withExtension: "svg") {
+           let url = resBundle.url(forResource: assetName, withExtension: "svg") {
             loaded = NSImage(contentsOf: url)
         }
 
         if loaded == nil,
            let resourceBundlePath = Bundle.main.path(forResource: "Hisingen_Hisingen", ofType: "bundle"),
            let resBundle = Bundle(path: resourceBundlePath),
-           let url = resBundle.url(forResource: "polestar_outline", withExtension: "svg") {
+           let url = resBundle.url(forResource: assetName, withExtension: "svg") {
             loaded = NSImage(contentsOf: url)
         }
 
-        if loaded == nil, let url = Bundle.main.url(forResource: "polestar_outline", withExtension: "svg") {
+        if loaded == nil, let url = Bundle.main.url(forResource: assetName, withExtension: "svg") {
             loaded = NSImage(contentsOf: url)
         }
 
         if loaded == nil {
             let possiblePaths = [
-                ".build/arm64-apple-macosx/debug/Hisingen_Hisingen.bundle/polestar_outline.svg",
-                ".build/arm64-apple-macosx/release/Hisingen_Hisingen.bundle/polestar_outline.svg",
-                "Sources/Hisingen/Resources/polestar_outline.svg",
-                "assets/polestar_outline.svg"
+                ".build/arm64-apple-macosx/debug/Hisingen_Hisingen.bundle/\(assetName).svg",
+                ".build/arm64-apple-macosx/release/Hisingen_Hisingen.bundle/\(assetName).svg",
+                "Sources/Hisingen/Resources/\(assetName).svg",
+                "assets/\(assetName).svg"
             ]
             for path in possiblePaths {
                 if FileManager.default.fileExists(atPath: path), let img = NSImage(contentsOfFile: path) {
@@ -45,56 +56,68 @@ final class VehicleOutlineImageProvider {
 
         if let loaded {
             loaded.isTemplate = true
-            self.image = loaded
+            return loaded
+        }
+        return nil
+    }
+}
+
+/// The silhouette itself: the model's own asset when it is available, and the vector fallback
+/// when it is not.
+@MainActor
+private struct VehicleOutlineBaseImage: View {
+    let spec: VehicleOutlineSpec
+    let og: OutlineGeometry
+    let container: CGSize
+    var model: VehicleModel? = nil
+    var brand: VehicleBrand? = nil
+
+    var body: some View {
+        if let svgImage = VehicleOutlineImageProvider.shared.image(for: spec) {
+            Image(nsImage: svgImage)
+                .resizable()
+                .renderingMode(.template)
+                .foregroundStyle(HisingenTheme.ink.opacity(0.85))
+                .frame(width: og.imageWidth, height: og.imageHeight)
+                .position(x: og.originX + og.imageWidth / 2,
+                          y: og.originY + og.imageHeight / 2)
         } else {
-            self.image = nil
+            FallbackCarSilhouetteView(model: model, brand: brand)
+                .frame(width: container.width, height: container.height)
         }
     }
 }
 
-struct OutlineGeometry {
-    static let aspectRatio: CGFloat = 1645.0 / 769.0
+/// The soft ellipse under the tires. Placed against the spec's content box so it sits on the
+/// ground for every model, however much empty margin its asset carries.
+@MainActor
+private struct VehicleGroundShadow: View {
+    let spec: VehicleOutlineSpec
+    let og: OutlineGeometry
 
-    let containerWidth: CGFloat
-    let containerHeight: CGFloat
-
-    var imageWidth: CGFloat {
-        if containerWidth / containerHeight > Self.aspectRatio {
-            return containerHeight * Self.aspectRatio
-        } else {
-            return containerWidth
-        }
-    }
-
-    var imageHeight: CGFloat {
-        if containerWidth / containerHeight > Self.aspectRatio {
-            return containerHeight
-        } else {
-            return containerWidth / Self.aspectRatio
-        }
-    }
-
-    var originX: CGFloat { (containerWidth - imageWidth) / 2 }
-    var originY: CGFloat { (containerHeight - imageHeight) / 2 }
-
-    func point(u: CGFloat, v: CGFloat) -> CGPoint {
-        CGPoint(x: originX + u * imageWidth, y: originY + v * imageHeight)
-    }
-
-    func size(wFraction: CGFloat, hFraction: CGFloat) -> CGSize {
-        CGSize(width: wFraction * imageWidth, height: hFraction * imageHeight)
+    var body: some View {
+        let shadow = og.groundShadow(for: spec)
+        Ellipse()
+            .fill(Color.black.opacity(0.12))
+            .frame(width: shadow.size.width, height: shadow.size.height)
+            .position(shadow.center)
+            .blur(radius: 3)
     }
 }
 
 @MainActor
 struct VehicleSideProfileDoorsView: View {
     let openings: [OpeningReading]
+    var model: VehicleModel? = nil
+    var brand: VehicleBrand? = nil
     var hoveredOpening: VehicleOpening? = nil
     /// Reports which part the pointer is over, so the card's chip grid can follow the car rather
     /// than the other way round. Nil when the pointer leaves every zone.
     var onHoverOpening: ((VehicleOpening?) -> Void)? = nil
     /// The natural gesture on a drawn car: point at the door and it does the door's thing.
     var onSelectOpening: ((VehicleOpening) -> Void)? = nil
+
+    private var spec: VehicleOutlineSpec { .spec(for: model) }
 
     private func reading(for op: VehicleOpening) -> OpeningReading? {
         openings.first(where: { $0.opening == op })
@@ -150,109 +173,72 @@ struct VehicleSideProfileDoorsView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let og = OutlineGeometry(containerWidth: w, containerHeight: h)
+            let og = OutlineGeometry(containerWidth: geo.size.width,
+                                     containerHeight: geo.size.height,
+                                     spec: spec)
 
             ZStack {
-                // Ground shadow
-                Ellipse()
-                    .fill(Color.black.opacity(0.12))
-                    .frame(width: og.imageWidth * 0.90, height: og.imageHeight * 0.10)
-                    .position(x: og.originX + og.imageWidth * 0.50, y: og.originY + og.imageHeight * 0.90)
-                    .blur(radius: 3)
+                VehicleGroundShadow(spec: spec, og: og)
 
-                // Vehicle SVG base outline (facing right)
-                if let svgImage = VehicleOutlineImageProvider.shared.image {
-                    Image(nsImage: svgImage)
-                        .resizable()
-                        .renderingMode(.template)
-                        .foregroundStyle(HisingenTheme.ink.opacity(0.85))
-                        .aspectRatio(1645 / 769, contentMode: .fit)
-                        .frame(width: w, height: h)
-                } else {
-                    FallbackCarSilhouetteView()
-                        .frame(width: w, height: h)
-                }
+                // The model's own SVG base outline (facing right).
+                VehicleOutlineBaseImage(spec: spec, og: og, container: geo.size,
+                                        model: model, brand: brand)
 
-                // Front headlight beam traced from SVG X=[1419..1583], Y=[347..407].
+                // Lamp glows sit at the clusters the model's own artwork draws, so a Polestar 3's
+                // headlamp lights up where a Polestar 3's headlamp is.
                 headlightsGlow(
                     og: og,
                     shown: hoodOpen || frontDoorOpen || frontWindowOpen || hoodHovered || frontDoorHovered || frontWindowHovered,
                     active: hoodOpen || frontDoorOpen || frontWindowOpen
                 )
 
-                // Rear taillight glow traced from SVG X=[72..211], Y=[278..343].
                 taillightsGlow(
                     og: og,
                     shown: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen || tailgateHovered || rearDoorHovered || rearWindowHovered || chargeLidHovered || fuelFlapHovered,
                     active: tailgateOpen || rearDoorOpen || rearWindowOpen || chargeLidOpen || fuelFlapOpen
                 )
 
-                // Hood zone traced from SVG X=[1122..1541], Y=[275..361].
                 openingZone(
-                    kind: .hood,
-                    u: 0.8094, v: 0.4135,
-                    wFraction: 0.2369, hFraction: 0.1040,
+                    zone: .hood, placement: spec.zones.hood,
                     open: hoodOpen, hovered: hoodHovered, og: og
                 )
 
-                // Tailgate zone traced from SVG X=[45..410], Y=[156..479].
                 openingZone(
-                    kind: .tailgate,
-                    u: 0.1383, v: 0.4129,
-                    wFraction: 0.2064, hFraction: 0.3906,
+                    zone: .tailgate, placement: spec.zones.tailgate,
                     open: tailgateOpen, hovered: tailgateHovered, og: og
                 )
 
-                // Front-door zone traced from SVG X=[766..1152], Y=[288..545].
                 openingZone(
-                    kind: .frontDoor,
-                    u: 0.5830, v: 0.5416,
-                    wFraction: 0.2183, hFraction: 0.3108,
+                    zone: .frontDoor, placement: spec.zones.frontDoor,
                     open: frontDoorOpen, hovered: frontDoorHovered,
                     hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // Rear-door zone traced from SVG X=[414..781], Y=[276..539].
                 openingZone(
-                    kind: .rearDoor,
-                    u: 0.3632, v: 0.5299,
-                    wFraction: 0.2075, hFraction: 0.3181,
+                    zone: .rearDoor, placement: spec.zones.rearDoor,
                     open: rearDoorOpen, hovered: rearDoorHovered,
                     hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // Front-window zone traced from SVG X=[730..1125], Y=[153..293].
                 openingZone(
-                    kind: .frontWindow,
-                    u: 0.5638, v: 0.2900,
-                    wFraction: 0.2401, hFraction: 0.1820,
+                    zone: .frontWindow, placement: spec.zones.frontWindow,
                     open: frontWindowOpen, hovered: frontWindowHovered,
                     hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // Rear-window zone traced from SVG X=[414..759], Y=[152..275].
                 openingZone(
-                    kind: .rearWindow,
-                    u: 0.3565, v: 0.2776,
-                    wFraction: 0.2097, hFraction: 0.1599,
+                    zone: .rearWindow, placement: spec.zones.rearWindow,
                     open: rearWindowOpen, hovered: rearWindowHovered,
                     hoverColor: hoverTint, hoverBadge: hoverAbbreviation, og: og
                 )
 
-                // Sunroof zone traced from SVG X=[432..965], Y=[124..160].
                 openingZone(
-                    kind: .sunroof,
-                    u: 0.4246, v: 0.1850,
-                    wFraction: 0.3240, hFraction: 0.0600,
+                    zone: .sunroof, placement: spec.zones.sunroof,
                     open: sunroofOpen, hovered: sunroofHovered, og: og
                 )
 
-                // Charge-lid and fuel-flap indicator traced from SVG X=[290..381], Y=[281..331].
                 chargeLidIndicator(
-                    u: 0.2040, v: 0.3979,
-                    wFraction: 0.0553, hFraction: 0.0650,
+                    placement: spec.zones.chargeLid,
                     open: chargeLidOpen || fuelFlapOpen,
                     hovered: chargeLidHovered || fuelFlapHovered,
                     og: og
@@ -265,84 +251,10 @@ struct VehicleSideProfileDoorsView: View {
         .accessibilityElement(children: .contain)
     }
 
-    enum OpeningZoneKind {
-        case hood, tailgate, frontDoor, rearDoor, frontWindow, rearWindow, sunroof, chargeLid
-    }
-
-    private func openingZone(
-        kind: OpeningZoneKind,
-        u: CGFloat, v: CGFloat,
-        wFraction: CGFloat, hFraction: CGFloat,
-        open: Bool, hovered: Bool,
-        hoverColor: Color? = nil,
-        hoverBadge: String? = nil, og: OutlineGeometry
-    ) -> some View {
-        // The zone stays in the hierarchy and fades/scales on the flag (like
-        // tireWheelGlow); animating a view that only exists while `open || hovered`
-        // cannot animate its own insertion or removal.
-        let visible = open || hovered
-        let activeColor = open ? HisingenTheme.semanticWarning : (hoverColor ?? HisingenTheme.accent)
-        let pos = og.point(u: u, v: v)
-        let size = og.size(wFraction: wFraction, hFraction: hFraction)
-
-        return ZStack {
-            zoneShape(kind: kind)
-                .fill(
-                    RadialGradient(
-                        colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
-                        center: .center,
-                        startRadius: 2,
-                        endRadius: max(size.width, size.height) * 0.55
-                    )
-                )
-                .overlay(
-                    zoneShape(kind: kind)
-                        .stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
-                )
-            if hovered, let hoverBadge {
-                Text(hoverBadge)
-                    .hisType(.nano, weight: .bold, design: .rounded)
-                    .monospacedDigit()
-                    .foregroundStyle(activeColor)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(HisingenTheme.chipFill, in: Capsule())
-            }
-        }
-        .frame(width: size.width, height: size.height)
-        .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
-        .scaleEffect(visible ? 1.02 : 1.0)
-        // The zone keeps its own hit area even at rest: `visible` drives the drawing's opacity, and
-        // an invisible zone you can still point at is the whole point of this view.
-        .contentShape(zoneShape(kind: kind))
-        .onHover { inside in
-            guard let onHoverOpening else { return }
-            if inside {
-                onHoverOpening(zoneOpenings(kind: kind).first)
-            } else if zoneOpenings(kind: kind).contains(hoveredOpening ?? .hood) {
-                onHoverOpening(nil)
-            }
-        }
-        .onTapGesture {
-            guard let onSelectOpening, let opening = zoneOpenings(kind: kind).first else { return }
-            onSelectOpening(opening)
-        }
-        .accessibilityElement()
-        .accessibilityLabel(zoneOpenings(kind: kind).map(\.displayName).joined(separator: ", "))
-        .accessibilityValue(L10n.text(open ? "Open" : "Closed"))
-        .accessibilityAddTraits(onSelectOpening == nil ? [] : .isButton)
-        .opacity(visible ? 1 : 0)
-        .position(pos)
-        // Accent→warning recolor and stroke width ride the open flag; the
-        // visibility animation below only owns hover in/out.
-        .hisAnimation(Motion.stateChange, value: open)
-        .hisAnimation(Motion.selection, value: visible)
-    }
-
     /// The openings a zone stands for. The charge lid and the fuel flap are drawn in the same
     /// place, so one zone has to answer for both.
-    private func zoneOpenings(kind: OpeningZoneKind) -> [VehicleOpening] {
-        switch kind {
+    private func zoneOpenings(_ zone: VehicleOutlineZone) -> [VehicleOpening] {
+        switch zone {
         case .hood: return [.hood]
         case .tailgate: return [.tailgate]
         case .frontDoor: return [.frontLeftDoor, .frontRightDoor]
@@ -354,23 +266,83 @@ struct VehicleSideProfileDoorsView: View {
         }
     }
 
-    private func zoneShape(kind: OpeningZoneKind) -> OutlineAnyShape {
-        switch kind {
-        case .frontWindow: return OutlineAnyShape(FrontWindowContourShape())
-        case .rearWindow: return OutlineAnyShape(RearWindowContourShape())
-        case .frontDoor: return OutlineAnyShape(FrontDoorContourShape())
-        case .rearDoor: return OutlineAnyShape(RearDoorContourShape())
-        case .hood: return OutlineAnyShape(HoodContourShape())
-        case .tailgate: return OutlineAnyShape(TailgateContourShape())
-        case .sunroof: return OutlineAnyShape(SunroofContourShape())
-        case .chargeLid: return OutlineAnyShape(ChargeLidContourShape())
+    private func openingZone(
+        zone: VehicleOutlineZone,
+        placement: OutlineZonePlacement,
+        open: Bool, hovered: Bool,
+        hoverColor: Color? = nil,
+        hoverBadge: String? = nil, og: OutlineGeometry
+    ) -> some View {
+        // The zone stays in the hierarchy and fades/scales on the flag (like
+        // tireWheelGlow); animating a view that only exists while `open || hovered`
+        // cannot animate its own insertion or removal.
+        let visible = open || hovered
+        let activeColor = open ? HisingenTheme.semanticWarning : (hoverColor ?? HisingenTheme.accent)
+        let resolved = placement.resolved(zone: zone, in: og)
+        let shape = OutlineFixedShape(path: resolved.path)
+        let zoneOpenings = zoneOpenings(zone)
+
+        return ZStack {
+            shape
+                .fill(
+                    RadialGradient(
+                        colors: [activeColor.opacity(open ? 0.30 : 0.20), activeColor.opacity(0.02)],
+                        center: resolved.anchor,
+                        startRadius: 2,
+                        endRadius: resolved.gradientRadius
+                    )
+                )
+                .overlay(
+                    shape.stroke(activeColor.opacity(open ? 0.95 : 0.75), lineWidth: open ? 1.5 : 1.0)
+                )
+            if hovered, let hoverBadge {
+                Text(hoverBadge)
+                    .hisType(.nano, weight: .bold, design: .rounded)
+                    .monospacedDigit()
+                    .foregroundStyle(activeColor)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(HisingenTheme.chipFill, in: Capsule())
+                    .offset(x: (resolved.anchor.x - 0.5) * resolved.frame.width,
+                            y: (resolved.anchor.y - 0.5) * resolved.frame.height)
+            }
         }
+        .frame(width: resolved.frame.width, height: resolved.frame.height)
+        .shadow(color: activeColor.opacity(open ? 0.40 : 0.20), radius: open ? 3 : 2)
+        // Scaling about the part's own centre: a traced zone's frame is the whole car, so a
+        // frame-centred pop would slide the hood and the tailgate sideways instead of lifting them.
+        .scaleEffect(visible ? 1.02 : 1.0, anchor: resolved.anchor)
+        // The zone keeps its own hit area even at rest: `visible` drives the drawing's opacity, and
+        // an invisible zone you can still point at is the whole point of this view.
+        .contentShape(shape)
+        .onHover { inside in
+            guard let onHoverOpening else { return }
+            if inside {
+                onHoverOpening(zoneOpenings.first)
+            } else if zoneOpenings.contains(hoveredOpening ?? .hood) {
+                onHoverOpening(nil)
+            }
+        }
+        .onTapGesture {
+            guard let onSelectOpening, let opening = zoneOpenings.first else { return }
+            onSelectOpening(opening)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(zoneOpenings.map(\.displayName).joined(separator: ", "))
+        .accessibilityValue(L10n.text(open ? "Open" : "Closed"))
+        .accessibilityAddTraits(onSelectOpening == nil ? [] : .isButton)
+        .opacity(visible ? 1 : 0)
+        .position(x: resolved.frame.midX, y: resolved.frame.midY)
+        // Accent→warning recolor and stroke width ride the open flag; the
+        // visibility animation below only owns hover in/out.
+        .hisAnimation(Motion.stateChange, value: open)
+        .hisAnimation(Motion.selection, value: visible)
     }
 
     private func headlightsGlow(og: OutlineGeometry, shown: Bool, active: Bool) -> some View {
         let color = active ? HisingenTheme.semanticWarning : HisingenTheme.accent
-        // Traced lamp cluster centroid: SVG X=[1419..1583], Y=[347..407]
-        let pos = og.point(u: 0.9125, v: 0.4902)
+        // Traced lamp cluster centroid, per model — see `VehicleOutlineSpec.headlight`.
+        let pos = og.point(u: spec.headlight.x, v: spec.headlight.y)
         let size = og.size(wFraction: 0.13, hFraction: 0.11)
 
         // Kept in the hierarchy and faded on the flag – a glow that only exists
@@ -392,9 +364,9 @@ struct VehicleSideProfileDoorsView: View {
     }
 
     private func taillightsGlow(og: OutlineGeometry, shown: Bool, active: Bool) -> some View {
-        let color = active ? HisingenTheme.semanticWarning : Color.red
-        // Traced lamp cluster centroid: SVG X=[72..211], Y=[278..343]
-        let pos = og.point(u: 0.0860, v: 0.4038)
+        let color = active ? HisingenTheme.semanticWarning : HisingenTheme.semanticCritical
+        // Traced lamp cluster centroid, per model — see `VehicleOutlineSpec.taillight`.
+        let pos = og.point(u: spec.taillight.x, v: spec.taillight.y)
         let size = og.size(wFraction: 0.11, hFraction: 0.12)
 
         return Ellipse()
@@ -414,175 +386,40 @@ struct VehicleSideProfileDoorsView: View {
     }
 
     private func chargeLidIndicator(
-        u: CGFloat, v: CGFloat,
-        wFraction: CGFloat, hFraction: CGFloat,
+        placement: OutlineZonePlacement,
         open: Bool, hovered: Bool,
         og: OutlineGeometry
     ) -> some View {
         let visible = open || hovered
         let color = open ? HisingenTheme.semanticWarning : HisingenTheme.accent
-        let pos = og.point(u: u, v: v)
-        let size = og.size(wFraction: wFraction, hFraction: hFraction)
+        let resolved = placement.resolved(zone: .chargeLid, in: og)
+        let shape = OutlineFixedShape(path: resolved.path)
 
         return ZStack {
-            ChargeLidContourShape()
-                .fill(color.opacity(open ? 0.60 : 0.40))
-                .frame(width: size.width, height: size.height)
-            ChargeLidContourShape()
-                .stroke(color, lineWidth: open ? 1.5 : 1.0)
-                .frame(width: size.width, height: size.height)
+            shape.fill(color.opacity(open ? 0.60 : 0.40))
+            shape.stroke(color, lineWidth: open ? 1.5 : 1.0)
             Circle()
                 .fill(Color.white)
                 .frame(width: 4, height: 4)
         }
+        .frame(width: resolved.frame.width, height: resolved.frame.height)
         .shadow(color: color.opacity(0.6), radius: 3)
         .scaleEffect(visible ? 1.18 : 1.0)
         .opacity(visible ? 1 : 0)
-        .position(pos)
+        .position(x: resolved.frame.midX, y: resolved.frame.midY)
         .hisAnimation(Motion.stateChange, value: open)
         .hisAnimation(Motion.selection, value: visible)
-    }
-}
-
-struct OutlineAnyShape: Shape, @unchecked Sendable {
-    private let _path: @Sendable (CGRect) -> Path
-
-    init<S: Shape>(_ shape: S) {
-        self._path = { shape.path(in: $0) }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        _path(rect)
-    }
-}
-
-// MARK: - Exact SVG Contour Shapes
-
-struct FrontWindowContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.05))
-        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.58, y: rect.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.maxY),
-            control: CGPoint(x: rect.minX + rect.width * 0.88, y: rect.minY + rect.height * 0.45)
-        )
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct RearWindowContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.72))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY + rect.height * 0.04),
-            control: CGPoint(x: rect.minX + rect.width * 0.12, y: rect.minY + rect.height * 0.28)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct FrontDoorContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.12))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - rect.width * 0.18, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.08, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.10),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct RearDoorContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.10))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - rect.width * 0.10, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.22, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.35),
-            control: CGPoint(x: rect.minX + rect.width * 0.08, y: rect.maxY - rect.height * 0.15)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct HoodContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.58),
-            control: CGPoint(x: rect.minX + rect.width * 0.65, y: rect.minY + rect.height * 0.15)
-        )
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct TailgateContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.20, y: rect.maxY))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.55),
-            control: CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.20)
-        )
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - rect.width * 0.25, y: rect.minY),
-            control: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY + rect.height * 0.15)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct SunroofContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 4, height: 4))
-        return path
-    }
-}
-
-struct ChargeLidContourShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 3, height: 3))
-        return path
     }
 }
 
 @MainActor
 struct VehicleSideProfileTiresView: View {
     let tyres: [TyrePressure]
+    var model: VehicleModel? = nil
+    var brand: VehicleBrand? = nil
     var hoveredPosition: TyrePosition? = nil
+
+    private var spec: VehicleOutlineSpec { .spec(for: model) }
 
     private func tyre(for pos: TyrePosition) -> TyrePressure? {
         tyres.first(where: { $0.position == pos })
@@ -611,42 +448,27 @@ struct VehicleSideProfileTiresView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let og = OutlineGeometry(containerWidth: w, containerHeight: h)
+            let og = OutlineGeometry(containerWidth: geo.size.width,
+                                     containerHeight: geo.size.height,
+                                     spec: spec)
 
             ZStack {
-                // Ground shadow
-                Ellipse()
-                    .fill(Color.black.opacity(0.12))
-                    .frame(width: og.imageWidth * 0.90, height: og.imageHeight * 0.10)
-                    .position(x: og.originX + og.imageWidth * 0.50, y: og.originY + og.imageHeight * 0.90)
-                    .blur(radius: 3)
+                VehicleGroundShadow(spec: spec, og: og)
 
-                // Vehicle SVG base outline
-                if let svgImage = VehicleOutlineImageProvider.shared.image {
-                    Image(nsImage: svgImage)
-                        .resizable()
-                        .renderingMode(.template)
-                        .foregroundStyle(HisingenTheme.ink.opacity(0.85))
-                        .aspectRatio(1645 / 769, contentMode: .fit)
-                        .frame(width: w, height: h)
-                } else {
-                    FallbackCarSilhouetteView()
-                        .frame(width: w, height: h)
-                }
+                VehicleOutlineBaseImage(spec: spec, og: og, container: geo.size,
+                                        model: model, brand: brand)
 
-                // Rear wheel mapped from SVG X=379, Y=516.
+                // The model's own wheel circles, so the ring lands on the drawn tire rather than
+                // on where a Polestar 2's tire happens to be.
                 tireWheelGlow(
-                    u: 0.2304, v: 0.6710,
+                    wheel: spec.rearWheel,
                     state: axleState(.rearLeft, .rearRight), hovered: rearHovered,
                     measured: axleMeasured(.rearLeft, .rearRight),
                     og: og
                 )
 
-                // Front wheel mapped from SVG X=1322, Y=516.
                 tireWheelGlow(
-                    u: 0.8036, v: 0.6710,
+                    wheel: spec.frontWheel,
                     state: axleState(.frontLeft, .frontRight), hovered: frontHovered,
                     measured: axleMeasured(.frontLeft, .frontRight),
                     og: og
@@ -659,7 +481,7 @@ struct VehicleSideProfileTiresView: View {
 
     @ViewBuilder
     private func tireWheelGlow(
-        u: CGFloat, v: CGFloat,
+        wheel: OutlineWheel,
         state: TyrePressureWarning, hovered: Bool,
         measured: Bool,
         og: OutlineGeometry
@@ -679,9 +501,10 @@ struct VehicleSideProfileTiresView: View {
                 return hovered ? HisingenTheme.accent : HisingenTheme.inkMuted.opacity(0.55)
             }
         }()
-        // Scaled wheel rim ring proportional to the vehicle height (202px in 769px SVG = 0.2627 * imageHeight)
-        let ringSize: CGFloat = max(22, og.imageHeight * 0.2627)
-        let pos = og.point(u: u, v: v)
+        // Ring diameter from the wheel the model's own artwork draws, so a Polestar 3's bigger
+        // wheels get a bigger ring instead of a Polestar 2-sized one.
+        let ringSize: CGFloat = max(22, og.imageHeight * wheel.radiusFraction * 2)
+        let pos = og.point(u: wheel.center.x, v: wheel.center.y)
 
         ZStack {
             // Pulse halo while hovered or warning. Kept in the hierarchy and
@@ -716,8 +539,11 @@ struct VehicleSideProfileTiresView: View {
 
 @MainActor
 private struct FallbackCarSilhouetteView: View {
+    var model: VehicleModel? = nil
+    var brand: VehicleBrand? = nil
+
     var body: some View {
-        let profile = CarProfile.current
+        let profile = CarProfile.profile(for: model, brand: brand)
         GeometryReader { _ in
             ZStack {
                 CarSilhouetteShape(profile: profile)
@@ -731,7 +557,7 @@ private struct FallbackCarSilhouetteView: View {
     }
 }
 
-private struct CarProfile {
+struct CarProfile: Sendable, Equatable {
     let roofFront: CGPoint
     let roofRear: CGPoint
     let windshieldBase: CGPoint
@@ -775,11 +601,22 @@ private struct CarProfile {
     )
 
     @MainActor
-    static var current: CarProfile {
-        switch PreferencesStore().appTheme {
-        case .polestar, .cyanRacing: return .polestar
-        case .volvo, .swedishGold, .sandDune: return .volvo
-        case .hisingen, .nordicNight, .aurora, .forest: return .neutral
+    static func profile(for model: VehicleModel? = nil, brand: VehicleBrand? = nil) -> CarProfile {
+        if let model {
+            switch model.brand {
+            case .polestar: return .polestar
+            case .volvo: return .volvo
+            }
+        }
+        if let brand {
+            switch brand {
+            case .polestar: return .polestar
+            case .volvo: return .volvo
+            }
+        }
+        switch PreferencesStore.shared.activeBrand {
+        case .polestar: return .polestar
+        case .volvo: return .volvo
         }
     }
 }

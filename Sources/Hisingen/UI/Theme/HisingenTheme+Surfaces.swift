@@ -62,21 +62,21 @@ extension HisingenTheme {
     static func shadow(for elevation: SurfaceElevation) -> (color: Color, radius: CGFloat, y: CGFloat) {
         switch elevation {
         case .onCard:
-            // Deliberately below `card`. It used to be 0.08 against the card's combined 0.07.
-            return (shadowTint(isPolestar ? 0 : 0.04), 1.5, 1)
+            // Deliberately below `card`: a chip sits on a surface that is already off the canvas, so
+            // it has less distance to cover than the card does.
+            return (shadowTint(0.04), 1.5, 1)
         case .card:
             // One shadow, not two: the old pair composed to about 0.07 spread over two passes, and
             // two stacked `.shadow` modifiers mean two offscreen renders for that result.
             return (shadowTint(cardShadowOpacity), cardShadowRadius, 3)
         case .floating:
-            // Not theme-flattened: this is a window over an arbitrary desktop, not a card over the
-            // canvas, so Polestar's flat-card language does not apply to it.
+            // The one elevation that stays heavier than the rest: this is a window over an arbitrary
+            // desktop, not a card over the canvas, so it has real distance to express.
             return (shadowTint(0.18), 8, 3)
         }
     }
 
-    /// The card surface in full: material, wash and specular rim, for a given corner radius and
-    /// opacity preference.
+    /// The card surface in full, for a given corner radius.
     ///
     /// `Card` used to hardcode this as a nine-way theme switch while `cardBackground` defined the
     /// same surface a second time for the one call site that used it, and the two disagreed:
@@ -84,54 +84,41 @@ extension HisingenTheme {
     /// the component, `.volvo` an opaque colour from one and a gradient from the other. A card is
     /// the most repeated surface in the app, so two answers meant editing the token changed one
     /// screen and nothing else. There is one answer now, and every card path reads it.
+    ///
+    /// The Polestar branch that drew a bare square `Rectangle` is gone with theme geometry: the
+    /// global `cornerRadius` is 12, so drawing a square *fill* under a rounded *boundary stroke*
+    /// would have left that theme's cards with filled corners and a detached outline.
+    ///
+    /// A card is a solid surface. It used to be a second `.regularMaterial` carrying the canvas at
+    /// 60 %, which meant a card rendered a blur *on top of* the blur the popover surface had already
+    /// drawn — two nested translucent materials, which §12 forbids because legibility collapses and
+    /// because the result is not a material reading at all, just two blurs compositing toward grey.
+    ///
+    /// The hierarchy is now explicit and each step is one thing:
+    ///   panel  → `.regularMaterial` over the popover backing
+    ///   card   → solid `cardFill`, the canvas lifted toward white
+    ///   chip   → solid `chipFill`, the card sunk toward black
+    ///
+    /// Separation comes from the boundary stroke and the shadow, which is what they are for. The
+    /// specular rim is kept: a real edge on a real surface.
     @ViewBuilder
-    static func cardSurface(cornerRadius radius: CGFloat, prefersOpaque: Bool) -> some View {
-        ZStack {
-            if theme == .hisingen, !prefersOpaque {
-                // Apple Liquid Glass dynamic material, plus a specular light wash.
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(light: NSColor(white: 1.0, alpha: 0.45), dark: NSColor(white: 1.0, alpha: 0.05)),
-                                Color(light: NSColor(white: 1.0, alpha: 0.10), dark: NSColor(white: 0.0, alpha: 0.12))
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            } else if theme == .polestar {
-                // Polestar stark minimalist architectural panel: square, opaque, no wash.
-                // No `.continuous` on a zero radius: the curve has nothing to round, and asking
-                // for it costs the renderer work on every one of the app's 94 cards.
-                Rectangle()
-                    .fill(Color(light: NSColor.white, dark: NSColor(red: 0.09, green: 0.09, blue: 0.11, alpha: 1.0)))
-            } else if theme == .volvo, !prefersOpaque {
-                // Volvo frosted glass with a subtle iron navy wash.
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(light: NSColor(white: 1.0, alpha: 0.75), dark: NSColor(red: 0.08, green: 0.11, blue: 0.16, alpha: 0.65)),
-                                Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.99, alpha: 0.45), dark: NSColor(red: 0.04, green: 0.06, blue: 0.10, alpha: 0.45))
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            } else {
-                // Frosted glass tinted with the theme canvas, or an opaque canvas surface when the
-                // user has asked for one.
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(canvas.opacity(prefersOpaque ? 1.0 : 0.60))
-            }
-        }
+    static func cardSurface(cornerRadius radius: CGFloat) -> some View {
+        CardSurface(cornerRadius: radius)
+    }
+
+    /// The panel's fill when the blur is dropped, under an opaque card.
+    ///
+    /// A neutral, deliberately *darker* than any canvas. When Reduce Transparency or Increase
+    /// Contrast drops the blur the panel becomes opaque, and the card is lifted toward white rather
+    /// than being the canvas — so the panel has to go down for the card to separate at all. Using
+    /// the theme canvas here, as an earlier comment claimed it did, would leave a light theme whose
+    /// canvas is already near-white (Swedish Gold, Sand Dune) with a card 2 % lighter than its own
+    /// panel.
+    static var panelFill: Color {
+        Color(
+            light: NSColor(red: 0.93, green: 0.94, blue: 0.95, alpha: 1),
+            dark: NSColor(red: 0.045, green: 0.05, blue: 0.06, alpha: 1)
+        )
     }
 
     /// The specular rim a glass card carries. Suppressed for opaque surfaces, which have a real
@@ -168,7 +155,8 @@ extension HisingenTheme {
     }
 
     /// 3:1 against every theme's canvas and against every theme's card, in both appearances.
-    /// `verify-app-contrast.py` recomputes all thirty-six of those ratios from this file.
+    /// `Scripts/verify-app-contrast.py` recomputes all eighteen of those pairs from this file and
+    /// fails the build; the measured floor is 3.29:1.
     static let cardBoundaryIncreased = Color(
         light: NSColor(white: 0.5216, alpha: 1),
         dark: NSColor(white: 0.4118, alpha: 1)
@@ -177,12 +165,13 @@ extension HisingenTheme {
     /// A boundary drawn at the width of a boundary, not of a hairline.
     static var cardBoundaryIncreasedWidth: CGFloat { 1 }
 
-    /// Corner radius for a full-width notice banner.
+    /// Corner radius for a full-width notice banner: one value, not a theme branch.
     ///
-    /// The banner hardcoded 10, so it kept rounded corners in the theme whose entire identity is
-    /// sharp corners — on the most prominent element a new reader sees, since the banner sits at
-    /// the top of the Controls tab.
-    static var bannerRadius: CGFloat { cornerRadius == 0 ? 0 : 10 }
+    /// The banner hardcoded 10 and used to keep rounded corners in a theme whose identity was sharp
+    /// corners. That theme no longer exists — geometry is global and ``cornerRadius`` is 12 — so the
+    /// conditional guarding against it could only ever take one branch. A banner is a slight
+    /// concentric inset of the card carrying it, which is why it is 10 rather than 12.
+    static var bannerRadius: CGFloat { 10 }
 
     /// A compact, neutral marker for keyboard focus on custom pressable buttons.
     /// It deliberately uses the foreground ink instead of the theme accent so focus never becomes
@@ -196,80 +185,107 @@ extension HisingenTheme {
     ///
     /// These are one idea — a small tinted label carrying state — and they were built
     /// independently at radii 5, 8 and 9 with no token between them, while ``Pill`` and
-    /// ``StateSummaryChip`` render side by side in the vehicle hero. A theme with square
-    /// corners still gets square chips.
-    static var statusChipRadius: CGFloat { cornerRadius == 0 ? 0 : 8 }
+    /// ``StateSummaryChip`` render side by side in the vehicle hero. One value now, and a low one:
+    /// a chip is far smaller than its card, so a literal concentric inset of the card's 12 would
+    /// read as a rounded rectangle rather than a label. (The formula this replaced,
+    /// `cornerRadius - cardPadding + 4`, evaluated to at most 1 at every density and was clamped
+    /// to this value on every path anyway.)
+    static var statusChipRadius: CGFloat { 4 }
 
-    /// Fill for a chip, badge or callout that sits on top of a card.
+    /// A surface inset into a card: the card sunk toward black, per theme. See ``Palette/chipFill``.
     ///
-    /// These were a third translucent material stacked on the card's material on the panel's
-    /// material. §12 forbids stacking light translucent surfaces because legibility collapses,
-    /// and the worst case was the hero badge over a photograph. A chip only has to separate
-    /// from the card behind it, not from the desktop behind that, so it is opaque.
-    static var chipFill: AnyShapeStyle { AnyShapeStyle(canvas) }
+    /// Derived from the card rather than fixed at one neutral, because the inset has to separate
+    /// from a *per-theme* card: a value that reads as inset under Sand Dune's warm card must also
+    /// read as inset under Nordic Night's lifted grey one, which sits at almost the same luminance
+    /// a fixed neutral chip used to land on.
+    static var cardFillInset: Color { palette.chipFill }
 
-    static var cardBorderWidth: CGFloat {
-        switch theme {
-        case .hisingen: return 0.5
-        default: return 1
-        }
-    }
-    static var cardShadowOpacity: Double {
-        switch theme {
-        case .polestar: return 0
-        case .volvo: return 0.03
-        default: return 0.04
-        }
-    }
-    static var cardShadowRadius: CGFloat {
-        switch theme {
-        case .polestar: return 0
-        case .volvo: return 4
-        default: return 6
-        }
-    }
+    /// Hairline boundary width, one value for every theme.
+    ///
+    /// The default theme used 0.5 and the rest used 1, so the boundary was sub-pixel in the theme
+    /// most people run and crisp in the others. A boundary is a boundary.
+    static var cardBorderWidth: CGFloat { 1 }
+
+    /// Card shadow, one value for every theme.
+    ///
+    /// Polestar resolved to a *zero* shadow and Volvo to a weaker one, so in two of nine themes the
+    /// entire elevation system was switched off and a card was separable only by its hairline.
+    /// 0.04 at radius 6 is the value the other seven already used.
+    static var cardShadowOpacity: Double { 0.04 }
+    static var cardShadowRadius: CGFloat { 6 }
 
     // MARK: - Popover Surface
 
-    /// Full-bleed popover surface. The Hisingen glass theme layers Apple's translucent
-    /// material with a specular light wash and a soft vignette so the window reads as
-    /// clear Liquid Glass over the desktop (the popover backing itself is cleared in
-    /// StatusItemController.showPopover). Other themes keep their opaque canvas.
+    /// Full-bleed popover surface: the panel's own material, over the standard `NSPopover`
+    /// backing.
+    ///
+    /// This used to be a `.ultraThinMaterial` over a three-stop gradient whose bottom stop was an
+    /// orange at 5 % alpha, drawn into a window whose backing had been cleared so the material
+    /// sampled the desktop. Three separate problems came out of that:
+    ///
+    /// 1. The popover lost its rounded corners, its arrow and its shadow, because `NSPopover` draws
+    ///    all three with the backing the window was clearing.
+    /// 2. The orange stop composited over dark content into a muddy brown wash, so the panel read as
+    ///    tinted rather than as glass. Apple's materials are neutral and take their colour from what
+    ///    is behind them; brand warmth belongs in the accent token, on the elements that act.
+    /// 3. `.ultraThinMaterial` is the substrate for thin strips — the menu bar, a toolbar. A
+    ///    full-height panel is a large surface, and a large surface has to read as thicker than the
+    ///    chips and cards it carries.
+    ///
+    /// So: `.regularMaterial` at full opacity, over AppKit's own popover backing, with the chrome
+    /// intact.
     @ViewBuilder
     static var popoverSurface: some View {
         PopoverSurface()
     }
 }
 
+/// A card's fill: a raised surface, never the canvas.
+///
+/// A card is *elevated* — it sits on the panel, and that elevation is the whole reason the shadow,
+/// the rim and the boundary stroke exist. Filling it with `canvas` made it the panel's exact colour,
+/// so in dark mode (where the canvas is already near-black) cards, panel and desktop composited into
+/// one black field and only a whisper of a hairline said where a card ended.
+///
+/// The fill is the canvas lifted toward white by a fixed *fraction*, per theme and per appearance —
+/// see ``Palette/cardFill``. The fraction keeps the lift proportionate (a fixed luminance step would
+/// be invisible on a black canvas and glaring on a white one, because perceived lightness is not
+/// linear in sRGB), and deriving it from the canvas keeps the theme's hue. It was one fixed blue-grey
+/// in the dark appearance, which dropped the hue of every theme but the default.
+@MainActor
+private struct CardSurface: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(HisingenTheme.cardFill)
+    }
+}
+
 /// The popover's own surface, as a view rather than a token, because the decision
 /// depends on the environment: Reduce Transparency and Increase Contrast both ask for
-/// an opaque surface, and a static token cannot see either. Glass is the app's identity;
-/// it is not worth someone's legibility.
+/// an opaque surface, and a static token cannot see either.
 @MainActor
 struct PopoverSurface: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// Under either setting the blur is dropped entirely and ``panelFill`` — a neutral, darker than
+    /// any canvas — supplies the panel, so the lifted card still separates from it. Otherwise
+    /// `.regularMaterial` supplies the panel, which already adapts to the appearance and to the
+    /// desktop behind the window.
     private var prefersOpaqueSurface: Bool {
-        reduceTransparency || contrast == .increased || HisingenTheme.theme != .hisingen
+        reduceTransparency || contrast == .increased
     }
 
     var body: some View {
         if prefersOpaqueSurface {
-            Rectangle().fill(HisingenTheme.canvas)
+            // The panel goes *down*, not the cards going up: an opaque card on an opaque canvas
+            // panel would have been invisible, which is exactly the defect the lifted `cardFill`
+            // exists to fix, arriving by a different route.
+            Rectangle().fill(HisingenTheme.panelFill)
         } else {
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(light: NSColor(white: 1.0, alpha: 0.50), dark: NSColor(white: 1.0, alpha: 0.07)), location: 0.0),
-                        .init(color: .clear, location: 0.45),
-                        .init(color: Color(light: NSColor(red: 1.0, green: 0.55, blue: 0.25, alpha: 0.05), dark: NSColor(white: 0.0, alpha: 0.16)), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
+            Rectangle().fill(.regularMaterial)
         }
     }
 }

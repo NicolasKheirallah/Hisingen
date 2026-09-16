@@ -48,7 +48,7 @@ struct SettingsChargingPlannerCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: .orange)
+                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
                 SettingsFeatureToggleRow(
                     binder: binder,
@@ -76,6 +76,7 @@ struct SettingsChargingPlannerCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Electricity price zone"))
                         .controlSize(.small)
                         .frame(maxWidth: 220)
                     }
@@ -113,6 +114,7 @@ struct SettingsChargingPlannerCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Charging Power"))
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
@@ -129,6 +131,8 @@ struct SettingsChargingPlannerCard: View {
                         }
                         Spacer()
                         Toggle("", isOn: binder(\.notifyPlannerWindowStart))
+                            .labelsHidden()
+                            .accessibilityLabel(L10n.text("Notify When the Cheap Window Opens"))
                             .toggleStyle(.switch)
                             .controlSize(.small)
                     }
@@ -149,6 +153,7 @@ struct SettingsChargingPlannerCard: View {
                                 }
                             }
                             .labelsHidden()
+                            .accessibilityLabel(L10n.text("Lead Time"))
                             .controlSize(.small)
                             .frame(maxWidth: 200)
                         }

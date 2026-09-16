@@ -45,7 +45,7 @@ struct SettingsActionsCard: View {
                             : "checkmark.circle.fill"
                     )
                     .hisType(.micro, weight: .medium)
-                    .foregroundStyle(settingsTransferFeedback.isError ? Color.red : HisingenTheme.semanticGood)
+                    .foregroundStyle(settingsTransferFeedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                     .textSelection(.enabled)
                 }
 
@@ -61,7 +61,7 @@ struct SettingsActionsCard: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
-                .tint(.red)
+                .tint(HisingenTheme.semanticCritical)
 
                 Button {
                     NSApp.terminate(nil)

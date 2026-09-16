@@ -22,8 +22,11 @@ struct BatteryGauge: View {
         return L10n.format("Battery %d percent", percent)
     }
 
-    private var isPolestar: Bool { preferences.appTheme == .polestar }
-    private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
+    /// The bar's radius is a global token. This used to read `isPolestar ? 0 : 5`, so the energy
+    /// bar's shape — and its gradient fill, edge glow, particle flow and shadow — turned on which
+    /// *palette* the reader had picked. A theme is a palette: it may change colour, never geometry
+    /// or the presence of an effect.
+    private var gaugeRadius: CGFloat { HisingenTheme.gaugeRadius }
 
     /// Energy is actively moving into the battery. Every charging effect –
     /// particles, edge glow, breathing – settles once the pack reaches 100 %
@@ -32,7 +35,6 @@ struct BatteryGauge: View {
     private var isComplete: Bool { isCharging && fraction >= 0.999 }
 
     private var fillStyle: AnyShapeStyle {
-        if isPolestar { return AnyShapeStyle(color) }
         if isEnergyFlowing {
             // Faint dark → bright ramp so the fill reads as energy pooling
             // toward the charge edge.
@@ -50,7 +52,7 @@ struct BatteryGauge: View {
     }
 
     private var edgeGlowOpacity: Double {
-        guard isEnergyFlowing, !isPolestar else { return 0 }
+        guard isEnergyFlowing else { return 0 }
         // Reduce Motion keeps a whisper of a static glow – presence without
         // movement.
         if reduceMotion { return 0.20 }
@@ -89,8 +91,8 @@ struct BatteryGauge: View {
                 RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
                     .fill(fillStyle)
                     .frame(width: currentWidth, height: 9)
-                    .shadow(color: isPolestar ? .clear : color.opacity(shadowOpacity),
-                            radius: isPolestar ? 0 : shadowRadius,
+                    .shadow(color: color.opacity(shadowOpacity),
+                            radius: shadowRadius,
                             x: 0, y: 1)
                     .hisAnimation(Motion.progress, value: fraction)
                     .hisAnimation(Motion.stateChange, value: color)
@@ -119,7 +121,7 @@ struct BatteryGauge: View {
                 ChargingParticleFlow(
                     tint: color,
                     isActive: isEnergyFlowing && !reduceMotion && ambientMotionAllowed
-                        && !isPolestar && currentWidth > 6
+                        && currentWidth > 6
                 )
                 .frame(width: currentWidth, height: 9)
                 .hisAnimation(Motion.progress, value: fraction)
@@ -147,11 +149,11 @@ struct BatteryGauge: View {
 
                 if let targetFraction {
                     let targetX = width * CGFloat(min(max(targetFraction, 0), 1)) - 1.5
-                    RoundedRectangle(cornerRadius: isPolestar ? 0 : 1.5)
+                    RoundedRectangle(cornerRadius: 1.5)
                         .fill(HisingenTheme.ink.opacity(0.75))
                         .frame(width: 3, height: 13)
                         .offset(x: targetX, y: -2)
-                        .shadow(color: .black.opacity(isPolestar ? 0 : 0.2), radius: isPolestar ? 0 : 1, x: 0, y: 1)
+                        .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
                         .hisAnimation(Motion.progress, value: targetFraction)
                 }
             }
@@ -217,8 +219,7 @@ struct FuelGauge: View {
 
     @Environment(\.preferencesStore) private var preferences
 
-    private var isPolestar: Bool { preferences.appTheme == .polestar }
-    private var gaugeRadius: CGFloat { isPolestar ? 0 : 5 }
+    private var gaugeRadius: CGFloat { HisingenTheme.gaugeRadius }
 
     private var accessibilityValue: String {
         let percent = Int((fraction * 100).rounded())
@@ -236,18 +237,14 @@ struct FuelGauge: View {
                     .frame(height: 9)
 
                 RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
-                    .fill(
-                        isPolestar
-                            ? AnyShapeStyle(color)
-                            : AnyShapeStyle(LinearGradient(
-                                colors: [color.opacity(0.85), color],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ))
-                    )
+                    .fill(LinearGradient(
+                        colors: [color.opacity(0.85), color],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
                     .frame(width: currentWidth, height: 9)
-                    .shadow(color: isPolestar ? .clear : color.opacity(0.35),
-                            radius: isPolestar ? 0 : 3,
+                    .shadow(color: color.opacity(0.35),
+                            radius: 3,
                             x: 0, y: 1)
                     .hisAnimation(Motion.progress, value: fraction)
                     .hisAnimation(Motion.stateChange, value: color)
@@ -328,18 +325,15 @@ struct DualEnergyGauge: View {
 
 @MainActor
 struct UnavailableEnergyGauge: View {
-    @Environment(\.preferencesStore) private var preferences
-
     var body: some View {
-        let isPolestar = preferences.appTheme == .polestar
         // The gauge is 13pt tall in its container; this placeholder was 9pt, so the row shifted
         // whenever a reading arrived or went away. It also drew the same empty track as a genuine
         // 0%, so "no data" and "empty" were visually identical.
-        return ZStack {
-            RoundedRectangle(cornerRadius: isPolestar ? 0 : 5, style: .continuous)
+        ZStack {
+            RoundedRectangle(cornerRadius: HisingenTheme.gaugeRadius, style: .continuous)
                 .fill(HisingenTheme.ink.opacity(0.08))
                 .frame(height: 9)
-            RoundedRectangle(cornerRadius: isPolestar ? 0 : 5, style: .continuous)
+            RoundedRectangle(cornerRadius: HisingenTheme.gaugeRadius, style: .continuous)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
                 .foregroundStyle(HisingenTheme.inkMuted)
                 .frame(height: 9)

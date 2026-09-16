@@ -21,7 +21,7 @@ struct SettingsNotificationsCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bell.badge", title: L10n.text("Notifications"), color: .orange)
+                CardHeader(symbol: "bell.badge", title: L10n.text("Notifications"), color: HisingenTheme.semanticWarning)
 
                 if notificationPermission == .denied {
                     HStack(spacing: 8) {
@@ -200,6 +200,7 @@ struct SettingsNotificationsCard: View {
                                 }
                             }
                             .labelsHidden()
+                            .accessibilityLabel(L10n.text("Low battery alert threshold"))
                             .controlSize(.small)
                             .frame(maxWidth: 80)
                         }
@@ -266,6 +267,7 @@ struct SettingsNotificationsCard: View {
                                 }
                             }
                             .labelsHidden()
+                            .accessibilityLabel(L10n.text("Quiet hours start time"))
                             .controlSize(.small)
                             .frame(maxWidth: 76)
                             Text(L10n.text("to"))
@@ -277,6 +279,7 @@ struct SettingsNotificationsCard: View {
                                 }
                             }
                             .labelsHidden()
+                            .accessibilityLabel(L10n.text("Quiet hours end time"))
                             .controlSize(.small)
                             .frame(maxWidth: 76)
                         }

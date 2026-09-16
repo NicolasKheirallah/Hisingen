@@ -7,6 +7,10 @@ struct SettingsView: View {
     var fleet = FleetSnapshot()
     var database: VehicleDatabase = VehicleDatabase.shared
     var imageCache: CarImageCache = CarImageCache.shared
+    /// When Settings is a tab, the panel's tab bar is the navigation and this header is not
+    /// drawn. It survives for the full-panel presentation — before sign-in, and for an account
+    /// with no snapshot yet — because there is no bar to leave by.
+    var showsHeaderBar = true
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
     var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
@@ -35,7 +39,9 @@ struct SettingsView: View {
     var body: some View {
         let _ = prefsTick
         VStack(spacing: 10) {
-            headerBar
+            if showsHeaderBar {
+                headerBar
+            }
             SettingsNavigationBar(
                 selection: $selectedSettingsSection,
                 searchText: $settingsSearchText
@@ -69,6 +75,10 @@ struct SettingsView: View {
                             SettingsChargingStatOrderCard(binder: binder)
                         }
                         .transition(Self.sectionSwapTransition)
+                    }
+                    if shows(.tabsAndCards) {
+                        SettingsTabsAndCardsCard(binder: binder, state: state)
+                            .transition(Self.sectionSwapTransition)
                     }
                     if shows(.updates) {
                         SettingsUpdatesCard(binder: binder)
@@ -255,6 +265,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(HisingenTheme.accent)
+            .foregroundStyle(HisingenTheme.accentOn)
             .controlSize(.small)
 
             Button {

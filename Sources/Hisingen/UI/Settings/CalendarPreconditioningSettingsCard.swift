@@ -47,7 +47,6 @@ struct CalendarPreconditioningSettingsCard: View {
                 Text(L10n.text("Start climate before timed events in calendars you choose. The command targets the currently active vehicle."))
                     .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
-                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
                 if preferences.requireBiometricsForRemoteControls {
@@ -55,14 +54,13 @@ struct CalendarPreconditioningSettingsCard: View {
                           systemImage: "info.circle")
                         .hisType(.micro).foregroundStyle(.secondary)
                         .hisCaptionLeading()
-                        .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if permissionDenied {
                     Label(L10n.text("Calendar access is denied. Allow Hisingen in System Settings → Privacy & Security → Calendars."),
                           systemImage: "lock.trianglebadge.exclamationmark")
-                        .hisType(.micro).foregroundStyle(.orange)
+                        .hisType(.micro).foregroundStyle(HisingenTheme.semanticWarning)
                         .transition(.opacity)
                 }
 

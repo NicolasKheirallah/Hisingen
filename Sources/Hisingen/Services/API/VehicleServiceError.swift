@@ -70,6 +70,15 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         return false
     }
 
+    /// The IdP actively rejected the credential the owner supplied, as opposed to a grant that
+    /// merely expired or an added sign-in step. Only this class of failure should drop a stored
+    /// password: keeping a rejected one makes `hasResumableSession` report the account as
+    /// resumable forever, replaying a failed login on every launch.
+    var isRejectedCredential: Bool {
+        if case .authenticationRequired(_, .invalidCredentials) = self { return true }
+        return false
+    }
+
     var isTransient: Bool {
         switch self {
         case .network, .rateLimited, .server, .temporarilyUnavailable: return true

@@ -10,7 +10,7 @@ struct VehicleDiagnosticsCard: View {
         let card = Self(state: state, features: features, preferences: preferences)
         if card.rows.isEmpty {
             guard !state.isVolvo else { return nil }
-            return UnavailableFeatureCard.make(state: state, feature: nil, symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange, badge: L10n.text("Sensor readings"), message: L10n.text("No sensor readings were reported on the last refresh."))
+            return UnavailableFeatureCard.make(state: state, feature: nil, symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: HisingenTheme.semanticWarning, badge: L10n.text("Sensor readings"), message: L10n.text("No sensor readings were reported on the last refresh."))
         }
         return AnyView(card)
     }
@@ -45,7 +45,7 @@ struct VehicleDiagnosticsCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: .orange)
+                CardHeader(symbol: "stethoscope", title: L10n.text("Diagnostics & Sensors"), color: HisingenTheme.semanticWarning)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }

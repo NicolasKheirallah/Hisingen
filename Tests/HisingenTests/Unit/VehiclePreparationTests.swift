@@ -60,7 +60,7 @@ private extension PolestarAPI {
         accessToken = "test-access-token"
         tokenExpiry = Date().addingTimeInterval(3600)
         // Discovery must not consult another client's credentials in this transport test.
-        vdmsDiscoveryBlockedUntil = Date().addingTimeInterval(3600)
+        backoffs.block(PolestarAPI.discoveryBackoff, until: Date().addingTimeInterval(3600), reason: "test")
     }
 }
 

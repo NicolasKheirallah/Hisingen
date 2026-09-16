@@ -18,7 +18,7 @@ struct EngineControlsCard: View {
                     CardHeader(
                         symbol: "flame.fill",
                         title: L10n.text("Remote Engine Start (RES)"),
-                        color: .orange
+                        color: HisingenTheme.semanticWarning
                     )
                     Spacer()
                     engineStatus
@@ -68,7 +68,7 @@ struct EngineControlsCard: View {
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.orange)
+                    .tint(HisingenTheme.semanticWarning)
                     .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning != false)
 
                     Button {

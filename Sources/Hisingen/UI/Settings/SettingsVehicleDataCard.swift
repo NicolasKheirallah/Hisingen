@@ -66,7 +66,7 @@ struct SettingsVehicleDataCard: View {
         let brandName = brand.displayName
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: .green)
+                CardHeader(symbol: "list.bullet.rectangle", title: L10n.text("Vehicle Data"), color: HisingenTheme.semanticGood)
 
                 if !warrantyVIN.isEmpty, state?.maintenance.warranty == nil {
                     VStack(alignment: .leading, spacing: 6) {

@@ -4,25 +4,24 @@ import AppKit
 /// Single source of truth for the menu-bar dropdown's geometry. Every consumer
 /// (StatusItemController's popover sizing, the SwiftUI frames, tests) resolves
 /// dimensions through here instead of re-doing preset/custom/clamp arithmetic,
-/// so the physical window size, the zoomed layout size, and the screen-fit
-/// clamp can never disagree.
+/// so the physical window size and the screen-fit clamp can never disagree.
 ///
 /// All emitted points are whole numbers: non-integral widths force text into
-/// fractional glyph positions when the density transform scales the tree,
-/// which visibly softens rendering on non-Retina displays.
+/// fractional glyph positions, which visibly softens rendering on non-Retina
+/// displays.
 struct PanelLayout: Equatable {
     /// Physical panel width in points.
     let width: CGFloat
     /// Physical ideal height in points, before the screen-fit clamp.
     let unclampedHeight: CGFloat
-    /// The density preset used to be applied as a `scaleEffect` over the whole panel tree, which
-    /// shrank already-small text rather than reflowing content to fit more of it — the opposite of
-    /// what §15 asks, and it meant the app ignored the reader's text-size setting and substituted
-    /// its own zoom. Type now comes from the ramp and spacing from the same preset, so the tree
-    /// lays out at the panel's real size and this is the identity.
+    /// Always `1`. The density preset used to be applied as a `scaleEffect` over the whole panel
+    /// tree, which shrank already-small text rather than reflowing content to fit more of it — the
+    /// opposite of what the type ramp asks, and it meant the app ignored the reader's text-size
+    /// setting and substituted its own zoom. Type now comes from the ramp and spacing from the same
+    /// preset, so the tree lays out at the panel's real size and nothing scales it.
     ///
-    /// Kept as a property rather than deleted: a dozen views and the floating mini panel read it,
-    /// and the density preset still carries a scale — it is simply no longer a raster one.
+    /// Kept as a property rather than deleted because the shell and the floating mini panel both
+    /// read it; it is the single place that would change if a raster zoom ever returned.
     var contentScale: CGFloat { 1 }
 
     /// Height after clamping to what fits below the menu bar on the current
@@ -55,7 +54,15 @@ struct PanelLayout: Equatable {
     /// Room the popover can actually occupy: the screen's visible frame
     /// already excludes the menu bar and Dock; the remainder buys a little
     /// breathing room under the status item and above any Dock edge cases.
+    ///
+    /// Only the bundled app asks AppKit. `NSScreen.main` does not return nil in a process
+    /// with no window-server connection — it trips an assertion inside `CGSConnectionByID`
+    /// and takes the whole test runner down with it, so a package test reading this by
+    /// accident aborts instead of reporting a failure. Being a bundle is the same
+    /// precondition `StatusItemController` already uses to decide whether it may install a
+    /// status item, and the unbundled fallback is the same value a nil screen would give.
     static var availablePanelHeight: CGFloat {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return maximumHeight }
         guard let visible = NSScreen.main?.visibleFrame.height else { return maximumHeight }
         return max(minimumHeight, visible - 24)
     }

@@ -25,6 +25,7 @@ struct ChargeLocationEditorSheet: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.pressable)
+                .accessibilityLabel(L10n.text("Close"))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -56,7 +57,7 @@ struct ChargeLocationEditorSheet: View {
                         }
                         let bounds = VehicleChargeBounds(capabilities: capabilities).amperageRange
                         Slider(value: $ampLimit, in: Double(bounds.lowerBound)...Double(bounds.upperBound), step: 1)
-                            .tint(.orange)
+                            .tint(HisingenTheme.semanticWarning)
                             .disabled(capabilities?.controlSettings?.locationAmperage == false)
                             // A control greyed out with no reason reads as broken. The vehicle's
                             // own refusal is the explanation, so it is attached to the control.
@@ -79,7 +80,7 @@ struct ChargeLocationEditorSheet: View {
                                 .hisType(.label, weight: .bold, design: .rounded)
                                 .monospacedDigit()
                         }
-                        Slider(value: $minimumSoc, in: 0...100, step: 5).tint(.green)
+                        Slider(value: $minimumSoc, in: 0...100, step: 5).tint(HisingenTheme.semanticGood)
                     }
 
                     Toggle(L10n.text("Optimised charging"), isOn: $optimised)
@@ -116,7 +117,9 @@ struct ChargeLocationEditorSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(HisingenTheme.accent)
+                .foregroundStyle(HisingenTheme.accentOn)
                 .controlSize(.small)
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

@@ -67,7 +67,7 @@ extension InfoTabView {
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
 
-        let headerColor: Color = failed ? .red : (hasNewer ? .orange : .blue)
+        let headerColor: Color = failed ? HisingenTheme.semanticCritical : (hasNewer ? HisingenTheme.semanticWarning : HisingenTheme.semanticActive)
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -76,9 +76,9 @@ extension InfoTabView {
                                title: L10n.text("Software & Updates"), color: headerColor)
                     Spacer()
                     if failed {
-                        Pill(text: L10n.text("Update failed"), color: .red, symbol: "exclamationmark.triangle.fill")
+                        Pill(text: L10n.text("Update failed"), color: HisingenTheme.semanticCritical, symbol: "exclamationmark.triangle.fill")
                     } else if hasNewer {
-                        Pill(text: L10n.text("Update available"), color: .orange, symbol: "arrow.down.circle.fill")
+                        Pill(text: L10n.text("Update available"), color: HisingenTheme.semanticWarning, symbol: "arrow.down.circle.fill")
                     }
                 }
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
@@ -182,7 +182,7 @@ extension InfoTabView {
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "batteryblock.fill", title: L10n.text("Battery Diagnostics"), color: .green)
+                CardHeader(symbol: "batteryblock.fill", title: L10n.text("Battery Diagnostics"), color: HisingenTheme.semanticGood)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         })
@@ -366,7 +366,7 @@ extension InfoTabView {
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Fluids & Lighting Diagnostics"), color: .orange)
+                CardHeader(symbol: "checklist", title: L10n.text("Fluids & Lighting Diagnostics"), color: HisingenTheme.semanticWarning)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }

@@ -526,10 +526,8 @@ struct FormattingTests {
         ]
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         store.save(state)
-        // Persistence hands off to a detached storage pass; wait for the snapshot to land.
-        let stored = await awaitStored(timeout: 5) { store.snapshot(for: state.identity.vin) != nil }
-        #expect(stored, "snapshot never reached the database after save")
 
+        // The snapshot is durable when `save` returns, so this needs no polling.
         let restored = try #require(store.snapshot(for: state.identity.vin))
         #expect(restored.energy.samples == state.energy.samples)
     }
@@ -563,30 +561,35 @@ struct FormattingTests {
     @MainActor
     func testMultiCarIndexCyclingWrapsThroughStatusItemController() throws {
         // Drive the real cycling seam (TESTS-02): the arithmetic lives in
-        // StatusItemController.cycleVehicle, which orders the fleet the way the menu bar
+        // StatusItemController.cycledVIN, which orders the fleet the way the menu bar
         // sees it, so a three-car fleet must step forward/backward and wrap at both ends.
+        //
+        // The fleet order is read from a FleetStore snapshot — the same source
+        // `availableVehicleVINs` returns — instead of constructing the controller. Its
+        // `init` builds an `NSStatusBar` item and reads panel geometry, and a package test
+        // runner has no window-server connection, so that path aborts the whole run inside
+        // `CGSConnectionByID` rather than failing an assertion.
         let (store, defaults, suite) = try makeStore()
         defer { defaults.removePersistentDomain(forName: suite) }
         let fleetStore = FleetStore(
             stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),
             preferences: store
         )
-        let controller = StatusItemController(
-            database: .inMemory(), preferences: store, fleetStore: fleetStore
-        )
         let vins = ["YSMCYCLEAAA0000001", "YSMCYCLEBBB0000002", "YSMCYCLECCC0000003"]
         fleetStore.updateCars(vins.enumerated().map { index, vin in
             CarSummary(vin: vin, title: "Cycle car \(index + 1)")
         })
-        var selected: [String] = []
-        controller.onSelectCar = { selected.append($0) }
+        let fleet = fleetStore.snapshot().vehicles
+        #expect(fleet == vins, "the menu bar cycles the fleet in FleetStore order")
+
+        var active: String? = vins[0]
 
         func cycledVIN(forward: Bool) -> String? {
-            controller.cycleVehicle(forward: forward)
-            return selected.last
+            let next = StatusItemController.cycledVIN(in: fleet, after: active, forward: forward)
+            active = next
+            return next
         }
 
-        controller.activeVin = vins[0]
         #expect(cycledVIN(forward: true) == vins[1], "forward must advance to the next fleet car")
         #expect(cycledVIN(forward: true) == vins[2])
         #expect(cycledVIN(forward: true) == vins[0], "forward must wrap past the last car")

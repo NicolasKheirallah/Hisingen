@@ -17,12 +17,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let imageCache = CarImageCache()
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
+    /// The one authority for which adapter backs which brand; every other holder of a brand asks
+    /// this rather than repeating the choice.
+    private lazy var providerRegistry = ProviderRegistry(polestar: polestarAPI, volvo: volvoAPI)
     private let sessionManager = SessionManager()
     private let resultPresenter = RemoteResultPresenter()
     private lazy var dockWarningBadge = DockWarningBadge(preferences: preferences)
     private lazy var connectionTester = ConnectionTester(
-        sessionManager: sessionManager, polestarAPI: polestarAPI,
-        volvoAPI: volvoAPI, preferences: preferences)
+        sessionManager: sessionManager, providers: providerRegistry, preferences: preferences)
     private lazy var launchAtLoginController = LaunchAtLoginController(preferences: preferences)
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
     private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
@@ -40,8 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chargingPlannerController: ChargingPlannerController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // One maintenance pass, before anything can read: legacy plist snapshots move into SQLite,
+        // expired caches are dropped, and the legacy charging-summary repair starts. It used to be
+        // split between construction and the read paths themselves.
+        stateStore.activate()
         mainMenuController = MainMenuController(
-            onCheckForUpdates: { [weak self] in self?.updateController.checkNow() })
+            onCheckForUpdates: { [weak self] in self?.updateController.checkNow() },
+            onOpenSettings: { [weak self] in self?.toggleSettingsInPopover() }
+        )
         mainMenuController.install()
         DistributedNotificationCenter.default().addObserver(
             self,
@@ -101,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifier.onWarningVehicleCountChanged = { [weak self] count in
             self?.dockWarningBadge.update(vehicleCount: count)
         }
+        // The in-memory tiers an erase has to reach. Registered here because both holders are
+        // built from `stateStore`, so an initializer edge back into the eraser would be a
+        // cycle; Settings drives an eraser of its own, which shares this registry.
+        VehicleMemoryCacheRegistry.shared.register(notifier)
+        VehicleMemoryCacheRegistry.shared.register(fleetStore)
         statusController.updateNotificationPermission(notifier.permission)
         commandCoordinator = CommandCoordinator(
             context: self, preferences: preferences,
@@ -134,22 +147,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
-            polestarAPI: polestarAPI, volvoAPI: volvoAPI, fleetStore: fleetStore)
+            providers: providerRegistry, fleetStore: fleetStore)
         signInCoordinator = SignInCoordinator(
             context: self, preferences: preferences,
             polestarAPI: polestarAPI, volvoAPI: volvoAPI)
         garageScanner = GarageScanner(
             context: self,
             preferences: preferences,
-            provider: { [polestarAPI, volvoAPI] brand in
-                switch brand {
-                case .volvo: return volvoAPI
-                case .polestar: return polestarAPI
-                }
-            },
+            provider: { [providerRegistry] brand in providerRegistry.provider(for: brand) },
             hasResumableSession: { [preferences] brand in preferences.hasResumableSession(for: brand) },
-            restoreDormantSession: { [sessionManager, polestarAPI, volvoAPI, preferences] brand in
-                let provider: any VehicleProviding = brand == .volvo ? volvoAPI : polestarAPI
+            restoreDormantSession: { [sessionManager, providerRegistry, preferences] brand in
+                let provider = providerRegistry.provider(for: brand)
                 try await sessionManager.restore(api: provider, preferences: preferences)
             })
         urlRouter = URLCommandRouter(context: self)
@@ -457,15 +465,9 @@ extension AppDelegate: CommandExecutionContext {
         _ receipt: CommandReceipt,
         optimisticState: VehicleState?
     ) {
-        if let targetVIN = receipt.targetVIN,
-           vehicleSession.latest?.identity.vin.caseInsensitiveCompare(targetVIN) != .orderedSame {
-            // The Remote Command target isn't the visible vehicle: record it under the
-            // target's VIN so it survives relaunch and supersedes correctly there. The
-            // selected vehicle's receipt goes through the refresh coordinator instead.
-            // Both go through the coordinator's ledger so they share one clock.
-            vehicleSession.recordOffTargetReceipt(receipt, targetVIN: targetVIN)
-            return
-        }
+        // The refresh module's receipt ledger decides where the receipt is filed: the selected
+        // vehicle's live collection, or the Remote Command target's VIN when that target is not
+        // the visible vehicle. The shell holds no part of that rule.
         vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
 }

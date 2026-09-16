@@ -65,7 +65,9 @@ struct VehicleStateCodableTests {
     func testLegacyServiceAndTripDecode() throws {
         var object = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(fullyPopulated())) as! [String: Any]
-        // Strip clustered encodings, inject the flat shapes older builds wrote.
+        // Strip clustered encodings, inject the flat shapes older builds wrote – and drop the
+        // schema marker, which is the absence that selects the legacy decode path.
+        object.removeValue(forKey: "schemaVersion")
         object.removeValue(forKey: "maintenance")
         object.removeValue(forKey: "tripComputer")
         object["daysToService"] = 17
@@ -90,6 +92,7 @@ struct VehicleStateCodableTests {
         var object = try #require(JSONSerialization.jsonObject(
             with: JSONEncoder().encode(fullyPopulated())) as? [String: Any])
 
+        object.removeValue(forKey: "schemaVersion")
         let energy = try #require(object.removeValue(forKey: "energy") as? [String: Any])
         let identity = try #require(object.removeValue(forKey: "identity") as? [String: Any])
         let maintenance = try #require(object.removeValue(forKey: "maintenance") as? [String: Any])
@@ -219,6 +222,7 @@ struct VehicleStateCodableTests {
         var base = fullyPopulated()
         base.fuelSystem = FuelSystemSnapshot()
         var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(base)) as! [String: Any]
+        object.removeValue(forKey: "schemaVersion")
         object.removeValue(forKey: "fuelSystem")
         object["fuelLevelPercent"] = fuel.levelPercent
         object["fuelRangeKm"] = fuel.rangeKm
@@ -227,6 +231,23 @@ struct VehicleStateCodableTests {
         object["isEngineRunning"] = fuel.isEngineRunning
         object["fuelType"] = fuel.type
         return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    @Test("A payload carrying the schema marker is never rescued by flat keys")
+    func testCurrentVersionPayloadIsNotRescuedByFlatKeys() throws {
+        var object = try #require(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(fullyPopulated())) as? [String: Any])
+        // Everything the flat fallback would need is here, but the payload claims to be current:
+        // the clusters are the state, so a missing one is a corrupt snapshot rather than an old
+        // one, and it must fail loudly instead of decoding into a half-empty vehicle.
+        let energy = try #require(object.removeValue(forKey: "energy") as? [String: Any])
+        object["batteryPercentage"] = energy["batteryPercentage"]
+        object["rangeKm"] = energy["rangeKm"]
+
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(
+                VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
+        }
     }
 
     @Test("Snapshots written before the fuel cluster migration still decode")

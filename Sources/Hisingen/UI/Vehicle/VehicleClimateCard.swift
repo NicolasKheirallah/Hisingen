@@ -76,12 +76,12 @@ struct VehicleClimateCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     HStack(spacing: 7) {
-                        SpinningFanView(isSpinning: climateActive, size: 14, color: climateActive ? .orange : HisingenTheme.inkMuted)
+                        SpinningFanView(isSpinning: climateActive, size: 14, color: climateActive ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
                         Text(L10n.text("Climate & Timers")).hisType(.body, weight: .bold).foregroundStyle(HisingenTheme.ink)
                     }
                     Spacer()
                     if climateActive {
-                        Pill(text: state.climateStatus?.activity.displayName ?? L10n.text("Active"), color: .orange, symbol: "fan.fill")
+                        Pill(text: state.climateStatus?.activity.displayName ?? L10n.text("Active"), color: HisingenTheme.semanticWarning, symbol: "fan.fill")
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }

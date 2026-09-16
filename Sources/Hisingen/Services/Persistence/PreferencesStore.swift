@@ -66,7 +66,7 @@ final class PreferencesStore {
             "low_battery_threshold",
             "automatically_check_for_updates", "automatically_download_updates",
             "update_check_interval",
-            "show_warning_badge", "grid_carbon_intensity_g_per_kwh"
+            "show_warning_badge", "grid_carbon_intensity_g_per_kwh", "tab_composition_v1"
         ]
         return exact.contains(key)
             || ["notify_", "remote_", "night_", "electricity_", "theme_for_"].contains(where: key.hasPrefix)
@@ -111,42 +111,163 @@ final class PreferencesStore {
         }
     }
 
-    /// Remove local per-vehicle state kept in UserDefaults. A database erase must clear
-    /// these too or an old snapshot or command receipt can reappear after relaunch.
-    /// Corrupt legacy payloads are removed wholesale because retaining an undecodable cache
-    /// is less safe than requiring the affected vehicles to refresh again.
-    func clearLocalVehicleDefaults(
-        for vin: String?,
-        includeBaselines: Bool = true,
-        includeCommandReceipts: Bool = true
-    ) {
-        func removeEntry<Value: Codable>(_ type: Value.Type, key: String) {
-            guard let vin else {
-                d.removeObject(forKey: key)
-                return
-            }
-            guard let data = d.data(forKey: key),
-                  var values = try? JSONDecoder().decode([String: Value].self, from: data) else {
-                d.removeObject(forKey: key)
-                return
-            }
-            values.removeValue(forKey: vin)
-            if values.isEmpty {
-                d.removeObject(forKey: key)
-            } else if let encoded = try? JSONEncoder().encode(values) {
-                d.set(encoded, forKey: key)
-            } else {
-                d.removeObject(forKey: key)
-            }
-        }
+    /// Whose fact a store holds, which is what decides the fleet-wide erases that may take it.
+    private enum Ownership {
+        /// Reported by the vehicle, so a session that ends discards it: a snapshot, a command
+        /// receipt, a charging baseline, the planner's notification dedupe stamp.
+        case vehicleDerived
+        /// Authored by the reader about the vehicle: a name, a colour, a mute, a hidden trip.
+        /// These are the reader's, not the vehicle's, so ending a session must not take them –
+        /// only the reader asking for that vehicle to be gone may.
+        case readerAuthored
+    }
 
-        removeEntry(VehicleState.self, key: "cached_vehicle_snapshots_v1")
-        if includeCommandReceipts {
-            removeEntry(StoredCommandReceipts.self, key: "command_receipts_v1")
+    /// The legacy pre-SQLite snapshot mirror, keyed by VIN. In the table because every per-vehicle
+    /// erase reaches it; named here as well because the location erase invalidates this store
+    /// *alone* – a held snapshot still carries the coordinates just deleted, while a baseline, a
+    /// receipt and everything the reader authored are untouched by a location change.
+    private static let snapshotMirrorKey = "cached_vehicle_snapshots_v1"
+
+    private nonisolated static func removeSnapshotMirrorEntry(
+        _ d: UserDefaults, _ key: String, _ vin: String
+    ) {
+        removeJSONEntry(VehicleState.self, key: key, vin: vin, from: d)
+    }
+
+    /// Every `UserDefaults` store keyed by VIN, each with the ownership that decides which
+    /// fleet-wide erase may take it and the removal that matches the shape its accessors write:
+    /// a JSON `Codable` payload, a property-list dictionary, or – for the mute list – a
+    /// property-list array of VINs. One table, so the per-vehicle erase, both fleet-wide erases
+    /// and the reader-facing accessors cannot drift apart.
+    private static let perVehicleStores: [(
+        key: String, ownership: Ownership, remove: @Sendable (UserDefaults, String, String) -> Void
+    )] = [
+        (snapshotMirrorKey, .vehicleDerived, removeSnapshotMirrorEntry),
+        ("command_receipts_v1", .vehicleDerived, { d, key, vin in
+            removeJSONEntry(StoredCommandReceipts.self, key: key, vin: vin, from: d)
+        }),
+        ("charging_baselines_v1", .vehicleDerived, { d, key, vin in
+            removeJSONEntry(ChargingBaseline.self, key: key, vin: vin, from: d)
+        }),
+        ("polestar_vehicle_nicknames_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("planner_notified_window_ends_v2", .vehicleDerived, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("history_selected_session_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("history_hidden_trips_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("vehicle_in_service_dates_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("vehicle_specification_overrides_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("dismissed_software_events_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("vehicle_themes_v1", .readerAuthored, { d, key, vin in
+            removeDictionaryEntry(key, vin: vin, from: d)
+        }),
+        ("muted_vehicle_vins_v1", .readerAuthored, { d, key, vin in
+            removeListEntry(key, vin: vin, from: d)
+        })
+    ]
+
+    /// Removes one vehicle's local state from `UserDefaults`. A database erase must clear these
+    /// too or an old snapshot or command receipt can reappear after relaunch.
+    ///
+    /// All twelve stores go, including the reader-authored nickname and theme. The action is
+    /// presented as "local vehicle data was erased", and a name or colour that outlives its
+    /// vehicle is the half-erase that sentence exists to rule out; the accepted cost is that
+    /// re-adding the car means naming and colouring it again. A sign-out that knows the vehicle
+    /// takes the same twelve, because that vehicle's session genuinely ended and it is the
+    /// vehicle the reader acted on.
+    ///
+    /// The VIN is normalized the way every writer normalizes it, so a caller holding a
+    /// lower-case or padded identifier still reaches the entry that was written. Corrupt legacy
+    /// payloads are removed wholesale because retaining an undecodable cache is less safe than
+    /// requiring the affected vehicle to refresh again.
+    func clearLocalVehicleDefaults(for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        // An empty VIN names no vehicle; it never stands for all of them.
+        guard !key.isEmpty else { return }
+        for store in Self.perVehicleStores {
+            store.remove(d, store.key, key)
         }
-        if includeBaselines {
-            removeEntry(ChargingBaseline.self, key: "charging_baselines_v1")
+    }
+
+    /// The all-twelve fleet erase, for the reader-chosen "Erase All Local Vehicle Data" action:
+    /// names, themes, baselines and receipts for every vehicle this Mac knows about. Its own
+    /// member because "no VIN" used to mean this, and the reader asking for every vehicle to be
+    /// gone is the one thing that may take what the reader authored.
+    func clearAllLocalVehicleDefaults() {
+        for store in Self.perVehicleStores {
+            d.removeObject(forKey: store.key)
         }
+    }
+
+    /// The fleet-wide erase for a sign-out that no longer knows any vehicle. Only the
+    /// vehicle-derived half goes: ending a session discards what the vehicles reported, and the
+    /// reader never asked for a name or a colour to be forgotten. Taking those here would erase
+    /// them for vehicles of a brand whose session was never touched.
+    func clearAllVehicleDerivedDefaults() {
+        for store in Self.perVehicleStores where store.ownership == .vehicleDerived {
+            d.removeObject(forKey: store.key)
+        }
+    }
+
+    /// The single store a location erase invalidates. It is named rather than reached through an
+    /// exclusion on the table, because the table's set is the whole per-vehicle set: a scope that
+    /// asked for "everything except these two" silently widened into the nickname, the theme and
+    /// the rest the moment the table grew.
+    func clearSnapshotMirror(for vin: String) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        // An empty VIN names no vehicle; it never stands for all of them.
+        guard !key.isEmpty else { return }
+        Self.removeSnapshotMirrorEntry(d, Self.snapshotMirrorKey, key)
+    }
+
+    /// The fleet-wide counterpart of `clearSnapshotMirror(for:)`.
+    func clearAllSnapshotMirrors() {
+        d.removeObject(forKey: Self.snapshotMirrorKey)
+    }
+
+    private nonisolated static func removeJSONEntry<Value: Codable>(
+        _ type: Value.Type, key: String, vin: String, from d: UserDefaults
+    ) {
+        guard let data = d.data(forKey: key),
+              var values = try? JSONDecoder().decode([String: Value].self, from: data) else {
+            d.removeObject(forKey: key)
+            return
+        }
+        values.removeValue(forKey: vin)
+        if values.isEmpty {
+            d.removeObject(forKey: key)
+        } else if let encoded = try? JSONEncoder().encode(values) {
+            d.set(encoded, forKey: key)
+        } else {
+            d.removeObject(forKey: key)
+        }
+    }
+
+    /// The nine catalogs whose accessors read a property-list dictionary are not JSON, so they
+    /// cannot go through `removeJSONEntry`: decoding them as JSON fails, and that failure path
+    /// drops the key for every vehicle instead of the one being erased.
+    private nonisolated static func removeDictionaryEntry(_ key: String, vin: String, from d: UserDefaults) {
+        guard var values = d.dictionary(forKey: key) else { return }
+        values.removeValue(forKey: vin)
+        if values.isEmpty { d.removeObject(forKey: key) } else { d.set(values, forKey: key) }
+    }
+
+    private nonisolated static func removeListEntry(_ key: String, vin: String, from d: UserDefaults) {
+        guard let values = d.array(forKey: key) as? [String] else { return }
+        let remaining = values.filter { $0 != vin }
+        if remaining.isEmpty { d.removeObject(forKey: key) } else { d.set(remaining, forKey: key) }
     }
 
     var email: String {
@@ -219,6 +340,13 @@ final class PreferencesStore {
         let result: Bool
         switch brand {
         case .polestar:
+            // Deliberate: a stored password counts as resumable. It lets a launch re-establish
+            // the session silently instead of prompting, which is the whole point of storing it.
+            // This is only safe because a credential the IdP actively rejects is dropped rather
+            // than replayed (`SessionManager.signInWithStoredPassword` on `.invalidCredentials`,
+            // `discardDeadRefreshToken` on a dead grant) – so this cannot spin on a permanently
+            // bad credential. Do not narrow it to `hasStoredPolestarSession` without that
+            // guarantee and the sign-in UX that goes with it.
             // Rendering menus and account cards asks this frequently. Presence bits avoid a
             // protected Keychain read here; SessionManager still reads and validates the real
             // token/password when an actual restore begins.
@@ -664,10 +792,103 @@ final class PreferencesStore {
         set { d.set(newValue.enabled.intersection(AppFeature.permittedFeatures).map(\.rawValue).sorted(), forKey: "enabled_features_v2"); d.set(true, forKey: "streaming_default_migration_v2"); d.removeObject(forKey: "enabled_features_v1"); d.removeObject(forKey: "show_vehicle_image") }
     }
 
-    func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme { let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); if let values = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String], let theme = values[key].flatMap(AppTheme.init) { return theme }; let resolved = brand ?? (key.isEmpty ? activeBrand : (key.hasPrefix("YV") ? .volvo : activeBrand)); if let theme = d.string(forKey: "theme_for_\(resolved.rawValue)").flatMap(AppTheme.init) { return theme }; return resolved == .volvo ? .volvo : .polestar }
-    func setTheme(_ theme: AppTheme, for vin: String, brand: VehicleBrand? = nil) { let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); if !key.isEmpty { var values = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]; values[key] = theme.rawValue; d.set(values, forKey: "vehicle_themes_v1") }; d.set(theme.rawValue, forKey: "theme_for_\((brand ?? activeBrand).rawValue)"); d.set(theme.rawValue, forKey: "app_theme") }
-    var appTheme: AppTheme { get { vin.isEmpty ? (d.string(forKey: "theme_for_\(activeBrand.rawValue)").flatMap(AppTheme.init) ?? AppTheme(rawValue: d.string(forKey: "app_theme") ?? "") ?? (activeBrand == .volvo ? .volvo : .polestar)) : theme(for: vin, brand: activeBrand) } set { setTheme(newValue, for: vin, brand: activeBrand) } }
-    func syncAppThemeStorageKey() { d.set(appTheme.rawValue, forKey: "app_theme") }
+    /// Which tabs exist, what is on each of them, and in what order.
+    ///
+    /// Stored as JSON under one key rather than as several parallel arrays, so a tab and the
+    /// cards on it can never be read half-updated. Decoding failure returns the shipped layout
+    /// instead of an empty panel: a corrupt layout should cost a reader their customisation,
+    /// not their whole interface.
+    var tabComposition: TabComposition {
+        get {
+            guard let data = d.data(forKey: Self.tabCompositionKey),
+                  let decoded = try? JSONDecoder().decode(TabComposition.self, from: data) else {
+                return seededTabComposition()
+            }
+            return decoded.normalized()
+        }
+        set {
+            let clean = newValue.normalized()
+            guard let data = try? JSONEncoder().encode(clean) else { return }
+            d.set(data, forKey: Self.tabCompositionKey)
+            d.set(true, forKey: "tab_items_seeded_v1")
+        }
+    }
+
+    static let tabCompositionKey = "tab_composition_v1"
+
+    /// First read on an installation that predates tabs-and-cards: take the feature toggles
+    /// the reader already made as the starting layout, so a card they switched off does not
+    /// reappear the first time they open the panel. Runs once — after that the layout is the
+    /// reader's, and a feature they re-enable through the feature list stays hidden until they
+    /// say otherwise.
+    private func seededTabComposition() -> TabComposition {
+        guard !d.bool(forKey: "tab_items_seeded_v1") else { return .default }
+        d.set(true, forKey: "tab_items_seeded_v1")
+        var seeded = TabComposition.default
+        let disabled = Set(AppFeature.allCases).subtracting(features.enabled)
+        guard !disabled.isEmpty else { return seeded }
+        for item in TabItemCatalog.all {
+            guard let feature = item.feature, disabled.contains(feature) else { continue }
+            // An item whose reading is never fetched cannot draw anything, so hiding it keeps
+            // the layout honest instead of leaving an empty card on the tab.
+            seeded.hiddenItems.insert(item.id)
+        }
+        return seeded
+    }
+
+    /// Switches off the readings a card arrangement no longer shows.
+    ///
+    /// `candidates` is every feature some card that used to need it has just been switched off
+    /// for; `keptFeatures` is every feature a card the reader can still see needs, across every
+    /// tab. A feature in `candidates` outside that set is a reading nothing draws on any more,
+    /// so the provider request behind it stops. Deliberately conservative: a feature is only
+    /// switched off when this action is what made it unnecessary, so a reading the reader turned
+    /// on by hand in the feature list is never taken away by moving a card.
+    ///
+    /// Returns whether anything actually changed, so the caller can tell the rest of the app
+    /// that the feature selection moved rather than guessing.
+    @discardableResult
+    func stopFetchingUnusedFeatures(_ candidates: Set<AppFeature>, keeping keptFeatures: Set<AppFeature>) -> Bool {
+        let unused = candidates.subtracting(keptFeatures)
+        guard !unused.isEmpty else { return false }
+        var updated = features
+        for feature in unused { updated.set(feature, enabled: false) }
+        guard updated != features else { return false }
+        features = updated
+        return true
+    }
+
+    func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (key.hasPrefix("YV") ? .volvo : activeBrand))
+        return ThemeChoice.resolve(vin: key, brand: resolvedBrand, defaults: d)
+    }
+
+    func setTheme(_ theme: AppTheme, for vin: String, brand: VehicleBrand? = nil) {
+        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !key.isEmpty {
+            ThemeChoice.assign(theme, scope: .vehicle(key), defaults: d)
+        }
+        let targetBrand = brand ?? activeBrand
+        ThemeChoice.assign(theme, scope: .brand(targetBrand), defaults: d)
+    }
+
+    var appTheme: AppTheme {
+        get {
+            ThemeChoice.resolve(vin: vin, brand: activeBrand, defaults: d)
+        }
+        set {
+            if vin.isEmpty {
+                ThemeChoice.assign(newValue, scope: .brand(activeBrand), defaults: d)
+            } else {
+                setTheme(newValue, for: vin, brand: activeBrand)
+            }
+        }
+    }
+
+    func syncAppThemeStorageKey() {
+        d.set(appTheme.rawValue, forKey: "app_theme")
+    }
     func applyAppearance() {
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         NSApplication.shared.appearance = appearanceMode.nsAppearance

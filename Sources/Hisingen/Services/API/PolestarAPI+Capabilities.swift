@@ -80,19 +80,20 @@ extension PolestarAPI {
         vin: String,
         bypassCache: Bool = false,
         operation: @Sendable () async throws -> Value?
-    ) async throws -> OptionalCapability<Value> {
+    ) async throws -> CapabilityState<Value> {
         try Task.checkCancellation()
         let epoch = sessionEpoch
-        guard enabled else { return OptionalCapability(value: nil, unavailable: false, unsupported: false) }
+        // The feature is off, so nothing was asked. This used to be reported as "not unavailable
+        // and not unsupported", which reads as available; `.unknown` is what it always meant.
+        guard enabled else { return .unknown }
         let cacheKey = Self.capabilityReadingKey(feature, key: key)
         let scopedCacheKey = "\(vin)|\(cacheKey)"
         if !bypassCache,
            let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
-            return OptionalCapability(value: cached.value as? Value, unavailable: false, unsupported: false)
+            return .available(cached.value as? Value)
         }
         if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-            let unsupported = unsupportedCapabilities.contains(scopedCacheKey)
-            return OptionalCapability(value: nil, unavailable: !unsupported, unsupported: unsupported)
+            return unsupportedCapabilities.contains(scopedCacheKey) ? .unsupported : .unavailable
         }
         do {
             let value = try await operation()
@@ -105,7 +106,7 @@ extension PolestarAPI {
                     expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
                 )
             }
-            return OptionalCapability(value: value, unavailable: false, unsupported: false)
+            return .available(value)
         } catch {
             try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
@@ -134,7 +135,7 @@ extension PolestarAPI {
             if unsupported { unsupportedCapabilities.insert(scopedCacheKey) }
             else { unsupportedCapabilities.remove(scopedCacheKey) }
             logger.debug("Optional \(feature.rawValue, privacy: .public) capability unavailable")
-            return OptionalCapability(value: nil, unavailable: !unsupported, unsupported: unsupported)
+            return unsupported ? .unsupported : .unavailable
         }
     }
 

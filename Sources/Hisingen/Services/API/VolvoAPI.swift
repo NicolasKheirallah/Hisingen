@@ -63,11 +63,18 @@ actor VolvoAPI {
 
 
     var session: URLSession
-    var accessToken: String?
-    var refreshToken: String?
-    var tokenExpiry: Date?
-    var refreshTask: Task<VolvoTokenResponseDTO, Error>?
-    var refreshTaskID: UUID?
+    /// The session token lifecycle: renewal margin, the grant cooldown that collapses the
+    /// telemetry fan-out into one grant, single-flight, rotate-on-use persistence, and
+    /// dead-grant classification. It stays private because it is confined to this actor:
+    /// `accessToken` stays readable because the telemetry extensions read it directly, and
+    /// `refreshToken` stays writable because `restoreSession` seeds it from the Keychain before
+    /// forcing a grant.
+    private let tokens: TokenLifecycle
+    var accessToken: String? { tokens.accessToken }
+    var refreshToken: String? {
+        get { tokens.refreshToken }
+        set { tokens.refreshToken = newValue }
+    }
     /// PKCE sign-in flow state. The flow validates the redirect callback against the pending
     /// values before consuming them, so a stray or forged callback cannot kill the genuine
     /// sign-in; `invalid_scope` stays retryable at a narrower scope tier.
@@ -90,7 +97,9 @@ actor VolvoAPI {
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
-    var endpointBackoff: [String: Date] = [:]
+    /// Where the durable per-endpoint stand-downs live: one owner for both providers, so an
+    /// erase reaches them and a test can inject one over an in-memory database.
+    let backoffs: ProviderBackoffStore
     var remoteCommandsInFlight: Set<String> = []
     var carImageData: [String: Data] = [:]
     var interiorImageData: [String: Data] = [:]
@@ -106,39 +115,40 @@ actor VolvoAPI {
         self.init(keychain: keychain, imageCache: imageCache, preferences: .shared)
     }
 
-    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(), preferences: PreferencesStore) {
+    init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
+         preferences: PreferencesStore, backoffs: ProviderBackoffStore = ProviderBackoffStore()) {
         self.keychain = keychain
         self.imageCache = imageCache
         self.preferences = preferences
+        self.backoffs = backoffs
+        self.tokens = TokenLifecycle(
+            policy: .init(renewalMargin: Self.tokenRenewalMargin(lifetime:),
+                          minimumRegrantInterval: 10),
+            providerName: "Volvo",
+            logger: AppLog.logger("volvo-api"),
+            persist: { try keychain.saveVolvoSessionToken($0) },
+            isDeadGrant: { error in
+                if case TokenRequestFailure.deadRefreshToken = error { return true }
+                return false
+            }
+        )
         session = Self.makeSession()
-        // Restore endpoint back-offs so a market-restricted endpoint (e.g. `location`, which
-        // returns 403 in this region) is not re-probed once per launch forever – the dict was
-        // in-memory only, so every restart erased hours of accumulated "known unavailable".
-        endpointBackoff = Self.loadPersistedEndpointBackoff()
     }
 
-    private static let endpointBackoffDefaultsKey = "volvo_endpoint_backoff_v1"
 
-    private static func loadPersistedEndpointBackoff() -> [String: Date] {
-        guard let raw = UserDefaults.standard.dictionary(forKey: endpointBackoffDefaultsKey) as? [String: Double]
-        else { return [:] }
-        let now = Date()
-        return raw.compactMapValues { epoch in
-            let date = Date(timeIntervalSince1970: epoch)
-            return date > now ? date : nil
+    /// Volvo's client credentials are not part of the shared interface, so assembling them is
+    /// this adapter's own business: a caller restores a session the same way for either brand.
+    func prepareSession() async throws {
+        // `PreferencesStore` is MainActor-backed; this adapter is not.
+        let configuredClientID = await MainActor.run { preferences.volvoClientID }
+        let clientID = configuredClientID.isEmpty ? BuiltinVolvoSecrets.clientID : configuredClientID
+        let secret = (try Keychain.readVolvoClientSecret()) ?? BuiltinVolvoSecrets.clientSecret
+        let apiKey = (try Keychain.readVolvoApiKey()) ?? BuiltinVolvoSecrets.vccApiKey
+        guard !clientID.isEmpty, !secret.isEmpty, !apiKey.isEmpty else {
+            throw VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
         }
+        configure(clientID: clientID, clientSecret: secret, vccApiKey: apiKey)
     }
-
-    func persistEndpointBackoff() {
-        let live = endpointBackoff.filter { $0.value > Date() }
-        if live.isEmpty {
-            UserDefaults.standard.removeObject(forKey: Self.endpointBackoffDefaultsKey)
-        } else {
-            UserDefaults.standard.set(live.mapValues { $0.timeIntervalSince1970 },
-                                      forKey: Self.endpointBackoffDefaultsKey)
-        }
-    }
-
 
     func configure(clientID: String, clientSecret: String, vccApiKey: String) {
         self.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -348,18 +358,34 @@ actor VolvoAPI {
         // A sign-out or restarted sign-in during the exchange must not repopulate the tokens
         // it just cleared (same guard as the Polestar grant paths).
         guard epoch == sessionEpoch else { throw CancellationError() }
-        try apply(token)
+        try tokens.adopt(TokenLifecycle.Grant(
+            accessToken: token.accessToken,
+            refreshToken: token.refreshToken,
+            expiresIn: TimeInterval(token.expiresIn)))
     }
 
-    /// When the most recent successful `refresh_token` grant landed, and the lifetime that
-    /// grant advertised. A brand-new token is the freshest one obtainable, so a caller that
-    /// arrives within a few seconds of a completed grant reuses it instead of starting
-    /// another – this collapses the ~20-endpoint telemetry fan-out (and a wave of requests
-    /// that all `401` at once) from several `refresh_token` grants down to one. Cleared by
-    /// `resetSession()`. Also lets the renewal threshold scale to a short-lived token
-    /// instead of a flat five minutes that would treat it as perpetually stale.
-    var lastTokenGrantAt: Date?
-    var tokenLifetime: TimeInterval = 0
+    /// The most recent successful grant is the freshest token obtainable, so a caller arriving
+    /// within a few seconds of one reuses it instead of starting another – this collapses the
+    /// ~20-endpoint telemetry fan-out (and a wave of requests that all `401` at once) from
+    /// several `refresh_token` grants down to one. The lifecycle enforces it as the policy's
+    /// minimum regrant interval.
+    static func tokenRenewalMargin(lifetime: TimeInterval) -> TimeInterval {
+        // Scale to a short-lived token instead of a flat five minutes that would treat it as
+        // perpetually stale, while never discarding most of a long-lived one.
+        lifetime > 0 ? min(300, lifetime / 2) : 300
+    }
+
+    /// Whether `epoch` still names the live session. Consulted after every suspension so a grant
+    /// that lands after a reset cannot be applied to the session that replaced it.
+    func isSessionCurrent(_ epoch: Int) -> Bool { epoch == sessionEpoch }
+
+    /// Cancels an in-flight grant without touching the session: a new authorization is about to
+    /// replace it, and its rotated token must not land afterwards.
+    func cancelInFlightTokenGrant() { tokens.cancelInFlightGrant() }
+
+    /// Clears the in-memory session and any in-flight grant. The persisted token is untouched –
+    /// only `signOut` and a dead grant delete that.
+    func resetTokenLifecycle() { tokens.reset() }
 
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
@@ -367,50 +393,42 @@ actor VolvoAPI {
 
     func refreshAccessToken(force: Bool) async throws {
         let requestEpoch = sessionEpoch
-        let renewalMargin = tokenLifetime > 0 ? min(300, tokenLifetime / 2) : 300
-        if !force, let expiry = tokenExpiry, accessToken != nil,
-           expiry.timeIntervalSinceNow >= renewalMargin { return }
-        if let landed = lastTokenGrantAt, accessToken != nil,
-           Date().timeIntervalSince(landed) < 10 { return }
-        if let refreshTask {
-            try await applyRefreshResult(from: refreshTask, requestEpoch: requestEpoch)
-            return
-        }
-        guard let clientID, let clientSecret, let refreshToken, !refreshToken.isEmpty else {
-            throw VolvoError.authenticationRequired(.noStoredSession)
-        }
-        var request = URLRequest(url: try identityURL(path: tokenPath))
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
-        request.httpBody = Self.formBody(["grant_type": "refresh_token", "refresh_token": refreshToken])
-        let tokenRequest = request
-        let taskID = UUID()
-        let task = Task { try await self.requestToken(tokenRequest) }
-        refreshTask = task
-        refreshTaskID = taskID
-        defer {
-            if refreshTaskID == taskID {
-                refreshTask = nil
-                refreshTaskID = nil
+        // Volvo's request path does not carry the refused token back, so a forced call cannot be
+        // matched against the session's; the lifecycle's grant cooldown is what bounds a burst.
+        let reason: TokenLifecycle.Reason = force
+            ? .serverRefused(rejectedToken: nil)
+            : .renewalWindow
+        // Captured before the closure runs so the grant does not read state the lifecycle owns;
+        // the configuration guard lives inside it, where a grant already in flight is awaited
+        // rather than failed. The lifecycle decides whether a grant is needed at all.
+        let configuration = (clientID: clientID, secret: clientSecret, refresh: refreshToken)
+        let outcome = try await tokens.refresh(
+            reason,
+            epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
+            grant: {
+                guard let clientID = configuration.clientID,
+                      let clientSecret = configuration.secret,
+                      let refreshToken = configuration.refresh, !refreshToken.isEmpty else {
+                    throw VolvoError.authenticationRequired(.noStoredSession)
+                }
+                let path = self.tokenPath
+                let url = try await self.identityURL(path: path)
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
+                request.httpBody = Self.formBody([
+                    "grant_type": "refresh_token", "refresh_token": refreshToken
+                ])
+                let token = try await self.requestToken(request)
+                return TokenLifecycle.Grant(accessToken: token.accessToken,
+                                            refreshToken: token.refreshToken,
+                                            expiresIn: TimeInterval(token.expiresIn))
             }
-        }
-        try await applyRefreshResult(from: task, requestEpoch: requestEpoch)
-    }
-
-    private func applyRefreshResult(from task: Task<VolvoTokenResponseDTO, Error>,
-                                    requestEpoch: Int) async throws {
-        do {
-            let token = try await task.value
-            guard requestEpoch == sessionEpoch else { throw CancellationError() }
-            try apply(token)
-        } catch TokenRequestFailure.deadRefreshToken {
-            guard requestEpoch == sessionEpoch else { throw CancellationError() }
+        )
+        if outcome == .deadGrant {
             await discardDeadRefreshToken()
             throw VolvoError.authenticationRequired(.invalidCredentials)
-        } catch {
-            guard requestEpoch == sessionEpoch else { throw CancellationError() }
-            throw error
         }
     }
 
@@ -422,40 +440,16 @@ actor VolvoAPI {
     /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
     private func discardDeadRefreshToken() async {
-        refreshToken = nil
-        lastTokenGrantAt = nil
-        tokenLifetime = 0
+        tokens.reset()
         try? keychain.deleteVolvoSessionToken()
         await MainActor.run { preferences.invalidateSessionCache() }
-    }
-
-    private func apply(_ token: VolvoTokenResponseDTO) throws {
-        let previous = refreshToken
-        let renewable = token.refreshToken ?? refreshToken
-        // Update the in-memory session *before* persisting. Volvo's identity provider is
-        // rotate-on-use: this grant has already invalidated `previous` server-side, so if the
-        // Keychain write fails (typically an ACL denial after the code-signing identity changed
-        // between dev builds) the app must still run this session on the rotated token –
-        // otherwise it keeps replaying a token the server just killed and every refresh is
-        // `invalid_grant`. A failed persist costs a restart, not the whole session.
-        accessToken = token.accessToken
-        refreshToken = renewable
-        tokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        tokenLifetime = TimeInterval(token.expiresIn)
-        lastTokenGrantAt = Date()
-        if let renewable, renewable != previous {
-            do {
-                try keychain.saveVolvoSessionToken(renewable)
-            } catch {
-                logger.error("Volvo rotated refresh token could not be persisted; the session will not survive a restart: \(String(describing: error), privacy: .public)")
-            }
-        }
     }
 
     private func requestToken(_ request: URLRequest) async throws -> VolvoTokenResponseDTO {
         let isRefreshGrant = (request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? "")
             .contains("grant_type=refresh_token")
-        let (data, response) = try await perform(request, operation: "Volvo token request")
+        let (data, response) = try await perform(request, operation: "Volvo token request",
+                                                 semanticError: { data, _ in Self.oauthErrorCode(in: data) })
         if response.statusCode == 400 || response.statusCode == 401 {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let err = json["error"] as? String ?? "auth_error"
@@ -560,12 +554,20 @@ actor VolvoAPI {
     }
 
 
+    /// One optional telemetry endpoint for one vehicle. Volvo's market-restricted and not-exposed
+    /// responses are per vehicle, so the vehicle travels with the subject; the identifier is
+    /// Volvo's own, which is what keeps the shared store free of brand knowledge.
+    static func endpointBackoffSubject(_ key: String, vin: String) -> ProviderBackoffStore.Subject {
+        ProviderBackoffStore.Subject("volvo.endpoint.\(key)", vin: vin)
+    }
+
     func optional<Value: Sendable>(
         enabled: Bool, key: String, vin: String, operation: @Sendable () async throws -> Value
     ) async throws -> Value? {
         guard enabled else { return nil }
         let backoffKey = "\(vin)|\(key)"
-        if let until = endpointBackoff[backoffKey], until > Date() { return nil }
+        let subject = Self.endpointBackoffSubject(key, vin: vin)
+        if let until = backoffs.blockedUntil(subject), until > Date() { return nil }
         if let cached = optionalTelemetryCache[backoffKey], cached.expiresAt > Date(),
            let value = cached.value as? Value { return value }
         do {
@@ -575,7 +577,7 @@ actor VolvoAPI {
                 optionalTelemetryCache[backoffKey] = CapabilityCacheEntry(
                     value: value, expiresAt: Date().addingTimeInterval(ttl))
             }
-            if endpointBackoff.removeValue(forKey: backoffKey) != nil { persistEndpointBackoff() }
+            backoffs.unblock(subject)
             return value
         } catch {
             if Self.isGlobalFailure(error) { throw error }
@@ -588,11 +590,12 @@ actor VolvoAPI {
             case .client(let statusCode) where statusCode == 404: isRestricted = true
             default: isRestricted = false
             }
+            // Both durations are durable now that the owner is one store: the 5-minute ones
+            // expire long before a relaunch can read them back, so the split the defaults
+            // dictionary kept – restricted entries persisted, transient ones process-local – was
+            // a distinction the retention rule already made for it.
             let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)
-            endpointBackoff[backoffKey] = Date().addingTimeInterval(duration)
-            // Persist only the long, market/permission back-offs; the 5-minute transient ones
-            // expire before the next launch and are not worth carrying across restarts.
-            if isRestricted { persistEndpointBackoff() }
+            backoffs.block(subject, until: Date().addingTimeInterval(duration), reason: nil)
             if isRestricted {
                 logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
             } else {

@@ -23,6 +23,8 @@ struct SettingsDatabaseCard: View {
     @State private var showPruneConfirmation = false
     @State private var showLocationClearConfirmation = false
     @State private var showWipeConfirmation = false
+    @State private var showFleetLocationClearConfirmation = false
+    @State private var showFleetWipeConfirmation = false
     @State private var showAPIDiagnosticInspector = false
     @State private var retentionDays = 90
     @State private var eraseHistoryOnSignOut = false
@@ -45,7 +47,7 @@ struct SettingsDatabaseCard: View {
 
     Card {
         VStack(alignment: .leading, spacing: 10) {
-            CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: .blue)
+            CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
 
             VStack(spacing: 6) {
                 KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
@@ -82,6 +84,13 @@ struct SettingsDatabaseCard: View {
                         if value {
                             preferences.persistLocationHistory = true
                         } else if preferences.persistLocationHistory {
+                            guard selectedVIN != nil else {
+                                // Nothing is loaded to name, and an unnamed clear used to widen
+                                // to every vehicle. Fleet-wide clearing is its own action below.
+                                preferences.persistLocationHistory = false
+                                setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
+                                return
+                            }
                             // Clearing retained coordinates is destructive; keep the
                             // effective value on until the user confirms it below.
                             persistLocationHistory = true
@@ -197,7 +206,7 @@ struct SettingsDatabaseCard: View {
                 if let feedback {
                     Label(feedback.message, systemImage: feedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                         .hisType(.caption, weight: .medium)
-                        .foregroundStyle(feedback.isError ? Color.red : HisingenTheme.semanticGood)
+                        .foregroundStyle(feedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                         .textSelection(.enabled)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -378,13 +387,46 @@ struct SettingsDatabaseCard: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "trash")
-                        Text(state == nil ? L10n.text("Erase All Local Vehicle Data") : L10n.text("Erase This Vehicle’s Local Data"))
+                        Text(L10n.text("Erase This Vehicle’s Local Data"))
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .tint(.red)
+                .tint(HisingenTheme.semanticCritical)
+                .disabled(selectedVIN == nil || isMaintaining)
+
+                // Fleet-wide erasing is its own labelled action with its own confirmation:
+                // the per-vehicle button must not be able to mean "every vehicle" by being
+                // pressed while no vehicle is loaded.
+                Button(role: .destructive) {
+                    showFleetWipeConfirmation = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash.slash")
+                        Text(L10n.text("Erase All Local Vehicle Data"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(HisingenTheme.semanticCritical)
+                .disabled(isMaintaining)
+
+                // The location toggle's dialog can only clear the loaded vehicle, so the
+                // fleet-wide clear needs an entry point of its own.
+                Button(role: .destructive) {
+                    showFleetLocationClearConfirmation = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.slash.fill")
+                        Text(L10n.text("Clear All Vehicles’ Locations"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(HisingenTheme.semanticCritical)
                 .disabled(isMaintaining)
             }
             // isMaintaining flips inside Task continuations without a transaction;
@@ -407,7 +449,7 @@ struct SettingsDatabaseCard: View {
         titleVisibility: .visible
     ) {
         Button(L10n.format("Prune Samples Older Than %d Days", retentionDays), role: .destructive) {
-            runMaintenance(.prune)
+            runMaintenance(.prune(days: retentionDays))
         }
         Button(L10n.text("Cancel"), role: .cancel) {}
     } message: {
@@ -428,28 +470,76 @@ struct SettingsDatabaseCard: View {
             persistLocationHistory = false
             setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
         }
-        Button(L10n.text("Stop Storing & Clear Locations"), role: .destructive) {
-            runMaintenance(.clearLocations)
+        // Offered only with a loaded vehicle: this dialog used to clear every vehicle's
+        // coordinates whenever no snapshot was loaded. That is a fleet-wide action, and it has
+        // its own labelled button and confirmation instead.
+        if let vin = selectedVIN {
+            Button(L10n.text("Stop Storing & Clear Locations"), role: .destructive) {
+                runMaintenance(.clearLocations(.vehicle(vin)))
+            }
         }
         Button(L10n.text("Cancel"), role: .cancel) {}
     } message: {
-        Text(state == nil
-             ? L10n.text("Saved coordinates for every vehicle will be permanently removed. Live parking location will still work.")
-             : L10n.text("Saved coordinates for the current vehicle will be permanently removed. Live parking location will still work."))
+        Text(L10n.text("Saved coordinates for the current vehicle will be permanently removed. Live parking location will still work."))
     }
     .confirmationDialog(
-        state == nil ? L10n.text("Erase all local vehicle data?") : L10n.text("Erase this vehicle’s local data?"),
+        L10n.text("Clear saved locations for every vehicle?"),
+        isPresented: $showFleetLocationClearConfirmation,
+        titleVisibility: .visible
+    ) {
+        Button(L10n.text("Clear All Locations"), role: .destructive) {
+            runMaintenance(.clearLocations(.all))
+        }
+        Button(L10n.text("Cancel"), role: .cancel) {}
+    } message: {
+        Text(L10n.text("Saved coordinates for every vehicle will be permanently removed. Live parking location will still work."))
+    }
+    .confirmationDialog(
+        L10n.text("Erase this vehicle’s local data?"),
         isPresented: $showWipeConfirmation,
         titleVisibility: .visible
     ) {
-        Button(L10n.text("Erase Permanently"), role: .destructive) { runMaintenance(.wipe) }
+        Button(L10n.text("Erase Permanently"), role: .destructive) {
+            guard let vin = selectedVIN else { return }
+            runMaintenance(.wipe(.vehicle(vin)))
+        }
         Button(L10n.text("Cancel"), role: .cancel) {}
     } message: {
-        Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed. Account credentials are kept."))
+        Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept."))
+    }
+    .confirmationDialog(
+        L10n.text("Erase all local vehicle data?"),
+        isPresented: $showFleetWipeConfirmation,
+        titleVisibility: .visible
+    ) {
+        Button(L10n.text("Erase Everything Permanently"), role: .destructive) {
+            runMaintenance(.wipe(.all))
+        }
+        Button(L10n.text("Cancel"), role: .cancel) {}
+    } message: {
+        Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept."))
     }
 }
 
-    private enum MaintenanceOperation: Equatable { case vacuum, prune, clearLocations, wipe }
+    private enum MaintenanceOperation: Equatable {
+        case vacuum
+        case prune(days: Int)
+        case clearLocations(VehicleScope)
+        case wipe(VehicleScope)
+
+        /// The two maintenance buttons each keep a short-lived checkmark; matched by name
+        /// rather than by equality because the destructive cases carry their target.
+        var isVacuum: Bool { self == .vacuum }
+        var isPrune: Bool { if case .prune = self { return true } else { return false } }
+    }
+
+    /// The vehicle the destructive actions act on. A snapshot with no VIN is no vehicle: the
+    /// scope must be spellable, and these actions used to widen to the whole database when it
+    /// was not.
+    private var selectedVIN: String? {
+        guard let vin = state?.identity.vin, !vin.isEmpty else { return nil }
+        return vin
+    }
 
     /// Single animation context for the feedback banner: its writers include
     /// NSSavePanel callbacks that run outside any SwiftUI transaction.
@@ -467,23 +557,22 @@ struct SettingsDatabaseCard: View {
             database: database, preferences: preferences, imageCache: imageCache)
         let scope: LocalDataEraser.Scope = switch operation {
         case .vacuum: .compact
-        case .prune: .samples(olderThanDays: retentionDays)
-        case .clearLocations: .locations
-        case .wipe: .everything
+        case .prune(let days): .samples(olderThanDays: days)
+        case .clearLocations(let vehicles): .locations(vehicles)
+        case .wipe(let vehicles): .everything(vehicles)
         }
-        let selectedVIN = state?.identity.vin
         Task { @MainActor in
             do {
-                try await eraser.performInBackground(scope, vin: selectedVIN)
-                if operation == .clearLocations {
+                try await eraser.performInBackground(scope)
+                if case .clearLocations = operation {
                     // The eraser turned the preference off; mirror that into the toggle above.
                     persistLocationHistory = false
                 }
                 await loadStats()
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 withAnimation(reduceMotion ? nil : Motion.stateChange) {
-                    justOptimised = operation == .vacuum
-                    justPruned = operation == .prune
+                    justOptimised = operation.isVacuum
+                    justPruned = operation.isPrune
                 }
                 Task {
                     try? await Task.sleep(for: .seconds(Motion.pulseDwell * 3))

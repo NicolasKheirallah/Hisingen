@@ -10,18 +10,18 @@ extension VehicleState {
             var appliedReading = false
             if shouldApplyLiveReading(.battery, reportedAt: reportedAt) {
                 if let value = battery.batteryPercentage {
-                    batteryPercentage = value
-                    if let reportedAt { readingDates[.battery] = reportedAt }
+                    energy.batteryPercentage = value
+                    if let reportedAt { freshness.readingDates[.battery] = reportedAt }
                 }
-                batteryDiagnostics = battery.diagnostics
-                reportedBatteryCapacityKwh = battery.reportedBatteryCapacityKwh
-                    ?? reportedBatteryCapacityKwh
+                energy.diagnostics = battery.diagnostics
+                energy.reportedBatteryCapacityKwh = battery.reportedBatteryCapacityKwh
+                    ?? energy.reportedBatteryCapacityKwh
                 appliedReading = true
             }
             if let value = battery.rangeKm,
                shouldApplyLiveReading(.range, reportedAt: reportedAt) {
-                rangeKm = value
-                if let reportedAt { readingDates[.range] = reportedAt }
+                energy.rangeKm = value
+                if let reportedAt { freshness.readingDates[.range] = reportedAt }
                 appliedReading = true
             }
             let hasChargingReading = battery.estimatedChargingTimeToFullMinutes != nil
@@ -33,19 +33,19 @@ extension VehicleState {
                 || battery.chargingVoltageVolts != nil
             if hasChargingReading,
                shouldApplyLiveReading(.charging, reportedAt: reportedAt) {
-                estimatedChargingTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
-                    ?? estimatedChargingTimeToFullMinutes
-                chargingState = battery.chargingState ?? chargingState
+                energy.estimatedTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
+                    ?? energy.estimatedTimeToFullMinutes
+                energy.chargingState = battery.chargingState ?? energy.chargingState
                 if battery.chargerConnection != .unknown {
-                    chargerConnection = battery.chargerConnection
+                    energy.connection = battery.chargerConnection
                 }
                 if battery.chargingType != .unknown {
-                    chargingType = battery.chargingType
+                    energy.type = battery.chargingType
                 }
-                chargingPowerWatts = battery.chargingPowerWatts ?? chargingPowerWatts
-                chargingCurrentAmps = battery.chargingCurrentAmps ?? chargingCurrentAmps
-                chargingVoltageVolts = battery.chargingVoltageVolts ?? chargingVoltageVolts
-                if let reportedAt { readingDates[.charging] = reportedAt }
+                energy.powerWatts = battery.chargingPowerWatts ?? energy.powerWatts
+                energy.currentAmps = battery.chargingCurrentAmps ?? energy.currentAmps
+                energy.voltageVolts = battery.chargingVoltageVolts ?? energy.voltageVolts
+                if let reportedAt { freshness.readingDates[.charging] = reportedAt }
                 appliedReading = true
             }
             if appliedReading { advanceVehicleReportedAt(to: reportedAt) }
@@ -57,14 +57,14 @@ extension VehicleState {
             if shouldApplyLiveReading(.openings, reportedAt: date) {
                 next.openings = merged.openings
                 next.isTailgateLocked = merged.isTailgateLocked
-                if let date { readingDates[.openings] = date }
+                if let date { freshness.readingDates[.openings] = date }
                 appliedReading = true
             }
             if (exterior.isLocked != nil || exterior.alarmTriggered != nil),
                shouldApplyLiveReading(.locks, reportedAt: date) {
                 next.isLocked = merged.isLocked
                 next.alarmTriggered = merged.alarmTriggered
-                if let date { readingDates[.locks] = date }
+                if let date { freshness.readingDates[.locks] = date }
                 appliedReading = true
             }
             if appliedReading {
@@ -75,8 +75,8 @@ extension VehicleState {
                 advanceVehicleReportedAt(to: date)
             }
         }
-        fetchedAt = receivedAt
-        isCachedSnapshot = false
+        freshness.fetchedAt = receivedAt
+        freshness.isCached = false
     }
 
     func shouldApplyLiveReading(_ reading: VehicleReading, reportedAt: Date?) -> Bool {
@@ -86,7 +86,7 @@ extension VehicleState {
 
     private mutating func advanceVehicleReportedAt(to reportedAt: Date?) {
         guard let reportedAt else { return }
-        vehicleReportedAt = max(vehicleReportedAt ?? .distantPast, reportedAt)
+        freshness.vehicleReportedAt = max(freshness.vehicleReportedAt ?? .distantPast, reportedAt)
     }
 
     func mergingLastKnown(
@@ -146,11 +146,11 @@ extension VehicleState {
             powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
             fuelSystem: fuelSystem.merging(previous: previous.fuelSystem)
         )
-        merged.readingDates = readingDates
-        if energy.batteryPercentage == nil { merged.readingDates[.battery] = previous.reportedDate(for: .battery) }
-        if energy.rangeKm == nil { merged.readingDates[.range] = previous.reportedDate(for: .range) }
-        if maintenance.odometerKm == nil { merged.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
-        if maintenance.details == nil { merged.readingDates[.health] = previous.reportedDate(for: .health) }
+        merged.freshness.readingDates = readingDates
+        if energy.batteryPercentage == nil { merged.freshness.readingDates[.battery] = previous.reportedDate(for: .battery) }
+        if energy.rangeKm == nil { merged.freshness.readingDates[.range] = previous.reportedDate(for: .range) }
+        if maintenance.odometerKm == nil { merged.freshness.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
+        if maintenance.details == nil { merged.freshness.readingDates[.health] = previous.reportedDate(for: .health) }
 
         var retained = Set(previous.retainedDataCategories.filter { !policy.wasRefreshed($0) })
         func markRetained(_ feature: AppFeature, currentIsMissing: Bool, previousWasPresent: Bool) {
@@ -173,9 +173,39 @@ extension VehicleState {
         markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)
         markRetained(.vehicleLocation, currentIsMissing: location == nil, previousWasPresent: previous.location != nil)
         retained.formUnion(policy.failedFeatures.filter { features.contains($0) })
-        merged.retainedDataCategories = retained.sorted { $0.title < $1.title }
-        merged.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
-        merged.optimisticCommandLockUntil = isCommandLocked ? previous.optimisticCommandLockUntil : nil
+        merged.freshness.retainedDataCategories = retained.sorted { $0.title < $1.title }
+        merged.freshness.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
+        merged.setOptimisticLock(isCommandLocked ? previous.optimisticCommandLockUntil : nil)
         return merged
+    }
+
+    /// Publishes the ledger's overlay. The receipts always come from that one producer, and the
+    /// lock is replaced only when the overlay names one, so publishing receipts cannot silently
+    /// drop a lock a command has just claimed.
+    mutating func publish(_ overlay: CommandPresentationState) {
+        commandState.receipts = overlay.receipts
+        if let lock = overlay.optimisticLockUntil { commandState.optimisticLockUntil = lock }
+    }
+
+    /// Takes the display for a command that was just accepted: the lock starts here and the
+    /// ledger's receipts arrive when the confirmation loop can show them.
+    mutating func claimOptimisticLock(until lock: Date) {
+        commandState = CommandPresentationState(optimisticLockUntil: lock)
+    }
+
+    /// Replaces the lock alone — `nil` ends the lock a superseded command claimed while the
+    /// receipts stay on screen. The merge policy carries it forward while a command is unconfirmed.
+    mutating func setOptimisticLock(_ lock: Date?) {
+        commandState.optimisticLockUntil = lock
+    }
+
+    /// Drops the display-only command state a fresh provider read must never carry.
+    ///
+    /// Receipts and optimistic locks are Hisingen's presentation of a command, not telemetry:
+    /// persisting them would put them in durable history and in the next snapshot. One call
+    /// instead of two assignments at every point a read arrives, so adding a presentation field
+    /// cannot leave a stale copy behind at whichever site was missed.
+    mutating func stripPresentationState() {
+        commandState = .empty
     }
 }

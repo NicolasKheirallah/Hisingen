@@ -269,10 +269,10 @@ struct VehicleCrossModelTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
 
-        VehicleStateStore(defaults: defaults, database: database).save(state)
-        // Telemetry recording runs on a detached storage pass (PERSIST-06/07).
-        let stored = await awaitStored(timeout: 5) { database.recordCounts().telemetry == 1 }
-        #expect(stored, "telemetry row never reached the database after save")
+        let store = VehicleStateStore(defaults: defaults, database: database)
+        store.save(state)
+        // Telemetry is one of the coalesced derived passes; the snapshot is already durable.
+        await store.drainHistory()
         let counts = database.recordCounts()
         #expect(counts.telemetry == 1)
         #expect(counts.batteryHealth == 0)

@@ -328,8 +328,7 @@ final class CommandCoordinator {
         let optimisticAt = now()
         command.descriptor.optimisticPatch(&current, optimisticAt, providerBrand)
         current.freshness.fetchedAt = optimisticAt
-        current.commandState.optimisticLockUntil = optimisticAt.addingTimeInterval(90)
-        current.commandState.receipts = []
+        current.claimOptimisticLock(until: optimisticAt.addingTimeInterval(90))
         return current
     }
 }

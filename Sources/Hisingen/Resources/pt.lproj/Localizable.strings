@@ -1972,7 +1972,6 @@
 
 "Saved coordinates for every vehicle will be permanently removed. Live parking location will still work." = "Saved coordinates for every vehicle will be permanently removed. Live parking location will still work.";
 "Export All History (JSON)" = "Export All History (JSON)";
-"Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed. Account credentials are kept." = "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed. Account credentials are kept.";
 "Alert after an opening has been left open for %d minutes" = "Alert after an opening has been left open for %d minutes";
 "Alert once at %d%% or below while unplugged and not charging" = "Alert once at %d%% or below while unplugged and not charging";
 "Alert if parked and unlocked after %02d:00" = "Alert if parked and unlocked after %02d:00";
@@ -2520,3 +2519,11 @@
 "Windows Open" = "Windows Open";
 "kr per kWh" = "kr per kWh";
 "≈%@ to target at your %@/kWh setting" = "≈%@ to target at your %@/kWh setting";
+
+// English fallback values pending translation
+"Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept." = "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept.";
+"Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept." = "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept.";
+"Erase Everything Permanently" = "Erase Everything Permanently";
+"Clear All Vehicles’ Locations" = "Clear All Vehicles’ Locations";
+"Clear saved locations for every vehicle?" = "Clear saved locations for every vehicle?";
+"Clear All Locations" = "Clear All Locations";

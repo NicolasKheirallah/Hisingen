@@ -437,81 +437,11 @@ enum AppTheme: String, CaseIterable, Codable, Sendable {
     case forest
     case sandDune
 
-    var title: String {
-        switch self {
-        case .hisingen: return L10n.text("Hisingen Glass")
-        case .polestar: return L10n.text("Monochrome Precision")
-        case .volvo: return L10n.text("Heritage Blue")
-        case .nordicNight: return L10n.text("Nordic Night")
-        case .aurora: return L10n.text("Aurora Borealis")
-        case .swedishGold: return L10n.text("Swedish Gold")
-        case .cyanRacing: return L10n.text("Cyan Racing")
-        case .forest: return L10n.text("Gothenburg Forest")
-        case .sandDune: return L10n.text("Sand Dune")
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .hisingen: return L10n.text("Rounded cards, translucent materials, amber accents")
-        case .polestar: return L10n.text("Monochrome panels, sharp corners, Scandinavian minimalism")
-        case .volvo: return L10n.text("Blue accents, calm surfaces, clear typographic contrast")
-        case .nordicNight: return L10n.text("Pitch OLED black, electric cyan glow, modern dark style")
-        case .aurora: return L10n.text("Deep midnight slate with radiant northern lights emerald")
-        case .swedishGold: return L10n.text("Polestar BST Öhlins Swedish Gold, dark charcoal luxury")
-        case .cyanRacing: return L10n.text("Cyan Racing championship blue, crisp track geometry")
-        case .forest: return L10n.text("Swedish pine and eucalyptus earth tones, organic soft feel")
-        case .sandDune: return L10n.text("Warm desert sand and titanium champagne minimalism")
-        }
-    }
-
-    var category: ThemeCategory {
-        switch self {
-        case .hisingen, .polestar, .volvo: return .brand
-        case .nordicNight: return .dark
-        case .aurora: return .nature
-        case .swedishGold, .cyanRacing: return .sport
-        case .forest: return .nature
-        case .sandDune: return .brand
-        }
-    }
-
-    var accentColorHex: String {
-        switch self {
-        case .hisingen: return "#E56E23"
-        case .polestar: return "#E56E23"
-        case .volvo: return "#005B94"
-        case .nordicNight: return "#00E5FF"
-        case .aurora: return "#00E676"
-        case .swedishGold: return "#D4AF37"
-        case .cyanRacing: return "#0090D0"
-        case .forest: return "#4CAF50"
-        case .sandDune: return "#C5A059"
-        }
-    }
-
-    var previewHexColors: [String] {
-        switch self {
-        case .hisingen:
-            return ["#E56E23", "#FFA726", "#424242"]
-        case .polestar:
-            return ["#E56E23", "#FFFFFF", "#141416"]
-        case .volvo:
-            return ["#005B94", "#003057", "#F4F6F9"]
-        case .nordicNight:
-            return ["#00E5FF", "#0A192F", "#000000"]
-        case .aurora:
-            return ["#00E676", "#1DE9B6", "#0B132B"]
-        case .swedishGold:
-            return ["#D4AF37", "#E5A93C", "#1E1E24"]
-        case .cyanRacing:
-            return ["#0090D0", "#00B4D8", "#0A0F1A"]
-        case .forest:
-            return ["#2E7D32", "#4CAF50", "#0D1F0F"]
-        case .sandDune:
-            return ["#C5A059", "#E0C097", "#1E1B18"]
-        }
-    }
+    var title: String { HisingenTheme.palette(for: self).name }
+    var subtitle: String { HisingenTheme.palette(for: self).subtitle }
+    var category: ThemeCategory { HisingenTheme.palette(for: self).category }
+    var accentColorHex: String { HisingenTheme.palette(for: self).accentHex }
+    var previewHexColors: [String] { HisingenTheme.palette(for: self).swatches }
 }
 
 enum DistanceUnit: String, CaseIterable, Codable, Sendable {

@@ -150,6 +150,17 @@ struct HistoricalChargingSample: Codable, Equatable, Sendable {
 /// Represents a recorded battery state-of-health milestone over time.
 struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     static let fullChargeRangeSource = "full-charge-range-v1"
+    static let calculatedSource = "calculated-v2"
+    static let legacyEstimateSource = "legacy-estimate"
+
+    /// Which `measurement_source` values count as a real state-of-health measurement.
+    ///
+    /// One predicate, because four readers must agree on it: the per-VIN read, the cross-vehicle
+    /// export, the backup, and the row count that a settings screen shows next to them. When it
+    /// was written inline in all four, a row counted in one screen could be absent from the
+    /// export that was supposed to contain it.
+    static let measurementSourceFilter =
+        "measurement_source IN ('\(fullChargeRangeSource)', '\(calculatedSource)', '\(legacyEstimateSource)')"
 
     let id: Int64
     let vin: String
@@ -162,7 +173,7 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
 
     init(id: Int64, vin: String, timestamp: Date, odometerKm: Double,
          stateOfHealthPct: Double, degradationPct: Double, effectiveUsableKwh: Double,
-         measurementSource: String = "calculated-v2") {
+         measurementSource: String = BatteryHealthRecord.calculatedSource) {
         self.id = id
         self.vin = vin
         self.timestamp = timestamp

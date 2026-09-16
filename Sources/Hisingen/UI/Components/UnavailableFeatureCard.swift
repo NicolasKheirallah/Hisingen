@@ -14,7 +14,7 @@ struct UnavailableFeatureCard: View {
     var message: String? = nil
     /// Derived from the cause by `make`, not fixed: a cached snapshot is temporary, a capability
     /// the provider never reported is not.
-    var state: CapabilityState = .unavailable
+    var state: CapabilitySummary = .unavailable
 
     var body: some View {
         Card {
@@ -48,7 +48,7 @@ struct UnavailableFeatureCard: View {
         // when the snapshot is live. Without that, a live snapshot with no rows produced no
         // section at all: not a placeholder, not an explanation, nothing.
         guard state.freshness.isCached || reportedUnavailable || message != nil else { return nil }
-        let capability: CapabilityState = reportedUnavailable ? .unsupported : .unavailable
+        let capability: CapabilitySummary = reportedUnavailable ? .unsupported : .unavailable
         let explanation = message ?? (reportedUnavailable
             ? L10n.text("This vehicle did not report this capability on the last refresh.")
             : L10n.text("Showing cached data. This section returns when the next refresh succeeds."))

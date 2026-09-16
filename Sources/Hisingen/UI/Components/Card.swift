@@ -5,10 +5,10 @@ struct Card<Content: View>: View {
     let content: Content
     init(@ViewBuilder content: () -> Content) { self.content = content() }
 
-    /// Reduce Transparency and Increase Contrast both ask for the same thing at this
-    /// layer: stop compositing the card out of a blur, and let it be a surface. Apple
-    /// answers both by making the material frostier or solid, so the two are handled
-    /// together here rather than each being half-implemented.
+    /// Reduce Transparency asks for the specular rim to be dropped, because the rim exists to sell a
+    /// glass edge and there is no glass edge once the surface is solid. Increase Contrast is handled
+    /// separately, by `borderWidth`/`cardBoundary`, since it wants a *defined* edge rather than no
+    /// edge. The card fill itself is opaque in every case — see `cardSurface`.
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -25,12 +25,12 @@ struct Card<Content: View>: View {
     var body: some View {
         let radius = HisingenTheme.cornerRadius
         // The surface, the rim and the shadow all come from the theme, which is the only place
-        // that knows what a card looks like for this theme and this appearance.
+        // that knows what a card looks like for this appearance.
         let shadow = HisingenTheme.shadow(for: .card)
         content
             .padding(HisingenTheme.cardPadding)
             .background {
-                HisingenTheme.cardSurface(cornerRadius: radius, prefersOpaque: prefersOpaqueSurfaces)
+                HisingenTheme.cardSurface(cornerRadius: radius)
             }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
@@ -39,17 +39,21 @@ struct Card<Content: View>: View {
                     HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
                 }
             )
-            // The flat theme resolves to a clear shadow at radius 0, and applying `.shadow`
-            // anyway still costs a compositing pass on every one of the app's 94 cards. The
-            // modifier is only attached when there is a shadow to draw.
+            // The shadow is attached through a modifier that drops it when there is nothing to draw.
+            // Every theme used to resolve to a shadow except Polestar, which resolved to a clear one
+            // at radius 0 — and `.shadow` still cost a compositing pass on each of the app's 94
+            // cards for that nothing. Shadow is a global token now, so the modifier always draws,
+            // but it stays as the single place that would change if a flat theme returned.
             .modifier(CardShadow(color: shadow.color, radius: shadow.radius, y: shadow.y))
     }
 }
 
 /// Attaches a layer shadow only when there is one to attach.
 ///
-/// `Color.clear` at radius 0 is not free: `.shadow` still asks the renderer to prepare the layer,
-/// and the theme whose identity is flat resolved to exactly that on every card in the app.
+/// `Color.clear` at radius 0 is not free: `.shadow` still asks the renderer to prepare the layer.
+/// That used to matter for one theme, whose flat identity resolved to a clear shadow at radius 0 on
+/// every card in the app. Radius is a global token now and is never 0, so this always draws; the
+/// guard remains as the single place a flat treatment would be reintroduced.
 private struct CardShadow: ViewModifier {
     let color: Color
     let radius: CGFloat

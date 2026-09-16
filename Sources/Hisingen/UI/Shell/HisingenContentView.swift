@@ -49,7 +49,6 @@ struct HisingenContentView: View {
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
     let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?)
-    let settingsMode: Bool
     /// One-time post-sign-in pass. Rendered full-panel like Settings; cleared only through
     /// `onCompleteSetup`, which also persists `hasCompletedSetupPass`.
     let setupMode: Bool
@@ -58,15 +57,18 @@ struct HisingenContentView: View {
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
 
-    @State private var selectedTab: Tab
+    @State private var selectedTab: TabRef
     @State private var historyJumpTarget: String?
-    private let tabSelection: Binding<Tab>
+    private let tabSelection: Binding<TabRef>
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
     @State private var firstLaunchCardDismissed = false
     /// Drives ``EnvironmentValues/ambientMotionAllowed``. Starts true: the panel is built while the
     /// app is becoming active, and a first frame of frozen motion would be the bug in reverse.
     @State private var isAppActive = true
+    /// The tab Settings was opened over, so backing out returns the reader to where they were
+    /// rather than to a fixed tab.
+    @State private var settingsReturnTab: TabRef?
     /// Scroll anchor for the shared container. See the reset in `body`.
     private static let scrollTopAnchor = "hisingen.scrollTop"
     @Namespace private var tabIndicatorNamespace
@@ -77,22 +79,70 @@ struct HisingenContentView: View {
     @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
     @AppStorage("his_appearanceMode") private var storedAppearanceMode: String = AppearanceMode.system.rawValue
 
-    enum Tab: String, CaseIterable {
-        case vehicle = "Vehicle"
-        case info = "Info"
-        case history = "History"
-        case controls = "Controls"
-        case settings = "Settings"
+    /// The tab currently drawn.
+    ///
+    /// The selection is stored, not derived, so a reader can hide or re-order tabs in Settings
+    /// without the panel jumping elsewhere. When their selection disappears — a hidden tab, a
+    /// deleted custom tab — the first visible one stands in, which is the only behaviour that
+    /// leaves them somewhere real. The rule itself lives in `TabRouting`, where it can be tested;
+    /// it used to live here, and nothing could reach it.
+    private var currentTab: TabRef {
+        TabRouting.resolve(composition: tabComposition, selected: selectedTab)
+    }
 
-        var symbol: String {
-            switch self {
-            case .vehicle: return "bolt.car"
-            case .info: return "info.circle"
-            case .history: return "chart.xyaxis.line"
-            case .controls: return "slider.horizontal.3"
-            case .settings: return "gearshape"
-            }
-        }
+    private var tabComposition: TabComposition { preferences.tabComposition }
+
+    /// The Settings tab, spelled once. Settings used to be reachable two ways at once — a
+    /// controller-owned `settingsMode` flag and a tab — and the two disagreed: with the Settings
+    /// tab selected, tapping the footer gear flipped the mode off and the panel fell back to
+    /// whichever tab was stored behind it, which read as "pressing Settings jumps to Info".
+    ///
+    /// The flag is gone. The selection is the one switch — see `select(_:)`.
+    private static let settingsTab = TabRef.settings
+
+    /// Whether the Settings surface is on screen. One answer, from one place: the selected tab.
+    private var showsSettings: Bool { currentTab == Self.settingsTab }
+
+    /// Where the gear returns to. Only ever a tab the reader was actually on.
+    private var returnTab: TabRef? {
+        guard let tab = settingsReturnTab, tabComposition.isVisible(tab) else { return nil }
+        return tab
+    }
+
+    /// Whether Settings is drawn as one tab among the others, with the panel's tab bar above it.
+    ///
+    /// It is not, before sign-in or before the first snapshot: there is no bar to draw, and the
+    /// account form is the only way forward, so Settings fills the panel and carries its own
+    /// header. Gating the tab-bar branch on this is what makes the header navigation identical on
+    /// every tab — `showsSettings` alone made the first branch swallow Settings, and the
+    /// `tabBar` that every other tab draws never rendered.
+    private var showsSettingsAsTab: Bool {
+        TabRouting.settingsDrawsAsTab(
+            authenticated: authenticated,
+            hasSnapshot: state != nil,
+            setupMode: setupMode
+        )
+    }
+
+    /// Settings as a tab and Settings full-panel take the same inputs; only the surface's
+    /// transition and the header it draws differ, so it is built in one place.
+    private var settingsScreen: some View {
+        SettingsView(
+            notificationPermission: notificationPermission,
+            state: state,
+            fleet: fleet,
+            database: database,
+            imageCache: imageCache,
+            showsHeaderBar: !showsSettingsAsTab,
+            onSettingsChanged: { change in
+                if case .closeSettings = change {
+                    withAnimation(tabIndicatorAnimation) { select(returnTab ?? .vehicle) }
+                }
+                onSettingsChanged(change)
+            },
+            onSignOut: onSignOut,
+            onTestConnection: onTestConnection
+        )
     }
 
     init(
@@ -115,10 +165,9 @@ struct HisingenContentView: View {
         onTestConnection: @escaping (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
             (false, L10n.text("Connection testing is not available."), nil)
         },
-        settingsMode: Bool,
         setupMode: Bool = false,
         onCompleteSetup: @escaping () -> Void = {},
-        selectedTab: Binding<Tab>, database: VehicleDatabase,
+        selectedTab: Binding<TabRef>, database: VehicleDatabase,
          reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache
     ) {
         self.state = state
@@ -145,7 +194,6 @@ struct HisingenContentView: View {
         self.onSettingsChanged = onSettingsChanged
         self.onSignOut = onSignOut
         self.onTestConnection = onTestConnection
-        self.settingsMode = settingsMode
         self.setupMode = setupMode
         self.onCompleteSetup = onCompleteSetup
         self.database = database
@@ -177,24 +225,18 @@ struct HisingenContentView: View {
 
     var body: some View {
         let layout = panelLayout
+        let tab = currentTab
         return VStack(spacing: 0) {
             if showsFirstLaunchWelcome {
                 firstLaunchWelcomeCard
             }
-            if settingsMode || (!authenticated && selectedTab == .settings) {
-                SettingsView(notificationPermission: notificationPermission,
-                             state: state,
-                             fleet: fleet,
-                             database: database, imageCache: imageCache,
-                             onSettingsChanged: { change in
-                                 if case .closeSettings = change {
-                                      withAnimation(tabIndicatorAnimation) { selectedTab = .vehicle }
-                                      tabSelection.wrappedValue = .vehicle
-                                 }
-                                 onSettingsChanged(change)
-                             }, onSignOut: onSignOut, onTestConnection: onTestConnection)
-                     .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
-                     .transition(modeTransition)
+            // Settings is a tab like any other once the panel has a bar to navigate by, so it
+            // rides the same branch as every other tab (below). Only the full-panel presentation
+            // — sign-in ends here, and an account with no snapshot yet — is drawn without one.
+            if showsSettings, !showsSettingsAsTab {
+                settingsScreen
+                    .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
+                    .transition(modeTransition)
             } else if !authenticated {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged, onTestConnection: onTestConnection)
                     .transition(modeTransition)
@@ -210,18 +252,8 @@ struct HisingenContentView: View {
             } else if let state {
                 tabBar
                 scrollEdgeFade
-                if selectedTab == .settings {
-                    SettingsView(notificationPermission: notificationPermission,
-                                 state: state,
-                                 fleet: fleet,
-                                 database: database, imageCache: imageCache,
-                                 onSettingsChanged: { change in
-                                     if case .closeSettings = change {
-                                          withAnimation(tabIndicatorAnimation) { selectedTab = .vehicle }
-                                          tabSelection.wrappedValue = .vehicle
-                                     }
-                                     onSettingsChanged(change)
-                                 }, onSignOut: onSignOut, onTestConnection: onTestConnection)
+                if tab == .settings {
+                    settingsScreen
                         .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                         .transition(.opacity)
                 } else {
@@ -239,14 +271,14 @@ struct HisingenContentView: View {
                                     retainedDataNotice(state, id: noticeID)
                                         .transition(retainedDataTransition)
                                 }
-                                selectedTabContent(state: state)
+                                selectedTabContent(state: state, tab: tab)
                             }
                             .padding(HisingenTheme.sectionSpacing)
-                            .animation(reduceMotion ? nil : Motion.interaction, value: selectedTab)
+                            .animation(reduceMotion ? nil : Motion.interaction, value: tab)
                             .hisAnimation(Motion.cardChange, value: activeVin)
                             .hisAnimation(Motion.stateChange, value: noticeIdentity)
-                            .onChange(of: selectedTab) { _, _ in
-                                if selectedTab != .history { historyJumpTarget = nil }
+                            .onChange(of: tab) { _, _ in
+                                if tab != .history { historyJumpTarget = nil }
                                 proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
                             }
                             // A command's outcome renders in the banner at the top of this one
@@ -255,7 +287,7 @@ struct HisingenContentView: View {
                             // no result, no scroll-to, not even a scrollbar to hint that content
                             // existed above. The outcome now comes to them.
                             .onChange(of: lastRemoteCommandFeedback?.id) { _, feedbackID in
-                                guard feedbackID != nil, selectedTab == .controls else { return }
+                                guard feedbackID != nil, tab == .controls else { return }
                                 withAnimation(Motion.resolve(Motion.cardChange)) {
                                     proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
                                 }
@@ -283,13 +315,18 @@ struct HisingenContentView: View {
         .clipped()
         .background { HisingenTheme.popoverSurface }
         .animation(reduceMotion ? nil : Motion.layout, value: panelLayout)
-        .animation(reduceMotion ? nil : Motion.entrance, value: settingsMode)
+        .animation(reduceMotion ? nil : Motion.entrance, value: showsSettings)
         .animation(reduceMotion ? nil : Motion.entrance, value: setupMode)
         .animation(reduceMotion ? nil : Motion.entrance, value: authenticated)
         .tint(HisingenTheme.accent)
         .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
-        .animation(reduceMotion ? nil : Motion.theme, value: appTheme)
-        .animation(reduceMotion ? nil : Motion.theme, value: storedAppearanceMode)
+        // A theme or appearance change is a palette swap: nothing moves, only colour interpolates.
+        // That makes it the case Reduce Motion should *keep* — a cross-fade is the non-vestibular
+        // equivalent of the transition, and hard-cutting nine palettes is exactly the abrupt
+        // brightness jump the setting exists to avoid. `hisAnimation` resolves to a short
+        // cross-fade under Reduce Motion instead of dropping the animation entirely.
+        .hisAnimation(Motion.theme, value: appTheme)
+        .hisAnimation(Motion.theme, value: storedAppearanceMode)
         .id(preferences.interfaceLanguage.rawValue)
         // Ambient motion stops when the app is not frontmost. The panel can be kept open behind
         // another window for hours, and the charging particle flow, the gauge breath and the fan
@@ -312,15 +349,34 @@ struct HisingenContentView: View {
 
     private func navigateFromInfoToHistory() {
         historyJumpTarget = "activity"
-        withAnimation(tabIndicatorAnimation) { selectedTab = .history }
-        tabSelection.wrappedValue = .history
+        withAnimation(tabIndicatorAnimation) { select(.history) }
     }
 
+    /// One place that writes the selection, so the local mirror and the controller's stored tab
+    /// can never disagree.
+    ///
+    /// The selection is also what puts Settings on screen, for the menu-bar item, the `⌘,`
+    /// shortcut and a sign-in that ends inside Settings. There is deliberately no second switch:
+    /// a mode and a tab that can each be toggled are two switches for one light, and this UI has
+    /// now broken twice from exactly that — once as "pressing Settings jumps to Info", and once
+    /// as a gear that did nothing because the resolver refused `.settings`.
+    private func select(_ tab: TabRef) {
+        selectedTab = tab
+        tabSelection.wrappedValue = tab
+    }
+
+    /// One tab's content.
+    ///
+    /// A shipped tab renders through its own view, which knows how to lay its cards out and
+    /// keeps its own scroll state. A tab the reader built renders through `TabCardStack`, which
+    /// draws the cards they placed there from anywhere in the app. Both read the same
+    /// composition, so hiding a card takes it out of either.
     @ViewBuilder
-    private func selectedTabContent(state: VehicleState) -> some View {
-        switch selectedTab {
-        case .vehicle:
-            VehicleTabView(state: state, cars: cars, activeVin: activeVin,
+    private func selectedTabContent(state: VehicleState, tab: TabRef) -> some View {
+        switch tab {
+        case .builtIn(.vehicle):
+            VehicleTabView(layout: TabLayout.resolve(tabComposition, for: tab),
+                           state: state, cars: cars, activeVin: activeVin,
                            onSelectCar: onSelectCar,
                            onDismissCommandReceipt: onDismissCommandReceipt,
                            error: error,
@@ -328,20 +384,25 @@ struct HisingenContentView: View {
                            imageCache: imageCache)
                 .id(state.identity.vin)
                 .transition(.opacity)
-        case .info:
+
+        case .builtIn(.info):
             InfoTabView(state: state, database: database, imageCache: imageCache,
                         reverseGeocoder: reverseGeocoder,
                         onRefresh: onRefresh,
                         onNavigateToHistory: navigateFromInfoToHistory,
-                        onRemoteCommand: onRemoteCommand)
+                        onRemoteCommand: onRemoteCommand,
+                        layout: TabLayout.resolve(tabComposition, for: tab))
                 .id(state.identity.vin)
                 .transition(.opacity)
-        case .history:
+
+        case .builtIn(.history):
             HistoryDashboardView(state: state, database: database,
-                                 initialSection: historyJumpTarget)
+                                 initialSection: historyJumpTarget,
+                                 layout: TabLayout.resolve(tabComposition, for: tab))
                 .id(state.identity.vin)
                 .transition(.opacity)
-        case .controls:
+
+        case .builtIn(.controls):
             ControlsTabView(state: state,
                             brand: commandBrand,
                             remoteCommandInProgress: remoteCommandInProgress,
@@ -349,10 +410,33 @@ struct HisingenContentView: View {
                             feedback: lastRemoteCommandFeedback,
                             onRemoteCommand: onRemoteCommand,
                             onRefresh: onRefresh,
-                            onDismissCommandReceipt: onDismissCommandReceipt)
+                            onDismissCommandReceipt: onDismissCommandReceipt,
+                            layout: TabLayout.resolve(tabComposition, for: tab))
                 .transition(.opacity)
-        case .settings:
+
+        case .builtIn(.settings):
             EmptyView()
+
+        case .custom:
+            TabCardStack(
+                tab: tab,
+                state: state,
+                preferences: preferences,
+                database: database,
+                reverseGeocoder: reverseGeocoder,
+                imageCache: imageCache,
+                cars: cars,
+                activeVin: activeVin,
+                error: error,
+                remoteCommandInProgress: remoteCommandInProgress,
+                inFlightRemoteCommandID: inFlightRemoteCommandID,
+                onRefresh: onRefresh,
+                onRemoteCommand: onRemoteCommand,
+                onSelectCar: onSelectCar,
+                onDismissCommandReceipt: onDismissCommandReceipt
+            )
+            .id(state.identity.vin)
+            .transition(.opacity)
         }
     }
 
@@ -384,8 +468,7 @@ struct HisingenContentView: View {
         !firstLaunchCardDismissed
             && !preferences.hasSeenFirstLaunchWelcome
             && !setupMode
-            && !settingsMode
-            && !(!authenticated && selectedTab == .settings)
+            && !showsSettings
     }
 
     private func dismissFirstLaunchWelcome() {
@@ -443,53 +526,41 @@ struct HisingenContentView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(Tab.allCases, id: \.self) { tab in
-                let tabNumber = (Tab.allCases.firstIndex(of: tab) ?? 0) + 1
+        // The bar is the reader's tab list, in their order, including the tabs they built and
+        // excluding the ones they hid, with Settings last. Settings is a tab like the others
+        // here because it is where the list is managed: a reader who hid every other tab still
+        // needs one place that answers "where did everything go?".
+        let tabs = tabComposition.visibleTabs(includingSettings: true)
+        let current = currentTab
+        return HStack(spacing: 4) {
+            ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
                 Button {
-                    withAnimation(tabIndicatorAnimation) {
-                        selectedTab = tab
-                        tabSelection.wrappedValue = tab
-                    }
+                    // Every tab, Settings included, is just a tab. `select` also keeps the
+                    // controller's mode in step, which is what the menu bar and ⌘, read.
+                    withAnimation(tabIndicatorAnimation) { select(tab) }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: tab.symbol)
-                            .hisType(.caption, weight: selectedTab == tab ? .semibold : .regular)
-                        Text(L10n.text(tab.rawValue))
-                            .hisType(.caption, weight: selectedTab == tab ? .semibold : .medium)
+                        Image(systemName: tabComposition.symbol(for: tab))
+                            .hisType(.caption, weight: current == tab ? .semibold : .regular)
+                        Text(tabComposition.title(for: tab))
+                            .hisType(.caption, weight: current == tab ? .semibold : .medium)
                             .lineLimit(1)
                             .minimumScaleFactor(0.9)
                     }
-                    .foregroundStyle(selectedTab == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                    .foregroundStyle(current == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 9)
                     .contentShape(Rectangle())
                     .background(alignment: .bottom) {
-                        if selectedTab == tab {
-
-
-                            Group {
-                                if HisingenTheme.cornerRadius == 0 {
-
-
-                                    Rectangle()
-                                        .fill(HisingenTheme.ink)
-                                        .frame(height: 1.5)
-                                } else {
-                                    Capsule()
-                                        .fill(.primary.opacity(0.08))
-                                        .overlay(Capsule().stroke(.separator.opacity(0.3), lineWidth: 0.5))
-                                }
-                            }
-                            .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
-                        }
+                        if current == tab { tabIndicator }
                     }
                 }
                 .buttonStyle(.pressable)
                 .focusEffectDisabled()
-                .help(L10n.text(tab.rawValue))
-                .keyboardShortcut(KeyEquivalent(Character("\(tabNumber)")), modifiers: .command)
-                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                .help(tabComposition.title(for: tab))
+                // The first nine tabs answer ⌘1–⌘9, which is as many as a key row has.
+                .applyTabShortcut(index: index)
+                .accessibilityAddTraits(current == tab ? .isSelected : [])
             }
             Spacer()
         }
@@ -497,6 +568,20 @@ struct HisingenContentView: View {
         .padding(.vertical, 6)
     }
 
+    private var tabIndicator: some View {
+        Group {
+            if HisingenTheme.cornerRadius == 0 {
+                Rectangle()
+                    .fill(HisingenTheme.ink)
+                    .frame(height: 1.5)
+            } else {
+                Capsule()
+                    .fill(.primary.opacity(0.08))
+                    .overlay(Capsule().stroke(.separator.opacity(0.3), lineWidth: 0.5))
+            }
+        }
+        .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
+    }
 
     /// Shown while authenticated but with no snapshot yet.
     ///
@@ -692,8 +777,7 @@ struct HisingenContentView: View {
             }
             Divider()
             Button {
-                selectedTab = .settings
-                tabSelection.wrappedValue = .settings
+                select(.settings)
             } label: {
                 Label(L10n.text("Add or Manage Vehicles…"), systemImage: "person.crop.circle.badge.plus")
             }
@@ -726,7 +810,7 @@ struct HisingenContentView: View {
             // Data freshness indicator
             if let fetchedAt = state?.freshness.fetchedAt, state?.hasOldData() == false {
                 let age = Date().timeIntervalSince(fetchedAt)
-                let freshnessColor: Color = age < 30 ? .green : (age < 120 ? .yellow : .red)
+                let freshnessColor: Color = age < 30 ? HisingenTheme.semanticGood : (age < 120 ? HisingenTheme.semanticWarning : HisingenTheme.semanticCritical)
                 let ageText: String = age < 60 ? "\(Int(age))s" : "\(Int(age / 60))m"
                 HStack(spacing: 3) {
                     Circle()
@@ -809,19 +893,38 @@ struct HisingenContentView: View {
             .disabled(!authenticated)
 
             Button {
-                onSettings()
+                // Back to the tab Settings was opened over, or to Settings. One switch, reached
+                // from two places — never a second switch that can disagree with the first.
+                withAnimation(tabIndicatorAnimation) {
+                    select(showsSettings ? (returnTab ?? .vehicle) : Self.settingsTab)
+                }
             } label: {
-                Image(systemName: settingsMode ? "car.fill" : "gearshape")
+                Image(systemName: showsSettings ? "car.fill" : "gearshape")
                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             }
             .controlSize(.small)
-            .help(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
-            .accessibilityLabel(settingsMode ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
+            .help(showsSettings ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
+            .accessibilityLabel(showsSettings ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
             .keyboardShortcut(",", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .hisAnimation(Motion.stateChange, value: updateVersion)
         .hisAnimation(Motion.stateChange, value: checkingForUpdates)
+    }
+}
+
+private extension View {
+    /// ⌘1–⌘9 for the first nine tabs, and nothing for the rest.
+    ///
+    /// A tab bar that grows with the reader's tabs cannot promise a key for every tab, and
+    /// binding an eleventh button to "1" would silently take the shortcut away from the first.
+    @ViewBuilder
+    func applyTabShortcut(index: Int) -> some View {
+        if index < 9 {
+            keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+        } else {
+            self
+        }
     }
 }

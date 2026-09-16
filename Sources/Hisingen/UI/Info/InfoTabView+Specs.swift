@@ -18,7 +18,7 @@ extension InfoTabView {
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "car.fill", title: L10n.text("Exterior & Styling"), color: .blue)
+                CardHeader(symbol: "car.fill", title: L10n.text("Exterior & Styling"), color: HisingenTheme.semanticActive)
 
                 VStack(spacing: 6) {
                     ForEach(rows.indices, id: \.self) { rows[$0] }
@@ -166,7 +166,7 @@ extension InfoTabView {
 
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bolt.fill", title: L10n.text("Powertrain & Specs"), color: .green)
+                CardHeader(symbol: "bolt.fill", title: L10n.text("Powertrain & Specs"), color: HisingenTheme.semanticGood)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }
@@ -198,7 +198,7 @@ extension InfoTabView {
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "heart.text.square.fill", title: L10n.text("Service Schedule"), color: .orange)
+                CardHeader(symbol: "heart.text.square.fill", title: L10n.text("Service Schedule"), color: HisingenTheme.semanticWarning)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         })
@@ -241,7 +241,7 @@ extension InfoTabView {
                                     .privacySensitive()
                                 Image(systemName: vinCopied ? "checkmark" : "doc.on.doc")
                                     .hisType(.micro)
-                                    .foregroundStyle(vinCopied ? Color.green : Color.secondary)
+                                    .foregroundStyle(vinCopied ? HisingenTheme.semanticGood : Color.secondary)
                                     .contentTransition(.symbolEffect(.replace))
                             }
                             .padding(.horizontal, 4)

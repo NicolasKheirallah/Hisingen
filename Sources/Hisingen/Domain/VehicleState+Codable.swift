@@ -1,7 +1,15 @@
 import Foundation
 
 extension VehicleState {
+    /// Written into every snapshot this build encodes. A payload carrying it is the current
+    /// format, whose clusters are the only place its state lives; a payload without it was
+    /// written before the clusters existed and is the only one the flat member keys may answer
+    /// for. The distinction is what makes those keys deletable once the pre-marker payloads have
+    /// aged out of the seven-day cache and the plist mirror migration has been dropped.
+    static let encodedSchemaVersion = 1
+
     private enum CodingKeys: String, CodingKey {
+        case schemaVersion
         case energy, identity, maintenance, freshness, commandState
         case readingDates
         case estimatedChargingTimeToTargetMinutes
@@ -36,13 +44,29 @@ extension VehicleState {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        let isCurrentFormat =
+            try values.decodeIfPresent(Int.self, forKey: .schemaVersion) == Self.encodedSchemaVersion
+
+        /// Reads a member under its own flat key. That key is the current encoding for the
+        /// top-level members below, and the pre-marker encoding for the cluster members, whose
+        /// callers pass this through the legacy closure of `cluster(_:_:legacy:)`.
         func readFlat<T: Decodable>(_ key: String) throws -> T? {
             guard let key = CodingKeys(stringValue: key) else { return nil }
             return try values.decodeIfPresent(T.self, forKey: key)
         }
 
-        let energy = try values.decodeIfPresent(EnergyAndChargingSnapshot.self, forKey: .energy)
-            ?? EnergyAndChargingSnapshot(
+        /// A current payload decodes its cluster strictly – a truncated or hand-edited one fails
+        /// here instead of decoding into a state assembled from whatever keys happened to be
+        /// present – while a pre-marker payload may still be rescued by its flat members.
+        func cluster<Value: Decodable>(
+            _ type: Value.Type, _ key: CodingKeys, legacy: () throws -> Value
+        ) throws -> Value {
+            if isCurrentFormat { return try values.decode(type, forKey: key) }
+            return try values.decodeIfPresent(type, forKey: key) ?? legacy()
+        }
+
+        let energy = try cluster(EnergyAndChargingSnapshot.self, .energy) {
+            EnergyAndChargingSnapshot(
                 batteryPercentage: try readFlat("batteryPercentage"),
                 rangeKm: try readFlat("rangeKm"),
                 chargingState: try values.decode(ChargingState.self, forKey: .chargingState),
@@ -62,8 +86,9 @@ extension VehicleState {
                 samples: try values.decodeIfPresent([ChargingSample].self, forKey: .chargingSamples) ?? [],
                 sessions: try values.decodeIfPresent([ChargingSession].self, forKey: .chargingSessions) ?? []
             )
-        let identity = try values.decodeIfPresent(VehicleIdentitySnapshot.self, forKey: .identity)
-            ?? VehicleIdentitySnapshot(
+        }
+        let identity = try cluster(VehicleIdentitySnapshot.self, .identity) {
+            VehicleIdentitySnapshot(
                 availability: try values.decode(VehicleAvailability.self, forKey: .availability),
                 modelName: try readFlat("modelName"),
                 modelYear: try readFlat("modelYear"),
@@ -81,28 +106,37 @@ extension VehicleState {
                 imageData: try readFlat("imageData"),
                 interiorImageData: try readFlat("interiorImageData")
             )
-        let service = try values.decodeIfPresent(ServiceSnapshot.self, forKey: .serviceInfo)
-            ?? ServiceSnapshot(
-                daysToService: try readFlat("daysToService"),
-                distanceToServiceKm: try readFlat("distanceToServiceKm"),
-                serviceWarning: try values.decodeIfPresent(Bool.self, forKey: .serviceWarning) ?? false,
-                fluidWarnings: try values.decodeIfPresent([String].self, forKey: .fluidWarnings) ?? [],
-                engineHoursToService: try readFlat("engineHoursToService"),
-                trigger: try readFlat("serviceTrigger"),
-                preferredWorkshopID: try readFlat("preferredWorkshopId"),
-                preferredWorkshopName: try readFlat("preferredWorkshopName")
-            )
-        let maintenance = try values.decodeIfPresent(MaintenanceAndHealthSnapshot.self, forKey: .maintenance)
-            ?? MaintenanceAndHealthSnapshot(
-                odometerKm: try readFlat("odometerKm"),
-                details: try readFlat("healthDetails"),
-                service: service,
-                warranty: try readFlat("warrantyInfo"),
-                frontBrakePadStatus: try readFlat("frontBrakePadStatus"),
-                rearBrakePadStatus: try readFlat("rearBrakePadStatus")
-            )
-        let freshness = try values.decodeIfPresent(SnapshotFreshness.self, forKey: .freshness)
-            ?? SnapshotFreshness(
+        }
+        // `service` has no top-level key of its own in the current format: it travels inside
+        // `maintenance`. Only a pre-marker payload wrote the service block flat, which is why the
+        // legacy branch reconstructs the maintenance cluster around the service it just read.
+        let maintenance: MaintenanceAndHealthSnapshot
+        if isCurrentFormat {
+            maintenance = try values.decode(MaintenanceAndHealthSnapshot.self, forKey: .maintenance)
+        } else {
+            let service = try values.decodeIfPresent(ServiceSnapshot.self, forKey: .serviceInfo)
+                ?? ServiceSnapshot(
+                    daysToService: try readFlat("daysToService"),
+                    distanceToServiceKm: try readFlat("distanceToServiceKm"),
+                    serviceWarning: try values.decodeIfPresent(Bool.self, forKey: .serviceWarning) ?? false,
+                    fluidWarnings: try values.decodeIfPresent([String].self, forKey: .fluidWarnings) ?? [],
+                    engineHoursToService: try readFlat("engineHoursToService"),
+                    trigger: try readFlat("serviceTrigger"),
+                    preferredWorkshopID: try readFlat("preferredWorkshopId"),
+                    preferredWorkshopName: try readFlat("preferredWorkshopName")
+                )
+            maintenance = try values.decodeIfPresent(MaintenanceAndHealthSnapshot.self, forKey: .maintenance)
+                ?? MaintenanceAndHealthSnapshot(
+                    odometerKm: try readFlat("odometerKm"),
+                    details: try readFlat("healthDetails"),
+                    service: service,
+                    warranty: try readFlat("warrantyInfo"),
+                    frontBrakePadStatus: try readFlat("frontBrakePadStatus"),
+                    rearBrakePadStatus: try readFlat("rearBrakePadStatus")
+                )
+        }
+        let freshness = try cluster(SnapshotFreshness.self, .freshness) {
+            SnapshotFreshness(
                 isCached: try values.decodeIfPresent(Bool.self, forKey: .isCachedSnapshot) ?? false,
                 fetchedAt: try values.decode(Date.self, forKey: .fetchedAt),
                 vehicleReportedAt: try readFlat("vehicleReportedAt"),
@@ -112,8 +146,9 @@ extension VehicleState {
                 retainedDataCategories: try values.decodeIfPresent([AppFeature].self, forKey: .retainedDataCategories) ?? [],
                 retainedDataAt: try readFlat("retainedDataAt")
             )
-        let tripComputer = try values.decodeIfPresent(TripComputerSnapshot.self, forKey: .tripComputer)
-            ?? TripComputerSnapshot(
+        }
+        let tripComputer = try cluster(TripComputerSnapshot.self, .tripComputer) {
+            TripComputerSnapshot(
                 manualTripKm: try readFlat("tripMeterManualKm"),
                 automaticTripKm: try readFlat("tripMeterAutomaticKm"),
                 averageSpeedKmH: try readFlat("averageSpeedKmH"),
@@ -122,8 +157,9 @@ extension VehicleState {
                 fuelDistanceKm: try readFlat("fuelDistanceKm"),
                 regeneratedEnergyKwh: try readFlat("regeneratedEnergyKwh")
             )
-        let fuelSystem = try values.decodeIfPresent(FuelSystemSnapshot.self, forKey: .fuelSystem)
-            ?? FuelSystemSnapshot(
+        }
+        let fuelSystem = try cluster(FuelSystemSnapshot.self, .fuelSystem) {
+            FuelSystemSnapshot(
                 levelPercent: try readFlat("fuelLevelPercent"),
                 rangeKm: try readFlat("fuelRangeKm"),
                 amountLiters: try readFlat("fuelAmountLiters"),
@@ -131,8 +167,10 @@ extension VehicleState {
                 isEngineRunning: try readFlat("isEngineRunning"),
                 type: try readFlat("fuelType")
             )
-        let commandState = try values.decodeIfPresent(CommandPresentationState.self, forKey: .commandState)
-            ?? CommandPresentationState(receipt: try readFlat("pendingCommand"))
+        }
+        let commandState = try cluster(CommandPresentationState.self, .commandState) {
+            CommandPresentationState(receipt: try readFlat("pendingCommand"))
+        }
 
         self.init(
             energy: energy,
@@ -158,6 +196,7 @@ extension VehicleState {
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(Self.encodedSchemaVersion, forKey: .schemaVersion)
         try values.encode(energy, forKey: .energy)
         try values.encode(identity, forKey: .identity)
         try values.encode(maintenance, forKey: .maintenance)

@@ -22,7 +22,7 @@ struct SettingsDisplayCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "display", title: L10n.text("Display, Units & Energy"), color: .blue)
+                CardHeader(symbol: "display", title: L10n.text("Display, Units & Energy"), color: HisingenTheme.semanticActive)
 
                 VStack(spacing: 10) {
                     settingsGroupHeader("Language & Vehicle Labels")
@@ -36,6 +36,7 @@ struct SettingsDisplayCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Language"))
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
@@ -57,6 +58,7 @@ struct SettingsDisplayCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Model badge position"))
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
@@ -78,6 +80,7 @@ struct SettingsDisplayCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("License plate position"))
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
@@ -99,6 +102,7 @@ struct SettingsDisplayCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Vehicle display name"))
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
@@ -195,11 +199,11 @@ struct SettingsDisplayCard: View {
                                 Image(nsImage: glyphImage)
                                     .renderingMode(.template)
                                     .frame(width: 16, height: 16)
-                                    .foregroundStyle(preferences.tintMenuBarIcon ? Color.green : Color.primary)
+                                    .foregroundStyle(preferences.tintMenuBarIcon ? HisingenTheme.semanticGood : Color.primary)
                             } else {
                                 Image(systemName: Format.icon(for: previewSample))
                                     .hisType(.caption)
-                                    .foregroundStyle(preferences.tintMenuBarIcon ? Color.green : Color.primary)
+                                    .foregroundStyle(preferences.tintMenuBarIcon ? HisingenTheme.semanticGood : Color.primary)
                             }
                             if preferences.menuBarStyle == .lockAndBattery,
                                let lockSymbol = Format.lockStatusSymbol(for: previewSample) {
@@ -235,6 +239,7 @@ struct SettingsDisplayCard: View {
                             }
                         }
                         .labelsHidden()
+                        .accessibilityLabel(L10n.text("Panel close behavior"))
                         .controlSize(.small)
                         .frame(maxWidth: 220)
                     }
@@ -257,6 +262,7 @@ struct SettingsDisplayCard: View {
                                 }
                             }
                             .labelsHidden()
+                            .accessibilityLabel(L10n.text("Card Layout"))
                             .controlSize(.small)
                             .frame(maxWidth: 160)
                         }

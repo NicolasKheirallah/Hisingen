@@ -9,9 +9,11 @@ import AppKit
 @MainActor
 final class MainMenuController: NSObject {
     private let onCheckForUpdates: () -> Void
+    private let onOpenSettings: () -> Void
 
-    init(onCheckForUpdates: @escaping () -> Void) {
+    init(onCheckForUpdates: @escaping () -> Void, onOpenSettings: @escaping () -> Void) {
         self.onCheckForUpdates = onCheckForUpdates
+        self.onOpenSettings = onOpenSettings
         super.init()
     }
 
@@ -20,6 +22,12 @@ final class MainMenuController: NSObject {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        let settingsItem = appMenu.addItem(
+            withTitle: L10n.text("Settings…"),
+            action: #selector(openSettingsMenuItem), keyEquivalent: ","
+        )
+        settingsItem.target = self
+        appMenu.addItem(.separator())
         let checkForUpdatesItem = appMenu.addItem(
             withTitle: L10n.text("Check for Updates…"),
             action: #selector(checkForUpdatesMenuItem), keyEquivalent: ""
@@ -44,6 +52,10 @@ final class MainMenuController: NSObject {
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func openSettingsMenuItem() {
+        onOpenSettings()
     }
 
     @objc private func checkForUpdatesMenuItem() {

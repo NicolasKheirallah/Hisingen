@@ -28,9 +28,22 @@ catalog, never in an entry point; see
 
 **Command receipt**: the display-only record of an accepted Remote Command in any lifecycle
 state: awaiting confirmation, provider-acknowledged (when no observable reading exists), confirmed,
-or timed out. `RefreshCoordinator` owns confirmation,
-suspension, timeout, and individual dismissal. A bounded per-vehicle receipt collection survives
-relaunch; provider telemetry and persisted vehicle snapshots never own the receipts.
+or timed out. `CommandReceiptLedger` owns the lifecycle — filing against the Remote Command
+target, confirmation, suspension, timeout, dismissal, and relaunch restore — while
+`RefreshCoordinator` carries out the transport the ledger asks for. A bounded per-vehicle receipt
+collection survives relaunch; provider telemetry and persisted vehicle snapshots never own the
+receipts.
+
+**CommandReceiptLedger**: the module that owns the Command receipt lifecycle end to end: filing a
+receipt under the selected VIN or under the Remote Command target's VIN, the records and their
+confirmation deadlines, suspension across sleep or brand switches, the timeout transition,
+individual dismissal, relaunch restore, the display fields an awaiting command still owns, and
+which transport could prove it. See
+`Services/Coordination/CommandReceiptLedger.swift`.
+
+**Remote Command target**: the vehicle identity and provider captured when a command is approved.
+It stays fixed until execution completes, even if the visible vehicle selection changes;
+`CommandReceiptLedger` files the receipt against this VIN rather than the selection's.
 
 **Gatekeeper**: macOS's system that checks code signing and notarization
 status before allowing a downloaded app to run; `spctl --assess` simulates
@@ -80,9 +93,41 @@ vehicle-state refresh triggers (timer, manual, wake-from-sleep,
 network-recovery) into one in-flight fetch per "generation," so they never
 race each other.
 
+**Command overlay**: the display-only part of Vehicle State — the Command receipts on screen and the
+optimistic lock a just-accepted command claimed (`CommandPresentationState`). `CommandReceiptLedger`
+produces it and `Domain/VehicleState+Merging.swift` is its only writer; the rest of the app reads it
+off the published Vehicle State.
+
+**Provider registry**: the module that answers "which adapter backs this brand, and what can it
+do that `VehicleProviding` does not say" — selection, the live-streaming view, and the
+brand-specific session preparation — so no caller writes the brand ternary or downcasts an adapter.
+See `Services/Refresh/ProviderRegistry.swift`.
+
+**Refresh clock**: the injectable wait the refresh module sleeps on (`AsyncTimerLoop.Wait`). The app
+supplies `Task.sleep`; a test supplies a recording or gated clock, which is what lets it assert the
+delay the coordinator asked for instead of waiting it out. See
+`Services/Integration/AsyncTimerLoop.swift`.
+
+**Provider backoff**: a provider's stand-down from one endpoint or secondary source: how long it
+will not be probed and why (a market restriction, a not-exposed resource, a client rejection).
+`ProviderBackoffStore` owns them for both providers, keyed by a **Subject** that carries the VIN
+when the stand-down is per-vehicle. A session erase drops the vehicle-scoped ones; a fleet-wide
+erase drops all of them. See `Services/Persistence/ProviderBackoffStore.swift`.
+
+**Snapshot schema version**: the marker every encoded Vehicle State snapshot carries. A payload that has it
+decodes its clusters strictly — the flat member keys are not consulted and a missing cluster is a
+corrupt snapshot rather than an old one — so only a payload written before the marker may be
+rescued by the legacy flat keys. That absence is what makes those keys a migration with a defined
+end rather than a permanent compatibility layer.
+
 **Stapling**: attaching Apple's notarization ticket directly to a signed
 app or DMG (`xcrun stapler staple`) so Gatekeeper can verify it was
 notarized even without a network connection at launch time.
+
+**Token lifecycle**: the module that owns one provider's refresh-token lifetime — the renewal
+decision, the single-flight grant, rotate-on-use persistence, the grant cooldown, and the
+classification of a permanently dead grant — while each provider keeps its wire transport and its
+error vocabulary. See `Services/API/TokenLifecycle.swift`.
 
 **Universal binary**: a single executable containing both `arm64` and
 `x86_64` code, produced via `lipo -create`, so one download runs natively on

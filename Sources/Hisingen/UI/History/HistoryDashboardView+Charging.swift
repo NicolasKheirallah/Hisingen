@@ -39,7 +39,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: .green)
+                    CardHeader(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"), color: HisingenTheme.semanticGood)
                     if selectedSession?.endedAt == nil {
                         HStack(spacing: 3) {
                             Circle().fill(HisingenTheme.chartPositive)
@@ -50,7 +50,7 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                         }
                         .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Color.green.opacity(0.15), in: Capsule())
+                        .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
                         .accessibilityLabel(L10n.text("Session in progress"))
                         .onAppear {
                             curveLivePulse = false
@@ -325,7 +325,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: .green)
+                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
                         .hisType(.micro).foregroundStyle(.tertiary)
@@ -407,7 +407,7 @@ extension HistoryDashboardView {
                     if session.endedAt == nil {
                         Text(L10n.text("Active")).hisType(.nano, weight: .bold)
                             .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Color.green.opacity(0.15), in: Capsule())
+                            .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
                     }
                 }
                 HStack(spacing: 5) {
@@ -476,7 +476,7 @@ extension HistoryDashboardView {
         let hasCost = monthly.contains { $0.cost != nil }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "calendar.badge.clock", title: L10n.text("Charging by Month"), color: .green)
+                CardHeader(symbol: "calendar.badge.clock", title: L10n.text("Charging by Month"), color: HisingenTheme.semanticGood)
                 Chart(monthly) { bucket in
                     BarMark(
                         x: .value(L10n.text("Month"), bucket.month, unit: .month),
@@ -582,7 +582,7 @@ extension HistoryDashboardView {
         let cost = aggregateChargingCost()
         return Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "bolt.badge.clock.fill", title: L10n.text("Charging Trends"), color: .green)
+                CardHeader(symbol: "bolt.badge.clock.fill", title: L10n.text("Charging Trends"), color: HisingenTheme.semanticGood)
                 KVRow(L10n.text("Sessions"), Format.count(chargingSessions.count), symbol: "number")
                 if let perWeek {
                     KVRow(L10n.text("Sessions Per Week"), Format.number(perWeek, decimals: 1), symbol: "calendar.badge.clock")

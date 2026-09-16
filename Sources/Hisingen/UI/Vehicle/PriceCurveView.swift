@@ -81,7 +81,7 @@ struct PriceCurveView: View {
         }
         switch point.sekPerKwh {
         case ..<1.0: return Color.secondary.opacity(0.4)
-        case ..<2.0: return Color.orange.opacity(0.45)
+        case ..<2.0: return HisingenTheme.semanticWarning.opacity(0.45)
         default: return HisingenTheme.semanticWarning.opacity(0.8)
         }
     }

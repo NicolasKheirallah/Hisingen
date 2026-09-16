@@ -246,6 +246,11 @@ extension PolestarAPI {
         guard epoch == sessionEpoch else { throw CancellationError() }
     }
 
+    /// Whether `epoch` still names the live session. Consulted by the token lifecycle after every
+    /// suspension so a grant that lands after a reset cannot be applied to the session that
+    /// replaced it.
+    func isSessionCurrent(_ epoch: Int) -> Bool { epoch == sessionEpoch }
+
     struct AccountIdentity: Decodable {
         let sub: String
         let email: String?

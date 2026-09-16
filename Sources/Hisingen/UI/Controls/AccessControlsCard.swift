@@ -14,7 +14,7 @@ struct AccessControlsCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "lock.fill", title: L10n.text("Locks & Security"), color: .blue)
+                    CardHeader(symbol: "lock.fill", title: L10n.text("Locks & Security"), color: HisingenTheme.semanticActive)
                     Spacer()
                     if let isLocked = state.exteriorStatus?.isLocked {
                         Pill(
@@ -59,7 +59,7 @@ struct AccessControlsCard: View {
                             .frame(maxWidth: .infinity, minHeight: 52)
                         }
                         .buttonStyle(.bordered)
-                        .tint(isLocked == true ? .blue : .green)
+                        .tint(isLocked == true ? HisingenTheme.semanticActive : HisingenTheme.semanticGood)
                         .help(isLocked == nil
                               ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
                               : (isLocked == true
@@ -134,7 +134,7 @@ struct AccessControlsCard: View {
                                 .frame(maxWidth: .infinity, minHeight: 46)
                             }
                             .buttonStyle(.bordered)
-                            .tint(tailgateIsOpen ? .orange : nil)
+                            .tint(tailgateIsOpen ? HisingenTheme.semanticWarning : nil)
                             .disabled(gate.isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
                             .hisAnimation(Motion.stateChange, value: tailgateIsOpen)
                         }

@@ -28,7 +28,7 @@ struct VehicleChargingCard: View {
                 // section at all. The Doors and Location cards explain themselves in this position.
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green, isSemantic: true)
+                        CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true)
                         HisingenEmptyState(
                             symbol: "questionmark.circle",
                             title: L10n.text("Temporarily unavailable"),
@@ -135,7 +135,7 @@ struct VehicleChargingCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: .green, isSemantic: true, isPulsing: state.isCharging)
+                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true, isPulsing: state.isCharging)
                     if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
                 }
                 // Tabular figures on all three stacked lines. Every one of them carries a number

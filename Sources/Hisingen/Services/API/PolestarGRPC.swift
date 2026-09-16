@@ -49,6 +49,14 @@ actor PolestarGRPC {
 
     private var c3BaseURL: URL?
     private var c3DiscoveryTask: PolestarInFlightRequest<URL>?
+    /// Supplies the app/command grant so discovery can retry a 406 with the other audience.
+    /// `PolestarAPI` owns both grants and installs this before the first telemetry sweep.
+    private var alternateAccessTokenProvider: (@Sendable () async -> String?)?
+
+    /// Installs the second grant used by the discovery retry ladder. Idempotent to call.
+    func setAlternateAccessTokenProvider(_ provider: @escaping @Sendable () async -> String?) {
+        alternateAccessTokenProvider = provider
+    }
     var exteriorCache: [String: ExteriorSnapshot] = [:]
     var otaSoftwareIDs: [String: String] = [:]
     /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
@@ -77,13 +85,16 @@ actor PolestarGRPC {
     /// (which itself walks several candidate endpoints) ran twice per refresh.
     var locationInFlight: [String: PolestarInFlightRequest<VehicleLocation?>] = [:]
     var chargeLocationsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
+    var myCarsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
 
     /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError` so that
     /// permanently unimplemented services (12), transient unavailability (14), and
     /// authentication failures (16) each receive distinct handling.
     static func readStatusError(status: String, message: String? = nil, path: String) -> PolestarError {
         let service = path.split(separator: "/").first.map(String.init) ?? path
-        let detail = (message?.removingPercentEncoding ?? message)?.lowercased()
+        let decoded = (message?.removingPercentEncoding ?? message)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let detail = decoded?.lowercased()
         switch status {
         case "12": return .grpcUnimplemented(service: service)
         case "14" where detail?.contains("authorization failed") == true:
@@ -94,7 +105,12 @@ actor PolestarGRPC {
             return .permissionDenied(operation: service)
         case "14": return .grpcUnavailable(service: service)
         case "16": return .authenticationRequired(.expiredSession)
-        default:   return .invalidResponse(operation: "gRPC status \(status)")
+        default:
+            // Keep the server's own explanation. For INVALID_ARGUMENT (3) the message is the
+            // only thing that separates a malformed request from a field this backend rejects,
+            // and discarding it left the failure undiagnosable from a support export.
+            let reason = decoded.flatMap { $0.isEmpty ? nil : $0 }.map { ": \($0.prefix(160))" } ?? ""
+            return .invalidResponse(operation: "gRPC \(status) \(service)\(reason)")
         }
     }
 
@@ -131,6 +147,14 @@ actor PolestarGRPC {
         case .client(let status): return status == 404 || status == 405
         default: return false
         }
+    }
+
+    /// Classifies a discovery attempt that a later attempt in the ladder will retry. A 406 here
+    /// is the endpoint refusing the presented Accept version or grant audience, both of which
+    /// the ladder handles; recording it as an unclassified failure produced one phantom error
+    /// per launch.
+    static func expectedDiscoveryRetry(_ data: Data, status: Int) -> String? {
+        status == 406 ? "expected:discovery-retry" : nil
     }
 
     private func persistUnimplementedReadPaths() {
@@ -254,8 +278,9 @@ actor PolestarGRPC {
                                              path: path)
             await diagnosticLog.record(
                 provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("live gRPC \(path)", grpcStatus: status,
-                                                    grpcMessage: http.value(forHTTPHeaderField: "grpc-message")),
+                operation: "live gRPC \(path)",
+                grpcStatus: status,
+                grpcMessage: http.value(forHTTPHeaderField: "grpc-message"),
                 statusCode: http.statusCode, startedAt: startedAt, error: error)
             throw error
         }
@@ -416,25 +441,50 @@ actor PolestarGRPC {
         let discoveryURL = discoveryURL
         let session = session
         let diagnosticLog = diagnosticLog
+        // Nothing may suspend between the single-flight check above and the assignment below.
+        // An `await` in that window lets every concurrent reader (a telemetry fan-out is a dozen
+        // at once) pass the check before any of them publishes a task, so each starts its own
+        // discovery request and all but the last hit the `c3DiscoveryTask?.id` guard below as a
+        // spurious `CancellationError`. The second grant is therefore resolved *inside* the task.
         let task = Task<URL, Error> {
+            // The app/command grant is a second audience for the same IdP. Discovery answers 406
+            // when the presented grant is not the one the endpoint expects, so the retry ladder
+            // spans grant as well as Accept version.
+            let alternateToken = await self.alternateAccessTokenProvider?()
             // The discovery document is version-dependent through the Accept header: v2 also
             // advertises the undocumented `vca-api-gateway` host, v3 answers 406, and a plain
-            // `application/json` Accept returns a different shape entirely. Request v2 first
-            // and fall back to v1 while Polestar serves both – a version-shape rejection
-            // (4xx or an unexpected body) retries; auth, network, rate-limit, and server
-            // failures fail for every version alike and surface immediately.
+            // `application/json` Accept returns a different shape entirely. A version-shape or
+            // audience rejection (4xx or an unexpected body) retries; auth, network,
+            // rate-limit, and server failures fail for every attempt alike and surface
+            // immediately.
             let versions = ["application/volvo.cloud.cnepmob.v2+json",
                             "application/volvo.cloud.cnepmob.v1+json"]
+            var tokens = [accessToken]
+            if let alternateToken, !alternateToken.isEmpty, alternateToken != accessToken {
+                tokens.append(alternateToken)
+            }
+            // Version first, then grant: the normal case resolves on the first grant's v1 and
+            // never presents the second one.
+            var attempts: [(token: String, accept: String)] = []
+            for token in tokens {
+                for accept in versions { attempts.append((token, accept)) }
+            }
             var lastError: Error = PolestarError.invalidResponse(operation: "C3 discovery")
-            for (index, accept) in versions.enumerated() {
-                let isLast = index == versions.count - 1
+            for (index, attempt) in attempts.enumerated() {
+                let isLast = index == attempts.count - 1
                 var request = URLRequest(url: discoveryURL)
-                request.setValue(accept, forHTTPHeaderField: "Accept")
-                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+                request.setValue(attempt.accept, forHTTPHeaderField: "Accept")
+                request.setValue("Bearer \(attempt.token)", forHTTPHeaderField: "Authorization")
                 do {
+                    // A rejection that a later attempt can clear is the fallback working as
+                    // designed, not a failure. Classify it so a support export does not report
+                    // one error per launch for a request that then succeeds.
+                    let classifier: (@Sendable (Data, Int) -> String?)? =
+                        isLast ? nil : Self.expectedDiscoveryRetry
                     let (data, response) = try await HTTPExchange.data(
                         for: request, using: session, limit: 256_000, operation: "C3 discovery",
-                        provider: .polestar, diagnosticLog: diagnosticLog
+                        provider: .polestar, diagnosticLog: diagnosticLog,
+                        semanticError: classifier
                     )
                     if let failure = PolestarError.httpFailure(
                         statusCode: response.statusCode, operation: "C3 discovery"
@@ -444,7 +494,7 @@ actor PolestarGRPC {
                           let host = c3["grpcHost"] as? String,
                           let port = c3["grpcPort"] as? Int,
                           let url = URL(string: "https://\(host):\(port)") else {
-                        throw PolestarError.incompatibleAPI(operation: "C3 discovery (\(accept))")
+                        throw PolestarError.incompatibleAPI(operation: "C3 discovery (\(attempt.accept))")
                     }
                     return url
                 } catch let error as PolestarError {
@@ -521,6 +571,11 @@ actor PolestarGRPC {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(vin, forHTTPHeaderField: "vin")
         request.httpBody = Protobuf.grpcFrame(message)
+        // PCCS Chronos reads normally answer in well under a second. The 10 s session budget
+        // let one hung optional capability stall the whole telemetry sweep, so cap those reads
+        // tighter: the sweep fails fast and `optionalCapability` backs the service off instead
+        // of everyone waiting on it.
+        if host == .pccs { request.timeoutInterval = 6 }
 
         let startedAt = Date()
         var httpStatus: Int?
@@ -577,7 +632,8 @@ actor PolestarGRPC {
 
             await diagnosticLog.record(
                 provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                operation: "gRPC \(path)",
+                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
                 statusCode: http.statusCode, responseBytes: body.count,
                 responseData: body, startedAt: startedAt
             )
@@ -588,26 +644,14 @@ actor PolestarGRPC {
             // immediately, so nothing reaches here twice.
             await diagnosticLog.record(
                 provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                operation: "gRPC \(path)",
+                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
                 statusCode: httpStatus, startedAt: startedAt, error: error
             )
             throw error
         }
     }
 
-
-    /// Enriches a diagnostic-store operation label with the gRPC status and
-    /// percent-decoded server message, so exported bundles explain *why* a call failed
-    /// instead of only that it returned HTTP 200.
-    static func diagnosticOperation(_ base: String, grpcStatus: String?, grpcMessage: String?) -> String {
-        var parts: [String] = []
-        if let grpcStatus, !grpcStatus.isEmpty { parts.append("grpc-status=\(grpcStatus)") }
-        if let grpcMessage, !grpcMessage.isEmpty {
-            let decoded = grpcMessage.removingPercentEncoding ?? grpcMessage
-            parts.append("grpc-message=\(decoded.prefix(120))")
-        }
-        return parts.isEmpty ? base : "\(base) (\(parts.joined(separator: ", ")))"
-    }
 
     /// Turns a non-zero gRPC status on a write RPC into something the user can act on.
     /// Previously every status except 12 and 16 collapsed into "returned an unexpected
@@ -734,7 +778,8 @@ actor PolestarGRPC {
             }
             await diagnosticLog.record(
                 provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                operation: "gRPC \(path)",
+                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
                 statusCode: http.statusCode, responseBytes: latest.count,
                 responseData: latest, startedAt: startedAt
             )
@@ -742,7 +787,8 @@ actor PolestarGRPC {
         } catch {
             await diagnosticLog.record(
                 provider: .polestar, request: request,
-                operation: Self.diagnosticOperation("gRPC \(path)", grpcStatus: grpcStatus, grpcMessage: grpcMessage),
+                operation: "gRPC \(path)",
+                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
                 statusCode: httpStatus, startedAt: startedAt, error: error
             )
             throw error

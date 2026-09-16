@@ -70,3 +70,19 @@ final class FleetStore {
         carsByBrand[brand] = nil
     }
 }
+
+extension FleetStore: VehicleMemoryCaching {
+    /// Drops retained snapshots for the erased vehicles, or all of them. `forget(brand:)` only
+    /// covers the sign-out path and is keyed by brand; without this an erased vehicle still
+    /// renders from the retained snapshot until relaunch. The next `snapshot(for:)` reads the
+    /// persistence tier instead, which the erase has already cleared. `carsByBrand` is
+    /// brand-keyed rather than VIN-keyed and is left to `forget(brand:)`.
+    func dropCachedVehicles(_ scope: VehicleScope) {
+        snapshots = snapshots.filter { !scope.covers($0.key) }
+    }
+
+    /// Retained snapshots are all this store holds, so the snapshot-only drop is the same drop.
+    func dropCachedSnapshots(_ scope: VehicleScope) {
+        dropCachedVehicles(scope)
+    }
+}

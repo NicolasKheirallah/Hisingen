@@ -29,11 +29,10 @@ final class StatusItemController: NSObject {
     private var latestState: VehicleState?
     private var latestError: String?
     private var authenticated = false
-    private var settingsMode = false
     /// Set at the first successful sign-in and cleared only when the setup pass completes,
     /// so a popover closed mid-pass reopens onto the pass instead of silently skipping it.
     private var setupMode = false
-    private var selectedTab: HisingenContentView.Tab = .vehicle
+    private var selectedTab: TabRef = .vehicle
     private lazy var popoverRefreshCoalescer = PopoverRefreshCoalescer { [weak self] in
         self?.applyPopoverRefresh()
     }
@@ -79,7 +78,7 @@ final class StatusItemController: NSObject {
         (false, L10n.text("Connection testing is not available."), nil)
     }
 
-    private var selectedTabBinding: Binding<HisingenContentView.Tab> {
+    private var selectedTabBinding: Binding<TabRef> {
         Binding(
             get: { [weak self] in self?.selectedTab ?? .vehicle },
             set: { [weak self] value in self?.selectedTab = value }
@@ -120,6 +119,7 @@ final class StatusItemController: NSObject {
         self.preferences = preferences
         self.fleetStore = fleetStore
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.autosaveName = "HisingenStatusItem"
         popover = NSPopover()
         super.init()
         let layout = PanelLayout.resolve(from: preferences)
@@ -650,8 +650,11 @@ final class StatusItemController: NSObject {
         )
     }
 
+    /// The stored tab is what decides the surface, so every Settings entry point has to move it:
+    /// `HisingenContentView` draws Settings when the selection is `.settings`. A separate flag
+    /// left the menu item and the `⌘,` shortcut writing a value nothing read.
     func showSettings() {
-        settingsMode = true
+        selectedTab = .settings
         if popover.isShown {
             refreshPopoverIfNeeded()
         } else {
@@ -659,27 +662,35 @@ final class StatusItemController: NSObject {
         }
     }
 
+    /// Toggled from the selection, which is the one value that says whether Settings is on screen.
     func toggleSettings() {
-        settingsMode.toggle()
-        if popover.isShown {
-            refreshPopoverIfNeeded()
+        if selectedTab == .settings {
+            dismissSettings()
         } else {
-            showPopover()
+            showSettings()
         }
     }
 
     func dismissSettings() {
-        settingsMode = false
+        if selectedTab == .settings {
+            selectedTab = .vehicle
+        }
         if popover.isShown {
             refreshPopoverIfNeeded()
         }
     }
 
-    /// Shows the one-time setup pass instead of the dashboard. Deliberately ignores
-    /// `settingsMode`: an interactive sign-in that ends inside Settings hands off here.
+    /// Shows the one-time setup pass instead of the dashboard: an interactive sign-in that ends
+    /// inside Settings hands off here.
+    ///
+    /// The stored tab has to leave `.settings`, because the view draws Settings whenever the
+    /// selection is `.settings` — that check comes first, so a setup pass requested while Settings
+    /// is on screen could never appear.
     func showSetupPass() {
         setupMode = true
-        settingsMode = false
+        if selectedTab == .settings {
+            selectedTab = .vehicle
+        }
         if popover.isShown {
             refreshPopoverIfNeeded()
         } else {
@@ -715,24 +726,26 @@ final class StatusItemController: NSObject {
         })
         let hosting = NSHostingController(rootView: root)
         popover.contentViewController = hosting
-        // Apple Liquid Glass: clear the popover's opaque backing so SwiftUI materials sample the
-        // real content behind the window (same pattern as ChargingMiniPanel).
+        // The popover's own chrome is deliberately left in place.
         //
-        // Applied before `show` as well as after. Doing it only afterwards meant `show` ordered the
-        // window in with AppKit's opaque popover backing and the clearing landed on the next
-        // statement, so every open painted at least one opaque frame before the material could
-        // sample the desktop — a visible flash on the app's highest-frequency interaction. The
-        // post-show pass stays because some macOS versions only vend `window` once it is on screen.
-        func clearBacking() {
-            guard let window = hosting.view.window else { return }
-            window.isOpaque = false
-            window.backgroundColor = .clear
-        }
-        clearBacking()
+        // This used to clear the window backing (`isOpaque = false`, `backgroundColor = .clear`) so
+        // the SwiftUI material could sample the desktop through the window. That does buy a real
+        // glass reading, but `NSPopover` draws its rounded corners, its arrow and its shadow with the
+        // very backing being cleared, and nothing re-created them — so the panel rendered as a
+        // sharp-cornered, arrowless rectangle. The arrow is not decoration: it is the only thing
+        // tying the panel to the menu-bar item that opened it, and without it the panel is an
+        // anonymous floating window rather than a popover.
+        //
+        // The pre-show `clearBacking()` was also a no-op by construction. It guarded on
+        // `hosting.view.window`, which is nil until the view is in a window, so it returned early on
+        // every open and the flash it existed to prevent still painted. Keeping the standard backing
+        // removes the missing chrome and the flash together.
+        //
+        // `PopoverSurface` is opaque to match: a material over an opaque backing, not over the
+        // desktop.
         if let button = statusItem.button {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
-        clearBacking()
     }
 
     func openPopover() {
@@ -748,14 +761,27 @@ final class StatusItemController: NSObject {
         onSelectCar?(vin)
     }
 
-    func cycleVehicle(forward: Bool) {
-        let vins = availableVehicleVINs
-        guard vins.count > 1 else { return }
-        let currentIndex = vins.firstIndex(of: activeVin ?? vins.first ?? "") ?? 0
+    /// The fleet-cycling rule, split out of ``cycleVehicle(forward:)`` so the wrap arithmetic can
+    /// be exercised without constructing the controller.
+    ///
+    /// `init` creates an `NSStatusBar` item and reads panel geometry, and neither survives a
+    /// process with no window-server connection: `CGSConnectionByID` asserts and aborts the whole
+    /// test run before an assertion can report anything. The ordering rule is what the cycling
+    /// tests are actually about, so it lives here and takes the fleet as an argument.
+    nonisolated static func cycledVIN(in vins: [String], after current: String?,
+                                      forward: Bool) -> String? {
+        guard vins.count > 1 else { return nil }
+        let currentIndex = vins.firstIndex(of: current ?? vins.first ?? "") ?? 0
         let nextIndex = forward
             ? (currentIndex + 1) % vins.count
             : (currentIndex - 1 + vins.count) % vins.count
-        selectCar(vins[nextIndex])
+        return vins[nextIndex]
+    }
+
+    func cycleVehicle(forward: Bool) {
+        guard let vin = Self.cycledVIN(in: availableVehicleVINs, after: activeVin,
+                                       forward: forward) else { return }
+        selectCar(vin)
     }
 
     func selectVehicleByIndex(_ index: Int) {
@@ -984,7 +1010,6 @@ final class StatusItemController: NSObject {
             checkingForUpdates: checkingForUpdates,
             notificationPermission: notificationPermission,
             diagnostics: diagnostics,
-            settingsMode: settingsMode,
             setupMode: setupMode
         )
     }
@@ -1019,7 +1044,6 @@ final class StatusItemController: NSObject {
             onTestConnection: { [weak self] brand in
                 await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."), nil)
             },
-            settingsMode: snapshot.settingsMode,
             setupMode: snapshot.setupMode,
             onCompleteSetup: { [weak self] in self?.completeSetupPass() },
             selectedTab: selectedTabBinding,
@@ -1090,7 +1114,6 @@ final class StatusItemController: NSObject {
 extension StatusItemController: NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         lastPopoverCloseDate = Date()
-        settingsMode = false
         // The first-launch welcome card belongs to the first panel session only: once that
         // session ends, it has had its moment even if the user never pressed dismiss.
         preferences.markFirstLaunchWelcomeSeen()

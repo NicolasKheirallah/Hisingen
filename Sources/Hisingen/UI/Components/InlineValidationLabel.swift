@@ -12,7 +12,7 @@ struct InlineValidationLabel: View {
     var body: some View {
         Label(message, systemImage: "exclamationmark.circle.fill")
             .hisType(.micro, weight: .medium)
-            .foregroundStyle(.red)
+            .foregroundStyle(HisingenTheme.semanticCritical)
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             .accessibilityLabel(message)
             // macOS has no live-region modifier (the typecheck confirms

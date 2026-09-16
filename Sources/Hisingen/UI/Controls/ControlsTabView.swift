@@ -18,6 +18,16 @@ struct ControlsTabView: View {
     /// about the request, not about the car.
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
 
+    /// The reader's layout for this tab: what to draw, and in what order. The default draws
+    /// everything exactly as designed.
+    var layout: TabLayout = .everything
+
+    func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
+
+    func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
+        layout.ordered(entries, by: item)
+    }
+
     @Environment(\.preferencesStore) private var preferences
     @State private var showScheduleEditor = false
     @State private var scheduleEditorKind: ScheduleKind = .climate
@@ -39,6 +49,8 @@ struct ControlsTabView: View {
 
     private struct CardEntry: Identifiable {
         let id: String
+        /// Which catalogued card this is, so the reader's layout can switch it off.
+        let item: TabItemID
         let isVisible: Bool
         let view: () -> AnyView
     }
@@ -58,7 +70,7 @@ struct ControlsTabView: View {
         let gate = commandGate
         return [
             CardEntry(
-                id: "climate",
+                id: TabItemID.controlsClimate.rawValue, item: TabItemID.controlsClimate,
                 isVisible: features.contains(.remoteClimate)
                     || (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)),
                 view: {
@@ -70,12 +82,12 @@ struct ControlsTabView: View {
                 }
             ),
             CardEntry(
-                id: "engine",
+                id: TabItemID.controlsEngine.rawValue, item: TabItemID.controlsEngine,
                 isVisible: state.powertrain.hasCombustionEngine && isBrandVolvo && engineStartPermitted,
                 view: { AnyView(EngineControlsCard(state: state, gate: gate)) }
             ),
             CardEntry(
-                id: "charging",
+                id: TabItemID.controlsCharging.rawValue, item: TabItemID.controlsCharging,
                 isVisible: hasAnyVisibleChargingControls,
                 view: {
                     AnyView(ChargingControlsCard(
@@ -86,25 +98,27 @@ struct ControlsTabView: View {
                 }
             ),
             CardEntry(
-                id: "access",
+                id: TabItemID.controlsAccess.rawValue, item: TabItemID.controlsAccess,
                 isVisible: features.contains(.remoteLocks),
                 view: { AnyView(AccessControlsCard(state: state, gate: gate)) }
             ),
             CardEntry(
-                id: "windows-locate",
+                id: TabItemID.controlsWindowsLocate.rawValue, item: TabItemID.controlsWindowsLocate,
                 isVisible: (features.contains(.remoteWindows) && profile.permits(.windows))
                     || features.contains(.remoteHonkFlash),
                 view: { AnyView(WindowsLocateCard(state: state, gate: gate)) }
             ),
             CardEntry(
-                id: "ota",
+                id: TabItemID.controlsOTA.rawValue, item: TabItemID.controlsOTA,
                 isVisible: features.contains(.remoteOTA) && profile.permits(.softwareInstallControl),
                 view: { AnyView(OTAControlsCard(state: state, gate: gate, onRefresh: onRefresh)) }
             )
         ]
     }
 
-    private var visibleCards: [CardEntry] { cards.filter(\.isVisible) }
+    private var visibleCards: [CardEntry] {
+        ordered(cards.filter { $0.isVisible && draws($0.item) }, by: { $0.item })
+    }
 
     private var engineStartPermitted: Bool {
         profile.hasEngineStart || profile.permits(.engineStart)
@@ -112,16 +126,20 @@ struct ControlsTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            ControlsBanners(
+            if draws(.controlsBanners) {
+                ControlsBanners(
                 state: state,
                 feedback: feedback,
                 features: features,
                 isBrandVolvo: isBrandVolvo,
                 showRestrictedNotice: !visibleCards.isEmpty
-            )
+                )
+            }
 
-            ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
-                CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt)
+            if draws(.controlsReceipts) {
+                ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
+                    CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt)
+                }
             }
 
             if !visibleCards.isEmpty {

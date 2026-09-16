@@ -210,10 +210,10 @@ struct AccountCredentialsForm: View {
         let health = connectionHealth
         let statusColor: Color = {
             switch health {
-            case .active: return .green
-            case .connectedInactive: return .blue
-            case .sessionExpired: return .orange
-            case .notConnected: return .orange
+            case .active: return HisingenTheme.semanticGood
+            case .connectedInactive: return HisingenTheme.semanticActive
+            case .sessionExpired: return HisingenTheme.semanticWarning
+            case .notConnected: return HisingenTheme.semanticWarning
             }
         }()
         let title: String = {
@@ -308,7 +308,7 @@ struct AccountCredentialsForm: View {
             if let test = testConnectionResult, !(health == .sessionExpired && !test.success) {
                 HStack(spacing: 6) {
                     Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(test.success ? .green : .red)
+                        .foregroundStyle(test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical)
                         .hisType(.caption)
                     Text(test.message)
                         .hisType(.caption)
@@ -340,7 +340,7 @@ struct AccountCredentialsForm: View {
         if prominent {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
                 .buttonStyle(.borderedProminent)
-                .tint(.orange)
+                .tint(HisingenTheme.semanticWarning)
                 .controlSize(.mini)
         } else {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
@@ -496,7 +496,7 @@ struct AccountCredentialsForm: View {
             if BuiltinVolvoSecrets.isConfigured && !showCustomVolvoApp {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(HisingenTheme.semanticGood)
                         .hisType(.subhead)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(L10n.text("Developer Access Ready"))
@@ -517,7 +517,7 @@ struct AccountCredentialsForm: View {
                     .foregroundStyle(HisingenTheme.accent)
                 }
                 .padding(8)
-                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             } else {
                 Text(L10n.text(
                     "Register a free API application at developer.volvocars.com to get a Client ID, "

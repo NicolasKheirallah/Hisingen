@@ -905,6 +905,45 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 }
 
+extension Notifier: VehicleMemoryCaching {
+    /// Drops every in-memory entry filed under an erased vehicle, and its persisted mirrors.
+    ///
+    /// `previousStateByVIN` is the one that keeps answering: `displayName(forVIN:)` falls back
+    /// to it for a vehicle's brand, so a wiped snapshot would still name itself in the next
+    /// banner. The rest is the same kind of residue – a pending climate reading, a sustained
+    /// condition timer, a service-due latch, a warning badge count – and would otherwise let a
+    /// re-added car inherit half-elapsed state from the vehicle that was erased.
+    func dropCachedVehicles(_ scope: VehicleScope) {
+        dropCachedSnapshots(scope)
+        serviceDueByVIN = serviceDueByVIN.filter { !scope.covers($0.key) }
+        let warningCountBefore = warningVehicles.count
+        warningVehicles = warningVehicles.filter { !scope.covers($0) }
+        // The optional dock badge is a count of vehicles in this set; leaving it stale would
+        // keep advertising a warning that belongs to a vehicle the reader just erased.
+        if warningVehicles.count != warningCountBefore {
+            onWarningVehicleCountChanged?(warningVehicles.count)
+        }
+        // Sustained-condition keys are "<vin>.<condition>", so they match on the VIN prefix
+        // rather than by equality.
+        let belongsToErasedVehicle = { (key: String) in
+            scope.covers(key.split(separator: ".").first.map(String.init) ?? key)
+        }
+        sustainedConditionStartedAt = sustainedConditionStartedAt.filter { !belongsToErasedVehicle($0.key) }
+        sustainedNotificationsDelivered = sustainedNotificationsDelivered.filter { !belongsToErasedVehicle($0) }
+        defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
+        persistSustainedState()
+    }
+
+    /// The snapshot half of the erase: what the vehicle last reported, which a location clear has
+    /// to drop because a held snapshot still carries the coordinates. The service-due and
+    /// sustained latches, the dock badge and the persisted dedupe mirrors say what the reader has
+    /// already been told, which a location change neither replays nor forgives.
+    func dropCachedSnapshots(_ scope: VehicleScope) {
+        previousStateByVIN = previousStateByVIN.filter { !scope.covers($0.key) }
+        pendingClimateStopReadingDateByVIN = pendingClimateStopReadingDateByVIN.filter { !scope.covers($0.key) }
+    }
+}
+
 private extension ClimateActivity {
     var isActiveClimate: Bool {
         switch self {

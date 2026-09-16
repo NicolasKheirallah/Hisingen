@@ -204,10 +204,7 @@ private struct ChargingMiniPanelView: View {
         .frame(width: 190 * HisingenTheme.contentScale)
         .background(
             ZStack {
-                HisingenTheme.cardSurface(
-                    cornerRadius: HisingenTheme.cornerRadius,
-                    prefersOpaque: reduceTransparency || contrast == .increased
-                )
+                HisingenTheme.cardSurface(cornerRadius: HisingenTheme.cornerRadius)
                 HisingenTheme.cardRim(
                     cornerRadius: HisingenTheme.cornerRadius,
                     prefersOpaque: reduceTransparency || contrast == .increased

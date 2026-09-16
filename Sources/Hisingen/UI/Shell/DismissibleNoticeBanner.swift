@@ -18,10 +18,13 @@ struct DismissibleNoticeBanner: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The theme's corner language, capped at 8: a banner should read as a notice rather than as
-    /// a card, but the sharp-cornered theme must still get sharp corners. It was hardcoded to 8,
-    /// so it stayed rounded on the one theme whose whole identity is square.
-    private var bannerRadius: CGFloat { min(8, HisingenTheme.cornerRadius) }
+    /// A banner should read as a notice rather than as a card, so it takes the shared banner radius
+    /// (`HisingenTheme.bannerRadius`, 10) instead of the card's 12. This used to be a second,
+    /// independent value — `min(8, cornerRadius)` — while `ControlsBanners` drew its own banners at
+    /// the token's 10, so the two notices in the same column had different curves. The `min(8, …)`
+    /// also guarded against a sharp-cornered theme that no longer exists; `cornerRadius` is 12 for
+    /// every theme.
+    private var bannerRadius: CGFloat { HisingenTheme.bannerRadius }
 
     var body: some View {
         if let containerHelp {

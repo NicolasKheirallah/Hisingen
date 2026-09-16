@@ -16,7 +16,8 @@ struct VehicleSessionControllerTests {
         let controller = VehicleSessionController(
             context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
             sessionManager: SessionManager(readToken: { _ in "token" }, readPassword: { "password" }, clearPassword: {}),
-            polestarAPI: SessionTestProvider(brand: .polestar), volvoAPI: SessionTestProvider(brand: .volvo),
+            providers: ProviderRegistry(polestar: SessionTestProvider(brand: .polestar),
+                                        volvo: SessionTestProvider(brand: .volvo)),
             fleetStore: FleetStore(stateStore: store, preferences: preferences), observesEnvironment: false)
         defer { controller.stop() }
         controller.resume()
@@ -57,7 +58,8 @@ struct VehicleSessionControllerTests {
         let volvo = SessionTestProvider(brand: .volvo)
         let controller = VehicleSessionController(
             context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
-            sessionManager: manager, polestarAPI: polestar, volvoAPI: volvo, fleetStore: fleet,
+            sessionManager: manager,
+            providers: ProviderRegistry(polestar: polestar, volvo: volvo), fleetStore: fleet,
             observesEnvironment: false)
         defer { controller.stop() }
         controller.credentialsDidChange(for: .polestar)
@@ -90,8 +92,10 @@ struct VehicleSessionControllerTests {
         let manager = SessionManager(readToken: { _ in "token" }, readPassword: { "new-password" }, clearPassword: {})
         let controller = VehicleSessionController(
             context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
-            sessionManager: manager, polestarAPI: SessionTestProvider(brand: .polestar),
-            volvoAPI: SessionTestProvider(brand: .volvo), fleetStore: fleet, observesEnvironment: false)
+            sessionManager: manager,
+            providers: ProviderRegistry(polestar: SessionTestProvider(brand: .polestar),
+                                        volvo: SessionTestProvider(brand: .volvo)),
+            fleetStore: fleet, observesEnvironment: false)
         defer { controller.stop() }
         controller.resume()
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }

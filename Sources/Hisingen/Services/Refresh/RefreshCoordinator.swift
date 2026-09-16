@@ -213,10 +213,15 @@ final class RefreshCoordinator {
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "io.kheirallah.hisingen.network")
 
-    /// Task.sleep-based one-shot scheduler for retries, confirmation polls, and the next
-    /// scheduled refresh. Task ticks are immune to run-loop modes – a status-item menu no
-    /// longer defers them – and cancel structurally (shared `AsyncTimerLoop`, RT-08).
-    private let scheduler = AsyncTimerLoop()
+    /// The one scheduler for retries, confirmation polls and the next scheduled refresh. Task
+    /// ticks are immune to run-loop modes – a status-item menu no longer defers them – and cancel
+    /// structurally (shared `AsyncTimerLoop`, RT-08). It holds the injected wait, so every delay
+    /// in this class, including the ones that run their own task, is one seam a test can drive
+    /// instead of sleeping through.
+    private let scheduler: AsyncTimerLoop
+    /// The live-streaming view of the selected adapter, handed in by the composition through the
+    /// registry: this class no longer asks whether its adapter happens to conform.
+    private let streaming: (any VehicleLiveStreaming)?
     private var task: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var failureCount = 0
@@ -229,7 +234,7 @@ final class RefreshCoordinator {
     private var streamEngine: LiveStreamEngine?
     /// Owns the whole Command receipt lifecycle: records, deadlines, watchdog, the display
     /// fields an awaiting command still owns, and which transport could prove it.
-    private let confirmations: CommandConfirmationLoop
+    private let confirmations: CommandReceiptLedger
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
@@ -299,8 +304,10 @@ final class RefreshCoordinator {
          selectionRetryDelay: TimeInterval = 2,
          liveStreamPolicy: LiveStreamPolicy = LiveStreamPolicy(),
          liveStreamJitter: @escaping () -> Double = { Double.random(in: 0...1) },
+         scheduler: AsyncTimerLoop = AsyncTimerLoop(),
+         streaming: (any VehicleLiveStreaming)? = nil,
          now: @escaping () -> Date = Date.init,
-         confirmationLoop: CommandConfirmationLoop? = nil,
+         receiptLedger: CommandReceiptLedger? = nil,
          commandConfirmationWindow: TimeInterval = CommandReceipt.maximumConfirmationDuration,
          commandConfirmationInitialPollDelay: TimeInterval = 2,
          commandConfirmationPollInterval: TimeInterval = 3) {
@@ -313,10 +320,12 @@ final class RefreshCoordinator {
         self.selectionRetryDelay = selectionRetryDelay
         self.liveStreamPolicy = liveStreamPolicy
         self.liveStreamJitter = liveStreamJitter
+        self.scheduler = scheduler
+        self.streaming = streaming
         self.now = now
-        // A test can hand in a loop it already holds; otherwise the confirmation timing lives
+        // A test can hand in a ledger it already holds; otherwise the confirmation timing lives
         // with the confirmation behaviour rather than as three loose knobs here.
-        self.confirmations = confirmationLoop ?? CommandConfirmationLoop(
+        self.confirmations = receiptLedger ?? CommandReceiptLedger(
             store: stateStore, now: now,
             confirmationWindow: commandConfirmationWindow,
             initialPollDelay: commandConfirmationInitialPollDelay,
@@ -338,9 +347,9 @@ final class RefreshCoordinator {
                 scheduleConfirmationWatchdog(vin: preferredVIN)
             }
             if var cached = stateStore.snapshot(for: preferredVIN) {
-                cached.commandState.optimisticLockUntil = nil
+                cached.setOptimisticLock(nil)
                 latestAuthoritative = cached
-                cached.commandState.receipts = confirmations.visibleReceipts
+                cached.publish(confirmations.overlay)
                 latest = cached
                 onEvent?(.state(cached))
             }
@@ -416,17 +425,20 @@ final class RefreshCoordinator {
         _ receipt: CommandReceipt,
         optimisticState: VehicleState? = nil
     ) {
+        // The ledger owns the Remote Command target comparison: a receipt for another vehicle
+        // is filed under that target's VIN, survives relaunch there, and has no live loop here.
+        let filing = confirmations.begin(receipt, selectedVIN: latest?.identity.vin)
+        guard filing.isForSelectedVehicle else { return }
         if var optimisticState,
            optimisticState.identity.vin == latest?.identity.vin {
-            optimisticState.commandState.receipts = []
+            optimisticState.publish(.empty)
             latest = optimisticState
         }
-        let awaiting = confirmations.begin(receipt, vin: latest?.identity.vin)
         publishCommandReceipts()
-        if awaiting, let vin = latest?.identity.vin {
+        if filing.awaitsTelemetry, let vin = latest?.identity.vin {
             refreshCommandConfirmationInfrastructure(vin: vin)
         }
-        guard awaiting else {
+        guard filing.awaitsTelemetry else {
             publishDiagnostics()
             return
         }
@@ -437,25 +449,20 @@ final class RefreshCoordinator {
 
     func dismissCommandReceipt(id: UUID) {
         guard confirmations.dismiss(id: id, vin: latest?.identity.vin) else { return }
-        if var displayState = latest {
-            displayState.commandState.receipts = confirmations.visibleReceipts
-            onEvent?(.state(displayState))
-        }
-        publishDiagnostics()
+        publishAfterReceiptDismissal()
     }
 
     func dismissCommandReceipt(issuedAt: Date) {
-        guard let record = confirmations.records.first(where: { $0.receipt.issuedAt == issuedAt }) else { return }
-        dismissCommandReceipt(id: record.receipt.id)
+        guard confirmations.dismiss(issuedAt: issuedAt, vin: latest?.identity.vin) else { return }
+        publishAfterReceiptDismissal()
     }
 
-    /// Records a receipt for a vehicle that is not the selected one. There is no live
-    /// confirmation loop for it: the record waits under the target's VIN and is restored when
-    /// that vehicle is selected. It never enters the in-memory collection, so it cannot be
-    /// dismissed from here – which is why it must be written by this ledger and not a second
-    /// instance with a different clock.
-    func recordOffTargetReceipt(_ receipt: CommandReceipt, targetVIN: String) {
-        confirmations.recordOffTarget(receipt, targetVIN: targetVIN)
+    private func publishAfterReceiptDismissal() {
+        if var displayState = latest {
+            displayState.publish(confirmations.overlay)
+            onEvent?(.state(displayState))
+        }
+        publishDiagnostics()
     }
 
     /// The confirmation window must actually end. A held-open exterior stream only
@@ -580,9 +587,9 @@ final class RefreshCoordinator {
             scheduleConfirmationWatchdog(vin: vin)
         }
         latestAuthoritative = stateStore.snapshot(for: vin)
-        latestAuthoritative?.commandState.optimisticLockUntil = nil
+        latestAuthoritative?.setOptimisticLock(nil)
         latest = latestAuthoritative
-        latest?.commandState.receipts = confirmations.visibleReceipts
+        latest?.publish(confirmations.overlay)
         if let latest { onEvent?(.state(latest)) } else { onEvent?(.loading) }
         onEvent?(.selectionChanged(vin))
         publishDiagnostics()
@@ -633,8 +640,9 @@ final class RefreshCoordinator {
 
     private func scheduleSelectionRetry(vin: String, after seconds: TimeInterval) {
         let requestGeneration = generation
+        let scheduler = scheduler
         Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
+            do { try await scheduler.sleep(for: seconds) } catch { return }
             guard let self, !Task.isCancelled else { return }
             guard requestGeneration == self.generation else { return }
             self.publishDiagnostics()
@@ -655,8 +663,10 @@ final class RefreshCoordinator {
     /// cached snapshot (which holds location and owner name) is always dropped; durable
     /// history is kept unless the user has opted into "erase history on sign out" in
     /// Settings → Privacy & Data, so a re-signed local build or a stray sign-out does not
-    /// discard months of charging and trip data. The only signal when revocation fails is
-    /// `.secureStorage` in `lastError`.
+    /// discard months of charging and trip data. A sign-out that finds no vehicle known at all
+    /// still goes fleet-wide over what the vehicles reported, but not over what the reader
+    /// authored: a nickname or a theme for a brand left alone is not a session artifact. The
+    /// only signal when revocation fails is `.secureStorage` in `lastError`.
     func signOut() {
         cancelCurrentWork()
         let requestGeneration = generation
@@ -680,7 +690,9 @@ final class RefreshCoordinator {
             if !currentVin.isEmpty {
                 stateStore.clear(vin: currentVin, eraseHistory: eraseHistory)
             } else {
-                stateStore.clear(eraseHistory: eraseHistory)
+                // No vehicle is known at all, so this is the fleet-wide session clear – named
+                // rather than reached by leaving the VIN out.
+                stateStore.clearAll(eraseHistory: eraseHistory)
             }
         } else {
             for vin in carsToClear {
@@ -905,7 +917,7 @@ final class RefreshCoordinator {
                 imageCache: imageCache
             )
         }
-        displayed.commandState.receipts = confirmations.visibleReceipts
+        displayed.publish(confirmations.overlay)
         return displayed
     }
 
@@ -1075,7 +1087,7 @@ final class RefreshCoordinator {
     private func startLiveStreamingIfNeeded(vin: String) {
         guard preferences.features.contains(.realTimeUpdates),
               streamEngine?.isRunning != true,
-              let streaming = api as? any VehicleLiveStreaming,
+              let streaming,
               let state = latest,
               let purpose = desiredLiveStreamPurpose(for: state) else { return }
         let requestGeneration = generation
@@ -1221,7 +1233,7 @@ final class RefreshCoordinator {
 
     private func publishCommandReceipts() {
         guard var displayState = latest else { return }
-        displayState.commandState.receipts = confirmations.visibleReceipts
+        displayState.publish(confirmations.overlay)
         onEvent?(.state(displayState))
     }
 

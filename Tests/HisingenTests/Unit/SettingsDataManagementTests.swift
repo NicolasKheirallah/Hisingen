@@ -17,7 +17,7 @@ struct SettingsDataManagementTests {
         try database.vacuumOrThrow()
         #expect(database.recordCounts().commands == 1)
 
-        try database.wipeAllOrThrow(for: vin)
+        try database.wipeVehicleOrThrow(for: vin)
         #expect(database.recordCounts().commands == 0)
         #expect(database.history.recentFuelEntries(for: vin).isEmpty)
         #expect(database.loadVehicleImage(for: vin, angle: 0) == nil)

@@ -1,30 +1,8 @@
 import SwiftUI
 
-enum CapabilityState {
-    case unsupported
-    case unavailable
-    case unknown
-
-    var label: String {
-        switch self {
-        case .unsupported: return L10n.text("Unsupported")
-        case .unavailable: return L10n.text("Temporarily unavailable")
-        case .unknown: return L10n.text("Not yet checked")
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .unsupported: return "minus.circle"
-        case .unavailable: return "wifi.exclamationmark"
-        case .unknown: return "questionmark.circle"
-        }
-    }
-}
-
 struct CapabilityBadge: View {
     let title: String
-    let state: CapabilityState
+    let state: CapabilitySummary
 
     var body: some View {
         HStack(spacing: 6) {

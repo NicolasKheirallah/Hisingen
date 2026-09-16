@@ -429,6 +429,9 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         title: String, message: String, success: Bool, target: RemoteCommandTarget?
     )] = []
     private let now: () -> Date
+    /// The production receipt ledger, so filing (including the Remote Command target
+    /// comparison) is the real rule rather than a hand-copied branch in this mock.
+    private let receipts: CommandReceiptLedger
     // `removePersistentDomain` is thread-safe; nonisolated(unsafe) exists only so `deinit`
     // can perform the guaranteed cleanup.
     private let scopedSuite: String
@@ -444,6 +447,8 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         scopedSuite = "RemoteCommandDispatchTests.mock.\(UUID().uuidString)"
         scopedDefaults = UserDefaults(suiteName: scopedSuite)!
         self.preferences = PreferencesStore(defaults: scopedDefaults)
+        self.receipts = CommandReceiptLedger(
+            store: VehicleStateStore(defaults: scopedDefaults, database: .inMemory()), now: now)
         preferences.features = {
             var selection = FeatureSelection.default
             for feature in enabledFeatures { selection.set(feature, enabled: true) }
@@ -497,10 +502,10 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
         optimisticState: VehicleState?
     ) {
         confirmationCount += 1
-        if let targetVIN = receipt.targetVIN,
-           vehicleState?.identity.vin.caseInsensitiveCompare(targetVIN) != .orderedSame {
-            return
-        }
+        // Mirror the production shell: let the ledger file the receipt against the visible VIN
+        // instead of re-implementing the target comparison in the test.
+        let filing = receipts.begin(receipt, selectedVIN: vehicleState?.identity.vin)
+        guard filing.isForSelectedVehicle else { return }
         if let optimisticState { vehicleState = optimisticState }
         vehicleState?.commandState.receipt = receipt
     }

@@ -116,7 +116,7 @@ struct SettingsFleetCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: summary.chargingCount == 0 ? "bolt.slash" : "bolt.fill")
                         .hisType(.micro)
-                        .foregroundStyle(summary.chargingCount == 0 ? Color.secondary : Color.green)
+                        .foregroundStyle(summary.chargingCount == 0 ? Color.secondary : HisingenTheme.semanticGood)
                     Text(L10n.text("Charging"))
                         .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
@@ -130,7 +130,7 @@ struct SettingsFleetCard: View {
                         Text(L10n.format("%d active", summary.chargingCount))
                             .hisType(.label, weight: .bold, design: .rounded)
                             .monospacedDigit()
-                            .foregroundStyle(Color.green)
+                            .foregroundStyle(HisingenTheme.semanticGood)
                         if totalChargingWatts > 0 {
                             Text("(\(Format.kilowatts(watts: totalChargingWatts)))")
                                 .hisType(.micro)
@@ -248,7 +248,7 @@ struct FleetVehicleCardRow: View {
                                 .hisType(.nano, weight: .bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
-                                .background(HisingenTheme.accent.opacity(0.18), in: RoundedRectangle(cornerRadius: 3))
+                                .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
                                 .foregroundStyle(HisingenTheme.accent)
                                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
                         }
@@ -323,10 +323,10 @@ struct FleetVehicleCardRow: View {
                         HStack(spacing: 3) {
                             Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
                                 .hisType(.micro)
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                                .foregroundStyle(isLocked ? Color.secondary : HisingenTheme.semanticWarning)
                             Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
                                 .hisType(.caption, weight: .medium)
-                                .foregroundStyle(isLocked ? Color.secondary : Color.orange)
+                                .foregroundStyle(isLocked ? Color.secondary : HisingenTheme.semanticWarning)
                         }
                     }
 

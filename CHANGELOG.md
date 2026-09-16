@@ -3,6 +3,128 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-09-16
+
+### Added
+
+- **Polestar 3 and Polestar 4 owners see their own car in the doors and tyres cards.** Both
+  drew the Polestar 2 outline, so the panels, windows, wheels and lamps lit up wherever a
+  Polestar 2 has them — the wrong car, and further off the more the two differ. Each model
+  now carries its own silhouette and its own geometry read off that artwork: the doors,
+  windows, hood, tailgate and charge flap follow its own panel lines, the glass roof its own
+  roofline, and the tyre rings and lamp glows sit on its own wheels and lights. The three
+  outlines are drawn at a matched size, so switching cars no longer changes how large the
+  car is in the card. Polestar 1, 2, 5 and 6 and every Volvo keep the outline they had.
+- **Tabs & Cards: every card is now the reader's to place.** A new Settings pane
+  (Settings → Tabs & Cards) lists every card, section and banner in the app, per tab,
+  and lets each one be switched off, moved — by button or by dragging it onto another
+  card — or removed. The order the pane shows is the order the tab draws, and the
+  shipped tabs read the same layout record, so what Settings shows is what the panel
+  draws.
+- **Tabs of your own.** Build a tab from anything in Hisingen: name it, pick an icon,
+  and add cards from any of the shipped tabs — the charging card beside the lock
+  controls, the render beside the tyre schematic. Cards are drawn by the same views
+  the shipped tabs use, so a card behaves and looks the same wherever it is placed.
+  Cards that own a tab's own state (the History charts, the Info section bars) stay on
+  the tab that gives them that state, and are named as such instead of silently
+  missing.
+- **Shipped tabs can be hidden.** Any of Vehicle, Info, History and Controls can be
+  hidden from the tab bar; Settings is always there, because it is where the list is
+  managed.
+- **Card switches double as data switches.** A card's own setting is a feature the
+  provider fetch already consulted, so switching a card off is also the instruction to
+  stop requesting the telemetry behind it — but only once no card the reader can still
+  see needs that reading, and never for a reading they switched on by hand. Switching a
+  card back on resumes the fetch, and the app is told the feature selection moved rather
+  than guessing.
+- An installation that predates this reads its existing feature toggles once as its
+  starting layout, so a card that was already switched off does not reappear. From
+  then on the layout is the reader's, and the feature list no longer moves cards.
+- A card shown while its reading is switched off is labelled **Data off** in the pane
+  with the reason, instead of drawing empty with no explanation.
+- A tab emptied on purpose stays empty. "Hide All" switches the cards off where they
+  live rather than discarding the arrangement, so "Show All" is one click away and a
+  tab you arranged yourself never has cards reappear in it that you did not put there.
+  A tab you have never rearranged does keep receiving cards added in later versions.
+
+### Fixed
+
+- **Cards no longer render as a black field in dark mode.** A card was filled with the canvas
+  — the panel's own colour — so in a dark appearance the cards, the panel and the desktop
+  behind them composited into one near-black surface, and only a hairline said where a card
+  ended. A card is a raised surface now: lifted toward white in the dark and off the tinted
+  canvas in the light, with the chip fill inset from it in turn. The contrast check models the
+  card surface it actually renders on rather than the canvas it used to sit on, and covers
+  both appearances for every theme.
+- **The footer gear no longer kicks the panel back to another tab.** Settings was reachable
+  two ways at once — a controller-owned mode and a tab — and the two could disagree: with the
+  Settings tab already selected, tapping the gear flipped the mode off and the panel fell back
+  to whichever tab was stored behind it. Settings is one tab now, and every route to it (the
+  tab, the gear, `⌘,`, the menu-bar item, a sign-in that ends inside Settings) writes that one
+  selection, so the two cannot disagree. Backing out returns to the tab Settings was opened
+  over.
+- **Settings draws the same header navigation as every other tab again.** The Settings
+  screen replaced the panel's tab bar with a header of its own — a back button, a centred
+  title and a close button — so the one navigation a reader had learned disappeared the
+  moment they opened Settings. Settings is a tab like the others now: the tab bar stays on
+  screen and marks the current tab exactly as it does everywhere else. Settings keeps its
+  own header only before sign-in, where there is no tab bar to leave by.
+- **The card list in Settings → Tabs & Cards no longer appears twice.** The card rows were
+  rendered once by the tab's controls and again by the page below them.
+- **A rejected password no longer replays on every launch.** With a password saved, Hisingen
+  offered it again at each launch even after the sign-in service had refused it, because the
+  "can resume" flag counted any stored password as a way in. A credential the IdP actually
+  rejects is dropped now, so the app asks instead of repeating a failed sign-in against
+  PingFederate's per-client attempt budget. A transient refusal — a 5xx, a timeout — still
+  keeps the session, so an outage never costs you a sign-in.
+- **A restriction learned on one car no longer switches off the same reading on another.**
+  Volvo stand-downs were recorded under the endpoint alone, so a vehicle that answered
+  "region restricted" for, say, the environment reading made Hisingen skip that reading on
+  every other car in the garage for the rest of the stand-down. It is scoped to the vehicle
+  that earned it now.
+- **One slow vehicle service no longer holds up the whole refresh.** The PCCS readings are
+  optional, and a hung one was allowed the full ten-second session budget before giving up;
+  they now give up at six, and that service stands down instead of every other reading
+  waiting on it.
+- **The C3 discovery fallback is no longer recorded as a failure.** Every launch wrote one
+  error for a request that then succeeded: the version-shape rejection that makes Hisingen
+  fall back is the fallback working, not a fault. It is classified as expected now, so a
+  support export shows the failures that actually matter.
+
+### Changed
+
+- **Authorizing remote commands no longer leaves a browser tab behind.** The sign-in for
+  remote commands now runs in a system browser sheet that dismisses itself the moment the
+  grant is issued, instead of opening a tab you had to close yourself. It is the same
+  Polestar sign-in page, still loaded outside Hisingen, so the app never sees the Polestar
+  ID password, and it shares the browser session you already have — which is why a sign-in
+  you have already completed finishes in a blink. Declining the sheet is not treated as a
+  failure, and if the sheet cannot be presented at all Hisingen falls back to opening the
+  page in your own browser as before.
+- **Settings is one entry point again.** The Settings tab in the tab bar and the gear
+  in the footer now take the same path into Settings and the same path back out, so
+  neither can leave the panel in a state the other cannot leave.
+- **The section row inside Settings reads like the tab bar.** The destinations
+  (All, Accounts, Appearance, …) wore accent-filled pills of their own; they now use the
+  tab bar's icon-and-label treatment, its ink emphasis and the same indicator moving under
+  the current section, so the two navigation rows speak one language. The row still
+  scrolls, so no section label is truncated at the narrowest panel width.
+- Switching a card off releases its reading only when nothing else you can see needs
+  it, and a reading you switched on yourself in Settings → Features is never taken
+  away by moving a card. When a card's reading is released, Hisingen tells the rest of
+  the app the feature selection moved, so notifications, update checks, the charging
+  planner and the live stream re-configure instead of running against a selection that
+  no longer exists.
+- The Vehicle tab's two side-by-side rows follow the layout: hiding or moving one of a
+  pair no longer leaves a card trying to share a row with something that is not there.
+- **Diagnostics name the failure rather than the code.** A non-zero gRPC status now keeps
+  its status and the server's own message next to a stable operation name, the token
+  endpoint's OAuth error code is recorded without retaining the response body, a request
+  that never reached the server is marked as a transport failure instead of a missing
+  status, and older entries report where their version is unknown. Existing archives still
+  load, and the export carries a schema version.
+
+
 ## [2.0.1] - 2026-09-13
 
 ### Added

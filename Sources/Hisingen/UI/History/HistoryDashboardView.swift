@@ -9,6 +9,16 @@ struct HistoryDashboardView: View {
     /// A deep link from Info can target the observed activity after the initial database load.
     let initialSection: String?
 
+    /// The reader's layout for this tab: what to draw, and in what order. The default draws
+    /// everything exactly as designed.
+    var layout: TabLayout = .everything
+
+    func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
+
+    func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
+        layout.ordered(entries, by: item)
+    }
+
     @Environment(\.preferencesStore) var preferences
 
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -346,7 +356,19 @@ struct HistoryDashboardView: View {
     }
 
     var visibleHistorySections: [HistorySection] {
-        historySections.filter(\.isVisible)
+        let drawn = historySections.filter { section in
+            guard section.isVisible else { return false }
+            // The terminal states are never composable: a reader who emptied the tab still
+            // needs to be told the store could not be read, or that nothing was recorded.
+            guard let item = TabItemID(rawValue: section.id) else { return true }
+            return draws(item)
+        }
+        // The reader's order, with the terminal states left where they are: they describe the
+        // data, not the layout, and belong at the end whichever way the cards are arranged.
+        let cards = ordered(drawn.filter { TabItemID(rawValue: $0.id) != nil },
+                            by: { TabItemID(rawValue: $0.id) ?? .historyOverview })
+        let tail = drawn.filter { TabItemID(rawValue: $0.id) == nil }
+        return cards + tail
     }
 
     /// key flips (that precedes the async query).
@@ -385,7 +407,7 @@ struct HistoryDashboardView: View {
     var body: some View {
         ScrollViewReader { proxy in
             VStack(spacing: HisingenTheme.sectionSpacing) {
-                periodPicker(proxy: proxy)
+                if draws(.historyPeriodPicker) { periodPicker(proxy: proxy) }
 
                 if isLoading && !didInitialLoad {
                     loadingSkeleton

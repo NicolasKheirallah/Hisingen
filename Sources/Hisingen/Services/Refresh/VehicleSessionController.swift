@@ -38,8 +38,7 @@ final class VehicleSessionController {
     private let sessionManager: SessionManager
     private let fleetStore: FleetStore
     private let observesEnvironment: Bool
-    private let polestarAPI: any VehicleProviding
-    private let volvoAPI: any VehicleProviding
+    private let providers: ProviderRegistry
     private weak var context: (any VehicleSessionControllerContext)?
 
     private var refreshCoordinator: RefreshCoordinator
@@ -51,7 +50,7 @@ final class VehicleSessionController {
     private(set) var lastDiagnostics: DiagnosticsSnapshot?
 
     private var activeProvider: any VehicleProviding {
-        preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
+        providers.provider(for: preferences.activeBrand)
     }
 
     /// True while an interactive refresh or vehicle switch owns the provider – the background
@@ -65,8 +64,7 @@ final class VehicleSessionController {
          stateStore: VehicleStateStore,
          imageCache: CarImageCache,
          sessionManager: SessionManager,
-         polestarAPI: any VehicleProviding,
-         volvoAPI: any VehicleProviding, fleetStore: FleetStore,
+         providers: ProviderRegistry, fleetStore: FleetStore,
          observesEnvironment: Bool = true) {
         self.context = context
         self.preferences = preferences
@@ -75,12 +73,12 @@ final class VehicleSessionController {
         self.sessionManager = sessionManager
         self.fleetStore = fleetStore
         self.observesEnvironment = observesEnvironment
-        self.polestarAPI = polestarAPI
-        self.volvoAPI = volvoAPI
-        let provider: any VehicleProviding = preferences.activeBrand == .volvo ? volvoAPI : polestarAPI
+        self.providers = providers
+        let provider = providers.provider(for: preferences.activeBrand)
         self.refreshCoordinator = RefreshCoordinator(
             api: provider, stateStore: stateStore, observesEnvironment: observesEnvironment,
-            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager)
+            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager,
+            streaming: providers.streaming(for: preferences.activeBrand))
         connectCoordinator()
     }
 
@@ -118,12 +116,6 @@ final class VehicleSessionController {
     }
     func dismissCommandReceipt(id: UUID) {
         refreshCoordinator.dismissCommandReceipt(id: id)
-    }
-    /// A receipt for a vehicle that is not the visible one. It goes to the coordinator's ledger
-    /// rather than a second one in the shell, so it is stamped by the same clock and window as
-    /// every other receipt.
-    func recordOffTargetReceipt(_ receipt: CommandReceipt, targetVIN: String) {
-        refreshCoordinator.recordOffTargetReceipt(receipt, targetVIN: targetVIN)
     }
     func refreshIfStale() { refreshCoordinator.refreshIfStale() }
     func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
@@ -229,7 +221,8 @@ final class VehicleSessionController {
             activeVIN: vin.isEmpty ? nil : vin)
         refreshCoordinator = RefreshCoordinator(
             api: activeProvider, stateStore: stateStore, observesEnvironment: observesEnvironment,
-            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager)
+            imageCache: imageCache, preferences: preferences, sessionManager: sessionManager,
+            streaming: providers.streaming(for: brand))
         connectCoordinator()
         context?.sessionStateDidChange()
     }

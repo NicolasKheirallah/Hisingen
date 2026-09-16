@@ -48,7 +48,7 @@ struct FuelAndEngineCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel & Engine"), color: .orange)
+                CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel & Engine"), color: HisingenTheme.semanticWarning)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         }

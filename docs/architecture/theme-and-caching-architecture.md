@@ -43,9 +43,13 @@ graph TD
 
 ### 2.1 The Concept
 Different car brands have distinct design languages:
-- **Polestar**: Minimalist, high-contrast monochrome, sharp rectangular panels (`cornerRadius: 0`), subtle tracking.
-- **Volvo**: Scandinavian warmth, Swedish Iron blue accents (`#1c6bba`), soft curves (`cornerRadius: 10`), bold/light typography contrast.
-- **Hisingen (Default)**: Modern macOS design with translucent materials (`ultraThinMaterial`), subtle border glows, and Polestar Amber accents.
+- **Polestar**: Minimalist, high-contrast monochrome, tuned amber accent, restrained tracking.
+- **Volvo**: Scandinavian warmth, Swedish Iron blue accent (`#1c6bba`), bold/light typography contrast.
+- **Hisingen (Default)**: Modern macOS design with translucent materials (`ultraThinMaterial`), subtle border glows, and Hisingen amber accents.
+
+A theme is a **palette, not a layout**. Corner radius, padding, shadow, border width and the type
+weight ladder are global (`cornerRadius` is 12 for every theme), so a theme change swaps colour and
+nothing else — there is no per-theme radius and no theme whose identity is "sharp corners".
 
 In Hisingen, users with multiple cars (or a mixed fleet of Polestar + Volvo) don't have to choose a single global theme. **Each car remembers its own theme**, and switching cars in the menu bar instantly swaps the entire interface style.
 
@@ -66,7 +70,7 @@ sequenceDiagram
     Prefs->>Storage: Read theme for "YV4..." (fallback: .volvo)
     Prefs->>Storage: Write to "app_theme" key
     Storage-->>UI: @AppStorage("app_theme") triggers
-    UI->>UI: Animate transition to Volvo Blue & 10pt radius
+    UI->>UI: Cross-fade to the Volvo palette (geometry is global)
 ```
 
 1. **Storage Structure (`UserDefaults`)**:

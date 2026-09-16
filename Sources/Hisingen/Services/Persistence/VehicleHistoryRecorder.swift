@@ -6,6 +6,15 @@ import Foundation
 /// charging, air-quality, connectivity, climate, and battery-health records that observation
 /// implies. Keeping those decisions together prevents a new history stream from being wired
 /// into only some refresh paths or applied after the snapshot it must compare against.
+///
+/// The workflow is two halves with different durability, because the readers differ:
+///
+/// - `saveAuthoritative(_:)` writes the snapshot and its activity rows synchronously, so a
+///   read straight after it sees what was just saved. The activity rows have to be derived
+///   here: they compare against the previous snapshot and would read the new one otherwise.
+/// - `record(_:)` queues the derived history tiers (`persistHistory(_:)`). Nothing reads them
+///   back through `VehicleStateStore`, so they coalesce per VIN on a utility queue and wait
+///   behind `drain()`.
 @MainActor
 final class VehicleHistoryRecorder {
     private let database: VehicleDatabase
@@ -39,19 +48,24 @@ final class VehicleHistoryRecorder {
 
     private struct RecordingRequest: Sendable {
         let state: VehicleState
-        let parkedChargeLoss: VehicleActivity?
         let inputs: RecordingInputs
         let database: VehicleDatabase
     }
 
-    /// One long-lived utility queue replaces a detached task per observation. Pending values
-    /// coalesce by VIN, while distinct vehicles retain FIFO order. This bounds memory when a
-    /// dashboard read or another writer temporarily occupies SQLite.
+    /// The derived history passes, delivered in order on one long-lived utility queue.
+    ///
+    /// This queue used to coalesce pending observations by VIN, which was safe only because the
+    /// authoritative snapshot write sat *inside* the queued pass: a caller that saved twice
+    /// raced its own first pass, so the queue could never hold two entries for one vehicle.
+    /// Splitting the snapshot out (see `saveAuthoritative`) removed that accidental
+    /// serialization, and coalescing would then drop observations the charging ledger needs —
+    /// it confirms a stop from *two* consecutive observations (`requiredStopObservations`), so
+    /// a dropped one is a lost session boundary. Every observation is therefore delivered, in
+    /// the order it was enqueued, and `drain()` waits for all of them.
     private final class Writer: @unchecked Sendable {
         private let lock = NSLock()
         private let queue = DispatchQueue(label: "com.hisingen.history-writer", qos: .utility)
-        private var pending: [String: RecordingRequest] = [:]
-        private var order: [String] = []
+        private var pending: [RecordingRequest] = []
         private var draining = false
         private var idleWaiters: [CheckedContinuation<Void, Never>] = []
         private let beforePersist: (@Sendable () -> Void)?
@@ -61,24 +75,22 @@ final class VehicleHistoryRecorder {
         }
 
         func enqueue(_ request: RecordingRequest) {
-            let vin = request.state.identity.vin
             lock.lock()
-            if pending[vin] == nil { order.append(vin) }
-            pending[vin] = request
+            pending.append(request)
             let shouldStart = !draining
             if shouldStart { draining = true }
             lock.unlock()
             if shouldStart {
-                // The queued drain owns the writer until every accepted observation lands.
+                // The queued drainLoop owns the writer until every accepted observation lands.
                 // A short-lived VehicleStateStore may be released immediately after `save`.
-                queue.async { self.drain() }
+                queue.async { self.drainLoop() }
             }
         }
 
-        func waitUntilIdle() async {
+        func drain() async {
             await withCheckedContinuation { continuation in
                 lock.lock()
-                if !draining && order.isEmpty {
+                if !draining && pending.isEmpty {
                     lock.unlock()
                     continuation.resume()
                 } else {
@@ -88,10 +100,10 @@ final class VehicleHistoryRecorder {
             }
         }
 
-        private func drain() {
+        private func drainLoop() {
             while true {
                 lock.lock()
-                guard let vin = order.first else {
+                guard !pending.isEmpty else {
                     draining = false
                     let waiters = idleWaiters
                     idleWaiters.removeAll()
@@ -99,30 +111,32 @@ final class VehicleHistoryRecorder {
                     waiters.forEach { $0.resume() }
                     return
                 }
-                order.removeFirst()
-                let request = pending.removeValue(forKey: vin)
+                let request = pending.removeFirst()
                 lock.unlock()
-                if let request {
-                    beforePersist?()
-                    VehicleHistoryRecorder.persist(request)
-                }
+                beforePersist?()
+                VehicleHistoryRecorder.persistHistory(request)
             }
         }
     }
 
-    func record(_ state: VehicleState) {
+    /// Write the authoritative snapshot for one observation, synchronously, so the caller can
+    /// read it back immediately. Also derives the activity rows, which compare against the
+    /// previous snapshot and therefore have to read it before it is replaced.
+    func saveAuthoritative(_ state: VehicleState) {
         // The recording body is pure storage I/O (per-event inserts, dedupe reads, the
-        // charging-ledger ingest) with no UI dependency. The main actor only reads its own
-        // mutable state (preferences, the parked-charge detector) and hands off Sendable
-        // values; the SQLite handle is Sendable and safe for cross-thread use.
+        // charging-ledger ingest) with no UI dependency. The SQLite handle is Sendable and
+        // safe for cross-thread use.
+        Self.recordActivitiesAndSnapshot(
+            state,
+            parkedChargeLossActivity: parkedChargeLoss(for: state),
+            into: database
+        )
+    }
+
+    func record(_ state: VehicleState) {
+        // Main-actor-owned preference values resolved once so the storage pass can run on the
+        // utility queue without capturing the non-Sendable `PreferencesStore`.
         let storeChargingHistory = preferences.storeChargingHistory
-        let parkedChargeLoss: VehicleActivity?
-        if storeChargingHistory {
-            parkedChargeLoss = parkedChargeLossDetector.ingest(state)
-        } else {
-            parkedChargeLossDetector.reset(vin: state.identity.vin)
-            parkedChargeLoss = nil
-        }
         let inputs = RecordingInputs(
             persistLocationHistory: preferences.persistLocationHistory,
             storeChargingHistory: storeChargingHistory,
@@ -135,22 +149,29 @@ final class VehicleHistoryRecorder {
             currencySymbol: preferences.currencySymbol
         )
         writer.enqueue(RecordingRequest(
-            state: state, parkedChargeLoss: parkedChargeLoss,
-            inputs: inputs, database: database
+            state: state, inputs: inputs, database: database
         ))
     }
 
-    func waitUntilIdle() async { await writer.waitUntilIdle() }
+    /// The parked-charge-loss activity this observation implies, advancing the detector's own
+    /// per-VIN state. Main-actor owned, so it is resolved before either write path runs.
+    private func parkedChargeLoss(for state: VehicleState) -> VehicleActivity? {
+        guard preferences.storeChargingHistory else {
+            parkedChargeLossDetector.reset(vin: state.identity.vin)
+            return nil
+        }
+        return parkedChargeLossDetector.ingest(state)
+    }
+
+    func drain() async { await writer.drain() }
 
     func resetTransientState(vin: String? = nil) {
         parkedChargeLossDetector.reset(vin: vin)
     }
 
-    private nonisolated static func persist(_ request: RecordingRequest) {
-        recordActivitiesAndSnapshot(
-            request.state, parkedChargeLossActivity: request.parkedChargeLoss,
-            into: request.database
-        )
+    /// The derived history tiers for one observation: everything that is appended after the
+    /// authoritative snapshot, and that nothing reads back through `VehicleStateStore`.
+    private nonisolated static func persistHistory(_ request: RecordingRequest) {
         recordAirQuality(request.state, into: request.database)
         recordTelemetry(
             request.state,

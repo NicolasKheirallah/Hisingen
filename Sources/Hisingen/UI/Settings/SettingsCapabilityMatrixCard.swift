@@ -21,7 +21,7 @@ struct SettingsCapabilityMatrixCard: View {
             UnavailableFeatureCard(
                 symbol: "checklist",
                 title: L10n.text("Vehicle Capability Matrix"),
-                color: .blue,
+                color: HisingenTheme.semanticActive,
                 badge: L10n.text("No vehicle selected"),
                 message: L10n.text("Choose a vehicle or sign in to see which capabilities this account can reach. The matrix is read from the vehicle itself, so it cannot be built without one."),
                 state: .unavailable
@@ -31,7 +31,7 @@ struct SettingsCapabilityMatrixCard: View {
             let items = VehicleCapability.displayed.filter { capabilityFilter.matches(profile.support(for: $0)) }
             Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: .blue)
+                    CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capability Matrix"), color: HisingenTheme.semanticActive)
                     // This card printed the raw VIN, and named its export after it, on the screen
                     // most likely to be screenshotted — defeating the setting whose own promise is
                     // that it blurs the VIN "across the app".
@@ -63,7 +63,7 @@ struct SettingsCapabilityMatrixCard: View {
                     if let exportFeedback {
                         Label(exportFeedback.message, systemImage: exportFeedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                             .hisType(.micro, weight: .medium)
-                            .foregroundStyle(exportFeedback.isError ? Color.red : HisingenTheme.semanticGood)
+                            .foregroundStyle(exportFeedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                     }
 
                     // A degraded dashboard should explain itself here rather than only in the
@@ -95,7 +95,7 @@ struct SettingsCapabilityMatrixCard: View {
                                 let color: Color = {
                                     switch support {
                                     case .supported: return HisingenTheme.semanticGood
-                                    case .vehicleManaged: return .blue
+                                    case .vehicleManaged: return HisingenTheme.semanticActive
                                     case .unavailable: return HisingenTheme.semanticWarning
                                     case .backendDependent: return .secondary
                                     }

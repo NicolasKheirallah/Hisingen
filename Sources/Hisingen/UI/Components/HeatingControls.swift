@@ -93,7 +93,7 @@ struct HeatingLevelControl: View {
     }
 
     private var tint: Color {
-        level.isHeatingActive ? .orange : .secondary
+        level.isHeatingActive ? HisingenTheme.semanticWarning : .secondary
     }
 
     private func stepButton(symbol: String, label: String, delta: Int) -> some View {

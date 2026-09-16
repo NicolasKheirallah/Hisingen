@@ -109,11 +109,9 @@ struct VehicleFeatureCompletionTests {
             cleaningState: .off, airQualityIndex: 18, particulateMatter25: 4
         )
         store.save(polestar)
-        // The storage pass runs detached; wait for the row before asserting.
-        let storedPolestarAQI = await awaitStored(timeout: 5) {
-            database.history.recentAirQuality(for: polestar.identity.vin).count == 1
-        }
-        #expect(storedPolestarAQI)
+        // AQI is one of the coalesced derived passes, so drain before asserting the row.
+        await store.drainHistory()
+        #expect(database.history.recentAirQuality(for: polestar.identity.vin).count == 1)
 
         let volvo = VehicleState(
             batteryPercentage: 60, rangeKm: 300, chargingState: .idle,
@@ -130,13 +128,10 @@ struct VehicleFeatureCompletionTests {
             vehicleReportedAt: Date(), dataWarnings: []
         )
         store.save(volvo)
-        // The Polestar snapshot's storage pass may still be in flight when the Volvo one
-        // is asserted; wait for the Volvo snapshot to land so this negative cannot pass
-        // merely because the row "is not written yet".
-        let storedVolvoSnapshot = await awaitStored(timeout: 5) {
-            database.loadSnapshot(for: volvo.identity.vin) != nil
-        }
-        #expect(storedVolvoSnapshot)
+        // Drain so this negative cannot pass merely because the Volvo pass has not run yet.
+        // The snapshot itself is already durable; the AQI row is the queued half.
+        await store.drainHistory()
+        #expect(database.loadSnapshot(for: volvo.identity.vin) != nil)
         #expect(database.history.recentAirQuality(for: volvo.identity.vin).isEmpty)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
