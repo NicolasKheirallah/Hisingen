@@ -7,25 +7,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- 
-
-### Fixed
-
-- wait for an armed schedule, not just the flag, in stream assertions
-
-### Changed
-
-- ci: run the suite serially, and stop blocking the main thread in one test
-- land 2.0.2: per-model car outlines, reader-placed tabs and cards, a receipt ledger, and a headless-safe suite
-- Avoid screen lookup in package geometry test
-- Fix Swift 6 CI compilation failures
-- Fix: design bugs
-- perf: harden refresh and persistence paths
-
-## [2.0.2] - 2026-09-16
-
-### Added
-
 - **Polestar 3 and Polestar 4 owners see their own car in the doors and tyres cards.** Both
   drew the Polestar 2 outline, so the panels, windows, wheels and lamps lit up wherever a
   Polestar 2 has them — the wrong car, and further off the more the two differ. Each model

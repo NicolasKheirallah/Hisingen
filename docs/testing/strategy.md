@@ -66,6 +66,30 @@ The Volvo job's env var (`HISINGEN_TEST_VOLVO_VCC_API_KEY`) matches what `LiveVo
 
 Neither test can wake a sleeping vehicle on its own; they read whatever state the backend currently reports, same as a normal refresh.
 
+## The deterministic suite runs serialized
+
+Every gate that runs the deterministic suite passes `--no-parallel`: `ci.yml`,
+`release.yml`, `Scripts/ci-local.sh`, `Scripts/release.sh`, and the `Makefile`'s `test` target.
+Add it to any new caller.
+
+The suite is not parallel-safe under a small runner, because a large part of it is
+schedule-sensitive by design. Tests like `RefreshCoordinatorStreamTests` and
+`PopoverRefreshCoalescerTests` assert on *when* the app will do something next — a confirmation
+poll 50 ms out, a coalescing window of 120 ms — and they drive real timers to get there. Those
+assertions hold while the actor they share has room to run them. On a three-core GitHub runner,
+132 suites at once do not leave that room: a 120 ms coalescing window has been measured taking
+over 10 s to fire, twice, on two different workflows. The failure says nothing about the
+coalescer and everything about the runner.
+
+Serializing costs about twice the wall clock (roughly 28 s against 13 s on a developer Mac,
+about ten minutes for the whole `build-and-test` job) and removes the whole class of noise, so a
+red run means a real defect. Omitting `--no-parallel` still runs the suites in parallel, so drop
+it deliberately if you want to reproduce a contention bug.
+
+This is a property of the runner, not of the tests: if the suite moves to a larger runner, or
+the timing-sensitive suites get injected clocks, re-measure before assuming serialization is
+still needed.
+
 ## Test framework (2026-08-22)
 
 The suite is **Swift Testing** (`import Testing`) exclusively. The current CommandLineTools

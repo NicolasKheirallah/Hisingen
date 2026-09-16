@@ -44,7 +44,7 @@ Read the specific doc for the area you're touching, not just this workflow page:
 ```bash
 make doctor
 swift build
-swift test --disable-xctest --enable-swift-testing --skip Live
+swift test --disable-xctest --enable-swift-testing --skip Live --no-parallel
 make app
 ```
 

@@ -71,7 +71,7 @@ Checkout → cache SwiftPM checkout data (keyed on
 `${{ matrix.os }}-spm-${{ hashFiles('Package.resolved','Package.swift') }}`)
 → select the runner's active full Xcode with `Scripts/select-xcode.sh` →
 `swift --version` + `make doctor` → `swift build` → `swift test --disable-xctest
---enable-swift-testing --skip Live`
+--enable-swift-testing --skip Live --no-parallel`
 → `make app` → bundle validation: binary executable bit
 set, `plutil -lint` on `Info.plist`, `codesign --verify --deep --strict`, and
 an explicit assertion that `LSUIElement == true`. The `macos-15` leg also

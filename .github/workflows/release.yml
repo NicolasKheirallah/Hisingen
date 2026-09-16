@@ -91,9 +91,14 @@ jobs:
           swift --version
 
       - name: Test (deterministic suite only — live/remote-command tests excluded)
+        # Serialized for the same reason ci.yml is: the suite drives real timers and asserts on
+        # schedules that have to land within seconds, and 132 suites sharing a small runner starve
+        # the main actor badly enough to miss them. Keep this in step with ci.yml,
+        # Scripts/ci-local.sh, Scripts/release.sh and the Makefile's `test` target.
         run: >-
           swift test --disable-xctest --enable-swift-testing
           --skip Live
+          --no-parallel
 
       - name: Configure code signing identity
         env:

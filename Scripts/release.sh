@@ -20,7 +20,8 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
 fi
 
 echo "🧪 Running full test suite..."
-sh Scripts/test.sh
+# --no-parallel matches every other gate that runs this suite; see the comment in ci.yml.
+sh Scripts/test.sh --no-parallel
 sh Scripts/validate-release.sh
 
 if [ -f "Scripts/check-localization.py" ]; then

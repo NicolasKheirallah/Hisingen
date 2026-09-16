@@ -139,7 +139,8 @@ run:
 	swift run
 
 test: doctor inject-secrets
-	sh Scripts/test.sh
+	# --no-parallel matches every other gate that runs this suite; see the comment in ci.yml.
+	sh Scripts/test.sh --no-parallel
 
 clean:
 	rm -rf .build .build-arm64 .build-x86_64 $(APP) $(DMG) $(ZIP) $(DMG_STAGING) SHA256SUMS notarize-app.zip
