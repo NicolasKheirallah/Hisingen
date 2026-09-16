@@ -33,7 +33,14 @@ struct VehicleHistoryRecorderPerformanceTests {
         }
 
         recorder.record(observation(1))
-        #expect(gate.waitUntilFirstWriteStarts())
+        // Poll rather than block on the gate: this test is on the main actor, so waiting on a
+        // semaphore here would hold up every other MainActor suite in the run until the gate
+        // opened. `waitUntilFirstWriteStarts` did exactly that for up to two seconds.
+        let startDeadline = ContinuousClock().now.advanced(by: .seconds(2))
+        while !gate.hasStarted, ContinuousClock().now < startDeadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(gate.hasStarted, "the first history write never reached the gate")
         // Enqueued while the first pass is still blocked: none of these may be dropped.
         for value in 2...10 {
             recorder.record(observation(value))
@@ -54,10 +61,10 @@ struct VehicleHistoryRecorderPerformanceTests {
 
 private final class FirstWriteGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let started = DispatchSemaphore(value: 0)
     private let resume = DispatchSemaphore(value: 0)
     private var isFirst = true
     private var count = 0
+    private var started = false
 
     var persistCount: Int {
         lock.lock()
@@ -65,19 +72,24 @@ private final class FirstWriteGate: @unchecked Sendable {
         return count
     }
 
+    /// Whether the first pass has reached the gate and parked there.
+    var hasStarted: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return started
+    }
+
     func pauseFirstWrite() {
         lock.lock()
         count += 1
         let shouldPause = isFirst
         isFirst = false
+        if shouldPause { started = true }
         lock.unlock()
         guard shouldPause else { return }
-        started.signal()
+        // Blocks the writer's own utility queue, which is the point: the test needs the first pass
+        // held open while the rest are enqueued, and that queue is not any test's actor.
         resume.wait()
-    }
-
-    func waitUntilFirstWriteStarts() -> Bool {
-        started.wait(timeout: .now() + 2) == .success
     }
 
     func resumeFirstWrite() { resume.signal() }

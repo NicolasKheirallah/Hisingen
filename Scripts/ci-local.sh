@@ -35,7 +35,9 @@ python3 Scripts/check-sync.py
 echo "==> build-and-test (ci: macos-15 job)"
 make doctor inject-secrets
 swift build
-sh Scripts/test.sh --skip Live
+# --no-parallel matches ci.yml: the suite's real-timer assertions are not reliable while 132
+# suites share a small runner. Keep this line in step with the workflow.
+sh Scripts/test.sh --skip Live --no-parallel
 sh Scripts/validate-release.sh
 
 echo "==> ad-hoc app bundle (ci: build-and-test)"

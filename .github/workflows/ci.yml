@@ -130,9 +130,15 @@ jobs:
         # Package.swift, so no per-invocation flags are needed here.
         run: swift build
       - name: Test deterministic suite
+        # Serialized on purpose. The suite drives real timers and asserts on schedules that have to
+        # land within seconds of being asked for, and on a three-core runner 132 suites at once
+        # starve the main actor badly enough to miss them: a 120 ms coalescer window has been
+        # observed to take over 10 s. Serially the suite costs about twice the wall clock, which
+        # this job's 25-minute budget covers many times over, and a failure here then means a real
+        # defect instead of scheduler noise. Keep Scripts/ci-local.sh in step with this line.
         run: |
           set -euo pipefail
-          sh Scripts/test.sh --skip Live
+          sh Scripts/test.sh --skip Live --no-parallel
       - name: Validate localization and documentation
         run: |
           python3 Scripts/check-localization.py
