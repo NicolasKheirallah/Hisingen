@@ -88,7 +88,11 @@ struct RefreshCoordinatorStreamTests {
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
-        let connected = await waitUntil(events) { $0.liveStreamConnected }
+        // Wait for the snapshot that both reports the connection and carries the schedule the
+        // connection installed. A refresh publishes one while its fetch is still in flight, with
+        // `nextRefresh` already cleared, so waiting on the flag alone can land on that interim
+        // snapshot and read no schedule at all.
+        let connected = await waitUntil(events) { $0.liveStreamConnected && $0.nextRefresh != nil }
         let snapshot = try #require(connected, "Expected the charging stream to connect")
         // Integrity poll interval is 30 minutes; a routine charging poll would be 120 s.
         let lead = snapshot.nextRefresh.map { $0.timeIntervalSinceNow } ?? 0
@@ -523,7 +527,7 @@ struct RefreshCoordinatorStreamTests {
         ))
 
         let retrying = await waitUntil(events, timeout: 2) {
-            !$0.liveStreamConnected && $0.liveStreamRetryAt != nil
+            !$0.liveStreamConnected && $0.liveStreamRetryAt != nil && $0.nextRefresh != nil
         }
         let snapshot = try #require(retrying, "Expected the failed confirmation stream to retry")
         let fallbackDelay = snapshot.nextRefresh?.timeIntervalSinceNow ?? .infinity
@@ -747,8 +751,12 @@ struct RefreshCoordinatorStreamTests {
             command: command
         ))
 
+        // The refresh that satisfies the poll clears `nextRefresh` while it is in flight and
+        // re-arms it only once it succeeds, so wait for the pair. Waiting on the count alone can
+        // catch the snapshot published at the start of the next poll, which has no schedule yet
+        // and would read as "never repeats" even though the cadence is intact.
         let firstPoll = try #require(await waitUntil(events, timeout: 2) {
-            $0.refreshSuccesses >= 2
+            $0.refreshSuccesses >= 2 && $0.nextRefresh != nil
         })
         let nextDelay = firstPoll.nextRefresh?.timeIntervalSinceNow ?? .infinity
         #expect(nextDelay < 1.2, "Poll-only confirmation must retain its short repeat cadence")
@@ -928,7 +936,12 @@ struct RefreshCoordinatorStreamTests {
             command: .lock
         ))
 
-        let confirmationDeadline = try #require(events.snapshots.last?.nextRefresh)
+        // Wait for the awaiting state to carry a schedule rather than reading whatever snapshot
+        // happened to land last: a refresh in flight publishes with `nextRefresh` cleared.
+        let awaiting = try #require(await waitUntil(events) {
+            $0.commandConfirmationStatus == .awaiting && $0.nextRefresh != nil
+        }, "Expected a confirmation poll scheduled under the provider's retry deadline")
+        let confirmationDeadline = try #require(awaiting.nextRefresh)
         #expect(
             confirmationDeadline >= rateLimitFloor,
             "Confirmation polling must respect the provider's retry deadline"
