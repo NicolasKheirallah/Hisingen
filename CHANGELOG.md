@@ -3,6 +3,21 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-09-16
+
+### Added
+
+- 
+
+### Fixed
+
+- 
+
+### Changed
+
+- chore(updates): publish v2.0.2 appcast
+- test: serialize the suite at every gate, not just ci.yml
+
 ## [2.0.2] - 2026-09-16
 
 ### Added
