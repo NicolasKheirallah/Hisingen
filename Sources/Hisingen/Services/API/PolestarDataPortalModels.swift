@@ -27,6 +27,8 @@ typealias PolestarDataPortalBatteryDTO = PolestarBatteryDTO
 typealias PolestarDataPortalExteriorDTO = PolestarExteriorDTO
 typealias PolestarDataPortalHealthDTO = PolestarHealthDTO
 typealias PolestarDataPortalAvailabilityDTO = PolestarAvailabilityDTO
+typealias PolestarDataPortalOdometerDTO = PolestarOdometerDTO
+typealias PolestarDataPortalLocationDTO = PolestarLocationDTO
 
 struct PolestarDataPortalTokenResponse: Codable, Sendable {
     let accessToken: String
@@ -427,6 +429,53 @@ extension PolestarHealthDTO {
         return MaintenanceAndHealthSnapshot(
             details: details,
             service: service
+        )
+    }
+}
+
+// MARK: - Odometer Telemetry
+
+struct PolestarOdometerDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let timestamp: PolestarDataPortalTimestamp?
+    let odometerMeters: Double?
+    let odometerKm: Double?
+    let meta: PolestarDataPortalMeta?
+
+    var calculatedOdometerKm: Int? {
+        if let km = odometerKm {
+            return Int(km.rounded())
+        }
+        if let meters = odometerMeters {
+            return Int((meters / 1000.0).rounded())
+        }
+        return nil
+    }
+}
+
+// MARK: - Location Telemetry
+
+struct PolestarLocationDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let timestamp: PolestarDataPortalTimestamp?
+    let latitude: Double?
+    let longitude: Double?
+    let headingDegrees: Double?
+    let altitudeMeters: Double?
+    let speedMetersPerSecond: Double?
+    let accuracyMeters: Double?
+    let meta: PolestarDataPortalMeta?
+
+    func toVehicleLocation() -> VehicleLocation {
+        let speedKmh = speedMetersPerSecond.map { $0 * 3.6 }
+        return VehicleLocation(
+            latitude: latitude,
+            longitude: longitude,
+            heading: headingDegrees,
+            speed: speedKmh,
+            timestamp: timestamp?.date,
+            altitudeMeters: altitudeMeters,
+            accuracyMeters: accuracyMeters
         )
     }
 }

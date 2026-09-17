@@ -2,6 +2,8 @@ import Foundation
 import OSLog
 import SwiftUI
 
+typealias PolestarConnectionMode = PreferencesStore.PolestarConnectionMode
+
 /// The single source of preference state for an application composition.
 /// Storage intentionally uses the legacy keys so existing installations migrate in place.
 @MainActor
@@ -38,6 +40,15 @@ final class PreferencesStore {
             }
         }
     }
+
+    nonisolated static var currentPolestarConnectionMode: PolestarConnectionMode {
+        guard let raw = UserDefaults.standard.string(forKey: "polestar_connection_mode"),
+              let mode = PolestarConnectionMode(rawValue: raw) else {
+            return .polestarID
+        }
+        return mode
+    }
+
 
     struct AccountDraft {
         var polestarEmail = ""
@@ -376,7 +387,7 @@ final class PreferencesStore {
     func hasSessionToken(for brand: VehicleBrand) -> Bool {
         if brand == .volvo { return keychain.hasStoredVolvoSession }
         if polestarConnectionMode == .dataPortal {
-            return keychain.hasStoredPolestarDataPortalCredentials
+            return keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
         }
         return keychain.hasStoredPolestarSession
     }
@@ -387,7 +398,9 @@ final class PreferencesStore {
         switch brand {
         case .polestar:
             if polestarConnectionMode == .dataPortal {
-                result = !polestarDataPortalClientID.isEmpty && keychain.hasStoredPolestarDataPortalCredentials
+                let hasID = !polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+                let hasSecret = keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+                result = hasID && hasSecret
             } else {
                 result = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
             }

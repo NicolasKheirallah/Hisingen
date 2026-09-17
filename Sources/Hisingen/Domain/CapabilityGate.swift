@@ -30,6 +30,9 @@ enum CommandAvailability: Equatable, Sendable {
         case .unsupportedByVehicle:
             return L10n.text("This vehicle does not support the command.")
         case .unimplementedByProvider:
+            if PreferencesStore.currentPolestarConnectionMode == .dataPortal {
+                return L10n.text("Remote controls are not supported by the Developer Portal (telemetry only).")
+            }
             return L10n.text("Not available through this account's vehicle service.")
         case .unavailableWhileBusy:
             return L10n.text("Another remote command is still running.")

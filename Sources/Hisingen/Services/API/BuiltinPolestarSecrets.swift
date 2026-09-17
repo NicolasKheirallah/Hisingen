@@ -10,6 +10,20 @@ enum BuiltinPolestarSecrets {
     /// CI) still overrides this default if Polestar ever rotates it. See
     /// `docs/api/polestar-backend-map.md` (Public render CDN API key).
     static var imageApiKey: String {
-        GeneratedPolestarSecrets.isConfigured ? GeneratedPolestarSecrets.imageApiKey : "da2-js63uvc7c5hwpdudt657d5lyou"
+        GeneratedPolestarSecrets.imageApiKey.isEmpty ? "da2-js63uvc7c5hwpdudt657d5lyou" : GeneratedPolestarSecrets.imageApiKey
+    }
+
+    /// Official Polestar Developer Portal (EU Data Act) M2M credentials injected at build-time.
+    static var dataPortalAccountID: String {
+        GeneratedPolestarSecrets.accountID
+    }
+
+    static var dataPortalClientID: String {
+        GeneratedPolestarSecrets.clientID
+    }
+
+    static var dataPortalClientSecret: String {
+        GeneratedPolestarSecrets.clientSecret
     }
 }
+

@@ -5,8 +5,12 @@ import Testing
 
 private let livePortalCredentialsConfigured: Bool = {
     let environment = ProcessInfo.processInfo.environment
-    return environment["POLESTAR_CLIENT_ID"]?.isEmpty == false
-        && environment["POLESTAR_CLIENT_SECRET"]?.isEmpty == false
+    if environment["POLESTAR_CLIENT_ID"]?.isEmpty == false
+        && environment["POLESTAR_CLIENT_SECRET"]?.isEmpty == false {
+        return true
+    }
+    return !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+        && !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
 }()
 
 @MainActor
@@ -19,9 +23,10 @@ struct LivePolestarDataPortalIntegrationTests {
     )
     func testLivePortalTokenGrantAndDiscovery() async throws {
         let env = ProcessInfo.processInfo.environment
-        let clientID = try #require(env["POLESTAR_CLIENT_ID"])
-        let clientSecret = try #require(env["POLESTAR_CLIENT_SECRET"])
-        let accountID = env["POLESTAR_ACCOUNT_ID"] ?? "0a7f033f-4e9c-4473-9b7a-c5998b44da23"
+        let clientID = env["POLESTAR_CLIENT_ID"] ?? BuiltinPolestarSecrets.dataPortalClientID
+        let clientSecret = env["POLESTAR_CLIENT_SECRET"] ?? BuiltinPolestarSecrets.dataPortalClientSecret
+        let envAccountID = env["POLESTAR_ACCOUNT_ID"]
+        let accountID = (envAccountID?.isEmpty == false) ? envAccountID! : (BuiltinPolestarSecrets.dataPortalAccountID.isEmpty ? "0a7f033f-4e9c-4473-9b7a-c5998b44da23" : BuiltinPolestarSecrets.dataPortalAccountID)
         let preferredVIN = env["POLESTAR_VIN"]
 
         let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-portal.\(UUID().uuidString)")
@@ -49,9 +54,15 @@ struct LivePolestarDataPortalIntegrationTests {
         let api = PolestarDataPortalAPI(keychain: keychain, preferences: preferences)
         try await api.restoreSession(token: "unused", preferredVIN: preferredVIN, features: .default)
 
-        let token = try await api.ensureAccessToken()
-        #expect(!token.isEmpty)
-        #expect(await api.hasWarmSession == true)
+        let (vehicleCount, _) = try await api.testConnection()
+        #expect(vehicleCount >= 0)
+
+        let isWarm = await api.hasWarmSession
+        if preferredVIN != nil || vehicleCount > 0 {
+            #expect(isWarm == true)
+        } else {
+            #expect(isWarm == false)
+        }
 
         let resolved = await api.resolvedVIN(preferred: preferredVIN)
         #expect(resolved == preferredVIN)

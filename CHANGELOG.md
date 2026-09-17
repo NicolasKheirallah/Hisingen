@@ -5,6 +5,16 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [2.0.3] - 2026-09-17
 
+### Added
+
+- **Polestar Developer Portal (EU Data Act M2M) integration.** Full support for official machine-to-machine integration using credentials from the Polestar Developer Portal (`developer.polestar.com`).
+  - **Comprehensive vehicle telemetry**: Ingests live battery status, charging telemetry, exterior locks and openings, vehicle health diagnostics, calculated odometer, and GPS location.
+  - **Isolated credential management**: Developer credentials (Account ID, Client ID, Client Secret, OAuth Bearer tokens) are isolated in separate Keychain storage from consumer Polestar ID credentials, enabling seamless switching between connection modes without credential conflicts or session invalidation.
+  - **Read-only remote control gating**: Remote controls (climate, locks, charging schedules) are cleanly disabled in the UI with informative labels, reflecting the EU Data Act's telemetry-only specification.
+  - **Live connection testing & vehicle linking guidance**: Dedicated "Test Connection" button verifies token issuance and vehicle discovery, guiding users when an account is authenticated but pending VIN linking in the portal.
+  - **Daily quota tracking**: Built-in tracking for the portal's 10,000 requests/day quota with UTC calendar rollover and live meter display in Settings.
+  - **Build-time secret injection tooling**: `Scripts/inject-secrets.sh` obfuscates developer credentials and compiles fallback accessors in `BuiltinPolestarSecrets`.
+
 ### Fixed
 
 - **Polestar 2 remote climate actuation.** When starting preconditioning on Polestar 2 (where cabin temperature is vehicle-managed), the remote command now explicitly provides the 22.0 °C comfort default on the wire. Omitting the temperature field previously caused the vehicle's climate control module (CCM) to quietly drop the command, leaving the cabin unconditioned while optimistic UI state masked the refusal.

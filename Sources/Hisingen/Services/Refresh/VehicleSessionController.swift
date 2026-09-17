@@ -192,7 +192,7 @@ final class VehicleSessionController {
 
     /// Adopts the account, reconciles app settings, then restarts with the new credentials.
     func credentialsDidChange(for brand: VehicleBrand) {
-        switchActiveBrand(to: brand)
+        switchActiveBrand(to: brand, force: true)
         context?.sessionCredentialsDidChange()
         refreshCoordinator.credentialsChanged(
             preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin)

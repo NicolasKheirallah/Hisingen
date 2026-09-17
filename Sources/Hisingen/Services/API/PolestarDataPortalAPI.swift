@@ -13,7 +13,7 @@ actor PolestarDataPortalAPI {
     nonisolated let brand: VehicleBrand = .polestar
     let logger = AppLog.logger("polestar-dataportal-api")
 
-    private let baseURL = URL(string: "https://pc-api.polestar.com/eu-north-1/data-portal/m2m")!
+    private let baseURL = URL(string: "https://pc-api.polestar.com/eu-north-1/data-portal/m2m/")!
 
     var accountID: String?
     var clientID: String?
@@ -24,6 +24,57 @@ actor PolestarDataPortalAPI {
     let imageCache: CarImageCache
     let preferences: PreferencesStore
     let diagnosticLog: APIDiagnosticLogStore
+
+    // MARK: - Daily Quota Tracking (10,000 calls/day limit)
+    nonisolated static let dailyCallLimit = 10_000
+
+    nonisolated static var dailyCallCount: Int {
+        let (count, date) = readQuotaState()
+        return isSameCalendarDay(date, Date()) ? count : 0
+    }
+
+    nonisolated var dailyCallCount: Int {
+        Self.dailyCallCount
+    }
+
+    private static func quotaDateFormatter() -> DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }
+
+    private static func isSameCalendarDay(_ d1: String, _ d2: Date) -> Bool {
+        d1 == quotaDateFormatter().string(from: d2)
+    }
+
+    private nonisolated static func readQuotaState() -> (count: Int, dateString: String) {
+        let count = UserDefaults.standard.integer(forKey: "polestar_dataportal_daily_calls")
+        let dateStr = UserDefaults.standard.string(forKey: "polestar_dataportal_daily_date") ?? ""
+        return (count, dateStr)
+    }
+
+    private func recordApiCall(on date: Date = Date()) {
+        let todayStr = Self.quotaDateFormatter().string(from: date)
+        let (currentCount, lastDate) = Self.readQuotaState()
+        let nextCount = (lastDate == todayStr) ? (currentCount + 1) : 1
+        UserDefaults.standard.set(nextCount, forKey: "polestar_dataportal_daily_calls")
+        UserDefaults.standard.set(todayStr, forKey: "polestar_dataportal_daily_date")
+    }
+
+    #if DEBUG
+    nonisolated static func resetDailyQuotaForTesting() {
+        UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_calls")
+        UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_date")
+    }
+
+    nonisolated static func setDailyQuotaForTesting(count: Int, date: Date) {
+        let dateStr = quotaDateFormatter().string(from: date)
+        UserDefaults.standard.set(count, forKey: "polestar_dataportal_daily_calls")
+        UserDefaults.standard.set(dateStr, forKey: "polestar_dataportal_daily_date")
+    }
+    #endif
+
 
     private(set) var cars: [CarSummary] = []
     var selectedVIN: String?
@@ -50,19 +101,36 @@ actor PolestarDataPortalAPI {
         self.session = Self.makeSession()
     }
 
+    private func resolveCredential(configured: String, stored: String?, builtin: String) -> String {
+        if !configured.isEmpty { return configured }
+        if let stored, !stored.isEmpty { return stored }
+        return builtin
+    }
+
     func prepareSession() async throws {
-        let configuredID = await MainActor.run { preferences.polestarDataPortalClientID }
-        let storedID = try? keychain.readPolestarDataPortalClientID()
-        let id = configuredID.isEmpty ? storedID : configuredID
-        let secret = try? keychain.readPolestarDataPortalClientSecret()
-        let configuredAccountID = await MainActor.run { preferences.polestarDataPortalAccountID }
-        let storedAccountID = try? keychain.readPolestarDataPortalAccountID()
-        let accID = configuredAccountID.isEmpty ? storedAccountID : configuredAccountID
-        guard let id, !id.isEmpty, let secret, !secret.isEmpty else {
+        let prefID = await MainActor.run { preferences.polestarDataPortalClientID }
+        let prefAccID = await MainActor.run { preferences.polestarDataPortalAccountID }
+        let id = resolveCredential(
+            configured: prefID,
+            stored: try? keychain.readPolestarDataPortalClientID(),
+            builtin: BuiltinPolestarSecrets.dataPortalClientID
+        )
+        let secret = resolveCredential(
+            configured: "",
+            stored: try? keychain.readPolestarDataPortalClientSecret(),
+            builtin: BuiltinPolestarSecrets.dataPortalClientSecret
+        )
+        let accID = resolveCredential(
+            configured: prefAccID,
+            stored: try? keychain.readPolestarDataPortalAccountID(),
+            builtin: BuiltinPolestarSecrets.dataPortalAccountID
+        )
+        guard !id.isEmpty, !secret.isEmpty else {
             throw PolestarDataPortalError.appNotConfigured
         }
-        configure(accountID: accID, clientID: id, clientSecret: secret)
+        configure(accountID: accID.isEmpty ? nil : accID, clientID: id, clientSecret: secret)
     }
+
 
     func configure(accountID: String? = nil, clientID: String, clientSecret: String) {
         self.accountID = accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -118,6 +186,7 @@ actor PolestarDataPortalAPI {
             provider: .polestar,
             diagnosticLog: diagnosticLog
         )
+        recordApiCall()
         return try handleTokenResponse(data: data, response: response)
     }
 
@@ -174,7 +243,15 @@ actor PolestarDataPortalAPI {
             provider: .polestar,
             diagnosticLog: diagnosticLog
         )
+        recordApiCall()
         return try decodeResponse(data: data, response: response, path: path)
+    }
+
+    func testConnection() async throws -> (vehicleCount: Int, vins: [String]) {
+        try await prepareSession()
+        _ = try await requestAccessToken()
+        let discovery: PolestarDataPortalVehiclesDTO = try await authenticatedGET("/v1/vehicles")
+        return (discovery.vins.count, discovery.vins)
     }
 
     private func decodeResponse<T: Decodable & Sendable>(data: Data, response: HTTPURLResponse, path: String) throws -> T {
@@ -247,12 +324,23 @@ actor PolestarDataPortalAPI {
         }
     }
 
+    private struct TelemetryBundle: Sendable {
+        let battery: PolestarDataPortalBatteryDTO?
+        let exterior: PolestarDataPortalExteriorDTO?
+        let health: PolestarDataPortalHealthDTO?
+        let availability: PolestarDataPortalAvailabilityDTO?
+        let odometer: PolestarDataPortalOdometerDTO?
+        let location: PolestarDataPortalLocationDTO?
+    }
+
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         _ = try await ensureAccessToken()
 
         let needsBattery = features.contains(.chargingDetails) || features.contains(.batteryDiagnostics)
         let needsExterior = features.contains(.exteriorStatus)
         let needsHealth = features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings)
+        let needsOdometer = features.contains(.vehicleHealth) || features.contains(.tripMeters)
+        let needsLocation = features.contains(.vehicleLocation)
 
         async let batteryDTO: PolestarDataPortalBatteryDTO? = needsBattery
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/battery") : nil
@@ -262,15 +350,20 @@ actor PolestarDataPortalAPI {
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/health") : nil
         async let availabilityDTO: PolestarDataPortalAvailabilityDTO? = features.contains(.vehicleAvailability)
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/availability") : nil
+        async let odometerDTO: PolestarDataPortalOdometerDTO? = needsOdometer
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/odometer") : nil
+        async let locationDTO: PolestarDataPortalLocationDTO? = needsLocation
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/location") : nil
 
-        let (battery, exterior, health, availability) = await (batteryDTO, exteriorDTO, healthDTO, availabilityDTO)
-        return assembleVehicleState(
-            vin: vin,
-            battery: battery,
-            exterior: exterior,
-            health: health,
-            availability: availability
+        let bundle = await TelemetryBundle(
+            battery: batteryDTO,
+            exterior: exteriorDTO,
+            health: healthDTO,
+            availability: availabilityDTO,
+            odometer: odometerDTO,
+            location: locationDTO
         )
+        return assembleVehicleState(vin: vin, bundle: bundle)
     }
 
     private func fetchTelemetry<T: Decodable & Sendable>(path: String) async -> T? {
@@ -282,39 +375,39 @@ actor PolestarDataPortalAPI {
         }
     }
 
-    private func assembleVehicleState(
-        vin: String,
-        battery: PolestarDataPortalBatteryDTO?,
-        exterior: PolestarDataPortalExteriorDTO?,
-        health: PolestarDataPortalHealthDTO?,
-        availability: PolestarDataPortalAvailabilityDTO?
-    ) -> VehicleState {
-        let energy = battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
-        let extSnapshot = exterior?.toExteriorSnapshot()
-        let healthSnapshot = health?.toMaintenanceSnapshot() ?? MaintenanceAndHealthSnapshot()
-
-        let availStatus: VehicleAvailability = {
-            guard let availability else { return .available }
-            if let status = availability.availabilityStatus?.uppercased() {
-                if status.contains("UNAVAILABLE") || status.contains("OFFLINE") {
-                    return .unavailable(reason: availability.unavailableReason)
-                }
-            }
+    private func assembleAvailability(from dto: PolestarDataPortalAvailabilityDTO?) -> VehicleAvailability {
+        guard let dto, let status = dto.availabilityStatus?.uppercased() else {
             return .available
-        }()
+        }
+        if status.contains("UNAVAILABLE") || status.contains("OFFLINE") {
+            return .unavailable(reason: dto.unavailableReason)
+        }
+        return .available
+    }
+
+    private func assembleReadingDates(from bundle: TelemetryBundle) -> [VehicleReading: Date] {
+        var readingDates: [VehicleReading: Date] = [:]
+        if let bDate = bundle.battery?.timestamp?.date { readingDates[.battery] = bDate }
+        if let eDate = bundle.exterior?.timestamp?.date { readingDates[.openings] = eDate }
+        if let hDate = bundle.health?.timestamp?.date { readingDates[.health] = hDate }
+        if let oDate = bundle.odometer?.timestamp?.date { readingDates[.odometer] = oDate }
+        if let lDate = bundle.location?.timestamp?.date { readingDates[.location] = lDate }
+        return readingDates
+    }
+
+    private func assembleVehicleState(vin: String, bundle: TelemetryBundle) -> VehicleState {
+        let energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
+        let extSnapshot = bundle.exterior?.toExteriorSnapshot()
+        var healthSnapshot = bundle.health?.toMaintenanceSnapshot() ?? MaintenanceAndHealthSnapshot()
+        if let km = bundle.odometer?.calculatedOdometerKm { healthSnapshot.odometerKm = km }
 
         let identity = VehicleIdentitySnapshot(
-            availability: availStatus,
-            availabilityReportedAt: availability?.timestamp?.date,
+            availability: assembleAvailability(from: bundle.availability),
+            availabilityReportedAt: bundle.availability?.timestamp?.date,
             modelName: "Polestar",
             vin: vin
         )
-
-        var readingDates: [VehicleReading: Date] = [:]
-        if let bDate = battery?.timestamp?.date { readingDates[.battery] = bDate }
-        if let eDate = exterior?.timestamp?.date { readingDates[.openings] = eDate }
-        if let hDate = health?.timestamp?.date { readingDates[.health] = hDate }
-
+        let readingDates = assembleReadingDates(from: bundle)
         let freshness = SnapshotFreshness(
             isCached: false,
             fetchedAt: Date(),
@@ -322,7 +415,6 @@ actor PolestarDataPortalAPI {
             readingDates: readingDates,
             unavailableFeatures: Array(AppFeature.remoteFeatures)
         )
-
         return VehicleState(
             energy: energy,
             identity: identity,
@@ -330,9 +422,11 @@ actor PolestarDataPortalAPI {
             freshness: freshness,
             commandState: CommandPresentationState(),
             exteriorStatus: extSnapshot,
+            location: bundle.location?.toVehicleLocation(),
             powertrain: .bev
         )
     }
+
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
         throw PolestarDataPortalError.authenticationRequired(.callbackRejected)

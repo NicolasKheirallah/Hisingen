@@ -992,16 +992,32 @@ This should report `accepted` with `source=Notarized Developer ID`. If macOS eve
 
 ## Polestar setup
 
-Polestar setup is straightforward.
+Hisingen supports two connection modes for Polestar vehicles:
 
-1. Open **Settings**.
-2. Select **Polestar**.
-3. Sign in with your Polestar account.
-4. Select your vehicle if your account contains more than one.
+### 1. Polestar ID (Consumer Account)
 
-There is no Hisingen account or Hisingen authentication server between the app and Polestar.
+Standard setup for most users:
 
-Because the services used for vehicle data aren't a documented third-party API, an upstream change can occasionally require a Hisingen update.
+1. Open **Settings** → **Polestar**.
+2. Keep the mode set to **Polestar ID**.
+3. Sign in with your Polestar account email and password.
+4. If an interactive challenge is presented, complete sign-in in the interactive window.
+
+### 2. Developer Portal (EU Data Act M2M)
+
+For developers and fleet managers with credentials from the official [Polestar Developer Portal](https://developer.polestar.com):
+
+1. Open **Settings** → **Polestar**.
+2. Switch the segmented picker to **Developer Portal**.
+3. Enter your **Account ID** (`x-client-id`), **Client ID**, and **Client Secret**.
+4. Click **Test Connection** to verify OAuth token issuance and vehicle discovery.
+5. Click **Save & Connect**.
+
+> **Note on Developer Portal Mode:**
+> * **Telemetry Only**: Provides read access to battery, charging, exterior status, vehicle health, odometer, and location.
+> * **No Remote Controls**: Per the EU Data Act specification, the Developer Portal is strictly telemetry-only. Remote control cards are dimmed with an explanatory label.
+> * **Rate Limits**: Includes a generous limit of 10,000 API requests per day, tracked live in the Settings view.
+
 
 ---
 

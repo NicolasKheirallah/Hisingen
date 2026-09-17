@@ -289,6 +289,126 @@ struct PolestarDataPortalTests {
         #expect(store.hasStoredPolestarDataPortalCredentials == false)
     }
 
+    @Test
+    func credentialsDoNotConflictBetweenConsumerAndDataPortal() throws {
+        let service = "io.kheirallah.hisingen.tests.portal.no-conflict.\(UUID().uuidString)"
+        let store = KeychainStore(service: service)
+
+        try store.savePassword("consumer-password-123")
+        try store.saveSessionToken("consumer-session-token")
+        try store.savePolestarDataPortalCredentials(
+            accountID: "portal-account-id",
+            clientID: "portal-client-id",
+            clientSecret: "portal-client-secret"
+        )
+
+        #expect(try store.readPassword() == "consumer-password-123")
+        #expect(try store.readSessionToken() == "consumer-session-token")
+        #expect(try store.readPolestarDataPortalAccountID() == "portal-account-id")
+        #expect(try store.readPolestarDataPortalClientID() == "portal-client-id")
+
+        try store.deletePassword()
+        try store.deleteSessionToken()
+        #expect(try store.readPassword() == nil)
+        #expect(try store.readSessionToken() == nil)
+        #expect(try store.readPolestarDataPortalClientID() == "portal-client-id")
+        #expect(store.hasStoredPolestarDataPortalCredentials == true)
+
+        try store.deletePolestarDataPortalCredentials()
+    }
+
+
+    // MARK: - Odometer & Location Telemetry Tests
+
+    @Test
+    func odometerTelemetryDecodesAndCalculatesKm() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "odometerMeters": 42150.0,
+            "timestamp": { "seconds": "1774968000", "nanos": 0 }
+        }
+        """
+        let odoDTO = try JSONDecoder().decode(PolestarOdometerDTO.self, from: Data(json.utf8))
+        #expect(odoDTO.odometerMeters == 42150.0)
+        #expect(odoDTO.calculatedOdometerKm == 42)
+
+        let kmJson = """
+        { "vin": "YSM12345678901234", "odometerKm": 128.7 }
+        """
+        let odoKmDTO = try JSONDecoder().decode(PolestarOdometerDTO.self, from: Data(kmJson.utf8))
+        #expect(odoKmDTO.calculatedOdometerKm == 129)
+    }
+
+    @Test
+    func locationTelemetryDecodesAndMapsToVehicleLocation() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "latitude": 57.7089,
+            "longitude": 11.9746,
+            "headingDegrees": 180.0,
+            "speedMetersPerSecond": 25.0,
+            "altitudeMeters": 35.0,
+            "accuracyMeters": 5.0
+        }
+        """
+        let locDTO = try JSONDecoder().decode(PolestarLocationDTO.self, from: Data(json.utf8))
+        #expect(locDTO.latitude == 57.7089)
+        #expect(locDTO.longitude == 11.9746)
+
+        let vehicleLoc = locDTO.toVehicleLocation()
+        #expect(vehicleLoc.latitude == 57.7089)
+        #expect(vehicleLoc.longitude == 11.9746)
+        #expect(vehicleLoc.speed == 90.0) // 25 m/s * 3.6 = 90 km/h
+        #expect(vehicleLoc.heading == 180.0)
+        #expect(vehicleLoc.altitudeMeters == 35.0)
+    }
+
+    // MARK: - Daily Quota Tracking Tests
+
+    @Test
+    func dailyQuotaTracksAndRollsOverAcrossDays() {
+        PolestarDataPortalAPI.resetDailyQuotaForTesting()
+        #expect(PolestarDataPortalAPI.dailyCallLimit == 10_000)
+        #expect(PolestarDataPortalAPI.dailyCallCount == 0)
+
+        // Simulate 42 calls today
+        PolestarDataPortalAPI.setDailyQuotaForTesting(count: 42, date: Date())
+        #expect(PolestarDataPortalAPI.dailyCallCount == 42)
+
+        // Simulate calls from yesterday (should rollover to 0)
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        PolestarDataPortalAPI.setDailyQuotaForTesting(count: 99, date: yesterday)
+        #expect(PolestarDataPortalAPI.dailyCallCount == 0)
+
+        PolestarDataPortalAPI.resetDailyQuotaForTesting()
+    }
+
+    // MARK: - Command Catalog & Read-Only Gating Tests
+
+    @Test
+    func providerCommandCatalogDisallowsRemoteCommandsInDataPortalMode() {
+        let portalCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal)
+        #expect(portalCatalog.implements(.lock) == false)
+        #expect(portalCatalog.implements(.unlock) == false)
+        #expect(portalCatalog.implements(.stopClimate) == false)
+        #expect(portalCatalog.implements(.startChargingOverride) == false)
+
+        let consumerCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .polestarID)
+        #expect(consumerCatalog.implements(.lock) == true)
+        #expect(consumerCatalog.implements(.stopClimate) == true)
+    }
+
+    @Test
+    @MainActor
+    func commandAvailabilityExplainsDataPortalReadonly() {
+        let pref = PreferencesStore.shared
+        pref.polestarConnectionMode = .dataPortal
+        let reason = CommandAvailability.unimplementedByProvider.shortReason
+        #expect(reason?.contains("Developer Portal") == true)
+    }
+
     // MARK: - API VehicleProviding Conformance Tests
 
     @Test

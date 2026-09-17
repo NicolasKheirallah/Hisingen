@@ -380,12 +380,16 @@ struct AccountCredentialsForm: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .onChange(of: polestarConnectionMode) { _, newMode in
+            .onChange(of: polestarConnectionMode) { oldMode, newMode in
+                guard oldMode != newMode else { return }
                 preferences.polestarConnectionMode = newMode
                 withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                     testConnectionResult = nil
                     keychainError = nil
                     polestarFallbackKind = nil
+                }
+                if preferences.hasResumableSession(for: .polestar) {
+                    onSettingsChanged(.credentials)
                 }
             }
 
@@ -579,13 +583,87 @@ struct AccountCredentialsForm: View {
                 InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
-            savePolestarDataPortalButton
+            dataPortalActionButtons
+
+            dataPortalQuotaView
+
+            if let test = testConnectionResult {
+                dataPortalTestResultBanner(test)
+            }
 
             if let keychainError {
                 InlineValidationLabel(message: keychainError)
                     .transition(.opacity)
             }
         }
+    }
+
+    private var dataPortalActionButtons: some View {
+        HStack(spacing: 8) {
+            savePolestarDataPortalButton
+
+            Button {
+                testCurrentConnection()
+            } label: {
+                HStack(spacing: 4) {
+                    if isTestingConnection {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                    }
+                    Text(L10n.text("Test Connection"))
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .disabled(isTestingConnection)
+            .padding(.top, style == .welcoming ? 6 : 4)
+        }
+    }
+
+    private var dataPortalQuotaView: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "gauge.with.needle")
+                .hisType(.micro)
+                .foregroundStyle(.secondary)
+            Text(L10n.format("Daily API usage: %d / %d calls", PolestarDataPortalAPI.dailyCallCount, PolestarDataPortalAPI.dailyCallLimit))
+                .hisType(.micro)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    private func dataPortalTestResultBanner(_ test: (success: Bool, message: String, failureKind: SignInFailureKind?)) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical)
+                .hisType(.caption)
+            Text(test.message)
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            (test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical).opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(
+                    (test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical).opacity(0.25),
+                    lineWidth: 0.5
+                )
+        )
+        .transition(.opacity)
+    }
+
+    private var isDataPortalConfiguredOrEntered: Bool {
+        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+        return hasID && isValidOptionalVIN(polestarVIN)
     }
 
     private var savePolestarDataPortalButton: some View {
@@ -607,9 +685,10 @@ struct AccountCredentialsForm: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.regular)
-        .disabled(polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isValidOptionalVIN(polestarVIN))
+        .disabled(!isDataPortalConfiguredOrEntered)
         .padding(.top, style == .welcoming ? 6 : 4)
     }
+
 
     private func savePolestarDataPortalCredentials() {
         let trimmedID = polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -863,6 +942,7 @@ struct AccountCredentialsForm: View {
         // Persist identity only after a new password has reached Keychain successfully. A
         // Keychain denial must not leave an email/VIN pointing at credentials that were not
         // actually saved.
+        preferences.polestarConnectionMode = .polestarID
         preferences.email = normalizedEmail
         preferences.setVin(upperVIN, for: .polestar)
         if !nicknameVIN.isEmpty {
