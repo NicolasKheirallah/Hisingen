@@ -461,6 +461,11 @@ struct ClimateControlCard: View {
         .buttonStyle(.borderedProminent)
         .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.polestarAmber)
         .disabled(gate.isDisabled(climateActive ? .stopClimate : startClimateCommand))
+        .accessibilityHint(
+            climateActive
+                ? L10n.text("Stop Climate")
+                : L10n.text("Preconditions the cabin to comfortable temperature using in-car climate settings.")
+        )
         .hisAnimation(Motion.stateChange, value: climateActive)
     }
 }

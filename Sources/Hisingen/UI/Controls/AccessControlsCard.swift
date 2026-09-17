@@ -66,11 +66,6 @@ struct AccessControlsCard: View {
                                  ? L10n.text("Unlocks the vehicle.")
                                  : L10n.text("Locks the vehicle.")))
                         .disabled(gate.isDisabled(lockCommand))
-                        .help(isLocked == nil
-                              ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
-                              : (isLocked == true
-                                 ? L10n.text("Unlocks the vehicle.")
-                                 : L10n.text("Locks the vehicle.")))
                         .hisAnimation(Motion.stateChange, value: isLocked)
                     }
 
