@@ -11,7 +11,16 @@ final class SessionManager {
     private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
     init(readToken: @escaping (VehicleBrand) throws -> String? = { brand in
-        brand == .volvo ? try Keychain.readVolvoSessionToken() : try Keychain.readSessionToken()
+        if brand == .volvo {
+            return try Keychain.readVolvoSessionToken()
+        }
+        if PreferencesStore.shared.polestarConnectionMode == .dataPortal {
+            if let secret = try Keychain.readPolestarDataPortalClientSecret() {
+                return secret
+            }
+            return try Keychain.readPolestarDataPortalToken()
+        }
+        return try Keychain.readSessionToken()
     }, readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
          clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
          configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
@@ -36,6 +45,7 @@ final class SessionManager {
 
         func passwordCredentials() throws -> (email: String, password: String)? {
             guard brand == .polestar,
+                  preferences.polestarConnectionMode == .polestarID,
                   let password = try readPassword(), !password.isEmpty else { return nil }
             let email = preferences.email
             return email.isEmpty ? nil : (email, password)

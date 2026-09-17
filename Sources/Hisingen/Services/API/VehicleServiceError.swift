@@ -112,6 +112,7 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
     static func map(_ error: Error, provider: VehicleBrand) -> VehicleServiceError {
         if let already = error as? VehicleServiceError { return already }
         if let polestar = error as? PolestarError { return polestar.asVehicleServiceError }
+        if let portal = error as? PolestarDataPortalError { return portal.asVehicleServiceError }
         if let volvo = error as? VolvoError { return volvo.asVehicleServiceError }
         if let urlError = error as? URLError { return .network(urlError) }
         if error is KeychainError { return .secureStorage }

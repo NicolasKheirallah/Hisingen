@@ -15,10 +15,13 @@ struct AccountCredentialsForm: View {
 
     @State private var selectedBrand = VehicleBrand.polestar
     @Environment(\.preferencesStore) private var preferences
+    @State private var polestarConnectionMode: PreferencesStore.PolestarConnectionMode = .polestarID
     @State private var polestarEmail = ""
     @State private var polestarPassword = ""
     @State private var polestarVIN = ""
     @State private var polestarNickname = ""
+    @State private var polestarDataPortalClientID = ""
+    @State private var polestarDataPortalClientSecret = ""
 
     @State private var volvoClientID = ""
     @State private var volvoClientSecret = ""
@@ -50,6 +53,9 @@ struct AccountCredentialsForm: View {
         guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
         switch selectedBrand {
         case .polestar:
+            if preferences.polestarConnectionMode == .dataPortal {
+                return !preferences.polestarDataPortalClientID.isEmpty && Keychain.hasStoredPolestarDataPortalCredentials
+            }
             return Keychain.hasStoredPolestarEmail
         case .volvo:
             let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
@@ -113,11 +119,14 @@ struct AccountCredentialsForm: View {
             }
         }
         .onAppear {
+            polestarConnectionMode = preferences.polestarConnectionMode
             let draft = preferences.accountDraft
             polestarEmail = draft.polestarEmail.isEmpty ? preferences.email : draft.polestarEmail
             polestarPassword = draft.polestarPassword
             polestarVIN = draft.polestarVIN.isEmpty ? preferences.vin(for: .polestar) : draft.polestarVIN
             polestarNickname = draft.polestarNickname.isEmpty ? preferences.vehicleNickname(for: polestarVIN) : draft.polestarNickname
+            polestarDataPortalClientID = draft.polestarDataPortalClientID.isEmpty ? preferences.polestarDataPortalClientID : draft.polestarDataPortalClientID
+            polestarDataPortalClientSecret = draft.polestarDataPortalClientSecret
             volvoClientID = draft.volvoClientID.isEmpty ? preferences.volvoClientID : draft.volvoClientID
             volvoClientSecret = draft.volvoClientSecret
             volvoApiKey = draft.volvoApiKey
@@ -125,6 +134,8 @@ struct AccountCredentialsForm: View {
             volvoNickname = draft.volvoNickname.isEmpty ? preferences.vehicleNickname(for: volvoVIN) : draft.volvoNickname
             preferences.accountDraft = .init(polestarEmail: polestarEmail, polestarPassword: polestarPassword,
                                              polestarVIN: polestarVIN, polestarNickname: polestarNickname,
+                                             polestarDataPortalClientID: polestarDataPortalClientID,
+                                             polestarDataPortalClientSecret: polestarDataPortalClientSecret,
                                              volvoClientID: volvoClientID, volvoClientSecret: volvoClientSecret,
                                              volvoApiKey: volvoApiKey, volvoVIN: volvoVIN, volvoNickname: volvoNickname)
             selectedBrand = preferences.activeBrand
@@ -195,7 +206,12 @@ struct AccountCredentialsForm: View {
     }
 
     private var isBrandConnected: Bool {
-        if selectedBrand == .polestar { return preferences.hasSessionToken(for: .polestar) }
+        if selectedBrand == .polestar {
+            if preferences.polestarConnectionMode == .dataPortal {
+                return preferences.hasResumableSession(for: .polestar)
+            }
+            return preferences.hasSessionToken(for: .polestar)
+        }
         return preferences.hasResumableSession(for: selectedBrand)
     }
 
@@ -353,6 +369,32 @@ struct AccountCredentialsForm: View {
     }
 
     private var polestarFields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker(L10n.text("Connection Mode"), selection: $polestarConnectionMode) {
+                ForEach(PreferencesStore.PolestarConnectionMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: polestarConnectionMode) { _, newMode in
+                preferences.polestarConnectionMode = newMode
+                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                    testConnectionResult = nil
+                    keychainError = nil
+                    polestarFallbackKind = nil
+                }
+            }
+
+            if polestarConnectionMode == .polestarID {
+                polestarIDFields
+            } else {
+                polestarDataPortalFields
+            }
+        }
+    }
+
+    private var polestarIDFields: some View {
         VStack(alignment: .leading, spacing: 8) {
             if style == .welcoming {
                 Text(L10n.text("Sign in with your Polestar ID email and password."))
@@ -485,6 +527,124 @@ struct AccountCredentialsForm: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    private var polestarDataPortalFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if style == .welcoming {
+                Text(L10n.text("Connect to Polestar Developer Portal using EU Data Act M2M credentials."))
+                    .hisType(.label)
+                    .foregroundStyle(.secondary)
+            }
+
+            labeledField(L10n.text("Client ID")) {
+                TextField("client-id", text: $polestarDataPortalClientID)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalClientID) { _, val in
+                        preferences.accountDraft.polestarDataPortalClientID = val
+                    }
+            }
+
+            labeledField(L10n.text("Client Secret")) {
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarDataPortalClientSecret)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalClientSecret) { _, val in
+                        preferences.accountDraft.polestarDataPortalClientSecret = val
+                    }
+            }
+
+            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
+                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarNickname) { _, val in preferences.accountDraft.polestarNickname = val }
+            }
+
+            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
+                TextField("YSM...", text: $polestarVIN)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarVIN) { _, val in preferences.accountDraft.polestarVIN = val }
+            }
+            if shouldShowVINError {
+                InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
+            }
+
+            savePolestarDataPortalButton
+
+            if let keychainError {
+                InlineValidationLabel(message: keychainError)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private var savePolestarDataPortalButton: some View {
+        Button {
+            savePolestarDataPortalCredentials()
+        } label: {
+            HStack(spacing: 4) {
+                if showSavedFeedback {
+                    Image(systemName: "checkmark")
+                    Text(L10n.text("Saved & Connected"))
+                } else {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text(L10n.text("Save & Connect"))
+                }
+            }
+            .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+            .id(showSavedFeedback)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.regular)
+        .disabled(polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isValidOptionalVIN(polestarVIN))
+        .padding(.top, style == .welcoming ? 6 : 4)
+    }
+
+    private func savePolestarDataPortalCredentials() {
+        let trimmedID = polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSecret = polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedID.isEmpty else { return }
+
+        var keychainFailed = false
+        if !trimmedSecret.isEmpty {
+            do {
+                try Keychain.savePolestarDataPortalCredentials(clientID: trimmedID, clientSecret: trimmedSecret)
+                polestarDataPortalClientSecret = ""
+                preferences.accountDraft.polestarDataPortalClientSecret = ""
+            } catch {
+                keychainFailed = true
+            }
+        }
+        withAnimation(reduceMotion ? nil : Motion.stateChange) {
+            showSavedFeedback = !keychainFailed
+            if keychainFailed {
+                keychainError = L10n.text("Couldn't save credentials to the Keychain. Please try again.")
+            }
+        }
+        triggerSavedFeedbackReset()
+        guard !keychainFailed else { return }
+        persistPolestarDataPortalPreferences(clientID: trimmedID)
+    }
+
+    private func triggerSavedFeedbackReset() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.8))
+            withAnimation(reduceMotion ? nil : Motion.theme) {
+                showSavedFeedback = false
+            }
+        }
+    }
+
+    private func persistPolestarDataPortalPreferences(clientID: String) {
+        preferences.polestarConnectionMode = .dataPortal
+        preferences.polestarDataPortalClientID = clientID
+        let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        preferences.setVin(upperVIN, for: .polestar)
+        let nickVIN = !upperVIN.isEmpty ? upperVIN : preferences.vin(for: .polestar)
+        if !nickVIN.isEmpty {
+            preferences.setVehicleNickname(polestarNickname, for: nickVIN)
+        }
+        onSettingsChanged(.credentials)
     }
 
     private var hasResumableVolvoSession: Bool {

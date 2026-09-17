@@ -16,10 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var miniPanel = ChargingMiniPanelController(preferences: preferences)
     private let imageCache = CarImageCache()
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
+    private lazy var polestarDataPortalAPI = PolestarDataPortalAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
     /// The one authority for which adapter backs which brand; every other holder of a brand asks
     /// this rather than repeating the choice.
-    private lazy var providerRegistry = ProviderRegistry(polestar: polestarAPI, volvo: volvoAPI)
+    private lazy var providerRegistry = ProviderRegistry(
+        polestar: polestarAPI, polestarDataPortal: polestarDataPortalAPI, volvo: volvoAPI, preferences: preferences)
     private let sessionManager = SessionManager()
     private let resultPresenter = RemoteResultPresenter()
     private lazy var dockWarningBadge = DockWarningBadge(preferences: preferences)
@@ -273,8 +275,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .reauthenticate(let brand):
             switch brand {
             case .polestar:
-                // Interactive browser window – no Polestar ID password re-entry.
-                signInCoordinator.beginPolestarWebSignIn()
+                if preferences.polestarConnectionMode == .dataPortal {
+                    vehicleSession.credentialsDidChange(for: .polestar)
+                } else {
+                    // Interactive browser window – no Polestar ID password re-entry.
+                    signInCoordinator.beginPolestarWebSignIn()
+                }
             case .volvo:
                 // Re-run the browser OAuth with the developer keys already on file.
                 let volvoVIN = preferences.vin(for: .volvo)

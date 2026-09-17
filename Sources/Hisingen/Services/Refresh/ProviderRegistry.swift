@@ -11,17 +11,31 @@ import Foundation
 @MainActor
 final class ProviderRegistry {
     private let polestar: any VehicleProviding
+    private let polestarDataPortal: (any VehicleProviding)?
     private let volvo: any VehicleProviding
+    private let preferences: PreferencesStore
 
-    init(polestar: any VehicleProviding, volvo: any VehicleProviding) {
+    init(
+        polestar: any VehicleProviding,
+        polestarDataPortal: (any VehicleProviding)? = nil,
+        volvo: any VehicleProviding,
+        preferences: PreferencesStore = .shared
+    ) {
         self.polestar = polestar
+        self.polestarDataPortal = polestarDataPortal
         self.volvo = volvo
+        self.preferences = preferences
     }
 
     func provider(for brand: VehicleBrand) -> any VehicleProviding {
         switch brand {
-        case .polestar: return polestar
-        case .volvo: return volvo
+        case .polestar:
+            if preferences.polestarConnectionMode == .dataPortal, let polestarDataPortal {
+                return polestarDataPortal
+            }
+            return polestar
+        case .volvo:
+            return volvo
         }
     }
 
@@ -29,9 +43,7 @@ final class ProviderRegistry {
     /// The conformance test lives here so no caller writes `as? any VehicleLiveStreaming`, and so a
     /// second streaming provider is one registration rather than a search across the app.
     func streaming(for brand: VehicleBrand) -> (any VehicleLiveStreaming)? {
-        switch brand {
-        case .polestar: return polestar as? any VehicleLiveStreaming
-        case .volvo: return volvo as? any VehicleLiveStreaming
-        }
+        let active = provider(for: brand)
+        return active as? any VehicleLiveStreaming
     }
 }

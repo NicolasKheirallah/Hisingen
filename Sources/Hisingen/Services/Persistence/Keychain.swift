@@ -57,12 +57,18 @@ private struct VolvoSecretBundle: Codable {
     var sessionToken: String?
 }
 
+private struct PolestarDataPortalSecretBundle: Codable {
+    var clientID: String?
+    var clientSecret: String?
+}
+
 struct KeychainStore: Sendable {
     static let app = KeychainStore(service: "io.kheirallah.hisingen")
 
     let service: String
     private let memoryCache: InMemorySecretCache
     private let volvoBundleLock = NSLock()
+    private let polestarDataPortalBundleLock = NSLock()
     private let operationLock = NSRecursiveLock()
     private let security: any KeychainSecurity
 
@@ -77,6 +83,9 @@ struct KeychainStore: Sendable {
     private static let sessionAccount = "polestar-refresh-token"
     private static let volvoBundleAccount = "volvo-credentials-bundle"
     private static let commandSessionAccount = "polestar-command-refresh-token"
+    private static let polestarDataPortalBundleAccount = "polestar-dataportal-credentials"
+    private static let polestarDataPortalTokenAccount = "polestar-dataportal-token"
+    private static let polestarDataPortalClientSecretDraftAccount = "polestar-dataportal-client-secret-draft"
 
     /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
     /// Authentication still reads and validates the real Keychain values.
@@ -98,6 +107,9 @@ struct KeychainStore: Sendable {
     var hasStoredVolvoAppCredentials: Bool {
         UserDefaults.standard.bool(forKey: "has_volvo_client_secret")
             && UserDefaults.standard.bool(forKey: "has_volvo_api_key")
+    }
+    var hasStoredPolestarDataPortalCredentials: Bool {
+        UserDefaults.standard.bool(forKey: "has_polestar_dataportal_credentials")
     }
 
     func saveEmail(_ email: String) throws {
@@ -240,6 +252,56 @@ struct KeychainStore: Sendable {
         try delete(account: Self.volvoApiKeyDraftAccount)
     }
 
+    func savePolestarDataPortalCredentials(clientID: String, clientSecret: String) throws {
+        try mutatePolestarDataPortalBundle {
+            $0.clientID = clientID
+            $0.clientSecret = clientSecret
+        }
+    }
+
+    func readPolestarDataPortalClientID() throws -> String? {
+        try readPolestarDataPortalBundle().clientID
+    }
+
+    func readPolestarDataPortalClientSecret() throws -> String? {
+        try readPolestarDataPortalBundle().clientSecret
+    }
+
+    func deletePolestarDataPortalCredentials() throws {
+        try mutatePolestarDataPortalBundle {
+            $0.clientID = nil
+            $0.clientSecret = nil
+        }
+    }
+
+    func savePolestarDataPortalToken(_ token: String) throws {
+        try save(token, account: Self.polestarDataPortalTokenAccount)
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_dataportal_token")
+    }
+
+    func readPolestarDataPortalToken() throws -> String? {
+        try read(account: Self.polestarDataPortalTokenAccount)
+    }
+
+    func deletePolestarDataPortalToken() throws {
+        try delete(account: Self.polestarDataPortalTokenAccount)
+        UserDefaults.standard.set(false, forKey: "has_polestar_dataportal_token")
+    }
+
+    func savePolestarDataPortalClientSecretDraft(_ value: String) throws {
+        UserDefaults.standard.set(!value.isEmpty, forKey: "has_polestar_dp_secret_draft")
+        try save(value, account: Self.polestarDataPortalClientSecretDraftAccount)
+    }
+
+    func readPolestarDataPortalClientSecretDraft() throws -> String? {
+        try read(account: Self.polestarDataPortalClientSecretDraftAccount)
+    }
+
+    func deletePolestarDataPortalClientSecretDraft() throws {
+        UserDefaults.standard.set(false, forKey: "has_polestar_dp_secret_draft")
+        try delete(account: Self.polestarDataPortalClientSecretDraftAccount)
+    }
+
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
     /// holding three secrets, so concurrent single-field writes (e.g. a sign-in flow saving
     /// the client secret while a token refresh persists the session token) would otherwise
@@ -297,6 +359,42 @@ struct KeychainStore: Sendable {
         defaults.set(hasAPIKey, forKey: "has_volvo_api_key")
         defaults.set(hasSecret && hasAPIKey && bundle.sessionToken?.isEmpty == false,
                      forKey: "has_volvo_session")
+    }
+
+    private func mutatePolestarDataPortalBundle(_ mutate: (inout PolestarDataPortalSecretBundle) -> Void) throws {
+        polestarDataPortalBundleLock.lock()
+        defer { polestarDataPortalBundleLock.unlock() }
+        var bundle = try readPolestarDataPortalBundle()
+        mutate(&bundle)
+        try savePolestarDataPortalBundle(bundle)
+    }
+
+    private func readPolestarDataPortalBundle() throws -> PolestarDataPortalSecretBundle {
+        if let raw = try read(account: Self.polestarDataPortalBundleAccount) {
+            let bundle = try JSONDecoder().decode(PolestarDataPortalSecretBundle.self, from: Data(raw.utf8))
+            Self.updatePolestarDataPortalPresenceFlags(bundle)
+            return bundle
+        }
+        let bundle = PolestarDataPortalSecretBundle()
+        Self.updatePolestarDataPortalPresenceFlags(bundle)
+        return bundle
+    }
+
+    private func savePolestarDataPortalBundle(_ bundle: PolestarDataPortalSecretBundle) throws {
+        if bundle.clientID == nil && bundle.clientSecret == nil {
+            try delete(account: Self.polestarDataPortalBundleAccount)
+            Self.updatePolestarDataPortalPresenceFlags(bundle)
+            return
+        }
+        let data = try JSONEncoder().encode(bundle)
+        guard let str = String(data: data, encoding: .utf8) else { return }
+        try save(str, account: Self.polestarDataPortalBundleAccount)
+        Self.updatePolestarDataPortalPresenceFlags(bundle)
+    }
+
+    private static func updatePolestarDataPortalPresenceFlags(_ bundle: PolestarDataPortalSecretBundle) {
+        let hasCredentials = bundle.clientID?.isEmpty == false && bundle.clientSecret?.isEmpty == false
+        UserDefaults.standard.set(hasCredentials, forKey: "has_polestar_dataportal_credentials")
     }
 
     /// Only explicitly test-prefixed services bypass the real Keychain. The previous check
@@ -449,4 +547,29 @@ enum Keychain {
     static func readVolvoClientSecret() throws -> String? { try KeychainStore.app.readVolvoClientSecret() }
     static func saveVolvoApiKey(_ value: String) throws { try KeychainStore.app.saveVolvoApiKey(value) }
     static func readVolvoApiKey() throws -> String? { try KeychainStore.app.readVolvoApiKey() }
+
+    static var hasStoredPolestarDataPortalCredentials: Bool {
+        KeychainStore.app.hasStoredPolestarDataPortalCredentials
+    }
+    static func savePolestarDataPortalCredentials(clientID: String, clientSecret: String) throws {
+        try KeychainStore.app.savePolestarDataPortalCredentials(clientID: clientID, clientSecret: clientSecret)
+    }
+    static func readPolestarDataPortalClientID() throws -> String? {
+        try KeychainStore.app.readPolestarDataPortalClientID()
+    }
+    static func readPolestarDataPortalClientSecret() throws -> String? {
+        try KeychainStore.app.readPolestarDataPortalClientSecret()
+    }
+    static func deletePolestarDataPortalCredentials() throws {
+        try KeychainStore.app.deletePolestarDataPortalCredentials()
+    }
+    static func savePolestarDataPortalToken(_ token: String) throws {
+        try KeychainStore.app.savePolestarDataPortalToken(token)
+    }
+    static func readPolestarDataPortalToken() throws -> String? {
+        try KeychainStore.app.readPolestarDataPortalToken()
+    }
+    static func deletePolestarDataPortalToken() throws {
+        try KeychainStore.app.deletePolestarDataPortalToken()
+    }
 }

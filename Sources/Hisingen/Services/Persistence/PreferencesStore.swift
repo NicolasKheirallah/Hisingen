@@ -27,11 +27,25 @@ final class PreferencesStore {
         cachedHasResumableSession.removeAll()
     }
 
+    enum PolestarConnectionMode: String, Codable, Sendable, CaseIterable {
+        case polestarID
+        case dataPortal
+
+        var displayName: String {
+            switch self {
+            case .polestarID: return L10n.text("Polestar ID")
+            case .dataPortal: return L10n.text("Developer Portal (EU Data Act)")
+            }
+        }
+    }
+
     struct AccountDraft {
         var polestarEmail = ""
         var polestarPassword = ""
         var polestarVIN = ""
         var polestarNickname = ""
+        var polestarDataPortalClientID = ""
+        var polestarDataPortalClientSecret = ""
         var volvoClientID = ""
         var volvoClientSecret = ""
         var volvoApiKey = ""
@@ -314,6 +328,26 @@ final class PreferencesStore {
         get { VehicleBrand(rawValue: d.string(forKey: "active_vehicle_brand") ?? "") ?? .polestar }
         set { d.set(newValue.rawValue, forKey: "active_vehicle_brand"); syncAppThemeStorageKey() }
     }
+    var polestarConnectionMode: PolestarConnectionMode {
+        get {
+            guard let raw = d.string(forKey: "polestar_connection_mode"),
+                  let mode = PolestarConnectionMode(rawValue: raw) else {
+                return .polestarID
+            }
+            return mode
+        }
+        set {
+            d.set(newValue.rawValue, forKey: "polestar_connection_mode")
+            cachedHasResumableSession[.polestar] = nil
+        }
+    }
+    var polestarDataPortalClientID: String {
+        get { d.string(forKey: "polestar_dataportal_client_id") ?? "" }
+        set {
+            d.set(newValue, forKey: "polestar_dataportal_client_id")
+            cachedHasResumableSession[.polestar] = nil
+        }
+    }
     var volvoClientID: String {
         get { d.string(forKey: "volvo_client_id").flatMap { $0.isEmpty ? nil : $0 } ?? BuiltinVolvoSecrets.clientID }
         set { d.set(newValue, forKey: "volvo_client_id"); cachedHasResumableSession[.volvo] = nil }
@@ -332,7 +366,11 @@ final class PreferencesStore {
         let nick = vehicleNickname(for: value); return nick.isEmpty ? value : nick
     }
     func hasSessionToken(for brand: VehicleBrand) -> Bool {
-        brand == .polestar ? keychain.hasStoredPolestarSession : keychain.hasStoredVolvoSession
+        if brand == .volvo { return keychain.hasStoredVolvoSession }
+        if polestarConnectionMode == .dataPortal {
+            return keychain.hasStoredPolestarDataPortalCredentials
+        }
+        return keychain.hasStoredPolestarSession
     }
 
     func hasResumableSession(for brand: VehicleBrand) -> Bool {
@@ -340,17 +378,11 @@ final class PreferencesStore {
         let result: Bool
         switch brand {
         case .polestar:
-            // Deliberate: a stored password counts as resumable. It lets a launch re-establish
-            // the session silently instead of prompting, which is the whole point of storing it.
-            // This is only safe because a credential the IdP actively rejects is dropped rather
-            // than replayed (`SessionManager.signInWithStoredPassword` on `.invalidCredentials`,
-            // `discardDeadRefreshToken` on a dead grant) – so this cannot spin on a permanently
-            // bad credential. Do not narrow it to `hasStoredPolestarSession` without that
-            // guarantee and the sign-in UX that goes with it.
-            // Rendering menus and account cards asks this frequently. Presence bits avoid a
-            // protected Keychain read here; SessionManager still reads and validates the real
-            // token/password when an actual restore begins.
-            result = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
+            if polestarConnectionMode == .dataPortal {
+                result = !polestarDataPortalClientID.isEmpty && keychain.hasStoredPolestarDataPortalCredentials
+            } else {
+                result = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
+            }
         case .volvo:
             result = !volvoClientID.isEmpty && keychain.hasStoredVolvoSession
         }
