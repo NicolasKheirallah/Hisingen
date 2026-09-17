@@ -15,6 +15,7 @@ actor PolestarDataPortalAPI {
 
     private let baseURL = URL(string: "https://pc-api.polestar.com/eu-north-1/data-portal/m2m")!
 
+    var accountID: String?
     var clientID: String?
     var clientSecret: String?
 
@@ -51,16 +52,20 @@ actor PolestarDataPortalAPI {
 
     func prepareSession() async throws {
         let configuredID = await MainActor.run { preferences.polestarDataPortalClientID }
-        let storedID = try? Keychain.readPolestarDataPortalClientID()
+        let storedID = try? keychain.readPolestarDataPortalClientID()
         let id = configuredID.isEmpty ? storedID : configuredID
-        let secret = try? Keychain.readPolestarDataPortalClientSecret()
+        let secret = try? keychain.readPolestarDataPortalClientSecret()
+        let configuredAccountID = await MainActor.run { preferences.polestarDataPortalAccountID }
+        let storedAccountID = try? keychain.readPolestarDataPortalAccountID()
+        let accID = configuredAccountID.isEmpty ? storedAccountID : configuredAccountID
         guard let id, !id.isEmpty, let secret, !secret.isEmpty else {
             throw PolestarDataPortalError.appNotConfigured
         }
-        configure(clientID: id, clientSecret: secret)
+        configure(accountID: accID, clientID: id, clientSecret: secret)
     }
 
-    func configure(clientID: String, clientSecret: String) {
+    func configure(accountID: String? = nil, clientID: String, clientSecret: String) {
+        self.accountID = accountID?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.clientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.clientSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -155,6 +160,10 @@ actor PolestarDataPortalAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let headerClientID = (accountID?.isEmpty == false) ? accountID! : (clientID ?? "")
+        if !headerClientID.isEmpty {
+            request.setValue(headerClientID, forHTTPHeaderField: "x-client-id")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await HTTPExchange.data(
@@ -169,10 +178,19 @@ actor PolestarDataPortalAPI {
     }
 
     private func decodeResponse<T: Decodable & Sendable>(data: Data, response: HTTPURLResponse, path: String) throws -> T {
-        if response.statusCode == 401 || response.statusCode == 403 {
+        if response.statusCode == 401 {
             self.accessToken = nil
             self.tokenExpiry = nil
             throw PolestarDataPortalError.authenticationRequired(.expiredSession)
+        }
+        if response.statusCode == 403 {
+            if let apiError = try? JSONDecoder().decode(PolestarDataPortalAPIError.self, from: data) {
+                if apiError.error.code == "AUTHZ_VIN_UNAUTHORIZED" {
+                    throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry: \(path)")
+                }
+                throw PolestarDataPortalError.client(statusCode: 403, message: apiError.error.message)
+            }
+            throw PolestarDataPortalError.permissionDenied(operation: path)
         }
         if response.statusCode == 429 {
             throw PolestarDataPortalError.rateLimited(retryAfter: Self.parseRetryAfter(response))
@@ -340,6 +358,7 @@ actor PolestarDataPortalAPI {
 
     func signOut() async throws {
         await resetSession()
+        accountID = nil
         clientID = nil
         clientSecret = nil
         try keychain.deletePolestarDataPortalCredentials()

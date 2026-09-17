@@ -44,6 +44,7 @@ final class PreferencesStore {
         var polestarPassword = ""
         var polestarVIN = ""
         var polestarNickname = ""
+        var polestarDataPortalAccountID = ""
         var polestarDataPortalClientID = ""
         var polestarDataPortalClientSecret = ""
         var volvoClientID = ""
@@ -338,6 +339,13 @@ final class PreferencesStore {
         }
         set {
             d.set(newValue.rawValue, forKey: "polestar_connection_mode")
+            cachedHasResumableSession[.polestar] = nil
+        }
+    }
+    var polestarDataPortalAccountID: String {
+        get { d.string(forKey: "polestar_dataportal_account_id") ?? "" }
+        set {
+            d.set(newValue, forKey: "polestar_dataportal_account_id")
             cachedHasResumableSession[.polestar] = nil
         }
     }

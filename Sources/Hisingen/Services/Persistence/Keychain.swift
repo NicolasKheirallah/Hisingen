@@ -58,6 +58,7 @@ private struct VolvoSecretBundle: Codable {
 }
 
 private struct PolestarDataPortalSecretBundle: Codable {
+    var accountID: String?
     var clientID: String?
     var clientSecret: String?
 }
@@ -252,11 +253,16 @@ struct KeychainStore: Sendable {
         try delete(account: Self.volvoApiKeyDraftAccount)
     }
 
-    func savePolestarDataPortalCredentials(clientID: String, clientSecret: String) throws {
+    func savePolestarDataPortalCredentials(accountID: String? = nil, clientID: String, clientSecret: String) throws {
         try mutatePolestarDataPortalBundle {
+            if let accountID { $0.accountID = accountID }
             $0.clientID = clientID
             $0.clientSecret = clientSecret
         }
+    }
+
+    func readPolestarDataPortalAccountID() throws -> String? {
+        try readPolestarDataPortalBundle().accountID
     }
 
     func readPolestarDataPortalClientID() throws -> String? {
@@ -269,6 +275,7 @@ struct KeychainStore: Sendable {
 
     func deletePolestarDataPortalCredentials() throws {
         try mutatePolestarDataPortalBundle {
+            $0.accountID = nil
             $0.clientID = nil
             $0.clientSecret = nil
         }
@@ -381,7 +388,7 @@ struct KeychainStore: Sendable {
     }
 
     private func savePolestarDataPortalBundle(_ bundle: PolestarDataPortalSecretBundle) throws {
-        if bundle.clientID == nil && bundle.clientSecret == nil {
+        if bundle.clientID == nil && bundle.clientSecret == nil && bundle.accountID == nil {
             try delete(account: Self.polestarDataPortalBundleAccount)
             Self.updatePolestarDataPortalPresenceFlags(bundle)
             return
@@ -551,8 +558,11 @@ enum Keychain {
     static var hasStoredPolestarDataPortalCredentials: Bool {
         KeychainStore.app.hasStoredPolestarDataPortalCredentials
     }
-    static func savePolestarDataPortalCredentials(clientID: String, clientSecret: String) throws {
-        try KeychainStore.app.savePolestarDataPortalCredentials(clientID: clientID, clientSecret: clientSecret)
+    static func savePolestarDataPortalCredentials(accountID: String? = nil, clientID: String, clientSecret: String) throws {
+        try KeychainStore.app.savePolestarDataPortalCredentials(accountID: accountID, clientID: clientID, clientSecret: clientSecret)
+    }
+    static func readPolestarDataPortalAccountID() throws -> String? {
+        try KeychainStore.app.readPolestarDataPortalAccountID()
     }
     static func readPolestarDataPortalClientID() throws -> String? {
         try KeychainStore.app.readPolestarDataPortalClientID()

@@ -270,7 +270,8 @@ struct PolestarDataPortalTests {
 
         #expect(store.hasStoredPolestarDataPortalCredentials == false)
 
-        try store.savePolestarDataPortalCredentials(clientID: "test-client-id", clientSecret: "test-client-secret")
+        try store.savePolestarDataPortalCredentials(accountID: "test-account-id", clientID: "test-client-id", clientSecret: "test-client-secret")
+        #expect(try store.readPolestarDataPortalAccountID() == "test-account-id")
         #expect(try store.readPolestarDataPortalClientID() == "test-client-id")
         #expect(try store.readPolestarDataPortalClientSecret() == "test-client-secret")
         #expect(store.hasStoredPolestarDataPortalCredentials == true)
@@ -282,6 +283,7 @@ struct PolestarDataPortalTests {
         #expect(try store.readPolestarDataPortalToken() == nil)
 
         try store.deletePolestarDataPortalCredentials()
+        #expect(try store.readPolestarDataPortalAccountID() == nil)
         #expect(try store.readPolestarDataPortalClientID() == nil)
         #expect(try store.readPolestarDataPortalClientSecret() == nil)
         #expect(store.hasStoredPolestarDataPortalCredentials == false)

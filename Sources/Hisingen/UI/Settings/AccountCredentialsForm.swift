@@ -20,6 +20,7 @@ struct AccountCredentialsForm: View {
     @State private var polestarPassword = ""
     @State private var polestarVIN = ""
     @State private var polestarNickname = ""
+    @State private var polestarDataPortalAccountID = ""
     @State private var polestarDataPortalClientID = ""
     @State private var polestarDataPortalClientSecret = ""
 
@@ -125,6 +126,7 @@ struct AccountCredentialsForm: View {
             polestarPassword = draft.polestarPassword
             polestarVIN = draft.polestarVIN.isEmpty ? preferences.vin(for: .polestar) : draft.polestarVIN
             polestarNickname = draft.polestarNickname.isEmpty ? preferences.vehicleNickname(for: polestarVIN) : draft.polestarNickname
+            polestarDataPortalAccountID = draft.polestarDataPortalAccountID.isEmpty ? preferences.polestarDataPortalAccountID : draft.polestarDataPortalAccountID
             polestarDataPortalClientID = draft.polestarDataPortalClientID.isEmpty ? preferences.polestarDataPortalClientID : draft.polestarDataPortalClientID
             polestarDataPortalClientSecret = draft.polestarDataPortalClientSecret
             volvoClientID = draft.volvoClientID.isEmpty ? preferences.volvoClientID : draft.volvoClientID
@@ -134,6 +136,7 @@ struct AccountCredentialsForm: View {
             volvoNickname = draft.volvoNickname.isEmpty ? preferences.vehicleNickname(for: volvoVIN) : draft.volvoNickname
             preferences.accountDraft = .init(polestarEmail: polestarEmail, polestarPassword: polestarPassword,
                                              polestarVIN: polestarVIN, polestarNickname: polestarNickname,
+                                             polestarDataPortalAccountID: polestarDataPortalAccountID,
                                              polestarDataPortalClientID: polestarDataPortalClientID,
                                              polestarDataPortalClientSecret: polestarDataPortalClientSecret,
                                              volvoClientID: volvoClientID, volvoClientSecret: volvoClientSecret,
@@ -537,6 +540,14 @@ struct AccountCredentialsForm: View {
                     .foregroundStyle(.secondary)
             }
 
+            labeledField(L10n.text("Account ID (x-client-id)")) {
+                TextField("0a7f033f-...", text: $polestarDataPortalAccountID)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalAccountID) { _, val in
+                        preferences.accountDraft.polestarDataPortalAccountID = val
+                    }
+            }
+
             labeledField(L10n.text("Client ID")) {
                 TextField("client-id", text: $polestarDataPortalClientID)
                     .textFieldStyle(.roundedBorder)
@@ -603,12 +614,17 @@ struct AccountCredentialsForm: View {
     private func savePolestarDataPortalCredentials() {
         let trimmedID = polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSecret = polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAccountID = polestarDataPortalAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedID.isEmpty else { return }
 
         var keychainFailed = false
         if !trimmedSecret.isEmpty {
             do {
-                try Keychain.savePolestarDataPortalCredentials(clientID: trimmedID, clientSecret: trimmedSecret)
+                try Keychain.savePolestarDataPortalCredentials(
+                    accountID: trimmedAccountID.isEmpty ? nil : trimmedAccountID,
+                    clientID: trimmedID,
+                    clientSecret: trimmedSecret
+                )
                 polestarDataPortalClientSecret = ""
                 preferences.accountDraft.polestarDataPortalClientSecret = ""
             } catch {
@@ -623,7 +639,7 @@ struct AccountCredentialsForm: View {
         }
         triggerSavedFeedbackReset()
         guard !keychainFailed else { return }
-        persistPolestarDataPortalPreferences(clientID: trimmedID)
+        persistPolestarDataPortalPreferences(accountID: trimmedAccountID, clientID: trimmedID)
     }
 
     private func triggerSavedFeedbackReset() {
@@ -635,8 +651,9 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    private func persistPolestarDataPortalPreferences(clientID: String) {
+    private func persistPolestarDataPortalPreferences(accountID: String, clientID: String) {
         preferences.polestarConnectionMode = .dataPortal
+        preferences.polestarDataPortalAccountID = accountID
         preferences.polestarDataPortalClientID = clientID
         let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         preferences.setVin(upperVIN, for: .polestar)
