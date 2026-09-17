@@ -7,12 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- **Polestar Developer Portal (EU Data Act M2M) integration.** Full support for official machine-to-machine integration using credentials from the Polestar Developer Portal (`developer.polestar.com`).
-  - **Comprehensive vehicle telemetry**: Ingests live battery status, charging telemetry, exterior locks and openings, vehicle health diagnostics, calculated odometer, and GPS location.
+- **Polestar Developer Portal (EU Data Act M2M) integration.** Dedicated machine-to-machine integration using credentials from the official Polestar Data Portal (`data-portal.polestar.com`).
+  - **Two-tier primary with fallback architecture**: `PolestarDataPortalAPI` serves as the primary data provider for all 15 vehicle endpoints (battery, charging, odometer, location, exterior, health, climate, and pre-cleaning), with automatic transparent failover to consumer Polestar ID credentials upon rate limiting (HTTP 429), token expiration, or upstream outages.
+  - **Augmented dual-stack mode**: Combines official EU Data Act high-precision telemetry with consumer Polestar ID remote actuation commands for door locks (`lock`, `unlock`) and visual alerts (`flashLights`).
+  - **Comprehensive vehicle telemetry**: Ingests live battery status with subsystem energy breakdown, high-precision meter-level odometer and triple trip computers, factory reference tyre pressures, multi-zone seat heating, and GPS coordinates.
   - **Isolated credential management**: Developer credentials (Account ID, Client ID, Client Secret, OAuth Bearer tokens) are isolated in separate Keychain storage from consumer Polestar ID credentials, enabling seamless switching between connection modes without credential conflicts or session invalidation.
-  - **Read-only remote control gating**: Remote controls (climate, locks, charging schedules) are cleanly disabled in the UI with informative labels, reflecting the EU Data Act's telemetry-only specification.
   - **Live connection testing & vehicle linking guidance**: Dedicated "Test Connection" button verifies token issuance and vehicle discovery, guiding users when an account is authenticated but pending VIN linking in the portal.
   - **Daily quota tracking**: Built-in tracking for the portal's 10,000 requests/day quota with UTC calendar rollover and live meter display in Settings.
+  - **Official OpenAPI 3.1.0 specification & documentation**: Bundled complete OpenAPI schema and step-by-step onboarding guide (`docs/api/polestar-developer-portal.md`) with co-located portal screenshots for landing, API credentials overview, and M2M key management.
   - **Build-time secret injection tooling**: `Scripts/inject-secrets.sh` obfuscates developer credentials and compiles fallback accessors in `BuiltinPolestarSecrets`.
 
 ### Fixed
