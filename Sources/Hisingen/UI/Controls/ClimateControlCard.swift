@@ -454,13 +454,13 @@ struct ClimateControlCard: View {
                 Text(climateActive ? L10n.text("Stop Climate") : L10n.text("Start Climate"))
                     .hisType(.body, weight: .semibold)
                     .contentTransition(reduceMotion ? .identity : .opacity)
-                gate.sendingOverlay(climateActive ? .stopClimate : Self.probe)
+                gate.sendingOverlay(climateActive ? .stopClimate : startClimateCommand)
             }
             .frame(maxWidth: .infinity, minHeight: 34)
         }
         .buttonStyle(.borderedProminent)
         .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.polestarAmber)
-        .disabled(gate.isDisabled(climateActive ? .stopClimate : Self.probe))
+        .disabled(gate.isDisabled(climateActive ? .stopClimate : startClimateCommand))
         .hisAnimation(Motion.stateChange, value: climateActive)
     }
 }
