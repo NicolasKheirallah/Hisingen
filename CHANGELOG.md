@@ -3,15 +3,14 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.3] - 2026-09-16
-
-### Added
-
-- 
+## [2.0.3] - 2026-09-17
 
 ### Fixed
 
-- 
+- **Polestar 2 remote climate actuation.** When starting preconditioning on Polestar 2 (where cabin temperature is vehicle-managed), the remote command now explicitly provides the 22.0 °C comfort default on the wire. Omitting the temperature field previously caused the vehicle's climate control module (CCM) to quietly drop the command, leaving the cabin unconditioned while optimistic UI state masked the refusal.
+- **Climate card button gating & overlay synchronization.** The Start Climate button's disabled state and in-flight spinner overlay now track the actual command being dispatched rather than the probe command, keeping the button interactive and showing clear in-flight progress.
+- **Sparkle updater Swift 6 concurrency.** Conformed `UpdateService` to `SPUStandardUserDriverDelegate` with `nonisolated` delegate methods to prevent protocol isolation errors under Swift 6 strict concurrency.
+- **Web sign-in window teardown.** Cleaned up WKWebView and window references upon dismissal to prevent retained views during re-authentication.
 
 ### Changed
 
