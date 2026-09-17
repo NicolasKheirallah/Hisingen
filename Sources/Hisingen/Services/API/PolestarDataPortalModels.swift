@@ -257,6 +257,18 @@ extension PolestarBatteryDTO {
             return .unknown
         }()
 
+        let breakdown: EnergyBreakdownSnapshot? = {
+            let whSource = energyConsumptionWhSinceCharge ?? energyConsumptionWhAutomatic ?? energyConsumptionWhManual
+            let pctSource = energyConsumptionPercentageSinceCharge ?? energyConsumptionPercentageAutomatic ?? energyConsumptionPercentageManual
+            guard whSource != nil || pctSource != nil else { return nil }
+            return EnergyBreakdownSnapshot(
+                driving: EnergyBreakdownItem(wattHours: whSource?.driving, percentage: pctSource?.driving),
+                climate: EnergyBreakdownItem(wattHours: whSource?.climate, percentage: pctSource?.climate),
+                battery: EnergyBreakdownItem(wattHours: whSource?.battery, percentage: pctSource?.battery),
+                other: EnergyBreakdownItem(wattHours: whSource?.other, percentage: pctSource?.other)
+            )
+        }()
+
         let diag = BatteryDiagnostics(
             timeToTargetMinutes: estimatedChargingTimeMinutesToTargetDistance.map { Int($0.rounded()) },
             timeToMinimumSOCMinutes: estimatedChargingTimeMinutesToMinimumSoc.map { Int($0.rounded()) },
@@ -264,7 +276,10 @@ extension PolestarBatteryDTO {
             averageConsumption: averageEnergyConsumptionKwhPer100Km,
             averageConsumptionSinceCharge: averageEnergyConsumptionKwhPer100KmSinceCharge,
             averageConsumptionAutomatic: averageEnergyConsumptionKwhPer100KmAutomatic,
-            energyUsedSinceChargeWh: totalEnergyConsumptionWhSinceCharge
+            energyUsedSinceChargeWh: totalEnergyConsumptionWhSinceCharge ?? totalEnergyConsumptionWhAutomatic ?? totalEnergyConsumptionWh,
+            energyBreakdown: breakdown,
+            powerLimitKw: dischargeInfo?.powerLimit,
+            energyAvailableKwh: dischargeInfo?.energyAvailable
         )
 
         return EnergyAndChargingSnapshot(
@@ -364,7 +379,7 @@ extension PolestarHealthDTO {
         checkWarning(washerFluidLevelWarning, warning: .washerFluid)
         checkWarning(lowVoltageBatteryWarning, warning: .lowVoltageBattery)
 
-        func parseTyrePressure(_ rawWarn: String?, kpa: Double?, pos: TyrePosition) -> TyrePressure {
+        func parseTyrePressure(_ rawWarn: String?, kpa: Double?, refKpa: Double?, pos: TyrePosition) -> TyrePressure {
             let warn: TyrePressureWarning = {
                 guard let w = rawWarn?.uppercased() else { return .none }
                 if w.contains("VERY_LOW") { return .veryLow }
@@ -373,14 +388,14 @@ extension PolestarHealthDTO {
                 if w.contains("FAULT") { return .sensorFault }
                 return .none
             }()
-            return TyrePressure(position: pos, kilopascals: kpa, warning: warn)
+            return TyrePressure(position: pos, kilopascals: kpa, warning: warn, referenceKilopascals: refKpa)
         }
 
         let tyres = [
-            parseTyrePressure(frontLeftTyrePressureWarning, kpa: frontLeftTyrePressureKpa, pos: .frontLeft),
-            parseTyrePressure(frontRightTyrePressureWarning, kpa: frontRightTyrePressureKpa, pos: .frontRight),
-            parseTyrePressure(rearLeftTyrePressureWarning, kpa: rearLeftTyrePressureKpa, pos: .rearLeft),
-            parseTyrePressure(rearRightTyrePressureWarning, kpa: rearRightTyrePressureKpa, pos: .rearRight)
+            parseTyrePressure(frontLeftTyrePressureWarning, kpa: frontLeftTyrePressureKpa, refKpa: frontTyresReferencePressureKpa, pos: .frontLeft),
+            parseTyrePressure(frontRightTyrePressureWarning, kpa: frontRightTyrePressureKpa, refKpa: frontTyresReferencePressureKpa, pos: .frontRight),
+            parseTyrePressure(rearLeftTyrePressureWarning, kpa: rearLeftTyrePressureKpa, refKpa: rearTyresReferencePressureKpa, pos: .rearLeft),
+            parseTyrePressure(rearRightTyrePressureWarning, kpa: rearRightTyrePressureKpa, refKpa: rearTyresReferencePressureKpa, pos: .rearRight)
         ]
 
         if tyres.contains(where: { $0.warning.needsAttention }) {
@@ -442,6 +457,44 @@ struct PolestarOdometerDTO: Codable, Sendable, Equatable {
     let odometerKm: Double?
     let meta: PolestarDataPortalMeta?
 
+    enum CodingKeys: String, CodingKey {
+        case vin, timestamp, odometerMeters, odometerInMeters, odometerKm, meta
+    }
+
+    init(
+        vin: String? = nil,
+        timestamp: PolestarDataPortalTimestamp? = nil,
+        odometerMeters: Double? = nil,
+        odometerKm: Double? = nil,
+        meta: PolestarDataPortalMeta? = nil
+    ) {
+        self.vin = vin
+        self.timestamp = timestamp
+        self.odometerMeters = odometerMeters
+        self.odometerKm = odometerKm
+        self.meta = meta
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.vin = try container.decodeIfPresent(String.self, forKey: .vin)
+        self.timestamp = try container.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .timestamp)
+        self.odometerKm = try container.decodeIfPresent(Double.self, forKey: .odometerKm)
+        let meters = try container.decodeIfPresent(Double.self, forKey: .odometerMeters)
+            ?? container.decodeIfPresent(Double.self, forKey: .odometerInMeters)
+        self.odometerMeters = meters
+        self.meta = try container.decodeIfPresent(PolestarDataPortalMeta.self, forKey: .meta)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(vin, forKey: .vin)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(odometerMeters, forKey: .odometerMeters)
+        try container.encodeIfPresent(odometerKm, forKey: .odometerKm)
+        try container.encodeIfPresent(meta, forKey: .meta)
+    }
+
     var calculatedOdometerKm: Int? {
         if let km = odometerKm {
             return Int(km.rounded())
@@ -465,6 +518,67 @@ struct PolestarLocationDTO: Codable, Sendable, Equatable {
     let speedMetersPerSecond: Double?
     let accuracyMeters: Double?
     let meta: PolestarDataPortalMeta?
+
+    enum CodingKeys: String, CodingKey {
+        case vin, timestamp, latitude, longitude
+        case headingDegrees, heading
+        case altitudeMeters, altitude
+        case speedMetersPerSecond, speed
+        case accuracyMeters, accuracy
+        case meta
+    }
+
+    init(
+        vin: String? = nil,
+        timestamp: PolestarDataPortalTimestamp? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        headingDegrees: Double? = nil,
+        altitudeMeters: Double? = nil,
+        speedMetersPerSecond: Double? = nil,
+        accuracyMeters: Double? = nil,
+        meta: PolestarDataPortalMeta? = nil
+    ) {
+        self.vin = vin
+        self.timestamp = timestamp
+        self.latitude = latitude
+        self.longitude = longitude
+        self.headingDegrees = headingDegrees
+        self.altitudeMeters = altitudeMeters
+        self.speedMetersPerSecond = speedMetersPerSecond
+        self.accuracyMeters = accuracyMeters
+        self.meta = meta
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.vin = try container.decodeIfPresent(String.self, forKey: .vin)
+        self.timestamp = try container.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .timestamp)
+        self.latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        self.longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        self.headingDegrees = try container.decodeIfPresent(Double.self, forKey: .headingDegrees)
+            ?? container.decodeIfPresent(Double.self, forKey: .heading)
+        self.altitudeMeters = try container.decodeIfPresent(Double.self, forKey: .altitudeMeters)
+            ?? container.decodeIfPresent(Double.self, forKey: .altitude)
+        self.speedMetersPerSecond = try container.decodeIfPresent(Double.self, forKey: .speedMetersPerSecond)
+            ?? container.decodeIfPresent(Double.self, forKey: .speed)
+        self.accuracyMeters = try container.decodeIfPresent(Double.self, forKey: .accuracyMeters)
+            ?? container.decodeIfPresent(Double.self, forKey: .accuracy)
+        self.meta = try container.decodeIfPresent(PolestarDataPortalMeta.self, forKey: .meta)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(vin, forKey: .vin)
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(headingDegrees, forKey: .headingDegrees)
+        try container.encodeIfPresent(altitudeMeters, forKey: .altitudeMeters)
+        try container.encodeIfPresent(speedMetersPerSecond, forKey: .speedMetersPerSecond)
+        try container.encodeIfPresent(accuracyMeters, forKey: .accuracyMeters)
+        try container.encodeIfPresent(meta, forKey: .meta)
+    }
 
     func toVehicleLocation() -> VehicleLocation {
         let speedKmh = speedMetersPerSecond.map { $0 * 3.6 }

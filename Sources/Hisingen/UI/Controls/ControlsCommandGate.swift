@@ -37,6 +37,7 @@ struct ControlsCommandGate {
             for: command,
             state: state,
             brand: brand,
+            polestarConnectionMode: preferences.polestarConnectionMode,
             enabledFeatures: features,
             commandInProgress: ignoreBusy ? false : remoteCommandInProgress,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled

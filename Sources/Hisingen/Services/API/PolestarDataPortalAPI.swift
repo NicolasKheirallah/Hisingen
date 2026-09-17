@@ -415,6 +415,30 @@ actor PolestarDataPortalAPI {
             readingDates: readingDates,
             unavailableFeatures: Array(AppFeature.remoteFeatures)
         )
+        let climateStatus: VehicleClimateStatus? = {
+            guard let precond = bundle.battery?.manualPreconditioning else { return nil }
+            let isActive = precond.preconditioningStatus?.uppercased().contains("ACTIVE") == true
+            let started = precond.startedAt?.date
+            let ends = precond.endingAt?.date
+            let remaining: Int? = {
+                guard let ends else { return nil }
+                let diff = ends.timeIntervalSinceNow
+                return diff > 0 ? max(1, Int(diff / 60)) : 0
+            }()
+            return VehicleClimateStatus(
+                activity: isActive ? .active : .idle,
+                timeRemainingMinutes: isActive ? remaining : nil,
+                timerTriggered: false,
+                interiorTemperatureCelsius: nil,
+                requestedTemperatureCelsius: nil,
+                driverSeatHeatingLevel: nil,
+                passengerSeatHeatingLevel: nil,
+                steeringWheelHeatingLevel: nil,
+                sessionStartedAt: started,
+                sessionEndsAt: ends
+            )
+        }()
+
         return VehicleState(
             energy: energy,
             identity: identity,
@@ -422,6 +446,7 @@ actor PolestarDataPortalAPI {
             freshness: freshness,
             commandState: CommandPresentationState(),
             exteriorStatus: extSnapshot,
+            climateStatus: climateStatus,
             location: bundle.location?.toVehicleLocation(),
             powertrain: .bev
         )

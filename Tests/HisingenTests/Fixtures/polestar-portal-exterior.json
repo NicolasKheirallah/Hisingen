@@ -1,0 +1,30 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "timestamp": {
+      "seconds": "1716300100",
+      "nanos": 0
+    },
+    "centralLock": "LOCKED",
+    "tailgateLock": "LOCKED",
+    "alarm": "ARMED",
+    "hood": "CLOSED",
+    "tailgate": "CLOSED",
+    "tankLid": "CLOSED",
+    "sunroof": "CLOSED",
+    "frontLeftDoor": "CLOSED",
+    "frontRightDoor": "CLOSED",
+    "rearLeftDoor": "CLOSED",
+    "rearRightDoor": "CLOSED",
+    "frontLeftWindow": "CLOSED",
+    "frontRightWindow": "CLOSED",
+    "rearLeftWindow": "CLOSED",
+    "rearRightWindow": "CLOSED",
+    "metaReceivedAt": "2026-05-21T14:01:40Z",
+    "metaEventId": "evt-ext-654321"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "exterior"
+  }
+}

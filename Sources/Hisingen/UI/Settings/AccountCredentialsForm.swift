@@ -393,10 +393,13 @@ struct AccountCredentialsForm: View {
                 }
             }
 
-            if polestarConnectionMode == .polestarID {
+            switch polestarConnectionMode {
+            case .polestarID:
                 polestarIDFields
-            } else {
+            case .dataPortal:
                 polestarDataPortalFields
+            case .augmented:
+                polestarAugmentedFields
             }
         }
     }
@@ -687,6 +690,122 @@ struct AccountCredentialsForm: View {
         .controlSize(.regular)
         .disabled(!isDataPortalConfiguredOrEntered)
         .padding(.top, style == .welcoming ? 6 : 4)
+    }
+
+    private var polestarAugmentedFields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(HisingenTheme.accent)
+                    .hisType(.label)
+                Text(L10n.text("Augmented mode pairs Developer Portal M2M telemetry with your Polestar ID for interactive remote controls and gRPC streaming."))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+
+            Text(L10n.text("1. Polestar ID (Remote Controls)"))
+                .hisType(.caption, weight: .semibold)
+                .foregroundStyle(HisingenTheme.accent)
+
+            labeledField(L10n.text("Polestar ID (Email)")) {
+                TextField("name@example.com", text: $polestarEmail)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.username)
+                    .onChange(of: polestarEmail) { _, val in preferences.accountDraft.polestarEmail = val }
+            }
+            if shouldShowEmailError {
+                InlineValidationLabel(message: L10n.text("Enter a valid email address."))
+            }
+
+            labeledField(L10n.text("Password")) {
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                    .onChange(of: polestarPassword) { _, val in preferences.accountDraft.polestarPassword = val }
+            }
+
+            Divider().padding(.vertical, 2)
+
+            Text(L10n.text("2. Developer Portal (M2M Telemetry)"))
+                .hisType(.caption, weight: .semibold)
+                .foregroundStyle(HisingenTheme.accent)
+
+            labeledField(L10n.text("Account ID (x-client-id)")) {
+                TextField("0a7f033f-...", text: $polestarDataPortalAccountID)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalAccountID) { _, val in
+                        preferences.accountDraft.polestarDataPortalAccountID = val
+                    }
+            }
+
+            labeledField(L10n.text("Client ID")) {
+                TextField("client-id", text: $polestarDataPortalClientID)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalClientID) { _, val in
+                        preferences.accountDraft.polestarDataPortalClientID = val
+                    }
+            }
+
+            labeledField(L10n.text("Client Secret")) {
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarDataPortalClientSecret)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarDataPortalClientSecret) { _, val in
+                        preferences.accountDraft.polestarDataPortalClientSecret = val
+                    }
+            }
+
+            Divider().padding(.vertical, 2)
+
+            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
+                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarNickname) { _, val in preferences.accountDraft.polestarNickname = val }
+            }
+
+            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
+                TextField("YSM...", text: $polestarVIN)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: polestarVIN) { _, val in preferences.accountDraft.polestarVIN = val }
+            }
+
+            savePolestarAugmentedButton
+            dataPortalQuotaView
+
+            if let keychainError {
+                InlineValidationLabel(message: keychainError)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private var savePolestarAugmentedButton: some View {
+        Button {
+            savePolestarAugmentedCredentials()
+        } label: {
+            HStack(spacing: 4) {
+                if showSavedFeedback {
+                    Image(systemName: "checkmark")
+                    Text(L10n.text("Saved & Connected (Augmented)"))
+                } else {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text(L10n.text("Save Both & Connect"))
+                }
+            }
+            .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+            .id(showSavedFeedback)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.regular)
+        .padding(.top, style == .welcoming ? 6 : 4)
+    }
+
+    private func savePolestarAugmentedCredentials() {
+        savePolestarCredentials()
+        savePolestarDataPortalCredentials()
     }
 
 

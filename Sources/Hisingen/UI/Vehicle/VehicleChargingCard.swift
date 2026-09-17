@@ -111,8 +111,37 @@ struct VehicleChargingCard: View {
             if let value = diagnostics.averageConsumptionSinceCharge { rows.append(("avgSinceCharge", KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))) }
             if let value = diagnostics.averageConsumptionAutomatic { rows.append(("avgAutoTrip", KVRow(L10n.text("Avg (Automatic Trip)"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))) }
             if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
+            if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
+                rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
+            }
+            if let breakdown = diagnostics.energyBreakdown, breakdown.hasData {
+                if let drive = breakdown.driving {
+                    rows.append(("energyDrive", KVRow(L10n.text("Traction Energy"), formatBreakdown(drive), symbol: "car.fill", info: L10n.text("Energy consumed directly by electric drivetrain motors."))))
+                }
+                if let climate = breakdown.climate {
+                    rows.append(("energyClimate", KVRow(L10n.text("Climate Energy"), formatBreakdown(climate), symbol: "fan.fill", info: L10n.text("Energy consumed by cabin heating and air conditioning."))))
+                }
+                if let battery = breakdown.battery {
+                    rows.append(("energyBattery", KVRow(L10n.text("Battery Thermal"), formatBreakdown(battery), symbol: "flame.fill", info: L10n.text("Energy consumed by high-voltage battery thermal conditioning and warming."))))
+                }
+                if let other = breakdown.other {
+                    rows.append(("energyOther", KVRow(L10n.text("Electronics & Aux"), formatBreakdown(other), symbol: "cpu", info: L10n.text("Energy consumed by 12 V computers, lighting, and auxiliary electronics."))))
+                }
+            }
         }
         return rows
+    }
+
+    private func formatBreakdown(_ item: EnergyBreakdownItem) -> String {
+        var parts: [String] = []
+        if let wh = item.wattHours {
+            parts.append(String(format: "%.1f kWh", wh / 1_000.0))
+        }
+        if let pct = item.percentage {
+            parts.append(String(format: "%.0f%%", pct))
+        }
+        guard !parts.isEmpty else { return "—" }
+        return parts.count > 1 ? "\(parts[0]) (\(parts[1]))" : parts[0]
     }
 
     private var activeSamples: [ChargingSample] {

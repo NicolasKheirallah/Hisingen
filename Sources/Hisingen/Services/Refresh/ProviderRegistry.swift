@@ -12,6 +12,7 @@ import Foundation
 final class ProviderRegistry {
     private let polestar: any VehicleProviding
     private let polestarDataPortal: (any VehicleProviding)?
+    private let polestarAugmented: (any VehicleProviding)?
     private let volvo: any VehicleProviding
     private let preferences: PreferencesStore
 
@@ -23,6 +24,14 @@ final class ProviderRegistry {
     ) {
         self.polestar = polestar
         self.polestarDataPortal = polestarDataPortal
+        if let polestarDataPortal {
+            self.polestarAugmented = PolestarAugmentedProvider(
+                telemetryProvider: polestarDataPortal,
+                commandProvider: polestar
+            )
+        } else {
+            self.polestarAugmented = nil
+        }
         self.volvo = volvo
         self.preferences = preferences
     }
@@ -30,8 +39,13 @@ final class ProviderRegistry {
     func provider(for brand: VehicleBrand) -> any VehicleProviding {
         switch brand {
         case .polestar:
-            if preferences.polestarConnectionMode == .dataPortal, let polestarDataPortal {
-                return polestarDataPortal
+            switch preferences.polestarConnectionMode {
+            case .dataPortal:
+                if let polestarDataPortal { return polestarDataPortal }
+            case .augmented:
+                if let polestarAugmented { return polestarAugmented }
+            case .polestarID:
+                break
             }
             return polestar
         case .volvo:

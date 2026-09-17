@@ -548,6 +548,69 @@ struct RefreshTelemetryIntent: AppIntent {
     }
 }
 
+struct GetEnergyBreakdownIntent: AppIntent {
+    static let title: LocalizedStringResource = "Get Energy Breakdown"
+    static let description = IntentDescription("Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
+        guard let (state, _) = AutomationHandoff.snapshot(for: vehicle) else {
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
+        }
+        guard let breakdown = state.energy.diagnostics?.energyBreakdown, breakdown.hasData else {
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("Energy breakdown data is not available for this vehicle.")))
+        }
+        var lines: [String] = []
+        if let d = breakdown.driving, let wh = d.wattHours {
+            lines.append(L10n.format("Traction: %.1f kWh", wh / 1_000))
+        }
+        if let c = breakdown.climate, let wh = c.wattHours {
+            lines.append(L10n.format("Climate: %.1f kWh", wh / 1_000))
+        }
+        if let b = breakdown.battery, let wh = b.wattHours {
+            lines.append(L10n.format("Battery Thermal: %.1f kWh", wh / 1_000))
+        }
+        if let o = breakdown.other, let wh = o.wattHours {
+            lines.append(L10n.format("Electronics: %.1f kWh", wh / 1_000))
+        }
+        let summary = lines.isEmpty ? L10n.text("No energy consumption recorded.") : lines.joined(separator: ", ")
+        return .result(value: summary, dialog: IntentDialog(stringLiteral: summary))
+    }
+}
+
+struct GetTirePressuresIntent: AppIntent {
+    static let title: LocalizedStringResource = "Get Tire Pressures"
+    static let description = IntentDescription("Returns the current tire pressures and statuses for all wheels.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    var vehicle: String?
+
+    @MainActor
+    func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
+        guard let (state, _) = AutomationHandoff.snapshot(for: vehicle) else {
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
+        }
+        guard let tyres = state.maintenance.details?.tyres, !tyres.isEmpty else {
+            return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("Tire status data is not available for this vehicle.")))
+        }
+        let lines = tyres.map { tyre -> String in
+            let posName = tyre.position.displayName
+            if let kpa = tyre.kilopascals {
+                let targetStr = tyre.referenceKilopascals.map { " (target \(Int($0.rounded())) kPa)" } ?? ""
+                return "\(posName): \(Int(kpa.rounded())) kPa\(targetStr)"
+            }
+            return "\(posName): \(tyre.warning.displayName)"
+        }
+        let summary = lines.joined(separator: "; ")
+        return .result(value: summary, dialog: IntentDialog(stringLiteral: summary))
+    }
+}
+
 struct HisingenShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(

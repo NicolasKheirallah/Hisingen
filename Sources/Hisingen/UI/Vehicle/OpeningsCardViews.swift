@@ -438,6 +438,11 @@ struct TirePillView: View {
         return knownGood ? HisingenTheme.ink : HisingenTheme.inkMuted
     }
 
+    private var referenceText: String? {
+        guard let ref = tyre?.referenceKilopascals, measuredText != nil else { return nil }
+        return L10n.format("Target: %@", Format.pressure(kilopascals: ref, unit: preferences.pressureUnit))
+    }
+
     private var readingView: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let measuredText {
@@ -451,6 +456,10 @@ struct TirePillView: View {
                 Text(inferredText)
                     .hisType(.micro, weight: .medium)
                     .foregroundStyle(attention ? statusColor : Color.secondary)
+            } else if let referenceText {
+                Text(referenceText)
+                    .hisType(.micro, weight: .regular)
+                    .foregroundStyle(.secondary)
             }
         }
     }

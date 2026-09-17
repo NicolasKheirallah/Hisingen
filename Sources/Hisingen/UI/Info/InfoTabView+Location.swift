@@ -238,8 +238,14 @@ extension InfoTabView {
                     .padding(.vertical, 1)
                     KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
                         .privacySensitive()
+                    if let speed = location.speed, speed > 0 {
+                        KVRow(L10n.text("Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer")
+                    }
                     if let alt = location.altitudeMeters {
                         KVRow(L10n.text("Altitude"), L10n.format("%d m", Int(alt.rounded())), symbol: "mountain.2.fill")
+                    }
+                    if let accuracy = location.accuracyMeters, accuracy > 0 {
+                        KVRow(L10n.text("GPS Accuracy"), L10n.format("±%d m", Int(accuracy.rounded())), symbol: "scope")
                     }
                     if let heading = location.heading {
                         let cardinal = headingToCardinal(heading)

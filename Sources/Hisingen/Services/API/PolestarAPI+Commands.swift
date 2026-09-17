@@ -1,6 +1,10 @@
 import Foundation
 
 extension PolestarAPI {
+    var commandCatalog: ProviderCommandCatalog {
+        ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .polestarID)
+    }
+
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         guard commandCatalog.implements(command) else { throw RemoteCommandError.unsupported }
         // Membership, not selection equality: the background garage scan re-points

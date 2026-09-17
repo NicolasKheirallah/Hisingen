@@ -1,0 +1,88 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "timestamp": {
+      "seconds": "1716300120",
+      "nanos": 500000000
+    },
+    "batteryChargeLevelPercentage": 78.5,
+    "chargerConnectionStatus": "CONNECTED",
+    "chargerPowerStatus": "CHARGING",
+    "chargingStatus": "CHARGING",
+    "chargingStatusV2": "FAST_CHARGING",
+    "chargingType": "DC",
+    "chargingCurrentAmps": 125.0,
+    "chargingPowerWatts": 48500.0,
+    "chargingVoltageVolts": 388.0,
+    "estimatedChargingTimeToFullMinutes": 35,
+    "estimatedChargingTimeMinutesToMinimumSoc": 12,
+    "estimatedChargingTimeMinutesToTargetDistance": 20,
+    "estimatedDistanceToEmptyKm": 340,
+    "estimatedDistanceToEmptyMiles": 211,
+    "averageEnergyConsumptionKwhPer100Km": 19.4,
+    "averageEnergyConsumptionKwhPer100KmAutomatic": 18.9,
+    "averageEnergyConsumptionKwhPer100KmSinceCharge": 17.5,
+    "totalEnergyConsumptionWh": 1420500,
+    "totalEnergyConsumptionWhAutomatic": 1380200,
+    "totalEnergyConsumptionWhSinceCharge": 35000,
+    "dischargeInfo": {
+      "powerLimit": 240.0,
+      "energyAvailable": 62.4,
+      "energyAvailableIncrease": 5.2
+    },
+    "energyConsumptionPercentageManual": {
+      "driving": 72.0,
+      "climate": 18.0,
+      "battery": 6.0,
+      "other": 4.0
+    },
+    "energyConsumptionPercentageAutomatic": {
+      "driving": 70.5,
+      "climate": 19.5,
+      "battery": 6.0,
+      "other": 4.0
+    },
+    "energyConsumptionPercentageSinceCharge": {
+      "driving": 74.0,
+      "climate": 16.0,
+      "battery": 7.0,
+      "other": 3.0
+    },
+    "energyConsumptionWhManual": {
+      "driving": 1022760,
+      "climate": 255690,
+      "battery": 85230,
+      "other": 56820
+    },
+    "energyConsumptionWhAutomatic": {
+      "driving": 973041,
+      "climate": 269139,
+      "battery": 82812,
+      "other": 55208
+    },
+    "energyConsumptionWhSinceCharge": {
+      "driving": 25900,
+      "climate": 5600,
+      "battery": 2450,
+      "other": 1050
+    },
+    "manualPreconditioning": {
+      "preconditioningStatus": "ACTIVE",
+      "unavailableReason": null,
+      "startedAt": {
+        "seconds": "1716299000",
+        "nanos": 0
+      },
+      "endingAt": {
+        "seconds": "1716300800",
+        "nanos": 0
+      }
+    },
+    "metaReceivedAt": "2026-05-21T14:02:00Z",
+    "metaEventId": "evt-bat-123456"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "battery"
+  }
+}

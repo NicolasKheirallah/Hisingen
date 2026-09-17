@@ -8,7 +8,7 @@ struct RemoteCommandTests {
         var state = vehicle(vin: "YSMSTALE")
         state.freshness.fetchedAt = Date().addingTimeInterval(-11 * 60)
         let availability = CapabilityGate().availability(
-            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar),
+            for: .lock, state: state, commandCatalog: ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .polestarID),
             enabledFeatures: [.remoteLocks], commandInProgress: false)
         #expect(availability == .unavailableUntilRefresh)
     }

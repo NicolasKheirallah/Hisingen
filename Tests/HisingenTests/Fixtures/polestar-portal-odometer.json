@@ -1,0 +1,16 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "timestamp": {
+      "seconds": "1716300080",
+      "nanos": 0
+    },
+    "odometerInMeters": 42150800,
+    "metaReceivedAt": "2026-05-21T14:01:20Z",
+    "metaEventId": "evt-odo-445566"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "odometer"
+  }
+}

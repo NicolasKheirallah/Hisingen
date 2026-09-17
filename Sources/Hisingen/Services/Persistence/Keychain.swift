@@ -106,11 +106,19 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.bool(forKey: "has_volvo_session")
     }
     var hasStoredVolvoAppCredentials: Bool {
-        UserDefaults.standard.bool(forKey: "has_volvo_client_secret")
+        if isTestService {
+            return (try? readVolvoClientSecret()) != nil
+                && (try? readVolvoApiKey()) != nil
+        }
+        return UserDefaults.standard.bool(forKey: "has_volvo_client_secret")
             && UserDefaults.standard.bool(forKey: "has_volvo_api_key")
     }
     var hasStoredPolestarDataPortalCredentials: Bool {
-        UserDefaults.standard.bool(forKey: "has_polestar_dataportal_credentials")
+        if isTestService {
+            return (try? readPolestarDataPortalClientID()) != nil
+                && (try? readPolestarDataPortalClientSecret()) != nil
+        }
+        return UserDefaults.standard.bool(forKey: "has_polestar_dataportal_credentials")
     }
 
     func saveEmail(_ email: String) throws {

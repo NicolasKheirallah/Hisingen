@@ -32,11 +32,13 @@ final class PreferencesStore {
     enum PolestarConnectionMode: String, Codable, Sendable, CaseIterable {
         case polestarID
         case dataPortal
+        case augmented
 
         var displayName: String {
             switch self {
             case .polestarID: return L10n.text("Polestar ID")
             case .dataPortal: return L10n.text("Developer Portal (EU Data Act)")
+            case .augmented: return L10n.text("Augmented (Portal Telemetry + Polestar ID Controls)")
             }
         }
     }

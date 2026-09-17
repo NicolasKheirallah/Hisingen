@@ -404,6 +404,8 @@ struct PolestarDataPortalTests {
     @MainActor
     func commandAvailabilityExplainsDataPortalReadonly() {
         let pref = PreferencesStore.shared
+        let oldMode = pref.polestarConnectionMode
+        defer { pref.polestarConnectionMode = oldMode }
         pref.polestarConnectionMode = .dataPortal
         let reason = CommandAvailability.unimplementedByProvider.shortReason
         #expect(reason?.contains("Developer Portal") == true)
@@ -418,6 +420,173 @@ struct PolestarDataPortalTests {
         await #expect(throws: RemoteCommandError.unsupported) {
             try await api.executeRemoteCommand(.lock, vin: "YSM12345678901234")
         }
+    }
+
+    // MARK: - Deep Telemetry & Augmented Mode Tests
+
+    @Test
+    func batteryTelemetryDecodesEnergyBreakdownAndPowerLimits() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "batteryChargeLevelPercentage": 75.0,
+            "estimatedDistanceToEmptyKm": 350.0,
+            "chargingStatus": "CHARGING_STATUS_IDLE",
+            "chargerConnectionStatus": "CHARGER_CONNECTION_STATUS_CONNECTED",
+            "chargingType": "CHARGING_TYPE_AC",
+            "chargerPowerStatus": "CHARGER_POWER_STATUS_PROVIDING_POWER",
+            "dischargeInfo": {
+                "powerLimit": 220.0,
+                "energyAvailable": 65.5
+            },
+            "energyConsumptionWhSinceCharge": {
+                "driving": 12000.0,
+                "climate": 2500.0,
+                "battery": 1800.0,
+                "other": 700.0
+            },
+            "energyConsumptionPercentageSinceCharge": {
+                "driving": 70.0,
+                "climate": 15.0,
+                "battery": 11.0,
+                "other": 4.0
+            }
+        }
+        """
+        let dto = try JSONDecoder().decode(PolestarBatteryDTO.self, from: Data(json.utf8))
+        let snapshot = dto.toEnergySnapshot()
+        #expect(snapshot.diagnostics?.powerLimitKw == 220.0)
+        #expect(snapshot.diagnostics?.energyAvailableKwh == 65.5)
+        #expect(snapshot.diagnostics?.energyBreakdown?.hasData == true)
+        #expect(snapshot.diagnostics?.energyBreakdown?.driving?.wattHours == 12000.0)
+        #expect(snapshot.diagnostics?.energyBreakdown?.driving?.percentage == 70.0)
+        #expect(snapshot.diagnostics?.energyBreakdown?.climate?.wattHours == 2500.0)
+        #expect(snapshot.diagnostics?.energyBreakdown?.battery?.percentage == 11.0)
+    }
+
+    @Test
+    func healthTelemetryDecodesReferenceTyrePressures() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "frontLeftTyrePressureKpa": 275.0,
+            "frontRightTyrePressureKpa": 280.0,
+            "rearLeftTyrePressureKpa": 285.0,
+            "rearRightTyrePressureKpa": 282.0,
+            "frontTyresReferencePressureKpa": 280.0,
+            "rearTyresReferencePressureKpa": 290.0,
+            "frontLeftTyrePressureWarning": "TYRE_PRESSURE_WARNING_NONE"
+        }
+        """
+        let dto = try JSONDecoder().decode(PolestarHealthDTO.self, from: Data(json.utf8))
+        let snapshot = dto.toMaintenanceSnapshot()
+        let frontLeft = snapshot.details?.tyres.first(where: { $0.position == .frontLeft })
+        let rearRight = snapshot.details?.tyres.first(where: { $0.position == .rearRight })
+        #expect(frontLeft?.kilopascals == 275.0)
+        #expect(frontLeft?.referenceKilopascals == 280.0)
+        #expect(rearRight?.kilopascals == 282.0)
+        #expect(rearRight?.referenceKilopascals == 290.0)
+    }
+
+    @Test
+    @MainActor
+    func augmentedModeEnablesRemoteCommandsInCommandCatalog() {
+        let catalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .augmented)
+        #expect(catalog.implements(.lock) == true)
+        #expect(catalog.implements(.unlock) == true)
+        #expect(catalog.implements(ClimateControlCard.probe) == true)
+        #expect(catalog.implements(.stopClimate) == true)
+    }
+
+    @Test
+    @MainActor
+    func augmentedProviderDelegatesTelemetryAndCommands() async throws {
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry-portal")
+        let commands = PortalTestProbeProvider(brand: .polestar, name: "commands-consumer")
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: commands)
+
+        let cars = await augmented.cars
+        #expect(cars.first?.vin == "telemetry-portal")
+
+        let warm = await augmented.hasWarmSession
+        #expect(warm == true)
+    }
+
+    // MARK: - Canonical Fixture End-to-End Decoding
+
+    @Test
+    func savedJSONFixturesDecodeAndMapToVehicleState() throws {
+        func fixtureData(named name: String) throws -> Data {
+            let url = try #require(Bundle.module.url(forResource: name, withExtension: "json"))
+            return try Data(contentsOf: url)
+        }
+
+        // 1. Token
+        let tokenData = try fixtureData(named: "polestar-portal-token")
+        let token = try JSONDecoder().decode(PolestarDataPortalTokenResponse.self, from: tokenData)
+        #expect(token.expiresIn == 3600)
+        #expect(token.tokenType == "Bearer")
+
+        // 2. Vehicles
+        let vehiclesData = try fixtureData(named: "polestar-portal-vehicles")
+        let vehicles = try JSONDecoder().decode(PolestarDataPortalVehiclesDTO.self, from: vehiclesData)
+        #expect(vehicles.vins.contains("YSMVSEDE6PL147228"))
+
+        // 3. Availability
+        let availData = try fixtureData(named: "polestar-portal-availability")
+        let availEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarAvailabilityDTO>.self, from: availData)
+        #expect(availEnv.data?.availabilityStatus == "AVAILABLE")
+
+        // 4. Battery
+        let batteryData = try fixtureData(named: "polestar-portal-battery")
+        let batteryEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarBatteryDTO>.self, from: batteryData)
+        let batteryDTO = try #require(batteryEnv.data)
+        #expect(batteryDTO.batteryChargeLevelPercentage == 78.5)
+        #expect(batteryDTO.dischargeInfo?.powerLimit == 240.0)
+        #expect(batteryDTO.dischargeInfo?.energyAvailable == 62.4)
+        #expect(batteryDTO.energyConsumptionPercentageManual?.driving == 72.0)
+        #expect(batteryDTO.energyConsumptionWhManual?.driving == 1022760)
+
+        let energy = batteryDTO.toEnergySnapshot()
+        #expect(energy.batteryPercentage == 78.5)
+        #expect(energy.diagnostics?.powerLimitKw == 240.0)
+        #expect(energy.diagnostics?.energyAvailableKwh == 62.4)
+        #expect(energy.diagnostics?.energyBreakdown?.driving?.percentage == 74.0)
+        #expect(energy.diagnostics?.energyBreakdown?.driving?.wattHours == 25900)
+
+        // 5. Exterior
+        let extData = try fixtureData(named: "polestar-portal-exterior")
+        let extEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarExteriorDTO>.self, from: extData)
+        let extDTO = try #require(extEnv.data)
+        #expect(extDTO.centralLock == "LOCKED")
+        #expect(extDTO.alarm == "ARMED")
+
+        // 6. Health
+        let healthData = try fixtureData(named: "polestar-portal-health")
+        let healthEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarHealthDTO>.self, from: healthData)
+        let healthDTO = try #require(healthEnv.data)
+        #expect(healthDTO.frontTyresReferencePressureKpa == 280)
+        #expect(healthDTO.rearTyresReferencePressureKpa == 290)
+        let maintenance = healthDTO.toMaintenanceSnapshot()
+        let frontLeft = maintenance.details?.tyres.first(where: { $0.position == .frontLeft })
+        let rearRight = maintenance.details?.tyres.first(where: { $0.position == .rearRight })
+        #expect(frontLeft?.referenceKilopascals == 280.0)
+        #expect(rearRight?.referenceKilopascals == 290.0)
+
+        // 7. Odometer
+        let odoData = try fixtureData(named: "polestar-portal-odometer")
+        let odoEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarOdometerDTO>.self, from: odoData)
+        let odoDTO = try #require(odoEnv.data)
+        #expect(odoDTO.calculatedOdometerKm == 42151)
+
+        // 8. Location
+        let locData = try fixtureData(named: "polestar-portal-location")
+        let locEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarLocationDTO>.self, from: locData)
+        let locDTO = try #require(locEnv.data)
+        let loc = locDTO.toVehicleLocation()
+        #expect(loc.latitude == 57.708870)
+        #expect(loc.longitude == 11.974560)
+        #expect(loc.accuracyMeters == 5.0)
     }
 }
 

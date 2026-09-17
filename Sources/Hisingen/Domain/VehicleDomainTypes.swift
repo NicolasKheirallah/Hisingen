@@ -255,6 +255,14 @@ enum TyrePosition: String, Codable, CaseIterable, Sendable {
     case rearLeft
     case rearRight
 
+    var displayName: String {
+        switch self {
+        case .frontLeft: return L10n.text("Front left")
+        case .frontRight: return L10n.text("Front right")
+        case .rearLeft: return L10n.text("Rear left")
+        case .rearRight: return L10n.text("Rear right")
+        }
+    }
 }
 
 enum TyrePressureWarning: Int, Codable, Sendable {
@@ -286,6 +294,19 @@ struct TyrePressure: Codable, Equatable, Sendable {
     let position: TyrePosition
     let kilopascals: Double?
     let warning: TyrePressureWarning
+    var referenceKilopascals: Double? = nil
+
+    init(
+        position: TyrePosition,
+        kilopascals: Double?,
+        warning: TyrePressureWarning,
+        referenceKilopascals: Double? = nil
+    ) {
+        self.position = position
+        self.kilopascals = kilopascals
+        self.warning = warning
+        self.referenceKilopascals = referenceKilopascals
+    }
 }
 
 enum VehicleWarning: String, Codable, CaseIterable, Sendable {
@@ -857,6 +878,39 @@ struct PolestarRawWireField: Codable, Equatable, Sendable {
     let isBinary: Bool
 }
 
+struct EnergyBreakdownItem: Codable, Equatable, Sendable {
+    let wattHours: Double?
+    let percentage: Double?
+
+    init(wattHours: Double? = nil, percentage: Double? = nil) {
+        self.wattHours = wattHours
+        self.percentage = percentage
+    }
+}
+
+struct EnergyBreakdownSnapshot: Codable, Equatable, Sendable {
+    let driving: EnergyBreakdownItem?
+    let climate: EnergyBreakdownItem?
+    let battery: EnergyBreakdownItem?
+    let other: EnergyBreakdownItem?
+
+    init(
+        driving: EnergyBreakdownItem? = nil,
+        climate: EnergyBreakdownItem? = nil,
+        battery: EnergyBreakdownItem? = nil,
+        other: EnergyBreakdownItem? = nil
+    ) {
+        self.driving = driving
+        self.climate = climate
+        self.battery = battery
+        self.other = other
+    }
+
+    var hasData: Bool {
+        driving != nil || climate != nil || battery != nil || other != nil
+    }
+}
+
 struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let timeToTargetMinutes: Int?
     let timeToMinimumSOCMinutes: Int?
@@ -871,11 +925,23 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// and surfaced in the battery-diagnostics card. Empty for Volvo and for snapshots
     /// persisted before capture existed.
     var unknownWireFields: [PolestarRawWireField] = []
+    var energyBreakdown: EnergyBreakdownSnapshot? = nil
+    var powerLimitKw: Double? = nil
+    var energyAvailableKwh: Double? = nil
 
-    init(timeToTargetMinutes: Int?, timeToMinimumSOCMinutes: Int?, chargerPowerState: ChargerPowerState,
-         averageConsumption: Double?, averageConsumptionSinceCharge: Double?,
-         averageConsumptionAutomatic: Double? = nil, energyUsedSinceChargeWh: Double?,
-         unknownWireFields: [PolestarRawWireField] = []) {
+    init(
+        timeToTargetMinutes: Int?,
+        timeToMinimumSOCMinutes: Int?,
+        chargerPowerState: ChargerPowerState,
+        averageConsumption: Double?,
+        averageConsumptionSinceCharge: Double?,
+        averageConsumptionAutomatic: Double? = nil,
+        energyUsedSinceChargeWh: Double?,
+        unknownWireFields: [PolestarRawWireField] = [],
+        energyBreakdown: EnergyBreakdownSnapshot? = nil,
+        powerLimitKw: Double? = nil,
+        energyAvailableKwh: Double? = nil
+    ) {
         self.timeToTargetMinutes = timeToTargetMinutes
         self.timeToMinimumSOCMinutes = timeToMinimumSOCMinutes
         self.chargerPowerState = chargerPowerState
@@ -884,12 +950,16 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         self.averageConsumptionAutomatic = averageConsumptionAutomatic
         self.energyUsedSinceChargeWh = energyUsedSinceChargeWh
         self.unknownWireFields = unknownWireFields
+        self.energyBreakdown = energyBreakdown
+        self.powerLimitKw = powerLimitKw
+        self.energyAvailableKwh = energyAvailableKwh
     }
 
     private enum CodingKeys: String, CodingKey {
         case timeToTargetMinutes, timeToMinimumSOCMinutes, chargerPowerState
         case averageConsumption, averageConsumptionSinceCharge, averageConsumptionAutomatic
         case energyUsedSinceChargeWh, unknownWireFields
+        case energyBreakdown, powerLimitKw, energyAvailableKwh
     }
 
     init(from decoder: Decoder) throws {
@@ -902,6 +972,9 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         averageConsumptionAutomatic = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionAutomatic)
         energyUsedSinceChargeWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedSinceChargeWh)
         unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields) ?? []
+        energyBreakdown = try c.decodeIfPresent(EnergyBreakdownSnapshot.self, forKey: .energyBreakdown)
+        powerLimitKw = try c.decodeIfPresent(Double.self, forKey: .powerLimitKw)
+        energyAvailableKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableKwh)
     }
 }
 

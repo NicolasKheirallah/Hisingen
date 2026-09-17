@@ -58,6 +58,7 @@ struct CapabilityGate: Sendable {
         for command: RemoteCommand,
         state: VehicleState,
         brand: VehicleBrand,
+        polestarConnectionMode: PolestarConnectionMode = PreferencesStore.currentPolestarConnectionMode,
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool,
         volvoRestrictedScopesEnabled: Bool = true
@@ -65,7 +66,7 @@ struct CapabilityGate: Sendable {
         evaluate(
             command: command,
             state: state,
-            commandCatalog: ProviderCommandCatalog(brand: brand),
+            commandCatalog: ProviderCommandCatalog(brand: brand, polestarConnectionMode: polestarConnectionMode),
             enabledFeatures: enabledFeatures,
             commandInProgress: commandInProgress,
             volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled

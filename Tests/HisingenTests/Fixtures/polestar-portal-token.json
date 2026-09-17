@@ -1,0 +1,5 @@
+{
+  "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example_sandbox_jwt_token",
+  "expiresIn": 3600,
+  "tokenType": "Bearer"
+}

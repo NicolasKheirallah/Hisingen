@@ -141,6 +141,7 @@ final class CommandCoordinator {
             for: command,
             state: state,
             brand: executor.brand,
+            polestarConnectionMode: preferences.polestarConnectionMode,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress || isAuthorizing,
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
