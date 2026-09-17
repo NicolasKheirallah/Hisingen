@@ -228,10 +228,13 @@ struct AccountCredentialsForm: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 if isTestingConnection {
-                    ProgressView().controlSize(.small).frame(width: 8, height: 8)
+                    ProgressView().controlSize(.mini)
+                        .frame(width: 10, height: 10)
                         .transition(.opacity)
                 } else {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
+                    Circle().fill(statusColor)
+                        .frame(width: 8, height: 8)
+                        .frame(width: 10, height: 10)
                         .transition(.opacity)
                 }
 

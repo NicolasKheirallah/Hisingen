@@ -63,5 +63,18 @@
 	<integer>86400</integer>
 	<key>SUVerifyUpdateBeforeExtraction</key>
 	<true/>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.kheirallah.hisingen.tab-item</string>
+			<key>UTTypeDescription</key>
+			<string>Hisingen Tab Item</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

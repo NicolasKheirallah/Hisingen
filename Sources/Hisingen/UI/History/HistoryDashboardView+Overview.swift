@@ -40,6 +40,7 @@ extension HistoryDashboardView {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .hisType(.label, weight: .medium)
+                        .frame(width: 14, height: 14)
                         // The skeleton only covers the first load, so a later reload looked like a
                         // dead button: nothing moved, and the stack then reshuffled unexplained.
                         .opacity(isLoading ? 0 : 1)

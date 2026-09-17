@@ -691,5 +691,5 @@ struct TabItemDragPayload: Codable, Transferable, Hashable {
 }
 
 extension UTType {
-    static let hisingenTabItem = UTType(exportedAs: "io.kheirallah.hisingen.tab-item")
+    static let hisingenTabItem = UTType(exportedAs: "io.kheirallah.hisingen.tab-item", conformingTo: .data)
 }

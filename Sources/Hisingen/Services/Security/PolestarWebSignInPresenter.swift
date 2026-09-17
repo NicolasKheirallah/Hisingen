@@ -76,10 +76,12 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDele
         activeWebView?.stopLoading()
         activeWebView?.navigationDelegate = nil
         activeWebView?.uiDelegate = nil
+        activeWebView?.removeFromSuperview()
         activeWebView = nil
         if let window = activeWindow {
             self.activeWindow = nil
             window.delegate = nil
+            window.contentView = nil
             window.close()
         }
         switch result {

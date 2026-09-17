@@ -40,6 +40,12 @@ protocol CommandExecutionContext: AnyObject {
         _ receipt: CommandReceipt,
         optimisticState: VehicleState?
     )
+    /// Requests an immediate vehicle state refresh, e.g. when a command was blocked due to stale telemetry.
+    func requestExpeditedRefresh()
+}
+
+extension CommandExecutionContext {
+    func requestExpeditedRefresh() {}
 }
 
 /// What a dispatch returned. The human presentation always flows through
@@ -140,6 +146,9 @@ final class CommandCoordinator {
             volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
         )
         guard availability == .available else {
+            if availability == .unavailableUntilRefresh, origin == .userInitiated {
+                context.requestExpeditedRefresh()
+            }
             let message: String = {
                 switch availability {
                 case .disabledBySettings: return RemoteCommandError.disabled.localizedDescription

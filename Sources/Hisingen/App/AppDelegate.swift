@@ -470,6 +470,9 @@ extension AppDelegate: CommandExecutionContext {
         // the visible vehicle. The shell holds no part of that rule.
         vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
     }
+    func requestExpeditedRefresh() {
+        vehicleSession.refreshNow()
+    }
 }
 
 // MARK: - SignInCoordinatorContext
