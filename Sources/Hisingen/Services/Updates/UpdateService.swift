@@ -1,13 +1,13 @@
 import AppKit
 import Foundation
 import OSLog
-import Sparkle
+@preconcurrency import Sparkle
 
 /// The small application-facing boundary around Sparkle. Sparkle owns appcast parsing,
 /// download progress, Ed25519 verification, safe replacement, permission prompts and
 /// relaunching; vehicle services never need to know how Hisingen updates itself.
 @MainActor
-final class UpdateService: NSObject, SPUUpdaterDelegate {
+final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
     private static let updateCheckFailureMessage = "Update check failed. Please try again later."
 
     struct AvailableUpdate: Equatable {
@@ -27,7 +27,7 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
     private lazy var controller = SPUStandardUpdaterController(
         startingUpdater: false,
         updaterDelegate: self,
-        userDriverDelegate: nil
+        userDriverDelegate: self
     )
 
     var onStateChanged: ((State) -> Void)?
@@ -146,6 +146,18 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
         // Stable is Sparkle's default channel. Beta can be opt-in later without letting
         // prerelease appcast entries reach stable users.
         []
+    }
+
+    // MARK: - SPUStandardUserDriverDelegate (Gentle Reminders)
+
+    nonisolated var supportsGentleScheduledUpdateReminders: Bool {
+        true
+    }
+
+    nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
+        // Foreground or user-initiated checks present the standard alert directly;
+        // background checks defer intrusive popups so the status-item badge can represent them gently.
+        immediateFocus
     }
 
     private func fail(_ operation: String, error: any Error) {
