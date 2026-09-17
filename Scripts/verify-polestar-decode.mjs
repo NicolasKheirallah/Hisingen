@@ -90,11 +90,11 @@ for (const field of ["exterior", "interior", "wheels", "packages"]) {
 }
 
 // 7. UI surfaces the decodes.
-const vehicleTab = read("Sources/Hisingen/UI/Vehicle/VehicleTabView.swift");
-require_(vehicleTab.includes("strippedReleaseNotes"), "release-notes stripping missing");
-require_(vehicleTab.includes("scheduleRelativeMinutes"), "vehicle-tab countdown row missing");
-require_(vehicleTab.includes("Build code"), "vehicle-tab build-code row missing");
-require_(vehicleTab.includes("Schedule originator"), "vehicle-tab originator row missing");
+const softwareCard = read("Sources/Hisingen/UI/Vehicle/VehicleSoftwareCard.swift");
+require_(softwareCard.includes("strippedReleaseNotes"), "release-notes stripping missing");
+require_(softwareCard.includes("scheduleRelativeMinutes"), "vehicle-tab countdown row missing");
+require_(softwareCard.includes("Build code"), "vehicle-tab build-code row missing");
+require_(softwareCard.includes("Schedule originator"), "vehicle-tab originator row missing");
 
 const infoDiag = read("Sources/Hisingen/UI/Info/InfoTabView+Diagnostics.swift");
 require_(infoDiag.includes("unknownWireFields"), "info-tab raw field rows missing");
