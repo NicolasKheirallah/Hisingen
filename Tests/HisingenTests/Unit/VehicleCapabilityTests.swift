@@ -49,7 +49,7 @@ struct VehicleCapabilityTests {
     }
 
     @Test
-    func automaticClimateWireRequestOmitsUnsupportedSelections() {
+    func automaticClimateWireRequestIncludesDefaultTemperatureAndOmitsUnsupportedSeats() throws {
         let data = PolestarGRPC.climateStartRequest(
             vin: "TESTVIN", temperature: 0,
             frontLeft: .unspecified, frontRight: .unspecified,
@@ -58,7 +58,9 @@ struct VehicleCapabilityTests {
         )
         let fields = Protobuf.fields(data)
         #expect(fields.first { $0.number == 2 }?.varint == 1)
-        for field in 3...8 {
+        let tempField = try #require(fields.first { $0.number == 3 })
+        #expect(Protobuf.float(from: tempField.data) == 22)
+        for field in 4...8 {
             #expect(fields.first { $0.number == field } == nil)
         }
     }

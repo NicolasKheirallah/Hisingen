@@ -419,8 +419,10 @@ extension PolestarGRPC {
         var request = invocationOnlyRequest(vin)
         request.append(Protobuf.intField(2, 1))
 
-
-        if temperature > 0 { request.append(Protobuf.floatField(3, temperature)) }
+        // On the wire, Polestar C3 gateway and vehicle CCM require Field 3 (compartment_temperature_celsius).
+        // If temperature == 0 (automatic / vehicle-managed mode), supply the standard comfort setpoint (22.0 °C).
+        let wireTemperature: Float = temperature > 0 ? temperature : 22.0
+        request.append(Protobuf.floatField(3, wireTemperature))
         if frontRight != .unspecified { request.append(Protobuf.intField(4, frontRight.rawValue)) }
         if frontLeft != .unspecified { request.append(Protobuf.intField(5, frontLeft.rawValue)) }
         if rearRight != .unspecified { request.append(Protobuf.intField(6, rearRight.rawValue)) }
