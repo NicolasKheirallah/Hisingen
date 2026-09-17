@@ -181,6 +181,78 @@ struct VehicleActivityTests {
         #expect(command.confirmationConflictKey == RemoteCommand.stopClimate.confirmationConflictKey)
     }
 
+    @Test func polestar2AutoClimateEndToEndWireAndConfirmation() throws {
+        let profile = VehicleCapabilityProfile(modelName: "Polestar 2")
+        #expect(!profile.hasSelectableClimateTemperature)
+
+        // 1. User dispatches climate start
+        let userCommand = RemoteCommand.startClimate(
+            temperatureCelsius: 21.0,
+            frontLeftSeat: .level2,
+            frontRightSeat: .off,
+            rearLeftSeat: .off,
+            rearRightSeat: .off,
+            steeringWheel: .off
+        )
+
+        // 2. Adapted for Polestar 2: temperature becomes 0 (auto), seats become unspecified
+        let adapted = userCommand.adapted(to: profile)
+        guard case .startClimate(let temp, let fl, let fr, let rl, let rr, let sw) = adapted else {
+            Issue.record("Expected adapted to be startClimate")
+            return
+        }
+        #expect(temp == 0)
+        #expect(fl == .unspecified)
+        #expect(fr == .unspecified)
+        #expect(sw == .unspecified)
+
+        // 3. Wire payload verification: field 3 must contain 22.0 comfort default
+        let wire = PolestarGRPC.climateStartRequest(
+            vin: "TESTVIN0000000000",
+            temperature: temp,
+            frontLeft: fl,
+            frontRight: fr,
+            rearLeft: rl,
+            rearRight: rr,
+            steeringWheel: sw
+        )
+        let fields = Protobuf.fields(wire)
+        let tempField = try #require(fields.first { $0.number == 3 })
+        #expect(Protobuf.float(from: tempField.data) == 22.0)
+
+        // 4. Optimistic state patch reflects 22.0
+        var currentState = state(at: Date())
+        userCommand.descriptor.optimisticPatch(&currentState, Date(), VehicleBrand.polestar)
+        #expect(currentState.climateStatus?.requestedTemperatureCelsius == 21.0)
+
+        var adaptedState = state(at: Date())
+        adapted.descriptor.optimisticPatch(&adaptedState, Date(), VehicleBrand.polestar)
+        #expect(adaptedState.climateStatus?.requestedTemperatureCelsius == 22.0)
+
+        // 5. Receipt confirmation via live telemetry
+        let now = Date()
+        let receipt = CommandReceipt(
+            commandIdentifier: adapted.identifier,
+            issuedAt: now.addingTimeInterval(-5),
+            command: adapted,
+            providerBrand: .polestar
+        )
+        #expect(receipt.status.isAwaiting)
+
+        var activeTelemetry = state(at: now)
+        activeTelemetry.climateStatus = VehicleClimateStatus(
+            activity: .heating,
+            timeRemainingMinutes: 28,
+            timerTriggered: false,
+            interiorTemperatureCelsius: 18.0,
+            requestedTemperatureCelsius: 22.0
+        )
+        activeTelemetry.freshness.readingDates[.climateStatus] = now
+
+        let confirmed = receipt.updatingConfirmation(from: activeTelemetry, now: now)
+        #expect(confirmed.status.isConfirmed)
+    }
+
     @Test func commandConfirmationAllowsOnlyBoundedProviderTimestampSkew() {
         let now = Date(timeIntervalSince1970: 1_750_000_010)
         let issuedAt = Date(timeIntervalSince1970: 1_750_000_000)

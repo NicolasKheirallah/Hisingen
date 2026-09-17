@@ -243,7 +243,7 @@ private class TokenEndpointTransport: URLProtocol, @unchecked Sendable {
 }
 
 /// The OAuth marker of a permanently dead grant (invalid_grant), deterministically.
-private final class DeadGrantTransport: TokenEndpointTransport {
+private final class DeadGrantTransport: TokenEndpointTransport, @unchecked Sendable {
     override class var tokenStatus: Int { 400 }
     override class var tokenBody: Data {
         Data(#"{"error":"invalid_grant","error_description":"Token has been revoked"}"#.utf8)
@@ -251,7 +251,7 @@ private final class DeadGrantTransport: TokenEndpointTransport {
 }
 
 /// The IdP answering 5xx, which says nothing about whether the grant is still valid.
-private final class ServerErrorTransport: TokenEndpointTransport {
+private final class ServerErrorTransport: TokenEndpointTransport, @unchecked Sendable {
     override class var tokenStatus: Int { 500 }
     override class var tokenBody: Data { Data(#"{"error":"server_error"}"#.utf8) }
 }
