@@ -50,6 +50,29 @@ struct ChargingControlsCard: View {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: HisingenTheme.semanticGood)
                 gate.dimReason(gate.liveAvailability(chargingCommands))
 
+                // Passive capability line, styled after the Target/Current Limit header rows.
+                // Only rendered when the vehicle reports the setting as on; a nil or false
+                // report simply leaves the row out.
+                if state.energy.diagnostics?.isBidirectionalChargingEnabled == true {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .hisType(.label, weight: .medium)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        Text(L10n.text("Bidirectional Charging"))
+                            .hisType(.label, weight: .medium)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(L10n.text("Enabled"))
+                            .hisType(.label, weight: .semibold)
+                            .foregroundStyle(HisingenTheme.semanticGood)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(L10n.text("Bidirectional Charging") + ": " + L10n.text("Enabled"))
+                    .transition(.opacity)
+                    .hisAnimation(Motion.layout, value: state.energy.diagnostics?.isBidirectionalChargingEnabled)
+                }
+
                 if profile.permits(.chargeTarget) && features.contains(.remoteCharging) {
                     chargeTargetControls
                 }
@@ -306,34 +329,47 @@ struct ChargingControlsCard: View {
     }
 
     private var chargeOverrideButtons: some View {
-        HStack(spacing: 8) {
-            Button {
-                gate.send(.startChargingOverride)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "bolt.fill")
-                    Text(L10n.text("Charge Now")).hisType(.label, weight: .medium)
-                    gate.sendingOverlay(.startChargingOverride)
+        VStack(spacing: 6) {
+            // Reports the state the two buttons below act on: the manual override is live at
+            // the vehicle, so "Resume Schedule" is the meaningful press. Mirrors the "Here"
+            // pill idiom, including the reduce-motion crossfade.
+            if state.energy.chargeNowActive == true {
+                HStack(spacing: 6) {
+                    Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity, minHeight: 30)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.semanticGood)
-            .disabled(gate.isDisabled(.startChargingOverride))
+            HStack(spacing: 8) {
+                Button {
+                    gate.send(.startChargingOverride)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt.fill")
+                        Text(L10n.text("Charge Now")).hisType(.label, weight: .medium)
+                        gate.sendingOverlay(.startChargingOverride)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HisingenTheme.semanticGood)
+                .disabled(gate.isDisabled(.startChargingOverride))
 
-            Button {
-                gate.send(.stopChargingOverride)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "clock.arrow.circlepath")
-                    Text(L10n.text("Resume Schedule")).hisType(.label, weight: .medium)
-                    gate.sendingOverlay(.stopChargingOverride)
+                Button {
+                    gate.send(.stopChargingOverride)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath")
+                        Text(L10n.text("Resume Schedule")).hisType(.label, weight: .medium)
+                        gate.sendingOverlay(.stopChargingOverride)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 30)
                 }
-                .frame(maxWidth: .infinity, minHeight: 30)
+                .buttonStyle(.bordered)
+                .disabled(gate.isDisabled(.stopChargingOverride))
             }
-            .buttonStyle(.bordered)
-            .disabled(gate.isDisabled(.stopChargingOverride))
         }
+        .hisAnimation(Motion.stateChange, value: state.energy.chargeNowActive)
     }
 
     @ViewBuilder
@@ -392,6 +428,10 @@ struct ChargingControlsCard: View {
                     .hisType(.label, weight: .semibold)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
+                if state.energy.isAtChargeLocation == true && (state.energy.currentChargeLocationName == location.alias || state.energy.currentChargeLocationName == location.id) {
+                    Pill(text: L10n.text("Here"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                }
                 Spacer()
                 Button {
                     renameDraft = location.alias

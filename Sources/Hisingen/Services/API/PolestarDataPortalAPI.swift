@@ -73,6 +73,15 @@ actor PolestarDataPortalAPI {
         UserDefaults.standard.set(count, forKey: "polestar_dataportal_daily_calls")
         UserDefaults.standard.set(dateStr, forKey: "polestar_dataportal_daily_date")
     }
+
+    func setSessionForTesting(_ session: URLSession) {
+        self.session = session
+    }
+
+    func setAccessTokenForTesting(_ token: String, expiry: Date = Date().addingTimeInterval(3600)) {
+        self.accessToken = token
+        self.tokenExpiry = expiry
+    }
     #endif
 
 
@@ -278,12 +287,12 @@ actor PolestarDataPortalAPI {
         if response.statusCode != 200 {
             throw PolestarDataPortalError.client(statusCode: response.statusCode)
         }
-        if let direct = try? JSONDecoder().decode(T.self, from: data) {
-            return direct
-        }
         if let envelope = try? JSONDecoder().decode(PolestarDataPortalEnvelope<T>.self, from: data),
            let content = envelope.data {
             return content
+        }
+        if let direct = try? JSONDecoder().decode(T.self, from: data) {
+            return direct
         }
         throw PolestarDataPortalError.decoding(operation: path)
     }
@@ -331,6 +340,18 @@ actor PolestarDataPortalAPI {
         let availability: PolestarDataPortalAvailabilityDTO?
         let odometer: PolestarDataPortalOdometerDTO?
         let location: PolestarDataPortalLocationDTO?
+        let parkingClimatization: PolestarParkingClimatizationDTO?
+        let preCleaning: PolestarPreCleaningDTO?
+        let targetSoc: PolestarTargetSocDTO?
+        let ampLimit: PolestarAmpLimitDTO?
+        let chargeLocations: PolestarChargeLocationsDTO?
+        let isAtChargeLocation: PolestarIsAtChargeLocationDTO?
+        let globalChargeTimer: PolestarGlobalChargeTimerDTO?
+        let parkingClimateTimer: PolestarParkingClimateTimerDTO?
+        let chargeNow: PolestarChargeNowDTO?
+        // No bundle entry for override-charge-timer: the portal defines it as POST/DELETE only,
+        // so a per-refresh GET would burn quota on a guaranteed error with nothing to decode.
+        // The synced read of the same override switch lives on the charge-now resource above.
     }
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
@@ -341,6 +362,15 @@ actor PolestarDataPortalAPI {
         let needsHealth = features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings)
         let needsOdometer = features.contains(.vehicleHealth) || features.contains(.tripMeters)
         let needsLocation = features.contains(.vehicleLocation)
+        let needsClimate = features.contains(.climateStatus) || features.contains(.remoteClimate)
+        let needsPreCleaning = features.contains(.airQuality) || features.contains(.remotePreCleaning)
+        let needsTargetSoc = features.contains(.chargingDetails) || features.contains(.remoteCharging)
+        let needsAmpLimit = features.contains(.chargingDetails) || features.contains(.remoteCharging)
+        let needsChargeNow = features.contains(.chargingDetails) || features.contains(.remoteCharging)
+        let needsChargeLocations = features.contains(.chargingDetails) || features.contains(.chargingSchedule) || features.contains(.remoteSchedules)
+        let needsIsAtChargeLocation = features.contains(.chargingDetails) || features.contains(.chargingSchedule) || features.contains(.vehicleLocation)
+        let needsGlobalChargeTimer = features.contains(.chargingSchedule) || features.contains(.remoteSchedules) || features.contains(.chargingDetails)
+        let needsParkingClimateTimer = features.contains(.climateStatus) || features.contains(.remoteClimate) || features.contains(.chargingSchedule)
 
         async let batteryDTO: PolestarDataPortalBatteryDTO? = needsBattery
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/battery") : nil
@@ -354,6 +384,24 @@ actor PolestarDataPortalAPI {
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/odometer") : nil
         async let locationDTO: PolestarDataPortalLocationDTO? = needsLocation
             ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/location") : nil
+        async let parkingClimatizationDTO: PolestarParkingClimatizationDTO? = needsClimate
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/parking-climatization") : nil
+        async let preCleaningDTO: PolestarPreCleaningDTO? = needsPreCleaning
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning") : nil
+        async let targetSocDTO: PolestarTargetSocDTO? = needsTargetSoc
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/target-soc") : nil
+        async let ampLimitDTO: PolestarAmpLimitDTO? = needsAmpLimit
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/amp-limit") : nil
+        async let chargeLocationsDTO: PolestarChargeLocationsDTO? = needsChargeLocations
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/charge-locations") : nil
+        async let isAtChargeLocationDTO: PolestarIsAtChargeLocationDTO? = needsIsAtChargeLocation
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/is-at-charge-location") : nil
+        async let globalChargeTimerDTO: PolestarGlobalChargeTimerDTO? = needsGlobalChargeTimer
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/global-charge-timer") : nil
+        async let parkingClimateTimerDTO: PolestarParkingClimateTimerDTO? = needsParkingClimateTimer
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/parking-climate-timer") : nil
+        async let chargeNowDTO: PolestarChargeNowDTO? = needsChargeNow
+            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/charge-now") : nil
 
         let bundle = await TelemetryBundle(
             battery: batteryDTO,
@@ -361,7 +409,16 @@ actor PolestarDataPortalAPI {
             health: healthDTO,
             availability: availabilityDTO,
             odometer: odometerDTO,
-            location: locationDTO
+            location: locationDTO,
+            parkingClimatization: parkingClimatizationDTO,
+            preCleaning: preCleaningDTO,
+            targetSoc: targetSocDTO,
+            ampLimit: ampLimitDTO,
+            chargeLocations: chargeLocationsDTO,
+            isAtChargeLocation: isAtChargeLocationDTO,
+            globalChargeTimer: globalChargeTimerDTO,
+            parkingClimateTimer: parkingClimateTimerDTO,
+            chargeNow: chargeNowDTO
         )
         return assembleVehicleState(vin: vin, bundle: bundle)
     }
@@ -392,20 +449,76 @@ actor PolestarDataPortalAPI {
         if let hDate = bundle.health?.timestamp?.date { readingDates[.health] = hDate }
         if let oDate = bundle.odometer?.timestamp?.date { readingDates[.odometer] = oDate }
         if let lDate = bundle.location?.timestamp?.date { readingDates[.location] = lDate }
+        if let cDate = bundle.parkingClimatization?.timestamp?.date { readingDates[.climateStatus] = cDate }
+        if let aDate = bundle.preCleaning?.timestamp?.date { readingDates[.airQuality] = aDate }
+        if let cnDate = bundle.chargeNow?.syncedOverrideChargeTimer?.updatedAtTimestamp?.date { readingDates[.charging] = cnDate }
         return readingDates
     }
 
     private func assembleVehicleState(vin: String, bundle: TelemetryBundle) -> VehicleState {
-        let energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
-        let extSnapshot = bundle.exterior?.toExteriorSnapshot()
+        var energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
+        if let target = bundle.targetSoc?.targetSocPercentage { energy.targetPercentage = target }
+        if let amp = bundle.ampLimit?.ampLimit { energy.currentLimitAmps = amp }
+        if let locs = bundle.chargeLocations { energy.locations = locs.toChargeLocations() }
+        if let timers = bundle.globalChargeTimer { energy.schedules = timers.toSchedules() }
+        if let isAt = bundle.isAtChargeLocation {
+            energy.isAtChargeLocation = isAt.isAtChargeLocation
+            // The is-at state carries only a locationId; resolve the display name against
+            // the synced charge-locations list fetched in the same refresh.
+            if let locationId = isAt.locationId,
+               let alias = bundle.chargeLocations?.chargeLocations?.first(where: { $0.locationId == locationId })?.locationAlias {
+                energy.currentChargeLocationName = alias
+            }
+            energy.arrivedAtLocationDate = isAt.arrivedAtTimestamp?.date
+        }
+        if let syncedOverride = bundle.chargeNow?.syncedOverrideChargeTimer {
+            // Only the synced value counts: a pending override has not reached the car yet.
+            energy.chargeNowActive = syncedOverride.override == true
+        }
+        if let increase = bundle.battery?.dischargeInfo?.energyAvailableIncrease {
+            energy.diagnostics?.energyAvailableIncreaseKwh = increase
+        }
+        if let preconditioning = bundle.battery?.manualPreconditioning {
+            energy.diagnostics?.batteryPreconditioningStatus = preconditioning.preconditioningStatus
+            energy.diagnostics?.batteryPreconditioningEndsAt = preconditioning.endingAt?.date
+        }
+
+        var extSnapshot = bundle.exterior?.toExteriorSnapshot()
+        if let alarm = bundle.exterior?.alarm?.uppercased() {
+            // The shared exterior mapper treats any value containing "ALARM" as an event,
+            // which would flag the spec's ALARM_STATUS_IDLE as triggered. Only the
+            // TRIGGERED spelling is an alarm event.
+            extSnapshot?.alarmTriggered = alarm.contains("TRIGGERED")
+        }
+
         var healthSnapshot = bundle.health?.toMaintenanceSnapshot() ?? MaintenanceAndHealthSnapshot()
         if let km = bundle.odometer?.calculatedOdometerKm { healthSnapshot.odometerKm = km }
 
+        var tripComputer = TripComputerSnapshot()
+        if let odo = bundle.odometer {
+            tripComputer.manualTripKm = odo.tripMeterManualKm
+            tripComputer.automaticTripKm = odo.tripMeterAutomaticKm
+            tripComputer.sinceChargeTripKm = odo.tripMeterSinceChargeKm
+            // Per-trip speeds stay in their explicit slots so the blended
+            // `averageSpeedKmH` is reserved for statistics-style sources.
+            tripComputer.manualAverageSpeedKmH = odo.averageSpeedKmPerHour.map { Int($0.rounded()) }
+            tripComputer.automaticAverageSpeedKmH = odo.averageSpeedKmPerHourAutomatic.map { Int($0.rounded()) }
+            tripComputer.sinceChargeAverageSpeedKmH = odo.averageSpeedKmPerHourSinceCharge.map { Int($0.rounded()) }
+        }
+
+        let availability = assembleAvailability(from: bundle.availability)
         let identity = VehicleIdentitySnapshot(
-            availability: assembleAvailability(from: bundle.availability),
+            availability: availability,
             availabilityReportedAt: bundle.availability?.timestamp?.date,
             modelName: "Polestar",
-            vin: vin
+            vin: vin,
+            usageMode: bundle.availability?.usageMode,
+            // A stale reason must not shadow an AVAILABLE report, so keep the raw wire
+            // value only while the vehicle actually reads as unavailable.
+            unavailableReason: {
+                if case .unavailable = availability { return bundle.availability?.unavailableReason }
+                return nil
+            }()
         )
         let readingDates = assembleReadingDates(from: bundle)
         let freshness = SnapshotFreshness(
@@ -413,11 +526,19 @@ actor PolestarDataPortalAPI {
             fetchedAt: Date(),
             vehicleReportedAt: readingDates.values.max(),
             readingDates: readingDates,
-            unavailableFeatures: Array(AppFeature.remoteFeatures)
+            unavailableFeatures: [.remoteLocks, .remoteWindows, .remoteHonkFlash, .remoteOTA]
         )
+
         let climateStatus: VehicleClimateStatus? = {
+            if let clim = bundle.parkingClimatization {
+                return clim.toVehicleClimateStatus(batteryPreconditioning: bundle.battery?.manualPreconditioning)
+            }
             guard let precond = bundle.battery?.manualPreconditioning else { return nil }
-            let isActive = precond.preconditioningStatus?.uppercased().contains("ACTIVE") == true
+            // The preconditioning state has no runningStatus of its own; the spec spells
+            // the running state MANUAL_PRECONDITIONING_STATUS_ON (probe transcripts also
+            // captured a bare "ACTIVE"), and _FINISHED/_OFF mean it already ended.
+            let status = precond.preconditioningStatus?.uppercased()
+            let isActive = status == "MANUAL_PRECONDITIONING_STATUS_ON" || status == "ACTIVE"
             let started = precond.startedAt?.date
             let ends = precond.endingAt?.date
             let remaining: Int? = {
@@ -429,15 +550,13 @@ actor PolestarDataPortalAPI {
                 activity: isActive ? .active : .idle,
                 timeRemainingMinutes: isActive ? remaining : nil,
                 timerTriggered: false,
-                interiorTemperatureCelsius: nil,
-                requestedTemperatureCelsius: nil,
-                driverSeatHeatingLevel: nil,
-                passengerSeatHeatingLevel: nil,
-                steeringWheelHeatingLevel: nil,
                 sessionStartedAt: started,
                 sessionEndsAt: ends
             )
         }()
+
+        let airQuality = bundle.preCleaning?.toVehicleAirQuality()
+        let climateTimers = bundle.parkingClimateTimer?.toClimateSchedules() ?? []
 
         return VehicleState(
             energy: energy,
@@ -447,6 +566,9 @@ actor PolestarDataPortalAPI {
             commandState: CommandPresentationState(),
             exteriorStatus: extSnapshot,
             climateStatus: climateStatus,
+            climateTimers: climateTimers,
+            tripComputer: tripComputer,
+            airQuality: airQuality,
             location: bundle.location?.toVehicleLocation(),
             powertrain: .bev
         )
@@ -494,8 +616,228 @@ actor PolestarDataPortalAPI {
         _ = try await ensureAccessToken()
     }
 
+    @discardableResult
+    private func authenticatedSend(
+        method: String,
+        path: String,
+        body: Data? = nil
+    ) async throws -> (data: Data, response: HTTPURLResponse) {
+        let token = try await ensureAccessToken()
+        let url = try apiURL(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let headerClientID = (accountID?.isEmpty == false) ? accountID! : (clientID ?? "")
+        if !headerClientID.isEmpty {
+            request.setValue(headerClientID, forHTTPHeaderField: "x-client-id")
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
+
+        let (data, response) = try await HTTPExchange.data(
+            for: request,
+            using: session,
+            limit: 1_000_000,
+            operation: "Data Portal \(method): \(path)",
+            provider: .polestar,
+            diagnosticLog: diagnosticLog
+        )
+        recordApiCall()
+        if response.statusCode == 401 {
+            self.accessToken = nil
+            self.tokenExpiry = nil
+            throw PolestarDataPortalError.authenticationRequired(.expiredSession)
+        }
+        if response.statusCode == 403 {
+            throw PolestarDataPortalError.permissionDenied(operation: "\(method) \(path)")
+        }
+        if response.statusCode == 429 {
+            throw PolestarDataPortalError.rateLimited(retryAfter: Self.parseRetryAfter(response))
+        }
+        if response.statusCode >= 500 {
+            throw PolestarDataPortalError.server(statusCode: response.statusCode)
+        }
+        guard (200...299).contains(response.statusCode) else {
+            throw PolestarDataPortalError.client(statusCode: response.statusCode)
+        }
+        return (data, response)
+    }
+
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        if let result = try await executeClimateCommand(command, vin: vin) {
+            return result
+        }
+        if let result = try await executePreCleaningCommand(command, vin: vin) {
+            return result
+        }
+        if let result = try await executeChargingCommand(command, vin: vin) {
+            return result
+        }
+        if let result = try await executeScheduleCommand(command, vin: vin) {
+            return result
+        }
+        if let result = try await executeChargeLocationCommand(command, vin: vin) {
+            return result
+        }
         throw RemoteCommandError.unsupported
+    }
+
+    private func executeClimateCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
+        switch command {
+        case .startClimate(let temp, let frontLeft, let frontRight, let rearLeft, let rearRight, let wheel):
+            let payload: [String: Any] = [
+                "targetTemperatureCelsius": Double(temp),
+                "frontLeftSeatHeating": heatingLevelString(frontLeft),
+                "frontRightSeatHeating": heatingLevelString(frontRight),
+                "rearLeftSeatHeating": heatingLevelString(rearLeft),
+                "rearRightSeatHeating": heatingLevelString(rearRight),
+                "steeringWheelHeating": wheel == .off ? "OFF" : "ON"
+            ]
+            let body = try JSONSerialization.data(withJSONObject: payload)
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/telemetry/parking-climatization", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .stopClimate:
+            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/telemetry/parking-climatization")
+            return RemoteCommandResult(outcome: .completed, message: nil)
+        default:
+            return nil
+        }
+    }
+
+    private func executePreCleaningCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
+        switch command {
+        case .startPreCleaning:
+            let body = try JSONSerialization.data(withJSONObject: ["status": "ACTIVE"])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .stopPreCleaning:
+            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning")
+            return RemoteCommandResult(outcome: .completed, message: nil)
+        default:
+            return nil
+        }
+    }
+
+    private func executeChargingCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
+        switch command {
+        case .setChargeTarget(let pct):
+            let body = try JSONSerialization.data(withJSONObject: ["targetSocPercentage": pct])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/target-soc", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .setAmpLimit(let amps):
+            let body = try JSONSerialization.data(withJSONObject: ["ampLimit": amps])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/amp-limit", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .startChargingOverride:
+            let body = try JSONSerialization.data(withJSONObject: ["overrideStatus": "ACTIVE"])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/override-charge-timer", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .stopChargingOverride:
+            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/override-charge-timer")
+            return RemoteCommandResult(outcome: .completed, message: nil)
+        default:
+            return nil
+        }
+    }
+
+    private func executeScheduleCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
+        switch command {
+        case .setGlobalChargeTimer(let schedule):
+            let timer: [String: Any] = portalTimerDictionary(
+                backendID: schedule.backendID, enabled: schedule.isActive,
+                startHour: schedule.startHour, startMinute: schedule.startMinute,
+                endHour: schedule.endHour, endMinute: schedule.endMinute,
+                weekdays: schedule.weekdays, departure: false)
+            let body = try JSONSerialization.data(withJSONObject: ["timers": [timer]])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/global-charge-timer", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .setClimateTimer(let schedule):
+            let timer: [String: Any] = portalTimerDictionary(
+                backendID: schedule.backendID, enabled: schedule.isActive,
+                startHour: schedule.startHour, startMinute: schedule.startMinute,
+                endHour: nil, endMinute: nil,
+                weekdays: schedule.weekdays, departure: true)
+            let body = try JSONSerialization.data(withJSONObject: ["timers": [timer]])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/parking-climate-timer", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .deleteClimateTimer(let id):
+            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/parking-climate-timer/\(id)")
+            return RemoteCommandResult(outcome: .completed, message: nil)
+        default:
+            return nil
+        }
+    }
+
+    private func executeChargeLocationCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
+        switch command {
+        case .createChargeLocationAtCar(let alias, let ampLimit, let minimumSoc, let optimised):
+            let body = try JSONSerialization.data(withJSONObject: [
+                "name": alias,
+                "ampLimit": ampLimit,
+                "targetSocPercentage": minimumSoc,
+                "optimisedCharging": optimised
+            ])
+            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/charge-locations", body: body)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .updateChargeLocationAlias(let id, let alias):
+            _ = try await updateChargeLocation(id: id, vin: vin, field: "name", value: alias)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .updateChargeLocationAmpLimit(let id, let amps):
+            _ = try await updateChargeLocation(id: id, vin: vin, field: "ampLimit", value: amps)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .updateChargeLocationMinimumSoc(let id, let soc):
+            _ = try await updateChargeLocation(id: id, vin: vin, field: "targetSocPercentage", value: soc)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .setChargeLocationOptimisedCharging(let id, let enabled):
+            _ = try await updateChargeLocation(id: id, vin: vin, field: "optimisedCharging", value: enabled)
+            return RemoteCommandResult(outcome: .accepted, message: nil)
+        case .deleteChargeLocation(let id):
+            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/charge-locations/\(id)")
+            return RemoteCommandResult(outcome: .completed, message: nil)
+        default:
+            return nil
+        }
+    }
+
+    private func updateChargeLocation(id: String, vin: String, field: String, value: Any) async throws -> (data: Data, response: HTTPURLResponse) {
+        let body = try JSONSerialization.data(withJSONObject: [field: value])
+        return try await authenticatedSend(method: "PUT", path: "/v1/vehicles/\(vin)/charging/charge-locations/\(id)", body: body)
+    }
+
+    /// One portal timer row. Charging windows carry start and end; climate timers carry the
+    /// departure instant in the start slot. Weekday names mirror the telemetry encoding
+    /// ("MONDAY"…) that `parsePortalWeekday` decodes.
+    private func portalTimerDictionary(
+        backendID: String?, enabled: Bool,
+        startHour: Int?, startMinute: Int?,
+        endHour: Int?, endMinute: Int?,
+        weekdays: [VehicleWeekday],
+        departure: Bool
+    ) -> [String: Any] {
+        var timer: [String: Any] = [
+            "id": backendID ?? UUID().uuidString,
+            "enabled": enabled,
+            "weekdays": weekdays.map { $0.portalWeekdayName }
+        ]
+        if let h = startHour, let m = startMinute {
+            timer[departure ? "departureTime" : "startTime"] = String(format: "%02d:%02d", h, m)
+        }
+        if !departure, let h = endHour, let m = endMinute {
+            timer["endTime"] = String(format: "%02d:%02d", h, m)
+        }
+        return timer
+    }
+
+    private func heatingLevelString(_ level: HeatingLevel) -> String {
+        switch level {
+        case .unspecified, .off: return "OFF"
+        case .level1: return "LEVEL_1"
+        case .level2: return "LEVEL_2"
+        case .level3: return "LEVEL_3"
+        }
     }
 
     private static func makeSession() -> URLSession {

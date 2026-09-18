@@ -1,0 +1,22 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "id": "target-soc-01",
+    "updatedAt": "2024-05-21T13:58:20Z",
+    "timestamp": {
+      "seconds": "1716300100",
+      "nanos": 0
+    },
+    "targetSoc": {
+      "batteryChargeTargetLevel": 80,
+      "chargeTargetLevelSettingType": "DAILY",
+      "updatedAt": "2024-05-21T13:58:20Z",
+      "source": "APP",
+      "id": "target-soc-value-01"
+    }
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "target-soc"
+  }
+}

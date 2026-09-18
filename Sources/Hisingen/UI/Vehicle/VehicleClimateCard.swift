@@ -35,6 +35,8 @@ struct VehicleClimateCard: View {
                 if let level = climate.driverSeatHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Driver Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.left.and.heat.waves")) }
                 if let level = climate.passengerSeatHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Passenger Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.right.and.heat.waves")) }
                 if let level = climate.steeringWheelHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Steering Wheel Heating"), L10n.text("Active"), symbol: "steeringwheel.and.heat.waves")) }
+                if let level = climate.rearLeftSeatHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Rear Left Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.left.and.heat.waves")) }
+                if let level = climate.rearRightSeatHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Rear Right Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.right.and.heat.waves")) }
             } else if features.contains(.remoteClimate) {
                 rows.append(KVRow(L10n.text("Cabin Climate"), L10n.text("Off"), symbol: "fan"))
             }
@@ -60,6 +62,15 @@ struct VehicleClimateCard: View {
                 rows.append(KVRow(L10n.text("Outside PM2.5"), "\(outside) µg/m³\(comparison)", symbol: "leaf.fill"))
             }
             if let life = air.filterRemainingPercent { rows.append(KVRow(L10n.text("Air Filter Life"), "\(life)%", symbol: "allergens", valueWarning: life < 15)) }
+            let cycleValid = air.lastCycleValid
+            if let completed = air.lastCycleCompleted {
+                var value = Format.dateTimeFormatter.string(from: completed)
+                if let cycleValid { value += (cycleValid ? " · \(L10n.text("Completed normally"))" : " · \(L10n.text("Did not complete"))") }
+                rows.append(KVRow(L10n.text("Last Cycle"), value, symbol: cycleValid == false ? "exclamationmark.triangle" : "checkmark.seal", valueWarning: cycleValid == false))
+            } else if let cycleValid {
+                rows.append(KVRow(L10n.text("Last Cycle"), cycleValid ? L10n.text("Completed normally") : L10n.text("Did not complete"), symbol: cycleValid == false ? "exclamationmark.triangle" : "checkmark.seal", valueWarning: cycleValid == false))
+            }
+            if let errorKind = air.errorKind, errorKind != .none { rows.append(KVRow(L10n.text("Purifier Status"), errorKind.displayName, symbol: errorKind == .interrupted ? "pause.circle" : "xmark.octagon", warning: errorKind == .generic)) }
         }
         if features.contains(.vehicleWeather), let weather = state.weather, let temperature = weather.temperatureCelsius {
             var value = Format.temperature(celsius: temperature, unit: preferences.temperatureUnit, decimals: 0)
@@ -83,9 +94,13 @@ struct VehicleClimateCard: View {
                     if climateActive {
                         Pill(text: state.climateStatus?.activity.displayName ?? L10n.text("Active"), color: HisingenTheme.semanticWarning, symbol: "fan.fill")
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                    } else if state.airQuality?.cleaningState == .on {
+                        Pill(text: L10n.text("Purifying"), color: HisingenTheme.semanticGood, symbol: "sparkles")
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
                 .animation(cardChangeAnimation, value: climateActive)
+                .animation(cardChangeAnimation, value: state.airQuality?.cleaningState)
                 if climateUnavailable { CapabilityBadge(title: L10n.text("Climate status"), state: .unavailable) }
                 if !rows.isEmpty { VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } } }
             }

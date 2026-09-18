@@ -22,6 +22,8 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var steeringOrientation: String?
     var imageData: Data?
     var interiorImageData: Data?
+    var usageMode: String?
+    var unavailableReason: String?
 
     init(
         availability: VehicleAvailability,
@@ -41,7 +43,9 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         upholstery: String? = nil,
         steeringOrientation: String? = nil,
         imageData: Data? = nil,
-        interiorImageData: Data? = nil
+        interiorImageData: Data? = nil,
+        usageMode: String? = nil,
+        unavailableReason: String? = nil
     ) {
         self.availability = availability
         self.availabilityReportedAt = availabilityReportedAt
@@ -61,5 +65,7 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         self.steeringOrientation = steeringOrientation
         self.imageData = imageData
         self.interiorImageData = interiorImageData
+        self.usageMode = usageMode
+        self.unavailableReason = unavailableReason
     }
 }

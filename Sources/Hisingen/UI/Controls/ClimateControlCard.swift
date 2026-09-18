@@ -31,7 +31,7 @@ struct ClimateControlCard: View {
     private var climateActive: Bool { state.isClimateActive }
 
     var body: some View {
-        let climateCommands = [Self.probe, RemoteCommand.startPreCleaning]
+        let climateCommands = [Self.probe, RemoteCommand.startPreCleaning, RemoteCommand.stopPreCleaning]
         Card {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -73,6 +73,8 @@ struct ClimateControlCard: View {
                         seatAndSteeringControls
                     }
 
+                    rearSeatHeatingStatus
+
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     climateStartStopButtons
 
@@ -93,22 +95,24 @@ struct ClimateControlCard: View {
                 }
 
                 if profile.permits(.preCleaning) && features.contains(.remotePreCleaning) {
+                    let isCleaning = state.airQuality?.cleaningState == .on
+                    let actionCommand: RemoteCommand = isCleaning ? .stopPreCleaning : .startPreCleaning
                     Button {
-                        let isCleaning = state.airQuality?.cleaningState == .on
-                        gate.send(isCleaning ? .stopPreCleaning : .startPreCleaning)
+                        gate.send(actionCommand)
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "sparkles").foregroundStyle(.secondary)
-                            Text(L10n.text(state.airQuality?.cleaningState == .on
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(isCleaning ? HisingenTheme.semanticGood : .secondary)
+                            Text(L10n.text(isCleaning
                                 ? "Stop Air Cleaning" : "Clean Cabin Air (PM2.5 Pre-Clean)"))
                                 .hisType(.label, weight: .medium)
-                            gate.sendingOverlay(.startPreCleaning)
+                            gate.sendingOverlay(actionCommand)
                         }
                         .frame(maxWidth: .infinity, minHeight: 30)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(gate.isDisabled(.startPreCleaning))
+                    .disabled(gate.isDisabled(actionCommand))
                 }
             }
         }
@@ -179,6 +183,17 @@ struct ClimateControlCard: View {
                         .hisType(.caption, weight: .bold)
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
+                    if let requested = state.climateStatus?.requestedTemperatureCelsius {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text(L10n.text("Target:"))
+                            .hisType(.caption, weight: .medium)
+                            .foregroundStyle(.secondary)
+                        Text(Format.temperature(celsius: requested, unit: preferences.temperatureUnit))
+                            .hisType(.caption, weight: .bold)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.temperatureColor(celsius: requested))
+                    }
                     if let exterior = state.weather?.temperatureCelsius {
                         Text("·")
                             .foregroundStyle(.tertiary)
@@ -415,6 +430,43 @@ struct ClimateControlCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+
+    /// Live rear-seat heat telemetry. The rear seats have no remote control path, so this is
+    /// status only, rendered in the same chip idiom as the live cabin temperature.
+    private var rearSeatHeatingStatusText: String? {
+        var parts: [String] = []
+        if let left = state.climateStatus?.rearLeftSeatHeatingLevel, left > 0 {
+            parts.append("\(L10n.text("Rear left")) \(L10n.format("Level %d", left))")
+        }
+        if let right = state.climateStatus?.rearRightSeatHeatingLevel, right > 0 {
+            parts.append("\(L10n.text("Rear right")) \(L10n.format("Level %d", right))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var rearSeatHeatingStatus: some View {
+        if let status = rearSeatHeatingStatusText {
+            HStack(spacing: 6) {
+                Image(systemName: "heat.waves")
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .hisType(.caption)
+                Text(L10n.text("Rear Seat Heating:"))
+                    .hisType(.caption, weight: .medium)
+                    .foregroundStyle(.secondary)
+                Text(status)
+                    .hisType(.caption, weight: .bold)
+                    .monospacedDigit()
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .hisAnimation(Motion.stateChange, value: state.climateStatus?.rearLeftSeatHeatingLevel)
+            .hisAnimation(Motion.stateChange, value: state.climateStatus?.rearRightSeatHeatingLevel)
         }
     }
 

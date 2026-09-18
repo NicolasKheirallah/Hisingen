@@ -102,6 +102,25 @@ struct VehicleChargingCard: View {
             if let amps = state.energy.currentLimitAmps, amps > 0 { rows.append(("limit", KVRow(L10n.text("Current Limit"), "\(amps) A", symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings.")))) }
             if let volts = state.energy.voltageVolts, volts > 0 { rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt.fill", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))) }
             if let target = state.energy.targetPercentage { rows.append(("target", KVRow(L10n.text("Target Limit"), "\(target)%", symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target.")))) }
+            // The energy-snapshot slot for the same estimate the diagnostics block renders as
+            // "Time to Target". Shown only when that diagnostics row is not already present, so
+            // one figure never appears twice in one card.
+            let timeToTargetShownInDiagnostics = features.contains(.batteryDiagnostics)
+                && state.energy.diagnostics?.timeToTargetMinutes != nil
+            if let minutes = state.energy.estimatedTimeToTargetMinutes, !timeToTargetShownInDiagnostics {
+                rows.append(("timeToTargetEstimate", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target."))))
+            }
+            if state.energy.isAtChargeLocation == true {
+                var locationValue = state.energy.currentChargeLocationName ?? L10n.text("Saved Location")
+                // Dwell: how long the car has been sitting at this charger. Only appended once a
+                // full minute has elapsed and never for a future timestamp (clock skew), so the
+                // row never reads "parked for 0min".
+                if let arrived = state.energy.arrivedAtLocationDate {
+                    let minutes = Int(Date().timeIntervalSince(arrived) / 60)
+                    if minutes >= 1 { locationValue += " · " + L10n.format("parked for %@", Format.shortDuration(minutes: minutes)) }
+                }
+                rows.append(("chargeLocation", KVRow(L10n.text("Charge Location"), locationValue, symbol: "mappin.and.ellipse", info: L10n.text("Location Awareness. Vehicle is connected at a recognized charge location."))))
+            }
         }
         if features.contains(.batteryDiagnostics), let diagnostics = state.energy.diagnostics {
             if diagnostics.chargerPowerState != .unknown { rows.append(("powerModule", KVRow(L10n.text("Power Module"), diagnostics.chargerPowerState.displayName, symbol: "batteryblock", valueWarning: diagnostics.chargerPowerState == .fault))) }
@@ -113,6 +132,16 @@ struct VehicleChargingCard: View {
             if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
             if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
                 rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
+            }
+            if let available = diagnostics.energyAvailableKwh, available > 0 {
+                rows.append(("energyAvailable", KVRow(L10n.text("Discharge Energy"), Format.energyKwh(available), symbol: "battery.100", info: L10n.text("Energy the high-voltage battery can discharge to external loads right now."))))
+            }
+            if let increase = diagnostics.energyAvailableIncreaseKwh, increase > 0 {
+                rows.append(("energyAvailableIncrease", KVRow(L10n.text("After Conditioning"), L10n.format("+%@", Format.energyKwh(increase)), symbol: "battery.100", info: L10n.text("Additional discharge energy expected once battery conditioning completes."))))
+            }
+            if let preconditioning = preconditioningRow(diagnostics) { rows.append(("preconditioning", preconditioning)) }
+            if diagnostics.isBidirectionalChargingEnabled == true {
+                rows.append(("bidirectional", KVRow(L10n.text("Bidirectional Charging"), L10n.text("Enabled"), symbol: "arrow.left.arrow.right", info: L10n.text("User Setting. When enabled the vehicle can discharge its battery to power a home or the grid (V2H/V2G)."))))
             }
             if let breakdown = diagnostics.energyBreakdown, breakdown.hasData {
                 if let drive = breakdown.driving {
@@ -130,6 +159,34 @@ struct VehicleChargingCard: View {
             }
         }
         return rows
+    }
+
+    /// DC fast-charge battery conditioning tracker. The provider passes the raw status token
+    /// through (`MANUAL_PRECONDITIONING_STATUS_ON`, `_PRECONDITIONING_FINISHED`), so only the
+    /// final token is matched — "preconditioning" itself contains "ON", and a whole-string
+    /// substring test would read every state as active. States that are neither active nor
+    /// finished (off, cancelled, unknown) omit the row entirely: it is a tracker, not a dump of
+    /// every enum value the car can send.
+    private func preconditioningRow(_ diagnostics: BatteryDiagnostics) -> KVRow? {
+        guard let rawStatus = diagnostics.batteryPreconditioningStatus?
+            .uppercased() else { return nil }
+        let token = rawStatus.split(separator: "_").last.map(String.init) ?? rawStatus
+        let finishedTokens: Set<String> = ["FINISHED", "FINISH", "COMPLETE", "COMPLETED", "DONE"]
+        let activeTokens: Set<String> = ["ON", "ACTIVE", "STARTED", "RUNNING", "PROGRESS"]
+        if finishedTokens.contains(token) {
+            return KVRow(L10n.text("Battery Conditioning"), L10n.text("Finished"), symbol: "heat.waves",
+                         info: L10n.text("High-voltage battery warming ahead of DC fast charging."))
+        }
+        guard activeTokens.contains(token) else { return nil }
+        var value = L10n.text("Active")
+        // Countdown only while the reported end is still ahead; a stale timestamp renders as a
+        // bare "Active" rather than a negative or zero remainder.
+        if let endsAt = diagnostics.batteryPreconditioningEndsAt, endsAt > Date() {
+            let minutes = max(1, Int((endsAt.timeIntervalSinceNow / 60).rounded()))
+            value += " · " + Format.shortDuration(minutes: minutes)
+        }
+        return KVRow(L10n.text("Battery Conditioning"), value, symbol: "heat.waves", valueWarning: true,
+                     info: L10n.text("High-voltage battery warming ahead of DC fast charging."))
     }
 
     private func formatBreakdown(_ item: EnergyBreakdownItem) -> String {
@@ -158,7 +215,7 @@ struct VehicleChargingCard: View {
         return []
     }
 
-    private var hasContent: Bool { headline != nil || !details.isEmpty || !activeSamples.isEmpty || !persistentSessions.isEmpty }
+    private var hasContent: Bool { headline != nil || !details.isEmpty || !activeSamples.isEmpty || !persistentSessions.isEmpty || state.energy.chargeNowActive == true }
 
     private var card: some View {
         Card {
@@ -166,7 +223,22 @@ struct VehicleChargingCard: View {
                 HStack(spacing: 6) {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true, isPulsing: state.isCharging)
                     if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
+                    if state.energy.chargeNowActive == true || state.energy.isAtChargeLocation == true {
+                        Spacer()
+                    }
+                    if state.energy.chargeNowActive == true {
+                        Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                    if state.energy.isAtChargeLocation == true {
+                        let locationName = state.energy.currentChargeLocationName ?? L10n.text("Saved Location")
+                        Pill(text: locationName, color: HisingenTheme.accent, symbol: "mappin.and.ellipse")
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
+                    }
                 }
+                // Keyed to the flag so the pill's insertion slides instead of snapping in from
+                // the outer card animation, which only fires when a text line changes.
+                .animation(reduceMotion ? nil : Motion.cardChange, value: state.energy.chargeNowActive)
                 // Tabular figures on all three stacked lines. Every one of them carries a number
                 // that changes as the car charges, and a proportional face re-lays-out the string
                 // on every digit that changes width, so the whole card reflowed across its full

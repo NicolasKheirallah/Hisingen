@@ -5,13 +5,14 @@
       "seconds": "1716300095",
       "nanos": 0
     },
-    "latitude": 57.70887,
-    "longitude": 11.97456,
-    "altitude": 24.5,
+    "coordinate": {
+      "latitude": 57.70887,
+      "longitude": 11.97456
+    },
+    "altitude": "24.5",
+    "speed": "0.0",
     "heading": 180.0,
-    "speed": 0.0,
-    "accuracy": 5.0,
-    "metaReceivedAt": "2026-05-21T14:01:35Z",
+    "metaReceivedAt": "2024-05-21T14:01:35Z",
     "metaEventId": "evt-loc-778899"
   },
   "meta": {

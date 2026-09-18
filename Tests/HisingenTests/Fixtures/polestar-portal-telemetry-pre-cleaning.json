@@ -1,0 +1,38 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "timestamp": {
+      "seconds": "1716300100",
+      "nanos": 0
+    },
+    "lastCycleCompleted": {
+      "seconds": "1716300100",
+      "nanos": 0
+    },
+    "measurementDate": {
+      "seconds": "1716300080",
+      "nanos": 0
+    },
+    "startedAt": {
+      "seconds": "1716299320",
+      "nanos": 0
+    },
+    "endingAt": {
+      "seconds": "1716300100",
+      "nanos": 0
+    },
+    "runningStatus": "RUNNING_STATUS_OFF",
+    "startReason": "START_REASON_REMOTE",
+    "lastCycleValid": true,
+    "measuredAirQualityIndex": 25,
+    "measuredParticulateMatter25": 8,
+    "runtimeLeftMinutes": 0,
+    "error": "ERROR_TYPE_NO_START_NEEDED",
+    "metaReceivedAt": "2024-05-21T14:01:40Z",
+    "metaEventId": "evt-clean-445599"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "pre-cleaning"
+  }
+}

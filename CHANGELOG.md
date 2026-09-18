@@ -10,12 +10,39 @@ All notable changes to Hisingen are documented in this file. The project follows
 - **Polestar Developer Portal (EU Data Act M2M) integration.** Dedicated machine-to-machine integration using credentials from the official Polestar Data Portal (`data-portal.polestar.com`).
   - **Two-tier primary with fallback architecture**: `PolestarDataPortalAPI` serves as the primary data provider for all 15 vehicle endpoints (battery, charging, odometer, location, exterior, health, climate, and pre-cleaning), with automatic transparent failover to consumer Polestar ID credentials upon rate limiting (HTTP 429), token expiration, or upstream outages.
   - **Augmented dual-stack mode**: Combines official EU Data Act high-precision telemetry with consumer Polestar ID remote actuation commands for door locks (`lock`, `unlock`) and visual alerts (`flashLights`).
-  - **Comprehensive vehicle telemetry**: Ingests live battery status with subsystem energy breakdown, high-precision meter-level odometer and triple trip computers, factory reference tyre pressures, multi-zone seat heating, and GPS coordinates.
   - **Isolated credential management**: Developer credentials (Account ID, Client ID, Client Secret, OAuth Bearer tokens) are isolated in separate Keychain storage from consumer Polestar ID credentials, enabling seamless switching between connection modes without credential conflicts or session invalidation.
   - **Live connection testing & vehicle linking guidance**: Dedicated "Test Connection" button verifies token issuance and vehicle discovery, guiding users when an account is authenticated but pending VIN linking in the portal.
   - **Daily quota tracking**: Built-in tracking for the portal's 10,000 requests/day quota with UTC calendar rollover and live meter display in Settings.
   - **Official OpenAPI 3.1.0 specification & documentation**: Bundled complete OpenAPI schema and step-by-step onboarding guide (`docs/api/polestar-developer-portal.md`) with co-located portal screenshots for landing, API credentials overview, and M2M key management.
   - **Build-time secret injection tooling**: `Scripts/inject-secrets.sh` obfuscates developer credentials and compiles fallback accessors in `BuiltinPolestarSecrets`.
+- **EU Data Act telemetry and smart energy expansion.** Complete integration of all telemetry fields and remote charging management capabilities from the official Polestar OpenAPI 3.1.0 specification:
+  - **Battery & Smart Energy**:
+    - Bidirectional / V2X power sharing monitoring (`isBidirectionalChargingEnabled`) with vehicle-enforced `minimumSoc` discharge thresholds.
+    - Dynamic spot-price optimization indicators (`isOptimizedChargingEnabled`, `availableOptimizedCharging`).
+    - Milestone charging duration estimates for departure readiness (`estimatedChargingTimeMinutesToMinimumSoc`) and target distance (`estimatedChargingTimeMinutesToTargetDistance`).
+    - Cold-weather battery discharge limits (`dischargeInfo.powerLimit`, `energyAvailable`, and `energyAvailableIncrease` restored once warm).
+    - DC fast-charge preconditioning tracking (`manualPreconditioning` running status, countdown timer, and unavailability reason).
+    - 3-way drive cycle energy breakdowns (driving, climate, battery conditioning, other) across automatic drive, since last charge, and manual trip meters.
+    - "Charge Now" remote override status and schedule resumption (`/charging/charge-now` and `/charging/override-charge-timer`).
+  - **Climate & Air Quality**:
+    - Multi-zone seat heating status across all 4 seating positions (`requestedFrontLeftSeat`, `requestedFrontRightSeat`, `requestedRearLeftSeat`, `requestedRearRightSeat`) and steering wheel heating.
+    - Live cabin thermal delta tracking comparing interior compartment temperature against requested setpoint with active ventilation mode.
+    - Precision PM2.5 particulate air quality gauge (`measuredParticulateMatter25` in µg/m³) with air cleaning cycle completion and validity tracking.
+  - **Diagnostics & Vehicle Health**:
+    - 38-point precision exterior lighting inspector mapping all lamp failure warnings in `lightWarnings` into vehicle health details.
+    - Factory recommended tyre reference pressure comparison (`frontTyresReferencePressureKpa`, `rearTyresReferencePressureKpa`) displaying exact pressure deviations.
+    - 12V low-voltage auxiliary battery warning tracking (`lowVoltageBatteryWarning`).
+    - Service countdown tracking for operating hours, days, and distance (`engineHoursToService`, `daysToService`, `distanceToServiceKm`).
+  - **Trip Computers & Navigation**:
+    - Sub-kilometer high-precision odometer (`odometerMeters`).
+    - Triple trip computers (manual, automatic, and since last charge) with corresponding average speeds.
+    - Altimeter elevation (`altitude`), ground speed (`speed`), and compass heading (`heading`).
+  - **Closures & Geofencing**:
+    - Charge flap open warning (`exterior.tankLid`), sunroof closure state (`exterior.sunroof`), and vehicle alarm state (`exterior.alarm`).
+    - Recognized charging location presence and dwell tracking (`is-at-charge-location`, `locationId`, `arrivedAtTimestamp`).
+    - Vehicle operational usage mode tracking (`availability.usageMode`).
+  - **Direct M2M Remote Actuation**:
+    - Direct REST API actuation for climate (`startClimate`, `stopClimate`), cabin air purification (`startPreCleaning`, `stopPreCleaning`), target state of charge (`setChargeTarget`), current limits (`setAmpLimit`), schedule override (`startChargingOverride`, `stopChargingOverride`), charging schedules (`setGlobalChargeTimer`), departure timers (`setClimateTimer`, `deleteClimateTimer`), and saved charge locations (`createChargeLocationAtCar`, `updateChargeLocationAlias`, `updateChargeLocationAmpLimit`, `updateChargeLocationMinimumSoc`, `setChargeLocationOptimisedCharging`, `deleteChargeLocation`).
 
 ### Fixed
 

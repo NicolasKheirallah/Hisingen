@@ -1,0 +1,29 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "id": "charge-locations-01",
+    "chargeLocations": [
+      {
+        "locationId": "loc-home-01",
+        "locationAlias": "Home Garage",
+        "coordinate": {
+          "latitude": 57.70887,
+          "longitude": 11.97456
+        },
+        "ampLimit": 16,
+        "minimumSoc": 90,
+        "isOptimizedChargingEnabled": true,
+        "isBidirectionalChargingEnabled": false,
+        "availableOptimizedCharging": "INTELLIGENT_TIMER",
+        "locationType": "LOCATION_TYPE_SAVED"
+      }
+    ],
+    "utc0": false,
+    "metaReceivedAt": "2024-05-21T13:58:20Z",
+    "metaEventId": "evt-locs-778811"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "charge-locations"
+  }
+}

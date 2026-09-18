@@ -601,6 +601,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     let driverSeatHeatingLevel: Int?
     let passengerSeatHeatingLevel: Int?
     let steeringWheelHeatingLevel: Int?
+    var rearLeftSeatHeatingLevel: Int? = nil
+    var rearRightSeatHeatingLevel: Int? = nil
+    var ventilation: String? = nil
+    var mainClimateRunningStatus: String? = nil
     /// When the current or last climate session started (wire field 14). `nil` when the
     /// backend omits it or in snapshots persisted before this field existed.
     var sessionStartedAt: Date? = nil
@@ -621,6 +625,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         driverSeatHeatingLevel: Int? = nil,
         passengerSeatHeatingLevel: Int? = nil,
         steeringWheelHeatingLevel: Int? = nil,
+        rearLeftSeatHeatingLevel: Int? = nil,
+        rearRightSeatHeatingLevel: Int? = nil,
+        ventilation: String? = nil,
+        mainClimateRunningStatus: String? = nil,
         sessionStartedAt: Date? = nil,
         sessionEndsAt: Date? = nil,
         unknownWireFields: [PolestarRawWireField]? = nil
@@ -633,6 +641,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         self.driverSeatHeatingLevel = driverSeatHeatingLevel
         self.passengerSeatHeatingLevel = passengerSeatHeatingLevel
         self.steeringWheelHeatingLevel = steeringWheelHeatingLevel
+        self.rearLeftSeatHeatingLevel = rearLeftSeatHeatingLevel
+        self.rearRightSeatHeatingLevel = rearRightSeatHeatingLevel
+        self.ventilation = ventilation
+        self.mainClimateRunningStatus = mainClimateRunningStatus
         self.sessionStartedAt = sessionStartedAt
         self.sessionEndsAt = sessionEndsAt
         self.unknownWireFields = unknownWireFields
@@ -642,6 +654,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         case activity, timeRemainingMinutes, timerTriggered
         case interiorTemperatureCelsius, requestedTemperatureCelsius
         case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
+        case rearLeftSeatHeatingLevel, rearRightSeatHeatingLevel, ventilation, mainClimateRunningStatus
         case sessionStartedAt, sessionEndsAt, unknownWireFields
     }
 
@@ -655,6 +668,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         driverSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .driverSeatHeatingLevel)
         passengerSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .passengerSeatHeatingLevel)
         steeringWheelHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .steeringWheelHeatingLevel)
+        rearLeftSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .rearLeftSeatHeatingLevel)
+        rearRightSeatHeatingLevel = try c.decodeIfPresent(Int.self, forKey: .rearRightSeatHeatingLevel)
+        ventilation = try c.decodeIfPresent(String.self, forKey: .ventilation)
+        mainClimateRunningStatus = try c.decodeIfPresent(String.self, forKey: .mainClimateRunningStatus)
         sessionStartedAt = try c.decodeIfPresent(Date.self, forKey: .sessionStartedAt)
         sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
         unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields)
@@ -776,6 +793,8 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     /// When the cabin air was last measured (field 2). Updates on vehicle wakes and at the
     /// end of a cleaning cycle – distinct from `reportedAt` (field 1, the frame time).
     var measuredAt: Date? = nil
+    /// When the previous cleaning cycle finished (`PreCleaningState.lastCycleCompleted`).
+    var lastCycleCompleted: Date? = nil
 
     init(
         cleaningState: AirCleaningState,
@@ -792,7 +811,8 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         startReason: AirCleaningStartReason? = nil,
         lastCycleValid: Bool? = nil,
         errorKind: AirCleaningError? = nil,
-        measuredAt: Date? = nil
+        measuredAt: Date? = nil,
+        lastCycleCompleted: Date? = nil
     ) {
         self.cleaningState = cleaningState
         self.airQualityIndex = airQualityIndex
@@ -809,13 +829,14 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         self.lastCycleValid = lastCycleValid
         self.errorKind = errorKind
         self.measuredAt = measuredAt
+        self.lastCycleCompleted = lastCycleCompleted
     }
 
     private enum CodingKeys: String, CodingKey {
         case cleaningState, airQualityIndex, particulateMatter25, particulateMatter10
         case externalParticulateMatter25, filterRemainingPercent, runtimeRemainingMinutes
         case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
-        case measuredAt
+        case measuredAt, lastCycleCompleted
     }
 
     /// Whether a one-tap pre-clean toggle may be shown for this reading: the backend reported
@@ -840,6 +861,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         lastCycleValid = try c.decodeIfPresent(Bool.self, forKey: .lastCycleValid)
         errorKind = try c.decodeIfPresent(AirCleaningError.self, forKey: .errorKind)
         measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
+        lastCycleCompleted = try c.decodeIfPresent(Date.self, forKey: .lastCycleCompleted)
     }
 }
 
@@ -928,6 +950,12 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     var energyBreakdown: EnergyBreakdownSnapshot? = nil
     var powerLimitKw: Double? = nil
     var energyAvailableKwh: Double? = nil
+    var energyAvailableIncreaseKwh: Double? = nil
+    var batteryPreconditioningStatus: String? = nil
+    var batteryPreconditioningEndsAt: Date? = nil
+    var isBidirectionalChargingEnabled: Bool? = nil
+    var isOptimizedChargingEnabled: Bool? = nil
+    var availableOptimizedCharging: String? = nil
 
     init(
         timeToTargetMinutes: Int?,
@@ -940,7 +968,13 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         unknownWireFields: [PolestarRawWireField] = [],
         energyBreakdown: EnergyBreakdownSnapshot? = nil,
         powerLimitKw: Double? = nil,
-        energyAvailableKwh: Double? = nil
+        energyAvailableKwh: Double? = nil,
+        energyAvailableIncreaseKwh: Double? = nil,
+        batteryPreconditioningStatus: String? = nil,
+        batteryPreconditioningEndsAt: Date? = nil,
+        isBidirectionalChargingEnabled: Bool? = nil,
+        isOptimizedChargingEnabled: Bool? = nil,
+        availableOptimizedCharging: String? = nil
     ) {
         self.timeToTargetMinutes = timeToTargetMinutes
         self.timeToMinimumSOCMinutes = timeToMinimumSOCMinutes
@@ -953,6 +987,12 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         self.energyBreakdown = energyBreakdown
         self.powerLimitKw = powerLimitKw
         self.energyAvailableKwh = energyAvailableKwh
+        self.energyAvailableIncreaseKwh = energyAvailableIncreaseKwh
+        self.batteryPreconditioningStatus = batteryPreconditioningStatus
+        self.batteryPreconditioningEndsAt = batteryPreconditioningEndsAt
+        self.isBidirectionalChargingEnabled = isBidirectionalChargingEnabled
+        self.isOptimizedChargingEnabled = isOptimizedChargingEnabled
+        self.availableOptimizedCharging = availableOptimizedCharging
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -960,6 +1000,8 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         case averageConsumption, averageConsumptionSinceCharge, averageConsumptionAutomatic
         case energyUsedSinceChargeWh, unknownWireFields
         case energyBreakdown, powerLimitKw, energyAvailableKwh
+        case energyAvailableIncreaseKwh, batteryPreconditioningStatus, batteryPreconditioningEndsAt
+        case isBidirectionalChargingEnabled, isOptimizedChargingEnabled, availableOptimizedCharging
     }
 
     init(from decoder: Decoder) throws {
@@ -975,6 +1017,12 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         energyBreakdown = try c.decodeIfPresent(EnergyBreakdownSnapshot.self, forKey: .energyBreakdown)
         powerLimitKw = try c.decodeIfPresent(Double.self, forKey: .powerLimitKw)
         energyAvailableKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableKwh)
+        energyAvailableIncreaseKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableIncreaseKwh)
+        batteryPreconditioningStatus = try c.decodeIfPresent(String.self, forKey: .batteryPreconditioningStatus)
+        batteryPreconditioningEndsAt = try c.decodeIfPresent(Date.self, forKey: .batteryPreconditioningEndsAt)
+        isBidirectionalChargingEnabled = try c.decodeIfPresent(Bool.self, forKey: .isBidirectionalChargingEnabled)
+        isOptimizedChargingEnabled = try c.decodeIfPresent(Bool.self, forKey: .isOptimizedChargingEnabled)
+        availableOptimizedCharging = try c.decodeIfPresent(String.self, forKey: .availableOptimizedCharging)
     }
 }
 
@@ -1244,6 +1292,10 @@ struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     let optimisedChargingMode: Int
     /// 1 = recent, 2 = saved, 3 = saved third-party.
     let kind: Int
+    var isBidirectionalChargingEnabled: Bool? = nil
+    var availableOptimizedCharging: String? = nil
+    var departureTimes: [VehicleSchedule] = []
+    var chargeTimers: [VehicleSchedule] = []
 
     var isSavedLocation: Bool { kind == 2 || kind == 3 }
 

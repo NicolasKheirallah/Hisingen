@@ -5,8 +5,14 @@
       "seconds": "1716300080",
       "nanos": 0
     },
-    "odometerInMeters": 42150800,
-    "metaReceivedAt": "2026-05-21T14:01:20Z",
+    "odometerMeters": 42150800,
+    "tripMeterManualKm": 128.4,
+    "tripMeterAutomaticKm": 42102.1,
+    "tripMeterSinceChargeKm": 96.7,
+    "averageSpeedKmPerHour": 34.0,
+    "averageSpeedKmPerHourAutomatic": 41.0,
+    "averageSpeedKmPerHourSinceCharge": 52.0,
+    "metaReceivedAt": "2024-05-21T14:01:20Z",
     "metaEventId": "evt-odo-445566"
   },
   "meta": {

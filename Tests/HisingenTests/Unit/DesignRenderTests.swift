@@ -71,6 +71,32 @@ struct DesignRenderTests {
         }
     }
 
+    @Test
+    func rendersPolestarDataPortalSettings() throws {
+        let suite = "io.kheirallah.hisingen.render.dataportal.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else { return }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.polestarConnectionMode = .dataPortal
+        preferences.polestarDataPortalClientID = "client-id-sample"
+        preferences.polestarDataPortalAccountID = "0a7f033f-..."
+
+        let view = AccountCredentialsForm(style: .welcoming, onSettingsChanged: { _ in })
+            .environment(\.preferencesStore, preferences)
+            .frame(width: 440)
+            .padding()
+            .background(HisingenTheme.palette(for: .polestar).canvas)
+
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2.0
+        guard let cgImage = renderer.cgImage else { return }
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        guard let pngData = bitmap.representation(using: .png, properties: [:]) else { return }
+        let dest = URL(fileURLWithPath: "docs/design/renders/settings-polestar-dataportal.png")
+        try pngData.write(to: dest)
+        #expect(FileManager.default.fileExists(atPath: dest.path))
+    }
+
     /// Applies `theme` through the global the views read, then restores what was there. The
     /// restore runs on the way out even if the body fails, so a failing assertion cannot leave the
     /// owner's chosen theme replaced.

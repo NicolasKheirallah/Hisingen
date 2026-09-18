@@ -1,0 +1,24 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "id": "global-charge-timer-01",
+    "globalChargeTimer": {
+      "start": {
+        "hour": 23,
+        "minute": 0
+      },
+      "stop": {
+        "hour": 6,
+        "minute": 0
+      },
+      "activated": true
+    },
+    "utc0": false,
+    "metaReceivedAt": "2024-05-21T13:58:20Z",
+    "metaEventId": "evt-gct-223344"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "global-charge-timer"
+  }
+}

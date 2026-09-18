@@ -29,6 +29,15 @@ typealias PolestarDataPortalHealthDTO = PolestarHealthDTO
 typealias PolestarDataPortalAvailabilityDTO = PolestarAvailabilityDTO
 typealias PolestarDataPortalOdometerDTO = PolestarOdometerDTO
 typealias PolestarDataPortalLocationDTO = PolestarLocationDTO
+typealias PolestarDataPortalParkingClimatizationDTO = PolestarParkingClimatizationDTO
+typealias PolestarDataPortalPreCleaningDTO = PolestarPreCleaningDTO
+typealias PolestarDataPortalTargetSocDTO = PolestarTargetSocDTO
+typealias PolestarDataPortalAmpLimitDTO = PolestarAmpLimitDTO
+typealias PolestarDataPortalChargeLocationsDTO = PolestarChargeLocationsDTO
+typealias PolestarDataPortalIsAtChargeLocationDTO = PolestarIsAtChargeLocationDTO
+typealias PolestarDataPortalGlobalChargeTimerDTO = PolestarGlobalChargeTimerDTO
+typealias PolestarDataPortalChargeNowDTO = PolestarChargeNowDTO
+typealias PolestarDataPortalParkingClimateTimerDTO = PolestarParkingClimateTimerDTO
 
 struct PolestarDataPortalTokenResponse: Codable, Sendable {
     let accessToken: String
@@ -450,146 +459,501 @@ extension PolestarHealthDTO {
 
 // MARK: - Odometer Telemetry
 
+/// `OdometerState`. The portal reports the lifetime odometer in metres plus trip meters
+/// in kilometres — there is no separate odometer-in-km field.
 struct PolestarOdometerDTO: Codable, Sendable, Equatable {
     let vin: String?
     let timestamp: PolestarDataPortalTimestamp?
     let odometerMeters: Double?
-    let odometerKm: Double?
-    let meta: PolestarDataPortalMeta?
-
-    enum CodingKeys: String, CodingKey {
-        case vin, timestamp, odometerMeters, odometerInMeters, odometerKm, meta
-    }
-
-    init(
-        vin: String? = nil,
-        timestamp: PolestarDataPortalTimestamp? = nil,
-        odometerMeters: Double? = nil,
-        odometerKm: Double? = nil,
-        meta: PolestarDataPortalMeta? = nil
-    ) {
-        self.vin = vin
-        self.timestamp = timestamp
-        self.odometerMeters = odometerMeters
-        self.odometerKm = odometerKm
-        self.meta = meta
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.vin = try container.decodeIfPresent(String.self, forKey: .vin)
-        self.timestamp = try container.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .timestamp)
-        self.odometerKm = try container.decodeIfPresent(Double.self, forKey: .odometerKm)
-        let meters = try container.decodeIfPresent(Double.self, forKey: .odometerMeters)
-            ?? container.decodeIfPresent(Double.self, forKey: .odometerInMeters)
-        self.odometerMeters = meters
-        self.meta = try container.decodeIfPresent(PolestarDataPortalMeta.self, forKey: .meta)
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(vin, forKey: .vin)
-        try container.encodeIfPresent(timestamp, forKey: .timestamp)
-        try container.encodeIfPresent(odometerMeters, forKey: .odometerMeters)
-        try container.encodeIfPresent(odometerKm, forKey: .odometerKm)
-        try container.encodeIfPresent(meta, forKey: .meta)
-    }
+    let tripMeterManualKm: Double?
+    let tripMeterAutomaticKm: Double?
+    let tripMeterSinceChargeKm: Double?
+    let averageSpeedKmPerHour: Double?
+    let averageSpeedKmPerHourAutomatic: Double?
+    let averageSpeedKmPerHourSinceCharge: Double?
+    let metaReceivedAt: String?
+    let metaEventId: String?
 
     var calculatedOdometerKm: Int? {
-        if let km = odometerKm {
-            return Int(km.rounded())
-        }
-        if let meters = odometerMeters {
-            return Int((meters / 1000.0).rounded())
-        }
-        return nil
+        odometerMeters.map { Int(($0 / 1000.0).rounded()) }
     }
 }
 
 // MARK: - Location Telemetry
 
+/// `TelemetryCoordinate` — the lat/long pair shared by location and charge locations.
+struct PolestarTelemetryCoordinateDTO: Codable, Sendable, Equatable {
+    let latitude: Double?
+    let longitude: Double?
+}
+
+/// `LocationState`. The coordinate is nested; altitude (metres) and speed (km/h) are
+/// reported as decimal strings.
 struct PolestarLocationDTO: Codable, Sendable, Equatable {
     let vin: String?
     let timestamp: PolestarDataPortalTimestamp?
-    let latitude: Double?
-    let longitude: Double?
-    let headingDegrees: Double?
-    let altitudeMeters: Double?
-    let speedMetersPerSecond: Double?
-    let accuracyMeters: Double?
-    let meta: PolestarDataPortalMeta?
+    let coordinate: PolestarTelemetryCoordinateDTO?
+    /// Metres above sea level, wire format is a decimal string.
+    let altitude: String?
+    /// Kilometres per hour, wire format is a decimal string.
+    let speed: String?
+    /// Degrees from true north.
+    let heading: Double?
+    let metaReceivedAt: String?
+    let metaEventId: String?
 
-    enum CodingKeys: String, CodingKey {
-        case vin, timestamp, latitude, longitude
-        case headingDegrees, heading
-        case altitudeMeters, altitude
-        case speedMetersPerSecond, speed
-        case accuracyMeters, accuracy
-        case meta
-    }
-
-    init(
-        vin: String? = nil,
-        timestamp: PolestarDataPortalTimestamp? = nil,
-        latitude: Double? = nil,
-        longitude: Double? = nil,
-        headingDegrees: Double? = nil,
-        altitudeMeters: Double? = nil,
-        speedMetersPerSecond: Double? = nil,
-        accuracyMeters: Double? = nil,
-        meta: PolestarDataPortalMeta? = nil
-    ) {
-        self.vin = vin
-        self.timestamp = timestamp
-        self.latitude = latitude
-        self.longitude = longitude
-        self.headingDegrees = headingDegrees
-        self.altitudeMeters = altitudeMeters
-        self.speedMetersPerSecond = speedMetersPerSecond
-        self.accuracyMeters = accuracyMeters
-        self.meta = meta
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.vin = try container.decodeIfPresent(String.self, forKey: .vin)
-        self.timestamp = try container.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .timestamp)
-        self.latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
-        self.longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
-        self.headingDegrees = try container.decodeIfPresent(Double.self, forKey: .headingDegrees)
-            ?? container.decodeIfPresent(Double.self, forKey: .heading)
-        self.altitudeMeters = try container.decodeIfPresent(Double.self, forKey: .altitudeMeters)
-            ?? container.decodeIfPresent(Double.self, forKey: .altitude)
-        self.speedMetersPerSecond = try container.decodeIfPresent(Double.self, forKey: .speedMetersPerSecond)
-            ?? container.decodeIfPresent(Double.self, forKey: .speed)
-        self.accuracyMeters = try container.decodeIfPresent(Double.self, forKey: .accuracyMeters)
-            ?? container.decodeIfPresent(Double.self, forKey: .accuracy)
-        self.meta = try container.decodeIfPresent(PolestarDataPortalMeta.self, forKey: .meta)
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(vin, forKey: .vin)
-        try container.encodeIfPresent(timestamp, forKey: .timestamp)
-        try container.encodeIfPresent(latitude, forKey: .latitude)
-        try container.encodeIfPresent(longitude, forKey: .longitude)
-        try container.encodeIfPresent(headingDegrees, forKey: .headingDegrees)
-        try container.encodeIfPresent(altitudeMeters, forKey: .altitudeMeters)
-        try container.encodeIfPresent(speedMetersPerSecond, forKey: .speedMetersPerSecond)
-        try container.encodeIfPresent(accuracyMeters, forKey: .accuracyMeters)
-        try container.encodeIfPresent(meta, forKey: .meta)
-    }
+    var latitude: Double? { coordinate?.latitude }
+    var longitude: Double? { coordinate?.longitude }
 
     func toVehicleLocation() -> VehicleLocation {
-        let speedKmh = speedMetersPerSecond.map { $0 * 3.6 }
-        return VehicleLocation(
-            latitude: latitude,
-            longitude: longitude,
-            heading: headingDegrees,
-            speed: speedKmh,
+        VehicleLocation(
+            latitude: coordinate?.latitude,
+            longitude: coordinate?.longitude,
+            heading: heading,
+            speed: speed.flatMap { Double($0) },
             timestamp: timestamp?.date,
-            altitudeMeters: altitudeMeters,
-            accuracyMeters: accuracyMeters
+            altitudeMeters: altitude.flatMap { Double($0) }
         )
     }
 }
+
+// MARK: - Parking Climatization Telemetry
+
+/// `ParkingClimatizationState`. Status, ventilation and seat fields are string enums;
+/// seat heating runs UNSPECIFIED/OFF/LOW/MEDIUM/HIGH.
+struct PolestarParkingClimatizationDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let timestamp: PolestarDataPortalTimestamp?
+    let runningStatus: String?
+    let mainClimateRunningStatus: String?
+    /// Deprecated upstream in favour of the `startedAt`/`endingAt` window.
+    let runtimeLeftMinutes: Double?
+    let errors: [String]?
+    let warnings: [String]?
+    let ventilation: String?
+    let currentCompartmentTemperatureCelsius: Double?
+    let requestedCompartmentTemperatureCelsius: Double?
+    let requestedFrontLeftSeat: String?
+    let requestedFrontRightSeat: String?
+    let requestedRearLeftSeat: String?
+    let requestedRearRightSeat: String?
+    let requestedSteeringWheelHeating: String?
+    let startedAt: PolestarDataPortalTimestamp?
+    let endingAt: PolestarDataPortalTimestamp?
+    let startReason: String?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+}
+
+// MARK: - Pre-Cleaning Telemetry
+
+/// `PreCleaningState`. Measured air quality and PM2.5 are numbers; every cycle marker is
+/// a `TelemetryTimestamp`.
+struct PolestarPreCleaningDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let timestamp: PolestarDataPortalTimestamp?
+    let lastCycleCompleted: PolestarDataPortalTimestamp?
+    let measurementDate: PolestarDataPortalTimestamp?
+    let startedAt: PolestarDataPortalTimestamp?
+    let endingAt: PolestarDataPortalTimestamp?
+    let runningStatus: String?
+    let startReason: String?
+    let lastCycleValid: Bool?
+    let measuredAirQualityIndex: Double?
+    let measuredParticulateMatter25: Double?
+    let runtimeLeftMinutes: Double?
+    let error: String?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+}
+
+// MARK: - Charging Control DTOs
+
+/// `TargetSocValue`.
+struct PolestarTargetSocValueDTO: Codable, Sendable, Equatable {
+    let batteryChargeTargetLevel: Double?
+    let timestamp: PolestarDataPortalTimestamp?
+    let chargeTargetLevelSettingType: String?
+    let updatedAt: String?
+    let source: String?
+    let id: String?
+}
+
+/// `TargetSocState`.
+struct PolestarTargetSocDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let updatedAt: String?
+    let timestamp: PolestarDataPortalTimestamp?
+    let targetSoc: PolestarTargetSocValueDTO?
+    let pendingTargetSoc: PolestarTargetSocValueDTO?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    /// Current charge target percentage, from `targetSoc.batteryChargeTargetLevel`.
+    var targetSocPercentage: Int? {
+        targetSoc?.batteryChargeTargetLevel.map { Int($0.rounded()) }
+    }
+}
+
+/// `AmpLimitValue`.
+struct PolestarAmpLimitValueDTO: Codable, Sendable, Equatable {
+    let ampLimit: Double?
+    let updatedAt: String?
+    let updatedAtTimestamp: PolestarDataPortalTimestamp?
+    let source: String?
+    let id: String?
+}
+
+/// `AmpLimitState`. The spec carries a single amperage value per entry — no
+/// minimum/maximum bounds.
+struct PolestarAmpLimitDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let updatedAt: String?
+    let updatedAtTimestamp: PolestarDataPortalTimestamp?
+    /// Nested `AmpLimitState.ampLimit` per the spec.
+    let syncedAmpLimit: PolestarAmpLimitValueDTO?
+    let pendingAmpLimit: PolestarAmpLimitValueDTO?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    /// Current amperage limit, from the nested `ampLimit.ampLimit` value.
+    var ampLimit: Int? {
+        syncedAmpLimit?.ampLimit.map { Int($0.rounded()) }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case vin, id, updatedAt, updatedAtTimestamp
+        case syncedAmpLimit = "ampLimit"
+        case pendingAmpLimit, metaReceivedAt, metaEventId
+    }
+}
+
+/// `ChargeLocation`.
+struct PolestarChargeLocationItemDTO: Codable, Sendable, Equatable {
+    let locationId: String?
+    let locationAlias: String?
+    let coordinate: PolestarTelemetryCoordinateDTO?
+    let ampLimit: Double?
+    let minimumSoc: Double?
+    let isOptimizedChargingEnabled: Bool?
+    let isBidirectionalChargingEnabled: Bool?
+    let availableOptimizedCharging: String?
+    let locationType: String?
+}
+
+/// `ChargeLocationsState`.
+struct PolestarChargeLocationsDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let chargeLocations: [PolestarChargeLocationItemDTO]?
+    let pendingChargeLocations: [PolestarChargeLocationItemDTO]?
+    /// True when the vehicle reports its timer times in UTC rather than local time.
+    let utc0: Bool?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    func toChargeLocations() -> [ChargeLocationSnapshot] {
+        chargeLocations?.map { $0.toChargeLocationSnapshot() } ?? []
+    }
+}
+
+/// `IsAtChargeLocationState`. The portal signals presence purely through `locationId` —
+/// there is no boolean on the wire.
+struct PolestarIsAtChargeLocationDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    /// The charge location the vehicle is currently at.
+    let locationId: String?
+    let arrivedAt: String?
+    let arrivedAtTimestamp: PolestarDataPortalTimestamp?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    var isAtChargeLocation: Bool { locationId != nil }
+    /// Kept for snapshot assembly until it joins `locationId` against the
+    /// charge-locations list; the state itself carries no name.
+    var currentLocationName: String? { nil }
+}
+
+/// `DailyTime` — a wall-clock hour/minute pair shared by every timer shape.
+struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
+    let hour: Double?
+    let minute: Double?
+
+    var hourComponent: Int? { hour.map { Int($0.rounded()) } }
+    var minuteComponent: Int? { minute.map { Int($0.rounded()) } }
+}
+
+/// `GlobalChargeTimerValue` — one daily charging window; the spec has no weekday list here.
+struct PolestarGlobalChargeTimerValueDTO: Codable, Sendable, Equatable {
+    let start: PolestarDailyTimeDTO?
+    let stop: PolestarDailyTimeDTO?
+    let activated: Bool?
+}
+
+/// `GlobalChargeTimerState` — a single synced window plus its pending counterpart.
+struct PolestarGlobalChargeTimerDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let globalChargeTimer: PolestarGlobalChargeTimerValueDTO?
+    let pendingGlobalChargeTimer: PolestarGlobalChargeTimerValueDTO?
+    /// True when the vehicle reports its timer times in UTC rather than local time.
+    let utc0: Bool?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    func toSchedules() -> [VehicleSchedule] {
+        guard let timer = globalChargeTimer else { return [] }
+        return [VehicleSchedule(
+            backendID: id,
+            index: 0,
+            kind: .globalCharging,
+            startHour: timer.start?.hourComponent,
+            startMinute: timer.start?.minuteComponent,
+            endHour: timer.stop?.hourComponent,
+            endMinute: timer.stop?.minuteComponent,
+            isActive: timer.activated ?? false
+        )]
+    }
+}
+
+/// `OverrideChargeTimerValue` — the charge-now override switch with its sync bookkeeping.
+struct PolestarOverrideChargeTimerValueDTO: Codable, Sendable, Equatable {
+    /// True while the charge timer is overridden, i.e. charge now is on.
+    let override: Bool?
+    let updatedAt: String?
+    let updatedAtTimestamp: PolestarDataPortalTimestamp?
+}
+
+/// `ChargeNowState`. The override-charge-timer resource shares this shape.
+struct PolestarChargeNowDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let syncedOverrideChargeTimer: PolestarOverrideChargeTimerValueDTO?
+    let pendingOverrideChargeTimer: PolestarOverrideChargeTimerValueDTO?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+}
+
+/// `StartDate` — the first day a one-shot climate timer applies.
+struct PolestarTimerStartDateDTO: Codable, Sendable, Equatable {
+    let year: Double?
+    let month: Double?
+    let day: Double?
+}
+
+/// `ParkingClimateTimer`. `readyAt` is a `DailyTime`: the cabin must be ready by that
+/// wall-clock time, and the vehicle back-computes its own start.
+struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
+    let timerId: String?
+    let index: Double?
+    let readyAt: PolestarDailyTimeDTO?
+    let activated: Bool?
+    /// True when the timer repeats weekly on the listed weekdays.
+    let repeats: Bool?
+    let weekdays: [String]?
+    let startDate: PolestarTimerStartDateDTO?
+
+    private enum CodingKeys: String, CodingKey {
+        case timerId, index, readyAt, activated
+        case repeats = "repeat"
+        case weekdays, startDate
+    }
+
+    func toVehicleSchedule(index fallbackIndex: Int = 0) -> VehicleSchedule {
+        VehicleSchedule(
+            backendID: timerId,
+            index: index.map { Int($0.rounded()) } ?? fallbackIndex,
+            kind: .climate,
+            startHour: readyAt?.hourComponent,
+            startMinute: readyAt?.minuteComponent,
+            endHour: nil,
+            endMinute: nil,
+            weekdays: weekdays?.compactMap { parsePortalWeekday($0) } ?? [],
+            isActive: activated ?? false
+        )
+    }
+}
+
+/// `ParkingClimateTimerState`.
+struct PolestarParkingClimateTimerDTO: Codable, Sendable, Equatable {
+    let vin: String?
+    let id: String?
+    let updatedAt: String?
+    let updatedAtTimestamp: PolestarDataPortalTimestamp?
+    let parkingClimateTimers: [PolestarParkingClimateTimerItemDTO]?
+    let pendingParkingClimateTimers: [PolestarParkingClimateTimerItemDTO]?
+    /// True when the vehicle reports its timer times in UTC rather than local time.
+    let utc0: Bool?
+    let metaReceivedAt: String?
+    let metaEventId: String?
+
+    func toClimateSchedules() -> [VehicleSchedule] {
+        parkingClimateTimers?.enumerated().map { idx, timer in
+            timer.toVehicleSchedule(index: idx)
+        } ?? []
+    }
+}
+
+// MARK: - Climatization, Pre-Cleaning & Charging Domain Mappers
+
+extension PolestarParkingClimatizationDTO {
+    /// HEATING_INTENSITY_OFF → 0 … HEATING_INTENSITY_HIGH → 3. UNSPECIFIED and absent both
+    /// map to nil so "the car did not say" stays distinguishable from "off".
+    private func seatHeatLevel(_ raw: String?) -> Int? {
+        switch raw?.uppercased() {
+        case "HEATING_INTENSITY_OFF": return 0
+        case "HEATING_INTENSITY_LOW": return 1
+        case "HEATING_INTENSITY_MEDIUM": return 2
+        case "HEATING_INTENSITY_HIGH": return 3
+        default: return nil
+        }
+    }
+
+    func toVehicleClimateStatus(batteryPreconditioning: PolestarPreconditioningDTO? = nil) -> VehicleClimateStatus {
+        let running = runningStatus == "RUNNING_STATUS_ON"
+        // runtimeLeftMinutes is deprecated upstream; when absent, derive the remainder
+        // from the session window instead.
+        let remaining: Int? = {
+            if let minutes = runtimeLeftMinutes { return Int(minutes.rounded()) }
+            guard let ends = endingAt?.date else { return nil }
+            let diff = ends.timeIntervalSinceNow
+            return diff > 0 ? max(1, Int(diff / 60)) : 0
+        }()
+        return VehicleClimateStatus(
+            activity: running ? .active : .idle,
+            timeRemainingMinutes: remaining,
+            timerTriggered: false,
+            interiorTemperatureCelsius: currentCompartmentTemperatureCelsius,
+            requestedTemperatureCelsius: requestedCompartmentTemperatureCelsius,
+            driverSeatHeatingLevel: seatHeatLevel(requestedFrontLeftSeat),
+            passengerSeatHeatingLevel: seatHeatLevel(requestedFrontRightSeat),
+            steeringWheelHeatingLevel: seatHeatLevel(requestedSteeringWheelHeating),
+            rearLeftSeatHeatingLevel: seatHeatLevel(requestedRearLeftSeat),
+            rearRightSeatHeatingLevel: seatHeatLevel(requestedRearRightSeat),
+            ventilation: ventilation,
+            mainClimateRunningStatus: mainClimateRunningStatus,
+            sessionStartedAt: startedAt?.date ?? batteryPreconditioning?.startedAt?.date,
+            sessionEndsAt: endingAt?.date ?? batteryPreconditioning?.endingAt?.date
+        )
+    }
+}
+
+extension PolestarPreCleaningDTO {
+    func toVehicleAirQuality() -> VehicleAirQuality {
+        let state: AirCleaningState = {
+            switch runningStatus {
+            case "RUNNING_STATUS_ON": return .on
+            case "RUNNING_STATUS_OFF": return .off
+            case "RUNNING_STATUS_PENDING": return .pending
+            default: return .unknown
+            }
+        }()
+        return VehicleAirQuality(
+            cleaningState: state,
+            airQualityIndex: measuredAirQualityIndex.map { Int($0.rounded()) },
+            particulateMatter25: measuredParticulateMatter25.map { Int($0.rounded()) },
+            runtimeRemainingMinutes: runtimeLeftMinutes.map { Int($0.rounded()) },
+            reportedAt: timestamp?.date,
+            startedAt: startedAt?.date,
+            endingAt: endingAt?.date,
+            startReason: cleaningStartReason,
+            lastCycleValid: lastCycleValid,
+            errorKind: cleaningErrorKind,
+            measuredAt: measurementDate?.date,
+            lastCycleCompleted: lastCycleCompleted?.date
+        )
+    }
+
+    /// Only reasons the domain type can represent are surfaced; TIMER and KEEP_CLIMATE
+    /// have no `AirCleaningStartReason` case and stay nil.
+    private var cleaningStartReason: AirCleaningStartReason? {
+        switch startReason {
+        case "START_REASON_REMOTE": return .remote
+        case "START_REASON_MANUALLY_FROM_CAR": return .manuallyFromCar
+        default: return nil
+        }
+    }
+
+    /// `ERROR_TYPE_UNSPECIFIED` means "no value" and decodes to nil. A present
+    /// NO_START_NEEDED is the explicit no-error signal (`.none`); INTERRUPTED is not a
+    /// hardware fault; every remaining error kind falls back to `.generic`.
+    /// `AirCleaningError` has a case literally named `none`, so a bare `return .none`
+    /// here would resolve to `Optional.none` and silently drop the signal — spell the type.
+    private var cleaningErrorKind: AirCleaningError? {
+        switch error {
+        case nil, "ERROR_TYPE_UNSPECIFIED": return nil
+        case "ERROR_TYPE_NO_START_NEEDED": return AirCleaningError.none
+        case "ERROR_TYPE_INTERRUPTED": return .interrupted
+        default: return .generic
+        }
+    }
+}
+
+extension PolestarChargeLocationItemDTO {
+    /// `availableOptimizedCharging` as the snapshot's mode code: 0 unavailable,
+    /// 1 intelligent timer, 2 price-optimised.
+    private var optimisedChargingMode: Int {
+        switch availableOptimizedCharging {
+        case "INTELLIGENT_TIMER": return 1
+        case "PRICED_OPTIMIZED_CHARGING": return 2
+        default: return 0
+        }
+    }
+
+    /// `LOCATION_TYPE_*` as the snapshot kind: 1 recent, 2 saved, 3 saved third-party.
+    /// Unspecified rows default to saved so they stay in the saved-locations bucket.
+    private var locationKind: Int {
+        switch locationType {
+        case "LOCATION_TYPE_RECENT": return 1
+        case "LOCATION_TYPE_SAVED_3RD_PARTY": return 3
+        case "LOCATION_TYPE_SAVED": return 2
+        default: return 2
+        }
+    }
+
+    func toChargeLocationSnapshot() -> ChargeLocationSnapshot {
+        ChargeLocationSnapshot(
+            id: locationId ?? UUID().uuidString,
+            alias: locationAlias ?? "Charge Location",
+            latitude: coordinate?.latitude,
+            longitude: coordinate?.longitude,
+            ampLimit: ampLimit.map { Int($0.rounded()) } ?? 0,
+            minimumSoc: minimumSoc.map { Int($0.rounded()) } ?? 0,
+            optimisedChargingEnabled: isOptimizedChargingEnabled ?? false,
+            optimisedChargingMode: optimisedChargingMode,
+            kind: locationKind
+        )
+    }
+}
+
+private func parsePortalWeekday(_ raw: String) -> VehicleWeekday? {
+    switch raw.uppercased() {
+    case "MONDAY", "MON": return .monday
+    case "TUESDAY", "TUE": return .tuesday
+    case "WEDNESDAY", "WED": return .wednesday
+    case "THURSDAY", "THU": return .thursday
+    case "FRIDAY", "FRI": return .friday
+    case "SATURDAY", "SAT": return .saturday
+    case "SUNDAY", "SUN": return .sunday
+    default: return nil
+    }
+}
+
+extension VehicleWeekday {
+    /// Portal wire encoding of a weekday, the inverse of `parsePortalWeekday`.
+    var portalWeekdayName: String {
+        switch self {
+        case .monday: return "MONDAY"
+        case .tuesday: return "TUESDAY"
+        case .wednesday: return "WEDNESDAY"
+        case .thursday: return "THURSDAY"
+        case .friday: return "FRIDAY"
+        case .saturday: return "SATURDAY"
+        case .sunday: return "SUNDAY"
+        }
+    }
+}
+

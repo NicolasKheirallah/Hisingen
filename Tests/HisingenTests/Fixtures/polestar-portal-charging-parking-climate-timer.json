@@ -1,0 +1,37 @@
+{
+  "data": {
+    "vin": "YSMVSEDE6PL147228",
+    "id": "parking-climate-timer-01",
+    "updatedAt": "2024-05-21T13:58:20Z",
+    "updatedAtTimestamp": {
+      "seconds": "1716299900",
+      "nanos": 0
+    },
+    "parkingClimateTimers": [
+      {
+        "timerId": "climate-timer-morning-01",
+        "index": 1,
+        "readyAt": {
+          "hour": 7,
+          "minute": 30
+        },
+        "activated": true,
+        "repeat": true,
+        "weekdays": [
+          "MONDAY",
+          "TUESDAY",
+          "WEDNESDAY",
+          "THURSDAY",
+          "FRIDAY"
+        ]
+      }
+    ],
+    "utc0": false,
+    "metaReceivedAt": "2024-05-21T13:58:20Z",
+    "metaEventId": "evt-pct-334455"
+  },
+  "meta": {
+    "vin": "YSMVSEDE6PL147228",
+    "domain": "parking-climate-timer"
+  }
+}

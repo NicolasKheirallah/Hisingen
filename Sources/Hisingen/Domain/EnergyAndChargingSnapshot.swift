@@ -26,6 +26,8 @@ struct TripComputerSnapshot: Codable, Equatable, Sendable {
     var electricDistanceKm: Double?
     var fuelDistanceKm: Double?
     var regeneratedEnergyKwh: Double?
+    var sinceChargeTripKm: Double? = nil
+    var sinceChargeAverageSpeedKmH: Int? = nil
 }
 
 struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
@@ -45,6 +47,10 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
     var diagnostics: BatteryDiagnostics?
     var schedules: [VehicleSchedule]
     var locations: [ChargeLocationSnapshot]
+    var isAtChargeLocation: Bool?
+    var currentChargeLocationName: String?
+    var chargeNowActive: Bool?
+    var arrivedAtLocationDate: Date?
     var samples: [ChargingSample]
     var sessions: [ChargingSession]
 
@@ -65,6 +71,10 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         diagnostics: BatteryDiagnostics? = nil,
         schedules: [VehicleSchedule] = [],
         locations: [ChargeLocationSnapshot] = [],
+        isAtChargeLocation: Bool? = nil,
+        currentChargeLocationName: String? = nil,
+        chargeNowActive: Bool? = nil,
+        arrivedAtLocationDate: Date? = nil,
         samples: [ChargingSample] = [],
         sessions: [ChargingSession] = []
     ) {
@@ -84,6 +94,10 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         self.diagnostics = diagnostics
         self.schedules = schedules
         self.locations = locations
+        self.isAtChargeLocation = isAtChargeLocation
+        self.currentChargeLocationName = currentChargeLocationName
+        self.chargeNowActive = chargeNowActive
+        self.arrivedAtLocationDate = arrivedAtLocationDate
         self.samples = samples
         self.sessions = sessions
     }

@@ -43,6 +43,13 @@ final class VehicleSessionController {
 
     private var refreshCoordinator: RefreshCoordinator
 
+    /// Polestar connection mode the current `RefreshCoordinator` was built against. A mode
+    /// flip reaches `credentialsDidChange` with the brand unchanged, so without this snapshot
+    /// the coordinator would keep polling the previous adapter until relaunch. Seeded from the
+    /// injected store in init rather than the global default so isolated test suites stay
+    /// isolated.
+    private var currentPolestarMode: PreferencesStore.PolestarConnectionMode
+
     /// Session-derived display state. The shell reads these back when it renders.
     private(set) var latest: VehicleState?
     private(set) var lastError: String?
@@ -74,6 +81,7 @@ final class VehicleSessionController {
         self.fleetStore = fleetStore
         self.observesEnvironment = observesEnvironment
         self.providers = providers
+        self.currentPolestarMode = preferences.polestarConnectionMode
         let provider = providers.provider(for: preferences.activeBrand)
         self.refreshCoordinator = RefreshCoordinator(
             api: provider, stateStore: stateStore, observesEnvironment: observesEnvironment,
@@ -191,8 +199,17 @@ final class VehicleSessionController {
     }
 
     /// Adopts the account, reconciles app settings, then restarts with the new credentials.
+    /// The forced brand switch is reserved for an actual brand or Polestar connection-mode
+    /// change: it tears down and rebuilds the `RefreshCoordinator`, which must happen when the
+    /// mode flip changes the backing adapter, but must not destroy the coordinator (and its
+    /// remembered `accountEmail`) on ordinary same-brand credential updates.
     func credentialsDidChange(for brand: VehicleBrand) {
-        switchActiveBrand(to: brand, force: true)
+        let brandChanged = preferences.activeBrand != brand
+        let modeChanged = (brand == .polestar && currentPolestarMode != preferences.polestarConnectionMode)
+        if brandChanged || modeChanged {
+            currentPolestarMode = preferences.polestarConnectionMode
+            switchActiveBrand(to: brand, force: true)
+        }
         context?.sessionCredentialsDidChange()
         refreshCoordinator.credentialsChanged(
             preferredVIN: preferences.vin.isEmpty ? nil : preferences.vin)

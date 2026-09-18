@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Hisingen
 
-@Suite
+@Suite(.serialized)
 struct PolestarDataPortalTests {
 
     // MARK: - Token Decoding Tests
@@ -325,19 +325,16 @@ struct PolestarDataPortalTests {
         let json = """
         {
             "vin": "YSM12345678901234",
-            "odometerMeters": 42150.0,
+            "odometerMeters": 42150800,
+            "tripMeterManualKm": 96.5,
+            "averageSpeedKmPerHour": 38.0,
             "timestamp": { "seconds": "1774968000", "nanos": 0 }
         }
         """
         let odoDTO = try JSONDecoder().decode(PolestarOdometerDTO.self, from: Data(json.utf8))
-        #expect(odoDTO.odometerMeters == 42150.0)
-        #expect(odoDTO.calculatedOdometerKm == 42)
-
-        let kmJson = """
-        { "vin": "YSM12345678901234", "odometerKm": 128.7 }
-        """
-        let odoKmDTO = try JSONDecoder().decode(PolestarOdometerDTO.self, from: Data(kmJson.utf8))
-        #expect(odoKmDTO.calculatedOdometerKm == 129)
+        #expect(odoDTO.odometerMeters == 42150800)
+        #expect(odoDTO.calculatedOdometerKm == 42151)
+        #expect(odoDTO.tripMeterManualKm == 96.5)
     }
 
     @Test
@@ -345,12 +342,10 @@ struct PolestarDataPortalTests {
         let json = """
         {
             "vin": "YSM12345678901234",
-            "latitude": 57.7089,
-            "longitude": 11.9746,
-            "headingDegrees": 180.0,
-            "speedMetersPerSecond": 25.0,
-            "altitudeMeters": 35.0,
-            "accuracyMeters": 5.0
+            "coordinate": { "latitude": 57.7089, "longitude": 11.9746 },
+            "heading": 180.0,
+            "speed": "90.0",
+            "altitude": "35.0"
         }
         """
         let locDTO = try JSONDecoder().decode(PolestarLocationDTO.self, from: Data(json.utf8))
@@ -360,7 +355,7 @@ struct PolestarDataPortalTests {
         let vehicleLoc = locDTO.toVehicleLocation()
         #expect(vehicleLoc.latitude == 57.7089)
         #expect(vehicleLoc.longitude == 11.9746)
-        #expect(vehicleLoc.speed == 90.0) // 25 m/s * 3.6 = 90 km/h
+        #expect(vehicleLoc.speed == 90.0) // wire speed is already km/h
         #expect(vehicleLoc.heading == 180.0)
         #expect(vehicleLoc.altitudeMeters == 35.0)
     }
@@ -388,12 +383,16 @@ struct PolestarDataPortalTests {
     // MARK: - Command Catalog & Read-Only Gating Tests
 
     @Test
-    func providerCommandCatalogDisallowsRemoteCommandsInDataPortalMode() {
+    func providerCommandCatalogDataPortalCommands() {
         let portalCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal)
         #expect(portalCatalog.implements(.lock) == false)
         #expect(portalCatalog.implements(.unlock) == false)
-        #expect(portalCatalog.implements(.stopClimate) == false)
-        #expect(portalCatalog.implements(.startChargingOverride) == false)
+        #expect(portalCatalog.implements(.openWindows) == false)
+        #expect(portalCatalog.implements(.stopClimate) == true)
+        #expect(portalCatalog.implements(.startPreCleaning) == true)
+        #expect(portalCatalog.implements(.setChargeTarget(80)) == true)
+        #expect(portalCatalog.implements(.setAmpLimit(16)) == true)
+        #expect(portalCatalog.implements(.startChargingOverride) == true)
 
         let consumerCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .polestarID)
         #expect(consumerCatalog.implements(.lock) == true)
@@ -401,14 +400,47 @@ struct PolestarDataPortalTests {
     }
 
     @Test
-    @MainActor
+    func dataPortalCatalogCoversSchedulesAndChargeLocations() {
+        let portalCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal)
+        #expect(portalCatalog.implements(.setGlobalChargeTimer(
+            VehicleSchedule(kind: .globalCharging, startHour: 23, startMinute: 0, endHour: 6, endMinute: 0, weekdays: [.monday], isActive: true))))
+        #expect(portalCatalog.implements(.setClimateTimer(
+            VehicleSchedule(kind: .climate, startHour: 7, startMinute: 30, endHour: nil, endMinute: nil, isActive: true))))
+        #expect(portalCatalog.implements(.deleteClimateTimer(id: "t1")))
+        #expect(portalCatalog.implements(.createChargeLocationAtCar(alias: "Work", ampLimit: 16, minimumSoc: 60, optimisedCharging: false)))
+        #expect(portalCatalog.implements(.updateChargeLocationAlias(id: "l1", alias: "Work")))
+        #expect(portalCatalog.implements(.updateChargeLocationAmpLimit(id: "l1", amps: 10)))
+        #expect(portalCatalog.implements(.updateChargeLocationMinimumSoc(id: "l1", soc: 70)))
+        #expect(portalCatalog.implements(.setChargeLocationOptimisedCharging(id: "l1", enabled: true)))
+        #expect(portalCatalog.implements(.deleteChargeLocation(id: "l1")))
+        #expect(!portalCatalog.implements(.honkAndFlash))
+        #expect(!portalCatalog.implements(.unlockTrunk))
+        #expect(!portalCatalog.implements(.scheduleOTA(delayMinutes: 5)))
+        // Bare catalogs default to consumer mode so parallel suites never inherit portal gating.
+        #expect(ProviderCommandCatalog(brand: .polestar).polestarConnectionMode == .polestarID)
+    }
+
+    @Test
     func commandAvailabilityExplainsDataPortalReadonly() {
-        let pref = PreferencesStore.shared
-        let oldMode = pref.polestarConnectionMode
-        defer { pref.polestarConnectionMode = oldMode }
-        pref.polestarConnectionMode = .dataPortal
-        let reason = CommandAvailability.unimplementedByProvider.shortReason
+        // Isolated catalog + gate: mutating PreferencesStore.shared here would leak the
+        // dataPortal mode into suites running concurrently in this process.
+        let state = VehicleState(
+            energy: EnergyAndChargingSnapshot(),
+            identity: VehicleIdentitySnapshot(availability: .available, modelName: "Polestar 2", vin: "TESTVIN"),
+            freshness: SnapshotFreshness(fetchedAt: Date())
+        )
+        let gate = CapabilityGate()
+        let availability = gate.availability(
+            for: .lock, state: state,
+            commandCatalog: ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal),
+            enabledFeatures: [.remoteLocks], commandInProgress: false)
+        guard case .unimplementedByProvider(let reason) = availability else {
+            Issue.record("Expected unimplementedByProvider in Developer Portal mode, got \(availability)")
+            return
+        }
         #expect(reason?.contains("Developer Portal") == true)
+        // The reason-less payload keeps the generic service-level wording.
+        #expect(CommandAvailability.unimplementedByProvider().shortReason?.contains("Not available") == true)
     }
 
     // MARK: - API VehicleProviding Conformance Tests
@@ -420,6 +452,212 @@ struct PolestarDataPortalTests {
         await #expect(throws: RemoteCommandError.unsupported) {
             try await api.executeRemoteCommand(.lock, vin: "YSM12345678901234")
         }
+    }
+
+    @Test
+    @MainActor
+    func apiExecuteRemoteCommandsActuatesSupportedEndpoints() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        var lastMethod = ""
+        var lastPath = ""
+        PortalMockTransport.requestHandler = { req in
+            lastMethod = req.httpMethod ?? ""
+            lastPath = req.url?.path ?? ""
+            return (200, Data("{}".utf8))
+        }
+
+        // Climate
+        let climateResult = try await api.executeRemoteCommand(
+            .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .level2, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .level1),
+            vin: "TESTVIN"
+        )
+        #expect(climateResult.outcome == .accepted)
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/telemetry/parking-climatization"))
+
+        let stopClimateResult = try await api.executeRemoteCommand(.stopClimate, vin: "TESTVIN")
+        #expect(stopClimateResult.outcome == .completed)
+        #expect(lastMethod == "DELETE")
+        #expect(lastPath.contains("/telemetry/parking-climatization"))
+
+        // Pre-cleaning
+        let startCleanResult = try await api.executeRemoteCommand(.startPreCleaning, vin: "TESTVIN")
+        #expect(startCleanResult.outcome == .accepted)
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/telemetry/pre-cleaning"))
+
+        let stopCleanResult = try await api.executeRemoteCommand(.stopPreCleaning, vin: "TESTVIN")
+        #expect(stopCleanResult.outcome == .completed)
+        #expect(lastMethod == "DELETE")
+        #expect(lastPath.contains("/telemetry/pre-cleaning"))
+
+        // Target SoC
+        let socResult = try await api.executeRemoteCommand(.setChargeTarget(85), vin: "TESTVIN")
+        #expect(socResult.outcome == .accepted)
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/target-soc"))
+
+        // Amp Limit
+        let ampResult = try await api.executeRemoteCommand(.setAmpLimit(16), vin: "TESTVIN")
+        #expect(ampResult.outcome == .accepted)
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/amp-limit"))
+
+        // Override timer
+        let overrideStartResult = try await api.executeRemoteCommand(.startChargingOverride, vin: "TESTVIN")
+        #expect(overrideStartResult.outcome == .accepted)
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/override-charge-timer"))
+
+        let overrideStopResult = try await api.executeRemoteCommand(.stopChargingOverride, vin: "TESTVIN")
+        #expect(overrideStopResult.outcome == .completed)
+        #expect(lastMethod == "DELETE")
+        #expect(lastPath.contains("/charging/override-charge-timer"))
+    }
+
+    @Test
+    @MainActor
+    func apiFetchVehicleStateAssemblesAll16Endpoints() async throws {
+        func fixtureData(named name: String) throws -> Data {
+            let url = try #require(Bundle.module.url(forResource: name, withExtension: "json"))
+            return try Data(contentsOf: url)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        let batteryData = try fixtureData(named: "polestar-portal-battery")
+        let exteriorData = try fixtureData(named: "polestar-portal-exterior")
+        let healthData = try fixtureData(named: "polestar-portal-health")
+        let availData = try fixtureData(named: "polestar-portal-availability")
+        let odoData = try fixtureData(named: "polestar-portal-odometer")
+        let locData = try fixtureData(named: "polestar-portal-location")
+        let climData = try fixtureData(named: "polestar-portal-telemetry-parking-climatization")
+        let cleanData = try fixtureData(named: "polestar-portal-telemetry-pre-cleaning")
+        let socData = try fixtureData(named: "polestar-portal-charging-target-soc")
+        let ampData = try fixtureData(named: "polestar-portal-charging-amp-limit")
+        let locsData = try fixtureData(named: "polestar-portal-charging-charge-locations")
+        let isAtData = try fixtureData(named: "polestar-portal-charging-is-at-charge-location")
+        let timerData = try fixtureData(named: "polestar-portal-charging-global-charge-timer")
+        let chargeNowData = try fixtureData(named: "polestar-portal-charging-charge-now")
+        let climTimerData = try fixtureData(named: "polestar-portal-charging-parking-climate-timer")
+
+        PortalMockTransport.requestHandler = { req in
+            let path = req.url?.path ?? ""
+            if path.contains("/telemetry/battery") { return (200, batteryData) }
+            if path.contains("/telemetry/exterior") { return (200, exteriorData) }
+            if path.contains("/telemetry/health") { return (200, healthData) }
+            if path.contains("/telemetry/availability") { return (200, availData) }
+            if path.contains("/telemetry/odometer") { return (200, odoData) }
+            if path.contains("/telemetry/location") { return (200, locData) }
+            if path.contains("/telemetry/parking-climatization") { return (200, climData) }
+            if path.contains("/telemetry/pre-cleaning") { return (200, cleanData) }
+            if path.contains("/charging/target-soc") { return (200, socData) }
+            if path.contains("/charging/amp-limit") { return (200, ampData) }
+            if path.contains("/charging/charge-locations") { return (200, locsData) }
+            if path.contains("/charging/is-at-charge-location") { return (200, isAtData) }
+            if path.contains("/charging/global-charge-timer") { return (200, timerData) }
+            if path.contains("/charging/charge-now") { return (200, chargeNowData) }
+            if path.contains("/charging/parking-climate-timer") { return (200, climTimerData) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            features: FeatureSelection(enabled: Set(AppFeature.allCases))
+        )
+
+        #expect(state.energy.batteryPercentage == 78.5)
+        #expect(state.energy.targetPercentage == 80)
+        #expect(state.energy.currentLimitAmps == 16)
+        #expect(state.energy.locations.count == 1)
+        #expect(state.energy.isAtChargeLocation == true)
+        // The is-at state only carries a locationId; assembly joins it against the
+        // charge-locations list to recover the display name.
+        #expect(state.energy.currentChargeLocationName == "Home Garage")
+        #expect(state.energy.arrivedAtLocationDate == Date(timeIntervalSince1970: 1_716_299_100))
+        #expect(state.energy.chargeNowActive == true)
+        #expect(state.energy.schedules.count == 1)
+        #expect(state.climateStatus?.activity == .active)
+        #expect(state.climateStatus?.timeRemainingMinutes == 18)
+        #expect(state.climateStatus?.requestedTemperatureCelsius == 21.0)
+        #expect(state.climateStatus?.driverSeatHeatingLevel == 2)
+        #expect(state.climateStatus?.steeringWheelHeatingLevel == 1)
+        #expect(state.airQuality?.cleaningState == .off)
+        #expect(state.airQuality?.airQualityIndex == 25)
+        #expect(state.climateTimers.count == 1)
+        #expect(state.maintenance.odometerKm == 42151)
+        #expect(state.location?.latitude == 57.708870)
+        #expect(state.exteriorStatus?.isLocked == true)
+        // ARMED is not an alarm event; only the spec's TRIGGERED spelling is.
+        #expect(state.exteriorStatus?.alarmTriggered == false)
+        #expect(state.identity.usageMode == "INACTIVE")
+        #expect(state.tripComputer.manualTripKm == 128.4)
+        #expect(state.tripComputer.automaticTripKm == 42102.1)
+        #expect(state.tripComputer.sinceChargeTripKm == 96.7)
+        #expect(state.tripComputer.manualAverageSpeedKmH == 34)
+        #expect(state.tripComputer.automaticAverageSpeedKmH == 41)
+        #expect(state.tripComputer.sinceChargeAverageSpeedKmH == 52)
+        #expect(state.energy.diagnostics?.energyAvailableIncreaseKwh == 5.2)
+        #expect(state.energy.diagnostics?.batteryPreconditioningStatus == "ACTIVE")
+        #expect(state.energy.diagnostics?.batteryPreconditioningEndsAt == Date(timeIntervalSince1970: 1_716_300_800))
+    }
+
+    @Test
+    @MainActor
+    func apiFetchVehicleStateAlarmIdleIsNotTriggered() async throws {
+        // The shared exterior mapper reads any value containing "ALARM" as an event;
+        // assembly must re-derive the flag so spec value ALARM_STATUS_IDLE stays false.
+        let exteriorJSON = """
+        {
+          "data": {
+            "vin": "TESTVIN",
+            "timestamp": { "seconds": "1716300100", "nanos": 0 },
+            "centralLock": "LOCKED",
+            "alarm": "ALARM_STATUS_IDLE",
+            "frontLeftDoor": "CLOSED",
+            "frontRightDoor": "CLOSED",
+            "rearLeftDoor": "CLOSED",
+            "rearRightDoor": "CLOSED",
+            "hood": "CLOSED",
+            "tailgate": "CLOSED"
+          },
+          "meta": { "vin": "TESTVIN", "domain": "exterior" }
+        }
+        """
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        PortalMockTransport.requestHandler = { req in
+            if req.url?.path.contains("/telemetry/exterior") == true { return (200, Data(exteriorJSON.utf8)) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "TESTVIN",
+            features: FeatureSelection(enabled: [.exteriorStatus])
+        )
+        #expect(state.exteriorStatus?.alarmTriggered == false)
     }
 
     // MARK: - Deep Telemetry & Augmented Mode Tests
@@ -512,6 +750,156 @@ struct PolestarDataPortalTests {
         #expect(warm == true)
     }
 
+    @Test
+    @MainActor
+    func augmentedProviderFallsBackToCommandProviderOnTelemetryError() async throws {
+        let dummyState = VehicleState(
+            batteryPercentage: 60,
+            rangeKm: 250,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: nil,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .ac,
+            chargerConnection: .connected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2023",
+            registrationNo: "ABC 123",
+            vin: "P2-FALLBACK",
+            ownerFirstName: nil,
+            odometerKm: nil,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: nil,
+            dataWarnings: []
+        )
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry-portal", shouldFailState: true)
+        let commands = PortalTestProbeProvider(brand: .polestar, name: "commands-consumer", state: dummyState)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: commands)
+
+        let state = try await augmented.fetchVehicleState(vin: "P2-FALLBACK", features: .default)
+        #expect(state.identity.vin == "P2-FALLBACK")
+        #expect(state.energy.batteryPercentage == 60)
+    }
+
+    // MARK: - Augmented Provider Portal-First Routing
+
+    @Test
+    func augmentedProviderRoutesPortalSupportedCommandsPortalFirst() async throws {
+        let portal = RoutingProbeProvider(name: "portal-primary")
+        let consumer = RoutingProbeProvider(name: "consumer-backup")
+        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
+
+        let result = try await augmented.executeRemoteCommand(.setChargeTarget(80), vin: "TESTVIN")
+        #expect(result.outcome == .completed)
+        #expect(await portal.receivedCommands.count == 1)
+        #expect(await consumer.receivedCommands.isEmpty)
+    }
+
+    @Test
+    func augmentedProviderFallsBackToConsumerWhenPortalCommandFails() async throws {
+        let portal = RoutingProbeProvider(name: "portal-primary", failCommands: true)
+        let consumer = RoutingProbeProvider(name: "consumer-backup")
+        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
+
+        let result = try await augmented.executeRemoteCommand(.setAmpLimit(12), vin: "TESTVIN")
+        #expect(result.outcome == .completed)
+        #expect(await portal.receivedCommands.count == 1)
+        #expect(await consumer.receivedCommands.count == 1)
+    }
+
+    @Test
+    func augmentedProviderRethrowsPrimaryErrorWhenConsumerIsCold() async throws {
+        let portal = RoutingProbeProvider(name: "portal-primary", failCommands: true)
+        let consumer = RoutingProbeProvider(name: "consumer-cold", warm: false)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
+
+        await #expect(throws: RemoteCommandError.busy) {
+            try await augmented.executeRemoteCommand(.setChargeTarget(80), vin: "TESTVIN")
+        }
+        #expect(await consumer.receivedCommands.isEmpty)
+    }
+
+    @Test
+    func augmentedProviderSendsConsumerExclusiveCommandsDirectly() async throws {
+        let portal = RoutingProbeProvider(name: "portal-primary")
+        let consumer = RoutingProbeProvider(name: "consumer-backup")
+        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
+
+        let result = try await augmented.executeRemoteCommand(.lock, vin: "TESTVIN")
+        #expect(result.outcome == .completed)
+        #expect(await portal.receivedCommands.isEmpty)
+        #expect(await consumer.receivedCommands.count == 1)
+    }
+
+    // MARK: - Schedule & Charge-Location REST Writes
+
+    @Test
+    @MainActor
+    func apiWritesSchedulesAndChargeLocationsToPortalEndpoints() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        var lastMethod = ""
+        var lastPath = ""
+        var lastBody = Data()
+        PortalMockTransport.requestHandler = { req in
+            lastMethod = req.httpMethod ?? ""
+            lastPath = req.url?.path ?? ""
+            lastBody = portalRequestBody(req)
+            return (200, Data("{}".utf8))
+        }
+        defer { PortalMockTransport.requestHandler = nil }
+
+        _ = try await api.executeRemoteCommand(
+            .setGlobalChargeTimer(VehicleSchedule(kind: .globalCharging, startHour: 23, startMinute: 0, endHour: 6, endMinute: 0, weekdays: [.friday], isActive: true)),
+            vin: "TESTVIN")
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/global-charge-timer"))
+        let timerBody = String(data: lastBody, encoding: .utf8) ?? ""
+        #expect(timerBody.contains("23:00"))
+        #expect(timerBody.contains("06:00"))
+        #expect(timerBody.contains("FRIDAY"))
+
+        _ = try await api.executeRemoteCommand(
+            .setClimateTimer(VehicleSchedule(kind: .climate, startHour: 7, startMinute: 30, endHour: nil, endMinute: nil, weekdays: [], isActive: true)),
+            vin: "TESTVIN")
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/parking-climate-timer"))
+        #expect((String(data: lastBody, encoding: .utf8) ?? "").contains("07:30"))
+
+        _ = try await api.executeRemoteCommand(.deleteClimateTimer(id: "timer-9"), vin: "TESTVIN")
+        #expect(lastMethod == "DELETE")
+        #expect(lastPath.contains("/charging/parking-climate-timer/timer-9"))
+
+        _ = try await api.executeRemoteCommand(
+            .createChargeLocationAtCar(alias: "Work", ampLimit: 16, minimumSoc: 70, optimisedCharging: true),
+            vin: "TESTVIN")
+        #expect(lastMethod == "POST")
+        #expect(lastPath.contains("/charging/charge-locations"))
+        let locationBody = String(data: lastBody, encoding: .utf8) ?? ""
+        #expect(locationBody.contains("Work"))
+        #expect(locationBody.contains("optimisedCharging"))
+
+        _ = try await api.executeRemoteCommand(.updateChargeLocationAmpLimit(id: "loc-1", amps: 10), vin: "TESTVIN")
+        #expect(lastMethod == "PUT")
+        #expect(lastPath.contains("/charging/charge-locations/loc-1"))
+        #expect((String(data: lastBody, encoding: .utf8) ?? "").contains("ampLimit"))
+
+        _ = try await api.executeRemoteCommand(.deleteChargeLocation(id: "loc-1"), vin: "TESTVIN")
+        #expect(lastMethod == "DELETE")
+        #expect(lastPath.contains("/charging/charge-locations/loc-1"))
+    }
+
     // MARK: - Canonical Fixture End-to-End Decoding
 
     @Test
@@ -586,17 +974,144 @@ struct PolestarDataPortalTests {
         let loc = locDTO.toVehicleLocation()
         #expect(loc.latitude == 57.708870)
         #expect(loc.longitude == 11.974560)
-        #expect(loc.accuracyMeters == 5.0)
+        #expect(loc.altitudeMeters == 24.5)
+
+        // 9. Parking Climatization
+        let climData = try fixtureData(named: "polestar-portal-telemetry-parking-climatization")
+        let climEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarParkingClimatizationDTO>.self, from: climData)
+        let climDTO = try #require(climEnv.data)
+        #expect(climDTO.runningStatus == "RUNNING_STATUS_ON")
+        #expect(climDTO.requestedCompartmentTemperatureCelsius == 21.0)
+        #expect(climDTO.requestedFrontLeftSeat == "HEATING_INTENSITY_MEDIUM")
+        #expect(climDTO.requestedSteeringWheelHeating == "HEATING_INTENSITY_LOW")
+        #expect(climDTO.runtimeLeftMinutes == 18)
+        let climate = climDTO.toVehicleClimateStatus()
+        #expect(climate.activity == .active)
+        #expect(climate.timeRemainingMinutes == 18)
+        #expect(climate.interiorTemperatureCelsius == 16.5)
+        #expect(climate.requestedTemperatureCelsius == 21.0)
+        #expect(climate.driverSeatHeatingLevel == 2)
+        #expect(climate.passengerSeatHeatingLevel == 0)
+        #expect(climate.rearLeftSeatHeatingLevel == 1)
+        #expect(climate.rearRightSeatHeatingLevel == 0)
+        #expect(climate.steeringWheelHeatingLevel == 1)
+        #expect(climate.ventilation == "VENTILATION_HEATING")
+        #expect(climate.mainClimateRunningStatus == "MAIN_CLIMATE_RUNNING_STATUS_ON")
+        #expect(climate.sessionStartedAt != nil)
+        #expect(climate.sessionEndsAt != nil)
+
+        // 10. Pre-cleaning
+        let cleanData = try fixtureData(named: "polestar-portal-telemetry-pre-cleaning")
+        let cleanEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarPreCleaningDTO>.self, from: cleanData)
+        let cleanDTO = try #require(cleanEnv.data)
+        #expect(cleanDTO.runningStatus == "RUNNING_STATUS_OFF")
+        #expect(cleanDTO.measuredAirQualityIndex == 25)
+        let air = cleanDTO.toVehicleAirQuality()
+        #expect(air.cleaningState == .off)
+        #expect(air.airQualityIndex == 25)
+        #expect(air.particulateMatter25 == 8)
+        #expect(air.lastCycleValid == true)
+        #expect(air.errorKind == AirCleaningError.none)
+        #expect(air.measuredAt != nil)
+        #expect(air.lastCycleCompleted != nil)
+
+        // 11. Target SoC
+        let socData = try fixtureData(named: "polestar-portal-charging-target-soc")
+        let socEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarTargetSocDTO>.self, from: socData)
+        let socDTO = try #require(socEnv.data)
+        #expect(socDTO.targetSoc?.batteryChargeTargetLevel == 80)
+        #expect(socDTO.targetSocPercentage == 80)
+
+        // 12. Amp Limit
+        let ampData = try fixtureData(named: "polestar-portal-charging-amp-limit")
+        let ampEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarAmpLimitDTO>.self, from: ampData)
+        let ampDTO = try #require(ampEnv.data)
+        #expect(ampDTO.syncedAmpLimit?.ampLimit == 16)
+        #expect(ampDTO.ampLimit == 16)
+        #expect(ampDTO.pendingAmpLimit == nil)
+
+        // 13. Charge Locations
+        let locsData = try fixtureData(named: "polestar-portal-charging-charge-locations")
+        let locsEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarChargeLocationsDTO>.self, from: locsData)
+        let locsDTO = try #require(locsEnv.data)
+        #expect(locsDTO.chargeLocations?.first?.locationAlias == "Home Garage")
+        #expect(locsDTO.chargeLocations?.first?.minimumSoc == 90)
+        let locList = locsDTO.toChargeLocations()
+        #expect(locList.count == 1)
+        #expect(locList.first?.id == "loc-home-01")
+        #expect(locList.first?.alias == "Home Garage")
+        #expect(locList.first?.latitude == 57.70887)
+        #expect(locList.first?.minimumSoc == 90)
+        #expect(locList.first?.ampLimit == 16)
+        #expect(locList.first?.optimisedChargingEnabled == true)
+        #expect(locList.first?.optimisedChargingMode == 1)
+        #expect(locList.first?.kind == 2)
+
+        // 14. Is At Charge Location
+        let isAtData = try fixtureData(named: "polestar-portal-charging-is-at-charge-location")
+        let isAtEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarIsAtChargeLocationDTO>.self, from: isAtData)
+        let isAtDTO = try #require(isAtEnv.data)
+        #expect(isAtDTO.locationId == "loc-home-01")
+        #expect(isAtDTO.isAtChargeLocation == true)
+        #expect(isAtDTO.arrivedAtTimestamp?.date != nil)
+        // The state carries no name; the id → name join happens in snapshot assembly.
+        #expect(isAtDTO.currentLocationName == nil)
+
+        // 15. Global Charge Timer
+        let timerData = try fixtureData(named: "polestar-portal-charging-global-charge-timer")
+        let timerEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarGlobalChargeTimerDTO>.self, from: timerData)
+        let timerDTO = try #require(timerEnv.data)
+        #expect(timerDTO.globalChargeTimer?.start?.hourComponent == 23)
+        #expect(timerDTO.globalChargeTimer?.stop?.hourComponent == 6)
+        let schedules = timerDTO.toSchedules()
+        #expect(schedules.count == 1)
+        #expect(schedules.first?.startHour == 23)
+        #expect(schedules.first?.startMinute == 0)
+        #expect(schedules.first?.endHour == 6)
+        #expect(schedules.first?.isActive == true)
+        // The spec global window is a daily range with no weekday list.
+        #expect(schedules.first?.weekdays.isEmpty == true)
+
+        // 16. Charge Now
+        let chargeNowData = try fixtureData(named: "polestar-portal-charging-charge-now")
+        let chargeNowEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarChargeNowDTO>.self, from: chargeNowData)
+        let chargeNowDTO = try #require(chargeNowEnv.data)
+        #expect(chargeNowDTO.syncedOverrideChargeTimer?.override == true)
+        #expect(chargeNowDTO.pendingOverrideChargeTimer == nil)
+
+        // 17. Override Charge Timer — same wire shape as charge-now, mid-sync after a POST
+        let overrideData = try fixtureData(named: "polestar-portal-charging-override-charge-timer")
+        let overrideEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarChargeNowDTO>.self, from: overrideData)
+        let overrideDTO = try #require(overrideEnv.data)
+        #expect(overrideDTO.pendingOverrideChargeTimer?.override == true)
+        #expect(overrideDTO.syncedOverrideChargeTimer?.override == false)
+
+        // 18. Parking Climate Timer
+        let climTimerData = try fixtureData(named: "polestar-portal-charging-parking-climate-timer")
+        let climTimerEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarParkingClimateTimerDTO>.self, from: climTimerData)
+        let climTimerDTO = try #require(climTimerEnv.data)
+        #expect(climTimerDTO.parkingClimateTimers?.first?.readyAt?.hourComponent == 7)
+        let climateTimers = climTimerDTO.toClimateSchedules()
+        #expect(climateTimers.count == 1)
+        #expect(climateTimers.first?.backendID == "climate-timer-morning-01")
+        #expect(climateTimers.first?.startHour == 7)
+        #expect(climateTimers.first?.startMinute == 30)
+        #expect(climateTimers.first?.isActive == true)
+        #expect(climateTimers.first?.weekdays.count == 5)
     }
 }
 
 private actor PortalTestProbeProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand
     let providerName: String
+    var stateToReturn: VehicleState?
+    var shouldFailState: Bool = false
 
-    init(brand: VehicleBrand, name: String) {
+    init(brand: VehicleBrand, name: String, state: VehicleState? = nil, shouldFailState: Bool = false) {
         self.brand = brand
         self.providerName = name
+        self.stateToReturn = state
+        self.shouldFailState = shouldFailState
     }
 
     var cars: [CarSummary] {
@@ -611,9 +1126,99 @@ private actor PortalTestProbeProvider: VehicleProviding {
     func resolvedVIN(preferred: String?) async -> String? { preferred }
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        if shouldFailState {
+            throw VehicleServiceError.rateLimited(retryAfter: 60)
+        }
+        if let state = stateToReturn {
+            return state
+        }
         throw VehicleServiceError.notConfigured
     }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
-        throw RemoteCommandError.unsupported
+        RemoteCommandResult(outcome: .completed, message: nil)
     }
+}
+
+private final class PortalMockTransport: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (Int, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        guard let handler = Self.requestHandler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let (status, data) = handler(request)
+        let response = HTTPURLResponse(
+            url: request.url ?? URL(string: "https://polestar.com")!,
+            statusCode: status,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+/// Records commands and can fail each channel independently, proving the augmented
+/// provider's portal-first routing and its warm-session fallback guard.
+private actor RoutingProbeProvider: VehicleProviding {
+    nonisolated let brand: VehicleBrand
+    let name: String
+    let warm: Bool
+    let failFetch: Bool
+    let failCommands: Bool
+    private(set) var receivedCommands: [RemoteCommand] = []
+
+    init(name: String, warm: Bool = true, failFetch: Bool = false, failCommands: Bool = false) {
+        self.brand = .polestar
+        self.name = name
+        self.warm = warm
+        self.failFetch = failFetch
+        self.failCommands = failCommands
+    }
+
+    var cars: [CarSummary] { [CarSummary(vin: name, title: name)] }
+    var hasWarmSession: Bool { warm }
+
+    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func resetSession() async {}
+    func signOut() async throws {}
+    func resolvedVIN(preferred: String?) async -> String? { preferred }
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
+    func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        if failFetch { throw VehicleServiceError.rateLimited(retryAfter: 60) }
+        return VehicleState(
+            energy: EnergyAndChargingSnapshot(batteryPercentage: 60),
+            identity: VehicleIdentitySnapshot(availability: .available, modelName: name, vin: name),
+            freshness: SnapshotFreshness(fetchedAt: Date())
+        )
+    }
+    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        receivedCommands.append(command)
+        if failCommands { throw RemoteCommandError.busy }
+        return RemoteCommandResult(outcome: .completed, message: nil)
+    }
+}
+
+/// URLSession hands POST bodies to URLProtocol as a stream, not `httpBody`, so drain
+/// whichever form the request carries.
+private func portalRequestBody(_ request: URLRequest) -> Data {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return Data() }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+        let read = stream.read(buffer, maxLength: 4096)
+        if read <= 0 { break }
+        data.append(buffer, count: read)
+    }
+    return data
 }

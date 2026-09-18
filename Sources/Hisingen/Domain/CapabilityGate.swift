@@ -4,7 +4,10 @@ enum CommandAvailability: Equatable, Sendable {
     case available
     case disabledBySettings
     case unsupportedByVehicle
-    case unimplementedByProvider
+    /// Provider does not offer the command at all. `reason` carries a provider-specific
+    /// explanation when one exists (Developer Portal mode says which control families it
+    /// covers); `nil` falls back to the generic service-level wording.
+    case unimplementedByProvider(reason: String? = nil)
     case unavailableWhileBusy
     case unavailableUntilRefresh
     /// The backend explicitly reports the signed-in account is not the vehicle's owner
@@ -29,10 +32,8 @@ enum CommandAvailability: Equatable, Sendable {
             return L10n.text("Turn this on in Settings → Telemetry & Features.")
         case .unsupportedByVehicle:
             return L10n.text("This vehicle does not support the command.")
-        case .unimplementedByProvider:
-            if PreferencesStore.currentPolestarConnectionMode == .dataPortal {
-                return L10n.text("Remote controls are not supported by the Developer Portal (telemetry only).")
-            }
+        case .unimplementedByProvider(let customReason):
+            if let customReason { return customReason }
             return L10n.text("Not available through this account's vehicle service.")
         case .unavailableWhileBusy:
             return L10n.text("Another remote command is still running.")
@@ -100,7 +101,13 @@ struct CapabilityGate: Sendable {
         volvoRestrictedScopesEnabled: Bool
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
-        guard commandCatalog.implements(command) else { return .unimplementedByProvider }
+        guard commandCatalog.implements(command) else {
+            if commandCatalog.brand == .polestar, commandCatalog.polestarConnectionMode == .dataPortal {
+                return .unimplementedByProvider(reason: L10n.text(
+                    "Remote door locks and horns are not supported by the Developer Portal (telemetry, climate, and charging only)."))
+            }
+            return .unimplementedByProvider()
+        }
         // Volvo's lock/unlock/locate writes need the restricted ("Approved") scope tier on
         // the signed-in token; without it the provider would reject the command after the
         // fact. One shared precondition keeps every entry point's answer identical.

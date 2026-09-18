@@ -67,6 +67,10 @@ extension EnergyAndChargingSnapshot {
             // Locations are only re-shown when this fetch actually returned them; an empty
             // result after a backend hiccup should not wipe the list the controls tab renders.
             locations: locations.isEmpty ? previous.locations : locations,
+            isAtChargeLocation: isAtChargeLocation ?? previous.isAtChargeLocation,
+            currentChargeLocationName: currentChargeLocationName ?? previous.currentChargeLocationName,
+            chargeNowActive: chargeNowActive ?? previous.chargeNowActive,
+            arrivedAtLocationDate: arrivedAtLocationDate ?? previous.arrivedAtLocationDate,
             // Providers never produce samples; the buffer carries forward from the previous
             // snapshot and the live reading below appends to it.
             samples: previous.samples
@@ -127,7 +131,9 @@ extension VehicleIdentitySnapshot {
             imageData: imageData ?? (policy.features.contains(.vehicleImage)
                 ? (previous.imageData ?? imageCache.image(for: vin)) : nil),
             interiorImageData: interiorImageData ?? (policy.features.contains(.vehicleImage)
-                ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil)
+                ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil),
+            usageMode: usageMode ?? previous.usageMode,
+            unavailableReason: unavailableReason ?? previous.unavailableReason
         )
     }
 }
@@ -172,7 +178,9 @@ extension TripComputerSnapshot {
             electricRangeKm: electricRangeKm ?? previous.electricRangeKm,
             electricDistanceKm: electricDistanceKm ?? previous.electricDistanceKm,
             fuelDistanceKm: fuelDistanceKm ?? previous.fuelDistanceKm,
-            regeneratedEnergyKwh: regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh
+            regeneratedEnergyKwh: regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh,
+            sinceChargeTripKm: sinceChargeTripKm ?? (policy.features.contains(.tripMeters) ? previous.sinceChargeTripKm : nil),
+            sinceChargeAverageSpeedKmH: sinceChargeAverageSpeedKmH ?? previous.sinceChargeAverageSpeedKmH
         )
     }
 }

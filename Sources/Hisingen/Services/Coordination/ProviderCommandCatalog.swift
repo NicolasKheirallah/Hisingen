@@ -6,7 +6,9 @@ struct ProviderCommandCatalog: Sendable {
 
     init(
         brand: VehicleBrand,
-        polestarConnectionMode: PolestarConnectionMode = PreferencesStore.currentPolestarConnectionMode
+        // Fixed default rather than the live preference: parallel test suites constructing a
+        // bare catalog must never inherit a `.dataPortal` mode set by another test thread.
+        polestarConnectionMode: PolestarConnectionMode = .polestarID
     ) {
         self.brand = brand
         self.polestarConnectionMode = polestarConnectionMode
@@ -22,7 +24,18 @@ struct ProviderCommandCatalog: Sendable {
     }
 
     private func implementsPolestar(_ command: RemoteCommand) -> Bool {
-        guard polestarConnectionMode != .dataPortal else { return false }
+        if polestarConnectionMode == .dataPortal {
+            switch command {
+            case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
+                 .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride,
+                 .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer,
+                 .createChargeLocationAtCar, .updateChargeLocationAlias, .updateChargeLocationAmpLimit,
+                 .updateChargeLocationMinimumSoc, .setChargeLocationOptimisedCharging, .deleteChargeLocation:
+                return true
+            default:
+                return false
+            }
+        }
         switch command {
         case .startEngine, .stopEngine, .lockReducedGuard:
             return false
