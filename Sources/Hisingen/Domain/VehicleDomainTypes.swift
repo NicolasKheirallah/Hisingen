@@ -61,6 +61,20 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
     let weekdays: [VehicleWeekday]
     let isActive: Bool
     var locationName: String?
+    /// The concrete date of a one-shot timer. Repeating timers leave this nil and describe
+    /// themselves through `weekdays`; a nil here never means "repeats weekly".
+    var oneShotDate: Date?
+    /// Vehicle-acknowledged sync state of a timer setting (`SYNCED`, `PENDING`, …), nil when
+    /// the backend sent no acknowledgement.
+    var syncStatus: String?
+
+    /// UNSPECIFIED means "no acknowledgement info", not "the car is behind"; only a real
+    /// pending or failed acknowledgement deserves user attention.
+    var syncNeedsAttention: Bool {
+        guard let syncStatus, !syncStatus.isEmpty else { return false }
+        let normalized = syncStatus.uppercased()
+        return normalized != "SYNCED" && normalized != "UNSPECIFIED" && !normalized.contains("UNSPECIFIED")
+    }
 
     init(
         backendID: String? = nil,
@@ -72,7 +86,9 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         endMinute: Int?,
         weekdays: [VehicleWeekday] = [],
         isActive: Bool,
-        locationName: String? = nil
+        locationName: String? = nil,
+        oneShotDate: Date? = nil,
+        syncStatus: String? = nil
     ) {
         self.backendID = backendID
         self.index = index
@@ -84,11 +100,13 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         self.weekdays = weekdays
         self.isActive = isActive
         self.locationName = locationName
+        self.oneShotDate = oneShotDate
+        self.syncStatus = syncStatus
     }
 
     private enum CodingKeys: String, CodingKey {
         case backendID, index, kind, startHour, startMinute, endHour, endMinute
-        case weekdays, isActive, locationName
+        case weekdays, isActive, locationName, oneShotDate, syncStatus
     }
 
     init(from decoder: Decoder) throws {
@@ -103,6 +121,8 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         weekdays = try c.decodeIfPresent([VehicleWeekday].self, forKey: .weekdays) ?? []
         isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
         locationName = try c.decodeIfPresent(String.self, forKey: .locationName)
+        oneShotDate = try c.decodeIfPresent(Date.self, forKey: .oneShotDate)
+        syncStatus = try c.decodeIfPresent(String.self, forKey: .syncStatus)
     }
 }
 
@@ -615,6 +635,10 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     /// raw so their accumulated values can be classified later. `nil` in snapshots
     /// persisted before retention existed.
     var unknownWireFields: [PolestarRawWireField]? = nil
+    /// Raw `ERROR_TYPE_*` / warning tokens the climate system reported for the current
+    /// session, kept verbatim for display and support exports. `nil` in snapshots persisted
+    /// before capture existed, and when the backend sent neither list.
+    var errors: [String]? = nil
 
     init(
         activity: ClimateActivity,
@@ -631,7 +655,8 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         mainClimateRunningStatus: String? = nil,
         sessionStartedAt: Date? = nil,
         sessionEndsAt: Date? = nil,
-        unknownWireFields: [PolestarRawWireField]? = nil
+        unknownWireFields: [PolestarRawWireField]? = nil,
+        errors: [String]? = nil
     ) {
         self.activity = activity
         self.timeRemainingMinutes = timeRemainingMinutes
@@ -648,6 +673,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         self.sessionStartedAt = sessionStartedAt
         self.sessionEndsAt = sessionEndsAt
         self.unknownWireFields = unknownWireFields
+        self.errors = errors
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -655,7 +681,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         case interiorTemperatureCelsius, requestedTemperatureCelsius
         case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
         case rearLeftSeatHeatingLevel, rearRightSeatHeatingLevel, ventilation, mainClimateRunningStatus
-        case sessionStartedAt, sessionEndsAt, unknownWireFields
+        case sessionStartedAt, sessionEndsAt, unknownWireFields, errors
     }
 
     init(from decoder: Decoder) throws {
@@ -675,6 +701,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         sessionStartedAt = try c.decodeIfPresent(Date.self, forKey: .sessionStartedAt)
         sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
         unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields)
+        errors = try c.decodeIfPresent([String].self, forKey: .errors)
     }
 }
 
@@ -946,7 +973,11 @@ struct EnergyBreakdownSnapshot: Codable, Equatable, Sendable {
 struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let timeToTargetMinutes: Int?
     let timeToMinimumSOCMinutes: Int?
-    let chargerPowerState: ChargerPowerState
+    /// Time to reach the distance goal configured in the car (`estimatedChargingTimeMinutesToTargetDistance`).
+    /// Deliberately separate from `timeToTargetMinutes`, which means time to the target state
+    /// of charge; the two wire estimates describe different goals.
+    var timeToTargetDistanceMinutes: Int? = nil
+    var chargerPowerState: ChargerPowerState
     let averageConsumption: Double?
     let averageConsumptionSinceCharge: Double?
     /// Average consumption over the automatic (per-drive) trip period. `Double?` so older
@@ -970,6 +1001,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     init(
         timeToTargetMinutes: Int?,
         timeToMinimumSOCMinutes: Int?,
+        timeToTargetDistanceMinutes: Int? = nil,
         chargerPowerState: ChargerPowerState,
         averageConsumption: Double?,
         averageConsumptionSinceCharge: Double?,
@@ -988,6 +1020,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     ) {
         self.timeToTargetMinutes = timeToTargetMinutes
         self.timeToMinimumSOCMinutes = timeToMinimumSOCMinutes
+        self.timeToTargetDistanceMinutes = timeToTargetDistanceMinutes
         self.chargerPowerState = chargerPowerState
         self.averageConsumption = averageConsumption
         self.averageConsumptionSinceCharge = averageConsumptionSinceCharge
@@ -1006,7 +1039,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case timeToTargetMinutes, timeToMinimumSOCMinutes, chargerPowerState
+        case timeToTargetMinutes, timeToMinimumSOCMinutes, timeToTargetDistanceMinutes, chargerPowerState
         case averageConsumption, averageConsumptionSinceCharge, averageConsumptionAutomatic
         case energyUsedSinceChargeWh, unknownWireFields
         case energyBreakdown, powerLimitKw, energyAvailableKwh
@@ -1018,6 +1051,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         timeToTargetMinutes = try c.decodeIfPresent(Int.self, forKey: .timeToTargetMinutes)
         timeToMinimumSOCMinutes = try c.decodeIfPresent(Int.self, forKey: .timeToMinimumSOCMinutes)
+        timeToTargetDistanceMinutes = try c.decodeIfPresent(Int.self, forKey: .timeToTargetDistanceMinutes)
         chargerPowerState = try c.decode(ChargerPowerState.self, forKey: .chargerPowerState)
         averageConsumption = try c.decodeIfPresent(Double.self, forKey: .averageConsumption)
         averageConsumptionSinceCharge = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionSinceCharge)

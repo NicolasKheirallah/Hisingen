@@ -31,11 +31,30 @@ extension CommandReceipt {
         guard status.isAwaiting, let command, let proofReading = command.descriptor.proofReading else { return self }
         guard command.descriptor.isProvenBy(state) else { return self }
         let earliestConfirmationDate = issuedAt.addingTimeInterval(-max(0, timestampTolerance))
-        guard state.hasFreshReading(proofReading, now: now),
-              let date = state.reportedDate(for: proofReading),
-              date >= earliestConfirmationDate else { return self }
+        let readingDate = state.reportedDate(for: proofReading)
+        // Vehicle-stamped proof: the reading's own timestamp postdates the command, so the
+        // value cannot be pre-command residue.
+        let stampedDate: Date? = {
+            guard state.hasFreshReading(proofReading, now: now),
+                  let date = readingDate, date >= earliestConfirmationDate else { return nil }
+            return date
+        }()
+        // A no-op write (setting a value the car already has) never advances the reading's
+        // own timestamp, so the vehicle-stamped proof cannot ever pass. When the state was
+        // fetched after the command and already shows the requested effect, the backend has
+        // answered a post-command read with the requested value — that is confirmation too.
+        // fetchedAt is app-local (no vehicle clock skew), so the command boundary is exact:
+        // a fetch even slightly before the issue instant cannot prove the command. And a
+        // refresh whose proving endpoint failed carries the previous value forward with a
+        // fresh timestamp — that is not the backend re-answering.
+        let fetchPostdatesCommand = !state.freshness.isCached
+            && state.freshness.fetchedAt >= issuedAt
+            && !state.freshness.unavailableFeatures.contains(command.feature)
+        guard let confirmedAt = stampedDate ?? (fetchPostdatesCommand ? state.freshness.fetchedAt : nil) else {
+            return self
+        }
         var updated = self
-        updated.status = .confirmed(at: date)
+        updated.status = .confirmed(at: confirmedAt)
         return updated
     }
 }

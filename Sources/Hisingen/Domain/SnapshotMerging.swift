@@ -70,7 +70,11 @@ extension EnergyAndChargingSnapshot {
             locations: locations.isEmpty ? previous.locations : locations,
             isAtChargeLocation: resolvedIsAt,
             currentChargeLocationName: (resolvedIsAt == false) ? nil : (currentChargeLocationName ?? previous.currentChargeLocationName),
-            chargeNowActive: chargeNowActive ?? previous.chargeNowActive,
+            // A failed charge-now read must not keep a stale override pill alive: nil the
+            // flag for this cycle rather than carrying the last success forward.
+            chargeNowActive: policy.failedFeatures.contains(.remoteCharging)
+                ? nil
+                : (chargeNowActive ?? previous.chargeNowActive),
             arrivedAtLocationDate: (resolvedIsAt == false) ? nil : (arrivedAtLocationDate ?? previous.arrivedAtLocationDate),
             // Providers never produce samples; the buffer carries forward from the previous
             // snapshot and the live reading below appends to it.
@@ -134,7 +138,14 @@ extension VehicleIdentitySnapshot {
             interiorImageData: interiorImageData ?? (policy.features.contains(.vehicleImage)
                 ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil),
             usageMode: usageMode ?? previous.usageMode,
-            unavailableReason: unavailableReason ?? previous.unavailableReason
+            // The producer nils the reason on any AVAILABLE frame, so an incoming nil here
+            // means "this frame says available" or "the availability read failed" — carry
+            // the previous reason forward only while the merged availability is still
+            // unavailable, never across a transition back to online.
+            unavailableReason: unavailableReason ?? {
+                if case .unavailable = availability { return previous.unavailableReason }
+                return nil
+            }()
         )
     }
 }
@@ -181,7 +192,9 @@ extension TripComputerSnapshot {
             fuelDistanceKm: fuelDistanceKm ?? previous.fuelDistanceKm,
             regeneratedEnergyKwh: regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh,
             sinceChargeTripKm: sinceChargeTripKm ?? (policy.features.contains(.tripMeters) ? previous.sinceChargeTripKm : nil),
-            sinceChargeAverageSpeedKmH: sinceChargeAverageSpeedKmH ?? previous.sinceChargeAverageSpeedKmH
+            // Same reading, same feature gate: an average speed without its trip distance
+            // would render a never-refreshing half-row when .tripMeters is disabled.
+            sinceChargeAverageSpeedKmH: sinceChargeAverageSpeedKmH ?? (policy.features.contains(.tripMeters) ? previous.sinceChargeAverageSpeedKmH : nil)
         )
     }
 }

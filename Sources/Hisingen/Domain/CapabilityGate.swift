@@ -104,7 +104,7 @@ struct CapabilityGate: Sendable {
         guard commandCatalog.implements(command) else {
             if commandCatalog.brand == .polestar, commandCatalog.polestarConnectionMode == .dataPortal {
                 return .unimplementedByProvider(reason: L10n.text(
-                    "Remote door locks and horns are not supported by the Developer Portal (telemetry, climate, and charging only)."))
+                    "The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)."))
             }
             return .unimplementedByProvider()
         }

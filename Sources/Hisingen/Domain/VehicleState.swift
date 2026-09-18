@@ -65,6 +65,13 @@ struct VehicleState: Codable, Equatable, Sendable {
         var cachedEnergy = energy
         cachedEnergy.locations = []
         cachedEnergy.sessions = []
+        // Presence flags are point-in-time facts about a live refresh, exactly like the
+        // location reading above: restoring them at launch would show "Here"/"Charge Now"
+        // pills computed hours ago.
+        cachedEnergy.isAtChargeLocation = nil
+        cachedEnergy.currentChargeLocationName = nil
+        cachedEnergy.chargeNowActive = nil
+        cachedEnergy.arrivedAtLocationDate = nil
 
         var cachedIdentity = identity
         cachedIdentity.registrationNo = nil

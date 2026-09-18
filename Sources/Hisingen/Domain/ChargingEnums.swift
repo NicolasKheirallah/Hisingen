@@ -24,7 +24,7 @@ enum ChargingState: Codable, Equatable, Sendable {
             .replacingOccurrences(of: "CHARGING_STATUS_", with: "")
             .uppercased()
         switch key {
-        case "CHARGING", "CHARGING_TOWARDS_MIN_SOC", "CHARGING_IS_EN_ROUTE":
+        case "CHARGING", "CHARGING_TOWARDS_MIN_SOC", "CHARGING_IS_EN_ROUTE", "FAST_CHARGING":
             self = .charging
         case "SMART_CHARGING", "SMART_CHARGING_WILL_NOT_FINISH":
             self = .smartCharging

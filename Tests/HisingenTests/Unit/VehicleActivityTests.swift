@@ -92,13 +92,16 @@ struct VehicleActivityTests {
         var current = state(at: now)
         current.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: nil,
                                                   reportedAt: now.addingTimeInterval(-20))
-        #expect(pending.updatingConfirmation(from: current).status == .awaiting)
+        // A live post-command read that shows the goal state confirms even when the vehicle's
+        // own reading timestamp predates the command (no-op writes never advance it).
+        #expect(pending.updatingConfirmation(from: current).status.isConfirmed)
         current.exteriorStatus?.reportedAt = now
         #expect(pending.updatingConfirmation(from: current).status == .confirmed(at: now))
         current.exteriorStatus?.isLocked = false
         #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         current.exteriorStatus?.isLocked = true
         current.freshness.isCached = true
+        // A cached frame is not a fresh read of the car and must never confirm.
         #expect(pending.updatingConfirmation(from: current).status == .awaiting)
         let unobservable = CommandReceipt(commandIdentifier: "honk", issuedAt: now.addingTimeInterval(-10), command: .honkHorn)
         #expect(unobservable.updatingConfirmation(from: current).status == .awaiting)
@@ -271,7 +274,9 @@ struct VehicleActivityTests {
 
         #expect(receipt.updatingConfirmation(from: current, now: now).status.isConfirmed)
         current.exteriorStatus?.reportedAt = issuedAt.addingTimeInterval(-2.1)
-        #expect(receipt.updatingConfirmation(from: current, now: now).status == .awaiting)
+        // Beyond the bounded skew the vehicle-stamped proof no longer applies, but a fresh
+        // post-command fetch that shows the goal state still confirms (no-op writes).
+        #expect(receipt.updatingConfirmation(from: current, now: now).status.isConfirmed)
         current.exteriorStatus?.reportedAt = issuedAt
         #expect(receipt.updatingConfirmation(
             from: current,
