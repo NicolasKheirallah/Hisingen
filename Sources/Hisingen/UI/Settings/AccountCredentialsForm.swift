@@ -15,7 +15,18 @@ struct AccountCredentialsForm: View {
 
     @State private var selectedBrand = VehicleBrand.polestar
     @Environment(\.preferencesStore) private var preferences
-    @State private var polestarConnectionMode: PreferencesStore.PolestarConnectionMode = .polestarID
+    @State private var enablePolestarID = true
+    @State private var enableDataPortal = false
+
+    private var polestarConnectionMode: PreferencesStore.PolestarConnectionMode {
+        if enablePolestarID && enableDataPortal {
+            return .augmented
+        } else if enableDataPortal {
+            return .dataPortal
+        } else {
+            return .polestarID
+        }
+    }
     @State private var polestarEmail = ""
     @State private var polestarPassword = ""
     @State private var polestarVIN = ""
@@ -129,7 +140,17 @@ struct AccountCredentialsForm: View {
             }
         }
         .onAppear {
-            polestarConnectionMode = preferences.polestarConnectionMode
+            switch preferences.polestarConnectionMode {
+            case .polestarID:
+                enablePolestarID = true
+                enableDataPortal = false
+            case .dataPortal:
+                enablePolestarID = false
+                enableDataPortal = true
+            case .augmented:
+                enablePolestarID = true
+                enableDataPortal = true
+            }
             let draft = preferences.accountDraft
             polestarEmail = draft.polestarEmail.isEmpty ? preferences.email : draft.polestarEmail
             polestarPassword = draft.polestarPassword
