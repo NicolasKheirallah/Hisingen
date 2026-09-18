@@ -1005,7 +1005,7 @@ Standard setup for most users:
 
 ### 2. Developer Portal (EU Data Act M2M)
 
-For developers and fleet managers with credentials from the official [Polestar Developer Portal](https://developer.polestar.com):
+For developers and fleet managers with credentials from the official [Polestar Developer Portal](https://data-portal.polestar.com/):
 
 1. Open **Settings** → **Polestar**.
 2. Switch the segmented picker to **Developer Portal**.
