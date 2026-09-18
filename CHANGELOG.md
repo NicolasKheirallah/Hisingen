@@ -3,6 +3,48 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-09-18
+
+### Added
+
+- redesign the panel as a live instrument
+- surface consumer identity, truthful 404s and timer offsets
+- surface portal schedules, climate faults and charging estimates
+- unify polestar sign-in credential selection
+- display usage mode tire delta and trips
+- expand portal models and trip mapping
+- add eu data act telemetry and controls
+- add data portal fixtures and fix tests
+- expand Polestar Developer Portal support
+- add account id header and live portal tests
+- add polestar developer portal provider
+
+### Fixed
+
+- harden snapshot merging and command confirmation
+- add force-login path for polestar command sign-in
+- make polestar augmented session and fallback resilient
+- fix charger status and expand v2 states
+- rethrow primary error on fallback fail
+- support augmented mode in session resume
+- fix steering heat default and departure
+- clean duplicate tooltip and add a11y hint
+- refine control sizes and tab drag metadata
+- mark updater delegate methods nonisolated
+- synchronize climate button gate with command
+- default wire temperature to 22C for auto climate
+
+### Changed
+
+- test: create the renders directory the data-portal render refreshes
+- docs: add AGENTS.md and DESIGN.md
+- chore(l10n): add portal wiring strings to all locales
+- docs(docs): update polestar developer portal url
+- docs(changelog): update polestar data portal notes
+- test(tests): add polestar 2 e2e test and sendable fixes
+- test(tests): update decode verification target
+- docs(docs): update 2.0.3 changelog with climate fix
+
 ## [2.0.3] - 2026-09-17
 
 ### Added
