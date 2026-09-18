@@ -465,9 +465,21 @@ actor PolestarDataPortalAPI {
             energy.isAtChargeLocation = isAt.isAtChargeLocation
             // The is-at state carries only a locationId; resolve the display name against
             // the synced charge-locations list fetched in the same refresh.
-            if let locationId = isAt.locationId,
-               let alias = bundle.chargeLocations?.chargeLocations?.first(where: { $0.locationId == locationId })?.locationAlias {
-                energy.currentChargeLocationName = alias
+            if let locationId = isAt.locationId {
+                let matched = bundle.chargeLocations?.chargeLocations?.first(where: { $0.locationId == locationId })
+                let alias = matched?.locationAlias ?? energy.locations.first(where: { $0.id == locationId })?.alias
+                if let alias, !alias.isEmpty {
+                    energy.currentChargeLocationName = alias
+                }
+                if let bidi = matched?.isBidirectionalChargingEnabled {
+                    energy.diagnostics?.isBidirectionalChargingEnabled = bidi
+                }
+                if let opt = matched?.isOptimizedChargingEnabled {
+                    energy.diagnostics?.isOptimizedChargingEnabled = opt
+                }
+                if let avail = matched?.availableOptimizedCharging {
+                    energy.diagnostics?.availableOptimizedCharging = avail
+                }
             }
             energy.arrivedAtLocationDate = isAt.arrivedAtTimestamp?.date
         }
@@ -494,17 +506,7 @@ actor PolestarDataPortalAPI {
         var healthSnapshot = bundle.health?.toMaintenanceSnapshot() ?? MaintenanceAndHealthSnapshot()
         if let km = bundle.odometer?.calculatedOdometerKm { healthSnapshot.odometerKm = km }
 
-        var tripComputer = TripComputerSnapshot()
-        if let odo = bundle.odometer {
-            tripComputer.manualTripKm = odo.tripMeterManualKm
-            tripComputer.automaticTripKm = odo.tripMeterAutomaticKm
-            tripComputer.sinceChargeTripKm = odo.tripMeterSinceChargeKm
-            // Per-trip speeds stay in their explicit slots so the blended
-            // `averageSpeedKmH` is reserved for statistics-style sources.
-            tripComputer.manualAverageSpeedKmH = odo.averageSpeedKmPerHour.map { Int($0.rounded()) }
-            tripComputer.automaticAverageSpeedKmH = odo.averageSpeedKmPerHourAutomatic.map { Int($0.rounded()) }
-            tripComputer.sinceChargeAverageSpeedKmH = odo.averageSpeedKmPerHourSinceCharge.map { Int($0.rounded()) }
-        }
+        let tripComputer = bundle.odometer?.toTripComputerSnapshot() ?? TripComputerSnapshot()
 
         let availability = assembleAvailability(from: bundle.availability)
         let identity = VehicleIdentitySnapshot(
@@ -694,7 +696,7 @@ actor PolestarDataPortalAPI {
                 "frontRightSeatHeating": heatingLevelString(frontRight),
                 "rearLeftSeatHeating": heatingLevelString(rearLeft),
                 "rearRightSeatHeating": heatingLevelString(rearRight),
-                "steeringWheelHeating": wheel == .off ? "OFF" : "ON"
+                "steeringWheelHeating": (wheel == .off || wheel == .unspecified) ? "OFF" : "ON"
             ]
             let body = try JSONSerialization.data(withJSONObject: payload)
             _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/telemetry/parking-climatization", body: body)

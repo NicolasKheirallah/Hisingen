@@ -47,6 +47,7 @@ extension EnergyAndChargingSnapshot {
             if case .unknown = chargingState { return previous.chargingState }
             return nil
         }()
+        let resolvedIsAt = isAtChargeLocation ?? previous.isAtChargeLocation
         var merged = EnergyAndChargingSnapshot(
             batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
             rangeKm: rangeKm ?? previous.rangeKm,
@@ -67,10 +68,10 @@ extension EnergyAndChargingSnapshot {
             // Locations are only re-shown when this fetch actually returned them; an empty
             // result after a backend hiccup should not wipe the list the controls tab renders.
             locations: locations.isEmpty ? previous.locations : locations,
-            isAtChargeLocation: isAtChargeLocation ?? previous.isAtChargeLocation,
-            currentChargeLocationName: currentChargeLocationName ?? previous.currentChargeLocationName,
+            isAtChargeLocation: resolvedIsAt,
+            currentChargeLocationName: (resolvedIsAt == false) ? nil : (currentChargeLocationName ?? previous.currentChargeLocationName),
             chargeNowActive: chargeNowActive ?? previous.chargeNowActive,
-            arrivedAtLocationDate: arrivedAtLocationDate ?? previous.arrivedAtLocationDate,
+            arrivedAtLocationDate: (resolvedIsAt == false) ? nil : (arrivedAtLocationDate ?? previous.arrivedAtLocationDate),
             // Providers never produce samples; the buffer carries forward from the previous
             // snapshot and the live reading below appends to it.
             samples: previous.samples

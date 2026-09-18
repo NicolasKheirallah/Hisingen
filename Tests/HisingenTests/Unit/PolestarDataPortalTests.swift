@@ -468,13 +468,15 @@ struct PolestarDataPortalTests {
 
         var lastMethod = ""
         var lastPath = ""
+        var lastBody: Data?
         PortalMockTransport.requestHandler = { req in
             lastMethod = req.httpMethod ?? ""
             lastPath = req.url?.path ?? ""
+            lastBody = req.httpBody
             return (200, Data("{}".utf8))
         }
 
-        // Climate
+        // Climate - level 1 steering wheel turns ON
         let climateResult = try await api.executeRemoteCommand(
             .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .level2, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .level1),
             vin: "TESTVIN"
@@ -482,6 +484,18 @@ struct PolestarDataPortalTests {
         #expect(climateResult.outcome == .accepted)
         #expect(lastMethod == "POST")
         #expect(lastPath.contains("/telemetry/parking-climatization"))
+        if let body = lastBody, let dict = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+            #expect(dict["steeringWheelHeating"] as? String == "ON")
+        }
+
+        // Climate - unspecified steering wheel turns OFF (does not inadvertently activate)
+        _ = try await api.executeRemoteCommand(
+            .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified, rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified),
+            vin: "TESTVIN"
+        )
+        if let body = lastBody, let dict = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+            #expect(dict["steeringWheelHeating"] as? String == "OFF")
+        }
 
         let stopClimateResult = try await api.executeRemoteCommand(.stopClimate, vin: "TESTVIN")
         #expect(stopClimateResult.outcome == .completed)
@@ -966,6 +980,13 @@ struct PolestarDataPortalTests {
         let odoEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarOdometerDTO>.self, from: odoData)
         let odoDTO = try #require(odoEnv.data)
         #expect(odoDTO.calculatedOdometerKm == 42151)
+        let tripSnap = odoDTO.toTripComputerSnapshot()
+        #expect(tripSnap.manualTripKm == 128.4)
+        #expect(tripSnap.automaticTripKm == 42102.1)
+        #expect(tripSnap.sinceChargeTripKm == 96.7)
+        #expect(tripSnap.manualAverageSpeedKmH == 34)
+        #expect(tripSnap.automaticAverageSpeedKmH == 41)
+        #expect(tripSnap.sinceChargeAverageSpeedKmH == 52)
 
         // 8. Location
         let locData = try fixtureData(named: "polestar-portal-location")
@@ -1046,6 +1067,16 @@ struct PolestarDataPortalTests {
         #expect(locList.first?.optimisedChargingEnabled == true)
         #expect(locList.first?.optimisedChargingMode == 1)
         #expect(locList.first?.kind == 2)
+        #expect(locList.first?.isBidirectionalChargingEnabled == false)
+        #expect(locList.first?.availableOptimizedCharging == "INTELLIGENT_TIMER")
+        #expect(locList.first?.chargeTimers.count == 1)
+        #expect(locList.first?.chargeTimers.first?.startHour == 1)
+        #expect(locList.first?.chargeTimers.first?.startMinute == 0)
+        #expect(locList.first?.chargeTimers.first?.endHour == 5)
+        #expect(locList.first?.chargeTimers.first?.endMinute == 30)
+        #expect(locList.first?.departureTimes.count == 1)
+        #expect(locList.first?.departureTimes.first?.startHour == 7)
+        #expect(locList.first?.departureTimes.first?.startMinute == 45)
 
         // 14. Is At Charge Location
         let isAtData = try fixtureData(named: "polestar-portal-charging-is-at-charge-location")
