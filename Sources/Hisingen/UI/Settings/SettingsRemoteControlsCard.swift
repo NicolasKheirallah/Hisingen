@@ -90,12 +90,24 @@ struct SettingsRemoteControlsCard: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button {
-                                binder.notify(.polestarCommandAuthorization)
+                            Menu {
+                                Button {
+                                    binder.notify(.polestarCommandAuthorization)
+                                } label: {
+                                    Text(authorized ? L10n.text("Re-authorize…") : L10n.text("Authorize…"))
+                                }
+                                Button {
+                                    binder.notify(.polestarCommandAuthorizationForceLogin)
+                                } label: {
+                                    Text(L10n.text("Sign in with a different account…"))
+                                }
                             } label: {
                                 Text(authorized ? L10n.text("Re-authorize…") : L10n.text("Authorize…"))
                                     .hisType(.caption, weight: .medium)
                             }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.visible)
+                            .fixedSize()
                             .controlSize(.small)
                         }
                         .padding(8)

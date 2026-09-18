@@ -228,7 +228,7 @@ final class SignInCoordinator {
     /// is a separate, explicit step from the base Polestar sign-in; remote commands stay
     /// unavailable until the user completes it (and again whenever the resulting session
     /// eventually expires).
-    func beginPolestarCommandAuthorization() {
+    func beginPolestarCommandAuthorization(forceLogin: Bool = false) {
         guard preferences.activeBrand == .polestar, preferences.hasResumableSession(for: .polestar) else {
             resultPresenter.present(
                 title: L10n.text("Sign in to Polestar first"),
@@ -237,15 +237,27 @@ final class SignInCoordinator {
             )
             return
         }
+        // A second start must not cancel the first: two Authorize surfaces (Settings card,
+        // setup pass) and SwiftUI re-fires made the flow cancel its own freshly presented
+        // sheet, which read as "the browser opens and immediately closes".
+        if let running = polestarSignInTask, !running.isCancelled {
+            return
+        }
         cancelPolestarSignIn()
         polestarSignInTask = Task { [weak self] in
             guard let self else { return }
+            defer { self.polestarSignInTask = nil }
             var authorizationState: String?
             let startedAt = Date()
             do {
                 let authorizeURL = try await polestarAPI.beginCommandAuthorization()
                 authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
-                let callbackURL = try await polestarCommandPresenter.signIn(authorizeURL: authorizeURL)
+                let callbackURL = try await polestarCommandPresenter.signIn(authorizeURL: authorizeURL, forceLogin: forceLogin)
+                await APIDiagnosticLogStore.shared.record(
+                    provider: .polestar, request: nil,
+                    operation: "Polestar command sign-in window",
+                    startedAt: Date(), error: nil,
+                    semanticErrorType: "presenter:callback-delivered")
                 try await polestarAPI.completeCommandAuthorization(callbackURL: callbackURL)
                 // Persistent banner through the Notifier pipeline – the transient
                 // `RemoteResultPresenter` variant self-cleans after 5 s, which reads as

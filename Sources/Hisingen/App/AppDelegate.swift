@@ -270,6 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signInCoordinator.beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .polestarCommandAuthorization:
             signInCoordinator.beginPolestarCommandAuthorization()
+        case .polestarCommandAuthorizationForceLogin:
+            signInCoordinator.beginPolestarCommandAuthorization(forceLogin: true)
         case .polestarWebSignIn:
             signInCoordinator.beginPolestarWebSignIn()
         case .reauthenticate(let brand):

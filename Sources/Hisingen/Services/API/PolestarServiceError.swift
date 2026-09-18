@@ -60,7 +60,7 @@ enum PolestarError: Error, LocalizedError {
         case .client:
             return L10n.text("Polestar rejected the request. Open Settings if this continues.")
         case .permissionDenied:
-            return L10n.text("This Polestar account is not permitted to use that vehicle service.")
+            return L10n.text("Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.")
         case .graphQL(_, let partial) where partial:
             return L10n.text("Some vehicle information is temporarily unavailable.")
         case .grpcUnimplemented:
