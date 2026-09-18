@@ -48,3 +48,4 @@ GATES*.md
 
 # Python bytecode from the docs/QA checkers
 __pycache__/
+api_dump.json
