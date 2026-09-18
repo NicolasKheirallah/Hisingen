@@ -147,6 +147,7 @@ extension VehicleState {
             fuelSystem: fuelSystem.merging(previous: previous.fuelSystem)
         )
         merged.freshness.readingDates = readingDates
+        merged.freshness.metaReceivedDates = freshness.metaReceivedDates ?? previous.freshness.metaReceivedDates
         if energy.batteryPercentage == nil { merged.freshness.readingDates[.battery] = previous.reportedDate(for: .battery) }
         if energy.rangeKm == nil { merged.freshness.readingDates[.range] = previous.reportedDate(for: .range) }
         if maintenance.odometerKm == nil { merged.freshness.readingDates[.odometer] = previous.reportedDate(for: .odometer) }

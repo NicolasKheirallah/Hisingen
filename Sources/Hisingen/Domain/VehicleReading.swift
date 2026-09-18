@@ -2,6 +2,9 @@ import Foundation
 
 enum VehicleReading: String, Codable, CaseIterable, Sendable {
     case battery, range, charging, climateStatus, locks, openings, health, odometer, software, airQuality, connectivity, location, fuel
+    /// The availability service's check-in frame. Distinct from `.connectivity`, which is
+    /// the Dashboard's richer (and on this backend unimplemented) connectivity report.
+    case availability
 
     var title: String {
         switch self {
@@ -18,6 +21,7 @@ enum VehicleReading: String, Codable, CaseIterable, Sendable {
         case .connectivity: return L10n.text("Connectivity")
         case .location: return L10n.text("Location")
         case .fuel: return L10n.text("Fuel")
+        case .availability: return L10n.text("Availability")
         }
     }
 }
@@ -66,6 +70,7 @@ extension VehicleState {
         case .airQuality: return airQuality?.reportedAt
         case .connectivity: return connectivity?.updatedAt
         case .location: return location?.timestamp
+        case .availability: return identity.availabilityReportedAt
         default: return nil
         }
     }

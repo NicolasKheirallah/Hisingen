@@ -240,6 +240,11 @@ final class VehicleSessionController {
             api: activeProvider, stateStore: stateStore, observesEnvironment: observesEnvironment,
             imageCache: imageCache, preferences: preferences, sessionManager: sessionManager,
             streaming: providers.streaming(for: brand))
+        // The rebuilt coordinator resolved its adapter from the CURRENT mode; recording it
+        // here (not only in credentialsDidChange) keeps the snapshot true whenever any path
+        // switches brands, so the next credentialsDidChange cannot see a phantom mode flip
+        // and tear the live coordinator down again.
+        currentPolestarMode = preferences.polestarConnectionMode
         connectCoordinator()
         context?.sessionStateDidChange()
     }

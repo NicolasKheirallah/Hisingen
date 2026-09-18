@@ -170,6 +170,7 @@ extension MaintenanceAndHealthSnapshot {
     func merging(previous: Self, policy: SnapshotMergePolicy) -> Self {
         MaintenanceAndHealthSnapshot(
             odometerKm: odometerKm ?? (policy.features.contains(.vehicleHealth) ? previous.odometerKm : nil),
+            odometerKmPrecise: odometerKmPrecise ?? (policy.features.contains(.vehicleHealth) ? previous.odometerKmPrecise : nil),
             details: details ?? (policy.features.contains(.tyreAndWarnings) ? previous.details : nil),
             service: service.merging(previous: previous.service, policy: policy),
             warranty: warranty ?? previous.warranty,

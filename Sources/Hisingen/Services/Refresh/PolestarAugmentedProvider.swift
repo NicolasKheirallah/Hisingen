@@ -127,6 +127,12 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             var state = try await telemetryProvider.fetchVehicleState(vin: vin, features: features)
             state.freshness.unavailableFeatures.removeAll { AppFeature.remoteFeatures.contains($0) }
+            // The M2M surface carries no vehicle identity metadata. Fill those gaps from the
+            // consumer adapter's prepared identity (no network call) so model name, plate,
+            // and owner greeting survive portal-served refreshes.
+            if let consumerIdentity = await commandProvider.identitySnapshot(for: vin, features: features) {
+                state.identity = state.identity.overlayingGaps(from: consumerIdentity)
+            }
             if state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
                 if let fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {
                     return fallback
@@ -145,26 +151,14 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         }
     }
 
-    /// Portal-supported commands (climate, cabin cleaning, charging, schedules, charge
-    /// locations) go to the Developer Portal first, falling back to the consumer API when the
-    /// portal cannot serve them. Locks, horn, and other consumer-exclusive commands skip the
-    /// portal entirely – the EU Data Act surface does not expose them.
+    /// In Augmented mode, Developer Portal M2M handles read telemetry exclusively, while all
+    /// remote vehicle controls (climate, pre-cleaning, locks, horn/flash, charging timers)
+    /// route directly to Polestar C3 Cloud (gRPC Invocation) via the command provider.
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
-        let portalCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal)
-        if portalCatalog.implements(command) {
-            do {
-                return try await telemetryProvider.executeRemoteCommand(command, vin: vin)
-            } catch let primaryError {
-                logger.warning("Primary Data Portal command failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
-                guard await commandProvider.hasWarmSession else { throw primaryError }
-                do {
-                    return try await commandProvider.executeRemoteCommand(command, vin: vin)
-                } catch {
-                    // Mirror the fetch policy: when both sides fail, the error from the
-                    // configured primary is the actionable one for the user.
-                    throw primaryError
-                }
-            }
+        guard await commandProvider.hasWarmSession else {
+            throw RemoteCommandError.rejected(
+                L10n.text("Polestar ID session is required for remote vehicle controls.")
+            )
         }
         return try await commandProvider.executeRemoteCommand(command, vin: vin)
     }

@@ -28,8 +28,17 @@ struct VehicleClimateCard: View {
             if let climate = state.climateStatus, climate.activity != .unknown {
                 var value = climate.activity.displayName
                 if let minutes = climate.timeRemainingMinutes, minutes > 0 { value += " · \(Format.shortDuration(minutes: minutes))" }
-                if climate.timerTriggered { value += " (\(L10n.text("Timer")))" }
+                // The portal reports who started the session; the gRPC surface only says
+                // whether a timer did, so the named reason wins when present.
+                if let reason = climate.startReason {
+                    value += " (\(reason.displayName))"
+                } else if climate.timerTriggered {
+                    value += " (\(L10n.text("Timer")))"
+                }
                 rows.append(KVRow(L10n.text("Cabin Climate"), value, symbol: climateActive ? "fan.fill" : "fan"))
+                if let ventilation = climate.ventilationName, climate.activity.isActiveSession {
+                    rows.append(KVRow(L10n.text("Ventilation"), ventilation, symbol: "wind"))
+                }
                 if let temperature = climate.interiorTemperatureCelsius { rows.append(KVRow(L10n.text("Cabin Temperature"), Format.temperature(celsius: temperature, unit: preferences.temperatureUnit), symbol: "thermometer.medium")) }
                 if let target = climate.requestedTemperatureCelsius { rows.append(KVRow(L10n.text("Climate Target"), Format.temperature(celsius: target, unit: preferences.temperatureUnit), symbol: "target")) }
                 if let level = climate.driverSeatHeatingLevel, level > 0 { rows.append(KVRow(L10n.text("Driver Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.left.and.heat.waves")) }

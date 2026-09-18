@@ -639,6 +639,27 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     /// session, kept verbatim for display and support exports. `nil` in snapshots persisted
     /// before capture existed, and when the backend sent neither list.
     var errors: [String]? = nil
+    /// Who started the session (portal `ParkingClimatizationState.startReason`). `nil`
+    /// when absent, unspecified, or in snapshots persisted before this field existed; the
+    /// gRPC surface keeps reporting through `timerTriggered`.
+    var startReason: VehicleStartReason? = nil
+
+    /// `Ventilation` mode for the running session from the spec vocabulary. Unspecified and
+    /// absent hide; a token outside the known set renders cleaned-up rather than guessed.
+    var ventilationName: String? {
+        guard let ventilation, !ventilation.isEmpty else { return nil }
+        switch ventilation {
+        case "VENTILATION_COOLING": return L10n.text("Cooling")
+        case "VENTILATION_HEATING": return L10n.text("Heating")
+        case "VENTILATION_NEUTRAL": return L10n.text("Neutral")
+        case "VENTILATION_UNSPECIFIED": return nil
+        default:
+            return ventilation
+                .replacingOccurrences(of: "VENTILATION_", with: "")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
+    }
 
     init(
         activity: ClimateActivity,
@@ -656,7 +677,8 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         sessionStartedAt: Date? = nil,
         sessionEndsAt: Date? = nil,
         unknownWireFields: [PolestarRawWireField]? = nil,
-        errors: [String]? = nil
+        errors: [String]? = nil,
+        startReason: VehicleStartReason? = nil
     ) {
         self.activity = activity
         self.timeRemainingMinutes = timeRemainingMinutes
@@ -674,6 +696,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         self.sessionEndsAt = sessionEndsAt
         self.unknownWireFields = unknownWireFields
         self.errors = errors
+        self.startReason = startReason
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -681,7 +704,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         case interiorTemperatureCelsius, requestedTemperatureCelsius
         case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
         case rearLeftSeatHeatingLevel, rearRightSeatHeatingLevel, ventilation, mainClimateRunningStatus
-        case sessionStartedAt, sessionEndsAt, unknownWireFields, errors
+        case sessionStartedAt, sessionEndsAt, unknownWireFields, errors, startReason
     }
 
     init(from decoder: Decoder) throws {
@@ -702,6 +725,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
         unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields)
         errors = try c.decodeIfPresent([String].self, forKey: .errors)
+        startReason = try c.decodeIfPresent(VehicleStartReason.self, forKey: .startReason)
     }
 }
 
@@ -764,8 +788,10 @@ enum AirCleaningState: String, Codable, Sendable {
     }
 }
 
-/// Who asked for the current/last pre-cleaning cycle – `PreCleaningStartReason` (field 7).
-enum AirCleaningStartReason: Int, Codable, Sendable {
+/// Who asked for the current/last cycle, shared by pre-cleaning and parking
+/// climatization: both wire surfaces declare the same `START_REASON_*` vocabulary
+/// (fields 7 and startReason respectively).
+enum VehicleStartReason: Int, Codable, Sendable {
     case unspecified = 0
     case remote = 1
     case manuallyFromCar = 2
@@ -779,6 +805,18 @@ enum AirCleaningStartReason: Int, Codable, Sendable {
         case .manuallyFromCar: return L10n.text("Started in car")
         case .timer: return L10n.text("Departure timer")
         case .keepClimate: return L10n.text("Keep climate")
+        }
+    }
+
+    /// `START_REASON_*` wire token to reason. Unspecified, absent, and unknown tokens give
+    /// nil so "the car did not say" stays distinguishable from a known reason.
+    init?(wireToken: String?) {
+        switch wireToken {
+        case "START_REASON_REMOTE": self = .remote
+        case "START_REASON_MANUALLY_FROM_CAR": self = .manuallyFromCar
+        case "START_REASON_TIMER": self = .timer
+        case "START_REASON_KEEP_CLIMATE": self = .keepClimate
+        default: return nil
         }
     }
 }
@@ -822,7 +860,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     /// When the running cycle is expected to finish (field 5).
     let endingAt: Date?
     /// Who started the cycle (field 7).
-    let startReason: AirCleaningStartReason?
+    let startReason: VehicleStartReason?
     /// Whether the last completed cycle finished normally (field 8).
     let lastCycleValid: Bool?
     /// Precise backend error classification (field 13). `nil` when the field is absent.
@@ -845,7 +883,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         reportedAt: Date? = nil,
         startedAt: Date? = nil,
         endingAt: Date? = nil,
-        startReason: AirCleaningStartReason? = nil,
+        startReason: VehicleStartReason? = nil,
         lastCycleValid: Bool? = nil,
         errorKind: AirCleaningError? = nil,
         measuredAt: Date? = nil,
@@ -894,7 +932,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         reportedAt = try c.decodeIfPresent(Date.self, forKey: .reportedAt)
         startedAt = try c.decodeIfPresent(Date.self, forKey: .startedAt)
         endingAt = try c.decodeIfPresent(Date.self, forKey: .endingAt)
-        startReason = try c.decodeIfPresent(AirCleaningStartReason.self, forKey: .startReason)
+        startReason = try c.decodeIfPresent(VehicleStartReason.self, forKey: .startReason)
         lastCycleValid = try c.decodeIfPresent(Bool.self, forKey: .lastCycleValid)
         errorKind = try c.decodeIfPresent(AirCleaningError.self, forKey: .errorKind)
         measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
@@ -997,6 +1035,15 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     var isBidirectionalChargingEnabled: Bool? = nil
     var isOptimizedChargingEnabled: Bool? = nil
     var availableOptimizedCharging: String? = nil
+    /// Charge target the backend has queued but the vehicle has not confirmed yet
+    /// (`TargetSocState.pendingTargetSoc`). `nil` when nothing is queued.
+    var pendingTargetPercentage: Int? = nil
+    /// Amperage limit queued but not yet applied by the vehicle (`AmpLimitState.pendingAmpLimit`).
+    var pendingLimitAmps: Int? = nil
+    /// Who last set the charge target (`TargetSocValue.source`), kept as the raw wire token.
+    var targetSource: String? = nil
+    /// Who last set the amperage limit (`AmpLimitValue.source`), raw wire token.
+    var limitSource: String? = nil
 
     init(
         timeToTargetMinutes: Int?,
@@ -1016,7 +1063,11 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         batteryPreconditioningEndsAt: Date? = nil,
         isBidirectionalChargingEnabled: Bool? = nil,
         isOptimizedChargingEnabled: Bool? = nil,
-        availableOptimizedCharging: String? = nil
+        availableOptimizedCharging: String? = nil,
+        pendingTargetPercentage: Int? = nil,
+        pendingLimitAmps: Int? = nil,
+        targetSource: String? = nil,
+        limitSource: String? = nil
     ) {
         self.timeToTargetMinutes = timeToTargetMinutes
         self.timeToMinimumSOCMinutes = timeToMinimumSOCMinutes
@@ -1036,6 +1087,10 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         self.isBidirectionalChargingEnabled = isBidirectionalChargingEnabled
         self.isOptimizedChargingEnabled = isOptimizedChargingEnabled
         self.availableOptimizedCharging = availableOptimizedCharging
+        self.pendingTargetPercentage = pendingTargetPercentage
+        self.pendingLimitAmps = pendingLimitAmps
+        self.targetSource = targetSource
+        self.limitSource = limitSource
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1045,6 +1100,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         case energyBreakdown, powerLimitKw, energyAvailableKwh
         case energyAvailableIncreaseKwh, batteryPreconditioningStatus, batteryPreconditioningEndsAt
         case isBidirectionalChargingEnabled, isOptimizedChargingEnabled, availableOptimizedCharging
+        case pendingTargetPercentage, pendingLimitAmps, targetSource, limitSource
     }
 
     init(from decoder: Decoder) throws {
@@ -1067,6 +1123,23 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         isBidirectionalChargingEnabled = try c.decodeIfPresent(Bool.self, forKey: .isBidirectionalChargingEnabled)
         isOptimizedChargingEnabled = try c.decodeIfPresent(Bool.self, forKey: .isOptimizedChargingEnabled)
         availableOptimizedCharging = try c.decodeIfPresent(String.self, forKey: .availableOptimizedCharging)
+        pendingTargetPercentage = try c.decodeIfPresent(Int.self, forKey: .pendingTargetPercentage)
+        pendingLimitAmps = try c.decodeIfPresent(Int.self, forKey: .pendingLimitAmps)
+        targetSource = try c.decodeIfPresent(String.self, forKey: .targetSource)
+        limitSource = try c.decodeIfPresent(String.self, forKey: .limitSource)
+    }
+
+    /// Queued values that still differ from what the vehicle reports as current. The wire
+    /// keeps a pending copy even after the car applies it (observed live: amp and pending
+    /// amp both 20), so equality means "applied", not "queued".
+    func unappliedTargetPercentage(current: Int?) -> Int? {
+        guard let pendingTargetPercentage else { return nil }
+        return pendingTargetPercentage == current ? nil : pendingTargetPercentage
+    }
+
+    func unappliedLimitAmps(current: Int?) -> Int? {
+        guard let pendingLimitAmps else { return nil }
+        return pendingLimitAmps == current ? nil : pendingLimitAmps
     }
 }
 

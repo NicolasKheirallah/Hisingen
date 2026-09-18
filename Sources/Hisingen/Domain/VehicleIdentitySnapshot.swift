@@ -68,4 +68,22 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         self.usageMode = usageMode
         self.unavailableReason = unavailableReason
     }
+
+    /// Fills this snapshot's nil identity metadata from a richer source. Presence facts the
+    /// portal owns (availability, usage mode, availability reason) never copy over, so a
+    /// consumer-side placeholder cannot shadow fresher portal telemetry.
+    func overlayingGaps(from source: VehicleIdentitySnapshot) -> VehicleIdentitySnapshot {
+        var copy = self
+        if copy.modelName == nil { copy.modelName = source.modelName }
+        if copy.modelYear == nil { copy.modelYear = source.modelYear }
+        if copy.registrationNo == nil { copy.registrationNo = source.registrationNo }
+        if copy.ownerFirstName == nil { copy.ownerFirstName = source.ownerFirstName }
+        if copy.structureWeek == nil { copy.structureWeek = source.structureWeek }
+        if copy.internalVehicleIdentifier == nil { copy.internalVehicleIdentifier = source.internalVehicleIdentifier }
+        if copy.pno34 == nil { copy.pno34 = source.pno34 }
+        if copy.accountMarket == nil { copy.accountMarket = source.accountMarket }
+        if copy.imageData == nil { copy.imageData = source.imageData }
+        if copy.interiorImageData == nil { copy.interiorImageData = source.interiorImageData }
+        return copy
+    }
 }

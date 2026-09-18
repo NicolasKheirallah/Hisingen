@@ -11,7 +11,13 @@
         "hour": 6,
         "minute": 0
       },
-      "activated": true
+      "activated": true,
+      "metadata": {
+        "id": "meta-gct-01",
+        "syncStatus": {
+          "value": "PENDING"
+        }
+      }
     },
     "utc0": false,
     "metaReceivedAt": "2024-05-21T13:58:20Z",

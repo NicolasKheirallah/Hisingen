@@ -29,6 +29,10 @@ struct ServiceSnapshot: Codable, Equatable, Sendable {
 
 struct MaintenanceAndHealthSnapshot: Codable, Equatable, Sendable {
     var odometerKm: Int?
+    /// Odometer with sub-kilometre precision, straight from the portal's metre value
+    /// (`OdometerState.odometerMeters` / 1000). `nil` when the provider reports only whole
+    /// kilometres or in snapshots persisted before this field existed.
+    var odometerKmPrecise: Double? = nil
     var details: VehicleHealthDetails?
     var service: ServiceSnapshot
     var warranty: VehicleWarrantyInfo?
@@ -37,6 +41,7 @@ struct MaintenanceAndHealthSnapshot: Codable, Equatable, Sendable {
 
     init(
         odometerKm: Int? = nil,
+        odometerKmPrecise: Double? = nil,
         details: VehicleHealthDetails? = nil,
         service: ServiceSnapshot = .init(),
         warranty: VehicleWarrantyInfo? = nil,
@@ -44,6 +49,7 @@ struct MaintenanceAndHealthSnapshot: Codable, Equatable, Sendable {
         rearBrakePadStatus: String? = nil
     ) {
         self.odometerKm = odometerKm
+        self.odometerKmPrecise = odometerKmPrecise
         self.details = details
         self.service = service
         self.warranty = warranty

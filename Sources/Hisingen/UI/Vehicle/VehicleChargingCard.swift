@@ -99,9 +99,17 @@ struct VehicleChargingCard: View {
             if state.energy.connection != .unknown { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug.fill", valueWarning: state.energy.connection == .fault))) }
             if state.energy.type != .unknown, state.energy.type != .none { rows.append(("type", KVRow(L10n.text("Charging Type"), state.energy.type.displayName, symbol: "bolt.circle"))) }
             if let amps = state.energy.currentAmps, amps > 0 { rows.append(("draw", KVRow(L10n.text("Current Draw"), "\(amps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))) }
-            if let amps = state.energy.currentLimitAmps, amps > 0 { rows.append(("limit", KVRow(L10n.text("Current Limit"), "\(amps) A", symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings.")))) }
+            if let amps = state.energy.currentLimitAmps, amps > 0 {
+                var value = "\(amps) A"
+                if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.limitSource) { value += " (\(suffix))" }
+                rows.append(("limit", KVRow(L10n.text("Current Limit"), value, symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings."))))
+            }
             if let volts = state.energy.voltageVolts, volts > 0 { rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt.fill", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))) }
-            if let target = state.energy.targetPercentage { rows.append(("target", KVRow(L10n.text("Target Limit"), "\(target)%", symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target.")))) }
+            if let target = state.energy.targetPercentage {
+                var value = "\(target)%"
+                if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.targetSource) { value += " (\(suffix))" }
+                rows.append(("target", KVRow(L10n.text("Target Limit"), value, symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target."))))
+            }
             // The energy-snapshot slot for the same estimate the diagnostics block renders as
             // "Time to Target". Shown only when that diagnostics row is not already present, so
             // one figure never appears twice in one card.
@@ -204,6 +212,18 @@ struct VehicleChargingCard: View {
         }
         return KVRow(L10n.text("Battery Conditioning"), value, symbol: "heat.waves", valueWarning: true,
                      info: L10n.text("High-voltage battery warming ahead of DC fast charging."))
+    }
+
+    /// Charging-setting source tokens to a reader label, from the verified vocabulary
+    /// (RCS cloud service, APP client). An unknown token renders raw rather than guessed;
+    /// nil means the provider said nothing.
+    static func chargingSourceSuffix(_ source: String?) -> String? {
+        switch source?.uppercased() {
+        case nil, "": return nil
+        case "RCS": return L10n.text("Set remotely")
+        case "APP": return L10n.text("Set from app")
+        case let other: return other
+        }
     }
 
     private func formatBreakdown(_ item: EnergyBreakdownItem) -> String {

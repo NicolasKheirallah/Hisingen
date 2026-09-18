@@ -16,6 +16,10 @@ enum PolestarDataPortalError: Error, LocalizedError, Sendable {
     case temporarilyUnavailable(service: String)
     case secureStorage
     case notConfigured
+    /// HTTP 404 with the body code `DATA_NOT_AVAILABLE`: the endpoint answered truthfully
+    /// that this vehicle reports no such data. Not an outage, so it serves an empty
+    /// reading instead of marking features unavailable.
+    case dataNotAvailable(operation: String)
 
     var errorDescription: String? {
         switch self {
@@ -45,8 +49,8 @@ enum PolestarDataPortalError: Error, LocalizedError, Sendable {
                 return L10n.format("Polestar rejected the request: %@", message)
             }
             return L10n.text("Polestar Developer Portal rejected the request. Open Settings if this continues.")
-        case .permissionDenied(let operation):
-            return L10n.format("This Polestar client is not authorized for %@.", operation)
+        case .permissionDenied:
+            return L10n.text("Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.")
         case .unsupported(let service):
             return L10n.format("The %@ service is not supported by Polestar Developer Portal.", service)
         case .temporarilyUnavailable:
@@ -57,6 +61,8 @@ enum PolestarDataPortalError: Error, LocalizedError, Sendable {
             return L10n.text("Hisingen couldn't update its protected Keychain session.")
         case .notConfigured:
             return L10n.text("Open Settings to configure Polestar Developer Portal.")
+        case .dataNotAvailable:
+            return L10n.text("This vehicle does not report this data to Polestar Developer Portal.")
         }
     }
 
@@ -102,6 +108,27 @@ enum PolestarDataPortalError: Error, LocalizedError, Sendable {
             return .temporarilyUnavailable(provider: .polestar, service: s)
         case .secureStorage:
             return .secureStorage
+        case .dataNotAvailable(let op):
+            return .unsupported(provider: .polestar, service: op)
         }
+    }
+}
+
+extension PolestarDataPortalError {
+    /// True for failures that invalidate the whole refresh rather than one endpoint: a
+    /// resource-rejected token, a rate limit, a server outage, or VIN-level authorization.
+    /// Per-endpoint misses degrade to a failed reading instead.
+    var isRefreshFatal: Bool {
+        switch self {
+        case .authenticationRequired, .rateLimited, .server, .permissionDenied:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isDataNotAvailable: Bool {
+        if case .dataNotAvailable = self { return true }
+        return false
     }
 }

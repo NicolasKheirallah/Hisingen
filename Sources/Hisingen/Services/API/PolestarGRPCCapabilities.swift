@@ -408,7 +408,7 @@ extension PolestarGRPC {
             reportedAt: timestamp(message(fields, field: 1)),
             startedAt: timestamp(message(fields, field: 4)),
             endingAt: timestamp(message(fields, field: 5)),
-            startReason: varint(fields, 7).flatMap { AirCleaningStartReason(rawValue: Int($0)) },
+            startReason: varint(fields, 7).flatMap { VehicleStartReason(rawValue: Int($0)) },
             lastCycleValid: varint(fields, 8).map { $0 != 0 },
             errorKind: errorKind,
             // Field 2 verified live: it advances on vehicle wakes and at cycle end, i.e. the

@@ -59,6 +59,10 @@ extension InfoTabView {
             if let level = climate.steeringWheelHeatingLevel, level > 0 {
                 rows.append(KVRow(L10n.text("Steering Wheel Heating"), L10n.format("Level %d", level), symbol: "steeringwheel.and.heat.waves"))
             }
+            if let reason = climate.startReason,
+               climate.activity != .idle && climate.activity != .unknown {
+                rows.append(KVRow(L10n.text("Started By"), reason.displayName, symbol: "play.circle"))
+            }
             if let startedAt = climate.sessionStartedAt,
                climate.activity != .idle && climate.activity != .unknown {
                 rows.append(KVRow(L10n.text("Session Started"), Format.timeFormatter.string(from: startedAt),

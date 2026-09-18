@@ -126,7 +126,15 @@ dmg:
 	mkdir -p $(DMG_STAGING)
 	cp -R $(APP) $(DMG_STAGING)/
 	ln -s /Applications $(DMG_STAGING)/Applications
-	hdiutil create -volname Hisingen -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG)
+	@# Hosted runners intermittently return "Resource busy" from hdiutil create
+	@# while diskarbitrationd settles; retry before treating it as a real failure.
+	@ok=0; for attempt in 1 2 3 4 5; do \
+		if hdiutil create -volname Hisingen -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG); then \
+			ok=1; break; \
+		fi; \
+		echo "hdiutil create attempt $$attempt failed; retrying in 5s" >&2; \
+		sleep 5; \
+	done; [ "$$ok" = 1 ] || { echo "hdiutil create still failing after 5 attempts" >&2; exit 1; }
 	rm -rf $(DMG_STAGING)
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
 	codesign --force --timestamp -s "$(IDENTITY)" $(DMG)

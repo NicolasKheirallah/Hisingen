@@ -92,6 +92,11 @@ actor PolestarDataPortalAPI {
     var selectedVIN: String?
 
     private var accessToken: String?
+    /// When the portal answers `AUTHZ_VIN_UNAUTHORIZED`, the owner has withdrawn (or not yet
+    /// granted) this client's access to the VIN — retrying cannot succeed, and every refused
+    /// call still burns the 10k/day meter. For an hour after a denial, fail the refresh
+    /// locally with the same error instead of hitting the network.
+    private var vinAccessDeniedUntil: Date?
     private var tokenExpiry: Date?
     private var inFlightTokenTask: Task<String, Error>?
 
@@ -236,6 +241,15 @@ actor PolestarDataPortalAPI {
     }
 
     private func authenticatedGET<T: Decodable & Sendable>(_ path: String) async throws -> T {
+        // Hard-stop before the portal's own limiter does: refused calls still count against
+        // the 10k/day meter, and the quota day rolls at UTC midnight.
+        guard Self.dailyCallCount < Self.dailyCallLimit else {
+            var utcCalendar = Calendar(identifier: .gregorian)
+            utcCalendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+            let midnight = utcCalendar.startOfDay(
+                for: utcCalendar.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+            throw PolestarDataPortalError.rateLimited(retryAfter: midnight.timeIntervalSinceNow)
+        }
         let token = try await ensureAccessToken()
         let url = try apiURL(path: path)
         var request = URLRequest(url: url)
@@ -286,6 +300,15 @@ actor PolestarDataPortalAPI {
         }
         if response.statusCode >= 500 {
             throw PolestarDataPortalError.server(statusCode: response.statusCode)
+        }
+        if response.statusCode == 404 {
+            // The portal's truthful "this vehicle reports no such data" is distinct from a
+            // routing miss; only the body code earns that reading.
+            if let apiError = try? JSONDecoder().decode(PolestarDataPortalAPIError.self, from: data),
+               apiError.error.code == "DATA_NOT_AVAILABLE" {
+                throw PolestarDataPortalError.dataNotAvailable(operation: path)
+            }
+            throw PolestarDataPortalError.client(statusCode: 404)
         }
         guard (200...299).contains(response.statusCode) else {
             throw PolestarDataPortalError.client(statusCode: response.statusCode)
@@ -358,7 +381,38 @@ actor PolestarDataPortalAPI {
     }
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        if let until = vinAccessDeniedUntil, Date() < until {
+            throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry (access revoked; retrying hourly)")
+        }
+        do {
+            return try await performFetch(vin: vin, features: features)
+        } catch PolestarDataPortalError.permissionDenied {
+            vinAccessDeniedUntil = Date().addingTimeInterval(3_600)
+            throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry (owner access revoked; re-grant data sharing in the Polestar app)")
+        }
+    }
+
+    private func performFetch(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        // The token grant POST is itself metered; refuse before spending it, not after.
+        if vinAccessDeniedUntil == nil, Self.dailyCallCount >= Self.dailyCallLimit {
+            var utcCalendar = Calendar(identifier: .gregorian)
+            utcCalendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+            let midnight = utcCalendar.startOfDay(
+                for: utcCalendar.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+            throw PolestarDataPortalError.rateLimited(retryAfter: midnight.timeIntervalSinceNow)
+        }
         _ = try await ensureAccessToken()
+        let pathVIN = Self.encodePathComponent(vin)
+        var unavailable = SnapshotAssembly.UnavailableFeatures()
+        // A portal reading that failed marks every feature it serves unavailable, so the
+        // merge keeps the previous values instead of reading the nil as "the car reports
+        // nothing". Refresh-fatal failures (auth, rate limit, server outage, revoked VIN
+        // access) throw and abort the whole refresh so backoff and fallback can engage.
+        func resolve<T>(_ reading: PortalReading<T>?, serving: [AppFeature]) -> T? {
+            guard let reading else { return nil }
+            unavailable.mark(serving, when: reading.failedRead)
+            return reading.value
+        }
 
         let needsBattery = features.contains(.chargingDetails) || features.contains(.batteryDiagnostics)
         let needsExterior = features.contains(.exteriorStatus)
@@ -375,69 +429,95 @@ actor PolestarDataPortalAPI {
         let needsGlobalChargeTimer = features.contains(.chargingSchedule) || features.contains(.remoteSchedules) || features.contains(.chargingDetails)
         let needsParkingClimateTimer = features.contains(.climateStatus) || features.contains(.remoteClimate) || features.contains(.chargingSchedule)
 
-        async let batteryDTO: PolestarDataPortalBatteryDTO? = needsBattery
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/battery") : nil
-        async let exteriorDTO: PolestarDataPortalExteriorDTO? = needsExterior
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/exterior") : nil
-        async let healthDTO: PolestarDataPortalHealthDTO? = needsHealth
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/health") : nil
-        async let availabilityDTO: PolestarDataPortalAvailabilityDTO? = features.contains(.vehicleAvailability)
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/availability") : nil
-        async let odometerDTO: PolestarDataPortalOdometerDTO? = needsOdometer
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/odometer") : nil
-        async let locationDTO: PolestarDataPortalLocationDTO? = needsLocation
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/location") : nil
-        async let parkingClimatizationDTO: PolestarParkingClimatizationDTO? = needsClimate
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/parking-climatization") : nil
-        async let preCleaningDTO: PolestarPreCleaningDTO? = needsPreCleaning
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning") : nil
-        async let targetSocDTO: PolestarTargetSocDTO? = needsTargetSoc
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/target-soc") : nil
-        async let ampLimitDTO: PolestarAmpLimitDTO? = needsAmpLimit
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/amp-limit") : nil
-        async let chargeLocationsDTO: PolestarChargeLocationsDTO? = needsChargeLocations
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/charge-locations") : nil
-        async let isAtChargeLocationDTO: PolestarIsAtChargeLocationDTO? = needsIsAtChargeLocation
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/is-at-charge-location") : nil
-        async let globalChargeTimerDTO: PolestarGlobalChargeTimerDTO? = needsGlobalChargeTimer
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/global-charge-timer") : nil
-        async let parkingClimateTimerDTO: PolestarParkingClimateTimerDTO? = needsParkingClimateTimer
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/parking-climate-timer") : nil
-        async let chargeNowDTO: PolestarChargeNowDTO? = needsChargeNow
-            ? fetchTelemetry(path: "/v1/vehicles/\(vin)/charging/charge-now") : nil
+        async let batteryDTO: PortalReading<PolestarDataPortalBatteryDTO>? = needsBattery
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/battery") : nil
+        async let exteriorDTO: PortalReading<PolestarDataPortalExteriorDTO>? = needsExterior
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/exterior") : nil
+        async let healthDTO: PortalReading<PolestarDataPortalHealthDTO>? = needsHealth
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/health") : nil
+        async let availabilityDTO: PortalReading<PolestarDataPortalAvailabilityDTO>? = features.contains(.vehicleAvailability)
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/availability") : nil
+        async let odometerDTO: PortalReading<PolestarDataPortalOdometerDTO>? = needsOdometer
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/odometer") : nil
+        async let locationDTO: PortalReading<PolestarDataPortalLocationDTO>? = needsLocation
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/location") : nil
+        async let parkingClimatizationDTO: PortalReading<PolestarParkingClimatizationDTO>? = needsClimate
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/parking-climatization") : nil
+        async let preCleaningDTO: PortalReading<PolestarPreCleaningDTO>? = needsPreCleaning
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/telemetry/pre-cleaning") : nil
+        async let targetSocDTO: PortalReading<PolestarTargetSocDTO>? = needsTargetSoc
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/target-soc") : nil
+        async let ampLimitDTO: PortalReading<PolestarAmpLimitDTO>? = needsAmpLimit
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/amp-limit") : nil
+        async let chargeLocationsDTO: PortalReading<PolestarChargeLocationsDTO>? = needsChargeLocations
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/charge-locations") : nil
+        async let isAtChargeLocationDTO: PortalReading<PolestarIsAtChargeLocationDTO>? = needsIsAtChargeLocation
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/is-at-charge-location") : nil
+        async let globalChargeTimerDTO: PortalReading<PolestarGlobalChargeTimerDTO>? = needsGlobalChargeTimer
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/global-charge-timer") : nil
+        async let parkingClimateTimerDTO: PortalReading<PolestarParkingClimateTimerDTO>? = needsParkingClimateTimer
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/parking-climate-timer") : nil
+        async let chargeNowDTO: PortalReading<PolestarChargeNowDTO>? = needsChargeNow
+            ? fetchTelemetry(path: "/v1/vehicles/\(pathVIN)/charging/charge-now") : nil
 
-        let bundle = await TelemetryBundle(
-            battery: batteryDTO,
-            exterior: exteriorDTO,
-            health: healthDTO,
-            availability: availabilityDTO,
-            odometer: odometerDTO,
-            location: locationDTO,
-            parkingClimatization: parkingClimatizationDTO,
-            preCleaning: preCleaningDTO,
-            targetSoc: targetSocDTO,
-            ampLimit: ampLimitDTO,
-            chargeLocations: chargeLocationsDTO,
-            isAtChargeLocation: isAtChargeLocationDTO,
-            globalChargeTimer: globalChargeTimerDTO,
-            parkingClimateTimer: parkingClimateTimerDTO,
-            chargeNow: chargeNowDTO
+        let bundle = TelemetryBundle(
+            battery: resolve(try await batteryDTO, serving: [.chargingDetails, .batteryDiagnostics]),
+            exterior: resolve(try await exteriorDTO, serving: [.exteriorStatus]),
+            health: resolve(try await healthDTO, serving: [.vehicleHealth, .tyreAndWarnings]),
+            availability: resolve(try await availabilityDTO, serving: [.vehicleAvailability]),
+            odometer: resolve(try await odometerDTO, serving: [.vehicleHealth, .tripMeters]),
+            location: resolve(try await locationDTO, serving: [.vehicleLocation]),
+            parkingClimatization: resolve(try await parkingClimatizationDTO, serving: [.climateStatus, .remoteClimate]),
+            preCleaning: resolve(try await preCleaningDTO, serving: [.airQuality, .remotePreCleaning]),
+            targetSoc: resolve(try await targetSocDTO, serving: [.chargingDetails, .remoteCharging]),
+            ampLimit: resolve(try await ampLimitDTO, serving: [.chargingDetails, .remoteCharging]),
+            chargeLocations: resolve(try await chargeLocationsDTO, serving: [.chargingDetails, .chargingSchedule, .remoteSchedules, .vehicleLocation]),
+            isAtChargeLocation: resolve(try await isAtChargeLocationDTO, serving: [.chargingDetails, .chargingSchedule, .vehicleLocation]),
+            globalChargeTimer: resolve(try await globalChargeTimerDTO, serving: [.chargingSchedule, .remoteSchedules, .chargingDetails]),
+            parkingClimateTimer: resolve(try await parkingClimateTimerDTO, serving: [.climateStatus, .remoteClimate, .chargingSchedule, .remoteSchedules]),
+            chargeNow: resolve(try await chargeNowDTO, serving: [.chargingDetails, .remoteCharging])
         )
-        return assembleVehicleState(vin: vin, bundle: bundle)
+        return assembleVehicleState(vin: vin, bundle: bundle, failedFeatures: unavailable.features)
     }
 
-    private func fetchTelemetry<T: Decodable & Sendable>(path: String) async -> T? {
+    /// One portal reading: the decoded payload, or a failed-read marker when the endpoint
+    /// miss should degrade. Refresh-fatal failures (dead token at the resource, rate limit,
+    /// server outage, VIN-level authorization) throw out of this call and abort the whole
+    /// refresh so the coordinator's backoff and the consumer fallback can engage.
+    private struct PortalReading<T: Decodable & Sendable> {
+        let value: T?
+        let failedRead: Bool
+    }
+
+    private func fetchTelemetry<T: Decodable & Sendable>(path: String) async throws -> PortalReading<T> {
         do {
-            return try await authenticatedGET(path)
+            return PortalReading(value: try await authenticatedGET(path), failedRead: false)
         } catch {
-            logger.warning("Optional Data Portal telemetry failed for \(path): \(String(describing: error), privacy: .public)")
-            return nil
+            logger.warning("Data Portal telemetry failed for \(path): \(String(describing: error), privacy: .public)")
+            if let portalError = error as? PolestarDataPortalError {
+                if portalError.isRefreshFatal { throw error }
+                // A truthful "this vehicle has no such data" is not a miss: serve an empty
+                // reading without marking the endpoint's features unavailable.
+                if portalError.isDataNotAvailable {
+                    logger.info("Data Portal reports no \(path, privacy: .public) data for this vehicle.")
+                    return PortalReading(value: nil, failedRead: false)
+                }
+            }
+            return PortalReading(value: nil, failedRead: true)
         }
     }
 
+    /// VINs are interpolated into URL paths; a stray space, "#" or "?" would otherwise
+    /// truncate or redirect the request.
+    nonisolated private static func encodePathComponent(_ raw: String) -> String {
+        raw.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._"))) ?? raw
+    }
+
     private func assembleAvailability(from dto: PolestarDataPortalAvailabilityDTO?) -> VehicleAvailability {
+        // A missing frame must not flip a sleeping car to "Online": .unknown makes the
+        // identity merge retain the previous availability until a real frame arrives.
         guard let dto, let status = dto.availabilityStatus?.uppercased() else {
-            return .available
+            return .unknown
         }
         if status.contains("UNAVAILABLE") || status.contains("OFFLINE") {
             return .unavailable(reason: dto.unavailableReason)
@@ -454,11 +534,73 @@ actor PolestarDataPortalAPI {
         if let lDate = bundle.location?.timestamp?.date { readingDates[.location] = lDate }
         if let cDate = bundle.parkingClimatization?.timestamp?.date { readingDates[.climateStatus] = cDate }
         if let aDate = bundle.preCleaning?.timestamp?.date { readingDates[.airQuality] = aDate }
+        if let avDate = bundle.availability?.timestamp?.date { readingDates[.availability] = avDate }
         if let cnDate = bundle.chargeNow?.syncedOverrideChargeTimer?.updatedAtTimestamp?.date { readingDates[.charging] = cnDate }
         return readingDates
     }
 
-    private func assembleVehicleState(vin: String, bundle: TelemetryBundle) -> VehicleState {
+    /// Portal ingest times keyed like the vehicle report times above, so the freshness card
+    /// can show where a domain sat in the delivery pipeline.
+    private func assembleMetaReceivedDates(from bundle: TelemetryBundle) -> [VehicleReading: Date] {
+        var received: [VehicleReading: Date] = [:]
+        func ingest(_ raw: String?, for reading: VehicleReading) {
+            guard let raw, let date = Self.parseMetaReceivedAt(raw) else { return }
+            received[reading] = date
+        }
+        ingest(bundle.battery?.metaReceivedAt, for: .battery)
+        ingest(bundle.exterior?.metaReceivedAt, for: .openings)
+        ingest(bundle.health?.metaReceivedAt, for: .health)
+        ingest(bundle.odometer?.metaReceivedAt, for: .odometer)
+        ingest(bundle.location?.metaReceivedAt, for: .location)
+        ingest(bundle.parkingClimatization?.metaReceivedAt, for: .climateStatus)
+        ingest(bundle.preCleaning?.metaReceivedAt, for: .airQuality)
+        ingest(bundle.availability?.metaReceivedAt, for: .availability)
+        ingest(bundle.chargeNow?.metaReceivedAt, for: .charging)
+        return received
+    }
+
+    /// Ten minutes is well above normal ingest jitter and well below anything a user would
+    /// still call fresh, so only genuinely queued readings warn.
+    private static let pipelineLagWarningThreshold: TimeInterval = 10 * 60
+
+    private func assemblePipelineLagWarnings(from bundle: TelemetryBundle) -> [String] {
+        let laggyDomains: [(String, vehicleReportedAt: Date?, metaReceivedAt: String?)] = [
+            ("battery", bundle.battery?.timestamp?.date, bundle.battery?.metaReceivedAt),
+            ("exterior", bundle.exterior?.timestamp?.date, bundle.exterior?.metaReceivedAt),
+            ("health", bundle.health?.timestamp?.date, bundle.health?.metaReceivedAt),
+            ("odometer", bundle.odometer?.timestamp?.date, bundle.odometer?.metaReceivedAt),
+            ("location", bundle.location?.timestamp?.date, bundle.location?.metaReceivedAt),
+            ("climate", bundle.parkingClimatization?.timestamp?.date, bundle.parkingClimatization?.metaReceivedAt),
+            ("air quality", bundle.preCleaning?.timestamp?.date, bundle.preCleaning?.metaReceivedAt)
+        ]
+        return laggyDomains.compactMap { (domain: String, reportedAt: Date?, receivedAt: String?) -> String? in
+            guard let reportedAt, let receivedAt,
+                  let ingestedAt = Self.parseMetaReceivedAt(receivedAt) else { return nil }
+            let interval = ingestedAt.timeIntervalSince(reportedAt)
+            guard interval >= Self.pipelineLagWarningThreshold else { return nil }
+            let lag = Int(interval / 60)
+            return L10n.format("%@ data was delayed at the portal for %d min", domain, Int(lag))
+        }
+    }
+
+    /// Wire form is RFC 3339, with fractional seconds on the live portal and without in
+    /// recorded payloads.
+    private static func parseMetaReceivedAt(_ value: String) -> Date? {
+        if let date = isoFormatterWithFraction.date(from: value) { return date }
+        return isoFormatter.date(from: value)
+    }
+
+    // ISO8601DateFormatter is state-mutable but only touched inside this actor's
+    // parseMetaReceivedAt, which the actor serializes; nonisolated(unsafe) documents that.
+    nonisolated(unsafe) private static let isoFormatterWithFraction: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
+
+    private func assembleVehicleState(vin: String, bundle: TelemetryBundle, failedFeatures: [AppFeature] = []) -> VehicleState {
         var energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
         if let target = bundle.targetSoc?.targetSocPercentage { energy.targetPercentage = target }
         if let amp = bundle.ampLimit?.ampLimit { energy.currentLimitAmps = amp }
@@ -490,6 +632,17 @@ actor PolestarDataPortalAPI {
             // Only the synced value counts: a pending override has not reached the car yet.
             energy.chargeNowActive = syncedOverride.override == true
         }
+        // The backend queues setting changes behind the car's next wake; the pending copies
+        // ride alongside the synced values so the controls card can say "queued" instead of
+        // silently showing a number the car has not applied.
+        if let pendingTarget = bundle.targetSoc?.pendingTargetSoc?.batteryChargeTargetLevel {
+            energy.diagnostics?.pendingTargetPercentage = Int(pendingTarget.rounded())
+        }
+        if let pendingAmps = bundle.ampLimit?.pendingAmpLimit?.ampLimit {
+            energy.diagnostics?.pendingLimitAmps = Int(pendingAmps.rounded())
+        }
+        energy.diagnostics?.targetSource = bundle.targetSoc?.targetSoc?.source
+        energy.diagnostics?.limitSource = bundle.ampLimit?.syncedAmpLimit?.source
         if let increase = bundle.battery?.dischargeInfo?.energyAvailableIncrease {
             energy.diagnostics?.energyAvailableIncreaseKwh = increase
         }
@@ -511,6 +664,9 @@ actor PolestarDataPortalAPI {
 
         var healthSnapshot = bundle.health?.toMaintenanceSnapshot() ?? MaintenanceAndHealthSnapshot()
         if let km = bundle.odometer?.calculatedOdometerKm { healthSnapshot.odometerKm = km }
+        // The portal reports lifetime distance in metres; keep the sub-kilometre remainder
+        // instead of letting only the rounded kilometre value carry it.
+        healthSnapshot.odometerKmPrecise = bundle.odometer?.odometerMeters.map { $0 / 1000.0 }
 
         let tripComputer = bundle.odometer?.toTripComputerSnapshot() ?? TripComputerSnapshot()
 
@@ -518,7 +674,10 @@ actor PolestarDataPortalAPI {
         let identity = VehicleIdentitySnapshot(
             availability: availability,
             availabilityReportedAt: bundle.availability?.timestamp?.date,
-            modelName: "Polestar",
+            // Deliberately nil: the M2M surface carries no model metadata, and a placeholder
+            // here would win the state merge over the consumer API's real model name
+            // ("Polestar" vs "Polestar 2"). A nil keeps the previously fetched name instead.
+            modelName: nil,
             vin: vin,
             usageMode: bundle.availability?.usageMode,
             // A stale reason must not shadow an AVAILABLE report, so keep the raw wire
@@ -534,7 +693,14 @@ actor PolestarDataPortalAPI {
             fetchedAt: Date(),
             vehicleReportedAt: readingDates.values.max(),
             readingDates: readingDates,
-            unavailableFeatures: [.remoteLocks, .remoteWindows, .remoteHonkFlash, .remoteOTA]
+            // metaReceivedAt is the portal's ingest time; a large gap to the vehicle's own
+            // timestamp means the reading sat in the delivery pipeline and may be older
+            // than its freshness suggests.
+            metaReceivedDates: assembleMetaReceivedDates(from: bundle),
+            dataWarnings: assemblePipelineLagWarnings(from: bundle),
+            // The consumer-exclusive commands are never portal-served; the rest of the
+            // list is what this refresh actually asked for and failed to read.
+            unavailableFeatures: failedFeatures + [.remoteLocks, .remoteWindows, .remoteHonkFlash, .remoteOTA]
         )
 
         let timerSettings = bundle.parkingClimateTimer?.timerSettings
@@ -566,7 +732,9 @@ actor PolestarDataPortalAPI {
                         ventilation: status.ventilation,
                         mainClimateRunningStatus: status.mainClimateRunningStatus,
                         sessionStartedAt: status.sessionStartedAt,
-                        sessionEndsAt: status.sessionEndsAt
+                        sessionEndsAt: status.sessionEndsAt,
+                        errors: status.errors,
+                        startReason: status.startReason
                     )
                 }
                 return status
@@ -643,6 +811,7 @@ actor PolestarDataPortalAPI {
     }
 
     func resetSession() async {
+        vinAccessDeniedUntil = nil
         accessToken = nil
         tokenExpiry = nil
         inFlightTokenTask?.cancel()
@@ -672,231 +841,12 @@ actor PolestarDataPortalAPI {
         _ = try await ensureAccessToken()
     }
 
-    @discardableResult
-    private func authenticatedSend(
-        method: String,
-        path: String,
-        body: Data? = nil
-    ) async throws -> (data: Data, response: HTTPURLResponse) {
-        let token = try await ensureAccessToken()
-        let url = try apiURL(path: path)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let headerClientID = (accountID?.isEmpty == false) ? accountID! : (clientID ?? "")
-        if !headerClientID.isEmpty {
-            request.setValue(headerClientID, forHTTPHeaderField: "x-client-id")
-        }
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
-        }
-
-        let (data, response) = try await HTTPExchange.data(
-            for: request,
-            using: session,
-            limit: 1_000_000,
-            operation: "Data Portal \(method): \(path)",
-            provider: .polestar,
-            diagnosticLog: diagnosticLog
-        )
-        recordApiCall()
-        if response.statusCode == 401 {
-            self.accessToken = nil
-            self.tokenExpiry = nil
-            throw PolestarDataPortalError.authenticationRequired(.expiredSession)
-        }
-        if response.statusCode == 403 {
-            throw PolestarDataPortalError.permissionDenied(operation: "\(method) \(path)")
-        }
-        if response.statusCode == 429 {
-            throw PolestarDataPortalError.rateLimited(retryAfter: Self.parseRetryAfter(response))
-        }
-        if response.statusCode >= 500 {
-            throw PolestarDataPortalError.server(statusCode: response.statusCode)
-        }
-        guard (200...299).contains(response.statusCode) else {
-            throw PolestarDataPortalError.client(statusCode: response.statusCode)
-        }
-        return (data, response)
-    }
-
+    /// The EU Data Act M2M surface is read-only (verified live 2026-09-18: write routes sit
+    /// behind an AWS IAM authorizer the M2M JWT cannot satisfy). Controls belong to the
+    /// consumer gRPC path via PolestarAugmentedProvider; this conformance exists so the
+    /// registry can hand the portal provider to read-only sessions.
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
-        if let result = try await executeClimateCommand(command, vin: vin) {
-            return result
-        }
-        if let result = try await executePreCleaningCommand(command, vin: vin) {
-            return result
-        }
-        if let result = try await executeChargingCommand(command, vin: vin) {
-            return result
-        }
-        if let result = try await executeScheduleCommand(command, vin: vin) {
-            return result
-        }
-        if let result = try await executeChargeLocationCommand(command, vin: vin) {
-            return result
-        }
         throw RemoteCommandError.unsupported
-    }
-
-    private func executeClimateCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
-        switch command {
-        case .startClimate(let temp, let frontLeft, let frontRight, let rearLeft, let rearRight, let wheel):
-            let payload: [String: Any] = [
-                "targetTemperatureCelsius": Double(temp),
-                "frontLeftSeatHeating": heatingLevelString(frontLeft),
-                "frontRightSeatHeating": heatingLevelString(frontRight),
-                "rearLeftSeatHeating": heatingLevelString(rearLeft),
-                "rearRightSeatHeating": heatingLevelString(rearRight),
-                "steeringWheelHeating": (wheel == .off || wheel == .unspecified) ? "OFF" : "ON"
-            ]
-            let body = try JSONSerialization.data(withJSONObject: payload)
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/telemetry/parking-climatization", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .stopClimate:
-            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/telemetry/parking-climatization")
-            return RemoteCommandResult(outcome: .completed, message: nil)
-        default:
-            return nil
-        }
-    }
-
-    private func executePreCleaningCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
-        switch command {
-        case .startPreCleaning:
-            let body = try JSONSerialization.data(withJSONObject: ["status": "ACTIVE"])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .stopPreCleaning:
-            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/telemetry/pre-cleaning")
-            return RemoteCommandResult(outcome: .completed, message: nil)
-        default:
-            return nil
-        }
-    }
-
-    private func executeChargingCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
-        switch command {
-        case .setChargeTarget(let pct):
-            let body = try JSONSerialization.data(withJSONObject: ["targetSocPercentage": pct])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/target-soc", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .setAmpLimit(let amps):
-            let body = try JSONSerialization.data(withJSONObject: ["ampLimit": amps])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/amp-limit", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .startChargingOverride:
-            let body = try JSONSerialization.data(withJSONObject: ["overrideStatus": "ACTIVE"])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/override-charge-timer", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .stopChargingOverride:
-            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/override-charge-timer")
-            return RemoteCommandResult(outcome: .completed, message: nil)
-        default:
-            return nil
-        }
-    }
-
-    private func executeScheduleCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
-        switch command {
-        case .setGlobalChargeTimer(let schedule):
-            let timer: [String: Any] = portalTimerDictionary(
-                backendID: schedule.backendID, enabled: schedule.isActive,
-                startHour: schedule.startHour, startMinute: schedule.startMinute,
-                endHour: schedule.endHour, endMinute: schedule.endMinute,
-                weekdays: schedule.weekdays, departure: false)
-            let body = try JSONSerialization.data(withJSONObject: ["timers": [timer]])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/global-charge-timer", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .setClimateTimer(let schedule):
-            let timer: [String: Any] = portalTimerDictionary(
-                backendID: schedule.backendID, enabled: schedule.isActive,
-                startHour: schedule.startHour, startMinute: schedule.startMinute,
-                endHour: nil, endMinute: nil,
-                weekdays: schedule.weekdays, departure: true)
-            let body = try JSONSerialization.data(withJSONObject: ["timers": [timer]])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/parking-climate-timer", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .deleteClimateTimer(let id):
-            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/parking-climate-timer/\(id)")
-            return RemoteCommandResult(outcome: .completed, message: nil)
-        default:
-            return nil
-        }
-    }
-
-    private func executeChargeLocationCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult? {
-        switch command {
-        case .createChargeLocationAtCar(let alias, let ampLimit, let minimumSoc, let optimised):
-            let body = try JSONSerialization.data(withJSONObject: [
-                "name": alias,
-                "ampLimit": ampLimit,
-                "targetSocPercentage": minimumSoc,
-                "optimisedCharging": optimised
-            ])
-            _ = try await authenticatedSend(method: "POST", path: "/v1/vehicles/\(vin)/charging/charge-locations", body: body)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .updateChargeLocationAlias(let id, let alias):
-            _ = try await updateChargeLocation(id: id, vin: vin, field: "name", value: alias)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .updateChargeLocationAmpLimit(let id, let amps):
-            _ = try await updateChargeLocation(id: id, vin: vin, field: "ampLimit", value: amps)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .updateChargeLocationMinimumSoc(let id, let soc):
-            _ = try await updateChargeLocation(id: id, vin: vin, field: "targetSocPercentage", value: soc)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .setChargeLocationOptimisedCharging(let id, let enabled):
-            _ = try await updateChargeLocation(id: id, vin: vin, field: "optimisedCharging", value: enabled)
-            return RemoteCommandResult(outcome: .accepted, message: nil)
-        case .deleteChargeLocation(let id):
-            _ = try await authenticatedSend(method: "DELETE", path: "/v1/vehicles/\(vin)/charging/charge-locations/\(id)")
-            return RemoteCommandResult(outcome: .completed, message: nil)
-        default:
-            return nil
-        }
-    }
-
-    private func updateChargeLocation(id: String, vin: String, field: String, value: Any) async throws -> (data: Data, response: HTTPURLResponse) {
-        let body = try JSONSerialization.data(withJSONObject: [field: value])
-        return try await authenticatedSend(method: "PUT", path: "/v1/vehicles/\(vin)/charging/charge-locations/\(id)", body: body)
-    }
-
-    /// One portal timer row. Charging windows carry start and end; climate timers carry the
-    /// departure instant in the start slot. Weekday names mirror the telemetry encoding
-    /// ("MONDAY"…) that `parsePortalWeekday` decodes.
-    private func portalTimerDictionary(
-        backendID: String?, enabled: Bool,
-        startHour: Int?, startMinute: Int?,
-        endHour: Int?, endMinute: Int?,
-        weekdays: [VehicleWeekday],
-        departure: Bool
-    ) -> [String: Any] {
-        var timer: [String: Any] = [
-            "id": backendID ?? UUID().uuidString,
-            "enabled": enabled,
-            "weekdays": weekdays.map { $0.portalWeekdayName }
-        ]
-        if let h = startHour, let m = startMinute {
-            timer[departure ? "departureTime" : "startTime"] = String(format: "%02d:%02d", h, m)
-            let dailyTime: [String: Any] = ["hour": h, "minute": m]
-            timer[departure ? "readyAt" : "start"] = dailyTime
-        }
-        if !departure, let h = endHour, let m = endMinute {
-            timer["endTime"] = String(format: "%02d:%02d", h, m)
-            timer["stop"] = ["hour": h, "minute": m]
-        }
-        return timer
-    }
-
-    private func heatingLevelString(_ level: HeatingLevel) -> String {
-        switch level {
-        case .unspecified, .off: return "OFF"
-        case .level1: return "LEVEL_1"
-        case .level2: return "LEVEL_2"
-        case .level3: return "LEVEL_3"
-        }
     }
 
     private static func makeSession() -> URLSession {

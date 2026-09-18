@@ -250,8 +250,31 @@ struct ChargingControlsCard: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
+            if let queued = state.energy.diagnostics?.unappliedTargetPercentage(current: chargeTarget) {
+                pendingSyncLine(Format.percent(Double(queued)))
+            }
         }
         .hisAnimation(Motion.layout, value: chargeTarget)
+        .hisAnimation(Motion.layout, value: state.energy.diagnostics?.pendingTargetPercentage)
+    }
+
+    /// The backend queues a setting change behind the car's next wake (observed live:
+    /// `pendingAmpLimit` rides alongside the synced value until the vehicle applies it).
+    /// Saying so keeps a queued number from reading as one the car already has.
+    private func pendingSyncLine(_ queuedValue: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.badge.clock")
+                .hisType(.micro)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(L10n.format("%@ queued · applies when the car wakes", queuedValue))
+                .hisType(.micro, weight: .medium)
+                .foregroundStyle(.secondary)
+                .hisCaptionLeading()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.format("%@ queued · applies when the car wakes", queuedValue))
+        .transition(.opacity)
     }
 
     private var currentLimitControls: some View {
@@ -324,8 +347,12 @@ struct ChargingControlsCard: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
+            if let queued = state.energy.diagnostics?.unappliedLimitAmps(current: ampLimit) {
+                pendingSyncLine(Format.amps(queued))
+            }
         }
         .hisAnimation(Motion.layout, value: ampLimit)
+        .hisAnimation(Motion.layout, value: state.energy.diagnostics?.pendingLimitAmps)
     }
 
     private var chargeOverrideButtons: some View {

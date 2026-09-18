@@ -25,16 +25,9 @@ struct ProviderCommandCatalog: Sendable {
 
     private func implementsPolestar(_ command: RemoteCommand) -> Bool {
         if polestarConnectionMode == .dataPortal {
-            switch command {
-            case .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
-                 .setChargeTarget, .setAmpLimit, .startChargingOverride, .stopChargingOverride,
-                 .setGlobalChargeTimer, .setClimateTimer, .deleteClimateTimer,
-                 .createChargeLocationAtCar, .updateChargeLocationAlias, .updateChargeLocationAmpLimit,
-                 .updateChargeLocationMinimumSoc, .setChargeLocationOptimisedCharging, .deleteChargeLocation:
-                return true
-            default:
-                return false
-            }
+            // The Developer Portal M2M API (EU Data Act) is currently read-only.
+            // Remote vehicle controls require Polestar ID or Augmented mode (via C3 Cloud gRPC).
+            return false
         }
         switch command {
         case .startEngine, .stopEngine, .lockReducedGuard:

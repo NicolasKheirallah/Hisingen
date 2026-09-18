@@ -248,7 +248,15 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
         }
         if let odo = state.maintenance.odometerKm {
-            rows.append(KVRow(L10n.text("Total Distance"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
+            // Metre-level odometer readings keep their decimal; integer-only providers keep
+            // the grouped whole-kilometre form.
+            let value: String
+            if let precise = state.maintenance.odometerKmPrecise, precise > 0 {
+                value = Format.distance(km: precise, decimals: 1, unit: preferences.distanceUnit)
+            } else {
+                value = Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit)
+            }
+            rows.append(KVRow(L10n.text("Total Distance"), value, symbol: "speedometer"))
         }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }

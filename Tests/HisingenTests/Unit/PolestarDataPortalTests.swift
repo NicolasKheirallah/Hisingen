@@ -388,11 +388,11 @@ struct PolestarDataPortalTests {
         #expect(portalCatalog.implements(.lock) == false)
         #expect(portalCatalog.implements(.unlock) == false)
         #expect(portalCatalog.implements(.openWindows) == false)
-        #expect(portalCatalog.implements(.stopClimate) == true)
-        #expect(portalCatalog.implements(.startPreCleaning) == true)
-        #expect(portalCatalog.implements(.setChargeTarget(80)) == true)
-        #expect(portalCatalog.implements(.setAmpLimit(16)) == true)
-        #expect(portalCatalog.implements(.startChargingOverride) == true)
+        #expect(portalCatalog.implements(.stopClimate) == false)
+        #expect(portalCatalog.implements(.startPreCleaning) == false)
+        #expect(portalCatalog.implements(.setChargeTarget(80)) == false)
+        #expect(portalCatalog.implements(.setAmpLimit(16)) == false)
+        #expect(portalCatalog.implements(.startChargingOverride) == false)
 
         let consumerCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .polestarID)
         #expect(consumerCatalog.implements(.lock) == true)
@@ -402,17 +402,17 @@ struct PolestarDataPortalTests {
     @Test
     func dataPortalCatalogCoversSchedulesAndChargeLocations() {
         let portalCatalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal)
-        #expect(portalCatalog.implements(.setGlobalChargeTimer(
+        #expect(!portalCatalog.implements(.setGlobalChargeTimer(
             VehicleSchedule(kind: .globalCharging, startHour: 23, startMinute: 0, endHour: 6, endMinute: 0, weekdays: [.monday], isActive: true))))
-        #expect(portalCatalog.implements(.setClimateTimer(
+        #expect(!portalCatalog.implements(.setClimateTimer(
             VehicleSchedule(kind: .climate, startHour: 7, startMinute: 30, endHour: nil, endMinute: nil, isActive: true))))
-        #expect(portalCatalog.implements(.deleteClimateTimer(id: "t1")))
-        #expect(portalCatalog.implements(.createChargeLocationAtCar(alias: "Work", ampLimit: 16, minimumSoc: 60, optimisedCharging: false)))
-        #expect(portalCatalog.implements(.updateChargeLocationAlias(id: "l1", alias: "Work")))
-        #expect(portalCatalog.implements(.updateChargeLocationAmpLimit(id: "l1", amps: 10)))
-        #expect(portalCatalog.implements(.updateChargeLocationMinimumSoc(id: "l1", soc: 70)))
-        #expect(portalCatalog.implements(.setChargeLocationOptimisedCharging(id: "l1", enabled: true)))
-        #expect(portalCatalog.implements(.deleteChargeLocation(id: "l1")))
+        #expect(!portalCatalog.implements(.deleteClimateTimer(id: "t1")))
+        #expect(!portalCatalog.implements(.createChargeLocationAtCar(alias: "Work", ampLimit: 16, minimumSoc: 60, optimisedCharging: false)))
+        #expect(!portalCatalog.implements(.updateChargeLocationAlias(id: "l1", alias: "Work")))
+        #expect(!portalCatalog.implements(.updateChargeLocationAmpLimit(id: "l1", amps: 10)))
+        #expect(!portalCatalog.implements(.updateChargeLocationMinimumSoc(id: "l1", soc: 70)))
+        #expect(!portalCatalog.implements(.setChargeLocationOptimisedCharging(id: "l1", enabled: true)))
+        #expect(!portalCatalog.implements(.deleteChargeLocation(id: "l1")))
         #expect(!portalCatalog.implements(.honkAndFlash))
         #expect(!portalCatalog.implements(.unlockTrunk))
         #expect(!portalCatalog.implements(.scheduleOTA(delayMinutes: 5)))
@@ -438,7 +438,16 @@ struct PolestarDataPortalTests {
             Issue.record("Expected unimplementedByProvider in Developer Portal mode, got \(availability)")
             return
         }
-        #expect(reason?.contains("Developer Portal") == true)
+        #expect(reason?.contains("read-only") == true)
+        let climateAvailability = gate.availability(
+            for: .stopClimate, state: state,
+            commandCatalog: ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .dataPortal),
+            enabledFeatures: [.remoteClimate], commandInProgress: false)
+        guard case .unimplementedByProvider(let climateReason) = climateAvailability else {
+            Issue.record("Expected unimplementedByProvider for climate in Developer Portal mode")
+            return
+        }
+        #expect(climateReason?.contains("read-only") == true)
         // The reason-less payload keeps the generic service-level wording.
         #expect(CommandAvailability.unimplementedByProvider().shortReason?.contains("Not available") == true)
     }
@@ -449,92 +458,13 @@ struct PolestarDataPortalTests {
     @MainActor
     func apiRemoteCommandsAreUnsupported() async throws {
         let api = PolestarDataPortalAPI()
-        await #expect(throws: RemoteCommandError.unsupported) {
-            try await api.executeRemoteCommand(.lock, vin: "YSM12345678901234")
+        for command in [RemoteCommand.lock, .stopClimate, .setChargeTarget(80), .startChargingOverride] {
+            await #expect(throws: RemoteCommandError.unsupported) {
+                try await api.executeRemoteCommand(command, vin: "YSM12345678901234")
+            }
         }
     }
 
-    @Test
-    @MainActor
-    func apiExecuteRemoteCommandsActuatesSupportedEndpoints() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [PortalMockTransport.self]
-        let session = URLSession(configuration: config)
-
-        let api = PolestarDataPortalAPI()
-        await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
-        await api.configure(clientID: "client-id", clientSecret: "client-secret")
-
-        var lastMethod = ""
-        var lastPath = ""
-        var lastBody: Data?
-        defer { PortalMockTransport.requestHandler = nil }
-        PortalMockTransport.requestHandler = { req in
-            lastMethod = req.httpMethod ?? ""
-            lastPath = req.url?.path ?? ""
-            lastBody = portalRequestBody(req)
-            return (200, Data("{}".utf8))
-        }
-
-        // Climate - level 1 steering wheel turns ON
-        let climateResult = try await api.executeRemoteCommand(
-            .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .level2, frontRightSeat: .off, rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .level1),
-            vin: "TESTVIN"
-        )
-        #expect(climateResult.outcome == .accepted)
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/telemetry/parking-climatization"))
-        let onBody = try JSONSerialization.jsonObject(with: #require(lastBody)) as? [String: Any]
-        #expect(onBody?["steeringWheelHeating"] as? String == "ON")
-
-        // Climate - unspecified steering wheel turns OFF (does not inadvertently activate)
-        _ = try await api.executeRemoteCommand(
-            .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified, rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified),
-            vin: "TESTVIN"
-        )
-        let offBody = try JSONSerialization.jsonObject(with: #require(lastBody)) as? [String: Any]
-        #expect(offBody?["steeringWheelHeating"] as? String == "OFF")
-
-        let stopClimateResult = try await api.executeRemoteCommand(.stopClimate, vin: "TESTVIN")
-        #expect(stopClimateResult.outcome == .completed)
-        #expect(lastMethod == "DELETE")
-        #expect(lastPath.contains("/telemetry/parking-climatization"))
-
-        // Pre-cleaning
-        let startCleanResult = try await api.executeRemoteCommand(.startPreCleaning, vin: "TESTVIN")
-        #expect(startCleanResult.outcome == .accepted)
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/telemetry/pre-cleaning"))
-
-        let stopCleanResult = try await api.executeRemoteCommand(.stopPreCleaning, vin: "TESTVIN")
-        #expect(stopCleanResult.outcome == .completed)
-        #expect(lastMethod == "DELETE")
-        #expect(lastPath.contains("/telemetry/pre-cleaning"))
-
-        // Target SoC
-        let socResult = try await api.executeRemoteCommand(.setChargeTarget(85), vin: "TESTVIN")
-        #expect(socResult.outcome == .accepted)
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/target-soc"))
-
-        // Amp Limit
-        let ampResult = try await api.executeRemoteCommand(.setAmpLimit(16), vin: "TESTVIN")
-        #expect(ampResult.outcome == .accepted)
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/amp-limit"))
-
-        // Override timer
-        let overrideStartResult = try await api.executeRemoteCommand(.startChargingOverride, vin: "TESTVIN")
-        #expect(overrideStartResult.outcome == .accepted)
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/override-charge-timer"))
-
-        let overrideStopResult = try await api.executeRemoteCommand(.stopChargingOverride, vin: "TESTVIN")
-        #expect(overrideStopResult.outcome == .completed)
-        #expect(lastMethod == "DELETE")
-        #expect(lastPath.contains("/charging/override-charge-timer"))
-    }
 
     @Test
     @MainActor
@@ -617,13 +547,16 @@ struct PolestarDataPortalTests {
         #expect(state.climateStatus?.steeringWheelHeatingLevel == 1)
         #expect(state.airQuality?.cleaningState == .off)
         #expect(state.airQuality?.airQualityIndex == 25)
-        #expect(state.climateTimers.count == 1)
+        #expect(state.climateTimers.count == 2)
         #expect(state.maintenance.odometerKm == 42151)
         #expect(state.location?.latitude == 57.708870)
         #expect(state.exteriorStatus?.isLocked == true)
         // ARMED is not an alarm event; only the spec's TRIGGERED spelling is.
         #expect(state.exteriorStatus?.alarmTriggered == false)
         #expect(state.identity.usageMode == "INACTIVE")
+        // The M2M surface carries no model metadata; the placeholder must not win the
+        // state merge over the consumer API's real model name.
+        #expect(state.identity.modelName == nil)
         #expect(state.tripComputer.manualTripKm == 128.4)
         #expect(state.tripComputer.automaticTripKm == 42102.1)
         #expect(state.tripComputer.sinceChargeTripKm == 96.7)
@@ -633,6 +566,276 @@ struct PolestarDataPortalTests {
         #expect(state.energy.diagnostics?.energyAvailableIncreaseKwh == 5.2)
         #expect(state.energy.diagnostics?.batteryPreconditioningStatus == "ACTIVE")
         #expect(state.energy.diagnostics?.batteryPreconditioningEndsAt == Date(timeIntervalSince1970: 1_716_300_800))
+        // The distance-goal estimate lands under its own name; it is not a SoC-target time.
+        #expect(state.energy.estimatedTimeToTargetMinutes == nil)
+        #expect(state.energy.diagnostics?.timeToTargetMinutes == nil)
+        #expect(state.energy.diagnostics?.timeToTargetDistanceMinutes == 20)
+        #expect(state.energy.estimatedTimeToFullMinutes == 35)
+        // The fixture climate session reports one fault token.
+        #expect(state.climateStatus?.errors == ["ERROR_TYPE_INTERRUPTED"])
+        // The global timer's vehicle acknowledgement rides through to the schedule row.
+        #expect(state.energy.schedules.first?.syncStatus == "PENDING")
+        // Second fixture timer is one-shot (repeat=false + startDate); the weekly first
+        // timer must stay undated.
+        let oneShot = try #require(state.climateTimers.first { $0.backendID == "climate-timer-oneshot-01" })
+        #expect(oneShot.oneShotDate != nil)
+        #expect(oneShot.syncStatus == "PENDING")
+        #expect(oneShot.weekdays.isEmpty)
+        let weekly = try #require(state.climateTimers.first { $0.backendID == "climate-timer-morning-01" })
+        #expect(weekly.oneShotDate == nil)
+        #expect(weekly.syncStatus == nil)
+        // The climatization fixture's metaReceivedAt trails its vehicle timestamp by
+        // 40 minutes; only that domain crosses the ten-minute pipeline-lag threshold.
+        #expect(state.freshness.dataWarnings.count == 1)
+        #expect(state.freshness.dataWarnings.first?.contains("climate") == true)
+        #expect(state.freshness.dataWarnings.first?.contains("40 min") == true)
+    }
+
+    @Test
+    func oneShotClimateTimerDateShiftsWithUTCTimers() throws {
+        // A UTC timer form ready at 23:00 on Jul 2 shifts to the next local day when the
+        // device offset pushes it past midnight; the date arithmetic must follow the hour
+        // shift `localHour(isUtc0:)` applies.
+        let json = """
+        {
+            "timerId": "oneshot-utc",
+            "readyAt": { "hour": 23, "minute": 0 },
+            "activated": true,
+            "repeat": false,
+            "startDate": { "year": 2024, "month": 7, "day": 2 }
+        }
+        """
+        let timer = try JSONDecoder().decode(PolestarParkingClimateTimerItemDTO.self, from: Data(json.utf8))
+        let date = try #require(timer.oneShotDate(isUtc0: true))
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.day], from: date)
+        let shiftedHours = 23 + TimeZone.current.secondsFromGMT() / 3600
+        let expectedDay = 2 + (shiftedHours >= 24 ? 1 : (shiftedHours < 0 ? -1 : 0))
+        #expect(components.day == expectedDay)
+
+        // A local timer form keeps the wire date untouched.
+        let localDate = try #require(timer.oneShotDate(isUtc0: false))
+        let localComponents = calendar.dateComponents([.year, .month, .day], from: localDate)
+        #expect(localComponents.year == 2024)
+        #expect(localComponents.month == 7)
+        #expect(localComponents.day == 2)
+    }
+
+    @Test
+    @MainActor
+    func batteryDiagnosticRowsExposeDistanceGoalAndFullChargeEstimates() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "batteryChargeLevelPercentage": 52,
+            "chargingStatusV2": "CHARGING_STATUS_V2_CHARGING",
+            "estimatedChargingTimeToFullMinutes": 35,
+            "estimatedChargingTimeMinutesToTargetDistance": 20
+        }
+        """
+        let dto = try JSONDecoder().decode(PolestarBatteryDTO.self, from: Data(json.utf8))
+        let energy = dto.toEnergySnapshot()
+        let rows = InfoTabView.batteryDiagnosticRows(energy: energy, energyUnit: .kwhPer100Km)
+        #expect(rows.contains { $0.key == L10n.text("Time to Full") && $0.value == L10n.format("%dmin", 35) })
+        #expect(rows.contains { $0.key == L10n.text("Time to Target Distance") && $0.value == L10n.format("%dmin", 20) })
+        // The distance estimate must not masquerade as the SoC-target row.
+        #expect(!rows.contains { $0.key == L10n.text("Time to Target") })
+    }
+
+    @Test
+    @MainActor
+    func exceptionRowsSurfaceClimateFaultsAndUnacknowledgedTimers() {
+        var climate = VehicleClimateStatus(activity: .active, timeRemainingMinutes: 10, timerTriggered: false)
+        climate.errors = ["ERROR_TYPE_INTERRUPTED"]
+        let schedule = VehicleSchedule(
+            backendID: "gct-1", index: 0, kind: .globalCharging,
+            startHour: 23, startMinute: 0, endHour: 6, endMinute: 0,
+            weekdays: [], isActive: true, syncStatus: "PENDING"
+        )
+        var energy = EnergyAndChargingSnapshot(batteryPercentage: 60)
+        energy.schedules = [schedule]
+        let state = VehicleState(
+            energy: energy,
+            identity: VehicleIdentitySnapshot(availability: .available, modelName: nil, vin: "TESTVIN"),
+            freshness: SnapshotFreshness(fetchedAt: Date()),
+            climateStatus: climate
+        )
+        let features = FeatureSelection(enabled: [.climateStatus, .chargingSchedule])
+
+        let rows = ExceptionsCard.attentionRows(state: state, features: features, dismissedSoftwareEventIdentifier: nil)
+        #expect(rows.contains { $0.key == L10n.text("Climate System") && $0.value.contains("Interrupted") })
+        #expect(rows.contains { $0.key == L10n.text("Timer Sync") && $0.value.contains("Pending") })
+
+        // An acknowledged schedule and a clean cabin produce neither row.
+        let ackSchedule = VehicleSchedule(
+            backendID: "gct-1", index: 0, kind: .globalCharging,
+            startHour: 23, startMinute: 0, endHour: 6, endMinute: 0,
+            weekdays: [], isActive: true, syncStatus: "SYNCED"
+        )
+        energy.schedules = [ackSchedule]
+        let cleanState = VehicleState(
+            energy: energy,
+            identity: VehicleIdentitySnapshot(availability: .available, modelName: nil, vin: "TESTVIN"),
+            freshness: SnapshotFreshness(fetchedAt: Date()),
+            climateStatus: VehicleClimateStatus(activity: .idle, timeRemainingMinutes: nil, timerTriggered: false)
+        )
+        let cleanRows = ExceptionsCard.attentionRows(state: cleanState, features: features, dismissedSoftwareEventIdentifier: nil)
+        #expect(!cleanRows.contains { $0.key == L10n.text("Climate System") })
+        #expect(!cleanRows.contains { $0.key == L10n.text("Timer Sync") })
+    }
+
+    @Test
+    func portalIdentityMergeKeepsConsumerModelName() throws {
+        // The whole point of the nil portal placeholder: a previously fetched consumer
+        // model name must survive every portal refresh.
+        let consumer = VehicleIdentitySnapshot(availability: .available, modelName: "Polestar 2", vin: "TESTVIN")
+        let portal = VehicleIdentitySnapshot(availability: .available, modelName: nil, vin: "TESTVIN")
+        let policy = SnapshotMergePolicy(
+            features: FeatureSelection(enabled: [.vehicleIdentity]),
+            refreshedFeatures: [.vehicleIdentity],
+            failedFeatures: [],
+            isCommandLocked: false,
+            fetchedAt: Date()
+        )
+        let merged = portal.merging(previous: consumer, policy: policy, imageCache: CarImageCache())
+        #expect(merged.modelName == "Polestar 2")
+    }
+
+    @Test
+    func augmentedProviderOverlaysConsumerIdentityOntoPortalState() async throws {
+        var portalIdentity = VehicleIdentitySnapshot(availability: .available, modelName: nil, vin: "TESTVIN")
+        portalIdentity.usageMode = "USAGE_MODE_INACTIVE"
+        let portalState = VehicleState(
+            energy: EnergyAndChargingSnapshot(batteryPercentage: 52),
+            identity: portalIdentity,
+            freshness: SnapshotFreshness(fetchedAt: Date())
+        )
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry", state: portalState)
+        let consumerIdentity = VehicleIdentitySnapshot(
+            availability: .available, modelName: "Polestar 2", modelYear: "2023",
+            registrationNo: "ZCJ06G", vin: "TESTVIN", ownerFirstName: "Nicolas",
+            structureWeek: "202248", pno34: "PNO34", accountMarket: "SE"
+        )
+        let commands = PortalTestProbeProvider(brand: .polestar, name: "commands", identity: consumerIdentity)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: commands)
+
+        let features = FeatureSelection(enabled: [.vehicleIdentity, .ownerGreeting])
+        let state = try await augmented.fetchVehicleState(vin: "TESTVIN", features: features)
+        #expect(state.identity.modelName == "Polestar 2")
+        #expect(state.identity.registrationNo == "ZCJ06G")
+        #expect(state.identity.ownerFirstName == "Nicolas")
+        #expect(state.identity.structureWeek == "202248")
+        #expect(state.identity.pno34 == "PNO34")
+        // Portal-owned presence facts never copy from the consumer side.
+        #expect(state.identity.usageMode == "USAGE_MODE_INACTIVE")
+
+        // Without a consumer identity there is nothing to overlay and nothing breaks.
+        let bareCommands = PortalTestProbeProvider(brand: .polestar, name: "bare")
+        let bareAugmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: bareCommands)
+        let bareState = try await bareAugmented.fetchVehicleState(vin: "TESTVIN", features: features)
+        #expect(bareState.identity.modelName == nil)
+        #expect(bareState.identity.usageMode == "USAGE_MODE_INACTIVE")
+    }
+
+    @Test
+    @MainActor
+    func dataNotAvailableServesEmptyReadingWithoutMarkingFeatures() async throws {
+        let dataNotAvailableBody = """
+        {
+          "error": {
+            "code": "DATA_NOT_AVAILABLE",
+            "message": "No is-at-charge-location data is available for this vehicle.",
+            "httpStatus": 404
+          }
+        }
+        """
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        PortalMockTransport.requestHandler = { req in
+            let path = req.url?.path ?? ""
+            // Location presence is served by three endpoints; all report truthfully that
+            // this vehicle sends no such data.
+            if path.contains("/charging/is-at-charge-location") { return (404, Data(dataNotAvailableBody.utf8)) }
+            if path.contains("/charging/charge-locations") { return (404, Data(dataNotAvailableBody.utf8)) }
+            if path.contains("/telemetry/location") { return (404, Data(dataNotAvailableBody.utf8)) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "TESTVIN",
+            features: FeatureSelection(enabled: [.vehicleLocation, .exteriorStatus])
+        )
+        // Every truthful 404 marks nothing; the plain 404 next to them still does.
+        #expect(!state.freshness.unavailableFeatures.contains(.vehicleLocation))
+        #expect(state.freshness.unavailableFeatures.contains(.exteriorStatus))
+    }
+
+    @Test
+    func dailyTimeAppliesStatedCarOffset() throws {
+        let deviceOffset = TimeZone.current.secondsFromGMT() / 60
+        func decode(_ json: String) throws -> PolestarDailyTimeDTO {
+            try JSONDecoder().decode(PolestarDailyTimeDTO.self, from: Data(json.utf8))
+        }
+
+        // A car two hours ahead of the device reads two hours earlier locally.
+        let ahead = try decode("""
+        {"hour": 23, "minute": 0, "timeZone": {"offsetMinutes": \(deviceOffset + 120)}}
+        """)
+        #expect(ahead.localHour(isUtc0: false) == 21)
+        #expect(ahead.localMinute(isUtc0: false) == 0)
+
+        // A car behind the device wraps the hour forward, minute included.
+        let behind = try decode("""
+        {"hour": 23, "minute": 45, "timeZone": {"offsetMinutes": \(deviceOffset - 30)}}
+        """)
+        #expect(behind.localHour(isUtc0: false) == 0)
+        #expect(behind.localMinute(isUtc0: false) == 15)
+
+        // Matching offset and a missing offset both stay exactly as sent.
+        let matching = try decode("""
+        {"hour": 23, "minute": 0, "timeZone": {"offsetMinutes": \(deviceOffset)}}
+        """)
+        #expect(matching.localHour(isUtc0: false) == 23)
+        let unstated = try decode("""
+        {"hour": 23, "minute": 0}
+        """)
+        #expect(unstated.localHour(isUtc0: false) == 23)
+    }
+
+    @Test
+    func oneShotDateFollowsStatedCarOffset() throws {
+        let deviceOffset = TimeZone.current.secondsFromGMT() / 60
+        func decodeTimer(wireOffset: Int) throws -> PolestarParkingClimateTimerItemDTO {
+            try JSONDecoder().decode(PolestarParkingClimateTimerItemDTO.self, from: Data("""
+            {
+                "timerId": "oneshot-offset",
+                "readyAt": {"hour": 23, "minute": 0, "timeZone": {"offsetMinutes": \(wireOffset)}},
+                "activated": true,
+                "repeat": false,
+                "startDate": {"year": 2024, "month": 7, "day": 2}
+            }
+            """.utf8))
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+
+        // 23:00 car time two hours behind the device is 01:00 the next day locally.
+        let behind = try decodeTimer(wireOffset: deviceOffset - 120)
+        let shifted = try #require(behind.oneShotDate(isUtc0: false))
+        #expect(calendar.dateComponents([.day], from: shifted).day == 3)
+
+        // A car in the device's own timezone keeps the wire date.
+        let matching = try decodeTimer(wireOffset: deviceOffset)
+        let unshifted = try #require(matching.oneShotDate(isUtc0: false))
+        #expect(calendar.dateComponents([.day], from: unshifted).day == 2)
     }
 
     @Test
@@ -957,54 +1160,34 @@ struct PolestarDataPortalTests {
         #expect(state.energy.rangeKm == 320)
     }
 
-    // MARK: - Augmented Provider Portal-First Routing
+    // MARK: - Augmented Provider Direct C3 Cloud Routing
 
     @Test
-    func augmentedProviderRoutesPortalSupportedCommandsPortalFirst() async throws {
-        let portal = RoutingProbeProvider(name: "portal-primary")
-        let consumer = RoutingProbeProvider(name: "consumer-backup")
+    func augmentedProviderRoutesAllCommandsDirectlyToCommandProvider() async throws {
+        let portal = RoutingProbeProvider(name: "portal-telemetry")
+        let consumer = RoutingProbeProvider(name: "consumer-commands")
         let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
 
-        let result = try await augmented.executeRemoteCommand(.setChargeTarget(80), vin: "TESTVIN")
-        #expect(result.outcome == .completed)
-        #expect(await portal.receivedCommands.count == 1)
-        #expect(await consumer.receivedCommands.isEmpty)
+        let targetResult = try await augmented.executeRemoteCommand(.setChargeTarget(80), vin: "TESTVIN")
+        let lockResult = try await augmented.executeRemoteCommand(.lock, vin: "TESTVIN")
+
+        #expect(targetResult.outcome == .completed)
+        #expect(lockResult.outcome == .completed)
+        #expect(await portal.receivedCommands.isEmpty)
+        #expect(await consumer.receivedCommands.count == 2)
     }
 
     @Test
-    func augmentedProviderFallsBackToConsumerWhenPortalCommandFails() async throws {
-        let portal = RoutingProbeProvider(name: "portal-primary", failCommands: true)
-        let consumer = RoutingProbeProvider(name: "consumer-backup")
-        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
-
-        let result = try await augmented.executeRemoteCommand(.setAmpLimit(12), vin: "TESTVIN")
-        #expect(result.outcome == .completed)
-        #expect(await portal.receivedCommands.count == 1)
-        #expect(await consumer.receivedCommands.count == 1)
-    }
-
-    @Test
-    func augmentedProviderRethrowsPrimaryErrorWhenConsumerIsCold() async throws {
-        let portal = RoutingProbeProvider(name: "portal-primary", failCommands: true)
+    func augmentedProviderRejectsWhenCommandProviderIsCold() async throws {
+        let portal = RoutingProbeProvider(name: "portal-telemetry")
         let consumer = RoutingProbeProvider(name: "consumer-cold", warm: false)
         let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
 
-        await #expect(throws: RemoteCommandError.busy) {
+        await #expect(throws: RemoteCommandError.self) {
             try await augmented.executeRemoteCommand(.setChargeTarget(80), vin: "TESTVIN")
         }
-        #expect(await consumer.receivedCommands.isEmpty)
-    }
-
-    @Test
-    func augmentedProviderSendsConsumerExclusiveCommandsDirectly() async throws {
-        let portal = RoutingProbeProvider(name: "portal-primary")
-        let consumer = RoutingProbeProvider(name: "consumer-backup")
-        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
-
-        let result = try await augmented.executeRemoteCommand(.lock, vin: "TESTVIN")
-        #expect(result.outcome == .completed)
         #expect(await portal.receivedCommands.isEmpty)
-        #expect(await consumer.receivedCommands.count == 1)
+        #expect(await consumer.receivedCommands.isEmpty)
     }
 
     @Test
@@ -1054,69 +1237,6 @@ struct PolestarDataPortalTests {
 
     // MARK: - Schedule & Charge-Location REST Writes
 
-    @Test
-    @MainActor
-    func apiWritesSchedulesAndChargeLocationsToPortalEndpoints() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [PortalMockTransport.self]
-        let session = URLSession(configuration: config)
-
-        let api = PolestarDataPortalAPI()
-        await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
-        await api.configure(clientID: "client-id", clientSecret: "client-secret")
-
-        var lastMethod = ""
-        var lastPath = ""
-        var lastBody = Data()
-        defer { PortalMockTransport.requestHandler = nil }
-        PortalMockTransport.requestHandler = { req in
-            lastMethod = req.httpMethod ?? ""
-            lastPath = req.url?.path ?? ""
-            lastBody = portalRequestBody(req)
-            return (200, Data("{}".utf8))
-        }
-        defer { PortalMockTransport.requestHandler = nil }
-
-        _ = try await api.executeRemoteCommand(
-            .setGlobalChargeTimer(VehicleSchedule(kind: .globalCharging, startHour: 23, startMinute: 0, endHour: 6, endMinute: 0, weekdays: [.friday], isActive: true)),
-            vin: "TESTVIN")
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/global-charge-timer"))
-        let timerBody = String(data: lastBody, encoding: .utf8) ?? ""
-        #expect(timerBody.contains("23:00"))
-        #expect(timerBody.contains("06:00"))
-        #expect(timerBody.contains("FRIDAY"))
-
-        _ = try await api.executeRemoteCommand(
-            .setClimateTimer(VehicleSchedule(kind: .climate, startHour: 7, startMinute: 30, endHour: nil, endMinute: nil, weekdays: [], isActive: true)),
-            vin: "TESTVIN")
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/parking-climate-timer"))
-        #expect((String(data: lastBody, encoding: .utf8) ?? "").contains("07:30"))
-
-        _ = try await api.executeRemoteCommand(.deleteClimateTimer(id: "timer-9"), vin: "TESTVIN")
-        #expect(lastMethod == "DELETE")
-        #expect(lastPath.contains("/charging/parking-climate-timer/timer-9"))
-
-        _ = try await api.executeRemoteCommand(
-            .createChargeLocationAtCar(alias: "Work", ampLimit: 16, minimumSoc: 70, optimisedCharging: true),
-            vin: "TESTVIN")
-        #expect(lastMethod == "POST")
-        #expect(lastPath.contains("/charging/charge-locations"))
-        let locationBody = String(data: lastBody, encoding: .utf8) ?? ""
-        #expect(locationBody.contains("Work"))
-        #expect(locationBody.contains("optimisedCharging"))
-
-        _ = try await api.executeRemoteCommand(.updateChargeLocationAmpLimit(id: "loc-1", amps: 10), vin: "TESTVIN")
-        #expect(lastMethod == "PUT")
-        #expect(lastPath.contains("/charging/charge-locations/loc-1"))
-        #expect((String(data: lastBody, encoding: .utf8) ?? "").contains("ampLimit"))
-
-        _ = try await api.executeRemoteCommand(.deleteChargeLocation(id: "loc-1"), vin: "TESTVIN")
-        #expect(lastMethod == "DELETE")
-        #expect(lastPath.contains("/charging/charge-locations/loc-1"))
-    }
 
     // MARK: - Canonical Fixture End-to-End Decoding
 
@@ -1156,14 +1276,14 @@ struct PolestarDataPortalTests {
         let energy = batteryDTO.toEnergySnapshot()
         #expect(energy.batteryPercentage == 78.5)
         #expect(energy.chargingState == .charging)
-        #expect(energy.estimatedTimeToTargetMinutes == 20)
         #expect(energy.diagnostics?.powerLimitKw == 240.0)
         #expect(energy.diagnostics?.energyAvailableKwh == 62.4)
         #expect(energy.diagnostics?.energyBreakdown?.driving?.percentage == 74.0)
         #expect(energy.diagnostics?.energyBreakdown?.driving?.wattHours == 25900)
         // Diagnostics fields that drive rendered rows but had no decode assertion.
         #expect(energy.diagnostics?.timeToMinimumSOCMinutes == 12)
-        #expect(energy.diagnostics?.timeToTargetMinutes == 20)
+        // Time-to-target-DISTANCE is tracked separately from time-to-SoC-target.
+        #expect(energy.diagnostics?.timeToTargetDistanceMinutes == 20)
         #expect(energy.diagnostics?.averageConsumption == 19.4)
         #expect(energy.diagnostics?.averageConsumptionSinceCharge == 17.5)
         #expect(energy.diagnostics?.averageConsumptionAutomatic == 18.9)
@@ -1336,9 +1456,11 @@ struct PolestarDataPortalTests {
         let climTimerDTO = try #require(climTimerEnv.data)
         #expect(climTimerDTO.parkingClimateTimers?.first?.readyAt?.hourComponent == 7)
         let climateTimers = climTimerDTO.toClimateSchedules()
-        #expect(climateTimers.count == 1)
+        #expect(climateTimers.count == 2)
         #expect(climateTimers.first?.backendID == "climate-timer-morning-01")
         #expect(climateTimers.first?.startHour == 7)
+        #expect(climateTimers.last?.backendID == "climate-timer-oneshot-01")
+        #expect(climateTimers.last?.startHour == 14)
         #expect(climateTimers.first?.startMinute == 30)
         #expect(climateTimers.first?.isActive == true)
         #expect(climateTimers.first?.weekdays.count == 5)
@@ -1352,6 +1474,7 @@ private actor PortalTestProbeProvider: VehicleProviding {
     var shouldFailState: Bool = false
     var shouldFailRestore: Bool = false
     var warm: Bool = true
+    var identityToReturn: VehicleIdentitySnapshot?
 
     init(
         brand: VehicleBrand,
@@ -1359,7 +1482,8 @@ private actor PortalTestProbeProvider: VehicleProviding {
         state: VehicleState? = nil,
         shouldFailState: Bool = false,
         shouldFailRestore: Bool = false,
-        warm: Bool = true
+        warm: Bool = true,
+        identity: VehicleIdentitySnapshot? = nil
     ) {
         self.brand = brand
         self.providerName = name
@@ -1367,6 +1491,7 @@ private actor PortalTestProbeProvider: VehicleProviding {
         self.shouldFailState = shouldFailState
         self.shouldFailRestore = shouldFailRestore
         self.warm = warm
+        self.identityToReturn = identity
     }
 
     var cars: [CarSummary] {
@@ -1384,6 +1509,9 @@ private actor PortalTestProbeProvider: VehicleProviding {
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
+    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot? {
+        identityToReturn
+    }
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         if shouldFailState {
             throw VehicleServiceError.rateLimited(retryAfter: 60)

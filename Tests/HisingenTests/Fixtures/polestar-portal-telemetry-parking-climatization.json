@@ -8,7 +8,9 @@
     "runningStatus": "RUNNING_STATUS_ON",
     "mainClimateRunningStatus": "MAIN_CLIMATE_RUNNING_STATUS_ON",
     "runtimeLeftMinutes": 18,
-    "errors": [],
+    "errors": [
+      "ERROR_TYPE_INTERRUPTED"
+    ],
     "warnings": [],
     "ventilation": "VENTILATION_HEATING",
     "currentCompartmentTemperatureCelsius": 16.5,
@@ -27,7 +29,7 @@
       "nanos": 0
     },
     "startReason": "START_REASON_REMOTE",
-    "metaReceivedAt": "2024-05-21T14:01:40Z",
+    "metaReceivedAt": "2024-05-21T14:41:40Z",
     "metaEventId": "evt-clim-112233"
   },
   "meta": {

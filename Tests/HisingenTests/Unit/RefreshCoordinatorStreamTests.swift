@@ -448,7 +448,8 @@ struct RefreshCoordinatorStreamTests {
         let selections = await provider.fetchSelections
         #expect(selections.contains { $0.enabled == [.remoteCharging, .remotePreCleaning] })
         let receipts = try #require(events.states.last?.commandState.receipts)
-        #expect(receipts.first(where: { $0.id == charging.id })?.status == .awaiting)
+        // The matching charging read confirms that receipt without disturbing the cleaning one.
+        #expect(receipts.first(where: { $0.id == charging.id })?.status.isConfirmed == true)
         #expect(receipts.first(where: { $0.id == cleaning.id })?.status == .awaiting)
         coordinator.stop()
     }
@@ -725,7 +726,7 @@ struct RefreshCoordinatorStreamTests {
         RemoteCommand.setChargeTarget(80),
         RemoteCommand.setAmpLimit(16)
     ])
-    func pollOnlyChargingSettingConfirmationRepeatsWithoutOpeningAStream(
+    func pollOnlyChargingSettingConfirmationConfirmsWithoutOpeningAStream(
         command: RemoteCommand
     ) async throws {
         let (defaults, suite) = try makeDefaults()
@@ -751,19 +752,36 @@ struct RefreshCoordinatorStreamTests {
             command: command
         ))
 
-        // The refresh that satisfies the poll clears `nextRefresh` while it is in flight and
-        // re-arms it only once it succeeds, so wait for the pair. Waiting on the count alone can
-        // catch the snapshot published at the start of the next poll, which has no schedule yet
-        // and would read as "never repeats" even though the cadence is intact.
+        // A matching post-command read confirms a charging-setting write on the first targeted
+        // poll — including the no-op case, where the vehicle never advances its own reading
+        // timestamp. Confirming must also END the short repeat cadence: polling a no-op write
+        // for the whole confirmation window burned ~500 quota calls per command.
         let firstPoll = try #require(await waitUntil(events, timeout: 2) {
             $0.refreshSuccesses >= 2 && $0.nextRefresh != nil
         })
-        let nextDelay = firstPoll.nextRefresh?.timeIntervalSinceNow ?? .infinity
-        #expect(nextDelay < 1.2, "Poll-only confirmation must retain its short repeat cadence")
         #expect(recorder.purposes.isEmpty, "Charging-setting confirmation must not open the battery stream")
-        _ = try #require(await waitUntil(events, timeout: 2) {
-            $0.refreshSuccesses >= 3
-        }, "Expected poll-only confirmation to fetch repeatedly")
+        let receipts = try #require(events.states.last?.commandState.receipts)
+        switch command {
+        case .setChargeTarget:
+            // The mock's state reports target 80, so a matching post-command read confirms
+            // immediately — and confirmation must end the short repeat cadence (a no-op write
+            // used to poll the whole five-minute window, ~500 quota calls).
+            #expect(receipts.first?.status.isConfirmed == true)
+            _ = try #require(await waitUntil(events, timeout: 2) {
+                ($0.nextRefresh?.timeIntervalSinceNow ?? .infinity) > 60
+            })
+        case .setAmpLimit:
+            // The mock reports no current limit, so this receipt cannot prove: it must keep
+            // the short repeat cadence (without a stream) until the value lands.
+            #expect(receipts.first?.status.isAwaiting == true)
+            #expect((firstPoll.nextRefresh?.timeIntervalSinceNow ?? .infinity) < 1.2,
+                    "Unproven poll-only confirmation retains its short repeat cadence")
+            _ = try #require(await waitUntil(events, timeout: 2) {
+                $0.refreshSuccesses >= 3
+            }, "Expected poll-only confirmation to fetch repeatedly")
+        default:
+            Issue.record("unexpected command")
+        }
         coordinator.stop()
     }
 

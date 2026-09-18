@@ -22,14 +22,28 @@ struct VehicleIdentityCard: View {
         }
         if features.contains(.vehicleAvailability) {
             if state.identity.availability == .available {
-                rows.append(KVRow(L10n.text("Cloud Connectivity"), state.identity.availability.displayName, symbol: "antenna.radiowaves.left.and.right"))
+                var connectivity = state.identity.availability.displayName
+                // The telematics gateway's last check-in; a bare "Online" cannot say how
+                // long ago the car last answered the cloud.
+                if let reportedAt = state.identity.availabilityReportedAt {
+                    connectivity += " · " + Format.shortTime(date: reportedAt)
+                }
+                rows.append(KVRow(L10n.text("Cloud Connectivity"), connectivity, symbol: "antenna.radiowaves.left.and.right"))
             }
             if let usage = state.identity.usageMode, !usage.isEmpty, usage != "USAGE_MODE_UNSPECIFIED" {
                 rows.append(KVRow(L10n.text("Usage Mode"), formattedUsageMode(usage), symbol: "power.circle"))
             }
         }
         if features.contains(.vehicleHealth), let km = state.maintenance.odometerKm {
-            rows.append(KVRow(L10n.text("Odometer"), Format.distance(km: km, grouped: true, unit: preferences.distanceUnit), symbol: "speedometer"))
+            // The portal's metre-level reading renders with its true decimal; the grouped
+            // whole-kilometre form stays for providers that only report integers.
+            let value: String
+            if let precise = state.maintenance.odometerKmPrecise, precise > 0 {
+                value = Format.distance(km: precise, decimals: 1, unit: preferences.distanceUnit)
+            } else {
+                value = Format.distance(km: km, grouped: true, unit: preferences.distanceUnit)
+            }
+            rows.append(KVRow(L10n.text("Odometer"), value, symbol: "speedometer"))
         }
         if features.contains(.vehicleHealth), let days = state.maintenance.service.daysToService {
             var value = L10n.format("in %d days", days)

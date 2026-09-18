@@ -24,6 +24,27 @@
           "THURSDAY",
           "FRIDAY"
         ]
+      },
+      {
+        "timerId": "climate-timer-oneshot-01",
+        "index": 2,
+        "readyAt": {
+          "hour": 14,
+          "minute": 0
+        },
+        "activated": true,
+        "repeat": false,
+        "startDate": {
+          "year": 2024,
+          "month": 6,
+          "day": 1
+        },
+        "metadata": {
+          "id": "meta-oneshot-01",
+          "syncStatus": {
+            "value": "PENDING"
+          }
+        }
       }
     ],
     "utc0": false,

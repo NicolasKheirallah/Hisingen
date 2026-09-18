@@ -31,6 +31,27 @@ extension PolestarAPI {
         try await fetchVehicleStateImplementation(vin: vin, features: features)
     }
 
+    /// No telemetry fetch: identity is prepared by `prepareVehicle`/`reloadVehicleMetadata`
+    /// and read from actor state here, so the augmented provider can overlay consumer-only
+    /// metadata onto portal-served refreshes without a consumer round trip. `availability`
+    /// is a placeholder the overlay never copies — the portal owns that fact.
+    func identitySnapshot(for vin: String, features: FeatureSelection) -> VehicleIdentitySnapshot? {
+        guard let identity = identities[vin] else { return nil }
+        return VehicleIdentitySnapshot(
+            availability: .available,
+            modelName: identity.modelName,
+            modelYear: features.contains(.vehicleIdentity) ? identity.modelYear : nil,
+            registrationNo: features.contains(.vehicleIdentity) ? identity.registrationNo : nil,
+            vin: vin,
+            ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
+            structureWeek: features.contains(.vehicleIdentity) ? identity.structureWeek : nil,
+            internalVehicleIdentifier: features.contains(.vehicleIdentity) ? identity.internalVehicleIdentifier : nil,
+            pno34: features.contains(.vehicleIdentity) ? identity.pno34 : nil,
+            accountMarket: market,
+            imageData: features.contains(.vehicleImage) ? carImages[vin] : nil
+        )
+    }
+
     func fetchVehicleStateImplementation(vin: String, features: FeatureSelection) async throws -> VehicleState {
         let epoch = sessionEpoch
         try await prepareVehicle(vin: vin, features: features)

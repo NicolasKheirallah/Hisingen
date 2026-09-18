@@ -176,7 +176,6 @@ struct PolestarBatteryDTO: Codable, Sendable, Equatable {
     let estimatedChargingTimeMinutesToTargetDistance: Double?
     let estimatedChargingTimeMinutesToMinimumSoc: Double?
     let estimatedDistanceToEmptyKm: Double?
-    let estimatedDistanceToEmptyMiles: Double?
     let manualPreconditioning: PolestarPreconditioningDTO?
     let totalEnergyConsumptionWh: Double?
     let totalEnergyConsumptionWhAutomatic: Double?
@@ -279,8 +278,12 @@ extension PolestarBatteryDTO {
         }()
 
         let diag = BatteryDiagnostics(
-            timeToTargetMinutes: estimatedChargingTimeMinutesToTargetDistance.map { Int($0.rounded()) },
+            timeToTargetMinutes: nil,
             timeToMinimumSOCMinutes: estimatedChargingTimeMinutesToMinimumSoc.map { Int($0.rounded()) },
+            // `estimatedChargingTimeMinutesToTargetDistance` is time to the distance goal
+            // configured in the car, not to the charge target, so it must not feed the
+            // SoC-target fields above.
+            timeToTargetDistanceMinutes: estimatedChargingTimeMinutesToTargetDistance.map { Int($0.rounded()) },
             chargerPowerState: powerState,
             averageConsumption: averageEnergyConsumptionKwhPer100Km,
             averageConsumptionSinceCharge: averageEnergyConsumptionKwhPer100KmSinceCharge,
@@ -296,7 +299,6 @@ extension PolestarBatteryDTO {
             rangeKm: estimatedDistanceToEmptyKm.map { Int($0.rounded()) },
             chargingState: chargeState,
             estimatedTimeToFullMinutes: estimatedChargingTimeToFullMinutes.map { Int($0.rounded()) },
-            estimatedTimeToTargetMinutes: estimatedChargingTimeMinutesToTargetDistance.map { Int($0.rounded()) },
             powerWatts: chargingPowerWatts.map { Int($0.rounded()) },
             currentAmps: chargingCurrentAmps.map { Int($0.rounded()) },
             voltageVolts: chargingVoltageVolts.map { Int($0.rounded()) },
@@ -313,9 +315,11 @@ extension PolestarExteriorDTO {
 
         func parseOpening(_ raw: String?) -> OpeningState {
             guard let raw = raw?.uppercased() else { return .unknown }
-            if raw.contains("OPEN") { return .open }
-            if raw.contains("CLOSED") { return .closed }
-            if raw.contains("AJAR") { return .ajar }
+            // Spec tokens are `OPEN_STATUS_*`, so CLOSED/AJAR must be matched before any
+            // "OPEN" check — every value begins with the literal "OPEN_STATUS_".
+            if raw.hasSuffix("_CLOSED") || raw == "CLOSED" { return .closed }
+            if raw.hasSuffix("_AJAR") || raw == "AJAR" { return .ajar }
+            if raw.hasSuffix("_OPEN") || raw == "OPEN" { return .open }
             return .unknown
         }
 
@@ -375,10 +379,24 @@ extension PolestarHealthDTO {
         var warnings: [VehicleWarning] = []
         var reported: [VehicleWarning] = []
 
+        // Every spec warning enum embeds the noun "WARNING" (`SERVICE_WARNING_NO_WARNING`,
+        // `LOW_VOLTAGE_BATTERY_WARNING_UNSPECIFIED`…), so "contains WARNING" reads every
+        // value as an active warning. Classify on the negative/positive tokens instead;
+        // the bare legacy tokens ("NORMAL", "TRUE") are kept for tolerance.
+        func isActiveWarningToken(_ raw: String) -> Bool {
+            if raw.contains("NO_WARNING") || raw.contains("UNSPECIFIED") || raw == "NORMAL" || raw == "FALSE" {
+                return false
+            }
+            return raw.contains("TOO_LOW") || raw.contains("CRITICALLY_LOW")
+                || raw.contains("TIME_FOR_SERVICE") || raw.contains("OVERDUE")
+                || raw.contains("FAULT") || raw.contains("FAILURE") || raw.contains("DEFECT")
+                || raw == "TRUE" || raw == "LOW_WARNING"
+        }
+
         func checkWarning(_ raw: String?, warning: VehicleWarning) {
             guard let raw = raw?.uppercased() else { return }
             reported.append(warning)
-            if raw.contains("WARNING") || raw.contains("LOW") || raw.contains("FAULT") || raw == "TRUE" {
+            if isActiveWarningToken(raw) {
                 warnings.append(warning)
             }
         }
@@ -417,8 +435,9 @@ extension PolestarHealthDTO {
         var lightFaults: [String] = []
         if let lightWarnings {
             for (lightName, status) in lightWarnings {
-                let st = status.uppercased()
-                if st.contains("FAULT") || st.contains("WARNING") || st.contains("DEFECT") || st == "TRUE" {
+                // Spec vocabulary is EXTERIOR_LIGHT_WARNING_{UNSPECIFIED,NO_WARNING,FAILURE};
+                // "contains WARNING" would flag every bulb on every payload.
+                if isActiveWarningToken(status.uppercased()) {
                     lightFaults.append(lightName)
                 }
             }
@@ -435,14 +454,13 @@ extension PolestarHealthDTO {
             lightFailures: lightFaults
         )
 
-        let isServiceWarn = (serviceWarning?.uppercased().contains("WARNING") ?? false)
-            || (serviceWarning?.uppercased() == "TRUE")
+        let isServiceWarn = serviceWarning.map { isActiveWarningToken($0.uppercased()) } ?? false
 
         var fluidWarningNames: [String] = []
-        if brakeFluidLevelWarning?.uppercased().contains("WARNING") == true { fluidWarningNames.append("Brake Fluid") }
-        if engineCoolantLevelWarning?.uppercased().contains("WARNING") == true { fluidWarningNames.append("Coolant") }
-        if oilLevelWarning?.uppercased().contains("WARNING") == true { fluidWarningNames.append("Oil") }
-        if washerFluidLevelWarning?.uppercased().contains("WARNING") == true { fluidWarningNames.append("Washer Fluid") }
+        if brakeFluidLevelWarning.map({ isActiveWarningToken($0.uppercased()) }) == true { fluidWarningNames.append("Brake Fluid") }
+        if engineCoolantLevelWarning.map({ isActiveWarningToken($0.uppercased()) }) == true { fluidWarningNames.append("Coolant") }
+        if oilLevelWarning.map({ isActiveWarningToken($0.uppercased()) }) == true { fluidWarningNames.append("Oil") }
+        if washerFluidLevelWarning.map({ isActiveWarningToken($0.uppercased()) }) == true { fluidWarningNames.append("Washer Fluid") }
 
         let service = ServiceSnapshot(
             daysToService: daysToService.map { Int($0.rounded()) },
@@ -675,24 +693,33 @@ struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
     var hourComponent: Int? { hour.map { Int($0.rounded()) } }
     var minuteComponent: Int? { minute.map { Int($0.rounded()) } }
 
+    /// Minutes to add to the wire wall-clock to read it in `timeZone`. Three wire forms
+    /// exist: UTC (`utc0`), the car's own offset (`timeZone.offsetMinutes`, which can differ
+    /// from the device's), and no offset at all, meaning "already local" on the car — the
+    /// historic no-conversion reading.
+    func deviceShiftMinutes(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
+        let deviceOffset = timeZone.secondsFromGMT() / 60
+        if isUtc0 { return deviceOffset }
+        guard let wireOffset = self.timeZone?.offsetMinutes.map({ Int($0.rounded()) }) else { return nil }
+        return deviceOffset - wireOffset
+    }
+
+    private func normalizedWallMinutes(_ raw: Int) -> Int {
+        var total = raw % 1440
+        if total < 0 { total += 1440 }
+        return total
+    }
+
     func localHour(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
-        guard let h = hourComponent, let m = minuteComponent else { return hourComponent }
-        guard isUtc0 else { return h }
-        let utcMinutes = h * 60 + m
-        let localOffset = timeZone.secondsFromGMT() / 60
-        var totalMinutes = (utcMinutes + localOffset) % 1440
-        if totalMinutes < 0 { totalMinutes += 1440 }
-        return totalMinutes / 60
+        guard let h = hourComponent else { return nil }
+        guard let m = minuteComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone) else { return h }
+        return normalizedWallMinutes(h * 60 + m + shift) / 60
     }
 
     func localMinute(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
-        guard let h = hourComponent, let m = minuteComponent else { return minuteComponent }
-        guard isUtc0 else { return m }
-        let utcMinutes = h * 60 + m
-        let localOffset = timeZone.secondsFromGMT() / 60
-        var totalMinutes = (utcMinutes + localOffset) % 1440
-        if totalMinutes < 0 { totalMinutes += 1440 }
-        return totalMinutes % 60
+        guard let m = minuteComponent else { return nil }
+        guard let h = hourComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone) else { return m }
+        return normalizedWallMinutes(h * 60 + m + shift) % 60
     }
 }
 
@@ -823,7 +850,9 @@ struct PolestarGlobalChargeTimerDTO: Codable, Sendable, Equatable {
             startMinute: timer.start?.localMinute(isUtc0: isUtc),
             endHour: timer.stop?.localHour(isUtc0: isUtc),
             endMinute: timer.stop?.localMinute(isUtc0: isUtc),
-            isActive: timer.activated ?? false
+            weekdays: [],
+            isActive: timer.activated ?? false,
+            syncStatus: timer.metadata?.syncStatus?.value
         )]
     }
 }
@@ -872,6 +901,34 @@ struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
         case weekdays, startDate, metadata
     }
 
+    /// Combines the one-shot `startDate` with the ready-at time into a concrete instant.
+    /// UTC timer forms get the same hour shift `localHour(isUtc0:)` applies, including the
+    /// day wrap when that shift crosses midnight.
+    func oneShotDate(isUtc0: Bool) -> Date? {
+        guard let start = startDate,
+              let year = start.year.map({ Int($0.rounded()) }),
+              let month = start.month.map({ Int($0.rounded()) }),
+              let day = start.day.map({ Int($0.rounded()) }) else { return nil }
+
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+
+        // The ready-at time decides the calendar date, so the same offset shift the hour
+        // display applies decides the day here too — including a wrap across midnight.
+        if let h = readyAt?.hourComponent, let m = readyAt?.minuteComponent,
+           let shift = readyAt?.deviceShiftMinutes(isUtc0: isUtc0) {
+            let total = h * 60 + m + shift
+            let dayShift = total >= 0 ? total / 1440 : -((-total + 1439) / 1440)
+            components.day = day + dayShift
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(from: components)
+    }
+
     func toVehicleSchedule(index fallbackIndex: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
         VehicleSchedule(
             backendID: timerId,
@@ -882,7 +939,11 @@ struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
             endHour: nil,
             endMinute: nil,
             weekdays: weekdays?.compactMap { parsePortalWeekday($0) } ?? [],
-            isActive: activated ?? false
+            isActive: activated ?? false,
+            // `startDate` only rides along on non-repeating timers; without it the date
+            // was silently dropped and a one-shot read as a weekly repeat.
+            oneShotDate: repeats != true ? oneShotDate(isUtc0: isUtc0) : nil,
+            syncStatus: metadata?.syncStatus?.value
         )
     }
 }
@@ -953,6 +1014,12 @@ extension PolestarParkingClimatizationDTO {
             let diff = ends.timeIntervalSinceNow
             return diff > 0 ? max(1, Int(diff / 60)) : 0
         }()
+        // `errors` and `warnings` are two severity lists over the same token vocabulary;
+        // both belong on screen, so they merge into one deduped list.
+        var climateErrors: [String] = []
+        for token in (errors ?? []) + (warnings ?? []) where !climateErrors.contains(token) {
+            climateErrors.append(token)
+        }
         return VehicleClimateStatus(
             activity: running ? .active : .idle,
             timeRemainingMinutes: remaining,
@@ -967,7 +1034,9 @@ extension PolestarParkingClimatizationDTO {
             ventilation: ventilation,
             mainClimateRunningStatus: mainClimateRunningStatus,
             sessionStartedAt: startedAt?.date ?? batteryPreconditioning?.startedAt?.date,
-            sessionEndsAt: endingAt?.date ?? batteryPreconditioning?.endingAt?.date
+            sessionEndsAt: endingAt?.date ?? batteryPreconditioning?.endingAt?.date,
+            errors: climateErrors.isEmpty ? nil : climateErrors,
+            startReason: VehicleStartReason(wireToken: startReason)
         )
     }
 }
@@ -998,14 +1067,8 @@ extension PolestarPreCleaningDTO {
         )
     }
 
-    private var cleaningStartReason: AirCleaningStartReason? {
-        switch startReason {
-        case "START_REASON_REMOTE": return .remote
-        case "START_REASON_MANUALLY_FROM_CAR": return .manuallyFromCar
-        case "START_REASON_TIMER": return .timer
-        case "START_REASON_KEEP_CLIMATE": return .keepClimate
-        default: return nil
-        }
+    private var cleaningStartReason: VehicleStartReason? {
+        VehicleStartReason(wireToken: startReason)
     }
 
     private var cleaningErrorKind: AirCleaningError? {

@@ -2560,3 +2560,11 @@
 "Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.";
 "Re-authorize…" = "Re-authorize…";
 "Sign in with a different account…" = "Sign in with a different account…";
+
+// Raw-output coverage surfacing
+"Set remotely" = "Fjärrinställt";
+"Set from app" = "Inställt från appen";
+"%@ queued · applies when the car wakes" = "%@ köad · tillämpas när bilen vaknar";
+"Ventilation" = "Ventilation";
+"Neutral" = "Neutral";
+"portal +%d min" = "portal +%d min";
