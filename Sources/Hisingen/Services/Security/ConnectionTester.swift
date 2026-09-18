@@ -77,7 +77,7 @@ final class ConnectionTester {
             let provider = providers.provider(for: brand)
             let providerCars = try await sessionManager.restore(api: provider, preferences: preferences)
             guard !providerCars.isEmpty else {
-                if brand == .polestar, preferences.polestarConnectionMode == .dataPortal {
+                if brand == .polestar, (preferences.polestarConnectionMode == .dataPortal || preferences.polestarConnectionMode == .augmented) {
                     return (true, L10n.text("Developer Portal verified (0 vehicles linked). Link your VIN in the portal."), nil)
                 }
                 return (false, L10n.text("Signed in, but no vehicles were returned."), .unspecified)

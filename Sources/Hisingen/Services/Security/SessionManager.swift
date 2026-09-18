@@ -20,6 +20,15 @@ final class SessionManager {
             }
             return try Keychain.readPolestarDataPortalToken()
         }
+        if PreferencesStore.shared.polestarConnectionMode == .augmented {
+            if let token = try Keychain.readSessionToken(), !token.isEmpty {
+                return token
+            }
+            if let secret = try Keychain.readPolestarDataPortalClientSecret() {
+                return secret
+            }
+            return try Keychain.readPolestarDataPortalToken()
+        }
         return try Keychain.readSessionToken()
     }, readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
          clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
@@ -45,7 +54,7 @@ final class SessionManager {
 
         func passwordCredentials() throws -> (email: String, password: String)? {
             guard brand == .polestar,
-                  preferences.polestarConnectionMode == .polestarID,
+                  (preferences.polestarConnectionMode == .polestarID || preferences.polestarConnectionMode == .augmented),
                   let password = try readPassword(), !password.isEmpty else { return nil }
             let email = preferences.email
             return email.isEmpty ? nil : (email, password)

@@ -54,10 +54,19 @@ struct AccountCredentialsForm: View {
         guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
         switch selectedBrand {
         case .polestar:
-            if preferences.polestarConnectionMode == .dataPortal {
-                return !preferences.polestarDataPortalClientID.isEmpty && Keychain.hasStoredPolestarDataPortalCredentials
+            switch preferences.polestarConnectionMode {
+            case .dataPortal:
+                let hasID = !preferences.polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+                let hasSecret = Keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+                return hasID && hasSecret
+            case .augmented:
+                let hasPortalID = !preferences.polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+                let hasPortalSecret = Keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+                let hasPortal = hasPortalID && hasPortalSecret
+                return hasPortal || Keychain.hasStoredPolestarEmail
+            case .polestarID:
+                return Keychain.hasStoredPolestarEmail
             }
-            return Keychain.hasStoredPolestarEmail
         case .volvo:
             let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
             let hasSecrets = BuiltinVolvoSecrets.isConfigured
@@ -210,10 +219,12 @@ struct AccountCredentialsForm: View {
 
     private var isBrandConnected: Bool {
         if selectedBrand == .polestar {
-            if preferences.polestarConnectionMode == .dataPortal {
+            switch preferences.polestarConnectionMode {
+            case .dataPortal, .augmented:
                 return preferences.hasResumableSession(for: .polestar)
+            case .polestarID:
+                return preferences.hasSessionToken(for: .polestar)
             }
-            return preferences.hasSessionToken(for: .polestar)
         }
         return preferences.hasResumableSession(for: selectedBrand)
     }
@@ -804,8 +815,10 @@ struct AccountCredentialsForm: View {
     }
 
     private func savePolestarAugmentedCredentials() {
+        preferences.polestarConnectionMode = .augmented
         savePolestarCredentials()
         savePolestarDataPortalCredentials()
+        preferences.polestarConnectionMode = .augmented
     }
 
 
@@ -850,7 +863,11 @@ struct AccountCredentialsForm: View {
     }
 
     private func persistPolestarDataPortalPreferences(accountID: String, clientID: String) {
-        preferences.polestarConnectionMode = .dataPortal
+        if polestarConnectionMode == .dataPortal {
+            preferences.polestarConnectionMode = .dataPortal
+        } else if polestarConnectionMode == .augmented {
+            preferences.polestarConnectionMode = .augmented
+        }
         preferences.polestarDataPortalAccountID = accountID
         preferences.polestarDataPortalClientID = clientID
         let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -1061,7 +1078,11 @@ struct AccountCredentialsForm: View {
         // Persist identity only after a new password has reached Keychain successfully. A
         // Keychain denial must not leave an email/VIN pointing at credentials that were not
         // actually saved.
-        preferences.polestarConnectionMode = .polestarID
+        if polestarConnectionMode == .polestarID {
+            preferences.polestarConnectionMode = .polestarID
+        } else if polestarConnectionMode == .augmented {
+            preferences.polestarConnectionMode = .augmented
+        }
         preferences.email = normalizedEmail
         preferences.setVin(upperVIN, for: .polestar)
         if !nicknameVIN.isEmpty {

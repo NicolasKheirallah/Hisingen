@@ -399,11 +399,18 @@ final class PreferencesStore {
         let result: Bool
         switch brand {
         case .polestar:
-            if polestarConnectionMode == .dataPortal {
+            switch polestarConnectionMode {
+            case .dataPortal:
                 let hasID = !polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
                 let hasSecret = keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
                 result = hasID && hasSecret
-            } else {
+            case .augmented:
+                let hasPortalID = !polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+                let hasPortalSecret = keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+                let hasPortal = hasPortalID && hasPortalSecret
+                let hasConsumer = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
+                result = hasPortal || hasConsumer
+            case .polestarID:
                 result = keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
             }
         case .volvo:
