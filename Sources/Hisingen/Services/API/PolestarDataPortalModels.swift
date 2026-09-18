@@ -477,6 +477,18 @@ struct PolestarOdometerDTO: Codable, Sendable, Equatable {
     var calculatedOdometerKm: Int? {
         odometerMeters.map { Int(($0 / 1000.0).rounded()) }
     }
+
+    func toTripComputerSnapshot() -> TripComputerSnapshot {
+        TripComputerSnapshot(
+            manualTripKm: tripMeterManualKm,
+            automaticTripKm: tripMeterAutomaticKm,
+            averageSpeedKmH: averageSpeedKmPerHour,
+            manualAverageSpeedKmH: averageSpeedKmPerHour.map { Int($0.rounded()) },
+            automaticAverageSpeedKmH: averageSpeedKmPerHourAutomatic.map { Int($0.rounded()) },
+            sinceChargeTripKm: tripMeterSinceChargeKm,
+            sinceChargeAverageSpeedKmH: averageSpeedKmPerHourSinceCharge.map { Int($0.rounded()) }
+        )
+    }
 }
 
 // MARK: - Location Telemetry
@@ -630,6 +642,51 @@ struct PolestarAmpLimitDTO: Codable, Sendable, Equatable {
     }
 }
 
+/// `ChargeLocationTimer` — a charging schedule window specific to one charge location.
+struct PolestarChargeLocationTimerDTO: Codable, Sendable, Equatable {
+    let id: String?
+    let activated: Bool?
+    let start: PolestarDailyTimeDTO?
+    let stop: PolestarDailyTimeDTO?
+    let activeDays: [String]?
+
+    func toVehicleSchedule(index: Int = 0) -> VehicleSchedule {
+        VehicleSchedule(
+            backendID: id,
+            index: index,
+            kind: .locationCharging,
+            startHour: start?.hourComponent,
+            startMinute: start?.minuteComponent,
+            endHour: stop?.hourComponent,
+            endMinute: stop?.minuteComponent,
+            weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
+            isActive: activated ?? false
+        )
+    }
+}
+
+/// `DepartureTime` — a departure preconditioning schedule specific to one charge location.
+struct PolestarChargeLocationDepartureDTO: Codable, Sendable, Equatable {
+    let id: String?
+    let activated: Bool?
+    let departureTime: PolestarDailyTimeDTO?
+    let activeDays: [String]?
+
+    func toVehicleSchedule(index: Int = 0) -> VehicleSchedule {
+        VehicleSchedule(
+            backendID: id,
+            index: index,
+            kind: .climate,
+            startHour: departureTime?.hourComponent,
+            startMinute: departureTime?.minuteComponent,
+            endHour: nil,
+            endMinute: nil,
+            weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
+            isActive: activated ?? false
+        )
+    }
+}
+
 /// `ChargeLocation`.
 struct PolestarChargeLocationItemDTO: Codable, Sendable, Equatable {
     let locationId: String?
@@ -641,6 +698,8 @@ struct PolestarChargeLocationItemDTO: Codable, Sendable, Equatable {
     let isBidirectionalChargingEnabled: Bool?
     let availableOptimizedCharging: String?
     let locationType: String?
+    let chargeTimers: [PolestarChargeLocationTimerDTO]?
+    let departureTimes: [PolestarChargeLocationDepartureDTO]?
 }
 
 /// `ChargeLocationsState`.
@@ -924,7 +983,11 @@ extension PolestarChargeLocationItemDTO {
             minimumSoc: minimumSoc.map { Int($0.rounded()) } ?? 0,
             optimisedChargingEnabled: isOptimizedChargingEnabled ?? false,
             optimisedChargingMode: optimisedChargingMode,
-            kind: locationKind
+            kind: locationKind,
+            isBidirectionalChargingEnabled: isBidirectionalChargingEnabled,
+            availableOptimizedCharging: availableOptimizedCharging,
+            departureTimes: departureTimes?.enumerated().map { idx, d in d.toVehicleSchedule(index: idx) } ?? [],
+            chargeTimers: chargeTimers?.enumerated().map { idx, t in t.toVehicleSchedule(index: idx) } ?? []
         )
     }
 }

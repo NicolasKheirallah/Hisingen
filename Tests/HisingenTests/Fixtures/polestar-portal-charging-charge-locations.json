@@ -15,6 +15,23 @@
         "isOptimizedChargingEnabled": true,
         "isBidirectionalChargingEnabled": false,
         "availableOptimizedCharging": "INTELLIGENT_TIMER",
+        "chargeTimers": [
+          {
+            "id": "timer-loc-01",
+            "activated": true,
+            "start": { "hour": 1, "minute": 0 },
+            "stop": { "hour": 5, "minute": 30 },
+            "activeDays": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
+          }
+        ],
+        "departureTimes": [
+          {
+            "id": "dep-loc-01",
+            "activated": true,
+            "departureTime": { "hour": 7, "minute": 45 },
+            "activeDays": ["MONDAY", "WEDNESDAY", "FRIDAY"]
+          }
+        ],
         "locationType": "LOCATION_TYPE_SAVED"
       }
     ],
