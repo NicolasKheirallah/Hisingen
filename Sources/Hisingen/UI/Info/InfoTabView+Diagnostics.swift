@@ -131,7 +131,14 @@ extension InfoTabView {
     // MARK: - Battery diagnostics
 
     var batteryDiagnosticsRows: [KVRow] {
-        guard let diag = state.energy.diagnostics else { return [] }
+        Self.batteryDiagnosticRows(energy: state.energy,
+                                   energyUnit: preferences.energyConsumptionUnit)
+    }
+
+    /// Static so tests can assert row content without constructing the full Info tab.
+    static func batteryDiagnosticRows(energy: EnergyAndChargingSnapshot,
+                                      energyUnit: EnergyConsumptionUnit) -> [KVRow] {
+        guard let diag = energy.diagnostics else { return [] }
         var rows: [KVRow] = []
         if diag.chargerPowerState != .unknown {
             rows.append(KVRow(L10n.text("Power Module"), diag.chargerPowerState.displayName,
@@ -141,25 +148,33 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer",
                               info: L10n.text("Vehicle Dynamic Calculation. Estimated time until the high-voltage battery reaches the configured charge target.")))
         }
+        if let minutes = diag.timeToTargetDistanceMinutes {
+            rows.append(KVRow(L10n.text("Time to Target Distance"), Format.shortDuration(minutes: minutes), symbol: "flag.checkered",
+                              info: L10n.text("Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car.")))
+        }
+        if let minutes = energy.estimatedTimeToFullMinutes, minutes > 0 {
+            rows.append(KVRow(L10n.text("Time to Full"), Format.shortDuration(minutes: minutes), symbol: "battery.100.bolt",
+                              info: L10n.text("Vehicle Estimate. Time until the high-voltage battery reaches a full charge.")))
+        }
         if let minutes = diag.timeToMinimumSOCMinutes {
             rows.append(KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minutes), symbol: "battery.50percent",
                               info: L10n.text("Vehicle Dynamic Calculation. Estimated time to reach the minimum operating state of charge.")))
         }
         if let value = diag.averageConsumption {
             rows.append(KVRow(L10n.text("Avg Consumption"),
-                              Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit),
+                              Format.energyConsumption(kwhPer100Km: value, unit: energyUnit),
                               symbol: "chart.line.uptrend.xyaxis",
                               info: L10n.text("Vehicle Calculation. Long-term average energy consumption from the trip computer.")))
         }
         if let value = diag.averageConsumptionSinceCharge {
             rows.append(KVRow(L10n.text("Avg Since Last Charge"),
-                              Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit),
+                              Format.energyConsumption(kwhPer100Km: value, unit: energyUnit),
                               symbol: "chart.line.uptrend.xyaxis",
                               info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))
         }
         if let value = diag.averageConsumptionAutomatic {
             rows.append(KVRow(L10n.text("Avg (Automatic Trip)"),
-                              Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit),
+                              Format.energyConsumption(kwhPer100Km: value, unit: energyUnit),
                               symbol: "chart.line.uptrend.xyaxis",
                               info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))
         }

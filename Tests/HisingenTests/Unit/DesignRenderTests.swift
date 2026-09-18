@@ -89,12 +89,13 @@ struct DesignRenderTests {
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2.0
-        guard let cgImage = renderer.cgImage else { return }
+        let cgImage = try #require(renderer.cgImage, "ImageRenderer produced no image; the test must not vacuously pass")
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
-        guard let pngData = bitmap.representation(using: .png, properties: [:]) else { return }
+        let pngData = try #require(bitmap.representation(using: .png, properties: [:]))
         let dest = URL(fileURLWithPath: "docs/design/renders/settings-polestar-dataportal.png")
         try pngData.write(to: dest)
-        #expect(FileManager.default.fileExists(atPath: dest.path))
+        let written = try #require(NSImage(contentsOf: dest))
+        #expect(written.size.width > 0)
     }
 
     /// Applies `theme` through the global the views read, then restores what was there. The

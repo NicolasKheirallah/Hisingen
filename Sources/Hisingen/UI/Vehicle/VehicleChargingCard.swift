@@ -110,6 +110,12 @@ struct VehicleChargingCard: View {
             if let minutes = state.energy.estimatedTimeToTargetMinutes, !timeToTargetShownInDiagnostics {
                 rows.append(("timeToTargetEstimate", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target."))))
             }
+            if let minutes = state.energy.diagnostics?.timeToTargetDistanceMinutes {
+                rows.append(("timeToTargetDistance", KVRow(L10n.text("Time to Target Distance"), Format.shortDuration(minutes: minutes), symbol: "flag.checkered", info: L10n.text("Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car."))))
+            }
+            if let minutes = state.energy.estimatedTimeToFullMinutes, minutes > 0 {
+                rows.append(("timeToFull", KVRow(L10n.text("Time to Full"), Format.shortDuration(minutes: minutes), symbol: "battery.100.bolt", info: L10n.text("Vehicle Estimate. Time until the high-voltage battery reaches a full charge."))))
+            }
             if state.energy.isAtChargeLocation == true {
                 var locationValue = state.energy.currentChargeLocationName ?? L10n.text("Saved Location")
                 // Dwell: how long the car has been sitting at this charger. Only appended once a
@@ -129,7 +135,7 @@ struct VehicleChargingCard: View {
             if let value = diagnostics.averageConsumption { rows.append(("avgConsumption", KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))) }
             if let value = diagnostics.averageConsumptionSinceCharge { rows.append(("avgSinceCharge", KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))) }
             if let value = diagnostics.averageConsumptionAutomatic { rows.append(("avgAutoTrip", KVRow(L10n.text("Avg (Automatic Trip)"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))) }
-            if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
+            if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), Format.energyKwh(wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
             if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
                 rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
             }
@@ -203,7 +209,7 @@ struct VehicleChargingCard: View {
     private func formatBreakdown(_ item: EnergyBreakdownItem) -> String {
         var parts: [String] = []
         if let wh = item.wattHours {
-            parts.append(String(format: "%.1f kWh", wh / 1_000.0))
+            parts.append(Format.energyKwh(wh / 1_000.0))
         }
         if let pct = item.percentage {
             parts.append(String(format: "%.0f%%", pct))

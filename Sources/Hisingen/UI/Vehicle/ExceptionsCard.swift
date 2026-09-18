@@ -13,6 +13,13 @@ struct ExceptionsCard: View {
     }
 
     private var rows: [KVRow] {
+        Self.attentionRows(state: state, features: features,
+                           dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier)
+    }
+
+    /// Static so tests can assert row content without mounting the view.
+    static func attentionRows(state: VehicleState, features: FeatureSelection,
+                              dismissedSoftwareEventIdentifier: String?) -> [KVRow] {
         var rows: [KVRow] = []
         // A triggered alarm is the one row here that means someone may be tampering with the car,
         // so it leads and it is the only row that gets the critical treatment.
@@ -45,6 +52,22 @@ struct ExceptionsCard: View {
             for warning in health.warnings {
                 rows.append(KVRow(warning.displayName, L10n.text("Warning"), symbol: "exclamationmark.triangle.fill", warning: true))
             }
+        }
+        // The portal reports climate faults as raw wire tokens; they are shown verbatim
+        // (underscores softened) rather than dropped, so a fault never renders as a healthy cabin.
+        if features.contains(.climateStatus), let errors = state.climateStatus?.errors, !errors.isEmpty {
+            let joined = errors.map { $0.replacingOccurrences(of: "_", with: " ").capitalized }.joined(separator: ", ")
+            rows.append(KVRow(L10n.text("Climate System"), joined, symbol: "fan.badge.angled.exclamationmark", warning: true))
+        }
+        // A timer the vehicle has not acknowledged may not fire; SYNCED and UNSPECIFIED
+        // need no row.
+        let unacknowledged = (state.energy.schedules + state.climateTimers)
+            .filter { $0.syncNeedsAttention }
+            .compactMap { $0.syncStatus }
+        if let first = unacknowledged.first {
+            let label = first.replacingOccurrences(of: "_", with: " ").capitalized
+            let extra = unacknowledged.count > 1 ? L10n.format(" (+%d more)", unacknowledged.count - 1) : ""
+            rows.append(KVRow(L10n.text("Timer Sync"), label + extra, symbol: "clock.badge.exclamationmark", warning: true))
         }
         if features.contains(.softwareUpdates), let software = state.softwareInfo,
            software.hasActionableFailure(), dismissedSoftwareEventIdentifier != software.eventIdentifier {

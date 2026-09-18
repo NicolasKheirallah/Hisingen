@@ -27,7 +27,7 @@ struct VehicleClimateCard: View {
         if features.contains(.climateStatus) {
             if let climate = state.climateStatus, climate.activity != .unknown {
                 var value = climate.activity.displayName
-                if let minutes = climate.timeRemainingMinutes { value += " · \(Format.shortDuration(minutes: minutes))" }
+                if let minutes = climate.timeRemainingMinutes, minutes > 0 { value += " · \(Format.shortDuration(minutes: minutes))" }
                 if climate.timerTriggered { value += " (\(L10n.text("Timer")))" }
                 rows.append(KVRow(L10n.text("Cabin Climate"), value, symbol: climateActive ? "fan.fill" : "fan"))
                 if let temperature = climate.interiorTemperatureCelsius { rows.append(KVRow(L10n.text("Cabin Temperature"), Format.temperature(celsius: temperature, unit: preferences.temperatureUnit), symbol: "thermometer.medium")) }

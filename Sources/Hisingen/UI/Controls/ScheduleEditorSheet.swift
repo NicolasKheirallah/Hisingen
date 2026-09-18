@@ -133,10 +133,20 @@ struct ScheduleEditorSheet: View {
                 let endStr = sched.endHour.map { String(format: " - %02d:%02d", $0, sched.endMinute ?? 0) } ?? ""
                 Text("\(sched.kind.title): \(timeStr)\(endStr)")
                     .hisType(.label, weight: .medium)
-                if !sched.weekdays.isEmpty {
+                if let oneShot = sched.oneShotDate {
+                    // A dated row is a one-shot timer; weekday names would read it as weekly.
+                    Text("\(L10n.text("Once on")) \(Format.dateFormatter.string(from: oneShot))")
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                } else if !sched.weekdays.isEmpty {
                     Text(sched.weekdays.map(\.shortName).joined(separator: ", "))
                         .hisType(.micro)
                         .foregroundStyle(.secondary)
+                }
+                if sched.syncNeedsAttention {
+                    Label((sched.syncStatus ?? "").replacingOccurrences(of: "_", with: " ").capitalized, systemImage: "clock.badge.exclamationmark")
+                        .hisType(.micro, weight: .medium)
+                        .foregroundStyle(HisingenTheme.semanticWarning)
                 }
                 if !isEditable {
                     Label(L10n.text("View only"), systemImage: "lock.fill")

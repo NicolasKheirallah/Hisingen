@@ -234,7 +234,7 @@ struct ClimateControlCard: View {
                     Text(L10n.text("Saved command setting; not live cabin telemetry"))
                         .hisType(.micro)
                         .foregroundStyle(.tertiary)
-                    if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive {
+                    if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive, remaining > 0 {
                         Text(L10n.format("%d min remaining", remaining))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(HisingenTheme.polestarAmber)
