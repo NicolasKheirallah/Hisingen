@@ -284,7 +284,7 @@ actor PolestarDataPortalAPI {
         if response.statusCode >= 500 {
             throw PolestarDataPortalError.server(statusCode: response.statusCode)
         }
-        if response.statusCode != 200 {
+        guard (200...299).contains(response.statusCode) else {
             throw PolestarDataPortalError.client(statusCode: response.statusCode)
         }
         if let envelope = try? JSONDecoder().decode(PolestarDataPortalEnvelope<T>.self, from: data),
@@ -826,9 +826,12 @@ actor PolestarDataPortalAPI {
         ]
         if let h = startHour, let m = startMinute {
             timer[departure ? "departureTime" : "startTime"] = String(format: "%02d:%02d", h, m)
+            let dailyTime: [String: Any] = ["hour": h, "minute": m]
+            timer[departure ? "readyAt" : "start"] = dailyTime
         }
         if !departure, let h = endHour, let m = endMinute {
             timer["endTime"] = String(format: "%02d:%02d", h, m)
+            timer["stop"] = ["hour": h, "minute": m]
         }
         return timer
     }

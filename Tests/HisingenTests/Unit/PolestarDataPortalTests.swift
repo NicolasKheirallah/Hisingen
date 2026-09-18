@@ -849,6 +849,51 @@ struct PolestarDataPortalTests {
         #expect(await consumer.receivedCommands.count == 1)
     }
 
+    @Test
+    func augmentedProviderRethrowsPrimaryErrorWhenBothTelemetryFail() async throws {
+        let portal = PortalTestProbeProvider(brand: .polestar, name: "portal-primary", shouldFailState: true)
+        let consumer = PortalTestProbeProvider(brand: .polestar, name: "consumer-warm", shouldFailState: true)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: portal, commandProvider: consumer)
+
+        do {
+            _ = try await augmented.fetchVehicleState(vin: "TESTVIN", features: .default)
+            Issue.record("Expected fetchVehicleState to throw")
+        } catch let err as VehicleServiceError {
+            if case .rateLimited(let retry) = err {
+                #expect(retry == 60)
+            } else {
+                Issue.record("Unexpected error case: \(err)")
+            }
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
+        }
+    }
+
+    @Test
+    @MainActor
+    func augmentedModeResumesSessionWithPortalCredentials() throws {
+        let suite = "io.kheirallah.hisingen.augmented-test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.augmented-keychain.\(UUID().uuidString)")
+        try? keychain.deletePolestarDataPortalCredentials()
+        try? keychain.deletePolestarDataPortalToken()
+        try? keychain.deleteSessionToken()
+        defer {
+            try? keychain.deletePolestarDataPortalCredentials()
+            try? keychain.deletePolestarDataPortalToken()
+            try? keychain.deleteSessionToken()
+        }
+
+        let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
+        preferences.polestarConnectionMode = .augmented
+        preferences.polestarDataPortalClientID = "test-client"
+        try keychain.savePolestarDataPortalCredentials(accountID: "acc-1", clientID: "test-client", clientSecret: "test-sec")
+
+        #expect(preferences.hasResumableSession(for: .polestar) == true)
+    }
+
     // MARK: - Schedule & Charge-Location REST Writes
 
     @Test

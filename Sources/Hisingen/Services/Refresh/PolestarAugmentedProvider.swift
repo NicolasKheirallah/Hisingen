@@ -79,14 +79,14 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             var state = try await telemetryProvider.fetchVehicleState(vin: vin, features: features)
             state.freshness.unavailableFeatures.removeAll { AppFeature.remoteFeatures.contains($0) }
             return state
-        } catch {
-            logger.warning("Primary Data Portal telemetry failed: \(String(describing: error), privacy: .public). Trying Polestar ID fallback.")
-            guard await commandProvider.hasWarmSession else { throw error }
+        } catch let primaryError {
+            logger.warning("Primary Data Portal telemetry failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
+            guard await commandProvider.hasWarmSession else { throw primaryError }
             do {
                 return try await commandProvider.fetchVehicleState(vin: vin, features: features)
             } catch {
                 logger.error("Fallback Polestar ID telemetry also failed: \(String(describing: error), privacy: .public)")
-                throw error
+                throw primaryError
             }
         }
     }
