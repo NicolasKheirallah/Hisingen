@@ -92,7 +92,18 @@ struct DesignRenderTests {
         let cgImage = try #require(renderer.cgImage, "ImageRenderer produced no image; the test must not vacuously pass")
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
         let pngData = try #require(bitmap.representation(using: .png, properties: [:]))
-        let dest = URL(fileURLWithPath: "docs/design/renders/settings-polestar-dataportal.png")
+        // The renders refresh the local design docs, and docs/ is gitignored — a fresh checkout
+        // has no renders directory. Anchor to the source tree rather than the runner's cwd and
+        // create the directory instead of assuming it.
+        let dest = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // .../Unit
+            .deletingLastPathComponent()   // .../HisingenTests
+            .deletingLastPathComponent()   // .../Tests
+            .deletingLastPathComponent()   // package root
+            .appendingPathComponent("docs/design/renders/settings-polestar-dataportal.png")
+        try FileManager.default.createDirectory(
+            at: dest.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
         try pngData.write(to: dest)
         let written = try #require(NSImage(contentsOf: dest))
         #expect(written.size.width > 0)
