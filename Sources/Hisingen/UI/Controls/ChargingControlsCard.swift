@@ -21,6 +21,7 @@ struct ChargingControlsCard: View {
     /// after the confirmation dialog's destructive action forwards the command.
     @State private var locationPendingDelete: ChargeLocationSnapshot?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.preferencesStore) private var preferences
 
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { gate.features }
@@ -244,6 +245,14 @@ struct ChargingControlsCard: View {
                 )))
                 .transition(.opacity)
                 gate.sendingOverlay(.setChargeTarget(chargeTarget))
+                // The consequence of the draft, while the finger is still on it: the car's
+                // own numbers project the time and range to the drafted target. Shows
+                // nothing when the car did not report enough to project from.
+                ChargeTargetProjection(
+                    state: state,
+                    draftPercent: chargeTargetDraft.map { Int($0.rounded()) } ?? chargeTarget,
+                    distanceUnit: preferences.distanceUnit
+                )
             } else {
                 Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
                     .hisType(.micro)

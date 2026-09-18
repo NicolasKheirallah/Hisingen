@@ -13,6 +13,21 @@ Hisingen (the Gothenburg island where Volvo builds cars) is a compact popover of
 battery, climate, charging, tyres, trips, service, with remote controls. Quiet, precise,
 warm where things act.
 
+The instrument layer (added 2026-09-18, same language): the hero render carries a living
+overlay drawn only from real vehicle signals (`LivingVehicleView`) — an open door or hood
+places a warning-tinted marker at its body position, an active climate session breathes
+accent warmth from the vent line, a charging session runs the gauge's particle rail beneath
+the body; with no signals it draws nothing, because a healthy car does not glow. Commands
+report their flight from the control itself via the shared `sendingOverlay` capsule.
+Pull-to-refresh (rubber-band physics, commits on release velocity), one-step momentum
+tab swipes, and hover-handle card drag-reorder make the panel directly manipulable; the
+flick spring (`Motion.flick`, the one sub-1.0 damping) is reserved for what a gesture
+threw. The panel materializes on arrival on the shared entrance curve. A charging session
+renders as the hero's scene (`ChargingSessionScene`): the car's own finish estimate leads
+at the display tier, arriving power supports it, and no figure is ever shown that the car
+did not report — projections derive capacity from readings only when they must, and say
+so (`ChargeTargetProjection`, `InstrumentMath`).
+
 ## Dials
 
 - **ENERGY 2** (Stripe, not GOV.UK): one composed entrance, one accent, data first. A utility
@@ -20,7 +35,9 @@ warm where things act.
 - **RHYTHM 2**: one card grammar everywhere, deliberately broken by the vehicle hero, the
   charts, and full-width banners.
 - **MOTION 2**: every state change animates, nothing bounces. Ambient motion only where the
-  car is actually doing something, and only while anyone can see it.
+  car is actually doing something, and only while anyone can see it. Gesture-carried motion
+  (pull, swipe, reorder) may settle with the flick spring's one step of overshoot, because
+  the gesture itself carried the velocity; state changes stay critically damped.
 
 ## Personality
 
@@ -71,8 +88,11 @@ SF Pro, the platform face; a menu-bar utility does not import a brand font. Appl
 one ramp (`HisingenTheme+Typography.swift`):
 
 - Tiers: nano 8, micro 9, caption 10, label 11, body 12, heading 13, subhead 14, title 15,
-  displaySmall 17. Every tier scales with the reader's text size (`@ScaledMetric`) and the
-  density preset; no frozen point sizes at call sites. Set tiers via `hisType(_:weight:design:)`.
+  displaySmall 17, display 28, displayLarge 44. The two display tiers are the instrument's
+  focal figures: one displayLarge figure per screen (the hero's battery level), a display
+  headline for the charging scene's finish estimate. Every tier scales with the reader's
+  text size (`@ScaledMetric`) and the density preset; no frozen point sizes at call sites.
+  Set tiers via `hisType(_:weight:design:)`.
 - Weight ladder frozen: headings semibold, values bold, captions semibold. Below 10pt, weight
   goes up, not down.
 - Optical tracking: positive below 12pt (+0.04 per point), negative for display (-1.1% of

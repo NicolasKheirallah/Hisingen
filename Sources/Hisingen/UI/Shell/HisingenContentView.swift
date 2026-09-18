@@ -63,6 +63,21 @@ struct HisingenContentView: View {
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
     @State private var firstLaunchCardDismissed = false
+    // MARK: Instrument layer state (gesture physics + material arrival)
+
+    /// Distance from the scroll content's top; `<= 0.5` means the reader is at the top and a
+    /// downward drag is a pull-to-refresh rather than a scroll.
+    @State private var scrollOffsetFromTop: CGFloat = 0
+    /// Rubber-banded pull distance feeding ``PullToRefreshOverlay``.
+    @State private var pullDistance: CGFloat = 0
+    /// Horizontal translation while a tab swipe is in progress; `nil` when the active gesture
+    /// is not a swipe.
+    @State private var swipeTranslation: CGFloat?
+    /// The axis the active drag committed to, latched on the first dominant movement so a
+    /// wobbly diagonal cannot flip between pull and swipe mid-gesture.
+    @State private var dragAxis: Axis?
+    /// The panel's material arrival: scale + opacity travel the entrance curve once per open.
+    @State private var hasMaterialized = false
     /// Drives ``EnvironmentValues/ambientMotionAllowed``. Starts true: the panel is built while the
     /// app is becoming active, and a first frame of frozen motion would be the bug in reverse.
     @State private var isAppActive = true
@@ -292,7 +307,22 @@ struct HisingenContentView: View {
                                     proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
                                 }
                             }
+                            // A swipe drags the page with the pointer (at a dampened ratio so
+                            // it tracks without pretending to be a full page), released into
+                            // the flick spring that carries the real velocity.
+                            .offset(x: swipeTranslation.map { $0 * 0.22 } ?? 0)
                         }
+                    }
+                    // Scroll geometry is what lets a downward drag mean two things: a pull
+                    // that can refresh at the top, and a plain scroll everywhere else.
+                    .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.contentOffset.y + geometry.contentInsets.top
+                    } action: { _, offset in
+                        scrollOffsetFromTop = offset
+                    }
+                    .simultaneousGesture(panelDragGesture)
+                    .overlay(alignment: .top) {
+                        PullToRefreshOverlay(pullDistance: pullDistance, threshold: Self.pullThreshold)
                     }
                 }
             } else {
@@ -314,6 +344,13 @@ struct HisingenContentView: View {
         // overflow would draw outside the transparent popover window.
         .clipped()
         .background { HisingenTheme.popoverSurface }
+        // The material arrival: the panel settles from a slightly smaller, dimmer state on
+        // the shared entrance curve, so opening reads as glass arriving rather than a picture
+        // appearing. `hisAnimation` keeps a crossfade under Reduce Motion.
+        .scaleEffect(hasMaterialized ? 1 : 0.965)
+        .opacity(hasMaterialized ? 1 : 0)
+        .hisAnimation(Motion.materialize, value: hasMaterialized)
+        .onAppear { hasMaterialized = true }
         .animation(reduceMotion ? nil : Motion.layout, value: panelLayout)
         .animation(reduceMotion ? nil : Motion.entrance, value: showsSettings)
         .animation(reduceMotion ? nil : Motion.entrance, value: setupMode)
@@ -346,6 +383,80 @@ struct HisingenContentView: View {
     private var retainedDataTransition: AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
     }
+
+    // MARK: - Instrument layer: gestures
+
+    /// Pull-to-refresh threshold in points — deep enough that a scroll that happens to end at
+    /// the top never commits, shallow enough to reach with a thumb on a trackpad.
+    private static let pullThreshold: CGFloat = 56
+    /// The nominal page width for tab-swipe projection. Tabs are not literally pages, but the
+    /// projection needs a distance scale, and the panel's own width is the honest one.
+    private var swipePageWidth: CGFloat { HisingenTheme.layoutWidth }
+
+    /// The visible tab list and the current index into it, shared by the swipe gesture and
+    /// the tab bar so the two can never disagree about what "next tab" means.
+    private var swipeTabs: [TabRef] {
+        tabComposition.visibleTabs(includingSettings: true)
+    }
+
+    /// The one drag coordinator for the panel: latches to an axis on the first dominant
+    /// movement, tracks the pull with rubber-band physics at the scroll top, tracks the tab
+    /// swipe everywhere else, and commits by release velocity — position alone never commits.
+    private var panelDragGesture: some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .global)
+            .onChanged { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                if dragAxis == nil, abs(dx) > 14 || abs(dy) > 14 {
+                    dragAxis = abs(dx) > abs(dy) * 1.3 ? .horizontal : .vertical
+                }
+                switch dragAxis {
+                case .horizontal:
+                    swipeTranslation = dx
+                case .vertical:
+                    guard scrollOffsetFromTop <= 0.5, dy > 0 else { return }
+                    pullDistance = InstrumentMath.rubberBandDisplacement(overshoot: dy, dimension: 300)
+                case nil:
+                    break
+                }
+            }
+            .onEnded { value in
+                defer {
+                    dragAxis = nil
+                    swipeTranslation = nil
+                    if pullDistance > 0 {
+                        withAnimation(reduceMotion ? nil : Motion.interaction) { pullDistance = 0 }
+                    }
+                }
+                if dragAxis == .horizontal, let translation = swipeTranslation {
+                    let tabs = swipeTabs
+                    guard let current = tabs.firstIndex(of: currentTab) else { return }
+                    let target = InstrumentMath.projectedTab(
+                        currentIndex: current,
+                        count: tabs.count,
+                        translation: translation,
+                        releaseVelocity: value.velocity.width,
+                        pageWidth: swipePageWidth
+                    )
+                    guard let target, target != current else { return }
+                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    withAnimation(reduceMotion ? nil : Motion.flick) { select(tabs[target]) }
+                }
+                if dragAxis == .vertical, pullDistance > 0,
+                   InstrumentMath.pullRefreshShouldCommit(
+                       dragDistance: pullDistance,
+                       releaseVelocity: value.velocity.height,
+                       threshold: Self.pullThreshold
+                   ) {
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                    withAnimation(reduceMotion ? nil : Motion.refreshSweep) {
+                        refreshRotation += 360
+                    }
+                    onRefresh()
+                }
+            }
+    }
+
 
     private func navigateFromInfoToHistory() {
         historyJumpTarget = "activity"

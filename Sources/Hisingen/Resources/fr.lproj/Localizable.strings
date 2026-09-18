@@ -2529,20 +2529,20 @@
 "Clear All Locations" = "Clear All Locations";
 
 // English fallback values pending translation
-"Time to Target Distance" = "Time to Target Distance";
-"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car.";
-"Time to Full" = "Time to Full";
-"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "Vehicle Estimate. Time until the high-voltage battery reaches a full charge.";
-"Climate System" = "Climate System";
-"Timer Sync" = "Timer Sync";
-"Once on" = "Once on";
-" (+%d more)" = " (+%d more)";
-"%@ data was delayed at the portal for %d min" = "%@ data was delayed at the portal for %d min";
-"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC).";
-"Polestar ID session is required for remote vehicle controls." = "Polestar ID session is required for remote vehicle controls.";
-"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.";
-"Re-authorize…" = "Re-authorize…";
-"Sign in with a different account…" = "Sign in with a different account…";
+"Time to Target Distance" = "Temps jusqu'à la distance cible";
+"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Estimation du véhicule. Temps de charge nécessaire pour atteindre la distance cible configurée dans la voiture.";
+"Time to Full" = "Temps jusqu'à la charge complète";
+"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "Estimation du véhicule. Temps restant avant que la batterie haute tension soit complètement chargée.";
+"Climate System" = "Système de climatisation";
+"Timer Sync" = "Synchronisation de la minuterie";
+"Once on" = "Une fois, le";
+" (+%d more)" = " (+%d autres)";
+"%@ data was delayed at the portal for %d min" = "Données %@ retardées de %d min sur le portail";
+"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "Le Developer Portal est actuellement en lecture seule. Les commandes à distance exigent Polestar ID ou le mode Augmenté (C3 Cloud gRPC).";
+"Polestar ID session is required for remote vehicle controls." = "Une session Polestar ID est requise pour les commandes à distance du véhicule.";
+"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar indique que le propriétaire n'a pas accordé l'accès du véhicule à cette app. Réactivez le partage de données pour Hisingen dans l'app Polestar, puis actualisez.";
+"Re-authorize…" = "Réautoriser…";
+"Sign in with a different account…" = "Se connecter avec un autre compte…";
 
 // Raw-output coverage surfacing
 "Set remotely" = "Défini à distance";
@@ -2551,3 +2551,20 @@
 "Ventilation" = "Ventilation";
 "Neutral" = "Neutre";
 "portal +%d min" = "portail +%d min";
+"%d min to target" = "%d min jusqu'à la cible";
+"+%@ range" = "+%@ d'autonomie";
+"Capacity derived from the car's available-energy reading" = "Capacité déduite de la mesure d'énergie disponible du véhicule";
+"Full in about %d min" = "Charge complète dans environ %d min";
+"Fully charged in about %d minutes" = "Charge complète dans environ %d minutes";
+"Release to refresh" = "Relâcher pour actualiser";
+"Pull to refresh" = "Tirer pour actualiser";
+"Drag to reorder" = "Glisser pour réorganiser";
+"Vehicle Readings" = "Mesures du véhicule";
+
+"battery" = "Batterie";
+"exterior" = "Extérieur";
+"health" = "Santé";
+"odometer" = "Kilométrage";
+"location" = "Position";
+"climate" = "Climatisation";
+"air quality" = "Qualité de l'air";

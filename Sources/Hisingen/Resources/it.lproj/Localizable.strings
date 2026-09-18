@@ -2529,20 +2529,20 @@
 "Clear All Locations" = "Clear All Locations";
 
 // English fallback values pending translation
-"Time to Target Distance" = "Time to Target Distance";
-"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car.";
-"Time to Full" = "Time to Full";
-"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "Vehicle Estimate. Time until the high-voltage battery reaches a full charge.";
-"Climate System" = "Climate System";
-"Timer Sync" = "Timer Sync";
-"Once on" = "Once on";
-" (+%d more)" = " (+%d more)";
-"%@ data was delayed at the portal for %d min" = "%@ data was delayed at the portal for %d min";
-"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC).";
-"Polestar ID session is required for remote vehicle controls." = "Polestar ID session is required for remote vehicle controls.";
-"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.";
-"Re-authorize…" = "Re-authorize…";
-"Sign in with a different account…" = "Sign in with a different account…";
+"Time to Target Distance" = "Tempo fino alla distanza obiettivo";
+"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Stima del veicolo. Tempo di ricarica necessario per raggiungere la distanza obiettivo configurata nell'auto.";
+"Time to Full" = "Tempo fino alla carica completa";
+"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "Stima del veicolo. Tempo fino alla carica completa della batteria ad alta tensione.";
+"Climate System" = "Sistema clima";
+"Timer Sync" = "Sincronizzazione timer";
+"Once on" = "Una volta, il";
+" (+%d more)" = " (altri %d)";
+"%@ data was delayed at the portal for %d min" = "Dati %@ ritardati di %d min sul portale";
+"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "Il Developer Portal è attualmente di sola lettura. I comandi remoti richiedono Polestar ID o la modalità Augmented (C3 Cloud gRPC).";
+"Polestar ID session is required for remote vehicle controls." = "Per i comandi remoti del veicolo è richiesta una sessione Polestar ID.";
+"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar segnala che il proprietario non ha concesso a questa app l'accesso al veicolo. Riattiva la condivisione dei dati per Hisingen nell'app Polestar, poi aggiorna.";
+"Re-authorize…" = "Riautorizza…";
+"Sign in with a different account…" = "Accedi con un altro account…";
 
 // Raw-output coverage surfacing
 "Set remotely" = "Impostato da remoto";
@@ -2551,3 +2551,20 @@
 "Ventilation" = "Ventilazione";
 "Neutral" = "Neutro";
 "portal +%d min" = "portale +%d min";
+"%d min to target" = "%d min all'obiettivo";
+"+%@ range" = "+%@ di autonomia";
+"Capacity derived from the car's available-energy reading" = "Capacità derivata dalla lettura dell'energia disponibile dell'auto";
+"Full in about %d min" = "Completa in circa %d min";
+"Fully charged in about %d minutes" = "Carica completa in circa %d minuti";
+"Release to refresh" = "Rilascia per aggiornare";
+"Pull to refresh" = "Trascina per aggiornare";
+"Drag to reorder" = "Trascina per riordinare";
+"Vehicle Readings" = "Letture del veicolo";
+
+"battery" = "Batteria";
+"exterior" = "Esterni";
+"health" = "Salute";
+"odometer" = "Contachilometri";
+"location" = "Posizione";
+"climate" = "Clima";
+"air quality" = "Qualità dell'aria";

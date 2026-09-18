@@ -85,6 +85,10 @@ extension HisingenTheme {
         case title
         /// A section title on a data surface. Was 17 and 18.
         case displaySmall
+        /// A screen's secondary focal figure (the charging scene's headline estimate).
+        case display
+        /// The instrument's primary focal figure: one per screen, everything else defers.
+        case displayLarge
 
         var baseSize: CGFloat {
             switch self {
@@ -97,6 +101,8 @@ extension HisingenTheme {
             case .subhead: return 14
             case .title: return 15
             case .displaySmall: return 17
+            case .display: return 28
+            case .displayLarge: return 44
             }
         }
 
@@ -112,6 +118,7 @@ extension HisingenTheme {
             case .subhead: return .subheadline
             case .title: return .title3
             case .displaySmall: return .title2
+            case .display, .displayLarge: return .largeTitle
             }
         }
     }

@@ -2529,20 +2529,20 @@
 "Clear All Locations" = "Clear All Locations";
 
 // English fallback values pending translation
-"Time to Target Distance" = "Time to Target Distance";
-"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car.";
-"Time to Full" = "Time to Full";
-"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "Vehicle Estimate. Time until the high-voltage battery reaches a full charge.";
-"Climate System" = "Climate System";
-"Timer Sync" = "Timer Sync";
-"Once on" = "Once on";
-" (+%d more)" = " (+%d more)";
-"%@ data was delayed at the portal for %d min" = "%@ data was delayed at the portal for %d min";
-"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC).";
-"Polestar ID session is required for remote vehicle controls." = "Polestar ID session is required for remote vehicle controls.";
-"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh.";
-"Re-authorize…" = "Re-authorize…";
-"Sign in with a different account…" = "Sign in with a different account…";
+"Time to Target Distance" = "距目标距离时间";
+"Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "车辆估算。充至足够电量以达到车内所设距离目标所需的时间。";
+"Time to Full" = "充满时间";
+"Vehicle Estimate. Time until the high-voltage battery reaches a full charge." = "车辆估算。高压电池充满电所需的时间。";
+"Climate System" = "空调系统";
+"Timer Sync" = "定时器同步";
+"Once on" = "单次 · ";
+" (+%d more)" = " (另有 %d 项)";
+"%@ data was delayed at the portal for %d min" = "%@ 数据在门户中延迟了 %d 分钟";
+"The Developer Portal is currently read-only. Remote controls require Polestar ID or Augmented mode (C3 Cloud gRPC)." = "Developer Portal 目前为只读。远程控制需要 Polestar ID 或增强模式（C3 Cloud gRPC）。";
+"Polestar ID session is required for remote vehicle controls." = "远程车辆控制需要 Polestar ID 会话。";
+"Polestar reports the owner has not granted this app access to the vehicle. Re-enable data sharing for Hisingen in the Polestar app, then refresh." = "Polestar 报告车主尚未授予此应用车辆访问权限。请在 Polestar 应用中重新启用 Hisingen 的数据共享，然后刷新。";
+"Re-authorize…" = "重新授权…";
+"Sign in with a different account…" = "使用其他账户登录…";
 
 // Raw-output coverage surfacing
 "Set remotely" = "远程设置";
@@ -2551,3 +2551,20 @@
 "Ventilation" = "通风";
 "Neutral" = "中性";
 "portal +%d min" = "门户 +%d 分钟";
+"%d min to target" = "距目标 %d 分钟";
+"+%@ range" = "续航 +%@";
+"Capacity derived from the car's available-energy reading" = "容量由车辆的可用能量读数推算得出";
+"Full in about %d min" = "约 %d 分钟后充满";
+"Fully charged in about %d minutes" = "约 %d 分钟后完全充满";
+"Release to refresh" = "松开以刷新";
+"Pull to refresh" = "下拉刷新";
+"Drag to reorder" = "拖拽以调整顺序";
+"Vehicle Readings" = "车辆读数";
+
+"battery" = "电池";
+"exterior" = "车外";
+"health" = "健康";
+"odometer" = "里程";
+"location" = "位置";
+"climate" = "空调";
+"air quality" = "空气质量";

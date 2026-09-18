@@ -2568,3 +2568,20 @@
 "Ventilation" = "Ventilation";
 "Neutral" = "Neutral";
 "portal +%d min" = "portal +%d min";
+"%d min to target" = "%d min to target";
+"+%@ range" = "+%@ range";
+"Capacity derived from the car's available-energy reading" = "Capacity derived from the car's available-energy reading";
+"Full in about %d min" = "Full in about %d min";
+"Fully charged in about %d minutes" = "Fully charged in about %d minutes";
+"Release to refresh" = "Release to refresh";
+"Pull to refresh" = "Pull to refresh";
+"Drag to reorder" = "Drag to reorder";
+"Vehicle Readings" = "Vehicle Readings";
+
+"battery" = "battery";
+"exterior" = "exterior";
+"health" = "health";
+"odometer" = "odometer";
+"location" = "location";
+"climate" = "climate";
+"air quality" = "air quality";

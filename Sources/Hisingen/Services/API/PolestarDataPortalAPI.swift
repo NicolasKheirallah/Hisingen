@@ -579,7 +579,9 @@ actor PolestarDataPortalAPI {
             let interval = ingestedAt.timeIntervalSince(reportedAt)
             guard interval >= Self.pipelineLagWarningThreshold else { return nil }
             let lag = Int(interval / 60)
-            return L10n.format("%@ data was delayed at the portal for %d min", domain, Int(lag))
+            // The domain word is a lookup key ("battery", "air quality", …), so the localized
+            // sentence reads with the reader's own word instead of an English token.
+            return L10n.format("%@ data was delayed at the portal for %d min", L10n.text(domain), Int(lag))
         }
     }
 

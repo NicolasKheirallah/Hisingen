@@ -145,10 +145,19 @@ struct TabCardStack: View {
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
 
+    /// Bumped after every drag move so the stack re-reads the composition. The preferences
+    /// store is unobserved by design, and a pure reorder changes no feature membership, so
+    /// the reflow is local: persistence is the defaults write, the re-render is this pulse.
+    @State private var reorderPulse = 0
+    /// The card currently being dragged, if any. Identifies the source in `dropEntered` so
+    /// the stack can move cards live while the drag hovers, not only on release.
+    @State private var draggingCard: TabItemID?
+
     private var composition: TabComposition { preferences.tabComposition }
 
     private var placed: [TabItemID] {
-        composition.visibleItems(for: tab).filter { ComposableCards.isReusable($0) }
+        _ = reorderPulse
+        return composition.visibleItems(for: tab).filter { ComposableCards.isReusable($0) }
     }
 
     /// Cards the reader placed that belong to the tab they came from.
@@ -178,6 +187,18 @@ struct TabCardStack: View {
                     onDismissCommandReceipt: onDismissCommandReceipt
                 )
                 .transition(.opacity)
+                .overlay(alignment: .topTrailing) {
+                    CardDragHandle(item: item, draggingCard: $draggingCard)
+                        .padding(4)
+                }
+                // Drop target: the whole card, so a drag released anywhere over it lands.
+                .onDrop(of: [.text], delegate: CardReorderDropDelegate(
+                    target: item,
+                    dragging: $draggingCard,
+                    preferences: preferences,
+                    tab: tab,
+                    reflow: { reorderPulse += 1 }
+                ))
             }
 
             if placed.isEmpty { emptyCard }
@@ -229,6 +250,66 @@ struct TabCardStack: View {
             }
         }
     }
+}
+
+/// The drag handle overlaying a reorderable card: appears on hover at the card's top-right,
+/// and is the only place a drag can start, so the card's own controls keep every click.
+@MainActor
+private struct CardDragHandle: View {
+    let item: TabItemID
+    @Binding var draggingCard: TabItemID?
+    @State private var hovered = false
+
+    var body: some View {
+        Image(systemName: "line.3.horizontal")
+            .hisType(.micro, weight: .medium)
+            .foregroundStyle(hovered ? HisingenTheme.inkMuted : Color.secondary)
+            .padding(6)
+            .contentShape(Rectangle())
+            .opacity(hovered ? 1 : 0)
+            .onHover { hovered = $0 }
+            .onDrag {
+                draggingCard = item
+                return NSItemProvider()
+            }
+            .help(L10n.text("Drag to reorder"))
+            // The reorder has no VoiceOver path here on purpose: pointer-drag is the only
+            // mechanism, and the Settings pane's ordered list remains the non-visual route.
+            .accessibilityHidden(true)
+    }
+}
+
+/// Live-reordering drop delegate: hovering the dragged card over a target moves it there
+/// immediately ("put this where that is"), and the drop itself only ends the gesture.
+private struct CardReorderDropDelegate: DropDelegate {
+    let target: TabItemID
+    @Binding var dragging: TabItemID?
+    let preferences: PreferencesStore
+    let tab: TabRef
+    let reflow: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != target else { return }
+        var updated = preferences.tabComposition
+        updated.move(dragging, onto: target, in: tab)
+        preferences.tabComposition = updated
+        reflow()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        dragging != nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
 }
 
 // MARK: - Cards that had no standalone view before

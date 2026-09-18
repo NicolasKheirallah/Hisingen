@@ -50,11 +50,14 @@ enum Motion {
     /// Critically damped. This was `dampingFraction: 0.86`, which overshoots — the same value
     /// `cardChange` carried. Overshoot is only justified when the *gesture itself* carried momentum:
     /// a card you flicked should settle with a little bounce, a tab underline that merely changed
-    /// state should not. Nothing in this app is driven by a pointer drag (there is no `DragGesture`
-    /// anywhere in the tree), so no transition here has momentum behind it and every spring is
-    /// critically damped. If a gesture layer is added, that is when a sub-1.0 damping ratio earns
-    /// its place — on the interaction that produced the velocity, not on state changes.
+    /// state should not. The gesture layer that earns the sub-1.0 ratio now exists — pull-to-refresh,
+    /// tab swipes and card reordering — so ``flick`` carries it, and it is the *only* place: a
+    /// state change with no velocity behind it stays critically damped.
     static var selection: Animation { .spring(response: 0.30, dampingFraction: 1.0) }
+    /// The one under-damped spring in the app. Reserved for motion a pointer gesture *threw*:
+    /// a tab swipe whose landing page was projected from release velocity, a card released
+    /// mid-reorder. Using it anywhere else is the bug the ``selection`` note describes.
+    static var flick: Animation { .spring(response: 0.32, dampingFraction: 0.85) }
     /// Theme / appearance cross-fades: colors and materials soften, nothing moves.
     static var theme: Animation { .easeInOut(duration: fast) }
     /// The manual refresh sweep (the 360° icon rotation).
@@ -107,6 +110,12 @@ enum Motion {
             duration: standard
         )
     }
+
+    /// A surface arriving as a material rather than fading in: the panel's scale and opacity
+    /// travel the same shared entrance curve, so opening the popover reads as the glass
+    /// *arriving* rather than as a picture appearing. Under Reduce Motion the shell collapses
+    /// this to its crossfade, like every other entrance.
+    static var materialize: Animation { entrance }
 
     // MARK: - Telemetry values
 

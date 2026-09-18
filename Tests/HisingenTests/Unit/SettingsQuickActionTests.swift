@@ -112,13 +112,24 @@ struct TypeTierTests {
     func everyTierReplacesAtLeastOneOfTheSizesThatWereInUse() {
         // Every one-off size the app actually declared across the text range. A tier that replaced
         // none of them would be a token nobody needs; one that covers none of them means the ramp
-        // missed. Sizes of 20 and above are display figures and stay deliberate one-offs.
+        // missed. Sizes of 20 and above are display figures and stay deliberate one-offs — which
+        // is exactly what the instrument's focal tiers are (display 28, displayLarge 44), so
+        // they are exempt here and pinned separately below.
         let retired: Set<CGFloat> = [7, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 17, 18]
-        for tier in HisingenTheme.TypeTier.allCases {
+        let focalDisplayTiers: Set<HisingenTheme.TypeTier> = [.display, .displayLarge]
+        for tier in HisingenTheme.TypeTier.allCases where !focalDisplayTiers.contains(tier) {
             let nearest = retired.min { abs($0 - tier.baseSize) < abs($1 - tier.baseSize) }
             #expect(nearest != nil)
             #expect(abs((nearest ?? 0) - tier.baseSize) <= 1)
         }
+    }
+
+    @Test
+    func theFocalDisplayTiersArePinnedOneOffs() {
+        // The instrument's focal figures: one displayLarge per screen, display for the scene
+        // headline. They replace no retired size by design, and their sizes are the contract.
+        #expect(HisingenTheme.TypeTier.display.baseSize == 28)
+        #expect(HisingenTheme.TypeTier.displayLarge.baseSize == 44)
     }
 
     @Test

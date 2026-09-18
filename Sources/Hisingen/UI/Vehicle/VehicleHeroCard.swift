@@ -9,8 +9,9 @@ struct VehicleHeroCard: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var chargingJustStarted = false
-    @ScaledMetric(relativeTo: .largeTitle) private var heroValueSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .largeTitle) private var heroValueSize: CGFloat = 44
     @ScaledMetric(relativeTo: .title) private var compactHeroValueSize: CGFloat = 34
+    @Namespace private var heroRotorNamespace
 
     private var features: FeatureSelection { preferences.features }
     /// The chip family's shape, so the model badge follows a theme with square corners instead
@@ -103,6 +104,11 @@ struct VehicleHeroCard: View {
                             }
                             .accessibilityElement(children: .combine)
                         }
+
+                        // The living layer: the car's own state drawn on the car. With
+                        // nothing open, no climate running and no charge flowing it draws
+                        // nothing at all, which is the point.
+                        LivingVehicleView(state: state)
 
                         if showModelTopLeft || showModelTopRight || showPlateTopLeft || showPlateTopRight {
                             VStack {
@@ -262,6 +268,14 @@ struct VehicleHeroCard: View {
                 .animation(cardChangeAnimation, value: state.hasOldData())
             }
             .animation(cardChangeAnimation, value: heroLayoutIdentity)
+        }
+        // The readings rotor: a VoiceOver reader reaches the two figures that matter from
+        // anywhere in the panel without walking every card. Entries whose branch is not on
+        // screen (combustion-only has no battery) resolve to nothing and are skipped by the
+        // system, which is the honest behaviour for a rotor over live data.
+        .accessibilityRotor(L10n.text("Vehicle Readings")) {
+            AccessibilityRotorEntry(Text(L10n.text("Battery level")), id: "hero.battery", in: heroRotorNamespace)
+            AccessibilityRotorEntry(Text(L10n.text("Estimated Range")), id: "hero.range", in: heroRotorNamespace)
         }
     }
 
@@ -459,6 +473,7 @@ struct VehicleHeroCard: View {
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
+                        .accessibilityRotorEntry(id: "hero.battery", in: heroRotorNamespace)
                     // The largest number on the surface said nothing about what it measured. On a
                     // charging screen the two candidates are the current level and the configured
                     // limit, so the caption names the first and, when there is one, the second.
@@ -468,8 +483,16 @@ struct VehicleHeroCard: View {
                 rangeSummary(
                     value: state.energy.rangeKm,
                     title: L10n.text("Estimated Range"),
-                    symbol: "gauge.with.needle"
+                    symbol: "gauge.with.needle",
+                    rotorID: "hero.range"
                 )
+            }
+
+            // A charging session is the hero's scene: the car's own finish estimate leads,
+            // the arriving power supports it, and the gauge keeps its flow underneath.
+            if state.isCharging {
+                ChargingSessionScene(state: state)
+                    .padding(.top, 2)
             }
 
             if let percentage = state.energy.batteryPercentage {
@@ -485,7 +508,7 @@ struct VehicleHeroCard: View {
         }
     }
 
-    private func rangeSummary(value: Int?, title: String, symbol: String) -> some View {
+    private func rangeSummary(value: Int?, title: String, symbol: String, rotorID: String? = nil) -> some View {
         VStack(alignment: .trailing, spacing: 1) {
             HStack(spacing: 4) {
                 Image(systemName: symbol).hisType(.label)
@@ -493,11 +516,29 @@ struct VehicleHeroCard: View {
                     .hisType(.title, weight: HisingenTheme.valueWeight)
                     .monospacedDigit()
                     .hisTelemetryValue(value, reduceMotion: reduceMotion)
+                    .modifier(HeroRotorEntry(id: rotorID, namespace: heroRotorNamespace))
             }
             .foregroundStyle(HisingenTheme.inkMuted)
             Text(title)
                 .hisType(.caption, weight: .medium)
                 .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// Marks a view as a rotor entry only when an id was given — `accessibilityRotorEntry`
+/// with a nil id is not expressible, so the optional lives here once instead of at every
+/// call site.
+@MainActor
+private struct HeroRotorEntry: ViewModifier {
+    let id: String?
+    let namespace: Namespace.ID
+
+    func body(content: Content) -> some View {
+        if let id {
+            content.accessibilityRotorEntry(id: id, in: namespace)
+        } else {
+            content
         }
     }
 }
