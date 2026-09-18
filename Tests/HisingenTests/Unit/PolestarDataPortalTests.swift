@@ -741,6 +741,72 @@ struct PolestarDataPortalTests {
     }
 
     @Test
+    func chargerConnectionDisconnectedDecodesAsDisconnected() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "batteryChargeLevelPercentage": 75.0,
+            "chargerConnectionStatus": "CHARGER_CONNECTION_STATUS_DISCONNECTED",
+            "chargerPowerStatus": "CHARGER_POWER_STATUS_NO_POWER_AVAILABLE",
+            "chargingStatusV2": "CHARGING_STATUS_V2_IDLE"
+        }
+        """
+        let dto = try JSONDecoder().decode(PolestarBatteryDTO.self, from: Data(json.utf8))
+        let snapshot = dto.toEnergySnapshot()
+        #expect(snapshot.connection == .disconnected)
+        #expect(snapshot.diagnostics?.chargerPowerState == .noPower)
+    }
+
+    @Test
+    func modernV2ChargingStatusesDecodeCorrectly() {
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_CHARGE_LEVEL_IS_GOOD_TO_GO") == .complete)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_CHARGING_TOWARDS_MIN_SOC") == .charging)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_CHARGING_IS_EN_ROUTE") == .charging)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_SCHEDULED_CHARGING_WILL_COMPLETE") == .scheduled)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_SCHEDULED_CHARGING_CANNOT_COMPLETE") == .scheduled)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_DISCHARGING_V2H") == .discharging)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_DISCHARGING_V2L") == .discharging)
+        #expect(ChargingState(apiValue: "CHARGING_STATUS_V2_SMART_CHARGING_WILL_NOT_FINISH") == .smartCharging)
+    }
+
+    @Test
+    func dailyTimeAdjustsUtc0ToLocalTimezone() {
+        let utcDailyTime = PolestarDailyTimeDTO(hour: 6, minute: 30, timeZone: nil)
+        let gmtPlus2 = TimeZone(secondsFromGMT: 7200)!
+        #expect(utcDailyTime.localHour(isUtc0: true, timeZone: gmtPlus2) == 8)
+        #expect(utcDailyTime.localMinute(isUtc0: true, timeZone: gmtPlus2) == 30)
+        #expect(utcDailyTime.localHour(isUtc0: false, timeZone: gmtPlus2) == 6)
+    }
+
+    @Test
+    func timerSettingsDecodesAndPropagatesComfortPreferences() throws {
+        let json = """
+        {
+            "vin": "YSM12345678901234",
+            "parkingClimateTimers": [],
+            "timerSettings": {
+                "seatHeatingIntensity": {
+                    "frontRowLeftSeat": "I_LEVEL2",
+                    "frontRowRightSeat": "I_LEVEL1",
+                    "rearRowLeftSeat": "I_OFF",
+                    "rearRowRightSeat": "I_LEVEL3"
+                },
+                "steeringWheelHeatingIntensity": "I_LEVEL2",
+                "requestedCompartmentTemperatureCelsius": 22.5,
+                "isCompartmentTemperatureRequested": true,
+                "batteryPreconditioning": "BP_WHEN_PLUGGED"
+            }
+        }
+        """
+        let dto = try JSONDecoder().decode(PolestarParkingClimateTimerDTO.self, from: Data(json.utf8))
+        let settings = try #require(dto.timerSettings)
+        #expect(settings.requestedCompartmentTemperatureCelsius == 22.5)
+        #expect(settings.batteryPreconditioning == "BP_WHEN_PLUGGED")
+        #expect(settings.steeringWheelHeatingIntensity == "I_LEVEL2")
+        #expect(settings.seatHeatingIntensity?.frontRowLeftSeat == "I_LEVEL2")
+    }
+
+    @Test
     @MainActor
     func augmentedModeEnablesRemoteCommandsInCommandCatalog() {
         let catalog = ProviderCommandCatalog(brand: .polestar, polestarConnectionMode: .augmented)

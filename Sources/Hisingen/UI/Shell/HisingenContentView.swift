@@ -306,8 +306,8 @@ struct HisingenContentView: View {
         // panel – so Compact fits more content and Relaxed enlarges it, independently of
         // the window preset. Transforms are ignored by layout, hence the inverse frames.
         // Height comes pre-clamped by PanelLayout to what fits below the menu bar.
-        .frame(width: layout.logicalWidth)
-        .frame(height: layout.logicalHeight)
+        .frame(width: layout.logicalWidth, alignment: .topLeading)
+        .frame(height: layout.logicalHeight, alignment: .topLeading)
         .scaleEffect(layout.contentScale, anchor: .topLeading)
         .frame(width: layout.width, height: layout.height, alignment: .topLeading)
         // Clips the transformed tree to the physical panel; without it, scaled

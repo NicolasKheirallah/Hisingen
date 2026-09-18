@@ -25,6 +25,9 @@ actor PolestarDataPortalAPI {
     let preferences: PreferencesStore
     let diagnosticLog: APIDiagnosticLogStore
 
+    // MARK: - Supported OAuth Scopes (EU Data Act)
+    nonisolated static let supportedScopes = "pdp-telemetry/availability pdp-telemetry/battery pdp-telemetry/exterior pdp-telemetry/health pdp-telemetry/location pdp-telemetry/odometer pdp-telemetry/parkingClimatization pdp-telemetry/preCleaning pdp-charging/ampLimit pdp-charging/chargeLocations pdp-charging/overrideChargeTimer pdp-charging/globalChargeTimer pdp-charging/isAtChargeLocation pdp-charging/parkingClimateTimer pdp-charging/targetSoc"
+
     // MARK: - Daily Quota Tracking (10,000 calls/day limit)
     nonisolated static let dailyCallLimit = 10_000
 
@@ -493,6 +496,9 @@ actor PolestarDataPortalAPI {
         if let preconditioning = bundle.battery?.manualPreconditioning {
             energy.diagnostics?.batteryPreconditioningStatus = preconditioning.preconditioningStatus
             energy.diagnostics?.batteryPreconditioningEndsAt = preconditioning.endingAt?.date
+        } else if let bpSetting = bundle.parkingClimateTimer?.timerSettings?.batteryPreconditioning,
+                  bpSetting != "BP_UNDEFINED" && bpSetting != "BP_OFF" {
+            energy.diagnostics?.batteryPreconditioningStatus = bpSetting
         }
 
         var extSnapshot = bundle.exterior?.toExteriorSnapshot()
@@ -531,30 +537,78 @@ actor PolestarDataPortalAPI {
             unavailableFeatures: [.remoteLocks, .remoteWindows, .remoteHonkFlash, .remoteOTA]
         )
 
+        let timerSettings = bundle.parkingClimateTimer?.timerSettings
+        func timerSeatLevel(_ raw: String?) -> Int? {
+            switch raw?.uppercased() {
+            case "I_OFF", "HEATING_INTENSITY_OFF", "OFF": return 0
+            case "I_LEVEL1", "HEATING_INTENSITY_LOW", "LEVEL_1", "LOW": return 1
+            case "I_LEVEL2", "HEATING_INTENSITY_MEDIUM", "LEVEL_2", "MEDIUM": return 2
+            case "I_LEVEL3", "HEATING_INTENSITY_HIGH", "LEVEL_3", "HIGH": return 3
+            default: return nil
+            }
+        }
+
         let climateStatus: VehicleClimateStatus? = {
             if let clim = bundle.parkingClimatization {
-                return clim.toVehicleClimateStatus(batteryPreconditioning: bundle.battery?.manualPreconditioning)
+                var status = clim.toVehicleClimateStatus(batteryPreconditioning: bundle.battery?.manualPreconditioning)
+                if status.requestedTemperatureCelsius == nil, let t = timerSettings?.requestedCompartmentTemperatureCelsius {
+                    status = VehicleClimateStatus(
+                        activity: status.activity,
+                        timeRemainingMinutes: status.timeRemainingMinutes,
+                        timerTriggered: status.timerTriggered,
+                        interiorTemperatureCelsius: status.interiorTemperatureCelsius,
+                        requestedTemperatureCelsius: t,
+                        driverSeatHeatingLevel: status.driverSeatHeatingLevel ?? timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowLeftSeat),
+                        passengerSeatHeatingLevel: status.passengerSeatHeatingLevel ?? timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowRightSeat),
+                        steeringWheelHeatingLevel: status.steeringWheelHeatingLevel ?? timerSeatLevel(timerSettings?.steeringWheelHeatingIntensity),
+                        rearLeftSeatHeatingLevel: status.rearLeftSeatHeatingLevel ?? timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowLeftSeat),
+                        rearRightSeatHeatingLevel: status.rearRightSeatHeatingLevel ?? timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowRightSeat),
+                        ventilation: status.ventilation,
+                        mainClimateRunningStatus: status.mainClimateRunningStatus,
+                        sessionStartedAt: status.sessionStartedAt,
+                        sessionEndsAt: status.sessionEndsAt
+                    )
+                }
+                return status
             }
-            guard let precond = bundle.battery?.manualPreconditioning else { return nil }
-            // The preconditioning state has no runningStatus of its own; the spec spells
-            // the running state MANUAL_PRECONDITIONING_STATUS_ON (probe transcripts also
-            // captured a bare "ACTIVE"), and _FINISHED/_OFF mean it already ended.
-            let status = precond.preconditioningStatus?.uppercased()
-            let isActive = status == "MANUAL_PRECONDITIONING_STATUS_ON" || status == "ACTIVE"
-            let started = precond.startedAt?.date
-            let ends = precond.endingAt?.date
-            let remaining: Int? = {
-                guard let ends else { return nil }
-                let diff = ends.timeIntervalSinceNow
-                return diff > 0 ? max(1, Int(diff / 60)) : 0
-            }()
-            return VehicleClimateStatus(
-                activity: isActive ? .active : .idle,
-                timeRemainingMinutes: isActive ? remaining : nil,
-                timerTriggered: false,
-                sessionStartedAt: started,
-                sessionEndsAt: ends
-            )
+            if let precond = bundle.battery?.manualPreconditioning {
+                let status = precond.preconditioningStatus?.uppercased()
+                let isActive = status == "MANUAL_PRECONDITIONING_STATUS_ON" || status == "ACTIVE"
+                let started = precond.startedAt?.date
+                let ends = precond.endingAt?.date
+                let remaining: Int? = {
+                    guard let ends else { return nil }
+                    let diff = ends.timeIntervalSinceNow
+                    return diff > 0 ? max(1, Int(diff / 60)) : 0
+                }()
+                return VehicleClimateStatus(
+                    activity: isActive ? .active : .idle,
+                    timeRemainingMinutes: isActive ? remaining : nil,
+                    timerTriggered: false,
+                    requestedTemperatureCelsius: timerSettings?.requestedCompartmentTemperatureCelsius,
+                    driverSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowLeftSeat),
+                    passengerSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowRightSeat),
+                    steeringWheelHeatingLevel: timerSeatLevel(timerSettings?.steeringWheelHeatingIntensity),
+                    rearLeftSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowLeftSeat),
+                    rearRightSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowRightSeat),
+                    sessionStartedAt: started,
+                    sessionEndsAt: ends
+                )
+            }
+            if let timerSettings, let reqTemp = timerSettings.requestedCompartmentTemperatureCelsius {
+                return VehicleClimateStatus(
+                    activity: .idle,
+                    timeRemainingMinutes: nil,
+                    timerTriggered: false,
+                    requestedTemperatureCelsius: reqTemp,
+                    driverSeatHeatingLevel: timerSeatLevel(timerSettings.seatHeatingIntensity?.frontRowLeftSeat),
+                    passengerSeatHeatingLevel: timerSeatLevel(timerSettings.seatHeatingIntensity?.frontRowRightSeat),
+                    steeringWheelHeatingLevel: timerSeatLevel(timerSettings.steeringWheelHeatingIntensity),
+                    rearLeftSeatHeatingLevel: timerSeatLevel(timerSettings.seatHeatingIntensity?.rearRowLeftSeat),
+                    rearRightSeatHeatingLevel: timerSeatLevel(timerSettings.seatHeatingIntensity?.rearRowRightSeat)
+                )
+            }
+            return nil
         }()
 
         let airQuality = bundle.preCleaning?.toVehicleAirQuality()

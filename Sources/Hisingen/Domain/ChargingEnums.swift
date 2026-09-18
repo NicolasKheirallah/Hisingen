@@ -24,15 +24,24 @@ enum ChargingState: Codable, Equatable, Sendable {
             .replacingOccurrences(of: "CHARGING_STATUS_", with: "")
             .uppercased()
         switch key {
-        case "CHARGING": self = .charging
-        case "SMART_CHARGING": self = .smartCharging
-        case "SMART_CHARGING_PAUSED": self = .paused
-        case "SCHEDULED": self = .scheduled
-        case "IDLE": self = .idle
-        case "DONE": self = .complete
-        case "DISCHARGING": self = .discharging
-        case "ERROR", "FAULT": self = .fault
-        default: self = .unknown(key.isEmpty ? "UNSPECIFIED" : key)
+        case "CHARGING", "CHARGING_TOWARDS_MIN_SOC", "CHARGING_IS_EN_ROUTE":
+            self = .charging
+        case "SMART_CHARGING", "SMART_CHARGING_WILL_NOT_FINISH":
+            self = .smartCharging
+        case "SMART_CHARGING_PAUSED":
+            self = .paused
+        case "SCHEDULED", "SCHEDULED_CHARGING_WILL_COMPLETE", "SCHEDULED_CHARGING_CANNOT_COMPLETE":
+            self = .scheduled
+        case "IDLE":
+            self = .idle
+        case "DONE", "CHARGE_LEVEL_IS_GOOD_TO_GO":
+            self = .complete
+        case "DISCHARGING", "DISCHARGING_V2H", "DISCHARGING_V2L":
+            self = .discharging
+        case "ERROR", "FAULT":
+            self = .fault
+        default:
+            self = .unknown(key.isEmpty ? "UNSPECIFIED" : key)
         }
     }
 

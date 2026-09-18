@@ -382,52 +382,189 @@ struct AccountCredentialsForm: View {
         }
     }
 
+    private struct CredentialOption {
+        let title: String
+        let subtitle: String
+        let symbol: String
+        let isSelected: Bool
+    }
+
     private var polestarFields: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker(L10n.text("Connection Mode"), selection: $polestarConnectionMode) {
-                ForEach(PreferencesStore.PolestarConnectionMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .onChange(of: polestarConnectionMode) { oldMode, newMode in
-                guard oldMode != newMode else { return }
-                preferences.polestarConnectionMode = newMode
-                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                    testConnectionResult = nil
-                    keychainError = nil
-                    polestarFallbackKind = nil
-                }
-                if preferences.hasResumableSession(for: .polestar) {
-                    onSettingsChanged(.credentials)
-                }
+            polestarCredentialSelector
+
+            polestarModeExplanation
+
+            if enablePolestarID {
+                polestarIDSection
             }
 
-            switch polestarConnectionMode {
-            case .polestarID:
-                polestarIDFields
-            case .dataPortal:
-                polestarDataPortalFields
-            case .augmented:
-                polestarAugmentedFields
+            if enablePolestarID && enableDataPortal {
+                Divider().padding(.vertical, 2)
+            }
+
+            if enableDataPortal {
+                polestarDataPortalSection
+            }
+
+            Divider().padding(.vertical, 2)
+
+            polestarSharedFields
+
+            polestarActionButtons
+        }
+    }
+
+    private var polestarCredentialSelector: some View {
+        HStack(spacing: 8) {
+            credentialOptionCard(
+                CredentialOption(
+                    title: L10n.text("Polestar ID"),
+                    subtitle: L10n.text("Remote Controls"),
+                    symbol: "person.badge.key.fill",
+                    isSelected: enablePolestarID
+                )
+            ) {
+                togglePolestarCredentialOption(polestarID: true)
+            }
+
+            credentialOptionCard(
+                CredentialOption(
+                    title: L10n.text("Developer Portal"),
+                    subtitle: L10n.text("EU Data Act"),
+                    symbol: "antenna.radiowaves.left.and.right",
+                    isSelected: enableDataPortal
+                )
+            ) {
+                togglePolestarCredentialOption(polestarID: false)
             }
         }
     }
 
-    private var polestarIDFields: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if style == .welcoming {
-                Text(L10n.text("Sign in with your Polestar ID email and password."))
-                    .hisType(.label)
+    private func togglePolestarCredentialOption(polestarID: Bool) {
+        withAnimation(reduceMotion ? nil : Motion.selection) {
+            testConnectionResult = nil
+            keychainError = nil
+            polestarFallbackKind = nil
+            if polestarID {
+                enablePolestarID.toggle()
+                if !enablePolestarID && !enableDataPortal {
+                    enableDataPortal = true
+                }
+            } else {
+                enableDataPortal.toggle()
+                if !enablePolestarID && !enableDataPortal {
+                    enablePolestarID = true
+                }
+            }
+            preferences.polestarConnectionMode = polestarConnectionMode
+        }
+        if preferences.hasResumableSession(for: .polestar) {
+            onSettingsChanged(.credentials)
+        }
+    }
+
+    private func credentialOptionCard(
+        _ option: CredentialOption,
+        action: @escaping () -> Void
+    ) -> some View {
+        let radius: CGFloat = HisingenTheme.cornerRadius == 0 ? 0 : 8
+        return Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: option.symbol)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(option.isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
+                    Spacer()
+                    Image(systemName: option.isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(option.isSelected ? HisingenTheme.accent : .secondary.opacity(0.4))
+                }
+                Text(option.title)
+                    .hisType(.label, weight: option.isSelected ? .semibold : .medium)
+                    .foregroundStyle(option.isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                Text(option.subtitle)
+                    .hisType(.micro)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                option.isSelected ? HisingenTheme.accent.opacity(0.08) : Color.primary.opacity(0.035),
+                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .stroke(
+                        option.isSelected ? HisingenTheme.accent.opacity(0.4) : HisingenTheme.hairline,
+                        lineWidth: option.isSelected ? 1.0 : 0.5
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .accessibilityAddTraits(option.isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    @ViewBuilder
+    private var polestarModeExplanation: some View {
+        if enablePolestarID && enableDataPortal {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(HisingenTheme.accent)
+                    .hisType(.label)
+                Text(PreferencesStore.PolestarConnectionMode.augmented.detailDescription)
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .transition(.opacity)
+        } else if enablePolestarID {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "person.badge.key.fill")
+                    .foregroundStyle(HisingenTheme.accent)
+                    .hisType(.label)
+                Text(PreferencesStore.PolestarConnectionMode.polestarID.detailDescription)
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .transition(.opacity)
+        } else {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(HisingenTheme.accent)
+                    .hisType(.label)
+                Text(PreferencesStore.PolestarConnectionMode.dataPortal.detailDescription)
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .transition(.opacity)
+        }
+    }
+
+    private var polestarIDSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if enableDataPortal {
+                Text(L10n.text("1. Polestar ID (Remote Controls)"))
+                    .hisType(.caption, weight: .semibold)
+                    .foregroundStyle(HisingenTheme.accent)
             }
 
             labeledField(L10n.text("Polestar ID (Email)")) {
                 TextField("name@example.com", text: $polestarEmail)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.username)
-                    .onChange(of: polestarEmail) { _, value in preferences.accountDraft.polestarEmail = value }
+                    .onChange(of: polestarEmail) { _, val in preferences.accountDraft.polestarEmail = val }
             }
             if shouldShowEmailError {
                 InlineValidationLabel(message: L10n.text("Enter a valid email address."))
@@ -437,125 +574,71 @@ struct AccountCredentialsForm: View {
                 SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
-                    .onChange(of: polestarPassword) { _, value in preferences.accountDraft.polestarPassword = value }
-            }
-
-            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarNickname) { _, value in preferences.accountDraft.polestarNickname = value }
-            }
-
-            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YSM...", text: $polestarVIN)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarVIN) { _, value in preferences.accountDraft.polestarVIN = value }
-            }
-            if shouldShowVINError {
-                InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
+                    .onChange(of: polestarPassword) { _, val in preferences.accountDraft.polestarPassword = val }
             }
 
             if let fallbackKind = polestarFallbackKind ?? inheritedPolestarFallbackKind {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "globe")
-                            .hisType(.label)
-                            .foregroundStyle(HisingenTheme.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.text("Interactive Verification Required"))
-                                .hisType(.label, weight: .semibold)
-                            Text(L10n.text(fallbackCopy(for: fallbackKind)))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                                .hisCaptionLeading()
-                                .hisCaptionLeading()
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    Button {
-                        onSettingsChanged(.polestarWebSignIn)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.up.forward.app")
-                            Text(L10n.text("Complete Interactive Sign-In"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    HStack(spacing: 4) {
-                        Text(L10n.text("Still failing?"))
-                            .hisType(.micro)
-                            .foregroundStyle(.tertiary)
-                        Button {
-                            onSettingsChanged(.exportDiagnosticLogs)
-                        } label: {
-                            Text(L10n.text("Export Diagnostic Logs"))
-                                .hisType(.micro, weight: .medium)
-                        }
-                        .buttonStyle(.pressable)
-                        .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
-                    }
-                }
-                .padding(8)
-                .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
-                )
-                .transition(.opacity)
-            }
-
-            Button {
-                // Only the attempt flag is animated – keying on the field text would
-                // re-render (and risk focus churn) on every keystroke.
-                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                    attemptedPolestarSignIn = true
-                }
-                savePolestarCredentials()
-            } label: {
-                HStack(spacing: 4) {
-                    if showSavedFeedback {
-                        Image(systemName: "checkmark")
-                        Text(L10n.text("Saved & Connected"))
-                    } else {
-                        Image(systemName: "arrow.right.circle.fill")
-                        Text(L10n.text("Sign In"))
-                    }
-                }
-                .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-                .id(showSavedFeedback)
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            // Deliberately not `.disabled(...)`. It used to be disabled by the same predicate that
-            // decides whether the inline errors show, and the only write to `attemptedPolestarSignIn`
-            // is inside this action, so a first-time user who mistyped their email saw a permanently
-            // dead button and never the sentence written for exactly that mistake. Pressing it now
-            // reveals the error, and the labels update live from then on because the condition
-            // re-evaluates on every keystroke.
-            .help(polestarFormIsValid
-                  ? L10n.text("Saves these credentials and connects.")
-                  : L10n.text("Some details still need fixing. Press to see what."))
-            .accessibilityHint(polestarFormIsValid
-                               ? L10n.text("Saves these credentials and connects.")
-                               : L10n.text("Some details still need fixing. Press to see what."))
-            .padding(.top, style == .welcoming ? 6 : 4)
-
-            if let keychainError {
-                InlineValidationLabel(message: keychainError)
-                    .transition(.opacity)
+                interactiveVerificationBanner(fallbackKind)
             }
         }
     }
 
-    private var polestarDataPortalFields: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if style == .welcoming {
-                Text(L10n.text("Connect to Polestar Developer Portal using EU Data Act M2M credentials."))
+    private func interactiveVerificationBanner(_ fallbackKind: SignInFailureKind) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "globe")
                     .hisType(.label)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.text("Interactive Verification Required"))
+                        .hisType(.label, weight: .semibold)
+                    Text(L10n.text(fallbackCopy(for: fallbackKind)))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button {
+                onSettingsChanged(.polestarWebSignIn)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.forward.app")
+                    Text(L10n.text("Complete Interactive Sign-In"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            HStack(spacing: 4) {
+                Text(L10n.text("Still failing?"))
+                    .hisType(.micro)
+                    .foregroundStyle(.tertiary)
+                Button {
+                    onSettingsChanged(.exportDiagnosticLogs)
+                } label: {
+                    Text(L10n.text("Export Diagnostic Logs"))
+                        .hisType(.micro, weight: .medium)
+                }
+                .buttonStyle(.pressable)
+                .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
+            }
+        }
+        .padding(8)
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
+        )
+        .transition(.opacity)
+    }
+
+    private var polestarDataPortalSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if enablePolestarID {
+                Text(L10n.text("2. Developer Portal (EU Data Act Telemetry)"))
+                    .hisType(.caption, weight: .semibold)
+                    .foregroundStyle(HisingenTheme.accent)
             }
 
             labeledField(L10n.text("Account ID (x-client-id)")) {
@@ -582,6 +665,12 @@ struct AccountCredentialsForm: View {
                     }
             }
 
+            dataPortalQuotaView
+        }
+    }
+
+    private var polestarSharedFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
                 TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
                     .textFieldStyle(.roundedBorder)
@@ -596,10 +685,55 @@ struct AccountCredentialsForm: View {
             if shouldShowVINError {
                 InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
+        }
+    }
 
-            dataPortalActionButtons
+    private var polestarActionButtons: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                        attemptedPolestarSignIn = true
+                    }
+                    savePolestarConnection()
+                } label: {
+                    HStack(spacing: 4) {
+                        if showSavedFeedback {
+                            Image(systemName: "checkmark")
+                            Text(polestarSaveButtonSavedTitle)
+                        } else {
+                            Image(systemName: "arrow.right.circle.fill")
+                            Text(polestarSaveButtonTitle)
+                        }
+                    }
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
+                    .id(showSavedFeedback)
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .disabled(enableDataPortal && !enablePolestarID && !isDataPortalConfiguredOrEntered)
+                .padding(.top, style == .welcoming ? 6 : 4)
 
-            dataPortalQuotaView
+                if enableDataPortal {
+                    Button {
+                        testCurrentConnection()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isTestingConnection {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                            }
+                            Text(L10n.text("Test Connection"))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .disabled(isTestingConnection)
+                    .padding(.top, style == .welcoming ? 6 : 4)
+                }
+            }
 
             if let test = testConnectionResult {
                 dataPortalTestResultBanner(test)
@@ -612,27 +746,38 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    private var dataPortalActionButtons: some View {
-        HStack(spacing: 8) {
-            savePolestarDataPortalButton
-
-            Button {
-                testCurrentConnection()
-            } label: {
-                HStack(spacing: 4) {
-                    if isTestingConnection {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                    }
-                    Text(L10n.text("Test Connection"))
-                }
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .disabled(isTestingConnection)
-            .padding(.top, style == .welcoming ? 6 : 4)
+    private func savePolestarConnection() {
+        if enablePolestarID && enableDataPortal {
+            savePolestarAugmentedCredentials()
+        } else if enableDataPortal {
+            savePolestarDataPortalCredentials()
+        } else {
+            savePolestarCredentials()
         }
+    }
+
+    private var polestarSaveButtonTitle: String {
+        if enablePolestarID && enableDataPortal {
+            return L10n.text("Save Both & Connect")
+        } else if enableDataPortal {
+            return L10n.text("Save & Connect")
+        } else {
+            return L10n.text("Sign In")
+        }
+    }
+
+    private var polestarSaveButtonSavedTitle: String {
+        if enablePolestarID && enableDataPortal {
+            return L10n.text("Saved & Connected (Both)")
+        } else {
+            return L10n.text("Saved & Connected")
+        }
+    }
+
+    private var isDataPortalConfiguredOrEntered: Bool {
+        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+        return hasID && isValidOptionalVIN(polestarVIN)
     }
 
     private var dataPortalQuotaView: some View {
@@ -672,146 +817,6 @@ struct AccountCredentialsForm: View {
                 )
         )
         .transition(.opacity)
-    }
-
-    private var isDataPortalConfiguredOrEntered: Bool {
-        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-        return hasID && isValidOptionalVIN(polestarVIN)
-    }
-
-    private var savePolestarDataPortalButton: some View {
-        Button {
-            savePolestarDataPortalCredentials()
-        } label: {
-            HStack(spacing: 4) {
-                if showSavedFeedback {
-                    Image(systemName: "checkmark")
-                    Text(L10n.text("Saved & Connected"))
-                } else {
-                    Image(systemName: "arrow.right.circle.fill")
-                    Text(L10n.text("Save & Connect"))
-                }
-            }
-            .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-            .id(showSavedFeedback)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
-        .disabled(!isDataPortalConfiguredOrEntered)
-        .padding(.top, style == .welcoming ? 6 : 4)
-    }
-
-    private var polestarAugmentedFields: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(HisingenTheme.accent)
-                    .hisType(.label)
-                Text(L10n.text("Augmented mode pairs Developer Portal M2M telemetry with your Polestar ID for interactive remote controls and gRPC streaming."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-
-            Text(L10n.text("1. Polestar ID (Remote Controls)"))
-                .hisType(.caption, weight: .semibold)
-                .foregroundStyle(HisingenTheme.accent)
-
-            labeledField(L10n.text("Polestar ID (Email)")) {
-                TextField("name@example.com", text: $polestarEmail)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.username)
-                    .onChange(of: polestarEmail) { _, val in preferences.accountDraft.polestarEmail = val }
-            }
-            if shouldShowEmailError {
-                InlineValidationLabel(message: L10n.text("Enter a valid email address."))
-            }
-
-            labeledField(L10n.text("Password")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-                    .onChange(of: polestarPassword) { _, val in preferences.accountDraft.polestarPassword = val }
-            }
-
-            Divider().padding(.vertical, 2)
-
-            Text(L10n.text("2. Developer Portal (M2M Telemetry)"))
-                .hisType(.caption, weight: .semibold)
-                .foregroundStyle(HisingenTheme.accent)
-
-            labeledField(L10n.text("Account ID (x-client-id)")) {
-                TextField("0a7f033f-...", text: $polestarDataPortalAccountID)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalAccountID) { _, val in
-                        preferences.accountDraft.polestarDataPortalAccountID = val
-                    }
-            }
-
-            labeledField(L10n.text("Client ID")) {
-                TextField("client-id", text: $polestarDataPortalClientID)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalClientID) { _, val in
-                        preferences.accountDraft.polestarDataPortalClientID = val
-                    }
-            }
-
-            labeledField(L10n.text("Client Secret")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarDataPortalClientSecret)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalClientSecret) { _, val in
-                        preferences.accountDraft.polestarDataPortalClientSecret = val
-                    }
-            }
-
-            Divider().padding(.vertical, 2)
-
-            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarNickname) { _, val in preferences.accountDraft.polestarNickname = val }
-            }
-
-            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YSM...", text: $polestarVIN)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarVIN) { _, val in preferences.accountDraft.polestarVIN = val }
-            }
-
-            savePolestarAugmentedButton
-            dataPortalQuotaView
-
-            if let keychainError {
-                InlineValidationLabel(message: keychainError)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    private var savePolestarAugmentedButton: some View {
-        Button {
-            savePolestarAugmentedCredentials()
-        } label: {
-            HStack(spacing: 4) {
-                if showSavedFeedback {
-                    Image(systemName: "checkmark")
-                    Text(L10n.text("Saved & Connected (Augmented)"))
-                } else {
-                    Image(systemName: "arrow.right.circle.fill")
-                    Text(L10n.text("Save Both & Connect"))
-                }
-            }
-            .transition(reduceMotion ? .opacity : .scale(scale: 0.85).combined(with: .opacity))
-            .id(showSavedFeedback)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
-        .padding(.top, style == .welcoming ? 6 : 4)
     }
 
     private func savePolestarAugmentedCredentials() {

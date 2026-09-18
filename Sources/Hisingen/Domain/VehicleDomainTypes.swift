@@ -742,12 +742,16 @@ enum AirCleaningStartReason: Int, Codable, Sendable {
     case unspecified = 0
     case remote = 1
     case manuallyFromCar = 2
+    case timer = 3
+    case keepClimate = 4
 
     var displayName: String {
         switch self {
         case .unspecified: return L10n.text("Unknown")
         case .remote: return L10n.text("Remote request")
         case .manuallyFromCar: return L10n.text("Started in car")
+        case .timer: return L10n.text("Departure timer")
+        case .keepClimate: return L10n.text("Keep climate")
         }
     }
 }
@@ -759,12 +763,18 @@ enum AirCleaningError: Int, Codable, Sendable {
     case none = 0
     case generic = 1
     case interrupted = 2
+    case lowBattery = 3
+    case notConnectedToPower = 4
+    case serviceRequired = 5
 
     var displayName: String {
         switch self {
         case .none: return L10n.text("No error")
         case .generic: return L10n.text("Purifier error")
         case .interrupted: return L10n.text("Cycle interrupted")
+        case .lowBattery: return L10n.text("Battery too low")
+        case .notConnectedToPower: return L10n.text("Not connected to power")
+        case .serviceRequired: return L10n.text("Purifier service required")
         }
     }
 }

@@ -146,7 +146,7 @@ struct SettingsView: View {
                 .hisAnimation(Motion.cardChange, value: settingsSearchText)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: HisingenTheme.layoutWidth, maxHeight: .infinity)
         .onAppear {
             persistLocationHistory = preferences.persistLocationHistory
         }

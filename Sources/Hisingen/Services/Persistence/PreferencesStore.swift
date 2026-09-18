@@ -37,8 +37,19 @@ final class PreferencesStore {
         var displayName: String {
             switch self {
             case .polestarID: return L10n.text("Polestar ID")
-            case .dataPortal: return L10n.text("Developer Portal (EU Data Act)")
-            case .augmented: return L10n.text("Augmented (Portal Telemetry + Polestar ID Controls)")
+            case .dataPortal: return L10n.text("Developer Portal")
+            case .augmented: return L10n.text("Augmented")
+            }
+        }
+
+        var detailDescription: String {
+            switch self {
+            case .polestarID:
+                return L10n.text("Sign in with your Polestar ID for remote controls, climate commands, and lock status.")
+            case .dataPortal:
+                return L10n.text("Connect with official EU Data Act M2M credentials for direct telemetry without a password.")
+            case .augmented:
+                return L10n.text("Pairs Developer Portal telemetry with your Polestar ID for interactive remote controls and gRPC streaming.")
             }
         }
     }

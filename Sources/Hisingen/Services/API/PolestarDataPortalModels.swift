@@ -241,8 +241,8 @@ extension PolestarBatteryDTO {
         let chargeState = ChargingState(apiValue: chargingStatusV2 ?? chargingStatus)
         let conn: ChargerConnection = {
             guard let status = chargerConnectionStatus?.uppercased() else { return .unknown }
-            if status.contains("CONNECTED") { return .connected }
             if status.contains("DISCONNECTED") { return .disconnected }
+            if status.contains("CONNECTED") { return .connected }
             if status.contains("FAULT") || status.contains("ERROR") { return .fault }
             return .unknown
         }()
@@ -259,9 +259,9 @@ extension PolestarBatteryDTO {
         let powerState: ChargerPowerState = {
             guard let p = chargerPowerStatus?.uppercased() else { return .unknown }
             if p.contains("PROVIDING") { return .providingPower }
-            if p.contains("AVAILABLE") { return .available }
-            if p.contains("INITIALIZING") { return .initializing }
             if p.contains("NO_POWER") { return .noPower }
+            if p.contains("INITIALIZ") { return .initializing }
+            if p.contains("AVAILABLE") { return .available }
             if p.contains("FAULT") { return .fault }
             return .unknown
         }()
@@ -348,7 +348,9 @@ extension PolestarExteriorDTO {
 
         let alarm: Bool? = {
             guard let a = self.alarm?.uppercased() else { return nil }
-            return a.contains("TRIGGERED") || a.contains("ALARM")
+            if a.contains("TRIGGERED") { return true }
+            if a.contains("IDLE") || a.contains("UNSPECIFIED") { return false }
+            return a.contains("ALARM")
         }()
 
         let tailgateLocked: Bool? = {
@@ -642,6 +644,58 @@ struct PolestarAmpLimitDTO: Codable, Sendable, Equatable {
     }
 }
 
+/// `SyncStatus` — acknowledges whether the vehicle has processed a setting.
+struct PolestarSyncStatusDTO: Codable, Sendable, Equatable {
+    let value: String?
+    let message: String?
+}
+
+/// `SettingsMetadata` — common metadata on configurable settings.
+struct PolestarSettingsMetadataDTO: Codable, Sendable, Equatable {
+    let id: String?
+    let updatedAt: String?
+    let updatedAtTimestamp: PolestarDataPortalTimestamp?
+    let source: String?
+    let syncStatus: PolestarSyncStatusDTO?
+    let sourceUpdatedAt: String?
+    let sourceUpdatedAtTimestamp: PolestarDataPortalTimestamp?
+}
+
+/// `TimeZone` — offset from UTC for daily times.
+struct PolestarTimeZoneDTO: Codable, Sendable, Equatable {
+    let offsetMinutes: Double?
+}
+
+/// `DailyTime` — a wall-clock hour/minute pair shared by every timer shape.
+struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
+    let hour: Double?
+    let minute: Double?
+    let timeZone: PolestarTimeZoneDTO?
+
+    var hourComponent: Int? { hour.map { Int($0.rounded()) } }
+    var minuteComponent: Int? { minute.map { Int($0.rounded()) } }
+
+    func localHour(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
+        guard let h = hourComponent, let m = minuteComponent else { return hourComponent }
+        guard isUtc0 else { return h }
+        let utcMinutes = h * 60 + m
+        let localOffset = timeZone.secondsFromGMT() / 60
+        var totalMinutes = (utcMinutes + localOffset) % 1440
+        if totalMinutes < 0 { totalMinutes += 1440 }
+        return totalMinutes / 60
+    }
+
+    func localMinute(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
+        guard let h = hourComponent, let m = minuteComponent else { return minuteComponent }
+        guard isUtc0 else { return m }
+        let utcMinutes = h * 60 + m
+        let localOffset = timeZone.secondsFromGMT() / 60
+        var totalMinutes = (utcMinutes + localOffset) % 1440
+        if totalMinutes < 0 { totalMinutes += 1440 }
+        return totalMinutes % 60
+    }
+}
+
 /// `ChargeLocationTimer` — a charging schedule window specific to one charge location.
 struct PolestarChargeLocationTimerDTO: Codable, Sendable, Equatable {
     let id: String?
@@ -650,15 +704,15 @@ struct PolestarChargeLocationTimerDTO: Codable, Sendable, Equatable {
     let stop: PolestarDailyTimeDTO?
     let activeDays: [String]?
 
-    func toVehicleSchedule(index: Int = 0) -> VehicleSchedule {
+    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
         VehicleSchedule(
             backendID: id,
             index: index,
             kind: .locationCharging,
-            startHour: start?.hourComponent,
-            startMinute: start?.minuteComponent,
-            endHour: stop?.hourComponent,
-            endMinute: stop?.minuteComponent,
+            startHour: start?.localHour(isUtc0: isUtc0),
+            startMinute: start?.localMinute(isUtc0: isUtc0),
+            endHour: stop?.localHour(isUtc0: isUtc0),
+            endMinute: stop?.localMinute(isUtc0: isUtc0),
             weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
             isActive: activated ?? false
         )
@@ -672,13 +726,13 @@ struct PolestarChargeLocationDepartureDTO: Codable, Sendable, Equatable {
     let departureTime: PolestarDailyTimeDTO?
     let activeDays: [String]?
 
-    func toVehicleSchedule(index: Int = 0) -> VehicleSchedule {
+    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
         VehicleSchedule(
             backendID: id,
             index: index,
             kind: .climate,
-            startHour: departureTime?.hourComponent,
-            startMinute: departureTime?.minuteComponent,
+            startHour: departureTime?.localHour(isUtc0: isUtc0),
+            startMinute: departureTime?.localMinute(isUtc0: isUtc0),
             endHour: nil,
             endMinute: nil,
             weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
@@ -700,6 +754,7 @@ struct PolestarChargeLocationItemDTO: Codable, Sendable, Equatable {
     let locationType: String?
     let chargeTimers: [PolestarChargeLocationTimerDTO]?
     let departureTimes: [PolestarChargeLocationDepartureDTO]?
+    let metadata: PolestarSettingsMetadataDTO?
 }
 
 /// `ChargeLocationsState`.
@@ -708,13 +763,15 @@ struct PolestarChargeLocationsDTO: Codable, Sendable, Equatable {
     let id: String?
     let chargeLocations: [PolestarChargeLocationItemDTO]?
     let pendingChargeLocations: [PolestarChargeLocationItemDTO]?
+    let pendingDeleteChargeLocations: [PolestarChargeLocationItemDTO]?
     /// True when the vehicle reports its timer times in UTC rather than local time.
     let utc0: Bool?
     let metaReceivedAt: String?
     let metaEventId: String?
 
     func toChargeLocations() -> [ChargeLocationSnapshot] {
-        chargeLocations?.map { $0.toChargeLocationSnapshot() } ?? []
+        let isUtc = utc0 ?? false
+        return chargeLocations?.map { $0.toChargeLocationSnapshot(isUtc0: isUtc) } ?? []
     }
 }
 
@@ -736,20 +793,12 @@ struct PolestarIsAtChargeLocationDTO: Codable, Sendable, Equatable {
     var currentLocationName: String? { nil }
 }
 
-/// `DailyTime` — a wall-clock hour/minute pair shared by every timer shape.
-struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
-    let hour: Double?
-    let minute: Double?
-
-    var hourComponent: Int? { hour.map { Int($0.rounded()) } }
-    var minuteComponent: Int? { minute.map { Int($0.rounded()) } }
-}
-
 /// `GlobalChargeTimerValue` — one daily charging window; the spec has no weekday list here.
 struct PolestarGlobalChargeTimerValueDTO: Codable, Sendable, Equatable {
     let start: PolestarDailyTimeDTO?
     let stop: PolestarDailyTimeDTO?
     let activated: Bool?
+    let metadata: PolestarSettingsMetadataDTO?
 }
 
 /// `GlobalChargeTimerState` — a single synced window plus its pending counterpart.
@@ -765,14 +814,15 @@ struct PolestarGlobalChargeTimerDTO: Codable, Sendable, Equatable {
 
     func toSchedules() -> [VehicleSchedule] {
         guard let timer = globalChargeTimer else { return [] }
+        let isUtc = utc0 ?? false
         return [VehicleSchedule(
             backendID: id,
             index: 0,
             kind: .globalCharging,
-            startHour: timer.start?.hourComponent,
-            startMinute: timer.start?.minuteComponent,
-            endHour: timer.stop?.hourComponent,
-            endMinute: timer.stop?.minuteComponent,
+            startHour: timer.start?.localHour(isUtc0: isUtc),
+            startMinute: timer.start?.localMinute(isUtc0: isUtc),
+            endHour: timer.stop?.localHour(isUtc0: isUtc),
+            endMinute: timer.stop?.localMinute(isUtc0: isUtc),
             isActive: timer.activated ?? false
         )]
     }
@@ -814,26 +864,44 @@ struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
     let repeats: Bool?
     let weekdays: [String]?
     let startDate: PolestarTimerStartDateDTO?
+    let metadata: PolestarSettingsMetadataDTO?
 
     private enum CodingKeys: String, CodingKey {
         case timerId, index, readyAt, activated
         case repeats = "repeat"
-        case weekdays, startDate
+        case weekdays, startDate, metadata
     }
 
-    func toVehicleSchedule(index fallbackIndex: Int = 0) -> VehicleSchedule {
+    func toVehicleSchedule(index fallbackIndex: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
         VehicleSchedule(
             backendID: timerId,
             index: index.map { Int($0.rounded()) } ?? fallbackIndex,
             kind: .climate,
-            startHour: readyAt?.hourComponent,
-            startMinute: readyAt?.minuteComponent,
+            startHour: readyAt?.localHour(isUtc0: isUtc0),
+            startMinute: readyAt?.localMinute(isUtc0: isUtc0),
             endHour: nil,
             endMinute: nil,
             weekdays: weekdays?.compactMap { parsePortalWeekday($0) } ?? [],
             isActive: activated ?? false
         )
     }
+}
+
+/// `SeatHeatingIntensity` — preset heating intensity for climate timer preconditioning.
+struct PolestarSeatHeatingIntensityDTO: Codable, Sendable, Equatable {
+    let frontRowLeftSeat: String?
+    let frontRowRightSeat: String?
+    let rearRowLeftSeat: String?
+    let rearRowRightSeat: String?
+}
+
+/// `TimerSettings` — preset comfort settings applied when climate timers trigger.
+struct PolestarTimerSettingsDTO: Codable, Sendable, Equatable {
+    let seatHeatingIntensity: PolestarSeatHeatingIntensityDTO?
+    let steeringWheelHeatingIntensity: String?
+    let requestedCompartmentTemperatureCelsius: Double?
+    let isCompartmentTemperatureRequested: Bool?
+    let batteryPreconditioning: String?
 }
 
 /// `ParkingClimateTimerState`.
@@ -844,14 +912,18 @@ struct PolestarParkingClimateTimerDTO: Codable, Sendable, Equatable {
     let updatedAtTimestamp: PolestarDataPortalTimestamp?
     let parkingClimateTimers: [PolestarParkingClimateTimerItemDTO]?
     let pendingParkingClimateTimers: [PolestarParkingClimateTimerItemDTO]?
+    let pendingDeleteParkingClimateTimers: [PolestarParkingClimateTimerItemDTO]?
+    let timerSettings: PolestarTimerSettingsDTO?
+    let pendingTimerSettings: PolestarTimerSettingsDTO?
     /// True when the vehicle reports its timer times in UTC rather than local time.
     let utc0: Bool?
     let metaReceivedAt: String?
     let metaEventId: String?
 
     func toClimateSchedules() -> [VehicleSchedule] {
-        parkingClimateTimers?.enumerated().map { idx, timer in
-            timer.toVehicleSchedule(index: idx)
+        let isUtc = utc0 ?? false
+        return parkingClimateTimers?.enumerated().map { idx, timer in
+            timer.toVehicleSchedule(index: idx, isUtc0: isUtc)
         } ?? []
     }
 }
@@ -859,14 +931,14 @@ struct PolestarParkingClimateTimerDTO: Codable, Sendable, Equatable {
 // MARK: - Climatization, Pre-Cleaning & Charging Domain Mappers
 
 extension PolestarParkingClimatizationDTO {
-    /// HEATING_INTENSITY_OFF → 0 … HEATING_INTENSITY_HIGH → 3. UNSPECIFIED and absent both
-    /// map to nil so "the car did not say" stays distinguishable from "off".
+    /// HEATING_INTENSITY_OFF → 0 … HEATING_INTENSITY_HIGH → 3. Also supports I_LEVEL* from TimerSettings.
+    /// UNSPECIFIED and absent both map to nil so "the car did not say" stays distinguishable from "off".
     private func seatHeatLevel(_ raw: String?) -> Int? {
         switch raw?.uppercased() {
-        case "HEATING_INTENSITY_OFF": return 0
-        case "HEATING_INTENSITY_LOW": return 1
-        case "HEATING_INTENSITY_MEDIUM": return 2
-        case "HEATING_INTENSITY_HIGH": return 3
+        case "HEATING_INTENSITY_OFF", "I_OFF", "OFF": return 0
+        case "HEATING_INTENSITY_LOW", "I_LEVEL1", "LEVEL_1", "LOW": return 1
+        case "HEATING_INTENSITY_MEDIUM", "I_LEVEL2", "LEVEL_2", "MEDIUM": return 2
+        case "HEATING_INTENSITY_HIGH", "I_LEVEL3", "LEVEL_3", "HIGH": return 3
         default: return nil
         }
     }
@@ -884,7 +956,7 @@ extension PolestarParkingClimatizationDTO {
         return VehicleClimateStatus(
             activity: running ? .active : .idle,
             timeRemainingMinutes: remaining,
-            timerTriggered: false,
+            timerTriggered: startReason == "START_REASON_TIMER",
             interiorTemperatureCelsius: currentCompartmentTemperatureCelsius,
             requestedTemperatureCelsius: requestedCompartmentTemperatureCelsius,
             driverSeatHeatingLevel: seatHeatLevel(requestedFrontLeftSeat),
@@ -926,26 +998,24 @@ extension PolestarPreCleaningDTO {
         )
     }
 
-    /// Only reasons the domain type can represent are surfaced; TIMER and KEEP_CLIMATE
-    /// have no `AirCleaningStartReason` case and stay nil.
     private var cleaningStartReason: AirCleaningStartReason? {
         switch startReason {
         case "START_REASON_REMOTE": return .remote
         case "START_REASON_MANUALLY_FROM_CAR": return .manuallyFromCar
+        case "START_REASON_TIMER": return .timer
+        case "START_REASON_KEEP_CLIMATE": return .keepClimate
         default: return nil
         }
     }
 
-    /// `ERROR_TYPE_UNSPECIFIED` means "no value" and decodes to nil. A present
-    /// NO_START_NEEDED is the explicit no-error signal (`.none`); INTERRUPTED is not a
-    /// hardware fault; every remaining error kind falls back to `.generic`.
-    /// `AirCleaningError` has a case literally named `none`, so a bare `return .none`
-    /// here would resolve to `Optional.none` and silently drop the signal — spell the type.
     private var cleaningErrorKind: AirCleaningError? {
         switch error {
         case nil, "ERROR_TYPE_UNSPECIFIED": return nil
         case "ERROR_TYPE_NO_START_NEEDED": return AirCleaningError.none
         case "ERROR_TYPE_INTERRUPTED": return .interrupted
+        case "ERROR_TYPE_BATTERY_LOW": return .lowBattery
+        case "ERROR_TYPE_NOT_CONNECTED_TO_POWER": return .notConnectedToPower
+        case "ERROR_TYPE_SERVICE_REQUIRED": return .serviceRequired
         default: return .generic
         }
     }
@@ -973,7 +1043,7 @@ extension PolestarChargeLocationItemDTO {
         }
     }
 
-    func toChargeLocationSnapshot() -> ChargeLocationSnapshot {
+    func toChargeLocationSnapshot(isUtc0: Bool = false) -> ChargeLocationSnapshot {
         ChargeLocationSnapshot(
             id: locationId ?? UUID().uuidString,
             alias: locationAlias ?? "Charge Location",
@@ -986,8 +1056,8 @@ extension PolestarChargeLocationItemDTO {
             kind: locationKind,
             isBidirectionalChargingEnabled: isBidirectionalChargingEnabled,
             availableOptimizedCharging: availableOptimizedCharging,
-            departureTimes: departureTimes?.enumerated().map { idx, d in d.toVehicleSchedule(index: idx) } ?? [],
-            chargeTimers: chargeTimers?.enumerated().map { idx, t in t.toVehicleSchedule(index: idx) } ?? []
+            departureTimes: departureTimes?.enumerated().map { idx, d in d.toVehicleSchedule(index: idx, isUtc0: isUtc0) } ?? [],
+            chargeTimers: chargeTimers?.enumerated().map { idx, t in t.toVehicleSchedule(index: idx, isUtc0: isUtc0) } ?? []
         )
     }
 }
