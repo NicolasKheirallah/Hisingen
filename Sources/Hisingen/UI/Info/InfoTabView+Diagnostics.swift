@@ -199,6 +199,9 @@ extension InfoTabView {
         if let autoKm = state.tripComputer.automaticTripKm {
             rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
         }
+        if let sinceChargeKm = state.tripComputer.sinceChargeTripKm {
+            rows.append(KVRow(L10n.text("Since Last Charge"), Format.distance(km: sinceChargeKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
+        }
         if let speed = state.tripComputer.manualAverageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed (TM)"),
                               Format.speed(kmH: speed, unit: preferences.distanceUnit),
@@ -210,6 +213,12 @@ extension InfoTabView {
                               Format.speed(kmH: speed, unit: preferences.distanceUnit),
                               symbol: "gauge.with.needle",
                               info: L10n.text("Vehicle Calculation. Average speed over the automatic trip-meter period, reported by the odometer service.")))
+        }
+        if let speed = state.tripComputer.sinceChargeAverageSpeedKmH, speed > 0 {
+            rows.append(KVRow(L10n.text("Average Speed (Charge)"),
+                              Format.speed(kmH: speed, unit: preferences.distanceUnit),
+                              symbol: "gauge.with.needle",
+                              info: L10n.text("Vehicle Calculation. Average speed recorded since the vehicle was last unplugged.")))
         }
         if let electricKm = state.tripComputer.electricDistanceKm, electricKm > 0 {
             rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))

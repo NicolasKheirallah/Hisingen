@@ -260,7 +260,7 @@ struct InfoTabView: View {
         if weatherCardHasContent {
             add(.weather, ambientWeatherCard)
         }
-        if state.tripComputer.manualTripKm != nil || state.tripComputer.automaticTripKm != nil || state.tripComputer.averageSpeedKmH != nil {
+        if state.tripComputer.manualTripKm != nil || state.tripComputer.automaticTripKm != nil || state.tripComputer.sinceChargeTripKm != nil || state.tripComputer.averageSpeedKmH != nil {
             add(.trip, tripComputerCard)
         }
         add(.powertrain, powertrainSpecsCard)

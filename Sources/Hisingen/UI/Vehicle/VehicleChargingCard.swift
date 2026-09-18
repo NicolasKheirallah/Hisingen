@@ -143,6 +143,17 @@ struct VehicleChargingCard: View {
             if diagnostics.isBidirectionalChargingEnabled == true {
                 rows.append(("bidirectional", KVRow(L10n.text("Bidirectional Charging"), L10n.text("Enabled"), symbol: "arrow.left.arrow.right", info: L10n.text("User Setting. When enabled the vehicle can discharge its battery to power a home or the grid (V2H/V2G)."))))
             }
+            if diagnostics.isOptimizedChargingEnabled == true {
+                let modeText: String = {
+                    if diagnostics.availableOptimizedCharging == "PRICED_OPTIMIZED_CHARGING" {
+                        return L10n.text("Spot-Price Optimised")
+                    } else if diagnostics.availableOptimizedCharging == "INTELLIGENT_TIMER" {
+                        return L10n.text("Intelligent Timer")
+                    }
+                    return L10n.text("Active")
+                }()
+                rows.append(("smartCharging", KVRow(L10n.text("Smart Charging"), modeText, symbol: "bolt.badge.clock", info: L10n.text("Vehicle Dynamic Charging. Ingests grid electricity spot prices or charging schedules to optimize charging hours."))))
+            }
             if let breakdown = diagnostics.energyBreakdown, breakdown.hasData {
                 if let drive = breakdown.driving {
                     rows.append(("energyDrive", KVRow(L10n.text("Traction Energy"), formatBreakdown(drive), symbol: "car.fill", info: L10n.text("Energy consumed directly by electric drivetrain motors."))))

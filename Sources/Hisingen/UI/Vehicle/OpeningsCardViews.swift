@@ -440,7 +440,15 @@ struct TirePillView: View {
 
     private var referenceText: String? {
         guard let ref = tyre?.referenceKilopascals, measuredText != nil else { return nil }
-        return L10n.format("Target: %@", Format.pressure(kilopascals: ref, unit: preferences.pressureUnit))
+        var text = L10n.format("Target: %@", Format.pressure(kilopascals: ref, unit: preferences.pressureUnit))
+        if let measured = tyre?.kilopascals {
+            let diff = measured - ref
+            if abs(diff) >= 5 {
+                let sign = diff > 0 ? "+" : ""
+                text += " (\(sign)\(Format.pressure(kilopascals: diff, unit: preferences.pressureUnit)))"
+            }
+        }
+        return text
     }
 
     private var readingView: some View {
