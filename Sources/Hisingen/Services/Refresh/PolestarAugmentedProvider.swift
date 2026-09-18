@@ -38,22 +38,60 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func prepareSession() async throws {
+        var telemetryOk = false
+        do {
+            try await telemetryProvider.prepareSession()
+            telemetryOk = true
+        } catch {
+            logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
+        }
+        do {
+            try await commandProvider.prepareSession()
+        } catch {
+            logger.warning("Command provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
+            if !telemetryOk { throw error }
+        }
+    }
+
+    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
+        var commandAuthError: Error?
+        do {
+            try await commandProvider.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
+        } catch {
+            commandAuthError = error
+            logger.warning("Command provider authenticate non-fatal: \(String(describing: error), privacy: .public)")
+        }
         do {
             try await telemetryProvider.prepareSession()
         } catch {
             logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
         }
-        try await commandProvider.prepareSession()
-    }
-
-    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
-        try await commandProvider.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
-        try? await telemetryProvider.prepareSession()
+        guard await hasWarmSession else {
+            if let commandAuthError { throw commandAuthError }
+            throw VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
+        }
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
-        try? await telemetryProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
-        try await commandProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+        var commandError: Error?
+        do {
+            try await commandProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+        } catch {
+            commandError = error
+            logger.warning("Command provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
+        }
+        var telemetryError: Error?
+        do {
+            try await telemetryProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+        } catch {
+            telemetryError = error
+            logger.warning("Telemetry provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
+        }
+        guard await hasWarmSession else {
+            if let commandError { throw commandError }
+            if let telemetryError { throw telemetryError }
+            throw VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
+        }
     }
 
     func resetSession() async {
@@ -63,21 +101,37 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
 
     func signOut() async throws {
         try? await telemetryProvider.signOut()
-        try await commandProvider.signOut()
+        try? await commandProvider.signOut()
     }
 
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {
-        try? await telemetryProvider.reloadVehicleMetadata(vin: vin, features: features)
-        try await commandProvider.reloadVehicleMetadata(vin: vin, features: features)
+        var telemetryOk = false
+        do {
+            try await telemetryProvider.reloadVehicleMetadata(vin: vin, features: features)
+            telemetryOk = true
+        } catch {
+            logger.warning("Telemetry reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .public)")
+        }
+        do {
+            try await commandProvider.reloadVehicleMetadata(vin: vin, features: features)
+        } catch {
+            logger.warning("Command reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .public)")
+            if !telemetryOk { throw error }
+        }
     }
 
-    /// The Developer Portal is the primary telemetry source; the consumer API only serves a
-    /// refresh when the portal fails and the user still has a warm Polestar ID session. The
-    /// primary error is re-thrown when the fallback also fails – it names the configured API.
+    /// The Developer Portal is the primary telemetry source; the consumer API serves a
+    /// refresh when the portal fails or returns empty telemetry and the user has a warm
+    /// Polestar ID session. The primary error is re-thrown when the fallback also fails.
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         do {
             var state = try await telemetryProvider.fetchVehicleState(vin: vin, features: features)
             state.freshness.unavailableFeatures.removeAll { AppFeature.remoteFeatures.contains($0) }
+            if state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
+                if let fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {
+                    return fallback
+                }
+            }
             return state
         } catch let primaryError {
             logger.warning("Primary Data Portal telemetry failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
@@ -100,10 +154,16 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         if portalCatalog.implements(command) {
             do {
                 return try await telemetryProvider.executeRemoteCommand(command, vin: vin)
-            } catch {
-                logger.warning("Primary Data Portal command failed: \(String(describing: error), privacy: .public). Trying Polestar ID fallback.")
-                guard await commandProvider.hasWarmSession else { throw error }
-                return try await commandProvider.executeRemoteCommand(command, vin: vin)
+            } catch let primaryError {
+                logger.warning("Primary Data Portal command failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
+                guard await commandProvider.hasWarmSession else { throw primaryError }
+                do {
+                    return try await commandProvider.executeRemoteCommand(command, vin: vin)
+                } catch {
+                    // Mirror the fetch policy: when both sides fail, the error from the
+                    // configured primary is the actionable one for the user.
+                    throw primaryError
+                }
             }
         }
         return try await commandProvider.executeRemoteCommand(command, vin: vin)

@@ -469,10 +469,11 @@ struct PolestarDataPortalTests {
         var lastMethod = ""
         var lastPath = ""
         var lastBody: Data?
+        defer { PortalMockTransport.requestHandler = nil }
         PortalMockTransport.requestHandler = { req in
             lastMethod = req.httpMethod ?? ""
             lastPath = req.url?.path ?? ""
-            lastBody = req.httpBody
+            lastBody = portalRequestBody(req)
             return (200, Data("{}".utf8))
         }
 
@@ -484,18 +485,16 @@ struct PolestarDataPortalTests {
         #expect(climateResult.outcome == .accepted)
         #expect(lastMethod == "POST")
         #expect(lastPath.contains("/telemetry/parking-climatization"))
-        if let body = lastBody, let dict = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-            #expect(dict["steeringWheelHeating"] as? String == "ON")
-        }
+        let onBody = try JSONSerialization.jsonObject(with: #require(lastBody)) as? [String: Any]
+        #expect(onBody?["steeringWheelHeating"] as? String == "ON")
 
         // Climate - unspecified steering wheel turns OFF (does not inadvertently activate)
         _ = try await api.executeRemoteCommand(
             .startClimate(temperatureCelsius: 21.0, frontLeftSeat: .unspecified, frontRightSeat: .unspecified, rearLeftSeat: .unspecified, rearRightSeat: .unspecified, steeringWheel: .unspecified),
             vin: "TESTVIN"
         )
-        if let body = lastBody, let dict = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-            #expect(dict["steeringWheelHeating"] as? String == "OFF")
-        }
+        let offBody = try JSONSerialization.jsonObject(with: #require(lastBody)) as? [String: Any]
+        #expect(offBody?["steeringWheelHeating"] as? String == "OFF")
 
         let stopClimateResult = try await api.executeRemoteCommand(.stopClimate, vin: "TESTVIN")
         #expect(stopClimateResult.outcome == .completed)
@@ -539,7 +538,7 @@ struct PolestarDataPortalTests {
 
     @Test
     @MainActor
-    func apiFetchVehicleStateAssemblesAll16Endpoints() async throws {
+    func apiFetchVehicleStateAssemblesAll15Endpoints() async throws {
         func fixtureData(named name: String) throws -> Data {
             let url = try #require(Bundle.module.url(forResource: name, withExtension: "json"))
             return try Data(contentsOf: url)
@@ -596,6 +595,7 @@ struct PolestarDataPortalTests {
         )
 
         #expect(state.energy.batteryPercentage == 78.5)
+        #expect(state.energy.chargingState == .charging)
         #expect(state.energy.targetPercentage == 80)
         #expect(state.energy.currentLimitAmps == 16)
         #expect(state.energy.locations.count == 1)
@@ -605,6 +605,10 @@ struct PolestarDataPortalTests {
         #expect(state.energy.currentChargeLocationName == "Home Garage")
         #expect(state.energy.arrivedAtLocationDate == Date(timeIntervalSince1970: 1_716_299_100))
         #expect(state.energy.chargeNowActive == true)
+        // The vehicle-level capability flags join from the charge-locations list even when
+        // the is-at read and the battery frame disagree about who fetched first.
+        #expect(state.energy.diagnostics?.isBidirectionalChargingEnabled == false)
+        #expect(state.energy.diagnostics?.isOptimizedChargingEnabled == true)
         #expect(state.energy.schedules.count == 1)
         #expect(state.climateStatus?.activity == .active)
         #expect(state.climateStatus?.timeRemainingMinutes == 18)
@@ -865,6 +869,94 @@ struct PolestarDataPortalTests {
         #expect(state.energy.batteryPercentage == 60)
     }
 
+    @Test
+    @MainActor
+    func augmentedProviderRestoresSessionWhenAtLeastOneProviderSucceeds() async throws {
+        let failingTelemetry = PortalTestProbeProvider(
+            brand: .polestar, name: "telemetry", shouldFailRestore: true, warm: false
+        )
+        let workingConsumer = PortalTestProbeProvider(
+            brand: .polestar, name: "consumer", shouldFailRestore: false, warm: true
+        )
+        let augmented = PolestarAugmentedProvider(
+            telemetryProvider: failingTelemetry, commandProvider: workingConsumer
+        )
+
+        try await augmented.restoreSession(token: "test-token", preferredVIN: "VIN1", features: FeatureSelection.default)
+        let isWarm = await augmented.hasWarmSession
+        #expect(isWarm == true)
+    }
+
+    @Test
+    @MainActor
+    func augmentedProviderThrowsWhenBothProvidersFailToRestore() async throws {
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry", shouldFailRestore: true, warm: false)
+        let consumer = PortalTestProbeProvider(brand: .polestar, name: "consumer", shouldFailRestore: true, warm: false)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: consumer)
+
+        await #expect(throws: VehicleServiceError.self) {
+            try await augmented.restoreSession(token: "test-token", preferredVIN: "VIN1", features: FeatureSelection.default)
+        }
+    }
+
+    @Test
+    @MainActor
+    func augmentedProviderFallsBackToConsumerWhenTelemetryHasEmptyBattery() async throws {
+        let emptyState = VehicleState(
+            batteryPercentage: nil,
+            rangeKm: nil,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: nil,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .none,
+            chargerConnection: .disconnected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: nil,
+            vin: "P2-EMPTY",
+            ownerFirstName: nil,
+            odometerKm: nil,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: nil,
+            dataWarnings: []
+        )
+        let fallbackState = VehicleState(
+            batteryPercentage: 75,
+            rangeKm: 320,
+            chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil,
+            chargeTargetPercentage: 80,
+            chargingPowerWatts: nil,
+            chargingCurrentAmps: nil,
+            chargingVoltageVolts: nil,
+            chargingType: .ac,
+            chargerConnection: .connected,
+            availability: .available,
+            modelName: "Polestar 2",
+            modelYear: "2024",
+            registrationNo: nil,
+            vin: "P2-EMPTY",
+            ownerFirstName: nil,
+            odometerKm: nil,
+            imageData: nil,
+            fetchedAt: Date(),
+            vehicleReportedAt: nil,
+            dataWarnings: []
+        )
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry-portal", state: emptyState)
+        let commands = PortalTestProbeProvider(brand: .polestar, name: "commands-consumer", state: fallbackState)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: commands)
+
+        let state = try await augmented.fetchVehicleState(vin: "P2-EMPTY", features: FeatureSelection.default)
+        #expect(state.energy.batteryPercentage == 75)
+        #expect(state.energy.rangeKm == 320)
+    }
+
     // MARK: - Augmented Provider Portal-First Routing
 
     @Test
@@ -977,6 +1069,7 @@ struct PolestarDataPortalTests {
         var lastMethod = ""
         var lastPath = ""
         var lastBody = Data()
+        defer { PortalMockTransport.requestHandler = nil }
         PortalMockTransport.requestHandler = { req in
             lastMethod = req.httpMethod ?? ""
             lastPath = req.url?.path ?? ""
@@ -1062,10 +1155,19 @@ struct PolestarDataPortalTests {
 
         let energy = batteryDTO.toEnergySnapshot()
         #expect(energy.batteryPercentage == 78.5)
+        #expect(energy.chargingState == .charging)
+        #expect(energy.estimatedTimeToTargetMinutes == 20)
         #expect(energy.diagnostics?.powerLimitKw == 240.0)
         #expect(energy.diagnostics?.energyAvailableKwh == 62.4)
         #expect(energy.diagnostics?.energyBreakdown?.driving?.percentage == 74.0)
         #expect(energy.diagnostics?.energyBreakdown?.driving?.wattHours == 25900)
+        // Diagnostics fields that drive rendered rows but had no decode assertion.
+        #expect(energy.diagnostics?.timeToMinimumSOCMinutes == 12)
+        #expect(energy.diagnostics?.timeToTargetMinutes == 20)
+        #expect(energy.diagnostics?.averageConsumption == 19.4)
+        #expect(energy.diagnostics?.averageConsumptionSinceCharge == 17.5)
+        #expect(energy.diagnostics?.averageConsumptionAutomatic == 18.9)
+        #expect(energy.diagnostics?.energyUsedSinceChargeWh == 35000)
 
         // 5. Exterior
         let extData = try fixtureData(named: "polestar-portal-exterior")
@@ -1248,21 +1350,36 @@ private actor PortalTestProbeProvider: VehicleProviding {
     let providerName: String
     var stateToReturn: VehicleState?
     var shouldFailState: Bool = false
+    var shouldFailRestore: Bool = false
+    var warm: Bool = true
 
-    init(brand: VehicleBrand, name: String, state: VehicleState? = nil, shouldFailState: Bool = false) {
+    init(
+        brand: VehicleBrand,
+        name: String,
+        state: VehicleState? = nil,
+        shouldFailState: Bool = false,
+        shouldFailRestore: Bool = false,
+        warm: Bool = true
+    ) {
         self.brand = brand
         self.providerName = name
         self.stateToReturn = state
         self.shouldFailState = shouldFailState
+        self.shouldFailRestore = shouldFailRestore
+        self.warm = warm
     }
 
     var cars: [CarSummary] {
         [CarSummary(vin: providerName, title: providerName)]
     }
-    var hasWarmSession: Bool { true }
+    var hasWarmSession: Bool { warm }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+        if shouldFailRestore {
+            throw VehicleServiceError.authenticationRequired(provider: brand, reason: .expiredSession)
+        }
+    }
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }

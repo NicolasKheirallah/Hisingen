@@ -41,6 +41,8 @@ enum SignInFailureKind: Equatable, Sendable {
             return .transient
         case .notConfigured:
             return .sessionExpired
+        case .permissionDenied where provider == .polestar:
+            return .interactiveChallenge
         case .client, .permissionDenied, .responseTooLarge, .unsupported, .secureStorage:
             return .unspecified
         }
@@ -68,6 +70,11 @@ final class ConnectionTester {
         self.preferences = preferences
     }
 
+    private func verifyTelemetry(provider: any VehicleProviding, brand: VehicleBrand) async throws {
+        guard let vin = await provider.resolvedVIN(preferred: preferences.vin(for: brand)) else { return }
+        _ = try await provider.fetchVehicleState(vin: vin, features: preferences.features)
+    }
+
     func test(brand: VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) {
         guard preferences.hasResumableSession(for: brand) else {
             return (false, L10n.text("No active session found. Please sign in."), nil)
@@ -82,6 +89,7 @@ final class ConnectionTester {
                 }
                 return (false, L10n.text("Signed in, but no vehicles were returned."), .unspecified)
             }
+            try await verifyTelemetry(provider: provider, brand: brand)
             let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
             return (true, L10n.format("Connection active & verified (%d ms)", elapsedMs), nil)
         } catch {

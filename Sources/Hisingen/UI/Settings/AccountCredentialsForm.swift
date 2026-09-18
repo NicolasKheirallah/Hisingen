@@ -294,7 +294,7 @@ struct AccountCredentialsForm: View {
 
                     switch health {
                     case .active, .connectedInactive:
-                        Text(L10n.format("Vehicle: %@", activeLabel))
+                        Text(activeAccountSubtitle(activeLabel: activeLabel))
                             .hisType(.caption).foregroundStyle(.secondary)
                     case .sessionExpired:
                         Text(selectedBrand == .polestar
@@ -573,12 +573,114 @@ struct AccountCredentialsForm: View {
         }
     }
 
+    private var isPolestarIDSignedIn: Bool {
+        preferences.hasSessionToken(for: .polestar)
+    }
+
+    private var isDataPortalConfigured: Bool {
+        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+        let hasSecret = Keychain.hasStoredPolestarDataPortalCredentials
+            || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+            || !polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return hasID && hasSecret
+    }
+
+    private func activeAccountSubtitle(activeLabel: String) -> String {
+        if selectedBrand == .polestar, preferences.polestarConnectionMode == .augmented {
+            if !isPolestarIDSignedIn {
+                return L10n.format("Vehicle: %@ · Developer Portal active (Polestar ID needs sign-in)", activeLabel)
+            }
+            return L10n.format("Vehicle: %@ · Polestar ID & Developer Portal active", activeLabel)
+        }
+        return L10n.format("Vehicle: %@", activeLabel)
+    }
+
+    private var polestarIDStatusBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(HisingenTheme.semanticGood)
+                .font(.system(size: 13))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text("Polestar ID: Signed In"))
+                    .hisType(.caption, weight: .semibold)
+                if !preferences.email.isEmpty {
+                    Text(preferences.email)
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button {
+                onSettingsChanged(.polestarWebSignIn)
+            } label: {
+                Text(L10n.text("Re-authenticate"))
+                    .hisType(.micro, weight: .medium)
+            }
+            .controlSize(.mini)
+        }
+        .padding(8)
+        .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var polestarIDUnauthenticatedBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "person.badge.shield.exclamationmark")
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .font(.system(size: 13))
+                Text(L10n.text("Polestar ID: Sign In Required"))
+                    .hisType(.caption, weight: .semibold)
+            }
+            Text(L10n.text("Polestar ID enables remote controls and streaming. Sign in via the interactive window to authorize your account."))
+                .hisType(.micro)
+                .foregroundStyle(.secondary)
+                .hisCaptionLeading()
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                onSettingsChanged(.polestarWebSignIn)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.forward.app")
+                    Text(L10n.text("Sign In with Polestar ID (Web)"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(8)
+        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var polestarDataPortalStatusBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(HisingenTheme.semanticGood)
+                .font(.system(size: 13))
+            Text(L10n.text("Developer Portal: Configured"))
+                .hisType(.caption, weight: .semibold)
+            Spacer()
+        }
+        .padding(8)
+        .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+
     private var polestarIDSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             if enableDataPortal {
                 Text(L10n.text("1. Polestar ID (Remote Controls)"))
                     .hisType(.caption, weight: .semibold)
                     .foregroundStyle(HisingenTheme.accent)
+            }
+
+            if let fallbackKind = polestarFallbackKind ?? inheritedPolestarFallbackKind {
+                interactiveVerificationBanner(fallbackKind)
+            } else if isPolestarIDSignedIn {
+                polestarIDStatusBanner
+            } else {
+                polestarIDUnauthenticatedBanner
             }
 
             labeledField(L10n.text("Polestar ID (Email)")) {
@@ -596,10 +698,6 @@ struct AccountCredentialsForm: View {
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
                     .onChange(of: polestarPassword) { _, val in preferences.accountDraft.polestarPassword = val }
-            }
-
-            if let fallbackKind = polestarFallbackKind ?? inheritedPolestarFallbackKind {
-                interactiveVerificationBanner(fallbackKind)
             }
         }
     }
@@ -660,6 +758,10 @@ struct AccountCredentialsForm: View {
                 Text(L10n.text("2. Developer Portal (EU Data Act Telemetry)"))
                     .hisType(.caption, weight: .semibold)
                     .foregroundStyle(HisingenTheme.accent)
+            }
+
+            if isDataPortalConfigured {
+                polestarDataPortalStatusBanner
             }
 
             labeledField(L10n.text("Account ID (x-client-id)")) {

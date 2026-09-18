@@ -33,6 +33,12 @@ struct SignInFailureKindTests {
     }
 
     @Test
+    func polestarPermissionDeniedMapsToTheInteractiveChallengeKind() {
+        let error = VehicleServiceError.permissionDenied(provider: .polestar, operation: "VIN telemetry: /v1/vehicles")
+        #expect(SignInFailureKind.classify(error, provider: .polestar) == .interactiveChallenge)
+    }
+
+    @Test
     func onlyChallengeExpiryAndFlowChangeAreRecoverableThroughInteractiveSignIn() {
         #expect(SignInFailureKind.interactiveChallenge.interactiveSignInHelps)
         #expect(SignInFailureKind.sessionExpired.interactiveSignInHelps)
