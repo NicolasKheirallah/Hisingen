@@ -10,11 +10,11 @@ struct DataRetentionHardeningTests {
     private func seededDatabase(vin: String) -> VehicleDatabase {
         let database = VehicleDatabase.inMemory()
         _ = database.charging.startChargingSession(vin: vin, startSoc: 30)
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: vin, odometerKm: 1_234, tripManualKm: nil, tripAutoKm: nil,
             avgConsumption: nil, ambientTempC: nil, latitude: nil, longitude: nil
         ))
-        #expect(database.addFuelEntry(vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
+        #expect(database.history.addFuelEntry(vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
         return database
     }
 
@@ -59,7 +59,7 @@ struct DataRetentionHardeningTests {
         let database = VehicleDatabase.inMemory()
         _ = database.charging.startChargingSession(vin: first, startSoc: 30)
         _ = database.charging.startChargingSession(vin: second, startSoc: 40)
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: second, odometerKm: 1_234, tripManualKm: nil, tripAutoKm: nil,
             avgConsumption: nil, ambientTempC: nil, latitude: nil, longitude: nil
         ))
@@ -124,9 +124,9 @@ struct DataRetentionHardeningTests {
         stateStore.activate()
 
         #expect(stateStore.baseline(for: vin)?.batteryPercentage == 42)
-        #expect(database.loadBaseline(for: vin)?.batteryPercentage == 42)
+        #expect(database.baselines.loadBaseline(for: vin)?.batteryPercentage == 42)
         #expect(stateStore.baseline(for: expiredVIN) == nil)
-        #expect(database.loadBaseline(for: expiredVIN) == nil)
+        #expect(database.baselines.loadBaseline(for: expiredVIN) == nil)
         #expect(defaults.data(forKey: "charging_baselines_v1") == nil)
     }
 
@@ -210,8 +210,9 @@ struct DataRetentionHardeningTests {
 
     @Test
     func quickCheckPassesForAHealthyDatabase() {
-        let database = VehicleDatabase.inMemory()
-        #expect(database.db.passesQuickCheck())
+        let raw = try! SQLiteDatabase.inMemory()
+        _ = VehicleDatabase(database: raw)
+        #expect(raw.passesQuickCheck())
     }
 
     @Test

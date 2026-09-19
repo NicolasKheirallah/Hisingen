@@ -61,6 +61,16 @@ extension VolvoAPI {
         isConfigured && refreshToken != nil && !cars.isEmpty
     }
 
+    /// Resolves the stored credential that resumes this adapter. Token-free for callers:
+    /// which keychain item means "session" is this adapter's knowledge, not the security
+    /// module's.
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
+        guard let token = try Keychain.readVolvoSessionToken(), !token.isEmpty else {
+            throw VolvoError.authenticationRequired(.noStoredSession)
+        }
+        try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+    }
+
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else { throw VolvoError.authenticationRequired(.noStoredSession) }
         guard isConfigured else { throw VolvoError.appNotConfigured }

@@ -1,41 +1,22 @@
 import Foundation
 
 /// Credential precedence and provider configuration for every session restoration path.
+/// Which stored credential resumes which adapter, and whether a stored password is a valid
+/// fallback, are answered by the adapter through `VehicleProviding`; this module owns the
+/// password-replay decision and the ordering of the two fallbacks.
 @MainActor
 final class SessionManager {
     enum Intent { case resume, credentialsChanged }
 
-    private let readToken: (VehicleBrand) throws -> String?
     private let readPassword: () throws -> String?
     private let clearPassword: () -> Void
     private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
-    init(readToken: @escaping (VehicleBrand) throws -> String? = { brand in
-        if brand == .volvo {
-            return try Keychain.readVolvoSessionToken()
-        }
-        if PreferencesStore.shared.polestarConnectionMode == .dataPortal {
-            if let secret = try Keychain.readPolestarDataPortalClientSecret() {
-                return secret
-            }
-            return try Keychain.readPolestarDataPortalToken()
-        }
-        if PreferencesStore.shared.polestarConnectionMode == .augmented {
-            if let token = try Keychain.readSessionToken(), !token.isEmpty {
-                return token
-            }
-            if let secret = try Keychain.readPolestarDataPortalClientSecret() {
-                return secret
-            }
-            return try Keychain.readPolestarDataPortalToken()
-        }
-        return try Keychain.readSessionToken()
-    }, readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
+    init(readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
          clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
          configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
              try await api.prepareSession()
          }) {
-        self.readToken = readToken
         self.readPassword = readPassword
         self.clearPassword = clearPassword
         self.configure = configure
@@ -48,13 +29,12 @@ final class SessionManager {
         let storedVIN = preferences.vin(for: brand)
         let vin = preferredVIN ?? (storedVIN.isEmpty ? nil : storedVIN)
         let features = preferences.features
-        let missingSession = VehicleServiceError.authenticationRequired(provider: brand, reason: .noStoredSession)
         try await configure(api, preferences)
         try Task.checkCancellation()
 
-        func passwordCredentials() throws -> (email: String, password: String)? {
+        func passwordCredentials() async throws -> (email: String, password: String)? {
             guard brand == .polestar,
-                  (preferences.polestarConnectionMode == .polestarID || preferences.polestarConnectionMode == .augmented),
+                  await api.acceptsStoredPasswordSignIn,
                   let password = try readPassword(), !password.isEmpty else { return nil }
             let email = preferences.email
             return email.isEmpty ? nil : (email, password)
@@ -77,17 +57,16 @@ final class SessionManager {
             clearPassword()
         }
 
-        if intent == .credentialsChanged, let credentials = try passwordCredentials() {
+        if intent == .credentialsChanged, let credentials = try await passwordCredentials() {
             try await signInWithStoredPassword(credentials)
             try Task.checkCancellation()
         } else {
             do {
-                guard let token = try readToken(brand), !token.isEmpty else { throw missingSession }
-                try await api.restoreSession(token: token, preferredVIN: vin, features: features)
+                try await api.restoreSession(preferredVIN: vin, features: features)
             } catch {
                 try Task.checkCancellation()
                 guard ServiceErrorPolicy.decision(error, provider: brand).error.requiresAuthentication,
-                      let credentials = try passwordCredentials() else { throw error }
+                      let credentials = try await passwordCredentials() else { throw error }
                 try await signInWithStoredPassword(credentials)
                 try Task.checkCancellation()
             }

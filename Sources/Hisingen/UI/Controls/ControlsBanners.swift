@@ -85,13 +85,6 @@ struct ControlsBanners: View {
             (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.10),
             in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
-                .stroke(
-                    (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.28),
-                    lineWidth: 0.5
-                )
-        )
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .task(id: feedback.id) {
@@ -147,10 +140,6 @@ struct ControlsBanners: View {
         }
         .padding(10)
         .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
-                .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
-        )
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }

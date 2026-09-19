@@ -39,8 +39,7 @@ struct RefreshCoordinatorStreamTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "test-session" },
-                                           readPassword: { nil }, clearPassword: {}),
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
             liveStreamPolicy: policy,
             streaming: provider,
             now: now,
@@ -679,7 +678,7 @@ struct RefreshCoordinatorStreamTests {
             stateStore: VehicleStateStore(defaults: defaults, database: database),
             observesEnvironment: false,
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "token" }, readPassword: { nil }),
+            sessionManager: SessionManager(readPassword: { nil }),
             commandConfirmationWindow: 2,
             commandConfirmationInitialPollDelay: 0.05,
             commandConfirmationPollInterval: 0.1
@@ -709,14 +708,14 @@ struct RefreshCoordinatorStreamTests {
 
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 2 })
         #expect(events.snapshots.last?.commandConfirmationStatus == .awaiting)
-        #expect(database.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .idle)
+        #expect(database.snapshots.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .idle)
         #expect(events.states.last?.climateStatus?.activity == .heating)
 
         await provider.setClimate(.ventilating)
         _ = try #require(await waitUntil(events) { diagnostics in
             diagnostics.commandConfirmationStatus?.isConfirmed == true
         })
-        #expect(database.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .ventilating)
+        #expect(database.snapshots.loadSnapshot(for: StreamingMockProvider.vinA)?.climateStatus?.activity == .ventilating)
         #expect(events.states.last?.climateStatus?.activity == .ventilating)
         #expect(events.states.last?.commandState.receipts.isEmpty == true)
         coordinator.stop()
@@ -1416,7 +1415,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? Self.vinA }

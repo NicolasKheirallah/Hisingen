@@ -28,9 +28,23 @@ enum Format {
         return "\(value) \(unit.suffix)"
     }
 
+    /// Locale decimal separator, grouping deliberately off: the non-grouped `Int` variant above
+    /// never grouped either, and a live catch found the fixed "." rendering "591.0 km" beside
+    /// "238,2 kWh" on the same sv-SE History screen.
+    private static let decimalDistanceFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        return formatter
+    }()
+
     static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit) -> String {
         let value = unit == .kilometers ? km : km * UnitConversion.kilometersPerMile
-        return String(format: "%.*f %@", decimals, value, unit.suffix)
+        decimalDistanceFormatter.minimumFractionDigits = decimals
+        decimalDistanceFormatter.maximumFractionDigits = decimals
+        let formatted = decimalDistanceFormatter.string(from: NSNumber(value: value))
+            ?? String(format: "%.*f", decimals, value)
+        return "\(formatted) \(unit.suffix)"
     }
 
     static func temperature(celsius: Double, unit: TemperatureUnit, decimals: Int = 1) -> String {

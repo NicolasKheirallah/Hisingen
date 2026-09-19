@@ -46,7 +46,7 @@ struct ProviderRegistryTests {
         // skipped both. Going through `prepareSession()` reaches each of them.
         let polestar = RegistryProbeProvider(brand: .polestar)
         let volvo = RegistryProbeProvider(brand: .volvo)
-        let manager = SessionManager(readToken: { _ in "token" }, readPassword: { nil }, clearPassword: {})
+        let manager = SessionManager(readPassword: { nil }, clearPassword: {})
 
         _ = try await manager.restore(api: polestar, preferences: preferences)
         _ = try await manager.restore(api: volvo, preferences: preferences)
@@ -77,7 +77,7 @@ private actor RegistryProbeProvider: VehicleProviding {
     private(set) var prepareCount = 0
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }
@@ -99,7 +99,7 @@ private actor RegistryDefaultPreparationProvider: VehicleProviding {
     var hasWarmSession: Bool { true }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }
@@ -119,7 +119,7 @@ private actor RegistryStreamingProbe: VehicleProviding, VehicleLiveStreaming {
     var hasWarmSession: Bool { true }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }

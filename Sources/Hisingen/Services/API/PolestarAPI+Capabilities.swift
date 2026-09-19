@@ -9,8 +9,7 @@ extension PolestarAPI {
     }
 
     func cachedMyCars(for vin: String?) -> VehicleOTACapabilities? {
-        guard let vin, let cached = capabilityCache["\(vin)|my-cars"], cached.expiresAt > Date() else { return nil }
-        return cached.value as? VehicleOTACapabilities
+        capabilityAuthority.cachedMyCars(for: vin)
     }
 
     func optionalBattery(enabled: Bool, vin: String, token: String) async throws -> GrpcBatteryExtras? {
@@ -73,6 +72,8 @@ extension PolestarAPI {
         return value
     }
 
+    /// Probe-or-cache state, TTLs, backoff, and invalidation live in `capabilityAuthority`;
+    /// the decision/record calls below never send a closure across the actor seam.
     func optionalCapability<Value: Sendable>(
         _ feature: AppFeature,
         key: String? = nil,
@@ -82,69 +83,71 @@ extension PolestarAPI {
         operation: @Sendable () async throws -> Value?
     ) async throws -> CapabilityState<Value> {
         try Task.checkCancellation()
-        let epoch = sessionEpoch
         // The feature is off, so nothing was asked. This used to be reported as "not unavailable
         // and not unsupported", which reads as available; `.unknown` is what it always meant.
         guard enabled else { return .unknown }
-        let cacheKey = Self.capabilityReadingKey(feature, key: key)
-        let scopedCacheKey = "\(vin)|\(cacheKey)"
-        if !bypassCache,
-           let cached = capabilityCache[scopedCacheKey], cached.expiresAt > Date(), cached.value != nil {
-            return .available(cached.value as? Value)
-        }
-        if let until = capabilityBackoff[vin]?[cacheKey], until > Date() {
-            return unsupportedCapabilities.contains(scopedCacheKey) ? .unsupported : .unavailable
+        let reading = PolestarCapabilityAuthority.readingKey(for: feature, key: key)
+        let epoch = sessionEpoch
+        switch capabilityAuthority.decision(reading: reading, vin: vin, bypassCache: bypassCache) {
+        case .serveCached(let value):
+            return .available(value as? Value)
+        case .backoff(let unsupported):
+            return unsupported ? .unsupported : .unavailable
+        case .probe:
+            break
         }
         do {
             let value = try await operation()
             try requireSession(epoch)
-            capabilityBackoff[vin]?[cacheKey] = nil
-            unsupportedCapabilities.remove(scopedCacheKey)
-            if value != nil {
-                capabilityCache[scopedCacheKey] = CapabilityCacheEntry(
-                    value: value,
-                    expiresAt: Date().addingTimeInterval(Self.capabilityCacheLifetime(feature, key: cacheKey))
-                )
-            }
+            capabilityAuthority.recordSuccess(reading: reading, vin: vin, value: value)
             return .available(value)
         } catch {
             try requireSession(epoch)
             if Self.isGlobalFailure(error) { throw error }
-            let interval: TimeInterval
-            let unsupported: Bool
-            // A service that answered UNIMPLEMENTED is not deployed for this backend/vehicle –
-            // treat it like `incompatibleAPI` and stay away for hours, not minutes. (The gRPC
-            // layer also remembers the specific backend/VIN/path for 24 hours.)
-            if case PolestarError.incompatibleAPI = error {
-                interval = 6 * 60 * 60
-                unsupported = true
-            } else if case PolestarError.grpcUnimplemented = error {
-                interval = 6 * 60 * 60
-                unsupported = true
-            } else if case PolestarError.permissionDenied = error {
-                interval = 6 * 60 * 60
-                unsupported = true
-            } else if case PolestarError.invalidResponse = error {
-                interval = 60 * 60
-                unsupported = false
-            } else {
-                interval = 5 * 60
-                unsupported = false
-            }
-            capabilityBackoff[vin, default: [:]][cacheKey] = Date().addingTimeInterval(interval)
-            if unsupported { unsupportedCapabilities.insert(scopedCacheKey) }
-            else { unsupportedCapabilities.remove(scopedCacheKey) }
+            let unsupported = capabilityAuthority.recordFailure(reading: reading, vin: vin, error: error)
             logger.debug("Optional \(feature.rawValue, privacy: .public) capability unavailable")
             return unsupported ? .unsupported : .unavailable
         }
     }
 
     func clearTransientCapabilityBackoffAfterCommand(for vin: String) {
-        guard let current = capabilityBackoff[vin] else { return }
-        let retained = current.filter { key, _ in
-            unsupportedCapabilities.contains("\(vin)|\(key)")
+        capabilityAuthority.clearTransientBackoffAfterCommand(vin: vin)
+    }
+
+    /// Software status and connectivity diagnostics for the augmented provider's overlay,
+    /// served through the same optional-capability caches a full Polestar ID refresh uses,
+    /// so portal-served refreshes pay at most one cached round trip per domain. A dead or
+    /// dying session answers nil rather than throwing: the portal refresh that asked for
+    /// this overlay already succeeded and must not be discarded over the consumer side.
+    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay? {
+        do {
+            try await refreshTokenIfNeeded()
+            guard let token = accessToken else { return nil }
+            let epoch = sessionEpoch
+            let modelProfile = VehicleCapabilityProfile(modelName: identity(for: vin).modelName)
+            async let software: CapabilityState<VehicleSoftwareInfo> = optionalCapability(
+                .softwareUpdates, enabled: features.contains(.softwareUpdates), vin: vin
+            ) {
+                try await self.grpc.fetchSoftware(vin: vin, accessToken: token,
+                                                  locale: preferences.interfaceLanguage.effectiveLanguageCode)
+            }
+            async let connectivity: CapabilityState<VehicleConnectivity> = optionalCapability(
+                .connectivityDiagnostics,
+                enabled: features.contains(.connectivityDiagnostics) && modelProfile.permits(.connectivity),
+                vin: vin
+            ) { try await self.grpc.fetchConnectivity(vin: vin, accessToken: token) }
+            let overlay = ConsumerTelemetryOverlay(
+                softwareInfo: try await software.value,
+                connectivity: try await connectivity.value
+            )
+            try requireSession(epoch)
+            return overlay
+        } catch is CancellationError {
+            return nil
+        } catch {
+            logger.debug("Consumer telemetry overlay unavailable: \(String(describing: error), privacy: .public)")
+            return nil
         }
-        capabilityBackoff[vin] = retained.isEmpty ? nil : retained
     }
 
 

@@ -85,14 +85,20 @@ enum PolestarError: Error, LocalizedError {
                             authenticationReason: AuthFailureReason = .expiredSession,
                             forbiddenIsAuthentication: Bool = false,
                             operation: String = "request") -> PolestarError? {
-        if (200..<300).contains(statusCode) { return nil }
-        if statusCode == 401 || (statusCode == 403 && forbiddenIsAuthentication) {
-            return .authenticationRequired(authenticationReason)
+        // The status ladder is shared; only this vocabulary mapping is Polestar's own.
+        switch ServiceResponseClassifier.failure(
+            status: statusCode,
+            retryAfter: retryAfter,
+            forbiddenIsAuthentication: forbiddenIsAuthentication,
+            operation: operation
+        ) {
+        case nil: return nil
+        case .authenticationRequired: return .authenticationRequired(authenticationReason)
+        case .permissionDenied(let operation): return .permissionDenied(operation: operation)
+        case .rateLimited(let retryAfter): return .rateLimited(retryAfter: retryAfter)
+        case .server(let statusCode): return .server(statusCode: statusCode)
+        case .client(let statusCode, _, _): return .client(statusCode: statusCode)
         }
-        if statusCode == 403 { return .permissionDenied(operation: operation) }
-        if statusCode == 429 { return .rateLimited(retryAfter: retryAfter) }
-        if (500..<600).contains(statusCode) { return .server(statusCode: statusCode) }
-        return .client(statusCode: statusCode)
     }
 
 

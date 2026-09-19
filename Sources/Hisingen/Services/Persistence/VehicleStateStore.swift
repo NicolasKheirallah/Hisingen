@@ -91,10 +91,10 @@ final class VehicleStateStore {
         migrateLegacyBaselines()
         migrateLegacyCommandReceipts()
         let now = Date()
-        database.deleteBaselines(olderThan: now.addingTimeInterval(-Self.cacheRetention))
+        database.baselines.deleteBaselines(olderThan: now.addingTimeInterval(-Self.cacheRetention))
         // Stand-downs are the database's other expiring tier: a closed window answers nil on read,
         // so the launch pass is where the row goes away instead of accumulating in the file.
-        database.deleteExpiredProviderBackoffs(now: now)
+        database.providerBackoffs.deleteExpiredProviderBackoffs(now: now)
         reconcileLegacyChargingSummaries()
     }
 
@@ -102,7 +102,7 @@ final class VehicleStateStore {
     /// vehicle's other tiers and never writes the plist; an expired row is dropped by the
     /// database's own expiry rule, which is the database's business rather than this read's.
     func snapshot(for vin: String) -> VehicleState? {
-        database.loadSnapshot(for: vin)
+        database.snapshots.loadSnapshot(for: vin)
     }
 
     /// Moves legacy plist snapshots into SQLite, which is authoritative, and drops the expired
@@ -115,7 +115,7 @@ final class VehicleStateStore {
         let now = Date()
         for (_, snapshot) in legacy where
             now.timeIntervalSince(snapshot.freshness.fetchedAt) <= Self.cacheRetention {
-            database.saveSnapshot(snapshot.cacheableCopy)
+            database.snapshots.saveSnapshot(snapshot.cacheableCopy)
         }
         defaults.removeObject(forKey: legacySnapshotsKey)
     }
@@ -129,7 +129,7 @@ final class VehicleStateStore {
         for (_, baseline) in legacy {
             guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
                   now.timeIntervalSince(timestamp) <= Self.cacheRetention else { continue }
-            database.saveBaseline(baseline)
+            database.baselines.saveBaseline(baseline)
         }
         defaults.removeObject(forKey: legacyBaselinesKey)
     }
@@ -141,7 +141,7 @@ final class VehicleStateStore {
         guard let legacy = load([String: StoredCommandReceipts].self, key: legacyCommandReceiptsKey)
         else { return }
         for (vin, receipts) in legacy {
-            database.saveCommandReceipts(receipts, for: vin)
+            database.commandReceipts.saveCommandReceipts(receipts, for: vin)
         }
         defaults.removeObject(forKey: legacyCommandReceiptsKey)
     }
@@ -175,7 +175,7 @@ final class VehicleStateStore {
     /// The baseline for `vin`, or nothing when it has aged out. The read stays pure: expiry is
     /// checked while answering, and the rows are swept by `activate()`.
     func baseline(for vin: String) -> ChargingBaseline? {
-        guard let baseline = database.loadBaseline(for: vin) else { return nil }
+        guard let baseline = database.baselines.loadBaseline(for: vin) else { return nil }
         guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
               Date().timeIntervalSince(timestamp) <= Self.cacheRetention else { return nil }
         return baseline
@@ -201,11 +201,11 @@ final class VehicleStateStore {
     }
 
     func save(_ baseline: ChargingBaseline) {
-        database.saveBaseline(baseline)
+        database.baselines.saveBaseline(baseline)
     }
 
     func commandReceipts(for vin: String) -> [StoredCommandReceipt] {
-        database.loadCommandReceipts(for: vin)?.records ?? []
+        database.commandReceipts.loadCommandReceipts(for: vin)?.records ?? []
     }
 
     func commandReceipt(for vin: String) -> StoredCommandReceipt? {
@@ -213,7 +213,7 @@ final class VehicleStateStore {
     }
 
     func saveCommandReceipts(_ records: [StoredCommandReceipt], for vin: String) {
-        database.saveCommandReceipts(StoredCommandReceipts(records: records), for: vin)
+        database.commandReceipts.saveCommandReceipts(StoredCommandReceipts(records: records), for: vin)
     }
 
     func saveCommandReceipt(_ record: StoredCommandReceipt, for vin: String) {
@@ -221,7 +221,7 @@ final class VehicleStateStore {
     }
 
     func clearCommandReceipts(for vin: String) {
-        database.deleteCommandReceipts(for: vin)
+        database.commandReceipts.deleteCommandReceipts(for: vin)
     }
 
     func clearCommandReceipt(for vin: String) {

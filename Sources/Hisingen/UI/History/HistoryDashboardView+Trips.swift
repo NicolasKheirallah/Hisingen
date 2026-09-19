@@ -453,7 +453,7 @@ extension HistoryDashboardView {
     }
 
     func setPurpose(_ purpose: TripPurpose?, for trip: TripHistoryEntry) {
-        database.setTripPurpose(purpose, tripID: trip.id, vin: trip.vin)
+        database.history.setTripPurpose(purpose, tripID: trip.id, vin: trip.vin)
         if let purpose { snapshot.tripPurposes[trip.id] = purpose }
         else { snapshot.tripPurposes.removeValue(forKey: trip.id) }
     }

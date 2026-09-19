@@ -5,7 +5,7 @@ import OSLog
 final class VehicleDatabase: @unchecked Sendable {
     static let shared = VehicleDatabase()
 
-    let db: SQLiteDatabase
+    private let db: SQLiteDatabase
     private let logger = AppLog.logger("database")
     // JSON coders and date formatters are created per operation rather than shared: this type
     // is `@unchecked Sendable` and its methods run on many threads, and `saveSnapshot` encodes
@@ -24,10 +24,15 @@ final class VehicleDatabase: @unchecked Sendable {
     /// schema, migrations, and cross-table operations (wipe, prune, backup, counts).
     let charging: ChargingSessionLedger
 
-    /// The Vehicle History ledger owns all domain reads and CSV exports over the remaining
-    /// history tables (battery health, air quality, telemetry, trips, audits, connectivity,
-    /// cabin climate, fuel).
+    /// The Vehicle History ledger owns all domain reads, writes, and CSV exports over the
+    /// remaining history tables (battery health, air quality, telemetry, trips, audits,
+    /// connectivity, cabin climate, fuel, activities).
     let history: VehicleHistoryLedger
+    let snapshots: VehicleSnapshotLedger
+    let baselines: ChargingBaselineLedger
+    let images: VehicleImageLedger
+    let commandReceipts: CommandReceiptStore
+    let providerBackoffs: ProviderBackoffLedger
 
     /// SQLite persistence for the Charging Planner's fetched spot-price series. Market
     /// data, not user history: excluded from wipes, prunes, and backups because a fresh
@@ -53,6 +58,11 @@ final class VehicleDatabase: @unchecked Sendable {
         self.charging = chargingLedger
         self.history = VehicleHistoryLedger(sql: handle, charging: chargingLedger)
         self.electricityPrices = ElectricityPriceStore(sql: handle)
+        self.snapshots = VehicleSnapshotLedger(sql: handle)
+        self.baselines = ChargingBaselineLedger(sql: handle)
+        self.images = VehicleImageLedger(sql: handle)
+        self.commandReceipts = CommandReceiptStore(sql: handle)
+        self.providerBackoffs = ProviderBackoffLedger(sql: handle)
         createTables()
     }
 
@@ -399,7 +409,9 @@ final class VehicleDatabase: @unchecked Sendable {
     /// Additive only: `ALTER TABLE ADD COLUMN`, `CREATE TABLE/INDEX IF NOT EXISTS`, and
     /// in-place `UPDATE`s. A migration must never `DROP` or recreate a table that can hold
     /// user history – `VehicleDatabaseMigrationTests` guards that rows survive an upgrade.
-    private func runMigrations(from currentVersion: Int) {
+    /// Internal (not private) so the migration round-trip test can drive the machinery
+    /// directly: open a store, re-run the migrator, assert the version holds steady.
+    func runMigrations(from currentVersion: Int) {
         // Local version cursor: a block only advances it after its statements succeeded, and
         // each block only runs when the previous one completed, so a failed migration can
         // never be skipped by a later block bumping `user_version` past it – it retries on
@@ -540,312 +552,14 @@ final class VehicleDatabase: @unchecked Sendable {
         }
     }
 
-    // MARK: - Vehicle Artwork & Images
-
-    @discardableResult
-    func saveVehicleImage(
-        vin: String, angle: Int, data: Data,
-        thumbnailData: Data? = nil, pixelBudget: Int? = nil
-    ) -> Bool {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty, !data.isEmpty else { return false }
-        let sql = """
-        INSERT INTO vehicle_images (vin, angle, image_data, thumbnail_data, pixel_budget, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(vin, angle) DO UPDATE SET
-            image_data=excluded.image_data,
-            thumbnail_data=excluded.thumbnail_data,
-            pixel_budget=excluded.pixel_budget,
-            updated_at=excluded.updated_at;
-        """
-        let saved: Void? = try? db.query(sql: sql) { stmt in
-            try stmt.bindText(cleanVIN, at: 1)
-            try stmt.bindInt64(Int64(angle), at: 2)
-            try stmt.bindBlob(data, at: 3)
-            try stmt.bindBlob(thumbnailData, at: 4)
-            try stmt.bindInt64(pixelBudget.map(Int64.init), at: 5)
-            try stmt.bindDate(Date(), at: 6)
-            try stmt.executeUpdate()
-        } process: { _ in }
-        return saved != nil
-    }
-
-    func loadVehicleImage(for vin: String, angle: Int) -> (data: Data, thumbnailData: Data?)? {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty else { return nil }
-        let sql = "SELECT image_data, thumbnail_data FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;"
-        return try? db.readQuery(sql: sql) { stmt in
-            try stmt.bindText(cleanVIN, at: 1)
-            try stmt.bindInt64(Int64(angle), at: 2)
-        } process: { stmt -> (data: Data, thumbnailData: Data?)? in
-            guard stmt.step(), let data = stmt.columnBlob(at: 0) else { return nil }
-            let thumb = stmt.columnBlob(at: 1)
-            return (data: data, thumbnailData: thumb)
-        }
-    }
-
-    func hasVehicleImage(for vin: String, angle: Int) -> Bool {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanVIN.isEmpty else { return false }
-        return (try? db.readQuery(
-            sql: "SELECT 1 FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;",
-            bindings: { stmt in
-                try stmt.bindText(cleanVIN, at: 1)
-                try stmt.bindInt64(Int64(angle), at: 2)
-            },
-            process: { $0.step() }
-        )) ?? false
-    }
-
-    // MARK: - Vehicle Snapshots
-
-    func saveSnapshot(_ state: VehicleState) {
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(state.cacheableCopy)
-        } catch {
-            logger.error("Could not encode vehicle snapshot for persistence: \(error, privacy: .public)")
-            return
-        }
-        let brandName = state.isVolvo ? "volvo" : "polestar"
-        let sql = """
-        INSERT INTO vehicle_snapshots (vin, brand, model_name, fetched_at, vehicle_reported_at, is_cached_snapshot, payload)
-        VALUES (?, ?, ?, ?, ?, 1, ?)
-        ON CONFLICT(vin) DO UPDATE SET
-            brand=excluded.brand,
-            model_name=excluded.model_name,
-            fetched_at=excluded.fetched_at,
-            vehicle_reported_at=excluded.vehicle_reported_at,
-            is_cached_snapshot=1,
-            payload=excluded.payload;
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(state.identity.vin, at: 1)
-            try stmt.bindText(brandName, at: 2)
-            try stmt.bindText(state.identity.modelName, at: 3)
-            try stmt.bindDate(state.freshness.fetchedAt, at: 4)
-            try stmt.bindDate(state.freshness.vehicleReportedAt, at: 5)
-            try stmt.bindBlob(data, at: 6)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func loadSnapshot(for vin: String) -> VehicleState? {
-        let sql = "SELECT payload, fetched_at FROM vehicle_snapshots WHERE vin = ? LIMIT 1;"
-        // `query` runs `process` while holding the database's recursive lock; nothing in the
-        // closure may call back into the repository. Record that the row expired and delete
-        // it after the query returns, once the lock is released.
-        var snapshotExpired = false
-        let state = try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { stmt -> VehicleState? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
-            guard var state = try? JSONDecoder().decode(VehicleState.self, from: blob) else { return nil }
-            if let fetchedAt = stmt.columnDate(at: 1) {
-                // Drop expired snapshots older than 7 days
-                if Date().timeIntervalSince(fetchedAt) > 7 * 24 * 60 * 60 {
-                    snapshotExpired = true
-                    return nil
-                }
-            }
-            state.freshness.isCached = true
-            return state
-        }
-        if snapshotExpired {
-            deleteSnapshot(for: vin)
-            return nil
-        }
-        return state
-    }
-
-    func deleteSnapshot(for vin: String) {
-        let sql = "DELETE FROM vehicle_snapshots WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    /// Drops every cached snapshot without touching durable history. Used by the sign-out
-    /// path when the user has chosen to keep local history: the snapshot holds live-ish
-    /// fields (location, owner name) that should not linger after sign-out, but charging
-    /// sessions, telemetry and the rest are kept.
-    func deleteAllSnapshots() {
-        try? db.execute(sql: "DELETE FROM vehicle_snapshots;")
-    }
-
-    // MARK: - Charging Baselines
-
-    /// One vehicle's baseline, replaced in place. The plist this replaced re-encoded every
-    /// vehicle's baseline on every save; the row is also why the erase regimes can name it.
-    func saveBaseline(_ baseline: ChargingBaseline) {
-        let payload: Data
-        do {
-            payload = try JSONEncoder().encode(baseline)
-        } catch {
-            logger.error("Could not encode charging baseline for persistence: \(error, privacy: .public)")
-            return
-        }
-        let sql = """
-        INSERT INTO charging_baselines (vin, sampled_at, vehicle_reported_at, payload)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(vin) DO UPDATE SET
-            sampled_at=excluded.sampled_at,
-            vehicle_reported_at=excluded.vehicle_reported_at,
-            payload=excluded.payload;
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(baseline.vin, at: 1)
-            try stmt.bindDate(baseline.sampledAt, at: 2)
-            try stmt.bindDate(baseline.vehicleReportedAt, at: 3)
-            try stmt.bindBlob(payload, at: 4)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func loadBaseline(for vin: String) -> ChargingBaseline? {
-        let sql = "SELECT payload FROM charging_baselines WHERE vin = ? LIMIT 1;"
-        return try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { stmt -> ChargingBaseline? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
-            return try? JSONDecoder().decode(ChargingBaseline.self, from: blob)
-        }
-    }
-
-    func deleteBaseline(for vin: String) {
-        let sql = "DELETE FROM charging_baselines WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func deleteAllBaselines() {
-        try? db.execute(sql: "DELETE FROM charging_baselines;")
-    }
-
-    /// The 7-day lifetime is a property of the baseline, not of the reader that noticed it.
-    func deleteBaselines(olderThan cutoff: Date) {
-        let sql = "DELETE FROM charging_baselines WHERE COALESCE(sampled_at, vehicle_reported_at, 0) < ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindDate(cutoff, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    /// Drops stand-downs whose window has closed. Reading one already answers nil, so keeping the
-    /// row only grows the file.
-    func deleteExpiredProviderBackoffs(now: Date) {
-        let sql = "DELETE FROM provider_backoff WHERE blocked_until <= ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindDate(now, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
 
     // MARK: - Command Receipts
 
-    /// One vehicle's visible receipts. Durable rather than mirrored: the plist rewrite this
-    /// replaces re-encoded every vehicle's receipts on every command, and a receipt that
-    /// outlived a sign-out could reappear in the Controls tab.
-    func saveCommandReceipts(_ receipts: StoredCommandReceipts, for vin: String) {
-        guard !receipts.records.isEmpty else {
-            deleteCommandReceipts(for: vin)
-            return
-        }
-        let payload: Data
-        do {
-            payload = try JSONEncoder().encode(receipts)
-        } catch {
-            logger.error("Could not encode command receipts for persistence: \(error, privacy: .public)")
-            return
-        }
-        let sql = """
-        INSERT INTO command_receipts (vin, payload)
-        VALUES (?, ?)
-        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload;
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindBlob(payload, at: 2)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func loadCommandReceipts(for vin: String) -> StoredCommandReceipts? {
-        let sql = "SELECT payload FROM command_receipts WHERE vin = ? LIMIT 1;"
-        return try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { stmt -> StoredCommandReceipts? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
-            return try? JSONDecoder().decode(StoredCommandReceipts.self, from: blob)
-        }
-    }
-
-    func deleteCommandReceipts(for vin: String) {
-        let sql = "DELETE FROM command_receipts WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func deleteAllCommandReceipts() {
-        try? db.execute(sql: "DELETE FROM command_receipts;")
-    }
 
     // MARK: - Provider Backoff
 
-    func saveProviderBackoff(subject: String, vin: String?, blockedUntil: Date, reason: String?) {
-        let sql = """
-            INSERT INTO provider_backoff (subject, vin, blocked_until, reason)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(subject) DO UPDATE SET
-                vin = excluded.vin,
-                blocked_until = excluded.blocked_until,
-                reason = excluded.reason;
-            """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(subject, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindDouble(blockedUntil.timeIntervalSince1970, at: 3)
-            try stmt.bindText(reason, at: 4)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
 
-    func providerBackoff(for subject: String) -> (blockedUntil: Date, reason: String?)? {
-        let sql = "SELECT blocked_until, reason FROM provider_backoff WHERE subject = ? LIMIT 1;"
-        return try? db.query(sql: sql) { stmt in
-            try stmt.bindText(subject, at: 1)
-        } process: { stmt -> (blockedUntil: Date, reason: String?)? in
-            guard stmt.step(), let epoch = stmt.columnDouble(at: 0) else { return nil }
-            return (Date(timeIntervalSince1970: epoch), stmt.columnText(at: 1))
-        }
-    }
 
-    func deleteProviderBackoff(subject: String) {
-        let sql = "DELETE FROM provider_backoff WHERE subject = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(subject, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    /// The stand-downs that name a vehicle, dropped by a fleet-wide sign-out. The provider-wide
-    /// ones stay: a client-version rejection is not something a sign-out answers.
-    func deleteVehicleScopedProviderBackoffs() {
-        try? db.execute(sql: "DELETE FROM provider_backoff WHERE vin IS NOT NULL;")
-    }
-
-    func deleteProviderBackoffs(for vin: String) {
-        let sql = "DELETE FROM provider_backoff WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
 
     // MARK: - Battery Health History
 
@@ -864,229 +578,24 @@ final class VehicleDatabase: @unchecked Sendable {
         static let odometerDeltaKm: Double = 500
     }
 
-    /// Whether these readings differ enough from the last stored row to be worth keeping.
-    /// `nil` previous row means this VIN has no history yet, which always qualifies.
-    func isBatteryHealthMilestone(sohPct: Double, odometerKm: Double,
-                                  since previous: BatteryHealthRecord?,
-                                  now: Date = Date()) -> Bool {
-        guard let previous else { return true }
-        if now.timeIntervalSince(previous.timestamp) >= BatteryHealthMilestone.minimumInterval { return true }
-        if abs(sohPct - previous.stateOfHealthPct) >= BatteryHealthMilestone.sohDeltaPct { return true }
-        if odometerKm - previous.odometerKm >= BatteryHealthMilestone.odometerDeltaKm { return true }
-        return false
-    }
 
     /// Records a battery-health milestone, skipping rows that duplicate the last one.
     /// Returns whether a row was actually written.
-    @discardableResult
-    func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
-                                      sohPct: Double, degPct: Double, usableKwh: Double,
-                                      measurementSource: String = BatteryHealthRecord.calculatedSource,
-                                      timestamp: Date = Date()) -> Bool {
-        let previous = history.batteryHealthHistory(for: vin, limit: 50)
-            .first { $0.measurementSource == measurementSource }
-        guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
-            return false
-        }
-        let sql = """
-        INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-        return executeInsert(sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(timestamp, at: 2)
-            try stmt.bindDouble(odometerKm, at: 3)
-            try stmt.bindDouble(sohPct, at: 4)
-            try stmt.bindDouble(degPct, at: 5)
-            try stmt.bindDouble(usableKwh, at: 6)
-            try stmt.bindText(measurementSource, at: 7)
-        }
-    }
 
-
-    // MARK: - Cabin Air Quality History
-
-    /// Minimum spacing between recorded samples, mirroring the battery-health-milestone
-    /// approach: a sample is only worth keeping if enough time has passed or the reading moved
-    /// meaningfully, not on every refresh cycle.
-    private static let airQualityHeartbeat: TimeInterval = 60 * 60
-    private static let airQualityIndexDelta: Double = 5.0
-    private static let airQualityPM25Delta: Double = 5.0
-
-    private func lastAirQualitySample(for vin: String) -> (timestamp: Date, aqi: Double?, pm25: Double?)? {
-        let sql = """
-        SELECT timestamp, air_quality_index, particulate_matter_25
-        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
-        """
-        return try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { stmt -> (Date, Double?, Double?)? in
-            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
-            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2))
-        } ?? nil
-    }
 
     /// Records a cabin air-quality sample, skipping ones that would just duplicate the last
     /// recorded reading. Returns whether a row was actually written.
-    @discardableResult
-    func recordAirQuality(vin: String, airQualityIndex: Double?, particulateMatter25: Double?,
-                          particulateMatter10: Double?, filterRemainingPercent: Double?,
-                          timestamp: Date = Date()) -> Bool {
-        guard airQualityIndex != nil || particulateMatter25 != nil else { return false }
-        if let last = lastAirQualitySample(for: vin),
-           timestamp.timeIntervalSince(last.timestamp) < Self.airQualityHeartbeat,
-           abs((airQualityIndex ?? 0) - (last.aqi ?? 0)) < Self.airQualityIndexDelta,
-           abs((particulateMatter25 ?? 0) - (last.pm25 ?? 0)) < Self.airQualityPM25Delta {
-            return false
-        }
-        let sql = """
-        INSERT INTO air_quality_history (vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """
-        return executeInsert(sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(timestamp, at: 2)
-            try stmt.bindDouble(airQualityIndex, at: 3)
-            try stmt.bindDouble(particulateMatter25, at: 4)
-            try stmt.bindDouble(particulateMatter10, at: 5)
-            try stmt.bindDouble(filterRemainingPercent, at: 6)
-        }
-    }
 
-
-
-    // MARK: - Telemetry Logging
-
-    /// Heartbeat for a vehicle that hasn't moved. Drive telemetry is only interesting when
-    /// the odometer or a trip meter changes; a parked car re-reported the same figures every
-    /// refresh, which is what filled this table.
-    static let telemetryHeartbeat: TimeInterval = 24 * 60 * 60
-
-    /// The odometer/trip readings of the most recent row, used to detect movement.
-    private func lastTelemetryReadings(
-        for vin: String
-    ) -> (timestamp: Date, odometerKm: Double?, tripManualKm: Double?, tripAutoKm: Double?)? {
-        let sql = """
-        SELECT timestamp, odometer_km, trip_manual_km, trip_auto_km
-        FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
-        """
-        return try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-        } process: { stmt -> (Date, Double?, Double?, Double?)? in
-            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
-            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2), stmt.columnDouble(at: 3))
-        } ?? nil
-    }
 
     /// Records drive telemetry, skipping refreshes where the vehicle hasn't moved.
     /// One duplicate immediately after movement is retained as a parked boundary so
     /// short journeys can be split without storing every stationary poll.
     /// Returns whether a row was actually written.
-    @discardableResult
-    func recordTelemetry(vin: String, odometerKm: Double?, tripManualKm: Double?,
-                         tripAutoKm: Double?, avgConsumption: Double?,
-                         consumptionUnit: String? = nil, ambientTempC: Double?,
-                         latitude: Double?, longitude: Double?,
-                         timestamp: Date = Date()) -> Bool {
-        if let last = lastTelemetryReadings(for: vin),
-           timestamp.timeIntervalSince(last.timestamp) < Self.telemetryHeartbeat,
-           last.odometerKm == odometerKm,
-           last.tripManualKm == tripManualKm,
-           last.tripAutoKm == tripAutoKm {
-            let previous = history.recentTelemetry(for: vin, limit: 2).dropFirst().first
-            let lastRowFollowedMovement = previous.map {
-                $0.odometerKm != last.odometerKm
-                    || $0.tripManualKm != last.tripManualKm
-                    || $0.tripAutomaticKm != last.tripAutoKm
-            } ?? false
-            if !lastRowFollowedMovement { return false }
-        }
-        let sql = """
-        INSERT INTO telemetry_logs (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """
-        return executeInsert(sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(timestamp, at: 2)
-            try stmt.bindDouble(odometerKm, at: 3)
-            try stmt.bindDouble(tripManualKm, at: 4)
-            try stmt.bindDouble(tripAutoKm, at: 5)
-            try stmt.bindDouble(avgConsumption, at: 6)
-            try stmt.bindDouble(ambientTempC, at: 7)
-            try stmt.bindDouble(latitude, at: 8)
-            try stmt.bindDouble(longitude, at: 9)
-            try stmt.bindText(consumptionUnit, at: 10)
-        }
-    }
-
-
-
 
     // MARK: - Trip classification and monthly mileage
 
-    func setTripPurpose(_ purpose: TripPurpose?, tripID: String, vin: String) {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !tripID.isEmpty, !cleanVIN.isEmpty else { return }
-        if let purpose {
-            let sql = """
-            INSERT INTO trip_tags (trip_id, vin, purpose, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(trip_id, vin) DO UPDATE SET
-                purpose=excluded.purpose, updated_at=excluded.updated_at;
-            """
-            try? db.query(sql: sql) { stmt in
-                try stmt.bindText(tripID, at: 1)
-                try stmt.bindText(cleanVIN, at: 2)
-                try stmt.bindText(purpose.rawValue, at: 3)
-                try stmt.bindDate(Date(), at: 4)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        } else {
-            try? db.query(sql: "DELETE FROM trip_tags WHERE trip_id = ? AND vin = ?;") { stmt in
-                try stmt.bindText(tripID, at: 1)
-                try stmt.bindText(cleanVIN, at: 2)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-    }
-
-
-
 
     // MARK: - Remote Commands Audit
-
-    func recordCommandAudit(id: String = UUID().uuidString, vin: String,
-                            command: String, status: String, durationMs: Int? = nil, error: String? = nil,
-                            timestamp: Date = Date()) {
-        let sql = """
-        INSERT INTO remote_commands_log (id, vin, command_name, status, executed_at, duration_ms, error_message)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(id, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindText(command, at: 3)
-            try stmt.bindText(status, at: 4)
-            try stmt.bindDate(timestamp, at: 5)
-            try stmt.bindInt64(durationMs.map(Int64.init), at: 6)
-            try stmt.bindText(error, at: 7)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func updateCommandAudit(id: String, status: String, error: String? = nil) {
-        let sql = """
-        UPDATE remote_commands_log
-        SET status = ?, error_message = COALESCE(?, error_message)
-        WHERE id = ?;
-        """
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(status, at: 1)
-            try stmt.bindText(error, at: 2)
-            try stmt.bindText(id, at: 3)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
 
 
     // MARK: - Database Diagnostics & Maintenance
@@ -1225,10 +734,6 @@ final class VehicleDatabase: @unchecked Sendable {
     }
 
     // MARK: - CSV Exporters
-
-
-
-
 
 
     // MARK: - Wipe / Purge
@@ -1593,74 +1098,6 @@ extension VehicleDatabase {
         let requestedCelsius: Double?
     }
 
-    /// Records a connectivity sample only when something observable changed (network type,
-    /// signal level, or wake reason) or the hourly heartbeat elapsed – parked-and-sleeping
-    /// cars would otherwise duplicate one row per poll.
-    @discardableResult
-    func recordConnectivity(vin: String, networkType: String?, signalBars: Int?,
-                            wakeReason: String?, timestamp: Date = Date()) -> Bool {
-        let sql = """
-        SELECT timestamp, network_type, signal_bars, wake_reason
-        FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
-        """
-        var last: (Date, String?, Int?, String?)?
-        try? db.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
-            if stmt.step(), let ts = stmt.columnDate(at: 0) {
-                last = (ts, stmt.columnText(at: 1), stmt.columnInt64(at: 2).map(Int.init),
-                        stmt.columnText(at: 3))
-            }
-        }
-        if let last {
-            let unchanged = last.1 == networkType && last.2 == signalBars && last.3 == wakeReason
-            if unchanged, timestamp.timeIntervalSince(last.0) < 60 * 60 { return false }
-        }
-        return executeInsert(
-            "INSERT INTO connectivity_history (vin, timestamp, network_type, signal_bars, wake_reason) VALUES (?,?,?,?,?);"
-        ) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(timestamp, at: 2)
-            try stmt.bindText(networkType, at: 3)
-            try stmt.bindInt64(signalBars.map(Int64.init), at: 4)
-            try stmt.bindText(wakeReason, at: 5)
-        }
-    }
-
-    @discardableResult
-    func recordCabinClimate(vin: String, interiorCelsius: Double?, requestedCelsius: Double?,
-                            timestamp: Date = Date()) -> Bool {
-        guard interiorCelsius != nil || requestedCelsius != nil else { return false }
-        let sql = "SELECT timestamp FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;"
-        var last: Date?
-        try? db.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
-            if stmt.step() { last = stmt.columnDate(at: 0) }
-        }
-        // One row per hour is plenty for a temperature trend.
-        if let last, timestamp.timeIntervalSince(last) < 60 * 60 { return false }
-        return executeInsert(
-            "INSERT INTO cabin_climate_history (vin, timestamp, interior_c, requested_c) VALUES (?,?,?,?);"
-        ) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(timestamp, at: 2)
-            try stmt.bindDouble(interiorCelsius, at: 3)
-            try stmt.bindDouble(requestedCelsius, at: 4)
-        }
-    }
-
-    private func executeInsert(_ sql: String, bind: (SQLiteStatement) throws -> Void) -> Bool {
-        do {
-            try db.query(sql: sql, bindings: { stmt in
-                try bind(stmt)
-                try stmt.executeUpdate()
-            }) { _ in }
-            return true
-        } catch {
-            logger.error("History insert failed: \(error, privacy: .public)")
-            return false
-        }
-    }
-
-
-
 }
 
 // MARK: - Manual Fuel Entries (PHEV/ICE economics)
@@ -1674,28 +1111,5 @@ extension VehicleDatabase {
         let pricePerLiter: Double
         let odometerKm: Double?
     }
-
-    @discardableResult
-    func addFuelEntry(vin: String, date: Date, liters: Double,
-                      pricePerLiter: Double, odometerKm: Double?) -> Bool {
-        guard liters > 0, pricePerLiter >= 0 else { return false }
-        return executeInsert(
-            "INSERT INTO fuel_entries (vin, date, liters, price_per_liter, odometer_km) VALUES (?,?,?,?,?);"
-        ) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.bindDate(date, at: 2)
-            try stmt.bindDouble(liters, at: 3)
-            try stmt.bindDouble(pricePerLiter, at: 4)
-            try stmt.bindDouble(odometerKm, at: 5)
-        }
-    }
-
-    func deleteFuelEntry(id: Int64) {
-        try? db.query(sql: "DELETE FROM fuel_entries WHERE id = ?;") { stmt in
-            try stmt.bindInt64(id, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
 
 }

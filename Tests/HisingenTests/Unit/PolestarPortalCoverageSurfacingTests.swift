@@ -256,7 +256,9 @@ struct PolestarPortalCoverageSurfacingTests {
         // 42,150,800 m is 42,150.8 km; the rounded integer keeps its own slot.
         #expect(state.maintenance.odometerKm == 42151)
         #expect(state.maintenance.odometerKmPrecise == 42150.8)
-        #expect(Format.distance(km: 42150.8, decimals: 1, unit: .kilometers) == "42150.8 km")
+        // Separator-agnostic: the formatter is locale-aware, this pins precision, not locale.
+        #expect(Format.distance(km: 42150.8, decimals: 1, unit: .kilometers)
+            .replacingOccurrences(of: ",", with: ".") == "42150.8 km")
     }
 
     // MARK: - G6 freshness + availability check-in

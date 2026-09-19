@@ -239,7 +239,7 @@ final class CommandCoordinator {
             logger.info("Remote command \(command.identifier, privacy: .public) sent for \(target.vin, privacy: .private)")
             let result = try await executor.executeRemoteCommand(command, vin: target.vin)
             let receiptID = UUID()
-            database.recordCommandAudit(
+            database.history.recordCommandAudit(
                 id: receiptID.uuidString,
                 vin: target.vin,
                 command: command.identifier,
@@ -287,7 +287,7 @@ final class CommandCoordinator {
             )
             if !receipt.supportsTelemetryConfirmation {
                 receipt.status = .acknowledged(at: now())
-                database.updateCommandAudit(id: receiptID.uuidString, status: "acknowledged")
+                database.history.updateCommandAudit(id: receiptID.uuidString, status: "acknowledged")
             }
             context.beginCommandConfirmation(
                 receipt,
@@ -298,7 +298,7 @@ final class CommandCoordinator {
             let mapped = error as? LocalizedError
             logger.error("Remote command \(command.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             let message = mapped?.errorDescription ?? error.localizedDescription
-            database.recordCommandAudit(
+            database.history.recordCommandAudit(
                 vin: target.vin,
                 command: command.identifier,
                 status: "failed",

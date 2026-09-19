@@ -131,7 +131,7 @@ struct VehicleFeatureCompletionTests {
         // Drain so this negative cannot pass merely because the Volvo pass has not run yet.
         // The snapshot itself is already durable; the AQI row is the queued half.
         await store.drainHistory()
-        #expect(database.loadSnapshot(for: volvo.identity.vin) != nil)
+        #expect(database.snapshots.loadSnapshot(for: volvo.identity.vin) != nil)
         #expect(database.history.recentAirQuality(for: volvo.identity.vin).isEmpty)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
@@ -195,9 +195,9 @@ struct VehicleFeatureCompletionTests {
         #expect(report.totalKm == 35)
 
         let database = VehicleDatabase.inMemory()
-        database.setTripPurpose(.business, tripID: "1-2", vin: "VIN")
+        database.history.setTripPurpose(.business, tripID: "1-2", vin: "VIN")
         #expect(database.history.tripPurposes(for: "VIN")["1-2"] == .business)
-        database.setTripPurpose(nil, tripID: "1-2", vin: "VIN")
+        database.history.setTripPurpose(nil, tripID: "1-2", vin: "VIN")
         #expect(database.history.tripPurposes(for: "VIN")["1-2"] == nil)
         #expect(MonthlyMileageReport.csv(reports: [report], vin: "VIN").contains("Business km"))
     }

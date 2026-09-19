@@ -67,7 +67,7 @@ struct MultiCarFleetSwitchingTests {
         // restoreSession with an invalid token will fail at network level,
         // but must NOT delete the stored session token from Keychain.
         do {
-            try await volvoAPI.restoreSession(token: "bad-token", preferredVIN: nil, features: .default)
+            try await volvoAPI.restoreSession(preferredVIN: nil, features: .default)
         } catch {
             // Expected failure
         }
@@ -97,7 +97,7 @@ struct MultiCarFleetSwitchingTests {
         await polestarAPI.installRestoreTestSession(URLSession(configuration: configuration))
 
         do {
-            try await polestarAPI.restoreSession(token: "dead-polestar-refresh-token", preferredVIN: nil, features: .default)
+            try await polestarAPI.restoreSession(preferredVIN: nil, features: .default)
             Issue.record("A dead refresh grant must not restore a session")
         } catch PolestarError.authenticationRequired(.noStoredSession) {
             // expected: a dead grant surfaces as .noStoredSession (API-07)
@@ -129,7 +129,7 @@ struct MultiCarFleetSwitchingTests {
         await polestarAPI.installRestoreTestSession(URLSession(configuration: configuration))
 
         do {
-            try await polestarAPI.restoreSession(token: "valid-polestar-refresh-token", preferredVIN: nil, features: .default)
+            try await polestarAPI.restoreSession(preferredVIN: nil, features: .default)
             Issue.record("a 5xx token exchange must not restore a session")
         } catch {
             // expected: the caller sees a transient failure
@@ -197,7 +197,7 @@ private actor MockFleetProvider: VehicleProviding {
     var cars: [CarSummary] { vins.map { CarSummary(vin: $0, title: $0) } }
     var hasWarmSession: Bool { !vins.isEmpty }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { vins.first }

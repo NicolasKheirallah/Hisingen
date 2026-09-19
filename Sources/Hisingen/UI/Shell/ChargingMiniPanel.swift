@@ -141,7 +141,6 @@ private struct ChargingMiniPanelView: View {
     var onClose: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
@@ -202,21 +201,12 @@ private struct ChargingMiniPanelView: View {
         // Honors the dropdown's Content Density zoom so the floating panel scales
         // consistently with the main panel's text size preference.
         .frame(width: 190 * HisingenTheme.contentScale)
-        .background(
-            ZStack {
-                HisingenTheme.cardSurface(cornerRadius: HisingenTheme.cornerRadius)
-                HisingenTheme.cardRim(
-                    cornerRadius: HisingenTheme.cornerRadius,
-                    prefersOpaque: reduceTransparency || contrast == .increased
-                )
-                HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
-            }
-        )
-        .shadow(
-            color: HisingenTheme.shadow(for: .floating).color,
-            radius: HisingenTheme.shadow(for: .floating).radius,
-            y: HisingenTheme.shadow(for: .floating).y
-        )
+        // The one surface that floats over the desktop gets the one window-level glass. The
+        // panel's own NSPanel supplies the shadow; a content-level shadow here would double it.
+        .hisFloatingGlass(in: RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous))
+        .overlay {
+            HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.text("Charging status"))
     }

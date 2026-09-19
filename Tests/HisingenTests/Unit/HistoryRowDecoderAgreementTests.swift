@@ -23,12 +23,12 @@ struct HistoryRowDecoderAgreementTests {
         let database = VehicleDatabase.inMemory()
         let sampleTimestamp = base.addingTimeInterval(60)
 
-        #expect(database.recordConnectivity(
+        #expect(database.history.recordConnectivity(
             vin: vin, networkType: "LTE", signalBars: 3, wakeReason: "poll",
             timestamp: sampleTimestamp))
-        #expect(database.recordCabinClimate(
+        #expect(database.history.recordCabinClimate(
             vin: vin, interiorCelsius: 21.5, requestedCelsius: 22.5, timestamp: sampleTimestamp))
-        #expect(database.addFuelEntry(
+        #expect(database.history.addFuelEntry(
             vin: vin, date: sampleTimestamp, liters: 41.25, pricePerLiter: 1.879, odometerKm: 12_345))
         let sessionID = database.charging.startChargingSession(vin: vin, startSoc: 41)
         database.charging.recordChargingSample(
@@ -56,18 +56,18 @@ struct HistoryRowDecoderAgreementTests {
         let database = VehicleDatabase.inMemory()
         let sampleTimestamp = base.addingTimeInterval(120)
 
-        #expect(database.recordBatteryHealthMilestone(
+        #expect(database.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 54_321, sohPct: 93.5, degPct: 6.5,
             usableKwh: 74.25, measurementSource: BatteryHealthRecord.fullChargeRangeSource,
             timestamp: sampleTimestamp))
-        #expect(database.recordAirQuality(
+        #expect(database.history.recordAirQuality(
             vin: vin, airQualityIndex: 17, particulateMatter25: 4.5,
             particulateMatter10: 9.5, filterRemainingPercent: 78, timestamp: sampleTimestamp))
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: vin, odometerKm: 54_321, tripManualKm: 12.5, tripAutoKm: 30.5,
             avgConsumption: 18.25, ambientTempC: 7.5, latitude: 57.7089, longitude: 11.9746,
             timestamp: sampleTimestamp))
-        database.recordCommandAudit(
+        database.history.recordCommandAudit(
             id: "audit-agreement", vin: vin, command: "lock", status: "success",
             durationMs: 1_234, error: "none", timestamp: sampleTimestamp)
 
@@ -114,7 +114,7 @@ struct HistoryRowDecoderAgreementTests {
     @Test
     func excludingCoordinatesDropsOnlyCoordinates() throws {
         let database = VehicleDatabase.inMemory()
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: vin, odometerKm: 1_111, tripManualKm: 2, tripAutoKm: 3,
             avgConsumption: 4, ambientTempC: 5, latitude: 57.7, longitude: 11.9,
             timestamp: base))
@@ -136,19 +136,19 @@ struct HistoryRowDecoderAgreementTests {
         let database = VehicleDatabase.inMemory()
         let sampleTimestamp = base.addingTimeInterval(180)
 
-        #expect(database.recordAirQuality(
+        #expect(database.history.recordAirQuality(
             vin: vin, airQualityIndex: 17, particulateMatter25: 4.5,
             particulateMatter10: 9.5, filterRemainingPercent: 78, timestamp: sampleTimestamp))
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: vin, odometerKm: 54_321, tripManualKm: 12.5, tripAutoKm: 30.5,
             avgConsumption: 18.25, consumptionUnit: "kwh", ambientTempC: 7.5,
             latitude: 57.7089, longitude: 11.9746, timestamp: sampleTimestamp))
-        #expect(database.recordConnectivity(
+        #expect(database.history.recordConnectivity(
             vin: vin, networkType: "5G", signalBars: 3, wakeReason: "stream",
             timestamp: sampleTimestamp))
-        #expect(database.recordCabinClimate(
+        #expect(database.history.recordCabinClimate(
             vin: vin, interiorCelsius: 21.5, requestedCelsius: 22.5, timestamp: sampleTimestamp))
-        #expect(database.addFuelEntry(
+        #expect(database.history.addFuelEntry(
             vin: vin, date: sampleTimestamp, liters: 41.25, pricePerLiter: 1.879, odometerKm: 12_345))
 
         let air = try #require(database.history.recentAirQuality(for: vin).first)
@@ -207,14 +207,14 @@ struct HistoryRowDecoderAgreementTests {
     @Test
     func batteryHealthCountAndExportUseTheSameSources() throws {
         let database = VehicleDatabase.inMemory()
-        #expect(database.recordBatteryHealthMilestone(
+        #expect(database.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 1_000, sohPct: 99, degPct: 1, usableKwh: 70,
             measurementSource: BatteryHealthRecord.fullChargeRangeSource, timestamp: base))
-        #expect(database.recordBatteryHealthMilestone(
+        #expect(database.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 2_000, sohPct: 98, degPct: 2, usableKwh: 69,
             measurementSource: BatteryHealthRecord.calculatedSource,
             timestamp: base.addingTimeInterval(60)))
-        #expect(database.recordBatteryHealthMilestone(
+        #expect(database.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 3_000, sohPct: 97, degPct: 3, usableKwh: 68,
             measurementSource: BatteryHealthRecord.legacyEstimateSource,
             timestamp: base.addingTimeInterval(120)))

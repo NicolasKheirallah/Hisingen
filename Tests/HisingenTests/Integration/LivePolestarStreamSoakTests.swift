@@ -69,8 +69,7 @@ struct LivePolestarStreamSoakTests {
                 observesEnvironment: false,
                 imageCache: CarImageCache(),
                 preferences: preferences,
-                sessionManager: SessionManager(readToken: { _ in storedToken },
-                                               readPassword: { nil }, clearPassword: {}),
+                sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
                 liveStreamPolicy: LiveStreamPolicy(shouldStream: { _ in true })
             )
             coordinator?.onEvent = { events.record($0) }
@@ -210,8 +209,8 @@ private actor SoakCountingProvider: VehicleProviding, VehicleLiveStreaming {
                                    preferredVIN: preferredVIN, features: features)
     }
 
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
-        try await api.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
+        try await api.restoreSession(preferredVIN: preferredVIN, features: features)
     }
 
     func resetSession() async {

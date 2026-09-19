@@ -47,10 +47,6 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                         isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                         in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(isSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                    )
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.ink)
                 }
                 .buttonStyle(.pressable)

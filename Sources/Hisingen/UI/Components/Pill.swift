@@ -23,11 +23,10 @@ struct Pill: View {
         .foregroundStyle(color)
         .padding(.horizontal, 7)
         .padding(.vertical, 2.5)
+        // The 12 % wash is the ceiling the token's 4.5:1 guarantee covers (checked by
+        // Scripts/verify-app-contrast.py); the outline the chip used to draw over it said what
+        // the fill already said, and outlines are not part of the 2026 surface language.
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .stroke(color.opacity(0.28), lineWidth: 0.5)
-        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)
     }

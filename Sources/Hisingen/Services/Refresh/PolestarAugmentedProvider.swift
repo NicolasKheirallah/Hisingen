@@ -72,17 +72,20 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         }
     }
 
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+    /// Each half resolves its own stored credential, so a missing consumer token no longer
+    /// means feeding the portal secret to the consumer API: the halves fail independently
+    /// and `hasWarmSession` decides whether enough of the session survived.
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
         var commandError: Error?
         do {
-            try await commandProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+            try await commandProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
             commandError = error
             logger.warning("Command provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
         }
         var telemetryError: Error?
         do {
-            try await telemetryProvider.restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+            try await telemetryProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
             telemetryError = error
             logger.warning("Telemetry provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
@@ -132,6 +135,14 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             // and owner greeting survive portal-served refreshes.
             if let consumerIdentity = await commandProvider.identitySnapshot(for: vin, features: features) {
                 state.identity = state.identity.overlayingGaps(from: consumerIdentity)
+            }
+            // Software status and connectivity diagnostics are consumer-API-only domains:
+            // without this overlay a portal-served refresh reports them missing every time,
+            // which pinned the "Showing last-known values" banner permanently.
+            if await commandProvider.hasWarmSession,
+               let overlay = await commandProvider.consumerTelemetryOverlay(for: vin, features: features) {
+                state.softwareInfo = state.softwareInfo ?? overlay.softwareInfo
+                state.connectivity = state.connectivity ?? overlay.connectivity
             }
             if state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
                 if let fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {

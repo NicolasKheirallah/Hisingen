@@ -170,7 +170,7 @@ struct DegradedStateResilienceTests {
         // The migration's last act is to drop the legacy blob rather than leave an empty one
         // behind, so there is nothing stale left in the plist for a later launch to re-read.
         #expect(defaults.data(forKey: "cached_vehicle_snapshots_v1") == nil)
-        #expect(database.loadSnapshot(for: live.identity.vin)?.location == nil)
+        #expect(database.snapshots.loadSnapshot(for: live.identity.vin)?.location == nil)
     }
 
     // MARK: - Helpers
@@ -241,8 +241,7 @@ struct AuthFailureReschedulingTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "test-session" },
-                                           readPassword: { nil }, clearPassword: {})
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {})
         )
         defer { coordinator.stop() }
 
@@ -268,7 +267,7 @@ private actor AuthFailingProvider: VehicleProviding {
     var hasWarmSession: Bool { true }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? cars.first?.vin }

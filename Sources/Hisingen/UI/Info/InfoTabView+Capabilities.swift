@@ -124,7 +124,7 @@ extension InfoTabView {
 
     /// One raw `GetMyCars` wire field. The label carries the parent message number when the
     /// field lives inside a known sub-message, e.g. "Field 35.5".
-    func rawCapabilityFieldRow(_ field: PolestarRawWireField) -> KVRow {
+    func rawCapabilityFieldRow(_ field: VehicleRawWireField) -> KVRow {
         let path = field.subfield.map { "\($0).\(field.field)" } ?? String(field.field)
         let label = field.isBinary ? L10n.format("Field %@ (raw)", path) : L10n.format("Field %@", path)
         return KVRow(label, field.value, symbol: "curlybraces",

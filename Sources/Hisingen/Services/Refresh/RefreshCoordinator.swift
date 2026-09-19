@@ -245,6 +245,9 @@ final class RefreshCoordinator {
     /// what distinguishes "already settled on car X" from "car X failed mid-switch and the
     /// user is retrying" – without it a failed switch was unrecoverable.
     private var requestedSelectionVIN: String?
+    /// Callers awaiting a selection's outcome, keyed by VIN. Woken by the selection task's
+    /// own completion, by a superseding selection, or by `cancelCurrentWork` – never polled.
+    private var selectionWaiters: [String: [CheckedContinuation<Bool, Never>]] = [:]
     /// Automatic retries consumed for the current selection attempt. A raced provider-side
     /// selection flip surfaces as `.notConfigured`, which is otherwise terminal; bounded
     /// retries recover it without letting a genuinely broken state loop forever.
@@ -571,7 +574,54 @@ final class RefreshCoordinator {
         beginSelection(vin: vin)
     }
 
+    /// One awaited seam for "vehicle X is selected and its first telemetry applied".
+    /// Returns `true` when the selection settled for `vin` (its state was applied and no
+    /// selection work remains), `false` when the selection failed, was superseded, the
+    /// coordinator stopped, or `timeout` elapsed. Wakes on the selection task's own
+    /// completion instead of leaving callers to poll display state.
+    func selectionSettled(vin: String, timeout: TimeInterval = 30) async -> Bool {
+        if selectionIsSettled(for: vin) { return true }
+        return await withTaskGroup(of: Bool?.self) { group in
+            group.addTask {
+                await self.awaitSelectionWaiter(vin: vin)
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(timeout))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            if let settled = first { return settled }
+            // Timeout: release the still-registered waiter (resumed `false`), never leaked.
+            self.wakeSelectionWaiters(vin: vin, settled: false)
+            return false
+        }
+    }
+
+    /// Registers one waiter. Runs on the actor, so registration cannot interleave with a
+    /// wake: between the settled check in `selectionSettled` and this append, the main
+    /// actor has not suspended.
+    private func awaitSelectionWaiter(vin: String) async -> Bool {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            selectionWaiters[vin, default: []].append(continuation)
+        }
+    }
+
+    private func selectionIsSettled(for vin: String) -> Bool {
+        vin == latest?.identity.vin && requestedSelectionVIN == nil && task == nil
+    }
+
+    private func wakeSelectionWaiters(vin: String? = nil, settled: Bool) {
+        let targets = vin.map { [$0] } ?? Array(selectionWaiters.keys)
+        for key in targets {
+            guard let waiters = selectionWaiters.removeValue(forKey: key) else { continue }
+            waiters.forEach { $0.resume(returning: settled) }
+        }
+    }
+
     private func beginSelection(vin: String) {
+        // Any earlier waiter is waiting on a selection this call supersedes.
+        wakeSelectionWaiters(settled: false)
         confirmations.persist(vin: latest?.identity.vin)
         generation &+= 1
         failureCount = 0
@@ -622,6 +672,7 @@ final class RefreshCoordinator {
                 onEvent?(.selectionChanged(vin))
                 // Selection does not establish a session or schedule a garage scan.
                 apply(state, latency: max(0, now().timeIntervalSince(started)))
+                wakeSelectionWaiters(vin: vin, settled: true)
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
@@ -633,6 +684,7 @@ final class RefreshCoordinator {
                     scheduleSelectionRetry(vin: vin, after: selectionRetryDelay)
                     return
                 }
+                wakeSelectionWaiters(vin: vin, settled: false)
                 handle(mapped, retrySession: false)
             }
         }
@@ -846,7 +898,7 @@ final class RefreshCoordinator {
             from: latestAuthoritative,
             features: preferences.features,
             refreshedFeatures: refreshedFeatures,
-            imageCache: imageCache
+            imageBackfill: imageBackfill(for: state.identity.vin)
         )
         // Command receipts and optimistic locks are coordinator-owned presentation state,
         // never provider telemetry or durable history.
@@ -914,11 +966,23 @@ final class RefreshCoordinator {
                 from: optimistic,
                 features: preferences.features,
                 refreshedFeatures: refreshedFeatures,
-                imageCache: imageCache
+                imageBackfill: imageBackfill(for: authoritative.identity.vin)
             )
         }
         displayed.publish(confirmations.overlay)
         return displayed
+    }
+
+    /// Resolves the persisted-image tier for a merge. The image cache is persistence-owned,
+    /// so it is probed here and the bytes travel into the merge as `VehicleImageBackfill`
+    /// data; Domain never reaches into a store. Probes only when vehicle images are part of
+    /// the requested feature set, matching the old in-merge gate.
+    private func imageBackfill(for vin: String) -> VehicleImageBackfill {
+        guard preferences.features.contains(.vehicleImage) else { return .empty }
+        return VehicleImageBackfill(
+            exterior: imageCache.image(for: vin),
+            interior: imageCache.interiorImage(for: vin)
+        )
     }
 
     private func handle(_ error: VehicleServiceError, retrySession: Bool) {
@@ -1041,6 +1105,7 @@ final class RefreshCoordinator {
         streamEngine?.stop()
         scheduler.cancel()
         nextRefresh = nil
+        wakeSelectionWaiters(settled: false)
     }
 
     private func resumeCommandConfirmationIfNeeded() {
@@ -1054,7 +1119,7 @@ final class RefreshCoordinator {
 
     private func publishDiagnostics() {
         let diagnosticRecord = confirmations.diagnosticRecord
-        onEvent?(.diagnostics(DiagnosticsSnapshot(
+        let snapshot = DiagnosticsSnapshot(
             lastSuccess: lastFullRefreshAt,
             lastError: lastError?.localizedDescription,
             latency: lastLatency,
@@ -1081,7 +1146,11 @@ final class RefreshCoordinator {
             commandReceiptCount: confirmations.visibleReceipts.count,
             awaitingCommandReceiptCount: confirmations.awaitingCount,
             vehicleSwitchPending: requestedSelectionVIN != nil
-        )))
+        )
+        // The diagnostics log exporter is fed here, where the snapshot is built, rather than
+        // by every event handler, so the store can never drift from what was published.
+        Task { await LatestDiagnosticsStore.shared.update(snapshot) }
+        onEvent?(.diagnostics(snapshot))
     }
 
     private func startLiveStreamingIfNeeded(vin: String) {

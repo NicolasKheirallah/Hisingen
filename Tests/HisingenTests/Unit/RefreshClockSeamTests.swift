@@ -111,8 +111,7 @@ struct RefreshClockSeamTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "test-session" },
-                                           readPassword: { nil }, clearPassword: {}),
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
             scheduler: AsyncTimerLoop(wait: { duration in await clock.wait(duration) }),
             now: { instant }
         )
@@ -155,7 +154,7 @@ private actor ClockProbeProvider: VehicleProviding {
     var hasWarmSession: Bool { true }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? cars.first?.vin }

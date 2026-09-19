@@ -27,12 +27,15 @@ struct VehicleEraseScopeTests {
     @MainActor
     private final class Harness {
         let scoped = ScopedPreferences(label: "VehicleEraseScope")
-        let database = VehicleDatabase.inMemory()
+        let raw: SQLiteDatabase
+        let database: VehicleDatabase
         let registry = VehicleMemoryCacheRegistry()
         let stateStore: VehicleStateStore
         let eraser: LocalDataEraser
 
         init() {
+            raw = try! SQLiteDatabase.inMemory()
+            database = VehicleDatabase(database: raw)
             stateStore = VehicleStateStore(
                 defaults: scoped.defaults, database: database, preferences: scoped.store)
             eraser = LocalDataEraser(
@@ -120,7 +123,7 @@ struct VehicleEraseScopeTests {
         let sessionId = harness.database.charging.startChargingSession(vin: vin, startSoc: 20)
         harness.database.charging.recordChargingSample(
             sessionId: sessionId, vin: vin, soc: 20, powerKw: 10, voltage: 230, current: 16)
-        #expect(harness.database.addFuelEntry(
+        #expect(harness.database.history.addFuelEntry(
             vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
     }
 
@@ -184,7 +187,7 @@ struct VehicleEraseScopeTests {
         #expect(counts.chargingSamples == 1)
         #expect(harness.database.history.recentFuelEntries(for: vinA).isEmpty)
         #expect(harness.database.history.recentFuelEntries(for: vinB).count == 1)
-        #expect(harness.database.loadSnapshot(for: vinA) == nil)
+        #expect(harness.database.snapshots.loadSnapshot(for: vinA) == nil)
         for store in perVehicleStores(harness) {
             #expect(store.isPresent(vinB), "\(store.key) lost the untouched vehicle")
         }
@@ -295,10 +298,10 @@ struct VehicleEraseScopeTests {
     @Test
     func theFleetWideLocationScopeClearsEveryVehiclesCoordinates() throws {
         let harness = Harness()
-        #expect(harness.database.recordTelemetry(
+        #expect(harness.database.history.recordTelemetry(
             vin: vinA, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
             avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
-        #expect(harness.database.recordTelemetry(
+        #expect(harness.database.history.recordTelemetry(
             vin: vinB, odometerKm: 2, tripManualKm: nil, tripAutoKm: nil,
             avgConsumption: nil, ambientTempC: nil, latitude: 59.3, longitude: 18.1))
 
@@ -312,7 +315,7 @@ struct VehicleEraseScopeTests {
     }
 
     private func latitude(_ harness: Harness, vin: String) throws -> Double? {
-        try harness.database.db.query(
+        try harness.raw.query(
             sql: "SELECT latitude FROM telemetry_logs WHERE vin = ? LIMIT 1;"
         ) { stmt in
             try stmt.bindText(vin, at: 1)

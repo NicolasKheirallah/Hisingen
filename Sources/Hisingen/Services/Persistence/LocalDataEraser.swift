@@ -90,15 +90,15 @@ final class LocalDataEraser {
     private nonisolated static func runSQL(_ scope: Scope, database: VehicleDatabase) throws {
         switch scope {
         case .session(.vehicle(let vin)):
-            database.deleteSnapshot(for: vin)
-            database.deleteBaseline(for: vin)
-            database.deleteCommandReceipts(for: vin)
-            database.deleteProviderBackoffs(for: vin)
+            database.snapshots.deleteSnapshot(for: vin)
+            database.baselines.deleteBaseline(for: vin)
+            database.commandReceipts.deleteCommandReceipts(for: vin)
+            database.providerBackoffs.deleteProviderBackoffs(for: vin)
         case .session(.all):
-            database.deleteAllSnapshots()
-            database.deleteAllBaselines()
-            database.deleteAllCommandReceipts()
-            database.deleteVehicleScopedProviderBackoffs()
+            database.snapshots.deleteAllSnapshots()
+            database.baselines.deleteAllBaselines()
+            database.commandReceipts.deleteAllCommandReceipts()
+            database.providerBackoffs.deleteVehicleScopedProviderBackoffs()
         case .locations(.vehicle(let vin)):
             try database.clearStoredLocationsOrThrow(for: vin)
         case .locations(.all):

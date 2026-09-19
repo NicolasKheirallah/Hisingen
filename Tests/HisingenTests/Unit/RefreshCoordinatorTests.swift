@@ -23,8 +23,7 @@ struct RefreshCoordinatorTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "test-session" },
-                                           readPassword: { nil }, clearPassword: {})
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {})
         )
         await withCheckedContinuation { continuation in
             coordinator.onEvent = { event in
@@ -59,8 +58,7 @@ struct RefreshCoordinatorTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in storedToken },
-                                           readPassword: { nil }, clearPassword: {}),
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
             // Collapse production backoff (minutes at the top of its curve) so the
             // expiry→recovery cycle completes in milliseconds.
             retryDelay: { _, _, _ in 0.05 }
@@ -98,7 +96,7 @@ private actor MockVehicleProvider: VehicleProviding {
     private(set) var fetchCount = 0
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? { preferred ?? cars.first?.vin }
@@ -132,10 +130,7 @@ private actor RecoveryMockProvider: VehicleProviding {
     func resolvedVIN(preferred: String?) -> String? { preferred ?? "YSMTEST" }
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
 
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
-        guard !token.isEmpty else {
-            throw VehicleServiceError.authenticationRequired(provider: .polestar, reason: .noStoredSession)
-        }
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
         restoreCount += 1
         expired = false
     }

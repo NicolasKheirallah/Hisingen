@@ -45,7 +45,7 @@ struct ProviderBackoffStore: Sendable {
     /// stand-downs answer nil without being deleted: reading stays pure, and the launch pass
     /// drops the closed rows.
     func blockedUntil(_ subject: Subject, now: Date = Date()) -> Date? {
-        guard let entry = database.providerBackoff(for: storageKey(for: subject)),
+        guard let entry = database.providerBackoffs.providerBackoff(for: storageKey(for: subject)),
               entry.blockedUntil > now else { return nil }
         return entry.blockedUntil
     }
@@ -53,15 +53,15 @@ struct ProviderBackoffStore: Sendable {
     /// Why a subject stood down, for the diagnostics export. `fallback` is what the export reports
     /// when the reason was not recorded.
     func reason(for subject: Subject, fallback: String) -> String {
-        database.providerBackoff(for: storageKey(for: subject))?.reason ?? fallback
+        database.providerBackoffs.providerBackoff(for: storageKey(for: subject))?.reason ?? fallback
     }
 
     func block(_ subject: Subject, until: Date, reason: String?) {
-        database.saveProviderBackoff(
+        database.providerBackoffs.saveProviderBackoff(
             subject: storageKey(for: subject), vin: subject.vin, blockedUntil: until, reason: reason)
     }
 
     func unblock(_ subject: Subject) {
-        database.deleteProviderBackoff(subject: storageKey(for: subject))
+        database.providerBackoffs.deleteProviderBackoff(subject: storageKey(for: subject))
     }
 }

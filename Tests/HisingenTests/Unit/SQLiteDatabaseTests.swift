@@ -144,8 +144,8 @@ struct SQLiteDatabaseTests {
             dataWarnings: []
         )
 
-        vdb.saveSnapshot(state)
-        let loaded = vdb.loadSnapshot(for: "TESTVIN1234567890")
+        vdb.snapshots.saveSnapshot(state)
+        let loaded = vdb.snapshots.loadSnapshot(for: "TESTVIN1234567890")
 
         #expect(loaded != nil)
         #expect(loaded?.identity.vin == "TESTVIN1234567890")
@@ -153,8 +153,8 @@ struct SQLiteDatabaseTests {
         #expect(loaded?.energy.batteryPercentage == 82.5)
         #expect(loaded?.freshness.isCached == true)
 
-        vdb.deleteSnapshot(for: "TESTVIN1234567890")
-        #expect(vdb.loadSnapshot(for: "TESTVIN1234567890") == nil)
+        vdb.snapshots.deleteSnapshot(for: "TESTVIN1234567890")
+        #expect(vdb.snapshots.loadSnapshot(for: "TESTVIN1234567890") == nil)
     }
 
     @Test("VehicleDatabase logs and retrieves charging sessions & samples")
@@ -193,11 +193,11 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "BATTERY_VIN_002"
 
-        vdb.recordBatteryHealthMilestone(
+        vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8,
             measurementSource: BatteryHealthRecord.fullChargeRangeSource
         )
-        vdb.recordBatteryHealthMilestone(
+        vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 50000, sohPct: 95.0, degPct: 5.0, usableKwh: 74.1,
             measurementSource: BatteryHealthRecord.fullChargeRangeSource
         )
@@ -216,30 +216,30 @@ struct SQLiteDatabaseTests {
         let vin = "BATTERY_VIN_DEDUP"
 
         // First reading always lands – there is no history to compare against.
-        #expect(vdb.recordBatteryHealthMilestone(
+        #expect(vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
         ))
 
         // A refresh minutes later reporting the same figures carries no new information.
         for _ in 0..<20 {
-            #expect(vdb.recordBatteryHealthMilestone(
+            #expect(vdb.history.recordBatteryHealthMilestone(
                 vin: vin, odometerKm: 10_000, sohPct: 98.5, degPct: 1.5, usableKwh: 76.8
             ) == false)
         }
         #expect(vdb.history.batteryHealthHistory(for: vin, limit: 50).count == 1)
 
         // Noise below the threshold is still noise.
-        #expect(vdb.recordBatteryHealthMilestone(
+        #expect(vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_050, sohPct: 98.6, degPct: 1.4, usableKwh: 76.8
         ) == false)
 
         // Real SoH movement earns a row.
-        #expect(vdb.recordBatteryHealthMilestone(
+        #expect(vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_060, sohPct: 97.9, degPct: 2.1, usableKwh: 76.2
         ))
 
         // So does meaningful distance, even at an unchanged SoH.
-        #expect(vdb.recordBatteryHealthMilestone(
+        #expect(vdb.history.recordBatteryHealthMilestone(
             vin: vin, odometerKm: 10_600, sohPct: 97.9, degPct: 2.1, usableKwh: 76.2
         ))
         #expect(vdb.history.batteryHealthHistory(for: vin, limit: 50).count == 3)
@@ -255,13 +255,13 @@ struct SQLiteDatabaseTests {
         let interval = VehicleDatabase.BatteryHealthMilestone.minimumInterval
 
         // Identical readings, one second short of the heartbeat: still redundant.
-        #expect(vdb.isBatteryHealthMilestone(
+        #expect(vdb.history.isBatteryHealthMilestone(
             sohPct: 98.5, odometerKm: 10_000, since: previous,
             now: previous.timestamp.addingTimeInterval(interval - 1)
         ) == false)
 
         // Past the heartbeat, the same readings become a trend point worth keeping.
-        #expect(vdb.isBatteryHealthMilestone(
+        #expect(vdb.history.isBatteryHealthMilestone(
             sohPct: 98.5, odometerKm: 10_000, since: previous,
             now: previous.timestamp.addingTimeInterval(interval)
         ))
@@ -272,7 +272,7 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "TELEMETRY_VIN_DEDUP"
 
-        #expect(vdb.recordTelemetry(
+        #expect(vdb.history.recordTelemetry(
             vin: vin, odometerKm: 12_000, tripManualKm: 120, tripAutoKm: 40,
             avgConsumption: 18.2, ambientTempC: 14, latitude: 57.7, longitude: 11.9
         ))
@@ -280,25 +280,25 @@ struct SQLiteDatabaseTests {
         // Parked: odometer and both trip meters unchanged, so nothing new to log even
         // though ambient temperature drifts.
         for temp in [13.0, 12.5, 12.0] {
-            #expect(vdb.recordTelemetry(
+            #expect(vdb.history.recordTelemetry(
                 vin: vin, odometerKm: 12_000, tripManualKm: 120, tripAutoKm: 40,
                 avgConsumption: 18.2, ambientTempC: temp, latitude: 57.7, longitude: 11.9
             ) == false)
         }
 
         // Driving moves the odometer, which is exactly what this table is for.
-        #expect(vdb.recordTelemetry(
+        #expect(vdb.history.recordTelemetry(
             vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
             avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
         ))
 
         // The first unchanged reading after movement marks the parked boundary;
         // subsequent parked polls are still deduplicated.
-        #expect(vdb.recordTelemetry(
+        #expect(vdb.history.recordTelemetry(
             vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
             avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
         ))
-        #expect(vdb.recordTelemetry(
+        #expect(vdb.history.recordTelemetry(
             vin: vin, odometerKm: 12_014, tripManualKm: 134, tripAutoKm: 54,
             avgConsumption: 18.0, ambientTempC: 12, latitude: 57.8, longitude: 12.0
         ) == false)
@@ -306,12 +306,13 @@ struct SQLiteDatabaseTests {
 
     @Test("Derived trip history groups adjacent movement and separates parked periods")
     func testDerivedTripGrouping() throws {
-        let vdb = VehicleDatabase.inMemory()
+let raw = try SQLiteDatabase.inMemory()
+        let vdb = VehicleDatabase(database: raw)
         let vin = "TRIP_GROUPING_VIN"
         let start = Date(timeIntervalSince1970: 2_000_000_000)
 
         func insert(_ minute: Int, odometer: Double) throws {
-            try vdb.db.query(sql: """
+            try raw.query(sql: """
                 INSERT INTO telemetry_logs
                 (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c)
                 VALUES (?, ?, ?, NULL, NULL, 18.0, 12.0);
@@ -338,15 +339,16 @@ struct SQLiteDatabaseTests {
 
     @Test("VehicleDatabase audit logs remote commands")
     func testRemoteCommandAuditLogging() throws {
-        let vdb = VehicleDatabase.inMemory()
+let raw = try SQLiteDatabase.inMemory()
+        let vdb = VehicleDatabase(database: raw)
         let vin = "AUDIT_VIN_003"
 
-        vdb.recordCommandAudit(
+        vdb.history.recordCommandAudit(
             id: "cmd-1", vin: vin, command: "lock", status: "success",
             durationMs: 1420, error: nil
         )
 
-        let count = try vdb.db.query(sql: "SELECT COUNT(*) FROM remote_commands_log WHERE vin = ?;") { stmt in
+        let count = try raw.query(sql: "SELECT COUNT(*) FROM remote_commands_log WHERE vin = ?;") { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> Int64 in
             stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
@@ -364,11 +366,11 @@ struct SQLiteDatabaseTests {
         let vdb = VehicleDatabase.inMemory()
         let vin = "DIAG_VIN_004"
 
-        vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 12000, sohPct: 98.0, degPct: 2.0, usableKwh: 76.0)
+        vdb.history.recordBatteryHealthMilestone(vin: vin, odometerKm: 12000, sohPct: 98.0, degPct: 2.0, usableKwh: 76.0)
         let sId = vdb.charging.startChargingSession(vin: vin, startSoc: 30.0)
         vdb.charging.recordChargingSample(sessionId: sId, vin: vin, soc: 35.0, powerKw: 11.0, voltage: 230.0, current: 16.0)
-        vdb.recordTelemetry(vin: vin, odometerKm: 12000, tripManualKm: 250, tripAutoKm: 45, avgConsumption: 18.5, ambientTempC: 18.0, latitude: 57.7, longitude: 11.9)
-        vdb.recordCommandAudit(vin: vin, command: "climate", status: "success")
+        vdb.history.recordTelemetry(vin: vin, odometerKm: 12000, tripManualKm: 250, tripAutoKm: 45, avgConsumption: 18.5, ambientTempC: 18.0, latitude: 57.7, longitude: 11.9)
+        vdb.history.recordCommandAudit(vin: vin, command: "climate", status: "success")
 
         let counts = vdb.recordCounts()
         #expect(counts.batteryHealth == 1)
@@ -384,7 +386,7 @@ struct SQLiteDatabaseTests {
     func testTypedTelemetryHistory() throws {
         let vdb = VehicleDatabase.inMemory()
         let vin = "TELEMETRY_TYPED_HISTORY"
-        #expect(vdb.recordTelemetry(
+        #expect(vdb.history.recordTelemetry(
             vin: vin, odometerKm: 42_000, tripManualKm: 120.5, tripAutoKm: 18.2,
             avgConsumption: 17.4, ambientTempC: 9.0, latitude: nil, longitude: nil
         ))
@@ -397,13 +399,14 @@ struct SQLiteDatabaseTests {
 
     @Test("Disabling location history removes stored coordinates and charging labels")
     func testClearingStoredLocationHistory() throws {
-        let vdb = VehicleDatabase.inMemory()
+let raw = try SQLiteDatabase.inMemory()
+        let vdb = VehicleDatabase(database: raw)
         let vin = "PRIVATE_LOCATION_HISTORY"
-        #expect(vdb.recordTelemetry(vin: vin, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
+        #expect(vdb.history.recordTelemetry(vin: vin, odometerKm: 1, tripManualKm: nil, tripAutoKm: nil,
                                     avgConsumption: nil, ambientTempC: nil, latitude: 57.7, longitude: 11.9))
         _ = vdb.charging.startChargingSession(vin: vin, startSoc: 20, location: "57.7000°, 11.9000°")
         try vdb.clearStoredLocationsOrThrow(for: vin)
-        let remaining = try vdb.db.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
+        let remaining = try raw.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> (Double?, Double?) in
             guard stmt.step() else { return (nil, nil) }
@@ -454,7 +457,7 @@ struct SQLiteDatabaseTests {
         let sessionId = vdb.charging.startChargingSession(vin: vin, startSoc: 20.0, location: "Gothenburg Supercharger")
         vdb.charging.completeChargingSession(id: sessionId, endSoc: 80.0, energyDeliveredKwh: 46.8, peakPowerKw: 150.0, averagePowerKw: 85.0)
 
-        vdb.recordBatteryHealthMilestone(vin: vin, odometerKm: 25000, sohPct: 97.2, degPct: 2.8, usableKwh: 75.8)
+        vdb.history.recordBatteryHealthMilestone(vin: vin, odometerKm: 25000, sohPct: 97.2, degPct: 2.8, usableKwh: 75.8)
 
         let chargingCSV = vdb.charging.exportChargingSessionsCSV(for: vin)
         #expect(chargingCSV.contains("Session ID,VIN,Started At,Ended At"))

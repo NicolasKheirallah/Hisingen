@@ -113,7 +113,7 @@ struct ChargeHistoryRegressionTests {
                 powerWatts: observation.powerWatts, at: observation.at
             ))
             #expect(
-                database.loadSnapshot(for: vin)?.freshness.fetchedAt == observation.at,
+                database.snapshots.loadSnapshot(for: vin)?.freshness.fetchedAt == observation.at,
                 "observation at \(observation.at) was not readable straight after save"
             )
         }

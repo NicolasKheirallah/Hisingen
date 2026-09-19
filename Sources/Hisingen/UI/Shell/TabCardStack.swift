@@ -234,7 +234,7 @@ struct TabCardStack: View {
             VStack(alignment: .leading, spacing: 6) {
                 CardHeader(symbol: "info.circle", title: L10n.text("These cards stay on their own tab"),
                            color: .secondary)
-                Text(L10n.text("They own the state of the tab they came from — a period to chart, a section list to scroll. Open that tab to see them."))
+                Text(L10n.text("They own the state of the tab they came from: a period to chart, a section list to scroll. Open that tab to see them."))
                     .hisType(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -461,12 +461,10 @@ private struct GarageChipStrip: View {
                                 if selected {
                                     Capsule()
                                         .fill(HisingenTheme.accent.opacity(0.12))
-                                        .overlay(Capsule().stroke(HisingenTheme.accent, lineWidth: 1.2))
                                         .matchedGeometryEffect(id: "garageChipSelection", in: namespace)
                                 } else {
                                     Capsule()
                                         .fill(Color.primary.opacity(0.04))
-                                        .overlay(Capsule().stroke(Color.primary.opacity(0.15), lineWidth: 0.5))
                                 }
                             }
                         }

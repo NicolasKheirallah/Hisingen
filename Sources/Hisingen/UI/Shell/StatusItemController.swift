@@ -36,7 +36,7 @@ final class StatusItemController: NSObject {
     private lazy var popoverRefreshCoalescer = PopoverRefreshCoalescer { [weak self] in
         self?.applyPopoverRefresh()
     }
-    private var popoverViewModel: PopoverViewModel?
+    private var panelModel: PanelModel?
     private let database: VehicleDatabase
     private let reverseGeocoder: ReverseGeocoder
     private let imageCache: CarImageCache
@@ -719,10 +719,11 @@ final class StatusItemController: NSObject {
         popover.behavior = preferences.panelCloseBehavior.popoverBehavior
         let layout = PanelLayout.resolve(from: preferences)
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
-        let model = PopoverViewModel(snapshot: currentPopoverSnapshot())
-        popoverViewModel = model
-        let root = AnyView(PopoverRootView(model: model) { [weak self] snapshot in
-            self?.makeRootView(snapshot: snapshot) ?? AnyView(EmptyView())
+        let model = PanelModel(display: currentPanelDisplay(), actions: makePanelActions(),
+                               database: database, reverseGeocoder: reverseGeocoder, imageCache: imageCache)
+        panelModel = model
+        let root = AnyView(PopoverRootView(model: model) { [weak self] panel in
+            self?.makeRootView(panel: panel) ?? AnyView(EmptyView())
         })
         let hosting = NSHostingController(rootView: root)
         popover.contentViewController = hosting
@@ -992,11 +993,10 @@ final class StatusItemController: NSObject {
         popoverRefreshCoalescer.schedule()
     }
 
-    /// Single home for the popover's SwiftUI tree construction. `showPopover` and
-    /// `applyPopoverRefresh` were previously two verbatim copies of these ~30 lines, already
-    /// drifting in their trailing statements.
-    private func currentPopoverSnapshot() -> PopoverViewModel.Snapshot {
-        PopoverViewModel.Snapshot(
+    /// Single home for the popover's display state. `showPopover` and `applyPopoverRefresh`
+    /// both publish from here, so what the panel shows and what the model holds cannot drift.
+    private func currentPanelDisplay() -> PanelDisplay {
+        PanelDisplay(
             state: latestState,
             error: latestError,
             authenticated: authenticated,
@@ -1014,21 +1014,10 @@ final class StatusItemController: NSObject {
         )
     }
 
-    private func makeRootView(snapshot: PopoverViewModel.Snapshot) -> AnyView {
-        AnyView(HisingenContentView(
-            state: snapshot.state,
-            error: snapshot.error,
-            authenticated: snapshot.authenticated,
-            activeVin: snapshot.activeVin,
-            fleet: snapshot.fleet,
-            remoteCommandInProgress: snapshot.remoteCommandInProgress,
-            commandBrand: snapshot.commandBrand,
-            inFlightRemoteCommandID: snapshot.inFlightRemoteCommandID,
-            lastRemoteCommandFeedback: snapshot.lastRemoteCommandFeedback,
-            updateVersion: snapshot.updateVersion,
-            checkingForUpdates: snapshot.checkingForUpdates,
-            notificationPermission: snapshot.notificationPermission,
-            diagnostics: snapshot.diagnostics,
+    /// The panel's action seam, fixed once per controller. Every action routes back to the
+    /// app shell exactly as it did through the old 15-closure init spread.
+    private func makePanelActions() -> PanelActions {
+        PanelActions(
             onRefresh: { [weak self] in self?.onRefresh() },
             onSettings: { [weak self] in self?.toggleSettings() },
             onClose: { [weak self] in self?.popover.performClose(nil) },
@@ -1044,17 +1033,18 @@ final class StatusItemController: NSObject {
             onTestConnection: { [weak self] brand in
                 await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."), nil)
             },
-            setupMode: snapshot.setupMode,
-            onCompleteSetup: { [weak self] in self?.completeSetupPass() },
-            selectedTab: selectedTabBinding,
-            database: database,
-             reverseGeocoder: reverseGeocoder, imageCache: imageCache
-        ).environment(\.preferencesStore, preferences))
+            onCompleteSetup: { [weak self] in self?.completeSetupPass() }
+        )
+    }
+
+    private func makeRootView(panel: PanelModel) -> AnyView {
+        AnyView(HisingenContentView(panel: panel, selectedTab: selectedTabBinding)
+            .environment(\.preferencesStore, preferences))
     }
 
     private func applyPopoverRefresh() {
         guard popover.isShown, let hosting = popover.contentViewController as? NSHostingController<AnyView> else { return }
-        popoverViewModel?.update(currentPopoverSnapshot())
+        panelModel?.update(currentPanelDisplay())
          popover.appearance = preferences.appearanceMode.nsAppearance
         // Live-apply the close behavior so switching modes in Settings takes effect on
         // the open panel without closing it first.
@@ -1121,6 +1111,6 @@ extension StatusItemController: NSPopoverDelegate {
         // tasks and pulse animations, and the copied snapshot dictionaries stayed alive
         // until the next panel session. The tree is rebuilt by `showPopover`.
         popover.contentViewController = nil
-        popoverViewModel = nil
+        panelModel = nil
     }
 }

@@ -57,7 +57,9 @@ struct MeasurementUnitsAndThemeTests {
     func testUSUnitFormatting() {
         #expect(Format.temperature(celsius: 20, unit: .fahrenheit) == "68.0 °F")
         #expect(Format.pressure(kilopascals: 241.3, unit: .psi) == "35.0 psi")
-        #expect(Format.distance(km: 13.1, unit: .miles) == "8.1 mi")
+        // The decimal separator follows the test machine's locale (sv-SE formats "8,1");
+        // this test pins the conversion and the decimal count, not the separator.
+        #expect(Format.distance(km: 13.1, unit: .miles).replacingOccurrences(of: ",", with: ".") == "8.1 mi")
     }
 
     @Test

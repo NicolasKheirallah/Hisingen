@@ -2,11 +2,6 @@ import AppKit
 import Foundation
 import OSLog
 
-struct CapabilityCacheEntry {
-    let value: (any Sendable)?
-    let expiresAt: Date
-}
-
 struct VDMSDiscoveryDiagnostics: Equatable, Sendable {
     let blockedUntil: Date
     let reason: String
@@ -47,12 +42,25 @@ actor PolestarAPI {
     var commandAuthorization = PolestarAuthorizationFlow()
     var webAuthorization = PolestarAuthorizationFlow()
     var saveCommandToken: @Sendable (String) throws -> Void
-    var commandAccessToken: String?
-    var commandRefreshToken: String?
-    var commandTokenExpiry: Date?
-    /// Single-flight guard for the command client's refresh grant (see `commandClientAuthorization`).
-    var commandRefreshTask: Task<CommandClientAuthorization, Never>?
-    var commandRefreshTaskID: UUID?
+    /// The command client's own token lifecycle: the same renewal-window, single-flight and
+    /// dead-grant invariants as the session grant, configured for five-minute command tokens
+    /// and a browser-granted refresh credential that rotates on use. The grant closure owns
+    /// persistence directly, because a rotated token must be durable before the session is
+    /// advertised, whether or not the lifecycle saw the rotation as a change.
+    let commandTokens: TokenLifecycle
+
+    var commandAccessToken: String? {
+        get { commandTokens.accessToken }
+        set { commandTokens.accessToken = newValue }
+    }
+    var commandRefreshToken: String? {
+        get { commandTokens.refreshToken }
+        set { commandTokens.refreshToken = newValue }
+    }
+    var commandTokenExpiry: Date? {
+        get { commandTokens.tokenExpiry }
+        set { commandTokens.tokenExpiry = newValue }
+    }
 
     var session: URLSession
     var redirectDelegate: OAuthRedirectDelegate
@@ -136,9 +144,9 @@ actor PolestarAPI {
     let backoffs: ProviderBackoffStore
     private(set) var carImages: [String: Data] = [:]
     var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
-    var capabilityBackoff: [String: [String: Date]] = [:]
-    var unsupportedCapabilities: Set<String> = []
-    var capabilityCache: [String: CapabilityCacheEntry] = [:]
+    /// Probe-or-cache authority for backend capabilities: cache, TTLs, backoff, and
+    /// command-time invalidation live in one module (see `PolestarCapabilityAuthority`).
+    let capabilityAuthority = PolestarCapabilityAuthority()
     var remoteCommandsInFlight: Set<String> = []
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
     private var imageDownloadTaskIDs: [String: UUID] = [:]
@@ -174,6 +182,19 @@ actor PolestarAPI {
             isDeadGrant: { error in
                 if case PolestarError.authenticationRequired(.noStoredSession) = error { return true }
                 return false
+            }
+        )
+        // Polestar commonly issues five-minute command tokens, so the reuse margin must fit
+        // inside a fresh 300 s grant; 30 s matches the web-client margin `tokenRenewalMargin`
+        // computes for that lifetime.
+        let persistCommandToken = saveCommandToken
+        self.commandTokens = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 30 }),
+            providerName: "Polestar command client",
+            logger: AppLog.logger("polestar-api"),
+            persist: { try persistCommandToken($0) },
+            isDeadGrant: { error in
+                (error as? PolestarError)?.requiresAuthentication == true
             }
         )
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
@@ -599,7 +620,7 @@ actor PolestarAPI {
         }
         if let failure = PolestarError.httpFailure(
             statusCode: response.statusCode,
-            retryAfter: retryAfter(from: response),
+            retryAfter: ServiceResponseClassifier.retryAfter(from: response),
             authenticationReason: invalidReason,
             forbiddenIsAuthentication: true,
             operation: "token request"
@@ -1092,9 +1113,7 @@ actor PolestarAPI {
         ownerFirstName = nil
         market = nil
         targetCache = [:]
-        capabilityBackoff = [:]
-        unsupportedCapabilities = []
-        capabilityCache = [:]
+        capabilityAuthority.reset()
         remoteCommandsInFlight = []
     }
 
@@ -1187,15 +1206,6 @@ actor PolestarAPI {
         return nil
     }
 
-    static func retryAfter(from response: HTTPURLResponse) -> TimeInterval? {
-        guard let value = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
-        if let seconds = TimeInterval(value) { return seconds }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
-        return formatter.date(from: value).map { max(0, $0.timeIntervalSinceNow) }
-    }
 
     private static func mapErrors(_ errors: [GraphQLErrorDTO]) -> [GraphQLServiceError] {
         errors.map { GraphQLServiceError(message: $0.message, path: $0.path, code: $0.code) }
@@ -1251,31 +1261,6 @@ actor PolestarAPI {
         default:
             return false
         }
-    }
-
-    static func capabilityReadingKey(_ feature: AppFeature, key: String? = nil) -> String {
-        if let key { return key }
-        switch feature {
-        case .remoteLocks, .remoteWindows: return AppFeature.exteriorStatus.rawValue
-        case .remoteOTA: return AppFeature.softwareUpdates.rawValue
-        case .remoteSchedules: return AppFeature.chargingSchedule.rawValue
-        case .remotePreCleaning: return AppFeature.airQuality.rawValue
-        default: return feature.rawValue
-        }
-    }
-
-    static func capabilityCacheLifetime(_ feature: AppFeature, key: String) -> TimeInterval {
-        let reading = capabilityReadingKey(feature, key: key == feature.rawValue ? nil : key)
-        if reading == "climate-status" { return 15 }
-        if reading == "amp-limit" || [AppFeature.exteriorStatus, .airQuality, .vehicleLocation,
-                                       .tripMeters, .connectivityDiagnostics].map(\.rawValue).contains(reading) {
-            return 30
-        }
-        if reading == "climate-timers" || reading == "charge-locations"
-            || reading == AppFeature.chargingSchedule.rawValue { return 60 }
-        if [AppFeature.vehicleWeather, .tyreAndWarnings, .vehicleHealth]
-            .map(\.rawValue).contains(reading) { return 300 }
-        return 60 * 60
     }
 
     static func positive(_ value: Int?) -> Int? {

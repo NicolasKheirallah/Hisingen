@@ -76,7 +76,6 @@ struct DismissibleNoticeBanner: View {
         }
         .padding(9)
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: bannerRadius))
-        .overlay(RoundedRectangle(cornerRadius: bannerRadius).stroke(tint.opacity(0.22)))
         .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .scale(scale: 0.95)))
     }
 }

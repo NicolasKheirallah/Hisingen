@@ -7,12 +7,12 @@ struct SettingsDataManagementTests {
     func maintenanceOperationsCompleteBeforeReturning() throws {
         let database = VehicleDatabase.inMemory()
         let vin = "SETTINGS_DATA_TEST"
-        database.recordCommandAudit(vin: vin, command: "lock", status: "success")
-        #expect(database.addFuelEntry(vin: vin, date: Date(), liters: 20, pricePerLiter: 2, odometerKm: 1_000))
-        database.saveVehicleImage(vin: vin, angle: 0, data: Data([1, 2, 3]))
+        database.history.recordCommandAudit(vin: vin, command: "lock", status: "success")
+        #expect(database.history.addFuelEntry(vin: vin, date: Date(), liters: 20, pricePerLiter: 2, odometerKm: 1_000))
+        database.images.saveVehicleImage(vin: vin, angle: 0, data: Data([1, 2, 3]))
         #expect(database.recordCounts().commands == 1)
         #expect(database.history.recentFuelEntries(for: vin).count == 1)
-        #expect(database.loadVehicleImage(for: vin, angle: 0) != nil)
+        #expect(database.images.loadVehicleImage(for: vin, angle: 0) != nil)
 
         try database.vacuumOrThrow()
         #expect(database.recordCounts().commands == 1)
@@ -20,13 +20,13 @@ struct SettingsDataManagementTests {
         try database.wipeVehicleOrThrow(for: vin)
         #expect(database.recordCounts().commands == 0)
         #expect(database.history.recentFuelEntries(for: vin).isEmpty)
-        #expect(database.loadVehicleImage(for: vin, angle: 0) == nil)
+        #expect(database.images.loadVehicleImage(for: vin, angle: 0) == nil)
     }
 
     @Test
     func configurablePruneEntryPointPreservesRecentData() throws {
         let database = VehicleDatabase.inMemory()
-        #expect(database.recordTelemetry(
+        #expect(database.history.recordTelemetry(
             vin: "SETTINGS_RETENTION_TEST", odometerKm: 1, tripManualKm: nil,
             tripAutoKm: nil, avgConsumption: nil, ambientTempC: nil,
             latitude: nil, longitude: nil
@@ -44,9 +44,9 @@ struct SettingsDataManagementTests {
             sessionId: sessionID, vin: vin, soc: 31, powerKw: 11,
             voltage: 230, current: 16
         )
-        #expect(database.recordConnectivity(vin: vin, networkType: "LTE", signalBars: 4, wakeReason: "app"))
-        #expect(database.recordCabinClimate(vin: vin, interiorCelsius: 20, requestedCelsius: 21))
-        #expect(database.addFuelEntry(vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
+        #expect(database.history.recordConnectivity(vin: vin, networkType: "LTE", signalBars: 4, wakeReason: "app"))
+        #expect(database.history.recordCabinClimate(vin: vin, interiorCelsius: 20, requestedCelsius: 21))
+        #expect(database.history.addFuelEntry(vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
         let data = try database.exportBackupJSON(includeCoordinates: false)
         let payload = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(payload["schema"] as? String == "hisingen-backup-v1")

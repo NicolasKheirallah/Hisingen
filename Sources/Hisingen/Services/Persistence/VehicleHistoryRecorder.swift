@@ -184,19 +184,19 @@ final class VehicleHistoryRecorder {
     private nonisolated static func recordActivitiesAndSnapshot(
         _ state: VehicleState, parkedChargeLossActivity: VehicleActivity?, into database: VehicleDatabase
     ) {
-        let previous = database.loadSnapshot(for: state.identity.vin)
+        let previous = database.snapshots.loadSnapshot(for: state.identity.vin)
         if let parkedChargeLossActivity {
-            database.recordActivities([parkedChargeLossActivity])
+            database.history.recordActivities([parkedChargeLossActivity])
         }
-        database.recordActivities(VehicleActivity.changes(from: previous, to: state))
-        database.saveSnapshot(state)
+        database.history.recordActivities(VehicleActivity.changes(from: previous, to: state))
+        database.snapshots.saveSnapshot(state)
     }
 
     private nonisolated static func recordAirQuality(_ state: VehicleState, into database: VehicleDatabase) {
         // Cabin AQI comes from Polestar's GetPreCleaning service. Do not persist a value on
         // Volvo snapshots even if a stale or imported payload happens to carry that field.
         guard !state.isVolvo, let airQuality = state.airQuality else { return }
-        database.recordAirQuality(
+        database.history.recordAirQuality(
             vin: state.identity.vin,
             airQualityIndex: airQuality.airQualityIndex.map(Double.init),
             particulateMatter25: airQuality.particulateMatter25.map(Double.init),
@@ -211,7 +211,7 @@ final class VehicleHistoryRecorder {
     ) {
         guard state.maintenance.odometerKm != nil || state.tripComputer.manualTripKm != nil
                 || state.tripComputer.automaticTripKm != nil else { return }
-        database.recordTelemetry(
+        database.history.recordTelemetry(
             vin: state.identity.vin,
             odometerKm: state.maintenance.odometerKm.map(Double.init),
             tripManualKm: state.tripComputer.manualTripKm,
@@ -233,14 +233,14 @@ final class VehicleHistoryRecorder {
     ) {
         guard let batteryPercentage = state.energy.batteryPercentage else { return }
 
-        database.recordConnectivity(
+        database.history.recordConnectivity(
             vin: state.identity.vin,
             networkType: state.connectivity?.networkType,
             signalBars: state.connectivity?.signalBars,
             wakeReason: state.connectivity?.wakeReason,
             timestamp: state.freshness.fetchedAt
         )
-        database.recordCabinClimate(
+        database.history.recordCabinClimate(
             vin: state.identity.vin,
             interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
             requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
@@ -293,7 +293,7 @@ final class VehicleHistoryRecorder {
                 state: state,
                 specification: specification
               ) else { return }
-        database.recordBatteryHealthMilestone(
+        database.history.recordBatteryHealthMilestone(
             vin: state.identity.vin,
             odometerKm: Double(odometer),
             sohPct: estimate.stateOfHealthPercent,

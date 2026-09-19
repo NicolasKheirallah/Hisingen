@@ -6,7 +6,7 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     /// absent or in snapshots persisted before retention existed.
     var availabilityReportedAt: Date? = nil
     /// Undecoded availability wire fields, captured raw for future classification.
-    var availabilityUnknownWireFields: [PolestarRawWireField]? = nil
+    var availabilityUnknownWireFields: [VehicleRawWireField]? = nil
     var modelName: String?
     var modelYear: String?
     var registrationNo: String?
@@ -28,7 +28,7 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     init(
         availability: VehicleAvailability,
         availabilityReportedAt: Date? = nil,
-        availabilityUnknownWireFields: [PolestarRawWireField]? = nil,
+        availabilityUnknownWireFields: [VehicleRawWireField]? = nil,
         modelName: String? = nil,
         modelYear: String? = nil,
         registrationNo: String? = nil,

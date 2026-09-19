@@ -56,96 +56,93 @@ extension PolestarAPI {
     /// IdP 5xx) that a later retry recovers from on its own. A dead refresh token is cleared
     /// here so it is not re-tried on every subsequent command.
     ///
-    /// Refreshes are single-flight: parallel commands used to each fire a `refresh_token`
-    /// grant with the *same* stored token, and under a rotate-on-use identity provider one
-    /// replay fails while both paths then persist different rotated tokens (last writer
-    /// wins, orphaning the other).
+    /// Single-flight, the renewal window, rotate-on-use persistence, and dead-grant
+    /// classification live in `commandTokens` (a `TokenLifecycle`), the same invariants the
+    /// session grant already owns; the wire part is `refreshCommandGrant`.
     func commandClientAuthorization() async -> CommandClientAuthorization {
         guard !commandAuthorization.isInProgress else { return .notAuthorized }
-        // Polestar commonly issues five-minute command tokens, so the reuse margin must fit
-        // inside a fresh 300 s grant. A flat five-minute margin could never be met and forced
-        // a refresh grant plus account verification on every command; 30 s matches the
-        // web-client margin `tokenRenewalMargin` computes for that lifetime.
-        if let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 30,
-           let token = commandAccessToken { return .authorized(token) }
-        if let existing = commandRefreshTask {
-            return await existing.value
-        }
+        let requestEpoch = sessionEpoch
+        let commandEpoch = commandAuthorization.generation
         let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
-        guard let refresh = stored, !refresh.isEmpty, let tokenEndpoint else { return .notAuthorized }
-        var request = URLRequest(url: tokenEndpoint)
+        guard let refresh = stored, !refresh.isEmpty, tokenEndpoint != nil else { return .notAuthorized }
+        commandTokens.refreshToken = refresh
+        do {
+            switch try await commandTokens.refresh(
+                .renewalWindow,
+                epochIsCurrent: { [self] in
+                    guard await isSessionCurrent(requestEpoch) else { return false }
+                    return await commandAuthorization.isCurrent(commandEpoch)
+                },
+                grant: { [self] in try await refreshCommandGrant(requestEpoch: requestEpoch, commandEpoch: commandEpoch) }
+            ) {
+            case .notNeeded:
+                if let token = commandAccessToken { return .authorized(token) }
+                return .notAuthorized
+            case .refreshed:
+                if let token = commandAccessToken { return .authorized(token) }
+                return .unavailable
+            case .deadGrant:
+                // The refresh token itself is dead (invalid_grant / 401). Retrying it every
+                // command just re-fails; drop it so the UI flips to "not authorized" and the
+                // user is pointed at "Authorize Remote Commands" once.
+                logger.warning("Polestar command-token refresh rejected; clearing stored authorization")
+                clearCommandAuthorization()
+                return .notAuthorized
+            }
+        } catch is CancellationError {
+            return .unavailable
+        } catch is KeychainError {
+            logger.error("Polestar command authorization could not be saved to Keychain")
+            return .storageFailure
+        } catch {
+            // Transient: offline, 5xx, rate limit, decode. The authorization is probably
+            // still good – keep the stored refresh token and let a later command retry.
+            logger.warning("Polestar command-token refresh failed transiently: \(String(describing: error), privacy: .public)")
+            return .unavailable
+        }
+    }
+
+    /// The wire half of the command-client grant: exchange the stored refresh token, then
+    /// verify the returned token still names the same account as the web session. Lifecycle
+    /// state (persistence, dead-grant classification) stays with `commandTokens`.
+    private func refreshCommandGrant(requestEpoch: Int, commandEpoch: UInt) async throws -> TokenLifecycle.Grant {
+        guard let endpoint = tokenEndpoint else {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
+        guard let refresh = commandTokens.refreshToken, !refresh.isEmpty else {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.formBody([
             "grant_type": "refresh_token", "client_id": commandClientID, "refresh_token": refresh
         ])
-        let currentSession = session
-        let diagnosticLog = diagnosticLog
-        let requestEpoch = sessionEpoch
-        let commandEpoch = commandAuthorization.generation
-        let taskID = UUID()
-        let task = Task { [logger] () -> CommandClientAuthorization in
-            do {
-                let token = try await Self.requestToken(request: request, session: currentSession,
-                                                        invalidReason: .expiredSession,
-                                                        diagnosticLog: diagnosticLog)
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
-                // Rotation already happened at the server, even if userinfo is unavailable.
-                self.commandRefreshToken = token.refreshToken ?? refresh
-                try await self.verifyCommandAccount(accessToken: token.accessToken)
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else {
-                    return .unavailable
-                }
-                try self.applyCommandToken(token, fallbackRefresh: refresh)
-                return .authorized(token.accessToken)
-            } catch let error as PolestarError where error.requiresAuthentication {
-                guard self.sessionEpoch == requestEpoch, self.commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
-                // The refresh token itself is dead (invalid_grant / 401). Retrying it every
-                // command just re-fails; drop it so the UI flips to "not authorized" and the
-                // user is pointed at "Authorize Remote Commands" once.
-                logger.warning("Polestar command-token refresh rejected; clearing stored authorization")
-                self.clearCommandAuthorization()
-                return .notAuthorized
-            } catch is KeychainError {
-                logger.error("Polestar command authorization could not be saved to Keychain")
-                return .storageFailure
-            } catch {
-                // Transient: offline, 5xx, rate limit, decode. The authorization is probably
-                // still good – keep the stored refresh token and let a later command retry.
-                logger.warning("Polestar command-token refresh failed transiently: \(String(describing: error), privacy: .public)")
-                return .unavailable
-            }
+        let token = try await Self.requestToken(request: request, session: session,
+                                                invalidReason: .expiredSession,
+                                                diagnosticLog: diagnosticLog)
+        guard isSessionCurrent(requestEpoch), commandAuthorization.isCurrent(commandEpoch) else {
+            throw CancellationError()
         }
-        commandRefreshTask = task
-        commandRefreshTaskID = taskID
-        defer {
-            if commandRefreshTaskID == taskID {
-                commandRefreshTask = nil
-                commandRefreshTaskID = nil
-            }
-        }
-        return await task.value
-    }
-
-    private func applyCommandToken(_ token: TokenResponseDTO, fallbackRefresh: String) throws {
-        commandRefreshToken = token.refreshToken ?? fallbackRefresh
-        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
-        // Keep a rotated token in memory even when durable storage is temporarily locked.
-        // Do not advertise a usable command session until its persistence succeeds.
-        commandAccessToken = nil
-        try saveCommandToken(token.refreshToken ?? fallbackRefresh)
-        commandAccessToken = token.accessToken
+        // Rotation already happened at the server, even if account verification is unavailable:
+        // keep the rotated token in memory now so a transient verification failure cannot make
+        // the next retry present the token the server just invalidated. Persistence still waits
+        // for adoption after verification.
+        commandTokens.refreshToken = token.refreshToken ?? refresh
+        try await verifyCommandAccount(accessToken: token.accessToken)
+        // Persistence is the grant's own last step, not adoption's: a locked Keychain must
+        // surface as a storage failure instead of a session a restart would lose, and the
+        // lifecycle would otherwise skip persisting a token it already sees as current.
+        try saveCommandToken(commandTokens.refreshToken ?? refresh)
+        return TokenLifecycle.Grant(accessToken: token.accessToken,
+                                    refreshToken: token.refreshToken,
+                                    expiresIn: TimeInterval(token.expiresIn))
     }
 
     /// Invalidates in-flight grants and memory state; restoration may still use the Keychain.
     func invalidateCommandAuthorization() {
         commandAuthorization.invalidate()
-        commandRefreshTask?.cancel()
-        commandRefreshTask = nil
-        commandRefreshTaskID = nil
-        commandAccessToken = nil
-        commandRefreshToken = nil
-        commandTokenExpiry = nil
+        commandTokens.reset()
     }
 
     func clearCommandAuthorization() {
@@ -158,6 +155,25 @@ extension PolestarAPI {
     /// refreshed lazily inside that path.
     var hasWarmSession: Bool {
         refreshToken != nil && tokenEndpoint != nil && !cars.isEmpty
+    }
+
+    /// Resolves the stored credential that resumes the consumer API. Token-free for
+    /// callers: which keychain item means "session" in which connection mode is this
+    /// adapter's knowledge, not the security module's.
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
+        guard let token = try Keychain.readSessionToken(), !token.isEmpty else {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
+        try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+    }
+
+    /// Stored email + password sign-in applies to the consumer-API modes; an M2M-only
+    /// connection has no password to fall back to.
+    var acceptsStoredPasswordSignIn: Bool {
+        get async {
+            let mode = await MainActor.run { preferences.polestarConnectionMode }
+            return mode == .polestarID || mode == .augmented
+        }
     }
 
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {

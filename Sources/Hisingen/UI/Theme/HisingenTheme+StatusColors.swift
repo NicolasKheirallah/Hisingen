@@ -66,7 +66,9 @@ extension HisingenTheme {
     /// are not the same swatch. Was a bare `Color(red:green:blue:)` measured at 2.03:1 on the
     /// light card while being used as a foreground label.
     static let semanticFuel = Color(
-        light: NSColor(red: 0.5742, green: 0.3564, blue: 0.0000, alpha: 1),
+        // Light variant held 4.48:1 on a 12 % wash over the canvas once chips moved onto the
+        // panel glass (floor 4.5); darkened 4 % to clear it with margin in every theme.
+        light: NSColor(red: 0.5513, green: 0.3422, blue: 0.0000, alpha: 1),
         dark: NSColor(red: 1.0000, green: 0.7600, blue: 0.3000, alpha: 1)
     )
 

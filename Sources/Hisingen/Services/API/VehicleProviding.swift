@@ -11,7 +11,14 @@ protocol VehicleProviding: RemoteCommandExecuting {
     /// otherwise forced a token grant and a full vehicle re-discovery every five minutes.
     var hasWarmSession: Bool { get async }
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws
+    /// Resumes from stored state after a restart. The adapter resolves which stored
+    /// credential resumes it, in its own terms, and throws its own authentication-required
+    /// error when none can. Callers never pass a token: which keychain item means "session"
+    /// for which connection mode is adapter knowledge, not caller knowledge.
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws
+    /// Whether stored email + password sign-in is a valid fallback for this adapter's
+    /// current configuration. An M2M-only connection has no password to fall back to.
+    var acceptsStoredPasswordSignIn: Bool { get async }
     func resetSession() async
     func signOut() async throws
     func resolvedVIN(preferred: String?) async -> String?
@@ -29,10 +36,23 @@ protocol VehicleProviding: RemoteCommandExecuting {
     /// (model name, plate, owner greeting) survives refreshes that never touch the
     /// consumer API. Nil when the provider holds none.
     func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot?
+    /// Telemetry only the consumer API serves, for the augmented provider to overlay onto
+    /// portal-served state the same way `identitySnapshot` is. Nil when the provider has
+    /// nothing to add (including a cold session), so a portal refresh is never poisoned
+    /// by the overlay's own transport failures.
+    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay?
+}
+
+/// The consumer-API domains the M2M surface cannot serve. Carried behind the augmented
+/// provider's overlay so only one protocol surface grows if another domain appears.
+struct ConsumerTelemetryOverlay: Sendable, Equatable {
+    var softwareInfo: VehicleSoftwareInfo?
+    var connectivity: VehicleConnectivity?
 }
 
 extension VehicleProviding {
     func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot? { nil }
+    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay? { nil }
 }
 
 enum VehicleLiveUpdate: Equatable, Sendable {
@@ -56,6 +76,8 @@ protocol VehicleLiveStreaming: Sendable {
 extension VehicleProviding {
     /// The default: an adapter with no configuration of its own.
     func prepareSession() async throws {}
+    /// The default: an adapter with no stored-password sign-in path.
+    var acceptsStoredPasswordSignIn: Bool { false }
 }
 
 extension PolestarAPI: VehicleProviding {}

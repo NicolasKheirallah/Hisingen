@@ -117,12 +117,12 @@ struct VehicleTabView: View {
         case .vehicleChargingPlanner:
             if let card = chargingPlannerCard { card.transition(cardTransition) }
         case .vehicleFuelEngine:
-            pairedCard(FuelAndEngineCard.make(state: state, preferences: preferences), .vehicleOpenings, openingsCard)
+            if let row = VehicleDashboardRows.fuel(state: state, distanceUnit: preferences.distanceUnit) {
+                row.transition(cardTransition)
+            }
         case .vehicleOpenings:
-            // Drawn by the fuel row when that row is present; on its own otherwise, which is the
-            // case after the reader moves it somewhere else on the tab.
-            if !rowItems.contains(.vehicleFuelEngine) {
-                pairedCard(openingsCard, .vehicleTyres, tireSchematicCard)
+            if let row = openingsRow {
+                row.transition(cardTransition)
             }
         case .vehicleTyres:
             if !rowItems.contains(.vehicleOpenings) {
@@ -134,8 +134,9 @@ struct VehicleTabView: View {
             }
         case .vehicleReadiness:
             if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
-                VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
-                    .transition(cardTransition)
+                if let check = VehicleDashboardRows.departureCheck(state: state) {
+                    check.transition(cardTransition)
+                }
             }
         case .vehicleMore:
             moreDetailsSection
@@ -188,17 +189,17 @@ struct VehicleTabView: View {
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             // One shared capsule slides between chips; matched
-                            // geometry requires exactly one visible source.
+                            // geometry requires exactly one visible source. Selection is a
+                            // tinted fill only: the outline the selected chip drew said what
+                            // the fill already said.
                             .background {
                                 if selected {
                                     Capsule()
                                         .fill(HisingenTheme.accent.opacity(0.12))
-                                        .overlay(Capsule().stroke(HisingenTheme.accent, lineWidth: 1.2))
                                         .matchedGeometryEffect(id: "carChipSelection", in: carChipNamespace)
                                 } else {
                                     Capsule()
                                         .fill(Color.primary.opacity(0.04))
-                                        .overlay(Capsule().stroke(Color.primary.opacity(0.15), lineWidth: 0.5))
                                 }
                             }
                         }
@@ -246,9 +247,6 @@ struct VehicleTabView: View {
             }
             .disclosureGroupStyle(WholeRowDisclosureStyle())
             .padding(HisingenTheme.cardPadding)
-            .background(HisingenTheme.cardSurface(cornerRadius: HisingenTheme.cornerRadius))
-            .clipShape(RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous))
-            .overlay(HisingenTheme.cardBoundary(increasedContrast: false))
         )
     }
 
@@ -258,14 +256,16 @@ struct VehicleTabView: View {
         return AnyView(ChargingPlannerCard(state: state))
     }
 
-    private var openingsCard: AnyView? {
+    /// The doors-and-locks row, with the availability gating the openings card carried: a
+    /// missing feature or a data-less snapshot still owes the reader the explanation of *why*,
+    /// which is the unavailable card's whole job.
+    private var openingsRow: AnyView? {
         guard features.contains(.exteriorStatus) else { return nil }
         guard let exterior = state.exteriorStatus, !exterior.openings.isEmpty else {
             if state.isVolvo { return AnyView(volvoUnavailableCard(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo, message: L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings."))) }
             return UnavailableFeatureCard.make(state: state, feature: .exteriorStatus, symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo, badge: AppFeature.exteriorStatus.title)
         }
-        return AnyView(DoorsAndOpeningsCardView(ext: exterior, isLocked: exterior.isLocked,
-                                                model: state.model))
+        return VehicleDashboardRows.doors(state: state)
     }
 
     private var tireSchematicCard: AnyView? {

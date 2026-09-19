@@ -2,14 +2,16 @@
 
 Design direction for Hisingen. Transcribed on 2026-09-18 from the shipped app
 (`Sources/Hisingen/UI`), not invented: every field below is how the app already looks and
-behaves, with the source file named. Nico owns this file; correct anything that reads wrong.
-Where this file and the code disagree, the code wins and this file gets fixed. Tokens live in
+behaves, with the source file named. Surfaces were redesigned into Apple's 2026 Liquid Glass
+language on 2026-09-19; the surface sections below describe that language as shipped. Nico
+owns this file; correct anything that reads wrong. Where this file and the code disagree, the
+code wins and this file gets fixed. Tokens live in
 `Sources/Hisingen/UI/Theme/` and `Sources/Hisingen/UI/Motion.swift`.
 
 Reading this as: a macOS menu-bar utility panel for Volvo and Polestar EV owners, in a
 Scandinavian instrument-panel language, dial ENERGY 2 / RHYTHM 2 / MOTION 2.
 
-Hisingen (the Gothenburg island where Volvo builds cars) is a compact popover of cards:
+Hisingen (the Gothenburg island where Volvo builds cars) is a compact popover of sections:
 battery, climate, charging, tyres, trips, service, with remote controls. Quiet, precise,
 warm where things act.
 
@@ -32,7 +34,7 @@ so (`ChargeTargetProjection`, `InstrumentMath`).
 
 - **ENERGY 2** (Stripe, not GOV.UK): one composed entrance, one accent, data first. A utility
   that must never shout; the readings are the display, not the chrome.
-- **RHYTHM 2**: one card grammar everywhere, deliberately broken by the vehicle hero, the
+- **RHYTHM 2**: one section grammar everywhere, deliberately broken by the vehicle hero, the
   charts, and full-width banners.
 - **MOTION 2**: every state change animates, nothing bounces. Ambient motion only where the
   car is actually doing something, and only while anyone can see it. Gesture-carried motion
@@ -79,8 +81,10 @@ The nine themes:
 | Gothenburg Forest | `#4CAF50` | Swedish pine, organic soft |
 | Sand Dune | `#C5A059` | Desert sand, titanium champagne |
 
-Gradient use is structural, not decorative: the app's only gradient is the specular rim on
-glass cards. Brand warmth lives in the accent token, never as a wash over large surfaces.
+Gradient use is structural, not decorative: charts draw their series gradients, and the
+vehicle hero's scene carries its own lighting, but no surface draws a decorative gradient.
+The specular rim the old glass cards carried is gone with the 2026 surface pass. Brand warmth
+lives in the accent token, never as a wash over large surfaces.
 
 ## Typography
 
@@ -105,19 +109,37 @@ one ramp (`HisingenTheme+Typography.swift`):
 
 ## Surfaces and geometry
 
-One radius per question, all global (`HisingenTheme.swift`): cards 12, banners 10 (a
-concentric inset of the card), gauges 5, status chips 4. Nothing is pill-shaped by default.
+One radius per question, all global (`HisingenTheme.swift`): sections 12, banners 10 (a
+concentric inset of the section), gauges 5, status chips 4. Nothing is pill-shaped by default.
 
-Material discipline, the app's strongest identity rule: exactly one translucent surface in
-any stack. Panel = `.regularMaterial` glass; card = solid `cardFill`; chip = solid
-`chipFill`. Blurs never stack. Under Reduce Transparency or Increase Contrast the panel goes
-opaque and darker than any canvas, so the lifted card still separates.
+Material discipline, the app's strongest identity rule: exactly one surface in any stack.
+Panel = `.regularMaterial` glass; section = *no surface at all*, a group of content on the
+glass; chip = solid `chipFill`. Blurs never stack, and nothing competes with the material.
 
-Elevation is a three-step ladder chosen by surface size, not theme: onCard (chip) < card <
-floating panel. One shadow per surface, black in light and a lifted white in dark.
-Separation comes from the boundary stroke (1pt hairline; a 3:1 boundary under Increase
-Contrast) and the shadow, never from stacked translucency. Card padding 15 and section
-spacing 12, both density-scaled; whitespace is structural.
+The 2026 language (adopted 2026-09-19; the first pass kept a lifted fill on every section and
+read as same-looking, so the fill went too): a section is **not a surface**. The old card's
+fill, outline, specular rim and inner shadow are all deleted (`cardSurface` no longer exists)
+and content groups sit directly on the panel glass the way Apple's own popovers and Control
+Center do, grouped by whitespace, header typography and inset dividers. `cardFill` remains a
+palette token for the render reference, but nothing in the app draws it. Glass is the
+*functional* layer, drawn through exactly
+two tokens (`hisControlGlass`, `hisFloatingGlass` in `HisingenTheme+Surfaces.swift`) and only
+on what the reader operates: the selected tab capsule, the Settings section indicator, the
+floating charging mini panel. On macOS 26 these draw real system glass (`glassEffect`, with
+the system's own hover and press responses); on macOS 15 the same shapes fall back to palette
+fills and the panel material, so the hierarchy survives without the material. Under Reduce
+Transparency or Increase Contrast every surface goes opaque, per ``PopoverSurface``.
+`Scripts/verify-surface-discipline.mjs` fails when a second call site draws glass or a
+material, or when the section grammar regains a surface.
+
+Elevation belongs to windows, not to sections: the panel and the floating mini panel carry
+their system window shadows, and nothing inside the panel casts one. The only shadow drawn in
+UI is CardHeader's breathing glyph glow, a focus accent on a single element. Separators inside
+a section are `Divider()` at `dividerOpacity`; where content passes under the tab strip or
+over the footer, the scroll edge softens through a gradient mask instead of meeting a drawn
+divider. The Increase Contrast boundary (`cardBoundary(increasedContrast:)`, 3:1, checked by
+`Scripts/verify-app-contrast.py`) is the one outline the app draws, and only when asked.
+Card padding 15 and section spacing 12, both density-scaled; whitespace is structural.
 
 ## Motion
 
@@ -137,8 +159,22 @@ Tokens grouped by why (`Motion.swift`):
 
 ## Components and states
 
-- Cards are the universal grammar; one definition (`cardSurface`) serves every card.
-- Status labels are one family (`Pill`, `StateSummaryChip`, `CommandReceiptChip`) at radius 4.
+- Sections are the universal grammar; one definition (`Card`) serves every card: content on
+  the panel glass, no surface of its own.
+- The dashboard's status primitive is the **instrument row** (`DashboardRow`): tinted icon,
+  ink value, muted trailing label, one line, **no surface**. Tiles were tried between the card
+  and the row and read as cards, because a filled rounded rectangle is a card whatever it
+  contains; rows are only typography on the panel glass, stacked on whitespace. Rows state;
+  the hero's living overlay shows *where*; Controls *act*. Doors-and-locks and fuel render as
+  rows (`VehicleDashboardRows`); the hero owns the battery figure, so no row repeats it; a
+  disconnected cable is one muted line, not a titled section
+  (`VehicleChargingCard.idleCard`); the departure checker is one collapsed disclosure.
+- The tab selection and the Settings section indicator are glass capsules sliding on
+  `matchedGeometryEffect`. Selection everywhere else (garage chips, pickers, schedule rows)
+  is a tinted fill with no outline.
+- Status labels are one family (`Pill`, `StateSummaryChip`, `CommandReceiptChip`) at radius 4:
+  a 12 % wash of their own colour and no outline, the ceiling the accent's 4.5:1 guarantee
+  covers.
 - Empty states use `HisingenEmptyState` (ContentUnavailableView) with domain-specific copy
   and real recovery actions; loading and error states are part of every data card.
 - SF Symbols, hierarchical rendering, domain-relevant glyphs (a fan for climate, a battery

@@ -98,8 +98,8 @@ struct PolestarCapabilityTests {
         await gate.release()
         do { _ = try await read.value; Issue.record("Stale read returned successfully") }
         catch { #expect(error is CancellationError) }
-        #expect(await api.capabilityCache.isEmpty)
-        #expect(await api.capabilityBackoff.isEmpty)
+        #expect(await api.capabilityAuthority.isEmpty)
+        #expect(await api.capabilityAuthority.isEmpty)
     }
 
     @Test func lateFailureCannotBackOffANewerSession() async throws {
@@ -116,7 +116,7 @@ struct PolestarCapabilityTests {
         await gate.release()
         do { _ = try await read.value; Issue.record("Stale failure was swallowed") }
         catch { #expect(error is CancellationError) }
-        #expect(await api.capabilityBackoff.isEmpty)
+        #expect(await api.capabilityAuthority.isEmpty)
     }
 
     @Test func cancelledReadDoesNotMarkCapabilityUnavailable() async {
@@ -127,7 +127,7 @@ struct PolestarCapabilityTests {
             }
             Issue.record("Cancellation was swallowed")
         } catch { #expect(error is CancellationError) }
-        #expect(await api.capabilityBackoff.isEmpty)
+        #expect(await api.capabilityAuthority.isEmpty)
     }
 
     @Test func backoffPreservesFailureUntilAReadSucceeds() async throws {
@@ -246,12 +246,12 @@ struct PolestarCapabilityTests {
 
     @Test func dynamicReadingsNeverInheritMetadataLifetime() {
         for feature: AppFeature in [.tripMeters, .connectivityDiagnostics, .exteriorStatus, .remoteLocks, .remoteWindows] {
-            #expect(PolestarAPI.capabilityCacheLifetime(feature, key: feature.rawValue) == 30)
+            #expect(PolestarCapabilityAuthority.lifetime(forReading: PolestarCapabilityAuthority.readingKey(for: feature)) == 30)
         }
-        #expect(PolestarAPI.capabilityCacheLifetime(.chargingDetails, key: "amp-limit") == 30)
-        #expect(PolestarAPI.capabilityCacheLifetime(.climateStatus, key: "climate-status") == 15)
-        #expect(PolestarAPI.capabilityCacheLifetime(.remoteSchedules, key: "climate-timers") == 60)
-        #expect(PolestarAPI.capabilityCacheLifetime(.softwareUpdates, key: "my-cars") == 3600)
+        #expect(PolestarCapabilityAuthority.lifetime(forReading: "amp-limit") == 30)
+        #expect(PolestarCapabilityAuthority.lifetime(forReading: "climate-status") == 15)
+        #expect(PolestarCapabilityAuthority.lifetime(forReading: "climate-timers") == 60)
+        #expect(PolestarCapabilityAuthority.lifetime(forReading: "my-cars") == 3600)
     }
 }
 

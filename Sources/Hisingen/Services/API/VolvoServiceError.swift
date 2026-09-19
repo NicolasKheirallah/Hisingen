@@ -74,12 +74,16 @@ enum VolvoError: Error, LocalizedError {
 
     static func httpFailure(statusCode: Int, retryAfter: TimeInterval? = nil,
                             operation: String = "request") -> VolvoError? {
-        if (200..<300).contains(statusCode) { return nil }
-        if statusCode == 401 { return .authenticationRequired(.expiredSession) }
-        if statusCode == 403 { return .permissionDenied(operation: operation) }
-        if statusCode == 429 { return .rateLimited(retryAfter: retryAfter) }
-        if (500..<600).contains(statusCode) { return .server(statusCode: statusCode) }
-        return .client(statusCode: statusCode)
+        // The status ladder is shared; only this vocabulary mapping is Volvo's own.
+        switch ServiceResponseClassifier.failure(status: statusCode, retryAfter: retryAfter,
+                                                 operation: operation) {
+        case nil: return nil
+        case .authenticationRequired: return .authenticationRequired(.expiredSession)
+        case .permissionDenied(let operation): return .permissionDenied(operation: operation)
+        case .rateLimited(let retryAfter): return .rateLimited(retryAfter: retryAfter)
+        case .server(let statusCode): return .server(statusCode: statusCode)
+        case .client(let statusCode, _, _): return .client(statusCode: statusCode)
+        }
     }
 
     var asVehicleServiceError: VehicleServiceError {

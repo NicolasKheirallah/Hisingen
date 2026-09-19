@@ -153,18 +153,9 @@ struct SettingsNavigationBar: View {
 
     /// The indicator the panel's tab bar draws, so a reader learns one mark for "you are here".
     private var sectionIndicator: some View {
-        Group {
-            if HisingenTheme.cornerRadius == 0 {
-                Rectangle()
-                    .fill(HisingenTheme.ink)
-                    .frame(height: 1.5)
-            } else {
-                Capsule()
-                    .fill(.primary.opacity(0.08))
-                    .overlay(Capsule().stroke(.separator.opacity(0.3), lineWidth: 0.5))
-            }
-        }
-        .matchedGeometryEffect(id: "settingsSectionIndicator", in: sectionIndicatorNamespace)
+        Color.clear
+            .hisControlGlass(in: Capsule(), fallback: HisingenTheme.fill(.selected))
+            .matchedGeometryEffect(id: "settingsSectionIndicator", in: sectionIndicatorNamespace)
     }
 
     private var searchField: some View {

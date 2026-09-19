@@ -205,10 +205,6 @@ struct ScheduleEditorSheet: View {
                 : Color.primary.opacity(0.04),
             in: RoundedRectangle(cornerRadius: 6)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(editingScheduleID == sched.backendID && isEditable ? HisingenTheme.accent.opacity(0.4) : .clear, lineWidth: 1)
-        )
         .hisAnimation(Motion.selection, value: editingScheduleID)
         .contentShape(Rectangle())
         .onTapGesture { if isEditable { beginEditing(sched) } }

@@ -518,7 +518,7 @@ struct VehicleActivityTests {
         #expect(loss.after == "58.0")
         #expect(loss.intervalStart == start)
         let database = VehicleDatabase.inMemory()
-        database.recordActivities([loss])
+        database.history.recordActivities([loss])
         #expect(database.history.recentActivities(for: loss.vin).first == loss)
         #expect(detector.ingest(sample(30, battery: 58)) == nil)
         detector.reset()
@@ -592,12 +592,13 @@ struct VehicleActivityTests {
         let events = VehicleActivity.changes(from: previous, to: current)
         #expect(events.count == 2)
         #expect(VehicleActivity.changes(from: current, to: current).isEmpty)
-        let database = VehicleDatabase.inMemory()
-        database.recordActivities(events)
-        database.recordActivities(events)
+let raw = try SQLiteDatabase.inMemory()
+        let database = VehicleDatabase(database: raw)
+        database.history.recordActivities(events)
+        database.history.recordActivities(events)
         #expect(database.history.recentActivities(for: current.identity.vin).count == 2)
         #expect(database.history.recentActivities(for: "OTHER-VIN").isEmpty)
-        let version = try database.db.query(sql: "PRAGMA user_version;") { statement in
+        let version = try raw.query(sql: "PRAGMA user_version;") { statement in
             statement.step() ? statement.columnInt64(at: 0) : nil
         }
         #expect(version == Int64(VehicleDatabase.latestSchemaVersion))

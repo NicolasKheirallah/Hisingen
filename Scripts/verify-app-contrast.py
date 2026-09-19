@@ -388,6 +388,21 @@ def main() -> int:
                 TEXT_FLOOR,
             )
 
+    # The 2026 panel has one surface: sections are groups on the panel glass, so the washes
+    # chips draw composite over the canvas, not over a lifted card. Those pairs are checked
+    # here rather than trusted to transfer from the card pairs.
+    print("Accent as text on the canvas and a 12 % wash over it (floor 4.5:1)")
+    for theme in THEMES:
+        for appearance, index in (("light", 0), ("dark", 1)):
+            foreground = accent[theme][index]
+            check(f"{theme}/{appearance} accent on canvas", foreground, canvas[theme][index], TEXT_FLOOR)
+            check(
+                f"{theme}/{appearance} accent on 12 % wash over canvas",
+                foreground,
+                foreground.over(canvas[theme][index], TEXT_WASH),
+                TEXT_FLOOR,
+            )
+
     print("Semantic status tokens as text on the card and their own 12 % wash (floor 4.5:1)")
     for theme in THEMES:
         for appearance, index in (("light", 0), ("dark", 1)):
@@ -399,6 +414,21 @@ def main() -> int:
                     f"{theme}/{appearance} {name} on 12 % wash",
                     foreground,
                     foreground.over(backdrop, TEXT_WASH),
+                    TEXT_FLOOR,
+                )
+
+    # Chips sit on the panel glass now, so the same guarantee is owed against the canvas and a
+    # wash composited over the canvas.
+    print("Semantic status tokens as text on the canvas and a 12 % wash over it (floor 4.5:1)")
+    for theme in THEMES:
+        for appearance, index in (("light", 0), ("dark", 1)):
+            for name, pair in statuses.items():
+                foreground = pair[index]
+                check(f"{theme}/{appearance} {name} on canvas", foreground, canvas[theme][index], TEXT_FLOOR)
+                check(
+                    f"{theme}/{appearance} {name} on 12 % wash over canvas",
+                    foreground,
+                    foreground.over(canvas[theme][index], TEXT_WASH),
                     TEXT_FLOOR,
                 )
 

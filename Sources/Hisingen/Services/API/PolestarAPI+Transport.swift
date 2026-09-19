@@ -12,7 +12,7 @@ extension PolestarAPI {
     func validateHTTP(_ response: HTTPURLResponse, operation: String = "request") throws {
         if let failure = PolestarError.httpFailure(
             statusCode: response.statusCode,
-            retryAfter: Self.retryAfter(from: response),
+            retryAfter: ServiceResponseClassifier.retryAfter(from: response),
             operation: operation
         ) { throw failure }
     }

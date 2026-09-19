@@ -446,7 +446,7 @@ struct HistoryDashboardView: View {
             presenting: fuelEntryPendingDeletion
         ) { entry in
             Button(L10n.text("Delete"), role: .destructive) {
-                database.deleteFuelEntry(id: entry.id)
+                database.history.deleteFuelEntry(id: entry.id)
                 fuelEntryPendingDeletion = nil
                 bumpRefresh()
             }

@@ -9,7 +9,7 @@ import Foundation
 struct GrpcAvailabilityReport: Equatable, Sendable {
     let availability: VehicleAvailability
     let reportedAt: Date?
-    let unknownFields: [PolestarRawWireField]
+    let unknownFields: [VehicleRawWireField]
 }
 
 struct GrpcBatteryExtras: Codable, Equatable, Sendable {
@@ -27,7 +27,7 @@ struct GrpcBatteryExtras: Codable, Equatable, Sendable {
     /// Backend-reported usable pack capacity in kWh (field 12 in live captures).
     let reportedBatteryCapacityKwh: Double?
     /// Every wire field this parser does not decode semantically, captured raw.
-    let unknownFields: [PolestarRawWireField]
+    let unknownFields: [VehicleRawWireField]
 }
 
 struct PolestarInFlightRequest<Value: Sendable>: Sendable {
@@ -597,7 +597,7 @@ actor PolestarGRPC {
                 throw PolestarError.authenticationRequired(.expiredSession)
             }
             if let failure = PolestarError.httpFailure(
-                statusCode: http.statusCode, retryAfter: PolestarAPI.retryAfter(from: http), operation: path
+                statusCode: http.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: http), operation: path
             ) { throw failure }
             if let grpcStatus, grpcStatus != "0" {
                 throw readStatusFailure(status: grpcStatus, message: grpcMessage,
@@ -810,7 +810,7 @@ actor PolestarGRPC {
         var averageConsumption: Double?, averageSinceCharge: Double?, energySinceCharge: Double?
         var powerState: ChargerPowerState = .unknown
         var capacityKwh: Double?
-        var unknownFields: [PolestarRawWireField] = []
+        var unknownFields: [VehicleRawWireField] = []
         for field in Protobuf.fields(data) {
             switch field.number {
             case 1 where field.wire == 2:
@@ -910,22 +910,22 @@ actor PolestarGRPC {
     /// Preserves an undecoded field as inspectable text: scalars as their value, wire-type 2
     /// as a hex dump. Nothing here is interpreted; this exists so live captures can be
     /// classified later and so support bundles show what the backend actually sent.
-    static func rawField(_ field: Protobuf.Field) -> PolestarRawWireField {
+    static func rawField(_ field: Protobuf.Field) -> VehicleRawWireField {
         switch field.wire {
         case 0:
-            return PolestarRawWireField(field: field.number, wire: field.wire,
+            return VehicleRawWireField(field: field.number, wire: field.wire,
                                 value: String(field.varint), isBinary: false)
         case 1:
-            return PolestarRawWireField(field: field.number, wire: field.wire,
+            return VehicleRawWireField(field: field.number, wire: field.wire,
                                 value: String(describing: Protobuf.double(from: field.data) ?? 0),
                                 isBinary: false)
         case 5:
-            return PolestarRawWireField(field: field.number, wire: field.wire,
+            return VehicleRawWireField(field: field.number, wire: field.wire,
                                 value: String(describing: Protobuf.float(from: field.data) ?? 0),
                                 isBinary: false)
         default:
             let hex = field.data.map { String(format: "%02x", $0) }.joined()
-            return PolestarRawWireField(field: field.number, wire: field.wire, value: hex, isBinary: true)
+            return VehicleRawWireField(field: field.number, wire: field.wire, value: hex, isBinary: true)
         }
     }
 

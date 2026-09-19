@@ -259,7 +259,7 @@ struct SettingsTabsAndCardsCard: View {
 
             if selectedTab.customID != nil, let id = selectedTab.customID, let tab = composition.customTab(id) {
                 customTabEditor(tab)
-                Text(L10n.text("A tab of your own draws the cards that stand on their own — the vehicle cards and the remote controls. Cards that own a tab's own state (history charts, the Info section bars) stay on the tab they came from."))
+                Text(L10n.text("A tab of your own draws the cards that stand on their own: the vehicle cards and the remote controls. Cards that own a tab's own state (history charts, the Info section bars) stay on the tab they came from."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

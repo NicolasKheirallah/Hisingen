@@ -828,8 +828,8 @@ extension PolestarGRPC {
 
     /// Collects every undecoded field on the Car message, top-level and nested, as raw wire
     /// records. Nested fields carry their parent number so diagnostics can show `35.5`.
-    static func unknownCapabilityFields(_ car: [Protobuf.Field]) -> [PolestarRawWireField] {
-        var unknowns: [PolestarRawWireField] = []
+    static func unknownCapabilityFields(_ car: [Protobuf.Field]) -> [VehicleRawWireField] {
+        var unknowns: [VehicleRawWireField] = []
         func retain(_ fields: [Protobuf.Field], parent: Int?, known: Set<Int>) {
             for field in fields where !known.contains(field.number) {
                 var raw = PolestarGRPC.rawField(field)

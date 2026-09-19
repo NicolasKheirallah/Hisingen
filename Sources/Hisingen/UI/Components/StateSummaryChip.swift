@@ -53,10 +53,6 @@ struct StateSummaryChip: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: chipRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: chipRadius, style: .continuous)
-                .stroke(color.opacity(0.22), lineWidth: 0.5)
-        )
         .hisAnimation(Motion.stateChange, value: severity)
         .hisAnimation(Motion.stateChange, value: message)
         .accessibilityElement(children: .ignore)

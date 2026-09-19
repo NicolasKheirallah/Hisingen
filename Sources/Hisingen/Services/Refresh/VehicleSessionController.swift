@@ -169,21 +169,17 @@ final class VehicleSessionController {
     }
 
     /// Resolves selection and first telemetry before a command is gated or sent. This makes
-    /// VIN-targeted intents and deep links one awaited operation instead of a racy
-    /// select-then-send pair.
+    /// VIN-targeted intents and deep links one awaited operation: the coordinator wakes the
+    /// await itself when the selection task finishes, so there is no poll here.
     func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
         let target = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !target.isEmpty else { return sessionValid && latest != nil }
-        if sessionValid, latest?.identity.vin.uppercased() == target { return true }
+        if sessionValid, latest?.identity.vin.uppercased() == target,
+           !refreshCoordinator.isBusy { return true }
         selectVehicle(vin: target)
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if sessionValid, latest?.identity.vin.uppercased() == target,
-               !refreshCoordinator.isBusy { return true }
-            try? await Task.sleep(for: .milliseconds(100))
-            if Task.isCancelled { return false }
-        }
-        return false
+        // Read after `selectVehicle`: a brand switch rebuilds the coordinator, and the
+        // rebuilt instance owns the selection that is now in flight.
+        return await refreshCoordinator.selectionSettled(vin: target, timeout: timeout)
     }
 
     /// Settings "switch to <brand>": adopt the brand and resume its stored session.
@@ -310,7 +306,6 @@ final class VehicleSessionController {
         // diagnostics display default (see primeDisplayState).
         sessionValid = diagnostics.sessionValid
         lastDiagnostics = diagnostics
-        Task { await LatestDiagnosticsStore.shared.update(diagnostics) }
         if diagnostics.sessionValid, preferences.features.contains(.notifications) {
             context?.authenticationSucceeded()
         }

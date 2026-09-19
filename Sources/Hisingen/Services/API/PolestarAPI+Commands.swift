@@ -55,10 +55,7 @@ extension PolestarAPI {
         // An acknowledgement is not a sensor reading. Force the follow-up to read the
         // backend instead of caching the requested settings or inventing climate state.
         targetCache[vin] = nil
-        for key in capabilityCache.keys.filter({ $0.hasPrefix("\(vin)|") && !$0.hasSuffix("|my-cars") }) {
-            capabilityCache[key] = nil
-        }
-        clearTransientCapabilityBackoffAfterCommand(for: vin)
+        capabilityAuthority.invalidateTransientCaches(forVIN: vin)
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result
     }

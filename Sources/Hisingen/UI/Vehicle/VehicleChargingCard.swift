@@ -21,7 +21,11 @@ struct VehicleChargingCard: View {
     var body: some View {
         Group {
             if eligible && state.powertrain.hasElectricRange && hasContent {
-                card
+                if isIdle {
+                    idleCard
+                } else {
+                    card
+                }
             } else if eligible && state.powertrain.hasElectricRange {
                 // The card was simply not built when it had nothing to show, so a charging section
                 // that failed to load was indistinguishable from a vehicle that has no charging
@@ -234,7 +238,7 @@ struct VehicleChargingCard: View {
         if let pct = item.percentage {
             parts.append(String(format: "%.0f%%", pct))
         }
-        guard !parts.isEmpty else { return "—" }
+        guard !parts.isEmpty else { return "-" }
         return parts.count > 1 ? "\(parts[0]) (\(parts[1]))" : parts[0]
     }
 
@@ -253,6 +257,35 @@ struct VehicleChargingCard: View {
     }
 
     private var hasContent: Bool { headline != nil || !details.isEmpty || !activeSamples.isEmpty || !persistentSessions.isEmpty || state.energy.chargeNowActive == true }
+
+    /// Nothing is happening: the cable is out, nothing is complete or pending, and no samples
+    /// are live. A disconnected cable is one line of state, not a titled section — the idle
+    /// presentation keeps the charge history reachable and collapses the rest.
+    private var isIdle: Bool {
+        !state.isCharging
+            && !state.isComplete
+            && state.energy.chargeNowActive != true
+            && activeSamples.isEmpty
+    }
+
+    private var idleCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.slash")
+                        .hisType(.subhead, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                        .accessibilityHidden(true)
+                    Text(headline ?? L10n.text("Not connected"))
+                        .hisType(.subhead, weight: .medium)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+                if !persistentSessions.isEmpty { history }
+            }
+        }
+    }
 
     private var card: some View {
         Card {

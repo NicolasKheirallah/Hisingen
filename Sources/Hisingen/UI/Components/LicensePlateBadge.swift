@@ -18,10 +18,6 @@ struct LicensePlateBadge: View {
                 Color.primary.opacity(0.06),
                 in: RoundedRectangle(cornerRadius: 4, style: .continuous)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .stroke(Color.primary.opacity(0.18), lineWidth: 0.8)
-            )
         case .belowGreeting, .inlineHeader:
             // `Text.monospaced()` monospaces digits only, so "ABC 123" kept proportional letters
             // here while the pill and overlay positions monospaced the whole string. `plateText`
@@ -35,8 +31,6 @@ struct LicensePlateBadge: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4.5)
             .background(HisingenTheme.chipFill, in: Capsule())
-            .overlay(Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 0.6))
-            .shadow(color: HisingenTheme.shadowTint(0.08), radius: 4, x: 0, y: 1.5)
         case .hidden:
             EmptyView()
         }

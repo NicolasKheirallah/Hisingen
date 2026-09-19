@@ -634,7 +634,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     /// Undecoded climate wire fields (4, 5, 6, 9, 13 on the digital-twin shape), captured
     /// raw so their accumulated values can be classified later. `nil` in snapshots
     /// persisted before retention existed.
-    var unknownWireFields: [PolestarRawWireField]? = nil
+    var unknownWireFields: [VehicleRawWireField]? = nil
     /// Raw `ERROR_TYPE_*` / warning tokens the climate system reported for the current
     /// session, kept verbatim for display and support exports. `nil` in snapshots persisted
     /// before capture existed, and when the backend sent neither list.
@@ -676,7 +676,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         mainClimateRunningStatus: String? = nil,
         sessionStartedAt: Date? = nil,
         sessionEndsAt: Date? = nil,
-        unknownWireFields: [PolestarRawWireField]? = nil,
+        unknownWireFields: [VehicleRawWireField]? = nil,
         errors: [String]? = nil,
         startReason: VehicleStartReason? = nil
     ) {
@@ -723,7 +723,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         mainClimateRunningStatus = try c.decodeIfPresent(String.self, forKey: .mainClimateRunningStatus)
         sessionStartedAt = try c.decodeIfPresent(Date.self, forKey: .sessionStartedAt)
         sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
-        unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields)
+        unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields)
         errors = try c.decodeIfPresent([String].self, forKey: .errors)
         startReason = try c.decodeIfPresent(VehicleStartReason.self, forKey: .startReason)
     }
@@ -961,19 +961,6 @@ enum ChargerPowerState: String, Codable, Sendable {
     }
 }
 
-/// One undecoded protobuf field from a Polestar response, preserved so nothing on the wire
-/// disappears silently. Semantics are intentionally unknown – values are shown raw in the
-/// diagnostics surfaces and reclassified as they are identified by live probing.
-struct PolestarRawWireField: Codable, Equatable, Sendable {
-    let field: Int
-    /// Parent message number when the field lives inside a known sub-message (e.g. `35` for
-    /// the `GetMyCars` charging settings), `nil` for top-level fields.
-    var subfield: Int? = nil
-    let wire: Int
-    let value: String
-    /// True when `value` is a hex dump of the bytes rather than a decoded scalar.
-    let isBinary: Bool
-}
 
 struct EnergyBreakdownItem: Codable, Equatable, Sendable {
     let wattHours: Double?
@@ -1025,7 +1012,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// Undecoded wire fields the battery service sent, captured raw by the provider layer
     /// and surfaced in the battery-diagnostics card. Empty for Volvo and for snapshots
     /// persisted before capture existed.
-    var unknownWireFields: [PolestarRawWireField] = []
+    var unknownWireFields: [VehicleRawWireField] = []
     var energyBreakdown: EnergyBreakdownSnapshot? = nil
     var powerLimitKw: Double? = nil
     var energyAvailableKwh: Double? = nil
@@ -1054,7 +1041,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         averageConsumptionSinceCharge: Double?,
         averageConsumptionAutomatic: Double? = nil,
         energyUsedSinceChargeWh: Double?,
-        unknownWireFields: [PolestarRawWireField] = [],
+        unknownWireFields: [VehicleRawWireField] = [],
         energyBreakdown: EnergyBreakdownSnapshot? = nil,
         powerLimitKw: Double? = nil,
         energyAvailableKwh: Double? = nil,
@@ -1113,7 +1100,7 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         averageConsumptionSinceCharge = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionSinceCharge)
         averageConsumptionAutomatic = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionAutomatic)
         energyUsedSinceChargeWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedSinceChargeWh)
-        unknownWireFields = try c.decodeIfPresent([PolestarRawWireField].self, forKey: .unknownWireFields) ?? []
+        unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields) ?? []
         energyBreakdown = try c.decodeIfPresent(EnergyBreakdownSnapshot.self, forKey: .energyBreakdown)
         powerLimitKw = try c.decodeIfPresent(Double.self, forKey: .powerLimitKw)
         energyAvailableKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableKwh)
@@ -1494,7 +1481,7 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
     /// Undecoded wire fields the `GetMyCars` response carried (top-level and inside known
     /// sub-messages), captured raw like the battery parser does. `nil` in snapshots persisted
     /// before capture existed.
-    var unknownWireFields: [PolestarRawWireField]?
+    var unknownWireFields: [VehicleRawWireField]?
 
     init(installedSoftwareVersion: String? = nil,
          identity: VehicleBackendIdentity? = nil,
@@ -1521,7 +1508,7 @@ struct VehicleOTACapabilities: Codable, Equatable, Sendable {
           userIsLinked: Bool? = nil,
           userIsOwner: Bool? = nil,
           registrationPlate: String? = nil,
-          unknownWireFields: [PolestarRawWireField]? = nil) {
+          unknownWireFields: [VehicleRawWireField]? = nil) {
         self.installedSoftwareVersion = installedSoftwareVersion
         self.identity = identity
         self.supportsFullOtaUpdates = supportsFullOtaUpdates

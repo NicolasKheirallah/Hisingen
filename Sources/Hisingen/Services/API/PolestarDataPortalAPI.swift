@@ -9,6 +9,13 @@ import AppKit
 import Foundation
 import OSLog
 
+/// Get/set pair over the quota counter's backing store, so a test can isolate the
+/// process-global defaults from concurrent suite traffic.
+struct QuotaStateStore: Sendable {
+    let get: @Sendable () -> (count: Int, dateString: String)
+    let set: @Sendable (Int, String) -> Void
+}
+
 actor PolestarDataPortalAPI {
     nonisolated let brand: VehicleBrand = .polestar
     let logger = AppLog.logger("polestar-dataportal-api")
@@ -51,7 +58,13 @@ actor PolestarDataPortalAPI {
         d1 == quotaDateFormatter().string(from: d2)
     }
 
+    /// The quota counter's backing store. Injectable so a test can own its state: the
+    /// process-global defaults are shared by every portal call in every suite, and a
+    /// concurrent test's recorded call would otherwise land inside another test's assert.
+    nonisolated(unsafe) static var quotaStateStore: QuotaStateStore? = nil
+
     private nonisolated static func readQuotaState() -> (count: Int, dateString: String) {
+        if let store = Self.quotaStateStore { return store.get() }
         let count = UserDefaults.standard.integer(forKey: "polestar_dataportal_daily_calls")
         let dateStr = UserDefaults.standard.string(forKey: "polestar_dataportal_daily_date") ?? ""
         return (count, dateStr)
@@ -61,18 +74,24 @@ actor PolestarDataPortalAPI {
         let todayStr = Self.quotaDateFormatter().string(from: date)
         let (currentCount, lastDate) = Self.readQuotaState()
         let nextCount = (lastDate == todayStr) ? (currentCount + 1) : 1
+        if let store = Self.quotaStateStore {
+            store.set(nextCount, todayStr)
+            return
+        }
         UserDefaults.standard.set(nextCount, forKey: "polestar_dataportal_daily_calls")
         UserDefaults.standard.set(todayStr, forKey: "polestar_dataportal_daily_date")
     }
 
     #if DEBUG
     nonisolated static func resetDailyQuotaForTesting() {
+        if let store = quotaStateStore { store.set(0, ""); return }
         UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_calls")
         UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_date")
     }
 
     nonisolated static func setDailyQuotaForTesting(count: Int, date: Date) {
         let dateStr = quotaDateFormatter().string(from: date)
+        if let store = quotaStateStore { store.set(count, dateStr); return }
         UserDefaults.standard.set(count, forKey: "polestar_dataportal_daily_calls")
         UserDefaults.standard.set(dateStr, forKey: "polestar_dataportal_daily_date")
     }
@@ -91,14 +110,23 @@ actor PolestarDataPortalAPI {
     private(set) var cars: [CarSummary] = []
     var selectedVIN: String?
 
-    private var accessToken: String?
+    private var accessToken: String? {
+        get { portalTokens.accessToken }
+        set { portalTokens.accessToken = newValue }
+    }
     /// When the portal answers `AUTHZ_VIN_UNAUTHORIZED`, the owner has withdrawn (or not yet
     /// granted) this client's access to the VIN — retrying cannot succeed, and every refused
     /// call still burns the 10k/day meter. For an hour after a denial, fail the refresh
     /// locally with the same error instead of hitting the network.
     private var vinAccessDeniedUntil: Date?
-    private var tokenExpiry: Date?
-    private var inFlightTokenTask: Task<String, Error>?
+    private var tokenExpiry: Date? {
+        get { portalTokens.tokenExpiry }
+        set { portalTokens.tokenExpiry = newValue }
+    }
+    /// The client-credentials grant's lifetime: reuse window, single-flight, and the terminal
+    /// rejection of wrong credentials, owned by the shared token lifecycle rather than a
+    /// hand-rolled task guard. Client credentials do not rotate, so persistence is a no-op.
+    private let portalTokens: TokenLifecycle
 
     @MainActor
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache()) {
@@ -116,6 +144,18 @@ actor PolestarDataPortalAPI {
         self.preferences = preferences
         self.diagnosticLog = diagnosticLog
         self.session = Self.makeSession()
+        self.portalTokens = TokenLifecycle(
+            // A refused call still burns quota, so renew a minute before expiry rather than
+            // landing on the portal's limiter.
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "Polestar Data Portal",
+            logger: AppLog.logger("polestar-dataportal-api"),
+            persist: { _ in },
+            isDeadGrant: { error in
+                if case PolestarDataPortalError.authenticationRequired(.invalidCredentials) = error { return true }
+                return false
+            }
+        )
     }
 
     private func resolveCredential(configured: String, stored: String?, builtin: String) -> String {
@@ -164,27 +204,24 @@ actor PolestarDataPortalAPI {
     }
 
     func ensureAccessToken() async throws -> String {
-        if let token = accessToken, let expiry = tokenExpiry, expiry.timeIntervalSinceNow > 60 {
-            return token
-        }
-        if let inFlight = inFlightTokenTask {
-            return try await inFlight.value
-        }
-        let task = Task<String, Error> {
-            do {
-                let token = try await requestAccessToken()
-                inFlightTokenTask = nil
-                return token
-            } catch {
-                inFlightTokenTask = nil
-                throw error
+        let outcome = try await portalTokens.refresh(
+            .renewalWindow,
+            epochIsCurrent: { true },
+            grant: { [self] in try await requestTokenGrant() }
+        )
+        switch outcome {
+        case .refreshed, .notNeeded:
+            guard let token = portalTokens.accessToken else {
+                throw PolestarDataPortalError.appNotConfigured
             }
+            return token
+        case .deadGrant:
+            // The configured credentials are wrong; nothing a retry can fix.
+            throw PolestarDataPortalError.authenticationRequired(.invalidCredentials)
         }
-        inFlightTokenTask = task
-        return try await task.value
     }
 
-    private func requestAccessToken() async throws -> String {
+    private func requestTokenGrant() async throws -> TokenLifecycle.Grant {
         guard let clientID, let clientSecret, !clientID.isEmpty, !clientSecret.isEmpty else {
             throw PolestarDataPortalError.appNotConfigured
         }
@@ -204,16 +241,17 @@ actor PolestarDataPortalAPI {
             diagnosticLog: diagnosticLog
         )
         recordApiCall()
-        return try handleTokenResponse(data: data, response: response)
+        return try tokenGrant(from: data, response: response)
     }
 
-    private func handleTokenResponse(data: Data, response: HTTPURLResponse) throws -> String {
+    private func tokenGrant(from data: Data, response: HTTPURLResponse) throws -> TokenLifecycle.Grant {
         if response.statusCode == 400 || response.statusCode == 401 || response.statusCode == 403 {
             logger.error("Polestar Data Portal token request rejected (HTTP \(response.statusCode))")
             throw PolestarDataPortalError.authenticationRequired(.invalidCredentials)
         }
         if response.statusCode == 429 {
-            throw PolestarDataPortalError.rateLimited(retryAfter: Self.parseRetryAfter(response))
+            throw PolestarDataPortalError.rateLimited(
+                retryAfter: ServiceResponseClassifier.retryAfter(from: response))
         }
         if response.statusCode >= 500 {
             throw PolestarDataPortalError.server(statusCode: response.statusCode)
@@ -221,16 +259,12 @@ actor PolestarDataPortalAPI {
         guard let tokenResponse = try? JSONDecoder().decode(PolestarDataPortalTokenResponse.self, from: data) else {
             throw PolestarDataPortalError.decoding(operation: "token response")
         }
-        self.accessToken = tokenResponse.accessToken
-        self.tokenExpiry = Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn))
         try? keychain.savePolestarDataPortalToken(tokenResponse.accessToken)
-        return tokenResponse.accessToken
+        return TokenLifecycle.Grant(accessToken: tokenResponse.accessToken,
+                                    refreshToken: nil,
+                                    expiresIn: TimeInterval(tokenResponse.expiresIn))
     }
 
-    private static func parseRetryAfter(_ response: HTTPURLResponse) -> TimeInterval? {
-        guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
-        return TimeInterval(raw)
-    }
 
     private func apiURL(path: String) throws -> URL {
         let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
@@ -275,42 +309,49 @@ actor PolestarDataPortalAPI {
 
     func testConnection() async throws -> (vehicleCount: Int, vins: [String]) {
         try await prepareSession()
-        _ = try await requestAccessToken()
+        // A fresh grant on purpose: `configure` may have just replaced the credentials, and a
+        // token minted by the previous ones would fake a pass.
+        try portalTokens.adopt(try await requestTokenGrant())
         let discovery: PolestarDataPortalVehiclesDTO = try await authenticatedGET("/v1/vehicles")
         return (discovery.vins.count, discovery.vins)
     }
 
     private func decodeResponse<T: Decodable & Sendable>(data: Data, response: HTTPURLResponse, path: String) throws -> T {
         if response.statusCode == 401 {
-            self.accessToken = nil
-            self.tokenExpiry = nil
+            portalTokens.accessToken = nil
+            portalTokens.tokenExpiry = nil
             throw PolestarDataPortalError.authenticationRequired(.expiredSession)
         }
+        let apiError = try? JSONDecoder().decode(PolestarDataPortalAPIError.self, from: data)
         if response.statusCode == 403 {
-            if let apiError = try? JSONDecoder().decode(PolestarDataPortalAPIError.self, from: data) {
-                if apiError.error.code == "AUTHZ_VIN_UNAUTHORIZED" {
+            if let code = apiError?.error.code {
+                if code == "AUTHZ_VIN_UNAUTHORIZED" {
                     throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry: \(path)")
                 }
-                throw PolestarDataPortalError.client(statusCode: 403, message: apiError.error.message)
+                throw PolestarDataPortalError.client(statusCode: 403, message: apiError?.error.message)
             }
             throw PolestarDataPortalError.permissionDenied(operation: path)
-        }
-        if response.statusCode == 429 {
-            throw PolestarDataPortalError.rateLimited(retryAfter: Self.parseRetryAfter(response))
-        }
-        if response.statusCode >= 500 {
-            throw PolestarDataPortalError.server(statusCode: response.statusCode)
         }
         if response.statusCode == 404 {
             // The portal's truthful "this vehicle reports no such data" is distinct from a
             // routing miss; only the body code earns that reading.
-            if let apiError = try? JSONDecoder().decode(PolestarDataPortalAPIError.self, from: data),
-               apiError.error.code == "DATA_NOT_AVAILABLE" {
+            if apiError?.error.code == "DATA_NOT_AVAILABLE" {
                 throw PolestarDataPortalError.dataNotAvailable(operation: path)
             }
             throw PolestarDataPortalError.client(statusCode: 404)
         }
-        guard (200...299).contains(response.statusCode) else {
+        // 401, 403 and 404 carry body-code semantics above; the shared ladder owns the rest.
+        switch ServiceResponseClassifier.failure(status: response.statusCode,
+                                                 retryAfter: ServiceResponseClassifier.retryAfter(from: response),
+                                                 operation: path) {
+        case nil: break
+        case .rateLimited(let retryAfter):
+            throw PolestarDataPortalError.rateLimited(retryAfter: retryAfter)
+        case .server(let statusCode):
+            throw PolestarDataPortalError.server(statusCode: statusCode)
+        case .client(let statusCode, _, _):
+            throw PolestarDataPortalError.client(statusCode: statusCode)
+        case .authenticationRequired, .permissionDenied:
             throw PolestarDataPortalError.client(statusCode: response.statusCode)
         }
         if let envelope = try? JSONDecoder().decode(PolestarDataPortalEnvelope<T>.self, from: data),
@@ -418,7 +459,9 @@ actor PolestarDataPortalAPI {
         let needsExterior = features.contains(.exteriorStatus)
         let needsHealth = features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings)
         let needsOdometer = features.contains(.vehicleHealth) || features.contains(.tripMeters)
-        let needsLocation = features.contains(.vehicleLocation)
+        // Weather is keyed by the vehicle's position, so a weather-only selection still
+        // has to fetch the location reading it derives from.
+        let needsLocation = features.contains(.vehicleLocation) || features.contains(.vehicleWeather)
         let needsClimate = features.contains(.climateStatus) || features.contains(.remoteClimate)
         let needsPreCleaning = features.contains(.airQuality) || features.contains(.remotePreCleaning)
         let needsTargetSoc = features.contains(.chargingDetails) || features.contains(.remoteCharging)
@@ -477,7 +520,34 @@ actor PolestarDataPortalAPI {
             parkingClimateTimer: resolve(try await parkingClimateTimerDTO, serving: [.climateStatus, .remoteClimate, .chargingSchedule, .remoteSchedules]),
             chargeNow: resolve(try await chargeNowDTO, serving: [.chargingDetails, .remoteCharging])
         )
-        return assembleVehicleState(vin: vin, bundle: bundle, failedFeatures: unavailable.features)
+        let weather = features.contains(.vehicleWeather)
+            ? await weather(atVehicleLocation: bundle.location, vin: vin)
+            : nil
+        return assembleVehicleState(vin: vin, bundle: bundle, weather: weather, failedFeatures: unavailable.features)
+    }
+
+    /// Five minutes, the same weather cadence the consumer adapter's capability cache uses:
+    /// current conditions do not move faster than the polling interval between portal refreshes.
+    private static let weatherCacheLifetime: TimeInterval = 300
+
+    private var weatherCache: [String: (value: VehicleWeather, fetchedAt: Date)] = [:]
+
+    /// Neither provider exposes a weather resource on the M2M surface, so current conditions
+    /// come from Open-Meteo at the vehicle's last reported position - the same source the
+    /// Polestar ID adapter uses. A failed lookup stays uncached so the next refresh retries,
+    /// and `nil` weather lets the merge honestly retain the previous reading.
+    private func weather(atVehicleLocation location: PolestarLocationDTO?, vin: String) async -> VehicleWeather? {
+        guard let latitude = location?.latitude, let longitude = location?.longitude,
+              abs(latitude) > 0.001, abs(longitude) > 0.001 else { return nil }
+        if let cached = weatherCache[vin], Date().timeIntervalSince(cached.fetchedAt) < Self.weatherCacheLifetime {
+            return cached.value
+        }
+        let value = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
+            .weather(latitude: latitude, longitude: longitude)
+        if let value {
+            weatherCache[vin] = (value, Date())
+        }
+        return value
     }
 
     /// One portal reading: the decoded payload, or a failed-read marker when the endpoint
@@ -602,7 +672,7 @@ actor PolestarDataPortalAPI {
 
     nonisolated(unsafe) private static let isoFormatter = ISO8601DateFormatter()
 
-    private func assembleVehicleState(vin: String, bundle: TelemetryBundle, failedFeatures: [AppFeature] = []) -> VehicleState {
+    private func assembleVehicleState(vin: String, bundle: TelemetryBundle, weather: VehicleWeather?, failedFeatures: [AppFeature] = []) -> VehicleState {
         var energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
         if let target = bundle.targetSoc?.targetSocPercentage { energy.targetPercentage = target }
         if let amp = bundle.ampLimit?.ampLimit { energy.currentLimitAmps = amp }
@@ -795,6 +865,7 @@ actor PolestarDataPortalAPI {
             climateTimers: climateTimers,
             tripComputer: tripComputer,
             airQuality: airQuality,
+            weather: weather,
             location: bundle.location?.toVehicleLocation(),
             powertrain: .bev
         )
@@ -805,7 +876,9 @@ actor PolestarDataPortalAPI {
         throw PolestarDataPortalError.authenticationRequired(.callbackRejected)
     }
 
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+    /// The portal is self-configuring: it resolves its own client credentials from storage
+    /// inside `prepareSession`, so resume takes no token from the caller.
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
         try await prepareSession()
         _ = try await ensureAccessToken()
         try await discoverVehicles(preferredVIN: preferredVIN)
@@ -814,10 +887,9 @@ actor PolestarDataPortalAPI {
 
     func resetSession() async {
         vinAccessDeniedUntil = nil
+        portalTokens.reset()
         accessToken = nil
         tokenExpiry = nil
-        inFlightTokenTask?.cancel()
-        inFlightTokenTask = nil
         cars = []
         selectedVIN = nil
         session.invalidateAndCancel()

@@ -15,7 +15,7 @@ struct VehicleSessionControllerTests {
         let context = SessionTestContext()
         let controller = VehicleSessionController(
             context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
-            sessionManager: SessionManager(readToken: { _ in "token" }, readPassword: { "password" }, clearPassword: {}),
+            sessionManager: SessionManager(readPassword: { "password" }, clearPassword: {}),
             providers: ProviderRegistry(polestar: SessionTestProvider(brand: .polestar),
                                         volvo: SessionTestProvider(brand: .volvo)),
             fleetStore: FleetStore(stateStore: store, preferences: preferences), observesEnvironment: false)
@@ -30,7 +30,7 @@ struct VehicleSessionControllerTests {
         for _ in 0..<200 where context.receivedStates == previousCount { try await Task.sleep(for: .milliseconds(10)) }
         #expect(context.receivedStates > previousCount)
         #expect(controller.latest?.commandState.receipt == receipt)
-        #expect(store.database.loadSnapshot(for: "P1")?.commandState.receipt == nil)
+        #expect(store.database.snapshots.loadSnapshot(for: "P1")?.commandState.receipt == nil)
     }
     @Test(arguments: [VehicleBrand.polestar, .volvo])
     func credentialChangeAdoptsPolestarAndReconcilesBeforeRestoring(from originalBrand: VehicleBrand) async throws {
@@ -50,7 +50,7 @@ struct VehicleSessionControllerTests {
         context.onCredentialsChanged = {
             #expect(preferences.activeBrand == .polestar)
         }
-        let manager = SessionManager(readToken: { _ in "old-token" }, readPassword: { "new-password" },
+        let manager = SessionManager(readPassword: { "new-password" },
                                      clearPassword: {}, configure: { _, _ in
                                          #expect(context.reconciliations == 1)
                                      })
@@ -89,7 +89,7 @@ struct VehicleSessionControllerTests {
         let store = VehicleStateStore(defaults: defaults, database: database, preferences: preferences)
         let fleet = FleetStore(stateStore: store, preferences: preferences)
         let context = SessionTestContext()
-        let manager = SessionManager(readToken: { _ in "token" }, readPassword: { "new-password" }, clearPassword: {})
+        let manager = SessionManager(readPassword: { "new-password" }, clearPassword: {})
         let controller = VehicleSessionController(
             context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
             sessionManager: manager,
@@ -107,7 +107,7 @@ struct VehicleSessionControllerTests {
         controller.credentialsDidChange(for: .polestar)
         #expect(controller.latest == nil)
         #expect(fleet.snapshot(for: "P1") == nil)
-        #expect(database.loadSnapshot(for: "P1") == nil)
+        #expect(database.snapshots.loadSnapshot(for: "P1") == nil)
         #expect(fleet.snapshot(for: "V1") != nil)
         for _ in 0..<200 where controller.latest == nil { try await Task.sleep(for: .milliseconds(10)) }
         #expect(controller.latest?.identity.vin == "P2")

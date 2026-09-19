@@ -52,7 +52,7 @@ struct LivePolestarDataPortalIntegrationTests {
         preferences.polestarDataPortalClientID = clientID
 
         let api = PolestarDataPortalAPI(keychain: keychain, preferences: preferences)
-        try await api.restoreSession(token: "unused", preferredVIN: preferredVIN, features: .default)
+        try await api.restoreSession(preferredVIN: preferredVIN, features: .default)
 
         let (vehicleCount, _) = try await api.testConnection()
         #expect(vehicleCount >= 0)

@@ -364,7 +364,16 @@ struct PolestarDataPortalTests {
 
     @Test
     func dailyQuotaTracksAndRollsOverAcrossDays() {
-        PolestarDataPortalAPI.resetDailyQuotaForTesting()
+        // Own the backing store: the process-global defaults are written by every portal
+        // call in every suite, so a concurrent test's recorded call would land inside this
+        // test's asserts. The injected store makes the rollover logic deterministic.
+        let box = QuotaBox()
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { box.value },
+            set: { count, date in box.value = (count, date) })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
+
+
         #expect(PolestarDataPortalAPI.dailyCallLimit == 10_000)
         #expect(PolestarDataPortalAPI.dailyCallCount == 0)
 
@@ -376,8 +385,6 @@ struct PolestarDataPortalTests {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         PolestarDataPortalAPI.setDailyQuotaForTesting(count: 99, date: yesterday)
         #expect(PolestarDataPortalAPI.dailyCallCount == 0)
-
-        PolestarDataPortalAPI.resetDailyQuotaForTesting()
     }
 
     // MARK: - Command Catalog & Read-Only Gating Tests
@@ -591,6 +598,146 @@ struct PolestarDataPortalTests {
         #expect(state.freshness.dataWarnings.first?.contains("40 min") == true)
     }
 
+    // MARK: - Portal Weather Tests
+
+    /// Open-Meteo's forecast payload carries `current` in the same shape the client parses.
+    private static func openMeteoBody(temperature: Double) -> Data {
+        Data("""
+        {"current":{"temperature_2m":\(temperature),"weather_code":3,"apparent_temperature":11.5,"relative_humidity_2m":76}}
+        """.utf8)
+    }
+
+    @Test
+    @MainActor
+    func portalRefreshServesWeatherFromOpenMeteo() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
+        var openMeteoQueries: [String] = []
+        PortalMockTransport.requestHandler = { req in
+            if req.url?.host == "api.open-meteo.com" {
+                openMeteoQueries.append(req.url?.query ?? "")
+                return (200, Self.openMeteoBody(temperature: 14.1))
+            }
+            if req.url?.path.contains("/telemetry/location") == true { return (200, locationData) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            features: FeatureSelection(enabled: [.vehicleWeather, .vehicleLocation])
+        )
+
+        #expect(state.weather?.temperatureCelsius == 14.1)
+        #expect(state.weather?.condition == "Overcast")
+        #expect(state.weather?.apparentTemperatureCelsius == 11.5)
+        #expect(state.weather?.relativeHumidity == 76)
+        // The weather must key on the portal location reading's coordinates.
+        #expect(openMeteoQueries.count == 1)
+        #expect(openMeteoQueries.first?.contains("latitude=57.70887") == true)
+        #expect(openMeteoQueries.first?.contains("longitude=11.97456") == true)
+    }
+
+    @Test
+    @MainActor
+    func openMeteoFailureLeavesWeatherNilWithoutFailingTheRefresh() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
+        PortalMockTransport.requestHandler = { req in
+            if req.url?.host == "api.open-meteo.com" { return (500, Data("upstream unavailable".utf8)) }
+            if req.url?.path.contains("/telemetry/location") == true { return (200, locationData) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            features: FeatureSelection(enabled: [.vehicleWeather, .vehicleLocation])
+        )
+
+        #expect(state.weather == nil)
+        #expect(state.location?.latitude == 57.708870)
+    }
+
+    @Test
+    @MainActor
+    func portalWeatherCacheHoldsWithinTTL() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
+        var openMeteoCalls = 0
+        var temperature = 14.1
+        PortalMockTransport.requestHandler = { req in
+            if req.url?.host == "api.open-meteo.com" {
+                openMeteoCalls += 1
+                return (200, Self.openMeteoBody(temperature: temperature))
+            }
+            if req.url?.path.contains("/telemetry/location") == true { return (200, locationData) }
+            return (404, Data())
+        }
+
+        let features = FeatureSelection(enabled: [.vehicleWeather, .vehicleLocation])
+        let first = try await api.fetchVehicleState(vin: "YSMVSEDE6PL147228", features: features)
+        #expect(first.weather?.temperatureCelsius == 14.1)
+
+        // A second refresh back-to-back must reuse the cached reading even though the
+        // upstream now answers differently; it is within the five-minute TTL.
+        temperature = 21.0
+        let second = try await api.fetchVehicleState(vin: "YSMVSEDE6PL147228", features: features)
+        #expect(second.weather?.temperatureCelsius == 14.1)
+        #expect(openMeteoCalls == 1)
+    }
+
+    @Test
+    @MainActor
+    func weatherFeatureOffMakesNoOpenMeteoRequest() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.setAccessTokenForTesting("test-token")
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+
+        let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
+        var openMeteoCalls = 0
+        PortalMockTransport.requestHandler = { req in
+            if req.url?.host == "api.open-meteo.com" {
+                openMeteoCalls += 1
+                return (200, Self.openMeteoBody(temperature: 14.1))
+            }
+            if req.url?.path.contains("/telemetry/location") == true { return (200, locationData) }
+            return (404, Data())
+        }
+
+        let state = try await api.fetchVehicleState(
+            vin: "YSMVSEDE6PL147228",
+            features: FeatureSelection(enabled: [.vehicleLocation])
+        )
+
+        #expect(state.weather == nil)
+        #expect(openMeteoCalls == 0)
+        #expect(state.location?.latitude == 57.708870)
+    }
+
     @Test
     func oneShotClimateTimerDateShiftsWithUTCTimers() throws {
         // A UTC timer form ready at 23:00 on Jul 2 shifts to the next local day when the
@@ -699,7 +846,7 @@ struct PolestarDataPortalTests {
             isCommandLocked: false,
             fetchedAt: Date()
         )
-        let merged = portal.merging(previous: consumer, policy: policy, imageCache: CarImageCache())
+        let merged = portal.merging(previous: consumer, policy: policy, imageBackfill: .empty)
         #expect(merged.modelName == "Polestar 2")
     }
 
@@ -737,6 +884,36 @@ struct PolestarDataPortalTests {
         let bareState = try await bareAugmented.fetchVehicleState(vin: "TESTVIN", features: features)
         #expect(bareState.identity.modelName == nil)
         #expect(bareState.identity.usageMode == "USAGE_MODE_INACTIVE")
+    }
+
+    @Test
+    func augmentedProviderOverlaysConsumerTelemetryAndRespectsColdSession() async throws {
+        let portalState = VehicleState(
+            energy: EnergyAndChargingSnapshot(batteryPercentage: 52),
+            identity: VehicleIdentitySnapshot(availability: .available, modelName: nil, vin: "TESTVIN"),
+            freshness: SnapshotFreshness(fetchedAt: Date())
+        )
+        let telemetry = PortalTestProbeProvider(brand: .polestar, name: "telemetry", state: portalState)
+        let overlay = ConsumerTelemetryOverlay(
+            softwareInfo: VehicleSoftwareInfo(installedVersion: "3.2.4"),
+            connectivity: VehicleConnectivity(state: .connected, networkType: "LTE")
+        )
+        let commands = PortalTestProbeProvider(brand: .polestar, name: "commands", overlay: overlay)
+        let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: commands)
+
+        let features = FeatureSelection(enabled: [.softwareUpdates, .connectivityDiagnostics])
+        let state = try await augmented.fetchVehicleState(vin: "TESTVIN", features: features)
+        #expect(state.softwareInfo?.installedVersion == "3.2.4")
+        #expect(state.connectivity?.networkType == "LTE")
+
+        // Without a warm command session there is nothing to overlay from, and the portal
+        // state must come through untouched rather than failing the refresh.
+        let coldCommands = PortalTestProbeProvider(brand: .polestar, name: "cold", warm: false, overlay: overlay)
+        let coldAugmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: coldCommands)
+        let coldState = try await coldAugmented.fetchVehicleState(vin: "TESTVIN", features: features)
+        #expect(coldState.softwareInfo == nil)
+        #expect(coldState.connectivity == nil)
+        #expect(coldState.energy.batteryPercentage == 52)
     }
 
     @Test
@@ -1085,7 +1262,7 @@ struct PolestarDataPortalTests {
             telemetryProvider: failingTelemetry, commandProvider: workingConsumer
         )
 
-        try await augmented.restoreSession(token: "test-token", preferredVIN: "VIN1", features: FeatureSelection.default)
+        try await augmented.restoreSession(preferredVIN: "VIN1", features: FeatureSelection.default)
         let isWarm = await augmented.hasWarmSession
         #expect(isWarm == true)
     }
@@ -1098,7 +1275,7 @@ struct PolestarDataPortalTests {
         let augmented = PolestarAugmentedProvider(telemetryProvider: telemetry, commandProvider: consumer)
 
         await #expect(throws: VehicleServiceError.self) {
-            try await augmented.restoreSession(token: "test-token", preferredVIN: "VIN1", features: FeatureSelection.default)
+            try await augmented.restoreSession(preferredVIN: "VIN1", features: FeatureSelection.default)
         }
     }
 
@@ -1475,6 +1652,7 @@ private actor PortalTestProbeProvider: VehicleProviding {
     var shouldFailRestore: Bool = false
     var warm: Bool = true
     var identityToReturn: VehicleIdentitySnapshot?
+    var overlayToReturn: ConsumerTelemetryOverlay?
 
     init(
         brand: VehicleBrand,
@@ -1483,7 +1661,8 @@ private actor PortalTestProbeProvider: VehicleProviding {
         shouldFailState: Bool = false,
         shouldFailRestore: Bool = false,
         warm: Bool = true,
-        identity: VehicleIdentitySnapshot? = nil
+        identity: VehicleIdentitySnapshot? = nil,
+        overlay: ConsumerTelemetryOverlay? = nil
     ) {
         self.brand = brand
         self.providerName = name
@@ -1492,6 +1671,7 @@ private actor PortalTestProbeProvider: VehicleProviding {
         self.shouldFailRestore = shouldFailRestore
         self.warm = warm
         self.identityToReturn = identity
+        self.overlayToReturn = overlay
     }
 
     var cars: [CarSummary] {
@@ -1500,7 +1680,7 @@ private actor PortalTestProbeProvider: VehicleProviding {
     var hasWarmSession: Bool { warm }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
         if shouldFailRestore {
             throw VehicleServiceError.authenticationRequired(provider: brand, reason: .expiredSession)
         }
@@ -1511,6 +1691,9 @@ private actor PortalTestProbeProvider: VehicleProviding {
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot? {
         identityToReturn
+    }
+    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay? {
+        overlayToReturn
     }
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         if shouldFailState {
@@ -1572,7 +1755,7 @@ private actor RoutingProbeProvider: VehicleProviding {
     var hasWarmSession: Bool { warm }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) async -> String? { preferred }
@@ -1608,4 +1791,14 @@ private func portalRequestBody(_ request: URLRequest) -> Data {
         data.append(buffer, count: read)
     }
     return data
+}
+
+/// Thread-safe two-field box for the injected quota store.
+final class QuotaBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (count: Int, dateString: String) = (0, "")
+    var value: (count: Int, dateString: String) {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); defer { lock.unlock() }; stored = newValue }
+    }
 }

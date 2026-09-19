@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// The Vehicle History ledger – one typed read interface over the local history tables.
 ///
@@ -91,7 +92,7 @@ final class VehicleHistoryLedger: Sendable {
     /// Whether the local store answers a trivial read. A schema that cannot be queried means
     /// the reads below are not evidence of an empty history.
     private func storeIsReadable() -> Bool {
-        (try? sql.readQuery(sql: "SELECT count(*) FROM sqlite_master;") { _ in 0 }) != nil
+        (try? self.sql.readQuery(sql: "SELECT count(*) FROM sqlite_master;") { _ in 0 }) != nil
     }
 
     func dashboard(vin: String, range: ClosedRange<Date>?, rowCap: Int,
@@ -228,7 +229,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func tripPurposes(for vin: String) -> [String: TripPurpose] {
         let query = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
         } process: { stmt -> [String: TripPurpose] in
             var result: [String: TripPurpose] = [:]
@@ -260,7 +261,7 @@ final class VehicleHistoryLedger: Sendable {
         WHERE vin = ? AND \(BatteryHealthRecord.measurementSourceFilter)
         ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
@@ -274,7 +275,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.airQuality)
         FROM air_quality_history WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
@@ -289,7 +290,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.telemetry)
         FROM telemetry_logs WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(max(1, limit)), at: since != nil ? 3 : 2)
@@ -306,7 +307,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.commandAudit)
         FROM remote_commands_log \(filterClause)ORDER BY executed_at DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             var bindIndex: Int32 = 1
             if let vin { try stmt.bindText(vin, at: bindIndex); bindIndex += 1 }
             if let since { try stmt.bindDate(since, at: bindIndex); bindIndex += 1 }
@@ -318,7 +319,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func recentActivities(for vin: String, limit: Int = 100, since: Date? = nil) -> [VehicleActivity] {
         let dateClause = since == nil ? "" : " AND timestamp >= ?"
-        let payloads: [Data] = (try? sql.readQuery(sql: "SELECT payload FROM vehicle_activity WHERE vin = ?\(dateClause) ORDER BY timestamp DESC, id DESC LIMIT ?;") { statement in
+        let payloads: [Data] = (try? self.sql.readQuery(sql: "SELECT payload FROM vehicle_activity WHERE vin = ?\(dateClause) ORDER BY timestamp DESC, id DESC LIMIT ?;") { statement in
             try statement.bindText(vin, at: 1)
             if let since { try statement.bindDate(since, at: 2) }
             try statement.bindInt64(Int64(min(max(limit, 1), 1000)), at: since == nil ? 2 : 3)
@@ -339,7 +340,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.connectivity)
         FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
@@ -352,7 +353,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.cabinClimate)
         FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
@@ -365,7 +366,7 @@ final class VehicleHistoryLedger: Sendable {
         SELECT \(HistoryRowDecoder.Columns.fuelEntry)
         FROM fuel_entries WHERE vin = ? ORDER BY date DESC LIMIT ?;
         """
-        return (try? sql.readQuery(sql: query) { stmt in
+        return (try? self.sql.readQuery(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
@@ -376,7 +377,7 @@ final class VehicleHistoryLedger: Sendable {
     /// Total spend on fuel across stored entries – the combustion half of lifetime cost.
     func lifetimeFuelCost(for vin: String) -> Double {
         var total = 0.0
-        try? sql.readQuery(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
+        try? self.sql.readQuery(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
             try stmt.bindText(vin, at: 1)
         }, process: { stmt in
             if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
@@ -419,7 +420,7 @@ final class VehicleHistoryLedger: Sendable {
         ORDER BY timestamp DESC;
         """
 
-        let records = (try? sql.query(sql: query) { stmt in
+        let records = (try? self.sql.query(sql: query) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }
         } process: { stmt in
             HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
@@ -489,4 +490,319 @@ final class VehicleHistoryLedger: Sendable {
         return csv
     }
 
+}
+
+
+// MARK: - Recording (writes)
+
+// The write side of the history tables, moved here from `VehicleDatabase` so this ledger
+// owns every read AND write over the tables its header names. `executeInsert` and the
+// two "last reading" helpers are its own; nothing outside this file reaches them.
+extension VehicleHistoryLedger {
+    private var logger: Logger { AppLog.logger("database") }
+
+    // MARK: - Recording policy
+
+    /// Minimum spacing between recorded air-quality samples, mirroring the battery-health-
+    /// milestone approach: a sample is only worth keeping if enough time has passed or the
+    /// reading moved meaningfully, not on every refresh cycle.
+    private static let airQualityHeartbeat: TimeInterval = 60 * 60
+    private static let airQualityIndexDelta: Double = 5.0
+    private static let airQualityPM25Delta: Double = 5.0
+    /// Heartbeat for a vehicle that hasn't moved. Drive telemetry is only interesting when
+    /// the odometer or a trip meter changes; a parked car re-reported the same figures every
+    /// refresh, which is what filled this table.
+    static let telemetryHeartbeat: TimeInterval = 24 * 60 * 60
+
+    /// Whether these readings differ enough from the last stored row to be worth keeping.
+    /// `nil` previous row means this VIN has no history yet, which always qualifies.
+    func isBatteryHealthMilestone(sohPct: Double, odometerKm: Double,
+                                  since previous: BatteryHealthRecord?,
+                                  now: Date = Date()) -> Bool {
+        guard let previous else { return true }
+        if now.timeIntervalSince(previous.timestamp) >= VehicleDatabase.BatteryHealthMilestone.minimumInterval { return true }
+        if abs(sohPct - previous.stateOfHealthPct) >= VehicleDatabase.BatteryHealthMilestone.sohDeltaPct { return true }
+        if odometerKm - previous.odometerKm >= VehicleDatabase.BatteryHealthMilestone.odometerDeltaKm { return true }
+        return false
+    }
+
+    @discardableResult
+    func recordBatteryHealthMilestone(vin: String, odometerKm: Double,
+                                      sohPct: Double, degPct: Double, usableKwh: Double,
+                                      measurementSource: String = BatteryHealthRecord.calculatedSource,
+                                      timestamp: Date = Date()) -> Bool {
+        let previous = batteryHealthHistory(for: vin, limit: 50)
+            .first { $0.measurementSource == measurementSource }
+        guard isBatteryHealthMilestone(sohPct: sohPct, odometerKm: odometerKm, since: previous) else {
+            return false
+        }
+        let sql = """
+        INSERT INTO battery_health_history (vin, timestamp, odometer_km, state_of_health_pct, degradation_pct, effective_usable_kwh, measurement_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """
+        return executeInsert(sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(timestamp, at: 2)
+            try stmt.bindDouble(odometerKm, at: 3)
+            try stmt.bindDouble(sohPct, at: 4)
+            try stmt.bindDouble(degPct, at: 5)
+            try stmt.bindDouble(usableKwh, at: 6)
+            try stmt.bindText(measurementSource, at: 7)
+        }
+    }
+
+    private func lastAirQualitySample(for vin: String) -> (timestamp: Date, aqi: Double?, pm25: Double?)? {
+        let sql = """
+        SELECT timestamp, air_quality_index, particulate_matter_25
+        FROM air_quality_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
+        """
+        return try? self.sql.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> (Date, Double?, Double?)? in
+            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2))
+        } ?? nil
+    }
+
+    @discardableResult
+    func recordAirQuality(vin: String, airQualityIndex: Double?, particulateMatter25: Double?,
+                          particulateMatter10: Double?, filterRemainingPercent: Double?,
+                          timestamp: Date = Date()) -> Bool {
+        guard airQualityIndex != nil || particulateMatter25 != nil else { return false }
+        if let last = lastAirQualitySample(for: vin),
+           timestamp.timeIntervalSince(last.timestamp) < Self.airQualityHeartbeat,
+           abs((airQualityIndex ?? 0) - (last.aqi ?? 0)) < Self.airQualityIndexDelta,
+           abs((particulateMatter25 ?? 0) - (last.pm25 ?? 0)) < Self.airQualityPM25Delta {
+            return false
+        }
+        let sql = """
+        INSERT INTO air_quality_history (vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10, filter_remaining_percent)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """
+        return executeInsert(sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(timestamp, at: 2)
+            try stmt.bindDouble(airQualityIndex, at: 3)
+            try stmt.bindDouble(particulateMatter25, at: 4)
+            try stmt.bindDouble(particulateMatter10, at: 5)
+            try stmt.bindDouble(filterRemainingPercent, at: 6)
+        }
+    }
+
+    /// The odometer/trip readings of the most recent row, used to detect movement.
+    private func lastTelemetryReadings(
+        for vin: String
+    ) -> (timestamp: Date, odometerKm: Double?, tripManualKm: Double?, tripAutoKm: Double?)? {
+        let sql = """
+        SELECT timestamp, odometer_km, trip_manual_km, trip_auto_km
+        FROM telemetry_logs WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
+        """
+        return try? self.sql.query(sql: sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+        } process: { stmt -> (Date, Double?, Double?, Double?)? in
+            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2), stmt.columnDouble(at: 3))
+        } ?? nil
+    }
+
+    @discardableResult
+    func recordTelemetry(vin: String, odometerKm: Double?, tripManualKm: Double?,
+                         tripAutoKm: Double?, avgConsumption: Double?,
+                         consumptionUnit: String? = nil, ambientTempC: Double?,
+                         latitude: Double?, longitude: Double?,
+                         timestamp: Date = Date()) -> Bool {
+        if let last = lastTelemetryReadings(for: vin),
+           timestamp.timeIntervalSince(last.timestamp) < Self.telemetryHeartbeat,
+           last.odometerKm == odometerKm,
+           last.tripManualKm == tripManualKm,
+           last.tripAutoKm == tripAutoKm {
+            let previous = recentTelemetry(for: vin, limit: 2).dropFirst().first
+            let lastRowFollowedMovement = previous.map {
+                $0.odometerKm != last.odometerKm
+                    || $0.tripManualKm != last.tripManualKm
+                    || $0.tripAutomaticKm != last.tripAutoKm
+            } ?? false
+            if !lastRowFollowedMovement { return false }
+        }
+        let sql = """
+        INSERT INTO telemetry_logs (vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption, ambient_temp_c, latitude, longitude, avg_consumption_unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        return executeInsert(sql) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(timestamp, at: 2)
+            try stmt.bindDouble(odometerKm, at: 3)
+            try stmt.bindDouble(tripManualKm, at: 4)
+            try stmt.bindDouble(tripAutoKm, at: 5)
+            try stmt.bindDouble(avgConsumption, at: 6)
+            try stmt.bindDouble(ambientTempC, at: 7)
+            try stmt.bindDouble(latitude, at: 8)
+            try stmt.bindDouble(longitude, at: 9)
+            try stmt.bindText(consumptionUnit, at: 10)
+        }
+    }
+
+    func setTripPurpose(_ purpose: TripPurpose?, tripID: String, vin: String) {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !tripID.isEmpty, !cleanVIN.isEmpty else { return }
+        if let purpose {
+            let sql = """
+            INSERT INTO trip_tags (trip_id, vin, purpose, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(trip_id, vin) DO UPDATE SET
+                purpose=excluded.purpose, updated_at=excluded.updated_at;
+            """
+            try? self.sql.query(sql: sql) { stmt in
+                try stmt.bindText(tripID, at: 1)
+                try stmt.bindText(cleanVIN, at: 2)
+                try stmt.bindText(purpose.rawValue, at: 3)
+                try stmt.bindDate(Date(), at: 4)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        } else {
+            try? self.sql.query(sql: "DELETE FROM trip_tags WHERE trip_id = ? AND vin = ?;") { stmt in
+                try stmt.bindText(tripID, at: 1)
+                try stmt.bindText(cleanVIN, at: 2)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
+    }
+
+    func recordCommandAudit(id: String = UUID().uuidString, vin: String,
+                            command: String, status: String, durationMs: Int? = nil, error: String? = nil,
+                            timestamp: Date = Date()) {
+        let sql = """
+        INSERT INTO remote_commands_log (id, vin, command_name, status, executed_at, duration_ms, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """
+        try? self.sql.query(sql: sql) { stmt in
+            try stmt.bindText(id, at: 1)
+            try stmt.bindText(vin, at: 2)
+            try stmt.bindText(command, at: 3)
+            try stmt.bindText(status, at: 4)
+            try stmt.bindDate(timestamp, at: 5)
+            try stmt.bindInt64(durationMs.map(Int64.init), at: 6)
+            try stmt.bindText(error, at: 7)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func updateCommandAudit(id: String, status: String, error: String? = nil) {
+        let sql = """
+        UPDATE remote_commands_log
+        SET status = ?, error_message = COALESCE(?, error_message)
+        WHERE id = ?;
+        """
+        try? self.sql.query(sql: sql) { stmt in
+            try stmt.bindText(status, at: 1)
+            try stmt.bindText(error, at: 2)
+            try stmt.bindText(id, at: 3)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    @discardableResult
+    func recordConnectivity(vin: String, networkType: String?, signalBars: Int?,
+                            wakeReason: String?, timestamp: Date = Date()) -> Bool {
+        let sql = """
+        SELECT timestamp, network_type, signal_bars, wake_reason
+        FROM connectivity_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;
+        """
+        var last: (Date, String?, Int?, String?)?
+        try? self.sql.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
+            if stmt.step(), let ts = stmt.columnDate(at: 0) {
+                last = (ts, stmt.columnText(at: 1), stmt.columnInt64(at: 2).map(Int.init),
+                        stmt.columnText(at: 3))
+            }
+        }
+        if let last {
+            let unchanged = last.1 == networkType && last.2 == signalBars && last.3 == wakeReason
+            if unchanged, timestamp.timeIntervalSince(last.0) < 60 * 60 { return false }
+        }
+        return executeInsert(
+            "INSERT INTO connectivity_history (vin, timestamp, network_type, signal_bars, wake_reason) VALUES (?,?,?,?,?);"
+        ) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(timestamp, at: 2)
+            try stmt.bindText(networkType, at: 3)
+            try stmt.bindInt64(signalBars.map(Int64.init), at: 4)
+            try stmt.bindText(wakeReason, at: 5)
+        }
+    }
+
+    @discardableResult
+    func recordCabinClimate(vin: String, interiorCelsius: Double?, requestedCelsius: Double?,
+                            timestamp: Date = Date()) -> Bool {
+        guard interiorCelsius != nil || requestedCelsius != nil else { return false }
+        let sql = "SELECT timestamp FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;"
+        var last: Date?
+        try? self.sql.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
+            if stmt.step() { last = stmt.columnDate(at: 0) }
+        }
+        // One row per hour is plenty for a temperature trend.
+        if let last, timestamp.timeIntervalSince(last) < 60 * 60 { return false }
+        return executeInsert(
+            "INSERT INTO cabin_climate_history (vin, timestamp, interior_c, requested_c) VALUES (?,?,?,?);"
+        ) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(timestamp, at: 2)
+            try stmt.bindDouble(interiorCelsius, at: 3)
+            try stmt.bindDouble(requestedCelsius, at: 4)
+        }
+    }
+
+    private func executeInsert(_ sql: String, bind: (SQLiteStatement) throws -> Void) -> Bool {
+        do {
+            try self.sql.query(sql: sql, bindings: { stmt in
+                try bind(stmt)
+                try stmt.executeUpdate()
+            }) { _ in }
+            return true
+        } catch {
+            logger.error("History insert failed: \(error, privacy: .public)")
+            return false
+        }
+    }
+
+    @discardableResult
+    func addFuelEntry(vin: String, date: Date, liters: Double,
+                      pricePerLiter: Double, odometerKm: Double?) -> Bool {
+        guard liters > 0, pricePerLiter >= 0 else { return false }
+        return executeInsert(
+            "INSERT INTO fuel_entries (vin, date, liters, price_per_liter, odometer_km) VALUES (?,?,?,?,?);"
+        ) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(date, at: 2)
+            try stmt.bindDouble(liters, at: 3)
+            try stmt.bindDouble(pricePerLiter, at: 4)
+            try stmt.bindDouble(odometerKm, at: 5)
+        }
+    }
+
+    func deleteFuelEntry(id: Int64) {
+        try? self.sql.query(sql: "DELETE FROM fuel_entries WHERE id = ?;") { stmt in
+            try stmt.bindInt64(id, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+    }
+
+    func recordActivities(_ events: [VehicleActivity]) {
+        guard !events.isEmpty else { return }
+        do {
+            try sql.withTransaction {
+                for event in events {
+                    let payload = try JSONEncoder().encode(event)
+                    try self.sql.query(sql: "INSERT OR IGNORE INTO vehicle_activity(id, vin, timestamp, payload) VALUES (?, ?, ?, ?);") { statement in
+                        try statement.bindText(event.id, at: 1)
+                        try statement.bindText(event.vin, at: 2)
+                        try statement.bindDate(event.timestamp, at: 3)
+                        try statement.bindBlob(payload, at: 4)
+                        try statement.executeUpdate()
+                    } process: { _ in }
+                }
+            }
+        } catch {
+            logger.error("Could not save vehicle activity: \(error, privacy: .public)")
+        }
+    }
 }

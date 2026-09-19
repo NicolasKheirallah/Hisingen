@@ -1,35 +1,11 @@
 import SwiftUI
 
-@MainActor
-final class PopoverViewModel: ObservableObject {
-    struct Snapshot {
-        var state: VehicleState?
-        var error: String?
-        var authenticated: Bool
-        var activeVin: String?
-        var fleet: FleetSnapshot
-        var remoteCommandInProgress: Bool
-        var commandBrand: VehicleBrand
-        var inFlightRemoteCommandID: String?
-        var lastRemoteCommandFeedback: RemoteCommandFeedback?
-        var updateVersion: String?
-        var checkingForUpdates: Bool
-        var notificationPermission: NotificationPermission
-        var diagnostics: DiagnosticsSnapshot?
-        var setupMode: Bool
-    }
-
-    @Published private(set) var snapshot: Snapshot
-
-    init(snapshot: Snapshot) { self.snapshot = snapshot }
-
-    func update(_ snapshot: Snapshot) { self.snapshot = snapshot }
-}
-
+/// Observes the panel's single model and rebuilds the content whenever the app layer
+/// publishes new display state.
 @MainActor
 struct PopoverRootView: View {
-    @ObservedObject var model: PopoverViewModel
-    let content: @MainActor (PopoverViewModel.Snapshot) -> AnyView
+    @ObservedObject var model: PanelModel
+    let content: @MainActor (PanelModel) -> AnyView
 
-    var body: some View { content(model.snapshot) }
+    var body: some View { content(model) }
 }

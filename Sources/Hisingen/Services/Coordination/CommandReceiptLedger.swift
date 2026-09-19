@@ -164,7 +164,7 @@ final class CommandReceiptLedger {
                 records[index].confirmationDeadline = nil
                 confirmed = true
                 if let auditID = updated.auditID {
-                    store.database.updateCommandAudit(id: auditID, status: "confirmed")
+                    store.database.history.updateCommandAudit(id: auditID, status: "confirmed")
                 }
                 logger.info(
                     "Command confirmation matched fresh telemetry for \(updated.commandIdentifier, privacy: .public)"
@@ -196,7 +196,7 @@ final class CommandReceiptLedger {
             records[index].receipt.status = .timedOut(at: deadline)
             records[index].confirmationDeadline = nil
             if let auditID = records[index].receipt.auditID {
-                store.database.updateCommandAudit(id: auditID, status: "confirmation_timed_out")
+                store.database.history.updateCommandAudit(id: auditID, status: "confirmation_timed_out")
             }
             changed = true
             logger.info(

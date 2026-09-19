@@ -111,7 +111,7 @@ extension EnergyAndChargingSnapshot {
 }
 
 extension VehicleIdentitySnapshot {
-    func merging(previous: Self, policy: SnapshotMergePolicy, imageCache: CarImageCache) -> Self {
+    func merging(previous: Self, policy: SnapshotMergePolicy, imageBackfill: VehicleImageBackfill) -> Self {
         let availability: VehicleAvailability = {
             guard policy.features.contains(.vehicleAvailability), case .unknown = self.availability else {
                 return self.availability
@@ -134,9 +134,9 @@ extension VehicleIdentitySnapshot {
             upholstery: upholstery ?? previous.upholstery,
             steeringOrientation: steeringOrientation ?? previous.steeringOrientation,
             imageData: imageData ?? (policy.features.contains(.vehicleImage)
-                ? (previous.imageData ?? imageCache.image(for: vin)) : nil),
+                ? (previous.imageData ?? imageBackfill.exterior) : nil),
             interiorImageData: interiorImageData ?? (policy.features.contains(.vehicleImage)
-                ? (previous.interiorImageData ?? imageCache.interiorImage(for: vin)) : nil),
+                ? (previous.interiorImageData ?? imageBackfill.interior) : nil),
             usageMode: usageMode ?? previous.usageMode,
             // The producer nils the reason on any AVAILABLE frame, so an incoming nil here
             // means "this frame says available" or "the availability read failed" — carry

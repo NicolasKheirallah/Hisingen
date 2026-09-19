@@ -157,7 +157,7 @@ struct ProviderBackoffStoreTests {
         store.block(open, until: now.addingTimeInterval(3_600), reason: "open")
 
         // What `VehicleStateStore.activate()` runs on every launch.
-        database.deleteExpiredProviderBackoffs(now: now)
+        database.providerBackoffs.deleteExpiredProviderBackoffs(now: now)
 
         #expect(store.blockedUntil(closed, now: now) == nil)
         #expect(store.blockedUntil(open, now: now) != nil)

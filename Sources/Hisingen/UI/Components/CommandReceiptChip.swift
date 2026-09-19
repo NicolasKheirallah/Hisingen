@@ -56,12 +56,8 @@ struct CommandReceiptChip: View {
         }
         .padding(9)
         .background(
-            appearance.color.opacity(0.08),
+            appearance.color.opacity(0.12),
             in: RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
-                .stroke(appearance.color.opacity(0.25), lineWidth: 0.5)
         )
         .hisAnimation(Motion.stateChange, value: receipt.status)
         // Declared here so any host stack that animates insertions gets the

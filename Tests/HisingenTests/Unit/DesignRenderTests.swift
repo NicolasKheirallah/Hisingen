@@ -109,6 +109,141 @@ struct DesignRenderTests {
         #expect(written.size.width > 0)
     }
 
+    /// The 2026 dashboard grammar as the panel actually composes it: the glass tab selection,
+    /// the idle charging row (one line, not a titled section), two instrument rows, and the
+    /// boxless planner group. The opaque panel is pinned directly: the accessibility
+    /// environment values that steer PopoverSurface are read-only in the SDK, and a snapshot
+    /// must not depend on the host process appearance anyway.
+    private struct RedesignSnapshot: View {
+        var body: some View {
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                HStack(spacing: 4) {
+                    tab("Vehicle", symbol: "car.fill", selected: true)
+                    tab("History", symbol: "clock.arrow.circlepath", selected: false)
+                    tab("Settings", symbol: "gearshape", selected: false)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.slash")
+                        .hisType(.subhead, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                        .accessibilityHidden(true)
+                    Text("Not connected")
+                        .hisType(.subhead, weight: .medium)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    Spacer()
+                }
+
+                VStack(spacing: 6) {
+                    DashboardRow(symbol: "lock.fill", value: "Locked",
+                                 label: "Doors & Openings", tint: HisingenTheme.semanticGood)
+                    DashboardRow(symbol: "fuelpump.fill", value: "42% · 214 km",
+                                 label: "Fuel & Engine", tint: HisingenTheme.ink)
+                }
+
+                Card {
+                    VStack(alignment: .leading, spacing: 10) {
+                        CardHeader(symbol: "clock.badge.checkmark", title: "Charging Planner",
+                                   color: HisingenTheme.accent)
+                        Text("Tomorrow 01:45 to 13:45")
+                            .hisType(.title)
+                            .foregroundStyle(HisingenTheme.ink)
+                        Text("Charge 43.7 kWh over 12 h to reach 90%: average 0.01 kr/kWh, now 0.02 kr/kWh")
+                            .hisType(.body)
+                            .foregroundStyle(.secondary)
+                            .hisCaptionLeading()
+                            .fixedSize(horizontal: false, vertical: true)
+                        StateSummaryChip(message: "Cheapest window before Friday", severity: .good)
+                    }
+                }
+            }
+            .padding(HisingenTheme.sectionSpacing)
+            .frame(width: 380, alignment: .top)
+            .background { Rectangle().fill(HisingenTheme.panelFill) }
+        }
+
+        private func tab(_ title: String, symbol: String, selected: Bool) -> some View {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .hisType(.caption, weight: selected ? .semibold : .regular)
+                Text(title)
+                    .hisType(.caption, weight: selected ? .semibold : .medium)
+            }
+            .foregroundStyle(selected ? HisingenTheme.ink : HisingenTheme.inkMuted)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background {
+                if selected {
+                    Color.clear
+                        .hisControlGlass(in: Capsule(), fallback: HisingenTheme.fill(.selected))
+                }
+            }
+        }
+
+        private func row(_ title: String, detail: String? = nil) -> some View {
+            HStack(spacing: 6) {
+                Text(title)
+                    .hisType(.subhead)
+                    .foregroundStyle(HisingenTheme.ink)
+                Spacer()
+                if let detail {
+                    Text(detail)
+                        .hisType(.caption, weight: .medium)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .hisType(.micro)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+        }
+    }
+
+    /// Renders the redesign snapshot in `appearanceName` and writes the PNG the visual review reads.
+    private func renderRedesignSnapshot(appearanceName: NSAppearance.Name, name: String) throws -> Data {
+        let scheme: ColorScheme = name == "dark" ? .dark : .light
+        let view = RedesignSnapshot()
+            .environment(\.colorScheme, scheme)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2.0
+        // Color tokens are NSColor dynamic providers, resolved against the current appearance at
+        // draw time, so the appearance is pinned around the render as well as in the environment.
+        let appearance = try #require(NSAppearance(named: appearanceName), "no such appearance")
+        var rendered: CGImage?
+        appearance.performAsCurrentDrawingAppearance {
+            rendered = renderer.cgImage
+        }
+        let cgImage = try #require(
+            rendered,
+            "ImageRenderer produced no image; the snapshot must not vacuously pass"
+        )
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        let pngData = try #require(bitmap.representation(using: .png, properties: [:]))
+        let dest = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // .../Unit
+            .deletingLastPathComponent()   // .../HisingenTests
+            .deletingLastPathComponent()   // .../Tests
+            .deletingLastPathComponent()   // package root
+            .appendingPathComponent("docs/design/renders/redesign-panel-\(name).png")
+        try FileManager.default.createDirectory(
+            at: dest.deletingLastPathComponent(),
+            withIntermediateDirectories: true)
+        try pngData.write(to: dest)
+        // The two appearances must actually differ; identical bytes would mean the appearance
+        // pin never reached the renderer and one of the files lies.
+        return pngData
+    }
+
+    @Test
+    func rendersTheRedesignSnapshotInBothAppearancesDifferently() throws {
+        let dark = try renderRedesignSnapshot(appearanceName: .darkAqua, name: "dark")
+        let light = try renderRedesignSnapshot(appearanceName: .aqua, name: "light")
+        #expect(dark != light, "dark and light snapshots rendered identical bytes")
+    }
+
     /// Applies `theme` through the global the views read, then restores what was there. The
     /// restore runs on the way out even if the body fails, so a failing assertion cannot leave the
     /// owner's chosen theme replaced.

@@ -299,15 +299,12 @@ struct VehicleHeroCard: View {
     }
 
     private func modelOverlayBadge(_ modelIdentity: String) -> some View {
-        let elevation = HisingenTheme.shadow(for: .onCard)
-        return Text(modelIdentity)
+        Text(modelIdentity)
             .hisType(.label, weight: .semibold)
             .foregroundStyle(HisingenTheme.ink)
             .padding(.horizontal, 9)
             .padding(.vertical, 4.5)
             .background(HisingenTheme.chipFill, in: badgeShape)
-            .overlay(badgeShape.stroke(Color.primary.opacity(0.14), lineWidth: 0.6))
-            .shadow(color: elevation.color, radius: elevation.radius, x: 0, y: elevation.y)
     }
 
     private var statusPills: some View {

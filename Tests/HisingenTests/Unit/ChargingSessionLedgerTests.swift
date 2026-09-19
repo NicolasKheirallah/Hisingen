@@ -117,7 +117,8 @@ struct ChargingSessionLedgerTests {
 
     @Test("A stale open observation is abandoned before a new charge starts")
     func staleSessionBoundary() throws {
-        let database = VehicleDatabase.inMemory()
+let raw = try SQLiteDatabase.inMemory()
+        let database = VehicleDatabase(database: raw)
         let ledger = database.charging
         ingest(ledger, minutes: 0, soc: 20, state: .charging, power: nil)
         let oldID = try #require(ledger.activeChargingSession(for: vin)?.id)
@@ -131,12 +132,13 @@ struct ChargingSessionLedgerTests {
 
     @Test("Schema migration version and lifecycle columns are installed idempotently")
     func currentSchemaVersion() throws {
-        let database = VehicleDatabase.inMemory()
-        let version = try database.db.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
+let raw = try SQLiteDatabase.inMemory()
+        let database = VehicleDatabase(database: raw)
+        let version = try raw.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
             statement.step() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
-        let columns = try database.db.query(sql: "PRAGMA table_info(charging_sessions);") { _ in } process: { statement in
+        let columns = try raw.query(sql: "PRAGMA table_info(charging_sessions);") { _ in } process: { statement in
             var names = Set<String>()
             while statement.step() {
                 if let name = statement.columnText(at: 1) { names.insert(name) }
@@ -181,7 +183,8 @@ struct ChargingSessionLedgerTests {
 
     @Test("A stale open session observed idle is abandoned, not completed")
     func staleIdleDoesNotCreateMultiDayCharge() throws {
-        let database = VehicleDatabase.inMemory()
+let raw = try SQLiteDatabase.inMemory()
+        let database = VehicleDatabase(database: raw)
         let ledger = database.charging
         ingest(ledger, minutes: 0, soc: 20, state: .charging, power: nil)
         ingest(ledger, minutes: 49 * 60, soc: 60, state: .idle, power: nil)
@@ -189,7 +192,7 @@ struct ChargingSessionLedgerTests {
         #expect(ledger.activeChargingSession(for: vin) == nil)
         #expect(ledger.recentChargingSessions(for: vin).isEmpty)
         #expect(database.recordCounts().chargingSessions == 1)
-        let abandonedAt = try database.db.query(
+        let abandonedAt = try raw.query(
             sql: "SELECT ended_at FROM charging_sessions WHERE vin = ?;",
             bindings: { statement in try statement.bindText(vin, at: 1) },
             process: { statement in statement.step() ? statement.columnDate(at: 0) : nil }

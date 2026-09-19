@@ -160,60 +160,42 @@ struct HisingenContentView: View {
         )
     }
 
-    init(
-        state: VehicleState?, error: String?, authenticated: Bool,
-        activeVin: String?, fleet: FleetSnapshot,
-        remoteCommandInProgress: Bool,
-        commandBrand: VehicleBrand,
-        inFlightRemoteCommandID: String? = nil,
-        lastRemoteCommandFeedback: RemoteCommandFeedback? = nil,
-        updateVersion: String?, checkingForUpdates: Bool,
-        notificationPermission: NotificationPermission, diagnostics: DiagnosticsSnapshot?,
-        onRefresh: @escaping () -> Void, onSettings: @escaping () -> Void,
-        onClose: @escaping () -> Void = {},
-        onCheckForUpdates: @escaping () -> Void, onOpenUpdate: @escaping () -> Void,
-        onRemoteCommand: @escaping (RemoteCommand) -> Void,
-        onSelectCar: @escaping (String) -> Void,
-        onDismissCommandReceipt: @escaping (UUID) -> Void = { _ in },
-        onSettingsChanged: @escaping (SettingsChange) -> Void,
-        onSignOut: @escaping () -> Void,
-        onTestConnection: @escaping (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
-            (false, L10n.text("Connection testing is not available."), nil)
-        },
-        setupMode: Bool = false,
-        onCompleteSetup: @escaping () -> Void = {},
-        selectedTab: Binding<TabRef>, database: VehicleDatabase,
-         reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache
-    ) {
-        self.state = state
-        self.error = error
-        self.authenticated = authenticated
-        self.activeVin = activeVin
-        self.fleet = fleet
-        self.remoteCommandInProgress = remoteCommandInProgress
-        self.commandBrand = commandBrand
-        self.inFlightRemoteCommandID = inFlightRemoteCommandID
-        self.lastRemoteCommandFeedback = lastRemoteCommandFeedback
-        self.updateVersion = updateVersion
-        self.checkingForUpdates = checkingForUpdates
-        self.notificationPermission = notificationPermission
-        self.diagnostics = diagnostics
-        self.onRefresh = onRefresh
-        self.onSettings = onSettings
-        self.onClose = onClose
-        self.onCheckForUpdates = onCheckForUpdates
-        self.onOpenUpdate = onOpenUpdate
-        self.onRemoteCommand = onRemoteCommand
-        self.onSelectCar = onSelectCar
-        self.onDismissCommandReceipt = onDismissCommandReceipt
-        self.onSettingsChanged = onSettingsChanged
-        self.onSignOut = onSignOut
-        self.onTestConnection = onTestConnection
-        self.setupMode = setupMode
-        self.onCompleteSetup = onCompleteSetup
-        self.database = database
-        self.reverseGeocoder = reverseGeocoder
-        self.imageCache = imageCache
+    /// The panel reads everything from one observed model: display state updated wholesale
+    /// by the app layer, the fixed action seam, and the services it reads on demand. The
+    /// stored fields below are copies taken at construction, so the body stays untouched;
+    /// the popover re-constructs this view whenever the model publishes.
+    init(panel: PanelModel, selectedTab: Binding<TabRef>) {
+        let display = panel.display
+        let actions = panel.actions
+        self.state = display.state
+        self.error = display.error
+        self.authenticated = display.authenticated
+        self.activeVin = display.activeVin
+        self.fleet = display.fleet
+        self.remoteCommandInProgress = display.remoteCommandInProgress
+        self.commandBrand = display.commandBrand
+        self.inFlightRemoteCommandID = display.inFlightRemoteCommandID
+        self.lastRemoteCommandFeedback = display.lastRemoteCommandFeedback
+        self.updateVersion = display.updateVersion
+        self.checkingForUpdates = display.checkingForUpdates
+        self.notificationPermission = display.notificationPermission
+        self.diagnostics = display.diagnostics
+        self.onRefresh = actions.onRefresh
+        self.onSettings = actions.onSettings
+        self.onClose = actions.onClose
+        self.onCheckForUpdates = actions.onCheckForUpdates
+        self.onOpenUpdate = actions.onOpenUpdate
+        self.onRemoteCommand = actions.onRemoteCommand
+        self.onSelectCar = actions.onSelectCar
+        self.onDismissCommandReceipt = actions.onDismissCommandReceipt
+        self.onSettingsChanged = actions.onSettingsChanged
+        self.onSignOut = actions.onSignOut
+        self.onTestConnection = actions.onTestConnection
+        self.setupMode = display.setupMode
+        self.onCompleteSetup = actions.onCompleteSetup
+        self.database = panel.database
+        self.reverseGeocoder = panel.reverseGeocoder
+        self.imageCache = panel.imageCache
         self._selectedTab = State(initialValue: selectedTab.wrappedValue)
         self.tabSelection = selectedTab
     }
@@ -266,7 +248,6 @@ struct HisingenContentView: View {
                     .transition(modeTransition)
             } else if let state {
                 tabBar
-                scrollEdgeFade
                 if tab == .settings {
                     settingsScreen
                         .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
@@ -321,6 +302,18 @@ struct HisingenContentView: View {
                         scrollOffsetFromTop = offset
                     }
                     .simultaneousGesture(panelDragGesture)
+                    // The scroll edge effect: content softens as it passes under the floating
+                    // tab strip and over the footer, instead of meeting a drawn divider. This is
+                    // the 2026 replacement for the hairline strip the panel used to draw there.
+                    .mask {
+                        VStack(spacing: 0) {
+                            LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 18)
+                            Color.white
+                            LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 14)
+                        }
+                    }
                     .overlay(alignment: .top) {
                         PullToRefreshOverlay(pullDistance: pullDistance, threshold: Self.pullThreshold)
                     }
@@ -329,7 +322,6 @@ struct HisingenContentView: View {
                 placeholderView
                     .transition(.opacity)
             }
-            scrollEdgeFade
             footerBar
         }
         // Content-density zoom: lay out at panelSize/scale, then scale into the physical
@@ -551,20 +543,6 @@ struct HisingenContentView: View {
         }
     }
 
-    private var scrollEdgeFade: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [HisingenTheme.hairline.opacity(0.55), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(height: 5)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
     private var garageStates: [VehicleState] {
         fleet.vehicles.compactMap { fleet.snapshot(for: $0) }.sorted {
             if $0.model.brand != $1.model.brand { return $0.model.brand.rawValue < $1.model.brand.rawValue }
@@ -679,19 +657,14 @@ struct HisingenContentView: View {
         .padding(.vertical, 6)
     }
 
+    /// The tab selection, drawn as the one piece of chrome that moves: in the 2026 language it
+    /// is glass, a lens over the panel material that carries the system's own hover and press
+    /// responses rather than a tinted rectangle. On macOS 15 the same capsule falls back to the
+    /// palette's selected fill, so the selection still reads without the material.
     private var tabIndicator: some View {
-        Group {
-            if HisingenTheme.cornerRadius == 0 {
-                Rectangle()
-                    .fill(HisingenTheme.ink)
-                    .frame(height: 1.5)
-            } else {
-                Capsule()
-                    .fill(.primary.opacity(0.08))
-                    .overlay(Capsule().stroke(.separator.opacity(0.3), lineWidth: 0.5))
-            }
-        }
-        .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
+        Color.clear
+            .hisControlGlass(in: Capsule(), fallback: HisingenTheme.fill(.selected))
+            .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
     }
 
     /// Shown while authenticated but with no snapshot yet.

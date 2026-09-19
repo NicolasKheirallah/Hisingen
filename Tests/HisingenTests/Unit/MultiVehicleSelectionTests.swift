@@ -34,8 +34,7 @@ struct MultiVehicleSelectionTests {
             observesEnvironment: false,
             imageCache: CarImageCache(),
             preferences: preferences,
-            sessionManager: SessionManager(readToken: { _ in "test-session" },
-                                           readPassword: { nil }, clearPassword: {}),
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
             retryDelay: { _, _, _ in 0.01 },
             selectionRetryDelay: selectionRetryDelay
         )
@@ -252,7 +251,7 @@ private actor TwoCarProvider: VehicleProviding {
     var cars: [CarSummary] { vins.map { CarSummary(vin: $0, title: $0) } }
 
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
     func resetSession() async {}
     func signOut() async throws {}
     func resolvedVIN(preferred: String?) -> String? {

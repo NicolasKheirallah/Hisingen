@@ -20,7 +20,7 @@ struct VehicleHistoryRecorderTests {
         recorder.record(state)
         await recorder.drain()
 
-        let snapshot = try #require(database.loadSnapshot(for: state.identity.vin))
+        let snapshot = try #require(database.snapshots.loadSnapshot(for: state.identity.vin))
         #expect(snapshot.identity.vin == state.identity.vin)
         #expect(snapshot.energy.batteryPercentage == state.energy.batteryPercentage)
         #expect(snapshot.freshness.isCached)

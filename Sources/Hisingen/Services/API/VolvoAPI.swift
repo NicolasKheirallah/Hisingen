@@ -210,7 +210,7 @@ actor VolvoAPI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
         let (data, response) = try await perform(request, operation: "command: \(commandName)")
-        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: commandName) {
+        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: commandName) {
             if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
                let text = detail.text {
                 // Only a genuine 403 becomes permissionDenied. Letting the body's detail text
@@ -475,7 +475,7 @@ actor VolvoAPI {
                 ? VolvoError.authenticationRequired(.invalidCredentials)
                 : VolvoError.server(statusCode: response.statusCode)
         }
-        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: "token request") {
+        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: "token request") {
             throw failure
         }
         guard let decoded = try? JSONDecoder.volvo.decode(VolvoTokenResponseDTO.self, from: data),
@@ -528,7 +528,7 @@ actor VolvoAPI {
             }
             throw VolvoError.permissionDenied(operation: path)
         }
-        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
+        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
         if let value = envelope?.data { return value }
         guard let direct = try? JSONDecoder.volvo.decode(T.self, from: data) else {
@@ -543,7 +543,7 @@ actor VolvoAPI {
 
     func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
         let (data, response) = try await authenticatedGET(path)
-        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, operation: path) { throw failure }
+        if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {
             return list
         }

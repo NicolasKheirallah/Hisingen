@@ -93,7 +93,7 @@ extension VehicleState {
         from previous: VehicleState?,
         features: FeatureSelection,
         refreshedFeatures: Set<AppFeature>? = nil,
-        imageCache: CarImageCache = CarImageCache.shared
+        imageBackfill: VehicleImageBackfill = .empty
     ) -> VehicleState {
         guard let previous, previous.vin == vin else { return self }
         let isCommandLocked = (previous.optimisticCommandLockUntil ?? .distantPast) > Date()
@@ -128,7 +128,7 @@ extension VehicleState {
 
         var merged = VehicleState(
             energy: energy.merging(previous: previous.energy, policy: policy),
-            identity: identity.merging(previous: previous.identity, policy: policy, imageCache: imageCache),
+            identity: identity.merging(previous: previous.identity, policy: policy, imageBackfill: imageBackfill),
             maintenance: maintenance.merging(previous: previous.maintenance, policy: policy),
             freshness: freshness.merging(previous: previous.freshness, unavailableFeatures: mergedUnavailableFeatures),
             exteriorStatus: exteriorStatus ?? (features.contains(.exteriorStatus) ? previous.exteriorStatus : nil),

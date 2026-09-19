@@ -51,7 +51,7 @@ final class CarImageCache: @unchecked Sendable {
         let fileURL = cacheDirectory.appendingPathComponent("\(key).jpg")
         if fileManager.fileExists(atPath: fileURL.path) { return true }
         guard let parts = parseKey(key) else { return false }
-        return database.hasVehicleImage(for: parts.vin, angle: parts.angle)
+        return database.images.hasVehicleImage(for: parts.vin, angle: parts.angle)
     }
 
     func image(for vin: String, angle: Int? = nil) -> Data? {
@@ -89,7 +89,7 @@ final class CarImageCache: @unchecked Sendable {
         lock.unlock()
 
         if let parts = parseKey(key) {
-            if let dbImage = database.loadVehicleImage(for: parts.vin, angle: parts.angle) {
+            if let dbImage = database.images.loadVehicleImage(for: parts.vin, angle: parts.angle) {
                 lock.lock()
                 store(dbImage.data, forKey: key)
                 lock.unlock()
@@ -125,7 +125,7 @@ final class CarImageCache: @unchecked Sendable {
         guard let parts = parseKey(key) else { return }
         let database = self.database
         ioQueue.async { [logger] in
-            let saved = database.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
+            let saved = database.images.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
             if saved, let legacyFileURL {
                 do { try FileManager.default.removeItem(at: legacyFileURL) }
                 catch { logger.debug("Could not remove migrated image cache file: \(error, privacy: .public)") }
