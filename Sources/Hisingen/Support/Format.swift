@@ -2,6 +2,11 @@ import AppKit
 
 
 enum Format {
+    struct DistanceParts: Equatable, Sendable {
+        let value: String
+        let unit: String
+    }
+
     static func shortDuration(minutes: Int) -> String {
         if minutes < 60 { return L10n.format("%dmin", minutes) }
         let hours = minutes / 60, remainder = minutes % 60
@@ -9,7 +14,8 @@ enum Format {
     }
 
     /// Locale-aware via `powerKw`, so the menu bar and charging cards agree with the
-    /// planner/history surfaces on the decimal separator.
+    /// planner/history surfaces on the decimal separator. The locale is the app's display
+    /// language (`L10n.displayLocale`), not the raw region: one policy for every surface.
     static func kilowatts(watts: Int) -> String {
         powerKw(Double(watts) / 1_000)
     }
@@ -21,11 +27,22 @@ enum Format {
     }()
 
     static func distance(km: Int, grouped: Bool = false, unit: DistanceUnit) -> String {
+        let parts = distanceParts(km: km, grouped: grouped, unit: unit)
+        return "\(parts.value) \(parts.unit)"
+    }
+
+    /// Keeps the number and unit independently styleable without making a view parse a
+    /// localized presentation string back into data.
+    static func distanceParts(km: Int, grouped: Bool = false, unit: DistanceUnit) -> DistanceParts {
         let value = unit.convert(km: km)
+        groupedDistanceFormatter.locale = L10n.displayLocale
         if grouped {
-            return "\(groupedDistanceFormatter.string(from: NSNumber(value: value)) ?? String(value)) \(unit.suffix)"
+            return DistanceParts(
+                value: groupedDistanceFormatter.string(from: NSNumber(value: value)) ?? String(value),
+                unit: unit.suffix
+            )
         }
-        return "\(value) \(unit.suffix)"
+        return DistanceParts(value: String(value), unit: unit.suffix)
     }
 
     /// Locale decimal separator, grouping deliberately off: the non-grouped `Int` variant above
@@ -38,8 +55,10 @@ enum Format {
         return formatter
     }()
 
-    static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit) -> String {
+    static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit, grouped: Bool = false) -> String {
         let value = unit == .kilometers ? km : km * UnitConversion.kilometersPerMile
+        decimalDistanceFormatter.locale = L10n.displayLocale
+        decimalDistanceFormatter.usesGroupingSeparator = grouped
         decimalDistanceFormatter.minimumFractionDigits = decimals
         decimalDistanceFormatter.maximumFractionDigits = decimals
         let formatted = decimalDistanceFormatter.string(from: NSNumber(value: value))
@@ -48,12 +67,12 @@ enum Format {
     }
 
     static func temperature(celsius: Double, unit: TemperatureUnit, decimals: Int = 1) -> String {
-        String(format: "%.*f %@", decimals, unit.convert(celsius: celsius), unit.suffix)
+        L10n.format("%@ %@", decimal(unit.convert(celsius: celsius), decimals: decimals), unit.suffix)
     }
 
     static func pressure(kilopascals: Double, unit: PressureUnit) -> String {
         let decimals = unit == .kilopascals ? 0 : 1
-        return String(format: "%.*f %@", decimals, unit.convert(kilopascals: kilopascals), unit.suffix)
+        return L10n.format("%@ %@", decimal(unit.convert(kilopascals: kilopascals), decimals: decimals), unit.suffix)
     }
 
     static func icon(for data: VehicleState?, includeConnection: Bool = true) -> String {
@@ -110,6 +129,7 @@ enum Format {
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         formatter.timeZone = timeZone
+        formatter.locale = L10n.displayLocale
         completionTimeFormatters[key] = formatter
         completionTimeLock.unlock()
         return formatter.string(from: target)
@@ -138,8 +158,7 @@ enum Format {
     }
 
     static func fuelVolume(liters: Double, unit: FuelVolumeUnit) -> String {
-        let converted = unit.convert(liters: liters)
-        return String(format: "%.1f %@", converted, unit.suffix)
+        L10n.format("%@ %@", decimal(unit.convert(liters: liters), decimals: 1), unit.suffix)
     }
 
     static func fuelEconomy(lPer100Km: Double, unit: FuelEconomyUnit) -> String {
@@ -163,6 +182,7 @@ enum Format {
     private static func decimal(_ value: Double, decimals: Int, grouping: Bool = false) -> String {
         decimalFormatterLock.lock()
         defer { decimalFormatterLock.unlock() }
+        decimalFormatter.locale = L10n.displayLocale
         decimalFormatter.minimumFractionDigits = decimals
         decimalFormatter.maximumFractionDigits = decimals
         decimalFormatter.usesGroupingSeparator = grouping
@@ -236,26 +256,45 @@ enum Format {
         return L10n.format("%d d ago", seconds / 86_400)
     }
 
-    static let dateTimeFormatter: DateFormatter = {
+    /// The shared formatters below are cached objects whose `locale` is refreshed on every
+    /// access, so a reader who switches the interface language sees dates follow immediately
+    /// without a process restart. Exposure is deliberately through computed properties that
+    /// do that one assignment first.
+    private static let _dateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }()
 
-    static let dateFormatter: DateFormatter = {
+    static var dateTimeFormatter: DateFormatter {
+        _dateTimeFormatter.locale = L10n.displayLocale
+        return _dateTimeFormatter
+    }
+
+    private static let _dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .none
         return formatter
     }()
 
-    static let timeFormatter: DateFormatter = {
+    static var dateFormatter: DateFormatter {
+        _dateFormatter.locale = L10n.displayLocale
+        return _dateFormatter
+    }
+
+    private static let _timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter
     }()
+
+    static var timeFormatter: DateFormatter {
+        _timeFormatter.locale = L10n.displayLocale
+        return _timeFormatter
+    }
 
     /// Shared ISO-8601 formatter for exports (previously constructed per session row).
     nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
@@ -298,7 +337,7 @@ enum Format {
         }()
         let primaryRange: String? = {
             if let km = data.totalCombinedRangeKm ?? data.energy.rangeKm ?? data.fuelSystem.rangeKm {
-                return "\(unit.convert(km: km))\(unit.suffix)"
+                return "\(unit.convert(km: km)) \(unit.suffix)"
             }
             return nil
         }()

@@ -45,11 +45,6 @@ struct LiveStreamPolicy: Sendable {
         return false
     }
 
-    func isStable(connectedAt: Date?, now: Date) -> Bool {
-        guard let connectedAt else { return false }
-        return now.timeIntervalSince(connectedAt) >= stabilityInterval
-    }
-
     func action(
         for error: VehicleServiceError,
         consecutiveFailures: Int,

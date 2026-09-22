@@ -463,6 +463,22 @@ The screenshots below show each view within the app:
 
 <table>
 <tr>
+<td colspan="2" align="center">
+<strong>Vehicle instrument with factory render</strong><br><br>
+<img src="assets/vehicle-overview-factory-art.png" width="460" loading="lazy" alt="Hisingen vehicle instrument with the factory render, battery level, estimated range and quick actions">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Charging history & session curve</strong><br><br>
+<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with an expanded session, charging curve and estimate quality">
+</td>
+<td width="50%" align="center">
+<strong>Charging planner & spot prices</strong><br><br>
+<img src="assets/vehicle-charging-planner.png" width="420" loading="lazy" alt="Hisingen smart charging planner with hourly spot prices and recent charging sessions">
+</td>
+</tr>
+<tr>
 <td width="50%" align="center">
 <strong>Menu bar dashboard</strong><br><br>
 <img src="assets/status-menubar-main-dashboard.png" width="420" loading="lazy" alt="Hisingen menu bar dashboard">
@@ -514,6 +530,16 @@ The screenshots below show each view within the app:
 <table>
 <tr>
 <td width="50%" align="center">
+<strong>Controls overview & command confirmation</strong><br><br>
+<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen controls overview with remote command capabilities and a command confirmation">
+</td>
+<td width="50%" align="center">
+<strong>Climate & charging controls</strong><br><br>
+<img src="assets/controls-charging.png" width="420" loading="lazy" alt="Hisingen climate controls and charging target and current limits with saved charge locations">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
 <strong>Climate & CleanZone air purifier</strong><br><br>
 <img src="assets/controls-climate-preconditioning-airclean.png" width="420" loading="lazy" alt="Hisingen remote climate preconditioning and air purifier">
 </td>
@@ -542,6 +568,32 @@ The screenshots below show each view within the app:
 <br>
 
 <table>
+<tr>
+<td colspan="2" align="center">
+<strong>History overview & observed changes</strong><br><br>
+<img src="assets/history-overview.png" width="460" loading="lazy" alt="Hisingen history overview with distance, trips, energy, cost and observed changes">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Monthly mileage & detected trips</strong><br><br>
+<img src="assets/history-trips-and-charging.png" width="420" loading="lazy" alt="Hisingen monthly mileage report, detected trips and charging sessions">
+</td>
+<td width="50%" align="center">
+<strong>Charging & consumption trends</strong><br><br>
+<img src="assets/history-charging-trends.png" width="420" loading="lazy" alt="Hisingen charging trend summary and consumption per 100 km over time">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<strong>Odometer & battery health trends</strong><br><br>
+<img src="assets/history-odometer-and-battery-health.png" width="420" loading="lazy" alt="Hisingen odometer history and battery health trend with degradation and usable capacity">
+</td>
+<td width="50%" align="center">
+<strong>Usage insights & driving patterns</strong><br><br>
+<img src="assets/history-insights.png" width="420" loading="lazy" alt="Hisingen month-over-month comparison, air-cleaning runs, emissions estimate and driving patterns">
+</td>
+</tr>
 <tr>
 <td width="50%" align="center">
 <strong>Analytics dashboard & export</strong><br><br>
@@ -574,6 +626,16 @@ The screenshots below show each view within the app:
 <table>
 <tr>
 <td width="50%" align="center">
+<strong>Vehicle passport & reading freshness</strong><br><br>
+<img src="assets/info-vehicle-identity.png" width="420" loading="lazy" alt="Hisingen vehicle identity, key specifications and per-reading freshness timestamps">
+</td>
+<td width="50%" align="center">
+<strong>Doors, openings & tyre status</strong><br><br>
+<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with indirect tyre pressure monitoring">
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
 <strong>Battery pack SoH calculation (82.4%)</strong><br><br>
 <img src="assets/info-battery-pack-soh-longevity.png" width="420" loading="lazy" alt="Hisingen 78 kWh battery pack degradation and State of Health calculation">
 </td>
@@ -602,6 +664,12 @@ The screenshots below show each view within the app:
 <br>
 
 <table>
+<tr>
+<td colspan="2" align="center">
+<strong>Appearance, themes & vehicle perspective</strong><br><br>
+<img src="assets/settings-appearance.png" width="460" loading="lazy" alt="Hisingen appearance settings with light and dark mode, vehicle perspective art and the theme gallery">
+</td>
+</tr>
 <tr>
 <td width="50%" align="center">
 <strong>Multi-brand garage accounts</strong><br><br>

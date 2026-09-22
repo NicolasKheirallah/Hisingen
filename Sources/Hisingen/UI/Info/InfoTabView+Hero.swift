@@ -63,10 +63,8 @@ extension InfoTabView {
                             imageData: currentImageData
                         )
                         .frame(maxWidth: .infinity)
-                        .frame(height: 220)
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 220)
                     .padding(.horizontal, -HisingenTheme.cardPadding)
                     .padding(.top, -4)
                     .clipped()
@@ -102,7 +100,7 @@ extension InfoTabView {
                             .frame(height: 120)
                         VStack(spacing: 6) {
                             Image(systemName: isInterior ? "carseat.left.fill" : "car.side.fill")
-                                .font(.system(size: 38))
+                                .hisSymbolSize(38)
                                 .foregroundStyle(HisingenTheme.accent.opacity(0.7))
                             Text(isInterior ? L10n.text("Interior View") : L10n.text("Studio Render"))
                                 .hisType(.label, weight: .medium)

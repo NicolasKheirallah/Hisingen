@@ -5,7 +5,7 @@ extension HistoryDashboardView {
         let cycles = HistoryInsights.airCleaningCycles(from: snapshot.activities, vin: state.identity.vin)
         return Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "wind", title: L10n.text("Observed Air-Cleaning Runs"), color: .mint)
+                CardHeader(symbol: "wind", title: L10n.text("Observed Air-Cleaning Runs"), color: HisingenTheme.chartPositive)
                 PaginatedSection(items: cycles, pageSize: 10, resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No air-cleaning cycles were recorded in this period.")) { visible, footer in
                     ForEach(visible) { cycle in
@@ -14,12 +14,12 @@ extension HistoryDashboardView {
                             Text(cycle.startedAt, style: .time)
                             Spacer()
                             Text(Format.shortDuration(minutes: cycle.observedMinutes))
-                        }.font(.caption)
+                        }.hisType(.caption)
                     }
                     footer
                 }
                 Text(L10n.text("Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded."))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

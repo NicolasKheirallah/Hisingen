@@ -40,27 +40,36 @@ struct CardHeader: View {
     /// Optional trailing detail, e.g. how many rows a warning card holds. A bare title made the
     /// card the same shape whether it held one row or ten.
     var detail: String? = nil
+    /// Replaces the SF Symbol with a drawn glyph for the one header whose mark is animated
+    /// (climate's spinning fan). It steps outside the tint pipeline by design: the glyph
+    /// carries its own colour and motion.
+    var glyph: AnyView? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .foregroundStyle(isSemantic ? color : HisingenTheme.decorativeTint(color))
-                .hisType(.heading, weight: HisingenTheme.headingWeight)
-                // A quiet breath, not a throb: a ~6 % swell on a slow cycle.
-                .scaleEffect(isPulsing && pulse ? 1.06 : 1.0)
-                .shadow(color: isPulsing && pulse ? color.opacity(0.45) : .clear, radius: 3)
-                .animation(
-                    Motion.resolve(isPulsing ? Motion.breath : nil),
-                    value: pulse
-                )
-                .onAppear {
-                    if isPulsing && !reduceMotion {
-                        pulse = true
+            if let glyph {
+                glyph
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: symbol)
+                    .foregroundStyle(isSemantic ? color : HisingenTheme.decorativeTint(color))
+                    .hisType(.heading, weight: HisingenTheme.headingWeight)
+                    // A quiet breath, not a throb: a ~6 % swell on a slow cycle.
+                    .scaleEffect(isPulsing && pulse ? 1.06 : 1.0)
+                    .shadow(color: isPulsing && pulse ? color.opacity(0.45) : .clear, radius: 3)
+                    .animation(
+                        Motion.resolve(isPulsing ? Motion.breath : nil),
+                        value: pulse
+                    )
+                    .onAppear {
+                        if isPulsing && !reduceMotion {
+                            pulse = true
+                        }
                     }
-                }
+            }
             Text(title)
                 .hisType(.heading, weight: HisingenTheme.headingWeight)
                 .foregroundStyle(HisingenTheme.ink)

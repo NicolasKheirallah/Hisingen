@@ -14,6 +14,11 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
     var unavailableFeatures: [AppFeature]
     var retainedDataCategories: [AppFeature]
     var retainedDataAt: Date?
+    /// True when this snapshot was served by the fallback credential (the consumer Polestar ID
+    /// session) rather than the configured primary (the Developer Portal). `nil` when the
+    /// primary served it or the snapshot predates the marker, so old persisted snapshots
+    /// decode without migration.
+    var servedByFallback: Bool? = nil
 
     init(
         isCached: Bool = false,
@@ -24,7 +29,8 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
         dataWarnings: [String] = [],
         unavailableFeatures: [AppFeature] = [],
         retainedDataCategories: [AppFeature] = [],
-        retainedDataAt: Date? = nil
+        retainedDataAt: Date? = nil,
+        servedByFallback: Bool? = nil
     ) {
         self.isCached = isCached
         self.fetchedAt = fetchedAt
@@ -35,5 +41,6 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
         self.unavailableFeatures = unavailableFeatures
         self.retainedDataCategories = retainedDataCategories
         self.retainedDataAt = retainedDataAt
+        self.servedByFallback = servedByFallback
     }
 }

@@ -81,6 +81,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case controlsClimate = "controls-climate"
     case controlsEngine = "controls-engine"
     case controlsCharging = "controls-charging"
+    case controlsChargingPlanner = "controls-charging-planner"
     case controlsAccess = "controls-access"
     case controlsWindowsLocate = "controls-windows-locate"
     case controlsOTA = "controls-ota"
@@ -126,6 +127,17 @@ struct TabItem: Identifiable, Hashable, Sendable {
 /// designed in. It is the fallback for every reader who never opens the new settings pane,
 /// so a tab must render identically to the pre-composition build when nothing is customised.
 enum TabItemCatalog {
+    /// Kept as decodeable ids so an existing custom layout still loads, but no longer offered in
+    /// the editor: these five detail cards and their wrapper duplicate sections now owned by Info.
+    static let retiredVehicleDetailItems: Set<TabItemID> = [
+        .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
+        .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
+    ]
+
+    static func isRetired(_ id: TabItemID) -> Bool {
+        retiredVehicleDetailItems.contains(id)
+    }
+
     static let all: [TabItem] = [
         // MARK: Vehicle
         TabItem(id: .vehicleHero, title: L10n.text("Vehicle hero"), symbol: "car.side.fill",
@@ -137,7 +149,7 @@ enum TabItemCatalog {
         TabItem(id: .vehicleAttention, title: L10n.text("Attention"), symbol: "exclamationmark.triangle.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Refresh errors and provider data warnings.", feature: nil),
-        TabItem(id: .vehicleExceptions, title: L10n.text("Needs attention"), symbol: "exclamationmark.circle.fill",
+        TabItem(id: .vehicleExceptions, title: L10n.text("Needs Attention"), symbol: "exclamationmark.circle.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Alarm, open panel, tyre, fluid and software exceptions.", feature: nil),
         TabItem(id: .vehicleCharging, title: L10n.text("Charging"), symbol: "bolt.fill",
@@ -335,6 +347,9 @@ enum TabItemCatalog {
         TabItem(id: .controlsCharging, title: L10n.text("Charging controls"), symbol: "bolt.badge.clock",
                 sourceTab: .controls, kind: .card,
                 detail: "Charge target, current limit and charging override.", feature: .remoteCharging),
+        TabItem(id: .controlsChargingPlanner, title: L10n.text("Smart Charging Planner"), symbol: "calendar.badge.clock",
+                sourceTab: .controls, kind: .card,
+                detail: "The departure-aware charging plan for this vehicle.", feature: .smartChargingPlanner),
         TabItem(id: .controlsAccess, title: L10n.text("Lock controls"), symbol: "lock.fill",
                 sourceTab: .controls, kind: .card,
                 detail: "Lock, unlock and tailgate control.", feature: .remoteLocks),
@@ -369,11 +384,13 @@ enum TabItemCatalog {
 
     static func symbol(_ id: TabItemID) -> String { byID[id]?.symbol ?? "square.dashed" }
 
-    static func items(in tab: BuiltInTab) -> [TabItem] { all.filter { $0.sourceTab == tab } }
+    static func items(in tab: BuiltInTab) -> [TabItem] {
+        all.filter { $0.sourceTab == tab && !isRetired($0.id) }
+    }
 
     static var headers: [TabItem] { all.filter { $0.kind == .header } }
 
-    static var cards: [TabItem] { all.filter(\.isCard) }
+    static var cards: [TabItem] { all.filter { $0.isCard && !isRetired($0.id) } }
 
     /// The shipped layout of each built-in tab, in the order it was designed in.
     static func defaultItems(for tab: BuiltInTab) -> [TabItemID] {
@@ -407,18 +424,13 @@ enum TabItemCatalog {
         case .controls:
             return [
                 .controlsBanners, .controlsReceipts, .controlsClimate, .controlsEngine,
-                .controlsCharging, .controlsAccess, .controlsWindowsLocate, .controlsOTA
+                .controlsCharging, .controlsChargingPlanner, .controlsAccess,
+                .controlsWindowsLocate, .controlsOTA
             ]
         case .settings:
             // Settings is its own surface, managed by the settings sections rather than by
             // this catalog. It is listed so a hidden-tab set can name it.
             return []
         }
-    }
-
-    /// Default placement of every catalogued item, as items rather than ids, for callers that
-    /// need titles and symbols too.
-    static func defaultEntries(for tab: BuiltInTab) -> [TabItem] {
-        defaultItems(for: tab).compactMap(item)
     }
 }

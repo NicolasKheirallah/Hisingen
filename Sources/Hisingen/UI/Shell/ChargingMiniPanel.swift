@@ -154,13 +154,13 @@ private struct ChargingMiniPanelView: View {
                 Spacer()
                 if let target = targetPercent, target < 100,
                    let battery = batteryPercentage {
-                    Text("\(String(format: "%.0f", battery))→\(target)%")
+                    Text("\(String(format: "%.0f", locale: L10n.displayLocale, battery))→\(target)%")
                         .hisType(.label, weight: .bold, design: .rounded)
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
                         .transition(.opacity)
                 } else if let battery = batteryPercentage {
-                    Text(String(format: "%.0f%%", battery))
+                    Text(String(format: "%.0f%%", locale: L10n.displayLocale, battery))
                         .hisType(.heading, weight: .bold, design: .rounded)
                         .monospacedDigit()
                         .hisTelemetryValue(battery, reduceMotion: reduceMotion)
@@ -168,16 +168,16 @@ private struct ChargingMiniPanelView: View {
                 }
                 // The panel floats above every window, on every Space, over full-screen apps, and
                 // it holds no controls of its own: the only way to dismiss it was to know the
-                // switch lived in Settings. A way out belongs where the thing appears.
+                // switch lived in Settings. A way out belongs where the thing appears. The
+                // pressable style is the house primitive, so the target meets the 24pt floor
+                // and the click is answered on pointer-down like every other control.
                 if let onClose {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                             .hisType(.nano, weight: .semibold)
                             .foregroundStyle(.secondary)
-                            .frame(width: 18, height: 18)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .help(L10n.text("Hide this panel"))
                     .accessibilityLabel(L10n.text("Hide this panel"))
                 }

@@ -87,7 +87,10 @@ struct MultiVehicleSelectionTests {
     func switchingBetweenTwoSameAccountCarsWorksRoundTrip() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
         preferences.vin = Self.vinA
         let provider = TwoCarProvider(vins: [Self.vinA, Self.vinB])
         let coordinator = makeCoordinator(provider: provider, defaults: defaults, preferences: preferences)
@@ -139,7 +142,10 @@ struct MultiVehicleSelectionTests {
     func retryingAFailedSwitchIsAllowed() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
         preferences.vin = Self.vinA
         let provider = TwoCarProvider(vins: [Self.vinA, Self.vinB])
         // First attempt to select B fails terminally; the optimistic preferences write has
@@ -177,7 +183,10 @@ struct MultiVehicleSelectionTests {
     func racedSelectionAutoRecoversWithoutTerminalError() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
         preferences.vin = Self.vinA
         let provider = TwoCarProvider(vins: [Self.vinA, Self.vinB])
         await provider.setFailingVIN(Self.vinB, onceOnly: true)
@@ -210,7 +219,10 @@ struct MultiVehicleSelectionTests {
     func selectingTheSettledCurrentCarIsANoOp() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
         preferences.vin = Self.vinA
         let provider = TwoCarProvider(vins: [Self.vinA, Self.vinB])
         let coordinator = makeCoordinator(provider: provider, defaults: defaults, preferences: preferences)

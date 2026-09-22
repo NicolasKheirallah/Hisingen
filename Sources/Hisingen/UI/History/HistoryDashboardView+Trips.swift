@@ -44,7 +44,7 @@ extension HistoryDashboardView {
                     curveStat(L10n.text("Weekend / day"),
                               Format.distance(km: split.weekendKmPerDay, decimals: 1, unit: preferences.distanceUnit))
                     if let busiest = hours.max(by: { $0.tripCount < $1.tripCount }), busiest.tripCount > 0 {
-                        curveStat(L10n.text("Busiest hour"), String(format: "%02d:00", busiest.hour))
+                        curveStat(L10n.text("Busiest hour"), String(format: "%02d:00", locale: L10n.displayLocale, busiest.hour))
                     }
                 }
                 dataConfidenceNote(for: aggregateTrips.map(\.startedAt))
@@ -69,14 +69,14 @@ extension HistoryDashboardView {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "calendar.badge.checkmark", title: L10n.text("Monthly Mileage Report"), color: .indigo)
+                    CardHeader(symbol: "calendar.badge.checkmark", title: L10n.text("Monthly Mileage Report"), color: HisingenTheme.chartInfo)
                     Spacer()
                     Picker(L10n.text("Month"), selection: Binding(
                         get: { selectedMileageReport?.monthStart },
                         set: { mileageReportMonthStart = $0 }
                     )) {
                         ForEach(mileageReports) { report in
-                            Text(report.monthStart.formatted(.dateTime.month(.wide).year()))
+                            Text(report.monthStart.formatted(.dateTime.month(.wide).year().locale(L10n.displayLocale)))
                                 .tag(Optional(report.monthStart))
                         }
                     }
@@ -229,7 +229,7 @@ extension HistoryDashboardView {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: .teal)
+                    CardHeader(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: HisingenTheme.chartPositive)
                     Spacer()
                     Menu {
                         Picker(L10n.text("Sort"), selection: $tripSort) {
@@ -316,6 +316,15 @@ extension HistoryDashboardView {
                         .buttonStyle(.pressable)
                         .accessibilityLabel(L10n.text("Restore this hidden trip to the detected list."))
                         .help(L10n.text("Restore this hidden trip to the detected list."))
+                    }
+                    .contextMenu {
+                        Button {
+                            preferences.setTripHidden(false, id: trip.id, for: state.identity.vin)
+                            restoredTripIDs.insert(trip.id)
+                            expandedTripIDs.remove(trip.id)
+                        } label: {
+                            Label(L10n.text("Restore"), systemImage: "arrow.uturn.backward")
+                        }
                     }
                     .padding(.vertical, 2)
                 }
@@ -434,6 +443,20 @@ extension HistoryDashboardView {
         }
         .padding(.vertical, 1)
         .hisAnimation(Motion.layout, value: expanded)
+        .contextMenu {
+            Button {
+                preferences.setTripHidden(true, id: trip.id, for: state.identity.vin)
+                expandedTripIDs.remove(trip.id)
+            } label: {
+                Label(L10n.text("Hide"), systemImage: "eye.slash")
+            }
+            if let sLat = trip.startLatitude, let sLon = trip.startLongitude,
+               let eLat = trip.endLatitude, let eLon = trip.endLongitude {
+                Button { openRoute(fromLat: sLat, fromLon: sLon, toLat: eLat, toLon: eLon) } label: {
+                    Label(L10n.text("Route"), systemImage: "arrow.triangle.turn.up.right.diamond")
+                }
+            }
+        }
     }
 
     func tripPurposeButton(_ purpose: TripPurpose, trip: TripHistoryEntry) -> some View {
@@ -447,13 +470,13 @@ extension HistoryDashboardView {
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
-        .tint(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : .gray)
+        .tint(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : HisingenTheme.inkMuted)
         .hisAnimation(Motion.selection, value: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     func setPurpose(_ purpose: TripPurpose?, for trip: TripHistoryEntry) {
-        database.history.setTripPurpose(purpose, tripID: trip.id, vin: trip.vin)
+        history.setTripPurpose(purpose, tripID: trip.id, vin: trip.vin)
         if let purpose { snapshot.tripPurposes[trip.id] = purpose }
         else { snapshot.tripPurposes.removeValue(forKey: trip.id) }
     }

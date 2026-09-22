@@ -81,7 +81,8 @@ struct DesignRenderTests {
         preferences.polestarDataPortalClientID = "client-id-sample"
         preferences.polestarDataPortalAccountID = "0a7f033f-..."
 
-        let view = AccountCredentialsForm(style: .welcoming, onSettingsChanged: { _ in })
+        let view = AccountCredentialsForm(style: .welcoming, onSettingsChanged: { _ in },
+                                            model: AccountConnectionModel(preferences: preferences))
             .environment(\.preferencesStore, preferences)
             .frame(width: 440)
             .padding()
@@ -242,6 +243,56 @@ struct DesignRenderTests {
         let dark = try renderRedesignSnapshot(appearanceName: .darkAqua, name: "dark")
         let light = try renderRedesignSnapshot(appearanceName: .aqua, name: "light")
         #expect(dark != light, "dark and light snapshots rendered identical bytes")
+    }
+
+    @Test
+    func expandedChargingCurveReservesEnoughVerticalSpaceForItsPlotAndCaptions() throws {
+        let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let samples = [
+            ChargingSample(timestamp: start, batteryPercentage: 25, powerWatts: 11_000),
+            ChargingSample(timestamp: start.addingTimeInterval(300), batteryPercentage: 44, powerWatts: 10_200),
+            ChargingSample(timestamp: start.addingTimeInterval(600), batteryPercentage: 66, powerWatts: 8_700),
+        ]
+        let view = ChargingCurveView(
+            samples: samples,
+            targetPercentage: nil,
+            readyDate: nil,
+            isLive: false,
+            energySource: .legacyEstimate,
+            confidence: .low,
+            sampleCoverage: 0.62
+        )
+        .frame(width: 560)
+        .fixedSize(horizontal: false, vertical: true)
+        .environment(\.colorScheme, .dark)
+
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        renderer.proposedSize = ProposedViewSize(width: 560, height: nil)
+        let appearance = try #require(NSAppearance(named: .darkAqua), "dark appearance unavailable")
+        var rendered: CGImage?
+        appearance.performAsCurrentDrawingAppearance {
+            rendered = renderer.cgImage
+        }
+        let image = try #require(rendered, "expanded charging curve produced no image")
+
+        #expect(image.width == 560)
+        #expect(image.height >= 190,
+                "the expanded curve collapsed to \(image.height) pt and can clip its plot or captions")
+
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let pngData = try #require(bitmap.representation(using: .png, properties: [:]))
+        let destination = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("docs/design/renders/charging-curve-expanded.png")
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try pngData.write(to: destination)
     }
 
     /// Applies `theme` through the global the views read, then restores what was there. The

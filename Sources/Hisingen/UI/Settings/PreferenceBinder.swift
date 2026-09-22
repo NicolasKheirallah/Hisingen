@@ -49,5 +49,24 @@ struct PreferenceBinder {
             }
         )
     }
+
+    /// A binding for a switch. Flipping one is a real commit (behavior changes the moment it
+    /// lands), so it confirms through the tactile channel; plain value bindings behind text
+    /// fields and pickers must not, because over-feedback trains readers to ignore all of it.
+    func toggle(
+        _ keyPath: ReferenceWritableKeyPath<PreferencesStore, Bool>,
+        _ change: SettingsChange? = nil
+    ) -> Binding<Bool> {
+        Binding(
+            get: { preferences[keyPath: keyPath] },
+            set: { newValue in
+                guard newValue != preferences[keyPath: keyPath] else { return }
+                preferences[keyPath: keyPath] = newValue
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                bump()
+                if let change { notify(change) }
+            }
+        )
+    }
 }
 

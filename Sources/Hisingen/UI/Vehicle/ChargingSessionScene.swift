@@ -23,7 +23,6 @@ struct ChargingSessionScene: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(L10n.format("Full in about %d min", minutes))
                         .hisType(.display, weight: HisingenTheme.displayWeight)
-                        .tracking(HisingenTheme.displayTracking(forSize: 28))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(minutes, reduceMotion: reduceMotion)
@@ -34,7 +33,7 @@ struct ChargingSessionScene: View {
             HStack(spacing: 10) {
                 if let watts = state.energy.powerWatts, watts > 0 {
                     Label {
-                        Text(String(format: "%.1f kW", Double(watts) / 1_000))
+                        Text(String(format: "%.1f kW", locale: L10n.displayLocale, Double(watts) / 1_000))
                             .hisType(.label, weight: .medium)
                     } icon: {
                         Image(systemName: "bolt.fill")

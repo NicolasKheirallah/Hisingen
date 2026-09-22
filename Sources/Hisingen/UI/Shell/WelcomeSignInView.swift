@@ -5,8 +5,9 @@ import SwiftUI
 struct WelcomeSignInView: View {
     let error: String?
     let onSettingsChanged: (SettingsChange) -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
-        (false, L10n.text("Connection testing is not available."), nil)
+    let accountConnection: AccountConnectionModel
+    var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
+        ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,7 +22,8 @@ struct WelcomeSignInView: View {
                 }
                 Card {
                     AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
-                                            onTestConnection: onTestConnection)
+                                            onTestConnection: onTestConnection,
+                                            model: accountConnection)
                 }
             }
             .padding(HisingenTheme.sectionSpacing)
@@ -38,7 +40,6 @@ struct WelcomeSignInView: View {
                 .padding(.top, 8)
             Text(L10n.text("Welcome to Hisingen"))
                 .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
-                .tracking(HisingenTheme.displayTracking(forSize: 17))
                 .foregroundStyle(HisingenTheme.ink)
             Text(L10n.text("Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below."))
                 .hisType(.body)

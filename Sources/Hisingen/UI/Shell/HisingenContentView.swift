@@ -48,12 +48,13 @@ struct HisingenContentView: View {
     let onDismissCommandReceipt: (UUID) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
-    let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?)
+    let onTestConnection: (VehicleBrand) async -> ConnectionCheck
     /// One-time post-sign-in pass. Rendered full-panel like Settings; cleared only through
     /// `onCompleteSetup`, which also persists `hasCompletedSetupPass`.
     let setupMode: Bool
     let onCompleteSetup: () -> Void
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
+    let accountConnection: AccountConnectionModel
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
 
@@ -70,9 +71,18 @@ struct HisingenContentView: View {
     @State private var scrollOffsetFromTop: CGFloat = 0
     /// Rubber-banded pull distance feeding ``PullToRefreshOverlay``.
     @State private var pullDistance: CGFloat = 0
+    /// Whether the current pull has crossed the commit threshold. The arm tick fires on the
+    /// crossing and re-arms only below a hysteresis band, so a pull hovering at the line
+    /// cannot stutter the haptic.
+    @State private var pullArmed = false
     /// Horizontal translation while a tab swipe is in progress; `nil` when the active gesture
-    /// is not a swipe.
+    /// is not a swipe. Release animates the value back to `nil` rather than clearing it, so
+    /// the page settles from wherever the drag left it.
     @State private var swipeTranslation: CGFloat?
+    /// A card reorder owns the pointer. Reported upward by ``TabCardStack`` through
+    /// ``ReorderDragActiveKey``; while it lasts, the panel's own drag coordinator must stand
+    /// down instead of reading the same movement as a swipe or a pull.
+    @State private var reorderDragActive = false
     /// The axis the active drag committed to, latched on the first dominant movement so a
     /// wobbly diagonal cannot flip between pull and swipe mid-gesture.
     @State private var dragAxis: Axis?
@@ -146,7 +156,6 @@ struct HisingenContentView: View {
             notificationPermission: notificationPermission,
             state: state,
             fleet: fleet,
-            database: database,
             imageCache: imageCache,
             showsHeaderBar: !showsSettingsAsTab,
             onSettingsChanged: { change in
@@ -156,6 +165,7 @@ struct HisingenContentView: View {
                 onSettingsChanged(change)
             },
             onSignOut: onSignOut,
+            accountConnection: accountConnection,
             onTestConnection: onTestConnection
         )
     }
@@ -193,7 +203,8 @@ struct HisingenContentView: View {
         self.onTestConnection = actions.onTestConnection
         self.setupMode = display.setupMode
         self.onCompleteSetup = actions.onCompleteSetup
-        self.database = panel.database
+        self.history = panel.history
+        self.accountConnection = panel.accountConnection
         self.reverseGeocoder = panel.reverseGeocoder
         self.imageCache = panel.imageCache
         self._selectedTab = State(initialValue: selectedTab.wrappedValue)
@@ -235,7 +246,8 @@ struct HisingenContentView: View {
                     .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                     .transition(modeTransition)
             } else if !authenticated {
-                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged, onTestConnection: onTestConnection)
+                WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged,
+                                  accountConnection: accountConnection, onTestConnection: onTestConnection)
                     .transition(modeTransition)
             } else if setupMode {
                 // Deliberately not gated on `state`. SetupPassView only needs the brand, and
@@ -273,6 +285,11 @@ struct HisingenContentView: View {
                             .animation(reduceMotion ? nil : Motion.interaction, value: tab)
                             .hisAnimation(Motion.cardChange, value: activeVin)
                             .hisAnimation(Motion.stateChange, value: noticeIdentity)
+                            .environment(\.scrollRevealAction) { target in
+                                withAnimation(Motion.resolve(Motion.layout)) {
+                                    proxy.scrollTo(target, anchor: .bottom)
+                                }
+                            }
                             .onChange(of: tab) { _, _ in
                                 if tab != .history { historyJumpTarget = nil }
                                 proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
@@ -344,10 +361,14 @@ struct HisingenContentView: View {
         .hisAnimation(Motion.materialize, value: hasMaterialized)
         .onAppear { hasMaterialized = true }
         .animation(reduceMotion ? nil : Motion.layout, value: panelLayout)
-        .animation(reduceMotion ? nil : Motion.entrance, value: showsSettings)
         .animation(reduceMotion ? nil : Motion.entrance, value: setupMode)
         .animation(reduceMotion ? nil : Motion.entrance, value: authenticated)
         .tint(HisingenTheme.accent)
+        // SwiftUI's own date renderings (`Text(date, style: .date)`, FormatStyle in Text) read
+        // the environment locale, which is the system region by default; an English UI on a
+        // Swedish-region Mac got "19 september 2026". Pin the environment to the same display
+        // locale the string formatters use, so every date answers to one policy.
+        .environment(\.locale, L10n.displayLocale)
         .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
         // A theme or appearance change is a palette swap: nothing moves, only colour interpolates.
         // That makes it the case Reduce Motion should *keep* — a cross-fade is the non-vestibular
@@ -367,6 +388,7 @@ struct HisingenContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             isAppActive = false
         }
+        .onPreferenceChange(ReorderDragActiveKey.self) { reorderDragActive = $0 }
         // Escape closes the panel. The tabs carry their own shortcuts, the footer buttons are
         // reachable, and a panel that traps you in it is the thing a keyboard user notices first.
         .onExitCommand(perform: onClose)
@@ -388,7 +410,7 @@ struct HisingenContentView: View {
     /// The visible tab list and the current index into it, shared by the swipe gesture and
     /// the tab bar so the two can never disagree about what "next tab" means.
     private var swipeTabs: [TabRef] {
-        tabComposition.visibleTabs(includingSettings: true)
+        tabComposition.visibleTabs()
     }
 
     /// The one drag coordinator for the panel: latches to an axis on the first dominant
@@ -397,6 +419,7 @@ struct HisingenContentView: View {
     private var panelDragGesture: some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .global)
             .onChanged { value in
+                guard !reorderDragActive else { return }
                 let dx = value.translation.width
                 let dy = value.translation.height
                 if dragAxis == nil, abs(dx) > 14 || abs(dy) > 14 {
@@ -407,7 +430,14 @@ struct HisingenContentView: View {
                     swipeTranslation = dx
                 case .vertical:
                     guard scrollOffsetFromTop <= 0.5, dy > 0 else { return }
-                    pullDistance = InstrumentMath.rubberBandDisplacement(overshoot: dy, dimension: 300)
+                    let pulled = InstrumentMath.rubberBandDisplacement(overshoot: dy, dimension: 300)
+                    if pulled >= Self.pullThreshold, !pullArmed {
+                        pullArmed = true
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    } else if pulled < Self.pullThreshold * 0.85, pullArmed {
+                        pullArmed = false
+                    }
+                    pullDistance = pulled
                 case nil:
                     break
                 }
@@ -415,22 +445,29 @@ struct HisingenContentView: View {
             .onEnded { value in
                 defer {
                     dragAxis = nil
-                    swipeTranslation = nil
+                    pullArmed = false
                     if pullDistance > 0 {
-                        withAnimation(reduceMotion ? nil : Motion.interaction) { pullDistance = 0 }
+                        // The pull was gesture-carried, so its return takes the flick spring
+                        // rather than a fixed fade.
+                        withAnimation(reduceMotion ? nil : Motion.flick) { pullDistance = 0 }
                     }
                 }
-                if dragAxis == .horizontal, let translation = swipeTranslation {
+                if dragAxis == .horizontal {
+                    // The page leaves the pointer the way it arrived: on the flick spring,
+                    // from wherever the drag left it. Clearing the offset without an
+                    // animation read as a hard cut back to rest on every swipe that landed
+                    // where it started.
+                    withAnimation(reduceMotion ? nil : Motion.flick) { swipeTranslation = nil }
                     let tabs = swipeTabs
-                    guard let current = tabs.firstIndex(of: currentTab) else { return }
-                    let target = InstrumentMath.projectedTab(
-                        currentIndex: current,
-                        count: tabs.count,
-                        translation: translation,
-                        releaseVelocity: value.velocity.width,
-                        pageWidth: swipePageWidth
-                    )
-                    guard let target, target != current else { return }
+                    guard let current = tabs.firstIndex(of: currentTab),
+                          let target = InstrumentMath.projectedTab(
+                              currentIndex: current,
+                              count: tabs.count,
+                              translation: value.translation.width,
+                              releaseVelocity: value.velocity.width,
+                              pageWidth: swipePageWidth
+                          ),
+                          target != current else { return }
                     NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                     withAnimation(reduceMotion ? nil : Motion.flick) { select(tabs[target]) }
                 }
@@ -480,16 +517,21 @@ struct HisingenContentView: View {
         case .builtIn(.vehicle):
             VehicleTabView(layout: TabLayout.resolve(tabComposition, for: tab),
                            state: state, cars: cars, activeVin: activeVin,
+                           brand: commandBrand,
+                           remoteCommandInProgress: remoteCommandInProgress,
+                           inFlightCommandID: inFlightRemoteCommandID,
+                           onRemoteCommand: onRemoteCommand,
                            onSelectCar: onSelectCar,
                            onDismissCommandReceipt: onDismissCommandReceipt,
+                           onVerifyReceipt: { _ in onRefresh() },
                            error: error,
-                           database: database, reverseGeocoder: reverseGeocoder,
+                           history: history, reverseGeocoder: reverseGeocoder,
                            imageCache: imageCache)
                 .id(state.identity.vin)
                 .transition(.opacity)
 
         case .builtIn(.info):
-            InfoTabView(state: state, database: database, imageCache: imageCache,
+            InfoTabView(state: state, history: history, imageCache: imageCache,
                         reverseGeocoder: reverseGeocoder,
                         onRefresh: onRefresh,
                         onNavigateToHistory: navigateFromInfoToHistory,
@@ -499,7 +541,7 @@ struct HisingenContentView: View {
                 .transition(.opacity)
 
         case .builtIn(.history):
-            HistoryDashboardView(state: state, database: database,
+            HistoryDashboardView(state: state, history: history,
                                  initialSection: historyJumpTarget,
                                  layout: TabLayout.resolve(tabComposition, for: tab))
                 .id(state.identity.vin)
@@ -511,6 +553,7 @@ struct HisingenContentView: View {
                             remoteCommandInProgress: remoteCommandInProgress,
                             inFlightCommandID: inFlightRemoteCommandID,
                             feedback: lastRemoteCommandFeedback,
+                            imageCache: imageCache,
                             onRemoteCommand: onRemoteCommand,
                             onRefresh: onRefresh,
                             onDismissCommandReceipt: onDismissCommandReceipt,
@@ -525,7 +568,7 @@ struct HisingenContentView: View {
                 tab: tab,
                 state: state,
                 preferences: preferences,
-                database: database,
+                history: history,
                 reverseGeocoder: reverseGeocoder,
                 imageCache: imageCache,
                 cars: cars,
@@ -619,42 +662,87 @@ struct HisingenContentView: View {
         // excluding the ones they hid, with Settings last. Settings is a tab like the others
         // here because it is where the list is managed: a reader who hid every other tab still
         // needs one place that answers "where did everything go?".
-        let tabs = tabComposition.visibleTabs(includingSettings: true)
+        let tabs = tabComposition.visibleTabs()
         let current = currentTab
-        return HStack(spacing: 4) {
-            ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
-                Button {
-                    // Every tab, Settings included, is just a tab. `select` also keeps the
-                    // controller's mode in step, which is what the menu bar and ⌘, read.
-                    withAnimation(tabIndicatorAnimation) { select(tab) }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: tabComposition.symbol(for: tab))
-                            .hisType(.caption, weight: current == tab ? .semibold : .regular)
-                        Text(tabComposition.title(for: tab))
-                            .hisType(.caption, weight: current == tab ? .semibold : .medium)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.9)
-                    }
-                    .foregroundStyle(current == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 9)
-                    .contentShape(Rectangle())
-                    .background(alignment: .bottom) {
-                        if current == tab { tabIndicator }
-                    }
+        return awardConceptHeader(tabs: tabs, current: current)
+    }
+
+    /// Production counterpart of the award concept's instrument header. The compact panel uses
+    /// the same destinations as the wide panel, expressed as icons instead of hiding tabs in a
+    /// horizontal scroller. At standard width the labels return and the full wordmark still fits.
+    private func awardConceptHeader(tabs: [TabRef], current: TabRef) -> some View {
+        let compact = HisingenTheme.layoutWidth < 540
+        let wide = HisingenTheme.layoutWidth >= 700
+        return HStack(spacing: wide ? 18 : 8) {
+            HStack(spacing: 7) {
+                HStack(spacing: 3) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(HisingenTheme.accent)
+                        .frame(width: 4, height: 18)
+                        .rotationEffect(.degrees(8))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(HisingenTheme.accent)
+                        .frame(width: 4, height: 18)
+                        .rotationEffect(.degrees(8))
                 }
-                .buttonStyle(.pressable)
-                .focusEffectDisabled()
-                .help(tabComposition.title(for: tab))
-                // The first nine tabs answer ⌘1–⌘9, which is as many as a key row has.
-                .applyTabShortcut(index: index)
-                .accessibilityAddTraits(current == tab ? .isSelected : [])
+                .accessibilityHidden(true)
+                if !compact {
+                    Text("Hisingen")
+                        .hisType(size: wide ? 17 : 15, relativeTo: .title2, weight: .semibold)
+                }
             }
-            Spacer()
+            .frame(width: compact ? 14 : (wide ? 104 : 82), alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(2)
+
+            HStack(spacing: wide ? 5 : 2) {
+                ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
+                    Button {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                        withAnimation(tabIndicatorAnimation) { select(tab) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: tabComposition.symbol(for: tab))
+                                .hisType(.label, weight: current == tab ? .semibold : .regular)
+                            if !compact {
+                                Text(tabComposition.title(for: tab))
+                                    .hisType(.label, weight: current == tab ? .bold : .medium)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .foregroundStyle(current == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                        .padding(.horizontal, compact ? 11 : (wide ? 15 : 7))
+                        .frame(minWidth: compact ? 38 : nil, minHeight: wide ? 46 : 38)
+                        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background {
+                            if current == tab { tabIndicator }
+                        }
+                    }
+                    .buttonStyle(.pressable)
+                    .focusEffectDisabled()
+                    .help(tabComposition.title(for: tab))
+                    .accessibilityLabel(tabComposition.title(for: tab))
+                    .applyTabShortcut(index: index)
+                    .accessibilityAddTraits(current == tab ? .isSelected : [])
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            Button {
+                onSettings()
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .hisSymbolSize(16, weight: .semibold)
+                    .frame(width: wide ? 40 : 34, height: wide ? 40 : 34)
+            }
+            .buttonStyle(.pressable)
+            .keyboardShortcut(",", modifiers: .command)
+            .help(L10n.text("Settings…"))
+            .accessibilityLabel(L10n.text("Settings…"))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, wide ? 22 : 12)
+        .padding(.vertical, wide ? 14 : 8)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     /// The tab selection, drawn as the one piece of chrome that moves: in the 2026 language it
@@ -676,7 +764,7 @@ struct HisingenContentView: View {
         VStack(spacing: 12) {
             if let error {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 22))
+                    .hisSymbolSize(22)
                     .foregroundStyle(HisingenTheme.semanticWarning)
                 Text(error)
                     .hisType(.body)
@@ -976,20 +1064,6 @@ struct HisingenContentView: View {
             .keyboardShortcut("r", modifiers: .command)
             .disabled(!authenticated)
 
-            Button {
-                // Back to the tab Settings was opened over, or to Settings. One switch, reached
-                // from two places — never a second switch that can disagree with the first.
-                withAnimation(tabIndicatorAnimation) {
-                    select(showsSettings ? (returnTab ?? .vehicle) : Self.settingsTab)
-                }
-            } label: {
-                Image(systemName: showsSettings ? "car.fill" : "gearshape")
-                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-            }
-            .controlSize(.small)
-            .help(showsSettings ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
-            .accessibilityLabel(showsSettings ? L10n.text("Back to Dashboard") : L10n.text("Settings…"))
-            .keyboardShortcut(",", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

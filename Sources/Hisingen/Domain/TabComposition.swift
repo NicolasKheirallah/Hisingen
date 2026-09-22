@@ -66,8 +66,6 @@ enum TabRef: Hashable, Codable, Sendable, Identifiable {
         if case .custom(let id) = self { return id }
         return nil
     }
-
-    var isBuiltIn: Bool { builtIn != nil }
 }
 
 /// A tab the reader built: a name, a glyph, and whichever cards they chose from any tab.
@@ -185,10 +183,6 @@ struct TabComposition: Equatable, Codable, Sendable {
         visibleItems(for: tab).filter { TabItemCatalog.item($0)?.isCard ?? true }
     }
 
-    var visibleCardCount: Int {
-        visibleTabs().reduce(0) { $0 + visibleCards(for: $1).count }
-    }
-
     // MARK: - Writing
 
     mutating func setItem(_ item: TabItemID, shown: Bool) {
@@ -239,17 +233,6 @@ struct TabComposition: Equatable, Codable, Sendable {
         setItems(current, for: tab)
     }
 
-    /// Moves cards within a tab by index set, the shape `List` drag reports.
-    mutating func moveCards(in tab: TabRef, fromOffsets source: IndexSet, toOffset destination: Int) {
-        let whole = items(for: tab)
-        let headers = whole.filter { TabItemCatalog.item($0)?.isCard == false }
-        var cards = whole.filter { TabItemCatalog.item($0)?.isCard ?? true }
-        cards.move(fromOffsets: source, toOffset: destination)
-        setItems(headers + cards, for: tab)
-    }
-
-    /// Moves a card by one position, for a keyboard or button reorder.
-
     /// Whether a card can move any further in the given direction, so a reorder control can be
     /// disabled instead of silently doing nothing at the ends of the list.
     func canMove(_ item: TabItemID, in tab: TabRef, by offset: Int) -> Bool {
@@ -285,27 +268,6 @@ struct TabComposition: Equatable, Codable, Sendable {
         current.removeAll { $0 == item }
         setItems(current, for: tab)
         hiddenItems.insert(item)
-    }
-
-    /// Puts an item back on the tab it was designed for, shown, at its shipped position.
-    mutating func restoreItem(_ item: TabItemID) {
-        hiddenItems.remove(item)
-        guard let entry = TabItemCatalog.item(item) else { return }
-        showItem(item, on: entry.sourceTab)
-    }
-
-    private mutating func showItem(_ item: TabItemID, on tab: BuiltInTab) {
-        let reference = TabRef.builtIn(tab)
-        var current = items(for: reference)
-        guard !current.contains(item) else { return }
-        let defaultOrder = TabItemCatalog.defaultItems(for: tab)
-        let insertion = defaultOrder.firstIndex(of: item).map { defaultIndex in
-            current.firstIndex { existing in
-                (defaultOrder.firstIndex(of: existing) ?? Int.max) > defaultIndex
-            } ?? current.count
-        } ?? current.count
-        current.insert(item, at: insertion)
-        setItems(current, for: reference)
     }
 
     // MARK: - Custom tabs

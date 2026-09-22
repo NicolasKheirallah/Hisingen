@@ -44,7 +44,7 @@ struct SettingsTabsAndCardsCard: View {
     }
 
     private func tabItems(of tab: TabRef) -> [TabItemID] {
-        composition.visibleItems(for: tab)
+        composition.visibleItems(for: tab).filter { !TabItemCatalog.isRetired($0) }
     }
 
     /// Everything the reader can currently see, across every tab. These readings must keep
@@ -141,7 +141,7 @@ struct SettingsTabsAndCardsCard: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CardHeader(symbol: "rectangle.3.group", title: L10n.text("Tabs & Cards"), color: .purple)
+            CardHeader(symbol: "rectangle.3.group", title: L10n.text("Tabs & Cards"), color: HisingenTheme.chartInfo)
             Text(L10n.text("Choose what each tab shows, move cards into the order you want, or build a tab of your own from anything in Hisingen. Switching a card off also stops Hisingen requesting the data behind it."))
                 .hisType(.caption)
                 .foregroundStyle(.secondary)
@@ -216,7 +216,7 @@ struct SettingsTabsAndCardsCard: View {
             }
         }
         if let id = tab.customID {
-            Button(L10n.text("Rename…")) {
+            Button(L10n.text("Rename")) {
                 renameText = composition.customTab(id)?.name ?? ""
                 renamingTabID = id
             }

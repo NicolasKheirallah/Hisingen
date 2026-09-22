@@ -119,7 +119,7 @@ extension InfoTabView {
         }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "cloud.sun.fill", title: L10n.text("Ambient Conditions"), color: .cyan)
+                CardHeader(symbol: "cloud.sun.fill", title: L10n.text("Ambient Conditions"), color: HisingenTheme.chartInfo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 Text(L10n.text("Reported by the vehicle at its parked location, not a forecast."))
                     .hisType(.micro)
@@ -179,7 +179,7 @@ extension InfoTabView {
                               info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))
         }
         if let wh = diag.energyUsedSinceChargeWh {
-            rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", wh / 1_000), symbol: "leaf.fill",
+            rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000), symbol: "leaf.fill",
                               info: L10n.text("Vehicle Calculation. Total high-voltage energy used by powertrain and HVAC since the last charge.")))
         }
         for field in diag.unknownWireFields.sorted(by: { $0.field < $1.field }) {
@@ -242,7 +242,7 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump.fill"))
         }
         if let regen = state.tripComputer.regeneratedEnergyKwh, regen > 0 {
-            rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", regen), symbol: "arrow.triangle.2.circlepath"))
+            rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", locale: L10n.displayLocale, regen), symbol: "arrow.triangle.2.circlepath"))
         }
         if let speed = state.tripComputer.averageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
@@ -263,7 +263,7 @@ extension InfoTabView {
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "gauge.with.dots.needle.bottom.50percent", title: L10n.text("Trip Computer & Distance"), color: .indigo)
+                CardHeader(symbol: "gauge.with.dots.needle.bottom.50percent", title: L10n.text("Trip Computer & Distance"), color: HisingenTheme.chartInfo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         })
@@ -281,7 +281,7 @@ extension InfoTabView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "antenna.radiowaves.left.and.right",
-                           title: L10n.text("Connectivity & Wake"), color: .cyan)
+                           title: L10n.text("Connectivity & Wake"), color: HisingenTheme.chartInfo)
                 KVRow(L10n.text("Reported Connection"), current?.state.displayName ?? L10n.text("Unknown"), symbol: "network")
                 if let date = current?.updatedAt {
                     KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: date), symbol: "clock")
@@ -289,7 +289,7 @@ extension InfoTabView {
                 Text(state.hasFreshReading(.connectivity)
                      ? L10n.text("A reported connection does not guarantee that the vehicle can accept a command immediately.")
                      : L10n.text("Connection data is old or has no timestamp. Current reachability is unknown."))
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                 if let reason = current?.wakeReason {
                     KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
                 }
@@ -306,7 +306,7 @@ extension InfoTabView {
                             y: .value(L10n.text("Signal"), record.signalBars ?? 0)
                         )
                         .symbolSize(20)
-                        .foregroundStyle(Color.cyan.opacity(0.8))
+                        .foregroundStyle(HisingenTheme.chartInfo)
                     }
                     .chartYScale(domain: 0...4)
                     .chartYAxisLabel(L10n.text("Bars"))

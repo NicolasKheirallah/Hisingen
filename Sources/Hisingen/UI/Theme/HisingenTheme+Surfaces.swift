@@ -4,12 +4,28 @@ import AppKit
 @MainActor
 extension HisingenTheme {
 
+    /// Opacity for a tinted wash that carries text on the glass. Increase Contrast asks
+    /// surfaces to stop being translucent, and a 10–12 % hue is exactly that, so the wash
+    /// doubles under it (capped at the accent-wash ceiling's neighbour). Value bindings,
+    /// pickers and materials have their own paths; this is only for wash-as-fill call sites.
+    static func tintedWashOpacity(_ base: Double, increasedContrast: Bool) -> Double {
+        increasedContrast ? min(base * 2, 0.24) : base
+    }
+
     /// Opacity for the app's hairline separators.
     ///
     /// Six values were in use across 59 sites (0.2, 0.25, 0.3, 0.35, 0.4, 0.5) with no token
     /// between them, so two dividers inside one stack could differ for no stated reason. 0.4 was
     /// already the de facto value at 49 of them, and it is what the shell's own rules used.
     static var dividerOpacity: Double { 0.4 }
+
+    /// The neutral fill a selectable chip lifts to while the pointer is over it.
+    ///
+    /// The hover step of the tinted-fill ladder: louder than any chip's resting 4–6 %, the
+    /// same 8 % the accent washes use for hover, and still below the 12 % ceiling the
+    /// accent's 4.5:1 guarantee covers. A chip is clickable, and on this platform clickable
+    /// means the pointer gets an answer before the click.
+    static var chipHoverFill: Double { 0.08 }
 
     /// The outline a section draws *only* under Increase Contrast.
     ///
@@ -61,18 +77,6 @@ extension HisingenTheme {
     /// a chip is far smaller than its section, so a literal concentric inset of the card's 12 would
     /// read as a rounded rectangle rather than a label.
     static var statusChipRadius: CGFloat { 4 }
-
-    /// A surface inset into a section: the card sunk toward black, per theme. See ``Palette/chipFill``.
-    ///
-    /// Derived from the card rather than fixed at one neutral, because the inset has to separate
-    /// from a *per-theme* card: a value that reads as inset under Sand Dune's warm card must also
-    /// read as inset under Nordic Night's lifted grey one, which sits at almost the same luminance
-    /// a fixed neutral chip used to land on.
-    static var cardFillInset: Color { palette.chipFill }
-
-    /// Hairline boundary width. Retained for the Increase Contrast boundary only; the default
-    /// surface draws no outline.
-    static var cardBorderWidth: CGFloat { 1 }
 
     // MARK: - Popover Surface
 
@@ -195,7 +199,14 @@ private struct FloatingGlassModifier<S: Shape>: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
+            // The system adapts glass to the appearance, but Reduce Transparency and Increase
+            // Contrast are app-honored promises here: the mini panel goes opaque like the
+            // macOS 15 path below instead of staying translucent.
+            if reduceTransparency || contrast == .increased {
+                content.background(HisingenTheme.panelFill, in: shape)
+            } else {
+                content.glassEffect(.regular, in: shape)
+            }
         } else if reduceTransparency || contrast == .increased {
             content.background(HisingenTheme.panelFill, in: shape)
         } else {

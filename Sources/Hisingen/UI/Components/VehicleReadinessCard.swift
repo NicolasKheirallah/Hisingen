@@ -12,7 +12,7 @@ struct VehicleReadinessCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "checklist", title: L10n.text("Departure & Parking"), color: .teal)
+                CardHeader(symbol: "checklist", title: L10n.text("Departure & Parking"), color: HisingenTheme.chartPositive)
                 ForEach(VehicleReadiness.checks(state, lowBatteryThreshold: lowBatteryThreshold)) { check in
                     VStack(alignment: .leading, spacing: 2) {
                         KVRow(check.title, check.detail,
@@ -20,7 +20,7 @@ struct VehicleReadinessCard: View {
                               valueWarning: check.status == .attention)
                         if check.status == .unknown {
                             Text(L10n.text("Current condition is not confirmed by a fresh vehicle reading."))
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .hisType(.micro).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -33,8 +33,8 @@ struct VehicleReadinessCard: View {
                             Text(departureIsPast
                                  ? L10n.text("That departure time has passed. Pick a new one to check readiness.")
                                  : VehicleReadiness.chargingByDeparture(state, departure: departure))
-                                .font(.caption).fixedSize(horizontal: false, vertical: true)
-                            Text(state.chargingEstimateDestination).font(.caption2).foregroundStyle(.secondary)
+                                .hisType(.caption).fixedSize(horizontal: false, vertical: true)
+                            Text(state.chargingEstimateDestination).hisType(.micro).foregroundStyle(.secondary)
                         }.padding(.top, 6)
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())

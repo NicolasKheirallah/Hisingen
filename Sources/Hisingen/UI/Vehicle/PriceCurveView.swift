@@ -38,7 +38,7 @@ struct PriceCurveView: View {
                 AxisMarks(values: .stride(by: .hour, count: 6)) { (value: AxisValue) in
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
-                            Text(date, format: Date.FormatStyle.dateTime.hour())
+                            Text(date, format: Date.FormatStyle.dateTime.hour().locale(L10n.displayLocale))
                                 .hisType(.micro, weight: .medium)
                                 .monospacedDigit()
                         }
@@ -51,7 +51,7 @@ struct PriceCurveView: View {
                         if let price = value.as(Double.self) {
                             // The y axis carries the only measurable information on the chart, so
                             // it is no longer the smallest type on it, and it names its unit.
-                            Text(L10n.format("%@ kr", String(format: "%.1f", price)))
+                            Text(L10n.format("%@ kr", String(format: "%.1f", locale: L10n.displayLocale, price)))
                                 .hisType(.micro, weight: .medium)
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
@@ -69,20 +69,33 @@ struct PriceCurveView: View {
         )
     }
 
-    /// The bands are absolute, not relative to the window on screen.
-    ///
-    /// The scale was `(price - minimum) / span` over the visible period, so the same 1.20 kr/kWh
-    /// rendered red on a flat day and grey on a volatile one, and two cards showing different
-    /// periods disagreed about the same hour. These thresholds are the Swedish spot-price bands a
-    /// reader actually plans around.
+    /// Hue stays absolute: the Swedish spot-price bands are what a reader plans around, so
+    /// the same hour must read the same whichever period is on screen (a purely relative
+    /// scale once rendered 1.20 kr/kWh red on a flat day and grey on a volatile one).
+    /// Intensity comes from the visible window's `minimum`/`span` instead, so a window stuck
+    /// inside one band, a cheap summer night or an extreme-price day, still shows its shape
+    /// instead of rendering every bar identical.
     private func barColor(for point: ElectricityPricePoint, minimum: Double, span: Double) -> Color {
         if let plan, point.startDate >= plan.start && point.endDate <= plan.end {
             return HisingenTheme.semanticGood
         }
-        switch point.sekPerKwh {
-        case ..<1.0: return Color.secondary.opacity(0.4)
-        case ..<2.0: return HisingenTheme.semanticWarning.opacity(0.45)
-        default: return HisingenTheme.semanticWarning.opacity(0.8)
+        let alpha = Self.barAlpha(price: point.sekPerKwh, minimum: minimum, span: span)
+        return point.sekPerKwh < 1.0
+            ? Color.secondary.opacity(alpha)
+            : HisingenTheme.semanticWarning.opacity(alpha)
+    }
+
+    /// Alpha for a price bar: absolute bands pick the formula, the window position
+    /// (`(price - minimum) / span`, clamped) picks the intensity within it. Each band's
+    /// floor sits at its old flat alpha and ends at or above where the next begins, so
+    /// crossing a threshold upward never reads as a cheaper bar. Exposed for tests that pin
+    /// the ordering rules.
+    nonisolated static func barAlpha(price: Double, minimum: Double, span: Double) -> Double {
+        let position = span > 0 ? min(max((price - minimum) / span, 0), 1) : 0
+        switch price {
+        case ..<1.0: return 0.4 + 0.25 * position
+        case ..<2.0: return 0.45 + 0.2 * position
+        default: return 0.7 + 0.1 * position
         }
     }
 

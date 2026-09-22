@@ -768,31 +768,6 @@ extension PolestarGRPC {
         )
     }
 
-    /// `ota_mobcache.SoftwareState`. The enum it mirrors runs 0…14; 15 is an extra value this
-    /// backend has been observed emitting for an update that has been *announced* but not yet
-    /// *authorized for download* – distinct from 1 (`DOWNLOAD_READY`, which means the payload
-    /// has been downloaded and is ready to install). Both collapse into `.available` here for
-    /// UI continuity; the precise distinction is preserved in `VehicleSoftwareInfo.rawState`
-    /// (see `SoftwareStateRaw`). Pinned by
-    /// `testSoftwareVersionRepresentsAvailableUpdateNotInstalledVersion` and
-    /// `testDecodeGetSoftwareInfoRecursively`. Anything else is reported as unknown rather
-    /// than guessed at.
-    static func softwareState(_ value: UInt64) -> SoftwareUpdateState {
-        switch value {
-        case 1, 15: return .available // DOWNLOAD_READY, UPDATE_AVAILABLE
-        case 2: return .downloading   // DOWNLOAD_STARTED
-        case 3: return .downloaded    // DOWNLOAD_COMPLETED
-        case 4: return .failed        // DOWNLOAD_FAILED
-        case 5, 6: return .installing // INSTALLATION_INITIATED, INSTALLATION_STARTED
-        case 7, 8, 11: return .failed // ABORTED, FAILED, FAILED_CRITICAL
-        case 9: return .completed     // INSTALLATION_COMPLETED
-        case 10: return .deferred     // INSTALLATION_DEFERRED
-        case 12: return .scheduled    // INSTALLATION_SCHEDULED
-        case 13: return .installing   // INSTALLATION_SCHEDULE_TRIGGERED
-        default: return .unknown      // 0 UNKNOWN, 14 INSTALLATION_UNKNOWN
-        }
-    }
-
     /// Parses a `GetMyCarsResponse`: `{1: [MyCar]}` where `MyCar` = `{1: Car, 2: userIsLinked,
     /// 3: userIsOwner, 4: registrationPlate}`. Extracts the `Car` matching the VIN and reads
     /// the OTA + capability fields. The `Car` proto uses nested capability messages:

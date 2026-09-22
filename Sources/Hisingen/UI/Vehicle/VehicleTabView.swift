@@ -16,23 +16,36 @@ struct VehicleTabView: View {
     let state: VehicleState
     let cars: [CarSummary]
     let activeVin: String?
+    let brand: VehicleBrand
+    let remoteCommandInProgress: Bool
+    let inFlightCommandID: String?
+    let onRemoteCommand: (RemoteCommand) -> Void
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
+    /// Re-reads the vehicle so an acknowledged command receipt can settle against fresh
+    /// telemetry. Optional: tabs without a refresh action simply omit the Verify button.
+    var onVerifyReceipt: ((UUID) -> Void)? = nil
     let error: String?
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Collapsed by default: §16 asks the common path to come first and advanced detail to sit a
-    /// level deeper, and expanded-by-default meant the five secondary cards rendered at full size
-    /// and weight on first open.
-    @State private var moreExpanded = false
     @State private var dismissedSoftwareEventIdentifier: String?
     @Namespace private var carChipNamespace
 
     private var features: FeatureSelection { preferences.features }
+    private var commandGate: ControlsCommandGate {
+        ControlsCommandGate(
+            state: state,
+            brand: brand,
+            preferences: preferences,
+            remoteCommandInProgress: remoteCommandInProgress,
+            inFlightCommandID: inFlightCommandID,
+            onRemoteCommand: onRemoteCommand
+        )
+    }
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
     private var chipSelectionAnimation: Animation? { reduceMotion ? nil : Motion.selection }
     private var cardTransition: AnyTransition {
@@ -82,10 +95,18 @@ struct VehicleTabView: View {
             .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
             .vehicleExceptions, .vehicleCharging, .vehicleChargingPlanner,
             .vehicleFuelEngine, .vehicleOpenings, .vehicleTyres, .vehicleLocation,
-            .vehicleReadiness, .vehicleMore
+            .vehicleReadiness
+        ]
+        // These legacy composition ids used to form Vehicle's "More" disclosure. Their content
+        // now lives in Info, so old saved layouts must not re-introduce duplicate detail cards.
+        let detailItemsOwnedByInfo: Set<TabItemID> = [
+            .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
+            .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
         ]
         let unmatched = TabItemCatalog.defaultItems(for: .vehicle).filter { item in
-            !shipped.contains(item) && TabItemCatalog.item(item)?.kind == .card
+            !shipped.contains(item)
+                && !detailItemsOwnedByInfo.contains(item)
+                && TabItemCatalog.item(item)?.kind == .card
         }
         return ordered(shipped + unmatched, by: { $0 }).filter { draws($0) }
     }
@@ -100,10 +121,15 @@ struct VehicleTabView: View {
         case .vehicleSwitcher:
             multiCarChips
         case .vehicleHero:
-            VehicleHeroCard(state: state, displayedStateSummary: displayedStateSummary, imageCache: imageCache)
+            if HisingenTheme.layoutWidth >= 580 {
+                AwardVehicleInstrument(state: state, imageCache: imageCache, commandGate: commandGate)
+            } else {
+                VehicleHeroCard(state: state, displayedStateSummary: displayedStateSummary, imageCache: imageCache)
+            }
         case .vehicleReceipts:
             ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
-                CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt)
+                CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
+                                   onVerify: onVerifyReceipt)
                     .transition(cardTransition)
             }
         case .vehicleAttention:
@@ -113,7 +139,7 @@ struct VehicleTabView: View {
                 card.transition(cardTransition)
             }
         case .vehicleCharging:
-            VehicleChargingCard(state: state, database: database).transition(cardTransition)
+            VehicleChargingCard(state: state, history: history).transition(cardTransition)
         case .vehicleChargingPlanner:
             if let card = chargingPlannerCard { card.transition(cardTransition) }
         case .vehicleFuelEngine:
@@ -138,8 +164,6 @@ struct VehicleTabView: View {
                     check.transition(cardTransition)
                 }
             }
-        case .vehicleMore:
-            moreDetailsSection
         default:
             EmptyView()
         }
@@ -211,43 +235,6 @@ struct VehicleTabView: View {
             // switches move the capsule the same way a tap does.
             .animation(chipSelectionAnimation, value: currentVin)
         }
-    }
-
-    private var moreDetailsSection: some View {
-        let cards = [
-            (id: TabItemID.vehicleIdentityDetail.rawValue, item: TabItemID.vehicleIdentityDetail,
-             view: VehicleIdentityCard.make(state: state, features: features, preferences: preferences)),
-            (id: TabItemID.vehicleLighting.rawValue, item: TabItemID.vehicleLighting,
-             view: LightingAndFluidCard.make(state: state, features: features)),
-            (id: TabItemID.vehicleClimate.rawValue, item: TabItemID.vehicleClimate,
-             view: VehicleClimateCard.make(state: state, features: features, preferences: preferences)),
-            (id: TabItemID.vehicleSoftware.rawValue, item: TabItemID.vehicleSoftware,
-             view: VehicleSoftwareCard.make(state: state, features: features, preferences: preferences, dismissedSoftwareEventIdentifier: $dismissedSoftwareEventIdentifier)),
-            (id: TabItemID.vehicleDiagnostics.rawValue, item: TabItemID.vehicleDiagnostics,
-             view: VehicleDiagnosticsCard.make(state: state, features: features, preferences: preferences))
-        ].filter { draws($0.item) }.compactMap { entry -> (id: String, item: TabItemID, view: AnyView)? in
-            guard let view = entry.view else { return nil }
-            return (entry.id, entry.item, view)
-        }
-        guard !cards.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
-            DisclosureGroup(isExpanded: $moreExpanded) {
-                VStack(spacing: HisingenTheme.sectionSpacing) {
-                    ForEach(cards, id: \.id) { $0.view }
-                }.padding(.top, HisingenTheme.sectionSpacing)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "ellipsis.circle").foregroundStyle(HisingenTheme.inkMuted).hisType(.heading, weight: HisingenTheme.headingWeight).accessibilityHidden(true)
-                    Text(L10n.format("More (%d)", cards.count)).hisType(.heading, weight: HisingenTheme.headingWeight).foregroundStyle(HisingenTheme.ink)
-                    Spacer()
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(L10n.format("More, %d sections", cards.count))
-                .accessibilityHint(cards.map { TabItemCatalog.title($0.item) }.joined(separator: ", "))
-            }
-            .disclosureGroupStyle(WholeRowDisclosureStyle())
-            .padding(HisingenTheme.cardPadding)
-        )
     }
 
     private var chargingPlannerCard: AnyView? {

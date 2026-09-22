@@ -90,10 +90,6 @@ struct VehicleHistoryLedgerTests {
 
         handle.database.history.setTripPurpose(nil, tripID: trips[0].id, vin: vin)
         #expect(handle.database.history.tripPurposes(for: vin)[trips[0].id] == nil)
-
-        let mileage = handle.database.history.monthlyMileageReports(for: vin)
-        #expect(mileage.count == 1)
-        #expect(abs(mileage[0].totalKm - 48) < 0.001)
     }
 
     @Test("Connectivity and cabin climate records round-trip with heartbeats")
@@ -199,13 +195,5 @@ struct VehicleHistoryLedgerTests {
         #expect(bundle.chargingSessions.count == 1)
         #expect(bundle.chargingSessions.first?.kwhDelivered == 7.9)
         #expect(bundle.batteryHealthHistory.isEmpty)
-    }
-
-    @Test("Lifetime odometer span reads from stored telemetry endpoints")
-    func odometerSpan() throws {
-        let handle = makeDatabase()
-        try insertTelemetry(handle, minute: 0, odometer: 10_000)
-        try insertTelemetry(handle, minute: 5, odometer: 10_100)
-        #expect(handle.database.history.lifetimeOdometerSpanKm(for: vin) == 100)
     }
 }

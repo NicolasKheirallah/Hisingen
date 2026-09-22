@@ -22,22 +22,6 @@ struct PolestarDataPortalTests {
         #expect(token.tokenType == "Bearer")
     }
 
-    @Test
-    func tokenErrorDecodesCorrectly() throws {
-        let json = """
-        {
-            "error": "invalid_client",
-            "error_description": "Invalid client credentials",
-            "requestId": "req-12345",
-            "timestamp": "2026-03-31T12:00:00Z"
-        }
-        """
-        let errorDTO = try JSONDecoder().decode(PolestarDataPortalTokenError.self, from: Data(json.utf8))
-        #expect(errorDTO.error == "invalid_client")
-        #expect(errorDTO.errorDescription == "Invalid client credentials")
-        #expect(errorDTO.requestId == "req-12345")
-    }
-
     // MARK: - Vehicle Discovery Decoding Tests
 
     @Test

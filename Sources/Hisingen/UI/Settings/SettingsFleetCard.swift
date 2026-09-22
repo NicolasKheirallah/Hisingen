@@ -280,6 +280,19 @@ struct FleetVehicleCardRow: View {
                 }
             }
             .contentShape(Rectangle())
+            // Row hosts a nested switch control, so it cannot be a Button; the hover
+            // wash is the pointer answer and the haptic confirms the vehicle switch.
+            .onHover { isHovered = $0 }
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(isHovered && !isActive ? 0.04 : 0))
+            )
+            .onTapGesture {
+                if !isActive {
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                    onSettingsChanged(.selectVehicle(vin))
+                }
+            }
 
             if let vehicleState {
                 HStack(spacing: 12) {
@@ -288,7 +301,7 @@ struct FleetVehicleCardRow: View {
                             Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
                                 .hisType(.micro)
                                 .foregroundStyle(HisingenTheme.fleetBatteryTint(level: vehicleState.batteryLevel))
-                            Text(String(format: "%.0f%%", battery))
+                            Text(String(format: "%.0f%%", locale: L10n.displayLocale, battery))
                                 .hisType(.caption, weight: .semibold, design: .rounded)
                                 .monospacedDigit()
                             if vehicleState.isCharging, let power = vehicleState.energy.powerWatts, power > 0 {
@@ -302,7 +315,7 @@ struct FleetVehicleCardRow: View {
                             Image(systemName: "fuelpump.fill")
                                 .hisType(.micro)
                                 .foregroundStyle(Color.secondary)
-                            Text(String(format: "%.0f%%", fuel))
+                            Text(String(format: "%.0f%%", locale: L10n.displayLocale, fuel))
                                 .hisType(.caption, weight: .semibold, design: .rounded)
                                 .monospacedDigit()
                         }
@@ -333,13 +346,6 @@ struct FleetVehicleCardRow: View {
                     Spacer()
                 }
                 .padding(.leading, 6)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !isActive {
-                        onSettingsChanged(.selectVehicle(vin))
-                    }
-                }
-                .accessibilityAddTraits(isActive ? [] : [.isButton])
             }
 
             // Nickname & Theme Controls
@@ -387,12 +393,9 @@ struct FleetVehicleCardRow: View {
         }
         .padding(9)
         .background(
-            Color.primary.opacity(isActive ? 0.05 : (isHovered ? 0.045 : 0.025)),
+            isActive ? HisingenTheme.accent.opacity(0.10)
+                     : Color.primary.opacity(isHovered ? 0.045 : 0.025),
             in: RoundedRectangle(cornerRadius: 8)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isActive ? HisingenTheme.accent.opacity(0.35) : (isHovered && !isActive ? HisingenTheme.accent.opacity(0.25) : Color.clear), lineWidth: 1)
         )
         // isActive flips from an app-level SettingsChange with no transaction of
         // its own; this binding drives the badge/button swap and hover tint.

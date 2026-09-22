@@ -180,7 +180,7 @@ struct PanelLayoutTests {
 
     @Test
     func testDimensionsLabelFormat() {
-        #expect(PanelSize.standard.dimensionsLabel == "430 × 580")
-        #expect(PanelSize.grand.dimensionsLabel == "600 × 760")
+        #expect(PanelSize.standard.dimensionsLabel == "620 × 660")
+        #expect(PanelSize.grand.dimensionsLabel == "760 × 780")
     }
 }

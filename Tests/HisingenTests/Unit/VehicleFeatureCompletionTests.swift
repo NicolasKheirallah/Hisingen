@@ -133,17 +133,6 @@ struct VehicleFeatureCompletionTests {
         await store.drainHistory()
         #expect(database.snapshots.loadSnapshot(for: volvo.identity.vin) != nil)
         #expect(database.history.recentAirQuality(for: volvo.identity.vin).isEmpty)
-
-        let base = Date(timeIntervalSince1970: 1_700_000_000)
-        let trend = HistoryInsights.airQualityTrend(from: [
-            AirQualityRecord(id: 2, vin: polestar.identity.vin, timestamp: base.addingTimeInterval(60),
-                             airQualityIndex: 20, particulateMatter25: 5,
-                             particulateMatter10: nil, filterRemainingPercent: nil),
-            AirQualityRecord(id: 1, vin: polestar.identity.vin, timestamp: base,
-                             airQualityIndex: 10, particulateMatter25: 2,
-                             particulateMatter10: nil, filterRemainingPercent: nil)
-        ])
-        #expect(trend.map(\.index) == [10, 20])
     }
 
     @Test

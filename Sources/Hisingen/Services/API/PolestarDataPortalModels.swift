@@ -29,15 +29,6 @@ typealias PolestarDataPortalHealthDTO = PolestarHealthDTO
 typealias PolestarDataPortalAvailabilityDTO = PolestarAvailabilityDTO
 typealias PolestarDataPortalOdometerDTO = PolestarOdometerDTO
 typealias PolestarDataPortalLocationDTO = PolestarLocationDTO
-typealias PolestarDataPortalParkingClimatizationDTO = PolestarParkingClimatizationDTO
-typealias PolestarDataPortalPreCleaningDTO = PolestarPreCleaningDTO
-typealias PolestarDataPortalTargetSocDTO = PolestarTargetSocDTO
-typealias PolestarDataPortalAmpLimitDTO = PolestarAmpLimitDTO
-typealias PolestarDataPortalChargeLocationsDTO = PolestarChargeLocationsDTO
-typealias PolestarDataPortalIsAtChargeLocationDTO = PolestarIsAtChargeLocationDTO
-typealias PolestarDataPortalGlobalChargeTimerDTO = PolestarGlobalChargeTimerDTO
-typealias PolestarDataPortalChargeNowDTO = PolestarChargeNowDTO
-typealias PolestarDataPortalParkingClimateTimerDTO = PolestarParkingClimateTimerDTO
 
 struct PolestarDataPortalTokenResponse: Codable, Sendable {
     let accessToken: String
@@ -48,20 +39,6 @@ struct PolestarDataPortalTokenResponse: Codable, Sendable {
         case accessToken
         case expiresIn
         case tokenType
-    }
-}
-
-struct PolestarDataPortalTokenError: Codable, Sendable {
-    let error: String
-    let errorDescription: String?
-    let requestId: String?
-    let timestamp: String?
-
-    private enum CodingKeys: String, CodingKey {
-        case error
-        case errorDescription = "error_description"
-        case requestId
-        case timestamp
     }
 }
 
@@ -1135,21 +1112,6 @@ private func parsePortalWeekday(_ raw: String) -> VehicleWeekday? {
     case "SATURDAY", "SAT": return .saturday
     case "SUNDAY", "SUN": return .sunday
     default: return nil
-    }
-}
-
-extension VehicleWeekday {
-    /// Portal wire encoding of a weekday, the inverse of `parsePortalWeekday`.
-    var portalWeekdayName: String {
-        switch self {
-        case .monday: return "MONDAY"
-        case .tuesday: return "TUESDAY"
-        case .wednesday: return "WEDNESDAY"
-        case .thursday: return "THURSDAY"
-        case .friday: return "FRIDAY"
-        case .saturday: return "SATURDAY"
-        case .sunday: return "SUNDAY"
-        }
     }
 }
 

@@ -20,6 +20,16 @@ struct ChargingPlannerCard: View {
 
     private var zone: ElspotZone { preferences.electricityPriceZone }
 
+    /// One localized sentence, not three concatenated fragments, so translators can reorder
+    /// it. The zone code and the source name are data, not copy, and stay unlocalized.
+    private var attributionLine: String {
+        if let fetchedAt {
+            return L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@",
+                               zone.rawValue, Format.shortTime(date: fetchedAt))
+        }
+        return L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se", zone.rawValue)
+    }
+
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
     /// Reduce Motion keeps the fade and drops the movement.
     private var plannerTransition: AnyTransition {
@@ -108,8 +118,8 @@ struct ChargingPlannerCard: View {
                     .transition(plannerTransition)
                 } else if !hasLoaded && points.isEmpty {
                     HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.mini)
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.secondary)
                         Text(L10n.text("Loading prices…"))
                             .hisType(.label)
                             .foregroundStyle(.secondary)
@@ -129,15 +139,9 @@ struct ChargingPlannerCard: View {
                         .foregroundStyle(.tertiary)
                 }
 
-                HStack(spacing: 0) {
-                    Text(L10n.text("Spot prices exclude taxes and grid fees"))
-                    Text(" · \(zone.rawValue) · elprisetjustnu.se")
-                    if let fetchedAt {
-                        Text(" · " + L10n.format("fetched %@", Format.shortTime(date: fetchedAt)))
-                    }
-                }
-                .hisType(.micro)
-                .foregroundStyle(.tertiary)
+                Text(attributionLine)
+                    .hisType(.micro)
+                    .foregroundStyle(.tertiary)
             }
             // Loading → loaded → status branch swaps key here; the persistent
             // VStack carries the animation because branches cannot animate
@@ -198,7 +202,7 @@ struct ChargingPlannerCard: View {
         } else {
             dayLabel = Format.shortDate(date: plan.start)
         }
-        let windowLabel = "\(dayLabel) \(Format.shortTime(date: plan.start)) – \(Format.shortTime(date: plan.end))"
+        let windowLabel = "\(dayLabel) \(Format.shortTime(date: plan.start))–\(Format.shortTime(date: plan.end))"
 
         let average = Format.currency(plan.averagePrice, symbol: "kr") + "/kWh"
         let current = Format.currency(plan.currentPrice, symbol: "kr") + "/kWh"

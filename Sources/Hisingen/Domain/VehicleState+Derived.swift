@@ -369,11 +369,51 @@ extension VehicleState {
         return Format.chargingRateFormatted(powerWatts: watts, consumptionWhPerKm: consumption, unit: unit)
     }
 
-    var freshnessDescription: String {
-        if hasOldData() {
-            return L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
+    /// What the car is doing right now, in one sentence built only from reported signals.
+    /// `nil` when nothing is actively happening, so the header can show the data age instead.
+    /// Energy first, then cabin: this is the operational answer, while `stateSummary` is the
+    /// safety answer; the two are shown together and never say the same thing.
+    var activeVerdict: String? {
+        if isCharging {
+            if let minutes = remainingChargingMinutes, minutes > 0, !hasOldData() {
+                return L10n.format("Charging, ready at %@",
+                                   Format.completionTime(
+                                       from: minutes,
+                                       baseDate: reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt))
+            }
+            if let watts = chargingPowerWatts, watts > 0 {
+                return L10n.format("Charging at %@", Format.powerKw(Double(watts) / 1000))
+            }
+            return L10n.text("Charging")
         }
-        return L10n.format("Updated %@", Format.relativeAge(since: dataTimestamp))
+        if chargingState == .discharging {
+            return L10n.text("Discharging")
+        }
+        // "Charging complete" is only honest while the reading is: an hours-old
+        // snapshot must fall through so the header can show the data age instead.
+        if chargingState == .complete, batteryPercentage != nil, !hasOldData() {
+            return L10n.text("Charging complete")
+        }
+        if isClimateActive {
+            if let minutes = climateStatus?.timeRemainingMinutes, minutes > 0 {
+                return L10n.format("Climate running, %d min remaining", minutes)
+            }
+            return L10n.text("Climate running")
+        }
+        return nil
+    }
+
+    var freshnessDescription: String {
+        let base: String
+        if hasOldData() {
+            base = L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
+        } else {
+            base = L10n.format("Updated %@", Format.relativeAge(since: dataTimestamp))
+        }
+        // The configured primary is the Developer Portal; when the consumer Polestar ID
+        // session served this reading instead, the age line says which credential answered.
+        guard freshness.servedByFallback == true else { return base }
+        return L10n.format("%@ (via Polestar ID)", base)
     }
 
     var dataTimestamp: Date { vehicleReportedAt ?? fetchedAt }

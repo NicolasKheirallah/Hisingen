@@ -796,7 +796,7 @@ actor PolestarAPI {
         }
         if accountCars.isEmpty {
             guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-                  Self.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
+                  SettingsValidation.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
             cars = [CarSummary(vin: manualVIN, title: manualVIN)]
             // An empty identity records successful discovery without borrowing another car's metadata.
             identities[manualVIN] = .empty
@@ -1135,12 +1135,6 @@ actor PolestarAPI {
         guard let url = URL(string: string), url.scheme == "https", let host = url.host,
               host == "polestar.com" || host.hasSuffix(".polestar.com") else { return nil }
         return url
-    }
-
-    static func isValidVIN(_ value: String) -> Bool {
-        value.count == 17 && value.allSatisfy { character in
-            character.isASCII && (character.isNumber || (character.isUppercase && !"IOQ".contains(character)))
-        }
     }
 
     static func formBody(_ fields: [String: String]) -> Data? {

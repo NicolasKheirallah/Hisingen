@@ -83,17 +83,17 @@ struct DataRetentionHardeningTests {
             receipt: CommandReceipt(commandIdentifier: "lock", issuedAt: Date()),
             confirmationDeadline: Date().addingTimeInterval(60)
         )
-        stateStore.saveCommandReceipt(record, for: vin)
+        stateStore.saveCommandReceipts([record], for: vin)
 
         // A location erase names the one store it invalidates. The receipt is a row the eraser
         // owns, not a plist entry, so this is the only path that can reach it.
         let eraser = LocalDataEraser(
             database: database, preferences: preferences, imageCache: CarImageCache())
         try eraser.perform(.locations(.vehicle(vin)))
-        #expect(stateStore.commandReceipt(for: vin) == record)
+        #expect(stateStore.commandReceipts(for: vin).last == record)
 
         stateStore.clear(vin: vin)
-        #expect(stateStore.commandReceipt(for: vin) == nil)
+        #expect(stateStore.commandReceipts(for: vin).last == nil)
     }
 
     @Test

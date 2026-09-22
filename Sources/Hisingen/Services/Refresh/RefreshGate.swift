@@ -63,8 +63,6 @@ enum RefreshRefusal: Equatable {
 enum RefreshAdmission: Equatable {
     case start
     case refused(RefreshRefusal)
-
-    var isRefused: Bool { self != .start }
 }
 
 /// The one place a refresh intent is admitted or refused, so precedence no longer has to be

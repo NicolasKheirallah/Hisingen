@@ -19,7 +19,10 @@ struct MultiCarFleetSwitchingTests {
     func refreshCoordinatorsConstructPerBrandAndStartIdle() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
 
         let mockPolestarProvider = MockFleetProvider(brand: .polestar, vins: [Self.polestarVin1])
         let polestarCoordinator = RefreshCoordinator(
@@ -161,7 +164,10 @@ struct MultiCarFleetSwitchingTests {
     func testAutomationHandoffResolvesByNicknameOrVIN() throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
         preferences.setVin(Self.volvoVin1, for: .volvo)
         preferences.setVehicleNickname("My Swedish Wagon", for: Self.volvoVin1)
 
@@ -176,7 +182,10 @@ struct MultiCarFleetSwitchingTests {
     func testPerVehicleThemeAssignment() throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
 
         preferences.setTheme(.swedishGold, for: Self.polestarVin1, brand: .polestar)
         preferences.setTheme(.volvo, for: Self.volvoVin1, brand: .volvo)

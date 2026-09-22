@@ -20,6 +20,9 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
 
     case temporarilyUnavailable(provider: VehicleBrand, service: String)
     case secureStorage
+    /// macOS is waiting for the owner to approve Keychain access. The stored credential is
+    /// probably fine; retrying before the approval cannot succeed.
+    case keychainConsentRequired
     case notConfigured
 
     var errorDescription: String? {
@@ -60,6 +63,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
             return L10n.text("The vehicle service returned an unexpected response.")
         case .secureStorage:
             return L10n.text("Hisingen couldn't update its protected Keychain session.")
+        case .keychainConsentRequired:
+            return L10n.text("macOS needs your approval to read the saved sign-in. Approve the Keychain prompt, then refresh.")
         case .notConfigured:
             return L10n.text("Open Settings to sign in.")
         }
@@ -98,7 +103,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         case .authenticationRequired(_, .invalidCredentials),
              .authenticationRequired(_, .callbackRejected),
              .notConfigured,
-             .secureStorage:
+             .secureStorage,
+             .keychainConsentRequired:
             return false
         default:
             return true
@@ -115,7 +121,9 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         if let portal = error as? PolestarDataPortalError { return portal.asVehicleServiceError }
         if let volvo = error as? VolvoError { return volvo.asVehicleServiceError }
         if let urlError = error as? URLError { return .network(urlError) }
-        if error is KeychainError { return .secureStorage }
+        if let keychain = error as? KeychainError {
+            return keychain.isInteractionRequired ? .keychainConsentRequired : .secureStorage
+        }
         switch provider {
         case .polestar: return .invalidResponse(operation: "network request")
         case .volvo: return .invalidResponse(operation: "network request")

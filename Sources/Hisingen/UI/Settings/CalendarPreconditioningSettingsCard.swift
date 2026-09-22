@@ -22,6 +22,7 @@ struct CalendarPreconditioningSettingsCard: View {
                 if enabled { Task { await enable() } }
                 else {
                     preferences.calendarPreconditioningEnabled = false
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                     binder.notify(.automation)
                     binder.bump()
                 }
@@ -34,7 +35,7 @@ struct CalendarPreconditioningSettingsCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     CardHeader(symbol: "calendar.badge.clock",
-                               title: L10n.text("Calendar Preconditioning"), color: .purple)
+                               title: L10n.text("Calendar Preconditioning"), color: HisingenTheme.chartAttention)
                     Spacer()
                     if requestingAccess {
                         ProgressView().controlSize(.small)
@@ -50,7 +51,7 @@ struct CalendarPreconditioningSettingsCard: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if preferences.requireBiometricsForRemoteControls {
-                    Label(L10n.text("Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt – nobody is present to answer it when they fire."),
+                    Label(L10n.text("Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt, because nobody is present to answer it when they fire."),
                           systemImage: "info.circle")
                         .hisType(.micro).foregroundStyle(.secondary)
                         .hisCaptionLeading()
@@ -67,7 +68,7 @@ struct CalendarPreconditioningSettingsCard: View {
                 if CalendarPreconditioningController.hasCalendarAccess {
                     Group {
                         HStack {
-                            Text(L10n.text("Lead time")).hisType(.caption, weight: .medium)
+                            Text(L10n.text("Lead Time")).hisType(.caption, weight: .medium)
                             Spacer()
                             Picker("", selection: Binding(
                                 get: { preferences.calendarPreconditioningLeadTimeMinutes },
@@ -135,6 +136,7 @@ struct CalendarPreconditioningSettingsCard: View {
                 var ids = preferences.calendarPreconditioningCalendarIDs
                 if selected { ids.insert(identifier) } else { ids.remove(identifier) }
                 preferences.calendarPreconditioningCalendarIDs = ids
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 binder.notify(.automation)
                 binder.bump()
                 refreshPreview()
@@ -220,10 +222,10 @@ struct CalendarPreconditioningSettingsCard: View {
             }.value
             guard !Task.isCancelled else { return }
             nextPreview = next.map { title, eventStart, fireAt in
-                L10n.format("Next: %@ at %@ – climate starts %@",
+                L10n.format("Next: %@ at %@, climate starts %@",
                             title,
-                            eventStart.formatted(date: .omitted, time: .shortened),
-                            fireAt.formatted(date: .omitted, time: .shortened))
+                            eventStart.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.displayLocale)),
+                            fireAt.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.displayLocale)))
             }
         }
     }

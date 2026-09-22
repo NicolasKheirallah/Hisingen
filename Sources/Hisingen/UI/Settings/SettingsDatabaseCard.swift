@@ -124,6 +124,7 @@ struct SettingsDatabaseCard: View {
                     .controlSize(.mini)
                     .onChange(of: eraseHistoryOnSignOut) { _, value in
                         preferences.eraseHistoryOnSignOut = value
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                     }
                     .accessibilityLabel(L10n.text("Erase local history on sign out"))
             }
@@ -139,7 +140,8 @@ struct SettingsDatabaseCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("High-volume sample retention"))
                         .hisType(.label, weight: .medium)
-                    Text(L10n.text("Used by Prune Old Samples; charging summaries are retained longer."))
+                    Text(L10n.format("Keeps samples %d days. Charging and health summaries are kept %d days.",
+                                     retentionDays, VehicleDatabase.sessionRetentionDays))
                         .hisType(.micro)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
@@ -153,7 +155,6 @@ struct SettingsDatabaseCard: View {
                 }
                 .labelsHidden()
                 .controlSize(.small)
-                .frame(width: 90)
                 .onChange(of: retentionDays) { _, value in preferences.historySampleRetentionDays = value }
                 .accessibilityLabel(L10n.text("High-volume sample retention"))
             }

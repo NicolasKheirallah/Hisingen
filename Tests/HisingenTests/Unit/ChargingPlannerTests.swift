@@ -404,4 +404,50 @@ struct ChargingPlannerDecisionsTests {
         #expect(!ChargingPlannerDecisions.shouldAutoStartCharging(
             plan: finishedPlan, now: now, connection: .connected, chargingState: .idle))
     }
+
+    // MARK: - Price curve bar intensity
+
+    @Test
+    func barIntensitySpreadsInsideOneBand() {
+        // A window stuck entirely in the cheap band must still show its shape: the priciest
+        // visible hour renders darker than the cheapest one, which the old flat fill could not.
+        let alphaLow = PriceCurveView.barAlpha(price: 0.20, minimum: 0.20, span: 0.70)
+        let alphaHigh = PriceCurveView.barAlpha(price: 0.90, minimum: 0.20, span: 0.70)
+        #expect(alphaHigh > alphaLow)
+        #expect(alphaHigh - alphaLow > 0.2)
+    }
+
+    @Test
+    func barIntensityIsMonotonicInPrice() {
+        // One window spanning all three bands: alpha never decreases as the price rises.
+        let minimum = 0.4, span = 3.2
+        var previous = PriceCurveView.barAlpha(price: minimum, minimum: minimum, span: span)
+        for step in 1...32 {
+            let price = minimum + span * Double(step) / 32
+            let alpha = PriceCurveView.barAlpha(price: price, minimum: minimum, span: span)
+            #expect(alpha >= previous)
+            #expect((0.4...0.8).contains(alpha))
+            previous = alpha
+        }
+    }
+
+    @Test
+    func barIntensityStepsUpAtThresholds() {
+        // Crossing a planning threshold upward must read as a more expensive bar, never a
+        // barely different one: each band ends at or above where the next begins.
+        let minimum = 0.0, span = 3.0
+        #expect(PriceCurveView.barAlpha(price: 1.01, minimum: minimum, span: span)
+            > PriceCurveView.barAlpha(price: 0.99, minimum: minimum, span: span))
+        #expect(PriceCurveView.barAlpha(price: 2.01, minimum: minimum, span: span)
+            > PriceCurveView.barAlpha(price: 1.99, minimum: minimum, span: span))
+    }
+
+    @Test
+    func barIntensitySurvivesDegenerateWindow() {
+        // A single-price window divides by a zero span; the bar falls back to its band floor,
+        // which matches the old flat fills.
+        #expect(PriceCurveView.barAlpha(price: 0.5, minimum: 0.5, span: 0) == 0.4)
+        #expect(PriceCurveView.barAlpha(price: 1.5, minimum: 1.5, span: 0) == 0.45)
+        #expect(PriceCurveView.barAlpha(price: 2.5, minimum: 2.5, span: 0) == 0.7)
+    }
 }

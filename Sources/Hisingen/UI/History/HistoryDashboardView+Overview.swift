@@ -38,15 +38,14 @@ extension HistoryDashboardView {
                 Button {
                     bumpRefresh()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    Image(systemName: isLoading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                         .hisType(.label, weight: .medium)
                         .frame(width: 14, height: 14)
-                        // The skeleton only covers the first load, so a later reload looked like a
-                        // dead button: nothing moved, and the stack then reshuffled unexplained.
-                        .opacity(isLoading ? 0 : 1)
-                        .overlay { if isLoading { ProgressView().controlSize(.mini) } }
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 }
                 .buttonStyle(.pressable)
+                // A re-tap during a load queues another refresh via `refreshToken`;
+                // disabling the button froze the control for the whole load instead.
                 .help(L10n.text("Reload history from the local database"))
                 .accessibilityLabel(L10n.text("Refresh history"))
 
@@ -77,7 +76,7 @@ extension HistoryDashboardView {
             HStack(spacing: 4) {
                 Image(systemName: "info.circle").hisType(.nano)
                 if period == .custom {
-                    Text(L10n.format("Custom range: %@ – %@",
+                    Text(L10n.format("Custom range: %@–%@",
                                      Format.dateFormatter.string(from: min(customRangeStart, customRangeEnd)),
                                      Format.dateFormatter.string(from: max(customRangeStart, customRangeEnd))))
                         .hisType(.nano, weight: .medium)
@@ -136,7 +135,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("History Overview"), color: .indigo)
+                    CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("History Overview"), color: HisingenTheme.chartInfo)
                     Spacer()
                     if state.powertrain.hasCombustionEngine {
                         Button { showFuelSheet = true } label: {
@@ -148,14 +147,18 @@ extension HistoryDashboardView {
                     }
                     exportMenu
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     metric(L10n.text("Distance"), Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit), "road.lanes")
+                    metricColumnDivider
                     metric(L10n.text("Trips"), Format.count(aggregateTrips.count), "car.side")
+                    metricColumnDivider
                     metric(L10n.text("Driving"), Format.shortDuration(minutes: Int(drivingTime / 60)), "clock")
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     metric(L10n.text("Charge Sessions"), Format.count(chargingSessions.count), "bolt.fill")
+                    metricColumnDivider
                     metric(L10n.text("Estimated Energy"), Format.energyKwh(energy), "bolt.circle")
+                    metricColumnDivider
                     metric(
                         L10n.text("Estimated Cost"),
                         estimatedCost.map { Format.currency($0.amount, symbol: $0.currency) } ?? "–",
@@ -211,6 +214,21 @@ extension HistoryDashboardView {
         }
     }
 
+    /// One path for every export entry: the workspace decides how the CSV is built
+    /// (period rows it is handed, or a full-history ledger query off-main).
+    func exportThroughWorkspace(_ kind: HistoryWorkspace.ExportKind, name: String) {
+        let vin = state.identity.vin
+        let scope: HistoryWorkspace.ExportScope = exportScope == .selectedPeriod ? .selectedPeriod : .fullHistory
+        let sessionID = selectedSession?.id
+        let periodTrips = trips
+        let periodSessions = chargingSessions
+        Task { @MainActor in
+            let csv = await history.exportCSV(kind, scope: scope, vin: vin, selectedSessionID: sessionID,
+                                              periodTrips: periodTrips, periodSessions: periodSessions)
+            exportCSV(csv, name: name)
+        }
+    }
+
     var exportMenu: some View {
         Menu {
             Picker(L10n.text("Range (trips & charging sessions)"), selection: $exportScope) {
@@ -218,58 +236,50 @@ extension HistoryDashboardView {
             }
             Divider()
             Button(L10n.text("Trips")) {
-                let csv = exportScope == .selectedPeriod
-                    ? HistoryExport.tripsCSV(trips)
-                    : database.history.exportTripsCSV(for: state.identity.vin)
-                exportCSV(csv, name: "Trips")
+                exportThroughWorkspace(.trips, name: "Trips")
             }
             .disabled(trips.isEmpty)
             Button(L10n.text("Charging Sessions")) {
-                let csv = exportScope == .selectedPeriod
-                    ? HistoryExport.chargingSessionsCSV(chargingSessions)
-                    : database.charging.exportChargingSessionsCSV(for: state.identity.vin)
-                exportCSV(csv, name: "Charging-Sessions")
+                exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions")
             }
             .disabled(chargingSessions.isEmpty)
             Button(L10n.text("Session Samples")) {
-                guard let session = selectedSession else { return }
-                exportCSV(database.charging.exportChargingSamplesCSV(sessionID: session.id), name: "Charging-Samples")
+                guard selectedSession != nil else { return }
+                exportThroughWorkspace(.sessionSamples, name: "Charging-Samples")
             }
             .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
             Button(L10n.text("Battery Health")) {
-                exportCSV(database.history.exportBatteryHealthCSV(for: state.identity.vin), name: "Battery-Health")
+                exportThroughWorkspace(.batteryHealth, name: "Battery-Health")
             }
             .disabled(batteryHealthRecords.isEmpty)
             Button(L10n.text("Air Quality")) {
-                exportCSV(database.history.exportAirQualityCSV(for: state.identity.vin), name: "Air-Quality")
+                exportThroughWorkspace(.airQuality, name: "Air-Quality")
             }
             .disabled(airQualityRecords.isEmpty)
             Button(L10n.text("Telemetry")) {
-                exportCSV(database.history.exportTelemetryCSV(for: state.identity.vin), name: "Telemetry")
+                exportThroughWorkspace(.telemetry, name: "Telemetry")
             }
             .disabled(telemetryRecords.isEmpty)
             Button(L10n.text("Automation Log")) {
-                exportCSV(database.history.exportCommandAuditsCSV(for: state.identity.vin), name: "Automation-Log")
+                exportThroughWorkspace(.commandAudits, name: "Automation-Log")
             }
             .disabled(commands.isEmpty)
             if state.powertrain.hasCombustionEngine {
                 Button(L10n.text("Fuel Fill-Ups")) {
-                    exportCSV(database.history.exportFuelEntriesCSV(for: state.identity.vin), name: "Fuel")
+                    exportThroughWorkspace(.fuelEntries, name: "Fuel")
                 }
                 .disabled(fuelEntries.isEmpty)
             }
             Button(L10n.text("Cabin Climate")) {
-                exportCSV(database.history.exportCabinClimateCSV(for: state.identity.vin), name: "Cabin-Climate")
+                exportThroughWorkspace(.cabinClimate, name: "Cabin-Climate")
             }
             .disabled(cabinClimateRecords.isEmpty)
             Divider()
             Button(L10n.text("Full Backup (JSON)")) {
-                let database = database
+                let workspace = history
                 let includeCoordinates = preferences.persistLocationHistory
                 Task { @MainActor in
-                    let data = await Task.detached(priority: .userInitiated) {
-                        try? database.exportBackupJSON(includeCoordinates: includeCoordinates)
-                    }.value
+                    let data = await workspace.exportBackupJSON(includeCoordinates: includeCoordinates)
                     guard let data else {
                         exportError = L10n.text("The backup could not be created.")
                         return
@@ -301,6 +311,9 @@ extension HistoryDashboardView {
         .accessibilityLabel(L10n.text("Export history data"))
     }
 
+    /// One overview reading: a value over its label, typography on the panel glass. The old
+    /// tile drew a filled rounded rectangle, which is a card by any definition and the one
+    /// surface the 2026 grammar retired; the columns separate on hairlines instead.
     func metric(_ title: String, _ value: String, _ symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Image(systemName: symbol).hisType(.caption).foregroundStyle(HisingenTheme.accent)
@@ -313,10 +326,15 @@ extension HistoryDashboardView {
             .minimumScaleFactor(0.9)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(7)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(value)")
+    }
+
+    /// The hairline that separates metric columns now that no column carries a fill.
+    var metricColumnDivider: some View {
+        Divider()
+            .opacity(HisingenTheme.dividerOpacity)
+            .frame(maxHeight: 30)
     }
 
     // MARK: - Month / year comparison
@@ -330,14 +348,16 @@ extension HistoryDashboardView {
         guard hasMonth else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "calendar", title: L10n.text("This Month vs Last"), color: .cyan)
-                HStack(spacing: 8) {
+                CardHeader(symbol: "calendar", title: L10n.text("This Month vs Last"), color: HisingenTheme.chartInfo)
+                HStack(spacing: 10) {
                     comparisonMetric(L10n.text("Distance"),
                                      Format.distance(km: thisMonth.distanceKm, decimals: 0, unit: preferences.distanceUnit),
                                      delta(thisMonth.distanceKm, lastMonth.distanceKm), higherIsBetter: nil)
+                    metricColumnDivider
                     comparisonMetric(L10n.text("Energy"),
                                      Format.energyKwh(thisMonth.energyKwh),
                                      delta(thisMonth.energyKwh, lastMonth.energyKwh), higherIsBetter: nil)
+                    metricColumnDivider
                     if let thisConsumption = thisMonth.averageConsumption {
                         comparisonMetric(L10n.text("Consumption"),
                                          preferences.energyConsumptionUnit.format(kwhPer100Km: thisConsumption),
@@ -389,8 +409,6 @@ extension HistoryDashboardView {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(7)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(value)" + (delta.map { ", \(Format.signedPercent($0))" } ?? ""))
     }
@@ -410,7 +428,7 @@ extension HistoryDashboardView {
                 .hisTelemetryValue(delta, reduceMotion: reduceMotion)
         }
         .padding(.horizontal, 5).padding(.vertical, 2)
-        .background(Color.primary.opacity(0.04), in: Capsule())
+        .background(HisingenTheme.chipFill, in: Capsule())
     }
 
     // MARK: - Emissions
@@ -440,7 +458,7 @@ extension HistoryDashboardView {
                 }
                 Text(L10n.format("Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.",
                                  Format.count(Int(preferences.gridCarbonIntensityGramsPerKwh)),
-                                 Format.count(170)))
+                                 Format.count(Int(HistoryInsights.petrolCarGramsCO2PerKm))))
                     .hisType(.micro).foregroundStyle(.tertiary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
@@ -465,7 +483,7 @@ extension HistoryDashboardView {
         Card {
             VStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 20))
+                    .hisSymbolSize(20)
                     .foregroundStyle(HisingenTheme.semanticWarning)
                 Text(L10n.text("History could not be read")).hisType(.body, weight: .semibold)
                 Text(L10n.text("Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history."))
@@ -516,35 +534,38 @@ extension HistoryDashboardView {
         }
     }
 
+    /// The exported summary reads through L10n like every other surface, so a Swedish reader
+    /// does not print an English report. Labels reuse the keys the tab already shows; the
+    /// numbers go through `Format.number`, so the decimal separator matches the panel.
     var historySummaryText: String {
         var lines: [String] = []
-        lines.append("Hisingen – History summary")
-        lines.append("Vehicle: …\(state.identity.vin.suffix(6))")
-        lines.append("Range: \(period.rawValue)")
+        lines.append(L10n.text("Hisingen · History summary"))
+        lines.append("\(L10n.text("Vehicle")): …\(state.identity.vin.suffix(6))")
+        lines.append("\(L10n.text("Range")): \(period.rawValue)")
         if let range = activeRange {
-            lines.append("       \(Format.dateFormatter.string(from: range.lowerBound)) – \(Format.dateFormatter.string(from: range.upperBound))")
+            lines.append("       \(Format.dateFormatter.string(from: range.lowerBound))–\(Format.dateFormatter.string(from: range.upperBound))")
         }
-        lines.append("Generated: \(Format.dateTimeFormatter.string(from: Date()))")
+        lines.append("\(L10n.text("Generated")): \(Format.dateTimeFormatter.string(from: Date()))")
         lines.append("")
         let totalDistance = aggregateTrips.reduce(0) { $0 + $1.distanceKm }
-        lines.append("Trips: \(aggregateTrips.count)  ·  Distance: \(Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit))")
+        lines.append("\(L10n.text("Trips")): \(aggregateTrips.count)  ·  \(L10n.text("Distance")): \(Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit))")
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
-        lines.append("Charging sessions: \(chargingSessions.count)  ·  Energy: \(Format.energyKwh(energy))")
+        lines.append("\(L10n.text("Charge Sessions")): \(chargingSessions.count)  ·  \(L10n.text("Energy")): \(Format.energyKwh(energy))")
         if let cost = aggregateChargingCost() {
-            lines.append("Estimated charging cost: \(Format.currency(cost.amount, symbol: cost.currency))")
+            lines.append("\(L10n.text("Estimated Cost")): \(Format.currency(cost.amount, symbol: cost.currency))")
         }
         if let average = HistoryInsights.averageEfficiency(of: efficiencyPoints) {
-            lines.append("Average consumption: \(preferences.energyConsumptionUnit.format(kwhPer100Km: average))")
+            lines.append("\(L10n.text("Average consumption")): \(preferences.energyConsumptionUnit.format(kwhPer100Km: average))")
         }
         if let latest = batteryHealthRecords.first {
-            lines.append("Battery state of health: \(String(format: "%.1f%%", latest.stateOfHealthPct)) at \(Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit))")
+            lines.append("\(L10n.text("Calculated State of Health (SoH)")): \(Format.percent(latest.stateOfHealthPct, decimals: 1)) · \(L10n.text("Odometer")): \(Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true))")
         }
         if let kmPerDay = HistoryInsights.averageKmPerDay(from: allTimeOdometerPoints) {
-            lines.append("Average daily distance: \(Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit))")
+            lines.append("\(L10n.text("Average Daily Distance")): \(Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit))")
         }
         let stats = commandStatistics
         if stats.totalCount > 0, let rate = stats.successRatePct {
-            lines.append("Remote commands: \(stats.totalCount)  ·  success \(String(format: "%.0f%%", rate))")
+            lines.append("\(L10n.text("Remote commands")): \(stats.totalCount)  ·  \(Format.percent(rate, decimals: 0))")
         }
         return lines.joined(separator: "\n")
     }

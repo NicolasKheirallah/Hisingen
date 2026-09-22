@@ -210,7 +210,7 @@ struct PolestarAuthenticationTests {
         }
 
         await api.installAccessTokenForTesting("short-lived", lifetime: 300, remaining: 240)
-        let tasks = (0..<20).map { _ in Task { try await api.validAccessToken() } }
+        let tasks = (0..<20).map { _ in Task { try await api.refreshTokenIfNeeded(); return await api.accessToken } }
         var tokens: [String?] = []
         for task in tasks { tokens.append(try await task.value) }
 
@@ -229,7 +229,7 @@ struct PolestarAuthenticationTests {
         }
         await api.installAccessTokenForTesting("expired", lifetime: 300, remaining: -1)
 
-        let tasks = (0..<20).map { _ in Task { try await api.validAccessToken() } }
+        let tasks = (0..<20).map { _ in Task { try await api.refreshTokenIfNeeded(); return await api.accessToken } }
         var tokens: [String?] = []
         for task in tasks { tokens.append(try await task.value) }
 

@@ -145,7 +145,10 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
                 state.connectivity = state.connectivity ?? overlay.connectivity
             }
             if state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
-                if let fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {
+                if var fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {
+                    // The reader configured the portal; the consumer account served this
+                    // reading, and the snapshot says so next to its freshness.
+                    fallback.freshness.servedByFallback = true
                     return fallback
                 }
             }
@@ -154,7 +157,9 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             logger.warning("Primary Data Portal telemetry failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
             guard await commandProvider.hasWarmSession else { throw primaryError }
             do {
-                return try await commandProvider.fetchVehicleState(vin: vin, features: features)
+                var fallbackState = try await commandProvider.fetchVehicleState(vin: vin, features: features)
+                fallbackState.freshness.servedByFallback = true
+                return fallbackState
             } catch {
                 logger.error("Fallback Polestar ID telemetry also failed: \(String(describing: error), privacy: .public)")
                 throw primaryError

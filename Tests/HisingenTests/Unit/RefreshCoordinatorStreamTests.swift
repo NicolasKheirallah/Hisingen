@@ -358,12 +358,12 @@ struct RefreshCoordinatorStreamTests {
         #expect(diagnostics.commandConfirmationDeadline != nil)
         #expect(diagnostics.commandConfirmationFeatures == [.remoteCharging])
         #expect(diagnostics.commandReceiptVisible)
-        #expect(persistedReceipts.commandReceipt(for: StreamingMockProvider.vinA)?.receipt == receipt)
+        #expect(persistedReceipts.commandReceipts(for: StreamingMockProvider.vinA).last?.receipt == receipt)
 
         coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
         #expect(events.states.last?.commandState.receipt == nil)
         #expect(events.snapshots.last?.commandReceiptVisible == false)
-        #expect(persistedReceipts.commandReceipt(for: StreamingMockProvider.vinA) == nil)
+        #expect(persistedReceipts.commandReceipts(for: StreamingMockProvider.vinA).last == nil)
 
         coordinator.refreshNow()
         _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
@@ -1164,8 +1164,8 @@ struct RefreshCoordinatorStreamTests {
         )
         let database = VehicleDatabase.inMemory()
         let store = VehicleStateStore(defaults: defaults, database: database)
-        store.saveCommandReceipt(
-            StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline),
+        store.saveCommandReceipts(
+            [StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline)],
             for: StreamingMockProvider.vinA
         )
 
@@ -1184,7 +1184,7 @@ struct RefreshCoordinatorStreamTests {
 
         #expect(events.snapshots.last?.commandConfirmationDeadline == nil)
         #expect(events.states.last?.commandState.receipt?.status == .timedOut(at: deadline))
-        #expect(store.commandReceipt(for: StreamingMockProvider.vinA)?.receipt.status == .timedOut(at: deadline))
+        #expect(store.commandReceipts(for: StreamingMockProvider.vinA).last?.receipt.status == .timedOut(at: deadline))
         coordinator.stop()
     }
 
@@ -1213,7 +1213,7 @@ struct RefreshCoordinatorStreamTests {
         _ = try #require(await waitUntil(events) { $0.commandConfirmationStatus?.isTerminal == true })
 
         let store = VehicleStateStore(defaults: defaults, database: .inMemory())
-        #expect(store.commandReceipt(for: StreamingMockProvider.vinA) == nil)
+        #expect(store.commandReceipts(for: StreamingMockProvider.vinA).last == nil)
         #expect(events.snapshots.last?.commandReceiptVisible == false)
         coordinator.stop()
     }

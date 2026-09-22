@@ -40,6 +40,17 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Steering Orientation"), steering, symbol: "steeringwheel"))
         }
         if let climate = state.climateStatus {
+            if climate.activity != .unknown {
+                var status = climate.activity.displayName
+                if let minutes = climate.timeRemainingMinutes, minutes > 0 {
+                    status += " · \(Format.shortDuration(minutes: minutes))"
+                }
+                rows.append(KVRow(L10n.text("Cabin Climate"), status,
+                                  symbol: climate.activity.isActiveSession ? "fan.fill" : "fan"))
+            }
+            if let ventilation = climate.ventilationName, climate.activity.isActiveSession {
+                rows.append(KVRow(L10n.text("Ventilation"), ventilation, symbol: "wind"))
+            }
             if let interior = climate.interiorTemperatureCelsius {
                 rows.append(KVRow(L10n.text("Cabin Temperature"),
                                   Format.temperature(celsius: interior, unit: preferences.temperatureUnit),
@@ -59,6 +70,12 @@ extension InfoTabView {
             if let level = climate.steeringWheelHeatingLevel, level > 0 {
                 rows.append(KVRow(L10n.text("Steering Wheel Heating"), L10n.format("Level %d", level), symbol: "steeringwheel.and.heat.waves"))
             }
+            if let level = climate.rearLeftSeatHeatingLevel, level > 0 {
+                rows.append(KVRow(L10n.text("Rear Left Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.left.and.heat.waves"))
+            }
+            if let level = climate.rearRightSeatHeatingLevel, level > 0 {
+                rows.append(KVRow(L10n.text("Rear Right Seat Heating"), L10n.format("Level %d", level), symbol: "carseat.right.and.heat.waves"))
+            }
             if let reason = climate.startReason,
                climate.activity != .idle && climate.activity != .unknown {
                 rows.append(KVRow(L10n.text("Started By"), reason.displayName, symbol: "play.circle"))
@@ -73,12 +90,24 @@ extension InfoTabView {
                                   symbol: "clock.badge.checkmark"))
             }
         }
+        for timer in state.climateTimers.filter(\.isActive).prefix(3) {
+            rows.append(KVRow(L10n.text("Ready at"), Format.scheduleText(timer), symbol: "clock.badge.checkmark"))
+        }
+        for schedule in state.energy.schedules.filter(\.isActive).prefix(4) {
+            var title = schedule.kind == .departure
+                ? L10n.text("Departure Schedule")
+                : L10n.text("Charging Schedule")
+            if let location = schedule.locationName, !location.isEmpty {
+                title = "\(location) \(title)"
+            }
+            rows.append(KVRow(title, Format.scheduleText(schedule), symbol: "calendar.badge.clock"))
+        }
 
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: .purple)
+                CardHeader(symbol: "carseat.left.fill", title: L10n.text("Interior & Cabin"), color: HisingenTheme.chartInfo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 if let rawFields = state.climateStatus?.unknownWireFields, !rawFields.isEmpty {
                     DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
@@ -132,7 +161,7 @@ extension InfoTabView {
             }
             rows.append(KVRow(
                 title,
-                String(format: "%.1f kWh", reference.kwh),
+                String(format: "%.1f kWh", locale: L10n.displayLocale, reference.kwh),
                 symbol: "battery.100.bolt",
                 info: info
             ))
@@ -307,12 +336,6 @@ extension InfoTabView {
     /// what the providers reported for this VIN – an absent field exports as an empty cell,
     /// never a placeholder – so the file is honest about what is and is not known.
     static func factoryPassportCSV(state: VehicleState, preferences: PreferencesStore) -> String {
-        func csvField(_ value: String?) -> String {
-            guard let value, !value.isEmpty else { return "" }
-            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
-            return value.contains(",") || value.contains("\"") || value.contains("\n")
-                ? "\"\(escaped)\"" : value
-        }
         let model = [state.identity.modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " ")
         let paint = state.identity.externalColour
         let interior = state.identity.upholstery
@@ -337,7 +360,7 @@ extension InfoTabView {
         }
         rows.append(["Exported", Format.dateTimeFormatter.string(from: Date())])
         return rows
-            .map { $0.map(csvField).joined(separator: ",") }
+            .map { $0.map(CSV.field).joined(separator: ",") }
             .joined(separator: "\n") + "\n"
     }
 
@@ -349,7 +372,7 @@ extension InfoTabView {
         let isVolvo = (state.identity.modelName?.lowercased().contains("volvo") == true) || (state.identity.vin.uppercased().hasPrefix("YV"))
         let planTitle = warranty?.planName
         let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
-        let brandIcon = isVolvo ? "shield.checkmark.fill" : "sparkles"
+        let brandIcon = "shield.checkmark.fill"
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {

@@ -4,10 +4,14 @@ struct ChargingSessionRow: View {
     let session: ChargingSession
 
     @State private var isHovered = false
+    @State private var isExpanded = false
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.scrollRevealAction) private var revealInScrollView
+
+    private var scrollID: String { "charging-session-\(session.id.uuidString)" }
 
     var body: some View {
-        DisclosureGroup {
+        DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 8) {
                 if !session.samples.isEmpty {
                     ChargingCurveView(
@@ -25,25 +29,27 @@ struct ChargingSessionRow: View {
                     KVRow(L10n.text("Duration"), Format.shortDuration(minutes: session.durationMinutes), symbol: "timer")
                     KVRow(
                         L10n.text("Estimated Energy Added"),
-                        String(format: "%.1f kWh", session.kwhDelivered),
+                        String(format: "%.1f kWh", locale: L10n.displayLocale, session.kwhDelivered),
                         symbol: "bolt.fill", info: energyExplanation
                     )
-                    KVRow(
-                        L10n.text("Estimate Quality"),
-                        "\(session.confidence.displayName) · \(session.energySource.displayName)",
-                        symbol: "checkmark.seal",
-                        info: L10n.text("Shows whether energy came from sufficiently complete observed-power integration or from the SoC and usable-capacity fallback.")
-                    )
+                    if session.samples.isEmpty {
+                        KVRow(
+                            L10n.text("Estimate Quality"),
+                            "\(session.confidence.displayName) · \(session.energySource.displayName)",
+                            symbol: "checkmark.seal",
+                            info: L10n.text("Shows whether energy came from sufficiently complete observed-power integration or from the SoC and usable-capacity fallback.")
+                        )
+                    }
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
                     if let cost = session.estimatedCost(tariff: preferences.electricityPricePerKwh) {
-                        KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
+                        KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", locale: L10n.displayLocale, cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
                     }
                     if let spotCost = session.spotCost, spotCost > 0 {
                         KVRow(
                             L10n.text("Market Price Cost"),
-                            String(format: "%.2f %@", spotCost, session.currencySymbol ?? preferences.currencySymbol),
+                            String(format: "%.2f %@", locale: L10n.displayLocale, spotCost, session.currencySymbol ?? preferences.currencySymbol),
                             symbol: "chart.bar.fill",
                             info: L10n.text("Charged at the actual spot price for each interval. Spot prices exclude taxes and grid fees, so this is lower than a full bill.")
                         )
@@ -57,8 +63,8 @@ struct ChargingSessionRow: View {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .hisType(.label, weight: .medium)
                     let preferredCost = session.spotCost ?? session.estimatedCost(tariff: preferences.electricityPricePerKwh)
-                    let costStr = preferredCost.map { String(format: " · %.2f %@", $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
-                    Text(String(format: "+%.0f%% · ≈%.1f kWh%@", session.percentageAdded, session.kwhDelivered, costStr))
+                    let costStr = preferredCost.map { String(format: " · %.2f %@", locale: L10n.displayLocale, $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
+                    Text(String(format: "+%.0f%% · ≈%.1f kWh%@", locale: L10n.displayLocale, session.percentageAdded, session.kwhDelivered, costStr))
                         .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -77,7 +83,29 @@ struct ChargingSessionRow: View {
                 .fill(isHovered ? Color.primary.opacity(0.04) : Color.clear)
         )
         .hisAnimation(Motion.selection, value: isHovered)
+        .contextMenu {
+            Button {
+                let details = """
+                    \(Format.dateTimeFormatter.string(from: session.startDate))
+                    \(Format.energyKwh(session.kwhDelivered)) · \(Format.shortDuration(minutes: session.durationMinutes))
+                    \(Format.percent(session.startBatteryPercentage)) → \(Format.percent(session.endBatteryPercentage))
+                    """
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(details, forType: .string)
+            } label: {
+                Label(L10n.text("Copy"), systemImage: "doc.on.doc")
+            }
+        }
         .onHover { isHovered = $0 }
+        .id(scrollID)
+        .onChange(of: isExpanded) { _, expanded in
+            guard expanded else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(220))
+                guard isExpanded else { return }
+                revealInScrollView(scrollID)
+            }
+        }
     }
 
     private var energyExplanation: String {

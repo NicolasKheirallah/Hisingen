@@ -9,9 +9,10 @@ struct AccountCredentialsForm: View {
 
     let style: Style
     let onSettingsChanged: (SettingsChange) -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
-        (false, L10n.text("Connection testing is not available."), nil)
+    var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
+        ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
+    @ObservedObject var model: AccountConnectionModel
 
     @State private var selectedBrand = VehicleBrand.polestar
     @Environment(\.preferencesStore) private var preferences
@@ -27,24 +28,11 @@ struct AccountCredentialsForm: View {
             return .polestarID
         }
     }
-    @State private var polestarEmail = ""
-    @State private var polestarPassword = ""
-    @State private var polestarVIN = ""
-    @State private var polestarNickname = ""
-    @State private var polestarDataPortalAccountID = ""
-    @State private var polestarDataPortalClientID = ""
-    @State private var polestarDataPortalClientSecret = ""
-
-    @State private var volvoClientID = ""
-    @State private var volvoClientSecret = ""
-    @State private var volvoApiKey = ""
-    @State private var volvoVIN = ""
-    @State private var volvoNickname = ""
 
     @State private var showCustomVolvoApp = false
     @State private var showSavedFeedback = false
     @State private var isTestingConnection = false
-    @State private var testConnectionResult: (success: Bool, message: String, failureKind: SignInFailureKind?)?
+    @State private var testConnectionResult: ConnectionCheck?
     /// Local Keychain-save failures, kept separate from `testConnectionResult` so the
     /// banner's sessionExpired suppression can never hide them.
     @State private var keychainError: String?
@@ -58,53 +46,13 @@ struct AccountCredentialsForm: View {
 
     private enum ConnectionHealth { case active, connectedInactive, sessionExpired, notConnected }
 
-    /// Whether the selected brand has enough on file (developer keys / account email, plus a
-    /// previously-discovered VIN) to renew its session with a browser handshake alone – i.e.
-    /// this is an *expired* session, not a brand that was never set up.
-    private var hasRenewableCredentials: Bool {
-        guard !preferences.vin(for: selectedBrand).isEmpty else { return false }
-        switch selectedBrand {
-        case .polestar:
-            switch preferences.polestarConnectionMode {
-            case .dataPortal:
-                let hasID = !preferences.polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-                let hasSecret = Keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
-                return hasID && hasSecret
-            case .augmented:
-                let hasPortalID = !preferences.polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-                let hasPortalSecret = Keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
-                let hasPortal = hasPortalID && hasPortalSecret
-                return hasPortal || Keychain.hasStoredPolestarEmail
-            case .polestarID:
-                return Keychain.hasStoredPolestarEmail
-            }
-        case .volvo:
-            let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
-            let hasSecrets = BuiltinVolvoSecrets.isConfigured
-                || Keychain.hasStoredVolvoAppCredentials
-            return hasClientID && hasSecrets
-        }
-    }
-
     private var connectionHealth: ConnectionHealth {
-        // A live-check failure that reads like an auth problem is the strongest signal.
-        if isBrandConnected, let result = testConnectionResult, !result.success,
-           Self.looksLikeAuthFailure(result.message) {
-            return .sessionExpired
+        switch model.health(for: selectedBrand, isActiveBrand: isActiveBrand, lastCheck: testConnectionResult) {
+        case .active: return .active
+        case .connectedInactive: return .connectedInactive
+        case .sessionExpired: return .sessionExpired
+        case .notConnected: return .notConnected
         }
-        if isBrandConnected {
-            return isActiveBrand ? .active : .connectedInactive
-        }
-        // No resumable session, but the credentials to renew one are still on file.
-        return hasRenewableCredentials ? .sessionExpired : .notConnected
-    }
-
-    private static func looksLikeAuthFailure(_ message: String) -> Bool {
-        let needles = ["sign in", "signed in", "session", "expired", "credential",
-                       "additional or changed sign-in", "no active session", "not permitted",
-                       "authoriz", "token"]
-        let lower = message.lowercased()
-        return needles.contains { lower.contains($0) }
     }
 
     /// The kind the current session state implies before any check runs: an expired but
@@ -119,7 +67,7 @@ struct AccountCredentialsForm: View {
         case .signingFlowChanged:
             return "Polestar's sign-in page changed. Interactive Sign-In usually still works; if it doesn't, check for a Hisingen update."
         case .sessionExpired:
-            return "Your Polestar session expired. Sign in again – the interactive window handles any new verification step Polestar added."
+            return "Your Polestar session expired. Sign in again. The interactive window handles any new verification step Polestar added."
         default:
             return "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window."
         }
@@ -151,26 +99,7 @@ struct AccountCredentialsForm: View {
                 enablePolestarID = true
                 enableDataPortal = true
             }
-            let draft = preferences.accountDraft
-            polestarEmail = draft.polestarEmail.isEmpty ? preferences.email : draft.polestarEmail
-            polestarPassword = draft.polestarPassword
-            polestarVIN = draft.polestarVIN.isEmpty ? preferences.vin(for: .polestar) : draft.polestarVIN
-            polestarNickname = draft.polestarNickname.isEmpty ? preferences.vehicleNickname(for: polestarVIN) : draft.polestarNickname
-            polestarDataPortalAccountID = draft.polestarDataPortalAccountID.isEmpty ? preferences.polestarDataPortalAccountID : draft.polestarDataPortalAccountID
-            polestarDataPortalClientID = draft.polestarDataPortalClientID.isEmpty ? preferences.polestarDataPortalClientID : draft.polestarDataPortalClientID
-            polestarDataPortalClientSecret = draft.polestarDataPortalClientSecret
-            volvoClientID = draft.volvoClientID.isEmpty ? preferences.volvoClientID : draft.volvoClientID
-            volvoClientSecret = draft.volvoClientSecret
-            volvoApiKey = draft.volvoApiKey
-            volvoVIN = draft.volvoVIN.isEmpty ? preferences.vin(for: .volvo) : draft.volvoVIN
-            volvoNickname = draft.volvoNickname.isEmpty ? preferences.vehicleNickname(for: volvoVIN) : draft.volvoNickname
-            preferences.accountDraft = .init(polestarEmail: polestarEmail, polestarPassword: polestarPassword,
-                                             polestarVIN: polestarVIN, polestarNickname: polestarNickname,
-                                             polestarDataPortalAccountID: polestarDataPortalAccountID,
-                                             polestarDataPortalClientID: polestarDataPortalClientID,
-                                             polestarDataPortalClientSecret: polestarDataPortalClientSecret,
-                                             volvoClientID: volvoClientID, volvoClientSecret: volvoClientSecret,
-                                             volvoApiKey: volvoApiKey, volvoVIN: volvoVIN, volvoNickname: volvoNickname)
+            model.seedDraftFromStore()
             selectedBrand = preferences.activeBrand
         }
     }
@@ -204,7 +133,7 @@ struct AccountCredentialsForm: View {
 
     private func brandCard(_ brand: VehicleBrand) -> some View {
         let isSelected = selectedBrand == brand
-        let radius: CGFloat = HisingenTheme.cornerRadius == 0 ? 0 : 10
+        let radius = HisingenTheme.bannerRadius
         return Button {
             withAnimation(reduceMotion ? nil : Motion.interaction) {
                 selectedBrand = brand
@@ -215,7 +144,7 @@ struct AccountCredentialsForm: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: brand == .polestar ? "bolt.car.fill" : "car.fill")
-                    .font(.system(size: 20))
+                    .hisSymbolSize(20)
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
                 Text(brand.displayName)
                     .hisType(.body, weight: isSelected ? .semibold : .medium)
@@ -224,30 +153,13 @@ struct AccountCredentialsForm: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                isSelected ? HisingenTheme.accent.opacity(0.1) : Color.primary.opacity(0.04),
+                isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                 in: RoundedRectangle(cornerRadius: radius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(isSelected ? HisingenTheme.accent.opacity(0.45) : HisingenTheme.hairline,
-                            lineWidth: isSelected ? 1.2 : 0.5)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-    }
-
-    private var isBrandConnected: Bool {
-        if selectedBrand == .polestar {
-            switch preferences.polestarConnectionMode {
-            case .dataPortal, .augmented:
-                return preferences.hasResumableSession(for: .polestar)
-            case .polestarID:
-                return preferences.hasSessionToken(for: .polestar)
-            }
-        }
-        return preferences.hasResumableSession(for: selectedBrand)
     }
 
     private var isActiveBrand: Bool {
@@ -298,7 +210,7 @@ struct AccountCredentialsForm: View {
                             .hisType(.caption).foregroundStyle(.secondary)
                     case .sessionExpired:
                         Text(selectedBrand == .polestar
-                             ? L10n.text("Your Polestar sign-in needs renewing. Re-sign in below – no password required.")
+                             ? L10n.text("Your Polestar sign-in needs renewing. Re-sign in below, no password required.")
                              : L10n.text("Your Volvo sign-in needs renewing. Re-sign in below with the developer keys already saved."))
                             .hisType(.caption).foregroundStyle(.secondary)
                             .hisCaptionLeading()
@@ -312,7 +224,7 @@ struct AccountCredentialsForm: View {
                 }
                 Spacer()
 
-                if isBrandConnected && !isActiveBrand && health != .sessionExpired {
+                if model.isConnected(selectedBrand) && !isActiveBrand && health != .sessionExpired {
                     Button {
                         onSettingsChanged(.switchToBrand(selectedBrand))
                     } label: {
@@ -327,7 +239,7 @@ struct AccountCredentialsForm: View {
                 }
             }
 
-            if style != .welcoming && (isBrandConnected || health == .sessionExpired) {
+            if style != .welcoming && (model.isConnected(selectedBrand) || health == .sessionExpired) {
                 HStack(spacing: 6) {
                     reSignInButton(prominent: health == .sessionExpired)
 
@@ -344,7 +256,7 @@ struct AccountCredentialsForm: View {
                     }
                     .controlSize(.mini)
 
-                    if isBrandConnected {
+                    if model.isConnected(selectedBrand) {
                         Button {
                             testCurrentConnection()
                         } label: {
@@ -489,16 +401,16 @@ struct AccountCredentialsForm: View {
         _ option: CredentialOption,
         action: @escaping () -> Void
     ) -> some View {
-        let radius: CGFloat = HisingenTheme.cornerRadius == 0 ? 0 : 8
+        let radius: CGFloat = HisingenTheme.bannerRadius
         return Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Image(systemName: option.symbol)
-                        .font(.system(size: 14, weight: .semibold))
+                        .hisSymbolSize(14, weight: .semibold)
                         .foregroundStyle(option.isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
                     Spacer()
                     Image(systemName: option.isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 13))
+                        .hisSymbolSize(13)
                         .foregroundStyle(option.isSelected ? HisingenTheme.accent : .secondary.opacity(0.4))
                 }
                 Text(option.title)
@@ -513,15 +425,8 @@ struct AccountCredentialsForm: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(
-                option.isSelected ? HisingenTheme.accent.opacity(0.08) : Color.primary.opacity(0.035),
+                option.isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.035),
                 in: RoundedRectangle(cornerRadius: radius, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(
-                        option.isSelected ? HisingenTheme.accent.opacity(0.4) : HisingenTheme.hairline,
-                        lineWidth: option.isSelected ? 1.0 : 0.5
-                    )
             )
             .contentShape(Rectangle())
         }
@@ -533,7 +438,7 @@ struct AccountCredentialsForm: View {
     private var polestarModeExplanation: some View {
         if enablePolestarID && enableDataPortal {
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "sparkles")
+                Image(systemName: "link.badge.plus")
                     .foregroundStyle(HisingenTheme.accent)
                     .hisType(.label)
                 Text(PreferencesStore.PolestarConnectionMode.augmented.detailDescription)
@@ -577,15 +482,6 @@ struct AccountCredentialsForm: View {
         preferences.hasSessionToken(for: .polestar)
     }
 
-    private var isDataPortalConfigured: Bool {
-        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-        let hasSecret = Keychain.hasStoredPolestarDataPortalCredentials
-            || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
-            || !polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return hasID && hasSecret
-    }
-
     private func activeAccountSubtitle(activeLabel: String) -> String {
         if selectedBrand == .polestar, preferences.polestarConnectionMode == .augmented {
             if !isPolestarIDSignedIn {
@@ -600,7 +496,7 @@ struct AccountCredentialsForm: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(HisingenTheme.semanticGood)
-                .font(.system(size: 13))
+                .hisSymbolSize(13)
             VStack(alignment: .leading, spacing: 1) {
                 Text(L10n.text("Polestar ID: Signed In"))
                     .hisType(.caption, weight: .semibold)
@@ -628,7 +524,7 @@ struct AccountCredentialsForm: View {
             HStack(spacing: 6) {
                 Image(systemName: "person.badge.shield.exclamationmark")
                     .foregroundStyle(HisingenTheme.semanticWarning)
-                    .font(.system(size: 13))
+                    .hisSymbolSize(13)
                 Text(L10n.text("Polestar ID: Sign In Required"))
                     .hisType(.caption, weight: .semibold)
             }
@@ -658,7 +554,7 @@ struct AccountCredentialsForm: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(HisingenTheme.semanticGood)
-                .font(.system(size: 13))
+                .hisSymbolSize(13)
             Text(L10n.text("Developer Portal: Configured"))
                 .hisType(.caption, weight: .semibold)
             Spacer()
@@ -684,20 +580,18 @@ struct AccountCredentialsForm: View {
             }
 
             labeledField(L10n.text("Polestar ID (Email)")) {
-                TextField("name@example.com", text: $polestarEmail)
+                TextField("name@example.com", text: model.binding(\.polestarEmail))
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.username)
-                    .onChange(of: polestarEmail) { _, val in preferences.accountDraft.polestarEmail = val }
             }
             if shouldShowEmailError {
                 InlineValidationLabel(message: L10n.text("Enter a valid email address."))
             }
 
             labeledField(L10n.text("Password")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarPassword)
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: model.binding(\.polestarPassword))
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
-                    .onChange(of: polestarPassword) { _, val in preferences.accountDraft.polestarPassword = val }
             }
         }
     }
@@ -760,32 +654,23 @@ struct AccountCredentialsForm: View {
                     .foregroundStyle(HisingenTheme.accent)
             }
 
-            if isDataPortalConfigured {
+            if model.isDataPortalConfigured {
                 polestarDataPortalStatusBanner
             }
 
             labeledField(L10n.text("Account ID (x-client-id)")) {
-                TextField("0a7f033f-...", text: $polestarDataPortalAccountID)
+                TextField("0a7f033f-...", text: model.binding(\.polestarDataPortalAccountID))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalAccountID) { _, val in
-                        preferences.accountDraft.polestarDataPortalAccountID = val
-                    }
             }
 
             labeledField(L10n.text("Client ID")) {
-                TextField("client-id", text: $polestarDataPortalClientID)
+                TextField("client-id", text: model.binding(\.polestarDataPortalClientID))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalClientID) { _, val in
-                        preferences.accountDraft.polestarDataPortalClientID = val
-                    }
             }
 
             labeledField(L10n.text("Client Secret")) {
-                SecureField(L10n.text("•••••••• (only to update credentials)"), text: $polestarDataPortalClientSecret)
+                SecureField(L10n.text("•••••••• (only to update credentials)"), text: model.binding(\.polestarDataPortalClientSecret))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarDataPortalClientSecret) { _, val in
-                        preferences.accountDraft.polestarDataPortalClientSecret = val
-                    }
             }
 
             dataPortalQuotaView
@@ -795,15 +680,13 @@ struct AccountCredentialsForm: View {
     private var polestarSharedFields: some View {
         VStack(alignment: .leading, spacing: 8) {
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField(L10n.text("e.g. My Polestar, Midnight"), text: $polestarNickname)
+                TextField(L10n.text("e.g. My Polestar, Midnight"), text: model.binding(\.polestarNickname))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarNickname) { _, val in preferences.accountDraft.polestarNickname = val }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YSM...", text: $polestarVIN)
+                TextField("YSM...", text: model.binding(\.polestarVIN))
                     .textFieldStyle(.roundedBorder)
-                    .onChange(of: polestarVIN) { _, val in preferences.accountDraft.polestarVIN = val }
             }
             if shouldShowVINError {
                 InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
@@ -835,7 +718,7 @@ struct AccountCredentialsForm: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
-                .disabled(enableDataPortal && !enablePolestarID && !isDataPortalConfiguredOrEntered)
+                .disabled(enableDataPortal && !enablePolestarID && !model.canConnectDataPortal)
                 .padding(.top, style == .welcoming ? 6 : 4)
 
                 if enableDataPortal {
@@ -870,12 +753,14 @@ struct AccountCredentialsForm: View {
     }
 
     private func savePolestarConnection() {
-        if enablePolestarID && enableDataPortal {
-            savePolestarAugmentedCredentials()
-        } else if enableDataPortal {
-            savePolestarDataPortalCredentials()
-        } else {
-            savePolestarCredentials()
+        guard let outcome = model.savePolestar(mode: polestarConnectionMode) else { return }
+        withAnimation(reduceMotion ? nil : Motion.stateChange) {
+            showSavedFeedback = outcome.saved
+            keychainError = outcome.keychainError
+        }
+        triggerSavedFeedbackReset()
+        if let effect = outcome.effect {
+            onSettingsChanged(effect == .credentialsChanged ? .credentials : .presentation)
         }
     }
 
@@ -897,12 +782,6 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    private var isDataPortalConfiguredOrEntered: Bool {
-        let hasID = !polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-        return hasID && isValidOptionalVIN(polestarVIN)
-    }
-
     private var dataPortalQuotaView: some View {
         HStack(spacing: 4) {
             Image(systemName: "gauge.with.needle")
@@ -916,7 +795,7 @@ struct AccountCredentialsForm: View {
         .padding(.top, 2)
     }
 
-    private func dataPortalTestResultBanner(_ test: (success: Bool, message: String, failureKind: SignInFailureKind?)) -> some View {
+    private func dataPortalTestResultBanner(_ test: ConnectionCheck) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: test.success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical)
@@ -940,78 +819,6 @@ struct AccountCredentialsForm: View {
                 )
         )
         .transition(.opacity)
-    }
-
-    private func savePolestarAugmentedCredentials() {
-        preferences.polestarConnectionMode = .augmented
-        savePolestarCredentials()
-        savePolestarDataPortalCredentials()
-        preferences.polestarConnectionMode = .augmented
-    }
-
-
-    private func savePolestarDataPortalCredentials() {
-        let trimmedID = polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAccountID = polestarDataPortalAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty else { return }
-
-        var keychainFailed = false
-        if !trimmedSecret.isEmpty {
-            do {
-                try Keychain.savePolestarDataPortalCredentials(
-                    accountID: trimmedAccountID.isEmpty ? nil : trimmedAccountID,
-                    clientID: trimmedID,
-                    clientSecret: trimmedSecret
-                )
-                polestarDataPortalClientSecret = ""
-                preferences.accountDraft.polestarDataPortalClientSecret = ""
-            } catch {
-                keychainFailed = true
-            }
-        }
-        withAnimation(reduceMotion ? nil : Motion.stateChange) {
-            showSavedFeedback = !keychainFailed
-            if keychainFailed {
-                keychainError = L10n.text("Couldn't save credentials to the Keychain. Please try again.")
-            }
-        }
-        triggerSavedFeedbackReset()
-        guard !keychainFailed else { return }
-        persistPolestarDataPortalPreferences(accountID: trimmedAccountID, clientID: trimmedID)
-    }
-
-    private func triggerSavedFeedbackReset() {
-        Task {
-            try? await Task.sleep(for: .seconds(1.8))
-            withAnimation(reduceMotion ? nil : Motion.theme) {
-                showSavedFeedback = false
-            }
-        }
-    }
-
-    private func persistPolestarDataPortalPreferences(accountID: String, clientID: String) {
-        if polestarConnectionMode == .dataPortal {
-            preferences.polestarConnectionMode = .dataPortal
-        } else if polestarConnectionMode == .augmented {
-            preferences.polestarConnectionMode = .augmented
-        }
-        preferences.polestarDataPortalAccountID = accountID
-        preferences.polestarDataPortalClientID = clientID
-        let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        preferences.setVin(upperVIN, for: .polestar)
-        let nickVIN = !upperVIN.isEmpty ? upperVIN : preferences.vin(for: .polestar)
-        if !nickVIN.isEmpty {
-            preferences.setVehicleNickname(polestarNickname, for: nickVIN)
-        }
-        onSettingsChanged(.credentials)
-    }
-
-    private var hasResumableVolvoSession: Bool {
-        let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedClientID.isEmpty, trimmedClientID == preferences.volvoClientID,
-              volvoClientSecret.isEmpty, volvoApiKey.isEmpty else { return false }
-        return preferences.hasResumableSession(for: .volvo)
     }
 
     private var volvoFields: some View {
@@ -1043,14 +850,10 @@ struct AccountCredentialsForm: View {
                 .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             } else {
                 Text(L10n.text(
-                    "Register a free API application at developer.volvocars.com to get a Client ID, "
-                    + "Client Secret, and VCC API Key, then sign in with your Volvo ID below. "
-                    + "Hisingen never sees your Volvo ID password directly – sign-in happens in a "
-                    + "system browser window."
+                    "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window."
                 ))
                 .hisType(.caption)
                 .foregroundStyle(.secondary)
-                .hisCaptionLeading()
                 .hisCaptionLeading()
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -1059,9 +862,9 @@ struct AccountCredentialsForm: View {
                         Spacer()
                         Button {
                             showCustomVolvoApp = false
-                            volvoClientID = ""
-                            volvoClientSecret = ""
-                            volvoApiKey = ""
+                            model.draft.volvoClientID = ""
+                            model.draft.volvoClientSecret = ""
+                            model.draft.volvoApiKey = ""
                         } label: {
                             Text(L10n.text("Use Default Developer Keys"))
                                 .hisType(.caption)
@@ -1072,40 +875,35 @@ struct AccountCredentialsForm: View {
                 }
 
                 labeledField(L10n.text("Client ID")) {
-                    TextField("Client ID", text: $volvoClientID)
+                    TextField("Client ID", text: model.binding(\.volvoClientID))
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: volvoClientID) { _, value in preferences.accountDraft.volvoClientID = value }
                 }
 
                 labeledField(L10n.text("Client Secret")) {
-                    SecureField(hasResumableVolvoSession && volvoClientSecret.isEmpty
+                    SecureField(model.hasResumableVolvoSession && model.draft.volvoClientSecret.isEmpty
                                 ? L10n.text("•••••••• (Saved in Keychain)")
-                                : L10n.text("Client Secret"), text: $volvoClientSecret)
+                                : L10n.text("Client Secret"), text: model.binding(\.volvoClientSecret))
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: volvoClientSecret) { _, value in preferences.accountDraft.volvoClientSecret = value }
                 }
 
                 labeledField(L10n.text("VCC API Key")) {
-                    SecureField(hasResumableVolvoSession && volvoApiKey.isEmpty
+                    SecureField(model.hasResumableVolvoSession && model.draft.volvoApiKey.isEmpty
                                 ? L10n.text("•••••••• (Saved in Keychain)")
-                                : L10n.text("VCC API Key"), text: $volvoApiKey)
+                                : L10n.text("VCC API Key"), text: model.binding(\.volvoApiKey))
                         .textFieldStyle(.roundedBorder)
-                        .onChange(of: volvoApiKey) { _, value in preferences.accountDraft.volvoApiKey = value }
                 }
             }
 
             labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField(L10n.text("e.g. My Volvo, Family car"), text: $volvoNickname)
+                TextField(L10n.text("e.g. My Volvo, Family car"), text: model.binding(\.volvoNickname))
                     .textFieldStyle(.roundedBorder)
-                        .onChange(of: volvoNickname) { _, value in preferences.accountDraft.volvoNickname = value }
             }
 
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YV1...", text: $volvoVIN)
+                TextField("YV1...", text: model.binding(\.volvoVIN))
                     .textFieldStyle(.roundedBorder)
-                        .onChange(of: volvoVIN) { _, value in preferences.accountDraft.volvoVIN = value }
             }
-            if attemptedVolvoSignIn && !isValidOptionalVIN(volvoVIN) {
+            if attemptedVolvoSignIn && !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN) {
                 InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
             }
 
@@ -1117,7 +915,7 @@ struct AccountCredentialsForm: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "globe")
-                    Text(hasResumableVolvoSession
+                    Text(model.hasResumableVolvoSession
                          ? L10n.text("Switch to Volvo Account")
                          : L10n.text("Sign in with Volvo ID"))
                 }
@@ -1125,7 +923,7 @@ struct AccountCredentialsForm: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
-            .disabled((!BuiltinVolvoSecrets.isConfigured && volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || !isValidOptionalVIN(volvoVIN))
+            .disabled((!BuiltinVolvoSecrets.isConfigured && model.draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN))
             .padding(.top, style == .welcoming ? 6 : 4)
         }
     }
@@ -1155,107 +953,35 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    private var polestarFormIsValid: Bool {
-        isValidEmail(polestarEmail) && isValidOptionalVIN(polestarVIN)
-    }
-
     /// The email error shows once the reader has tried to sign in, and keeps showing while they
     /// fix it. A field nobody has touched is not shown as wrong.
     private var shouldShowEmailError: Bool {
-        (attemptedPolestarSignIn || !polestarEmail.isEmpty) && !isValidEmail(polestarEmail)
+        (attemptedPolestarSignIn || !model.draft.polestarEmail.isEmpty)
+            && !SettingsValidation.isValidEmail(model.draft.polestarEmail)
     }
 
     /// Same for the optional VIN, which only complains once there is something to complain about.
     private var shouldShowVINError: Bool {
-        !polestarVIN.isEmpty && !isValidOptionalVIN(polestarVIN)
+        !model.draft.polestarVIN.isEmpty && !SettingsValidation.isValidOptionalVIN(model.draft.polestarVIN)
     }
 
-    private func savePolestarCredentials() {
-        guard isValidEmail(polestarEmail), isValidOptionalVIN(polestarVIN) else { return }
-        keychainError = nil
-        let normalizedEmail = polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let upperVIN = polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let oldVIN = preferences.vin(for: .polestar)
-        let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
-        let credentialsChanged = normalizedEmail != preferences.email || upperVIN != oldVIN || !polestarPassword.isEmpty
-        var keychainFailed = false
-        if !polestarPassword.isEmpty {
-            do {
-                try Keychain.savePassword(polestarPassword)
-                // The plaintext must not linger: neither in this view's state nor in the
-                // app-lifetime draft store on `PreferencesStore`.
-                polestarPassword = ""
-                preferences.accountDraft.polestarPassword = ""
-            } catch {
-                keychainFailed = true
-            }
-        }
-        withAnimation(reduceMotion ? nil : Motion.stateChange) {
-            showSavedFeedback = !keychainFailed
-            if keychainFailed {
-                keychainError = L10n.text("Couldn't save the password to the Keychain. Please try again.")
-            }
-        }
+    private func beginVolvoSignIn() {
+        guard let request = model.beginVolvoSignIn() else { return }
+        onSettingsChanged(.volvoSignIn(
+            clientID: request.clientID,
+            clientSecret: request.clientSecret,
+            vccApiKey: request.vccApiKey,
+            nickname: request.nickname
+        ))
+    }
+
+    private func triggerSavedFeedbackReset() {
         Task {
             try? await Task.sleep(for: .seconds(1.8))
             withAnimation(reduceMotion ? nil : Motion.theme) {
                 showSavedFeedback = false
             }
         }
-        guard !keychainFailed else { return }
-        // Persist identity only after a new password has reached Keychain successfully. A
-        // Keychain denial must not leave an email/VIN pointing at credentials that were not
-        // actually saved.
-        if polestarConnectionMode == .polestarID {
-            preferences.polestarConnectionMode = .polestarID
-        } else if polestarConnectionMode == .augmented {
-            preferences.polestarConnectionMode = .augmented
-        }
-        preferences.email = normalizedEmail
-        preferences.setVin(upperVIN, for: .polestar)
-        if !nicknameVIN.isEmpty {
-            preferences.setVehicleNickname(polestarNickname, for: nicknameVIN)
-        }
-        onSettingsChanged(credentialsChanged ? .credentials : .presentation)
-    }
-
-    private func beginVolvoSignIn() {
-        guard isValidOptionalVIN(volvoVIN) else { return }
-        let upperVIN = volvoVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let trimmedClientID = volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let oldVIN = preferences.vin(for: .volvo)
-        preferences.volvoClientID = trimmedClientID
-        preferences.setVin(upperVIN, for: .volvo)
-        if !upperVIN.isEmpty {
-            preferences.setVehicleNickname(volvoNickname, for: upperVIN)
-        } else {
-            if !oldVIN.isEmpty {
-                preferences.setVehicleNickname(volvoNickname, for: oldVIN)
-            }
-        }
-        let idToSend = !trimmedClientID.isEmpty ? trimmedClientID : BuiltinVolvoSecrets.clientID
-        let secretToSend = !volvoClientSecret.isEmpty ? volvoClientSecret : BuiltinVolvoSecrets.clientSecret
-        let apiKeyToSend = !volvoApiKey.isEmpty ? volvoApiKey : BuiltinVolvoSecrets.vccApiKey
-        onSettingsChanged(.volvoSignIn(
-            clientID: idToSend,
-            clientSecret: secretToSend,
-            vccApiKey: apiKeyToSend,
-            nickname: volvoNickname
-        ))
-        // The secrets were handed to the sign-in flow; drop the plaintext copies here and in
-        // the app-lifetime draft store so they don't outlive the Settings sheet.
-        volvoClientSecret = ""
-        volvoApiKey = ""
-        preferences.accountDraft.volvoClientSecret = ""
-        preferences.accountDraft.volvoApiKey = ""
-    }
-
-    private func isValidEmail(_ value: String) -> Bool {
-        SettingsValidation.isValidEmail(value)
-    }
-
-    private func isValidOptionalVIN(_ value: String) -> Bool {
-        SettingsValidation.isValidOptionalVIN(value)
     }
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {

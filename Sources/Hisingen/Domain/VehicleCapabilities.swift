@@ -356,24 +356,6 @@ enum VehicleCapabilitySupport: String, Codable, Sendable {
     }
 }
 
-enum FeatureAvailability: String, Codable, Sendable {
-    case available
-    case vehicleOffline
-    case temporarilyUnavailable
-    case authenticationRequired
-    case unknown
-
-    var isActionable: Bool { self == .available }
-}
-
-struct VehicleFeatureStatus: Equatable, Sendable {
-    let support: VehicleCapabilitySupport
-    let availability: FeatureAvailability
-
-    var isVisible: Bool { support.permitsRequest }
-    var isUsable: Bool { support.permitsRequest && availability.isActionable }
-}
-
 enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case climateStartStop
     case climateTemperature
@@ -622,39 +604,5 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
 
     var hasEngineStart: Bool {
         support(for: .engineStart) == .supported
-    }
-
-    func featureStatus(for capability: VehicleCapability, in state: VehicleState) -> VehicleFeatureStatus {
-        let support = self.support(for: capability)
-        let availability: FeatureAvailability
-        switch state.identity.availability {
-        case .available: availability = .available
-        case .unavailable: availability = .vehicleOffline
-        case .unknown:
-            availability = state.freshness.unavailableFeatures.contains(capability.associatedFeature)
-                ? .temporarilyUnavailable : .unknown
-        }
-        return VehicleFeatureStatus(support: support, availability: availability)
-    }
-}
-
-private extension VehicleCapability {
-    var associatedFeature: AppFeature {
-        switch self {
-        case .climateStartStop, .climateTemperature, .seatHeating,
-             .steeringWheelHeating, .climateTimers, .engineStart:
-            return .climateStatus
-        case .preCleaning: return .airQuality
-        case .chargeTarget, .chargingCurrentLimit, .chargingSchedule,
-             .chargingScheduleOverride, .chargeLocations: return .chargingSchedule
-        case .locks, .reducedGuardLock, .trunk: return .exteriorStatus
-        case .windows: return .exteriorStatus
-        case .honkAndFlash: return .exteriorStatus
-        case .exteriorStatus: return .exteriorStatus
-        case .tyrePressureValues, .serviceWarnings: return .tyreAndWarnings
-        case .tripMeters: return .tripMeters
-        case .connectivity: return .connectivityDiagnostics
-        case .softwareStatus, .softwareInstallControl: return .softwareUpdates
-        }
     }
 }

@@ -221,7 +221,10 @@ extension SnapshotFreshness {
             fetchedAt: fetchedAt,
             vehicleReportedAt: vehicleReportedAt ?? previous.vehicleReportedAt,
             dataWarnings: dataWarnings,
-            unavailableFeatures: unavailableFeatures
+            unavailableFeatures: unavailableFeatures,
+            retainedDataCategories: [],
+            retainedDataAt: nil,
+            servedByFallback: servedByFallback
         )
     }
 }

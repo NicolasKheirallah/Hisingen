@@ -231,7 +231,7 @@ struct VehicleCapabilityParsingTests {
             12: .scheduled, 13: .installing, 14: .unknown, 15: .available, 99: .unknown
         ]
         for (raw, state) in expected {
-            #expect(PolestarGRPC.softwareState(raw) == state)
+            #expect((SoftwareStateRaw(rawValue: Int(raw)).map(\.coarseState) ?? .unknown) == state)
         }
         // A failed install still describes a target version, not what the car is running.
         var payload = Data()

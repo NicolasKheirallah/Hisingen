@@ -126,6 +126,6 @@ struct EngineControlsCard: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(Color.secondary.opacity(0.12), in: Capsule())
+            .background(HisingenTheme.chipFill, in: Capsule())
     }
 }

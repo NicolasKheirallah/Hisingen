@@ -35,9 +35,9 @@ struct SetupPassView: View {
 
                 Card {
                     VStack(alignment: .leading, spacing: 10) {
-                        CardHeader(symbol: "sparkles", title: L10n.text("Quick setup"), color: .accentColor)
+                        CardHeader(symbol: "checklist", title: L10n.text("Quick setup"), color: HisingenTheme.accent)
                         presetButton(id: "recommended",
-                                     symbol: "sparkles",
+                                     symbol: "checkmark.seal.fill",
                                      title: L10n.text("Recommended"),
                                      prominent: true) {
                             apply(FeatureSelection.default)
@@ -61,7 +61,7 @@ struct SetupPassView: View {
                 if brand == .polestar {
                     Card {
                         VStack(alignment: .leading, spacing: 8) {
-                            CardHeader(symbol: "key.horizontal", title: L10n.text("Remote commands"), color: .accentColor)
+                            CardHeader(symbol: "key.horizontal", title: L10n.text("Remote commands"), color: HisingenTheme.accent)
                             Text(L10n.text("Polestar remote controls run through a separate one-time browser authorization."))
                                 .hisType(.caption)
                                 .foregroundStyle(.secondary)

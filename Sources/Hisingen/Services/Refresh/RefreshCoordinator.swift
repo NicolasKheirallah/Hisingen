@@ -238,6 +238,9 @@ final class RefreshCoordinator {
     private var lastFullRefreshAt: Date?
     private var sessionReady = false
     private var accountEmail = ""
+    /// Guards the detached email resolution fired by `start`, so a second start cannot
+    /// double-read the Keychain.
+    private var accountEmailResolutionStarted = false
     private var sessionIntent: SessionManager.Intent = .resume
     /// The selection this coordinator last started and has not yet resolved. Set when a
     /// switch begins, cleared only when it completes (or the session re-resolves the VIN).
@@ -344,7 +347,7 @@ final class RefreshCoordinator {
     }
 
     func start(preferredVIN: String?) {
-        accountEmail = preferences.email
+        resolveAccountEmailInTheBackground()
         if let preferredVIN {
             if confirmations.restore(forVIN: preferredVIN) {
                 scheduleConfirmationWatchdog(vin: preferredVIN)
@@ -360,7 +363,29 @@ final class RefreshCoordinator {
         beginSession(preferredVIN: preferredVIN)
     }
 
+    /// Resolves the account email used for account-change detection without touching the
+    /// Keychain on the main thread. The first read after an app update can pause on an ACL
+    /// consent prompt that a background launch cannot answer; keeping that pause off the
+    /// launch path lets the panel render while it waits. A consent failure stays silent
+    /// here (best-effort detection): the classified `.keychainConsentRequired` surfaces
+    /// through session restore instead.
+    private func resolveAccountEmailInTheBackground() {
+        guard !accountEmailResolutionStarted else { return }
+        accountEmailResolutionStarted = true
+        let keychain = KeychainStore.app
+        Task.detached(priority: .utility) { [weak self] in
+            let resolved = (try? keychain.readEmail()) ?? ""
+            guard !resolved.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                guard let self, self.accountEmail.isEmpty else { return }
+                self.accountEmail = resolved
+            }
+        }
+    }
+
     func credentialsChanged(preferredVIN: String?) {
+        // Called from a user-initiated Settings path where an app is frontmost, so the
+        // synchronous Keychain read here can surface an approval prompt if one is pending.
         let oldAccount = accountEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let newAccount = preferences.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let accountChanged = !oldAccount.isEmpty && oldAccount != newAccount

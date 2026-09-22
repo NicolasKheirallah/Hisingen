@@ -45,6 +45,7 @@ struct InputBoundaryTests {
         func expectedKw(_ kw: Double) -> String {
             let decimals = kw >= 10 ? 0 : 1
             let formatter = NumberFormatter()
+            formatter.locale = L10n.displayLocale
             formatter.numberStyle = .decimal
             formatter.usesGroupingSeparator = false
             formatter.minimumFractionDigits = decimals
@@ -108,5 +109,4 @@ struct InputBoundaryTests {
         }
     }
 }
-
 

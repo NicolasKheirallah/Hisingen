@@ -92,9 +92,9 @@ struct APIDiagnosticInspectorView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.text("Live API Diagnostics"))
-                        .font(.headline)
+                        .hisType(.heading, weight: .semibold)
                     Text(L10n.format("%d redacted requests retained for up to 24 hours", entries.count))
-                        .font(.caption)
+                        .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -171,7 +171,7 @@ struct APIDiagnosticInspectorView: View {
                             } else if entry.payloadOmitted {
                                 Text(L10n.format("Payload omitted (%@).",
                                                  entry.payloadOmissionReason ?? "unknown"))
-                                    .font(.caption)
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -179,22 +179,22 @@ struct APIDiagnosticInspectorView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Text(entry.provider.rawValue.uppercased())
-                                .font(.caption2.weight(.semibold))
+                                .hisType(.micro, weight: .semibold)
                                 .foregroundStyle(.secondary)
-                            Text(entry.method).font(.caption.monospaced().weight(.medium))
+                            Text(entry.method).hisType(.caption, weight: .medium, design: .monospaced)
                             Text(entry.operation).lineLimit(1)
                             .minimumScaleFactor(0.9)
                             Spacer()
                             if let status = entry.statusCode {
                                 Text(String(status))
-                                    .font(.caption.monospacedDigit())
+                                    .hisType(.caption, design: .monospaced).monospacedDigit()
                                 .foregroundStyle(status >= 400 || entry.semanticErrorType != nil
                                                  ? HisingenTheme.semanticCritical : Color.secondary)
                             } else if entry.errorType != nil {
                                 Image(systemName: "wifi.exclamationmark").foregroundStyle(HisingenTheme.semanticWarning)
                             }
                             Text(entry.timestamp, style: .time)
-                                .font(.caption.monospacedDigit())
+                                .hisType(.caption, design: .monospaced).monospacedDigit()
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -233,8 +233,8 @@ struct APIDiagnosticInspectorView: View {
 
     private func diagnosticDetail(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(value).font(.caption.monospaced()).textSelection(.enabled)
+            Text(label).hisType(.caption, weight: .semibold).foregroundStyle(.secondary)
+            Text(value).hisType(.caption, design: .monospaced).textSelection(.enabled)
         }
     }
 

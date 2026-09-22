@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var commandCoordinator: CommandCoordinator!
     private var calendarPreconditioning: CalendarPreconditioningController!
     private var chargingPlannerController: ChargingPlannerController!
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One maintenance pass, before anything can read: legacy plist snapshots move into SQLite,
@@ -86,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
         statusController.onSignOut = { [weak self] in self?.signOut() }
         statusController.onTestConnection = { [weak self] brand in
-            guard let self else { return (false, L10n.text("Hisingen is no longer running."), nil) }
+            guard let self else { return ConnectionCheck(success: false, message: L10n.text("Hisingen is no longer running."), failureKind: nil) }
             return await self.connectionTester.test(brand: brand)
         }
         notifier.onPermissionChanged = { [weak self] permission in
@@ -249,7 +251,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleSettingsInPopover() {
-        statusController.showSettings()
+        showSettingsWindow()
+    }
+
+    private func showSettingsWindow() {
+        if let settingsWindow, settingsWindow.isVisible {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settings = SettingsView(
+            notificationPermission: statusController.notificationPermission,
+            state: vehicleSession.latest,
+            fleet: fleetStore.snapshot(activeState: vehicleSession.latest),
+            database: vehicleDatabase,
+            imageCache: imageCache,
+            showsHeaderBar: false,
+            onSettingsChanged: { [weak self] change in
+                guard let self else { return }
+                if case .closeSettings = change {
+                    self.closeSettingsWindow()
+                } else {
+                    self.settingsChanged(change)
+                }
+            },
+            onSignOut: { [weak self] in self?.signOut() },
+            accountConnection: statusController.accountConnection,
+            onTestConnection: { [weak self] brand in
+                guard let self else {
+                    return ConnectionCheck(success: false, message: L10n.text("Hisingen is no longer running."), failureKind: nil)
+                }
+                return await self.connectionTester.test(brand: brand)
+            }
+        )
+        .environment(\.preferencesStore, preferences)
+
+        let host = NSHostingController(rootView: settings)
+        let isNewWindow = settingsWindow == nil
+        let window = settingsWindow ?? NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1_080, height: 760),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = L10n.text("Hisingen Settings")
+        window.contentMinSize = NSSize(width: 820, height: 600)
+        window.contentViewController = host
+        window.isReleasedWhenClosed = false
+        if isNewWindow {
+            window.setContentSize(NSSize(width: 1_080, height: 760))
+            window.center()
+        }
+        window.setFrameAutosaveName("HisingenSettingsWindowV2")
+        settingsWindow = window
+        statusController.dismissSettings()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func closeSettingsWindow() {
+        settingsWindow?.orderOut(nil)
     }
 
     func performRemoteCommand(_ command: RemoteCommand) {
@@ -296,20 +358,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch brand {
             case .polestar:
                 vehicleSession.switchToBrandAndResume(.polestar)
-                statusController.dismissSettings()
+                closeSettingsWindow()
             case .volvo:
                 if preferences.hasResumableSession(for: .volvo) {
                     vehicleSession.switchToBrandAndResume(.volvo)
-                    statusController.dismissSettings()
+                    closeSettingsWindow()
                 } else {
                     signInCoordinator.beginVolvoSignIn(clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
                 }
             }
         case .selectVehicle(let vin):
             selectVehicle(vin: vin)
-            statusController.dismissSettings()
+            closeSettingsWindow()
         case .closeSettings:
-            statusController.dismissSettings()
+            closeSettingsWindow()
         case .exportDiagnosticLogs:
             exportDiagnosticLogs()
         case .features:
@@ -367,8 +429,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentExportFailure(_ error: Error) {
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = L10n.text("Export Failed")
-        alert.informativeText = "\(L10n.text("The diagnostic report could not be written."))\n\n\(error.localizedDescription)"
+        alert.messageText = L10n.text("Export failed")
+        alert.informativeText = "\(L10n.text("The diagnostic report could not be created."))\n\n\(error.localizedDescription)"
         alert.addButton(withTitle: L10n.text("OK"))
         alert.runModal()
     }
@@ -497,14 +559,17 @@ extension AppDelegate: SignInCoordinatorContext {
         // A first successful sign-in hands off to the one-time setup pass instead of the
         // dashboard. The pass itself sets hasCompletedSetupPass on completion or skip.
         if !preferences.hasCompletedSetupPass {
+            closeSettingsWindow()
             statusController.showSetupPass()
             return
         }
-        statusController.dismissSettings()
+        closeSettingsWindow()
     }
 
     func refreshSettingsSurface() {
-        statusController.refreshPopoverIfNeeded()
+        guard settingsWindow?.isVisible == true else { return }
+        closeSettingsWindow()
+        showSettingsWindow()
     }
 
     func presentSignInNotice(title: String, body: String, subtitle: String?) {
@@ -546,11 +611,15 @@ extension AppDelegate: URLCommandRouterContext {
     }
 
     func showSettings() {
-        statusController.showSettings()
+        showSettingsWindow()
     }
 
     func toggleSettings() {
-        statusController.toggleSettings()
+        if settingsWindow?.isVisible == true {
+            closeSettingsWindow()
+        } else {
+            showSettingsWindow()
+        }
     }
 
     func togglePopover() {

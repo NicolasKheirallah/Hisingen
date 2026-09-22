@@ -230,7 +230,7 @@ struct SettingsNotificationsCard: View {
                             title: L10n.text("Evening reminder starts"),
                             \.eveningUnlockedStartHour,
                             values: Array(18...23),
-                            label: { String(format: "%02d:00", $0) }
+                            label: { String(format: "%02d:00", locale: L10n.displayLocale, $0) }
                         )
                         .transition(Self.dependentRowTransition)
                     }
@@ -241,7 +241,7 @@ struct SettingsNotificationsCard: View {
                     notificationRow(
                         symbol: "speaker.wave.2.fill",
                         title: "Notification Sounds",
-                        detail: "Play a sound on urgent alerts – alarms, warnings and charging problems",
+                        detail: "Play a sound on urgent alerts: alarms, warnings and charging problems",
                         \.notifySounds
                     )
 
@@ -263,7 +263,7 @@ struct SettingsNotificationsCard: View {
                             Spacer()
                             Picker("", selection: binder(\.quietHoursStartHour, .notifications)) {
                                 ForEach(0..<24, id: \.self) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
+                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, h)).tag(h)
                                 }
                             }
                             .labelsHidden()
@@ -275,7 +275,7 @@ struct SettingsNotificationsCard: View {
                                 .foregroundStyle(.secondary)
                             Picker("", selection: binder(\.quietHoursEndHour, .notifications)) {
                                 ForEach(0..<24, id: \.self) { h in
-                                    Text(String(format: "%02d:00", h)).tag(h)
+                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, h)).tag(h)
                                 }
                             }
                             .labelsHidden()

@@ -22,16 +22,16 @@ struct VehicleActivityList: View {
             ForEach(events) { event in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(event.title).font(.caption.weight(.semibold))
+                        Text(event.title).hisType(.caption, weight: .semibold)
                         Spacer()
-                        Text(event.timestamp, style: .date).font(.caption2).foregroundStyle(.secondary)
-                        Text(event.timestamp, style: .time).font(.caption2).foregroundStyle(.secondary)
+                        Text(event.timestamp, style: .date).hisType(.micro).foregroundStyle(.secondary)
+                        Text(event.timestamp, style: .time).hisType(.micro).foregroundStyle(.secondary)
                     }
-                    Text(event.summary).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(event.summary).hisType(.caption).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Text(L10n.text("Observed changes while Hisingen was running. Software times indicate when a version change was first seen."))
-                .font(.caption2).foregroundStyle(.secondary)
+                .hisType(.micro).foregroundStyle(.secondary)
         }
     }
 }

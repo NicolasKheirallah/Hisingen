@@ -43,7 +43,8 @@ enum SignInFailureKind: Equatable, Sendable {
             return .sessionExpired
         case .permissionDenied where provider == .polestar:
             return .interactiveChallenge
-        case .client, .permissionDenied, .responseTooLarge, .unsupported, .secureStorage:
+        case .client, .permissionDenied, .responseTooLarge, .unsupported, .secureStorage,
+             .keychainConsentRequired:
             return .unspecified
         }
     }
@@ -75,9 +76,9 @@ final class ConnectionTester {
         _ = try await provider.fetchVehicleState(vin: vin, features: preferences.features)
     }
 
-    func test(brand: VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) {
+    func test(brand: VehicleBrand) async -> ConnectionCheck {
         guard preferences.hasResumableSession(for: brand) else {
-            return (false, L10n.text("No active session found. Please sign in."), nil)
+            return ConnectionCheck(success: false, message: L10n.text("No active session found. Please sign in."), failureKind: nil)
         }
         let start = Date()
         do {
@@ -85,18 +86,19 @@ final class ConnectionTester {
             let providerCars = try await sessionManager.restore(api: provider, preferences: preferences)
             guard !providerCars.isEmpty else {
                 if brand == .polestar, (preferences.polestarConnectionMode == .dataPortal || preferences.polestarConnectionMode == .augmented) {
-                    return (true, L10n.text("Developer Portal verified (0 vehicles linked). Link your VIN in the portal."), nil)
+                    return ConnectionCheck(success: true, message: L10n.text("Developer Portal verified (0 vehicles linked). Link your VIN in the portal."), failureKind: nil)
                 }
-                return (false, L10n.text("Signed in, but no vehicles were returned."), .unspecified)
+                return ConnectionCheck(success: false, message: L10n.text("Signed in, but no vehicles were returned."), failureKind: .unspecified)
             }
             try await verifyTelemetry(provider: provider, brand: brand)
             let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
-            return (true, L10n.format("Connection active & verified (%d ms)", elapsedMs), nil)
+            return ConnectionCheck(success: true, message: L10n.format("Connection active & verified (%d ms)", elapsedMs), failureKind: nil)
         } catch {
             logger.error("Connection test for \(brand.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             let mapped = VehicleServiceError.map(error, provider: brand)
-            return (false, mapped.errorDescription ?? error.localizedDescription,
-                    SignInFailureKind.classify(error, provider: brand))
+            return ConnectionCheck(success: false,
+                                   message: mapped.errorDescription ?? error.localizedDescription,
+                                   failureKind: SignInFailureKind.classify(error, provider: brand))
         }
     }
 }

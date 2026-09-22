@@ -34,7 +34,7 @@ struct PanelActions {
     let onDismissCommandReceipt: (UUID) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
-    let onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?)
+    let onTestConnection: (VehicleBrand) async -> ConnectionCheck
     let onCompleteSetup: () -> Void
 }
 
@@ -45,15 +45,18 @@ struct PanelActions {
 final class PanelModel: ObservableObject {
     @Published private(set) var display: PanelDisplay
     let actions: PanelActions
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
+    let accountConnection: AccountConnectionModel
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
 
     init(display: PanelDisplay, actions: PanelActions,
-         database: VehicleDatabase, reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache) {
+         history: HistoryWorkspace, accountConnection: AccountConnectionModel,
+         reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache) {
         self.display = display
         self.actions = actions
-        self.database = database
+        self.history = history
+        self.accountConnection = accountConnection
         self.reverseGeocoder = reverseGeocoder
         self.imageCache = imageCache
     }

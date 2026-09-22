@@ -62,24 +62,6 @@ final class PreferencesStore {
         return mode
     }
 
-
-    struct AccountDraft {
-        var polestarEmail = ""
-        var polestarPassword = ""
-        var polestarVIN = ""
-        var polestarNickname = ""
-        var polestarDataPortalAccountID = ""
-        var polestarDataPortalClientID = ""
-        var polestarDataPortalClientSecret = ""
-        var volvoClientID = ""
-        var volvoClientSecret = ""
-        var volvoApiKey = ""
-        var volvoVIN = ""
-        var volvoNickname = ""
-    }
-
-    var accountDraft = AccountDraft()
-
     enum SettingsTransferError: LocalizedError {
         case invalidArchive
         var errorDescription: String? { L10n.text("The selected file is not a valid Hisingen settings archive.") }
@@ -312,21 +294,29 @@ final class PreferencesStore {
     var email: String {
         get {
             if let cached = cachedEmail { return cached }
-            let value: String
-            if let secure = (try? keychain.readEmail()) ?? nil, !secure.isEmpty {
-                d.removeObject(forKey: "polestar_email")
-                value = secure
-            } else if let legacy = d.string(forKey: "polestar_email"), !legacy.isEmpty {
+            do {
+                if let secure = try keychain.readEmail(), !secure.isEmpty {
+                    d.removeObject(forKey: "polestar_email")
+                    cachedEmail = secure
+                    return secure
+                }
+            } catch KeychainError.interactionRequired {
+                // An ACL consent is pending and may be unanswerable from this context (a
+                // background launch). Leave the cache unset: once the owner approves access,
+                // the next read must actually retry instead of replaying a cached empty.
+                return ""
+            } catch {}
+            let legacy = d.string(forKey: "polestar_email")
+            if let legacy, !legacy.isEmpty {
                 do {
                     try keychain.saveEmail(legacy)
                     d.removeObject(forKey: "polestar_email")
                 } catch {}
-                value = legacy
-            } else {
-                value = ""
+                cachedEmail = legacy
+                return legacy
             }
-            cachedEmail = value
-            return value
+            cachedEmail = ""
+            return ""
         }
         set {
             let previous = cachedEmail

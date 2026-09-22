@@ -11,7 +11,7 @@ enum VehicleReading: String, Codable, CaseIterable, Sendable {
         case .battery: return L10n.text("Battery")
         case .range: return L10n.text("Range")
         case .charging: return L10n.text("Charging")
-        case .climateStatus: return L10n.text("Climate Status")
+        case .climateStatus: return L10n.text("Climate status")
         case .locks: return L10n.text("Locks")
         case .openings: return L10n.text("Doors & Openings")
         case .health: return L10n.text("Vehicle Health")

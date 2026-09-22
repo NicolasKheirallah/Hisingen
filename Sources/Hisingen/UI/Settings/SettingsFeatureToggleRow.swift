@@ -47,6 +47,7 @@ struct SettingsFeatureToggleRow: View {
                     var updated = binder.preferences.features
                     updated.set(feature, enabled: enabled)
                     binder.preferences.features = updated
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                     binder.bump()
                     binder.notify(.features)
                 }

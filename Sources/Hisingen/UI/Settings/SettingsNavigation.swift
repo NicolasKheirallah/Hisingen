@@ -1,31 +1,5 @@
 import SwiftUI
 
-enum SettingsValidation {
-    static func isValidEmail(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: "@", omittingEmptySubsequences: false)
-        return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".") && !trimmed.contains(" ")
-    }
-
-    static func isValidOptionalVIN(_ value: String) -> Bool {
-        let vin = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !vin.isEmpty else { return true }
-        guard vin.count == 17 else { return false }
-        return vin.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
-            && !vin.contains(where: { "IOQ".contains($0) })
-    }
-
-    static func isValidElectricityPrice(_ text: String) -> Bool {
-        guard let value = NumberParsing.decimal(from: text) else { return false }
-        return (0.01...1_000).contains(value)
-    }
-
-    static func isValidCurrencySymbol(_ text: String) -> Bool {
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (1...8).contains(value.count) && !value.contains(where: \.isNewline)
-    }
-}
-
 /// Stable, testable settings destinations. Search is intentionally section based: it
 /// keeps every control in its explanatory card instead of returning orphaned toggles.
 enum SettingsSection: String, CaseIterable, Identifiable {
@@ -85,6 +59,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsNavigationBar: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     @Binding var selection: SettingsSection
     @Binding var searchText: String
 
@@ -177,7 +152,83 @@ struct SettingsNavigationBar: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.045, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+}
+
+/// Stable desktop navigation for the award concept's Settings editor. Wide panels keep every
+/// destination visible, while the existing horizontal control remains the compact fallback.
+struct SettingsSidebar: View {
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Binding var selection: SettingsSection
+    @Binding var searchText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.text("Settings"))
+                    .hisType(size: 28, weight: .bold)
+                Text(L10n.text("Changes save automatically"))
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(L10n.text("Search settings"), text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button { searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel(L10n.text("Clear Search"))
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 38)
+            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.055, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 3) {
+                    ForEach(SettingsSection.allCases) { section in
+                        if searchText.isEmpty || section == .all || section.matches(searchText) {
+                            Button { selection = section } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: section.symbol)
+                                        .frame(width: 18)
+                                    Text(section.title)
+                                        .lineLimit(1)
+                                    Spacer()
+                                }
+                                .hisType(.label, weight: selection == section ? .bold : .medium)
+                                .foregroundStyle(selection == section ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 42)
+                                .background(alignment: .leading) {
+                                    if selection == section {
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(Color.primary.opacity(0.075))
+                                            .overlay(alignment: .leading) {
+                                                Capsule()
+                                                    .fill(HisingenTheme.accent)
+                                                    .frame(width: 3)
+                                                    .padding(.vertical, 8)
+                                            }
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.pressable)
+                            .accessibilityAddTraits(selection == section ? .isSelected : [])
+                        }
+                    }
+                }
+            }
+        }
+        .padding(22)
     }
 }
 

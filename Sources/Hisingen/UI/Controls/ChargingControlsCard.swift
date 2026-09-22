@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct ChargingControlsCard: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let state: VehicleState
     let gate: ControlsCommandGate
     let onShowSchedule: (ScheduleKind) -> Void
@@ -205,10 +206,14 @@ struct ChargingControlsCard: View {
                             .hisType(.micro, weight: selected ? .bold : .medium)
                             .padding(.vertical, 3)
                             .frame(maxWidth: .infinity)
-                            .background(
-                                selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05),
-                                in: RoundedRectangle(cornerRadius: 6)
-                            )
+                            .background {
+                                if selected {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(HisingenTheme.accent.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)))
+                                } else {
+                                    HoverChipFill(shape: RoundedRectangle(cornerRadius: 6))
+                                }
+                            }
                             .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
                             .animation(reduceMotion ? nil : Motion.selection, value: selected)
                     }
@@ -240,6 +245,7 @@ struct ChargingControlsCard: View {
                 )
                 .tint(HisingenTheme.semanticGood)
                 .disabled(gate.isDisabled(.setChargeTarget(chargeTarget)))
+                .accessibilityLabel(L10n.text("Charge target"))
                 .accessibilityValue(Format.percent(Double(
                     chargeTargetDraft.map { Int($0.rounded()) } ?? chargeTarget
                 )))
@@ -346,6 +352,7 @@ struct ChargingControlsCard: View {
                 )
                 .tint(HisingenTheme.semanticWarning)
                 .disabled(gate.isDisabled(.setAmpLimit(ampLimit)))
+                .accessibilityLabel(L10n.text("Current limit"))
                 .accessibilityValue(Format.amps(
                     ampLimitDraft.map { Int($0.rounded()) } ?? ampLimit
                 ))

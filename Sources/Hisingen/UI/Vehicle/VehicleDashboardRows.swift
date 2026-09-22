@@ -91,9 +91,9 @@ enum VehicleDashboardRows {
             // The fuel card warned below 12 %; the row keeps exactly that threshold.
             tint = level <= 12 ? HisingenTheme.semanticWarning : HisingenTheme.ink
             if let range = state.fuelSystem.rangeKm {
-                value = "\(String(format: "%.0f%%", level)) · \(Format.distance(km: range, unit: distanceUnit))"
+                value = "\(String(format: "%.0f%%", locale: L10n.displayLocale, level)) · \(Format.distance(km: range, unit: distanceUnit))"
             } else {
-                value = String(format: "%.0f%%", level)
+                value = String(format: "%.0f%%", locale: L10n.displayLocale, level)
             }
         } else if let running {
             symbol = "engine.combustion.fill"
@@ -136,8 +136,8 @@ private struct DepartureCheckDisclosure: View {
                 Text(departureIsPast
                      ? L10n.text("That departure time has passed. Pick a new one to check readiness.")
                      : VehicleReadiness.chargingByDeparture(state, departure: departure))
-                    .font(.caption).fixedSize(horizontal: false, vertical: true)
-                Text(state.chargingEstimateDestination).font(.caption2).foregroundStyle(.secondary)
+                    .hisType(.caption).fixedSize(horizontal: false, vertical: true)
+                Text(state.chargingEstimateDestination).hisType(.micro).foregroundStyle(.secondary)
             }.padding(.top, 6)
         } label: {
             HStack(spacing: 10) {

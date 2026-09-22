@@ -48,15 +48,24 @@ struct DiagnosticSourceGuardrailTests {
             )
         }
 
-        let accountForm = try String(
-            contentsOf: uiRoot.appendingPathComponent("Settings/AccountCredentialsForm.swift"),
+        // The connection health and renewability decisions moved out of the account form
+        // into `AccountConnectionModel`; the same rule follows them there. Their span must
+        // classify from presence bits and the typed failure kinds alone — never from the
+        // Keychain-backed email, whose first read can trigger a Keychain round-trip.
+        let connectionModel = try String(
+            contentsOf: packageRoot.appendingPathComponent(
+                "Sources/Hisingen/Services/Security/AccountConnectionModel.swift"),
             encoding: .utf8)
-        let renewable = try #require(accountForm.range(of: "private var hasRenewableCredentials"))
-        let renewableTail = accountForm[renewable.lowerBound...]
-        let health = try #require(renewableTail.range(of: "private var connectionHealth"))
+        let factsStart = try #require(
+            connectionModel.range(of: "func isConnected(_ brand: VehicleBrand)")
+        ).lowerBound
+        let factsTail = connectionModel[factsStart...]
+        let authFailureStart = try #require(
+            factsTail.range(of: "private func isAuthFailure")
+        ).lowerBound
         #expect(
-            !renewableTail[..<health.lowerBound].contains("preferences.email"),
-            "SwiftUI credential-presence rendering must not indirectly read the Keychain-backed email."
+            !factsTail[..<authFailureStart].contains("preferences.email"),
+            "Connection-health classification must use presence bits, not the Keychain-backed email."
         )
 
         let preferences = packageRoot.appendingPathComponent(

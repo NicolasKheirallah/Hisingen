@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 struct ControlsBanners: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let state: VehicleState
     let feedback: RemoteCommandFeedback?
     let features: Set<AppFeature>
@@ -82,7 +83,7 @@ struct ControlsBanners: View {
         }
         .padding(10)
         .background(
-            (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.10),
+            (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)),
             in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
         )
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -109,7 +110,7 @@ struct ControlsBanners: View {
             Spacer()
         }
         .padding(10)
-        .background(HisingenTheme.semanticWarning.opacity(0.10), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
+        .background(HisingenTheme.semanticWarning.opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }

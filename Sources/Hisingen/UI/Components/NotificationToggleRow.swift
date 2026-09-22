@@ -5,6 +5,8 @@ import SwiftUI
 /// settings cards reuse one layout and one accessibility treatment
 /// (label + hint on the toggle) instead of hand-rolling rows.
 struct NotificationToggleRow: View {
+    @State private var hovered = false
+
     let symbol: String
     let title: String
     let detail: String
@@ -33,9 +35,18 @@ struct NotificationToggleRow: View {
                 .accessibilityHint(L10n.text(detail))
         }
         .padding(.vertical, 3)
-        // The row reads as one control and it is the row a reader aims at, but only the mini switch
-        // was clickable: everything left of it was a dead zone that looked live.
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(hovered ? 0.05 : 0))
+        )
+        .hisAnimation(Motion.interaction, value: hovered)
+        // The row reads as one control and it is the row a reader aims at, but only the mini
+        // switch was clickable: everything left of it was a dead zone that looked live.
         .contentShape(Rectangle())
-        .onTapGesture { isOn.wrappedValue.toggle() }
+        .onTapGesture { isOn.wrappedValue.toggle() } // row hosts a nested switch, so no Button
+        .onHover { hovered = $0 }
+        .onChange(of: isOn.wrappedValue) { _, _ in
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
     }
 }

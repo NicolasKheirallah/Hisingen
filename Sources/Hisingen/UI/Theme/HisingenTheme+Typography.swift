@@ -140,6 +140,13 @@ struct HisingenScaledType: ViewModifier {
         self.design = design
     }
 
+    /// The bespoke-size path for ``View/hisType(size:relativeTo:weight:design:)``.
+    init(customSize: CGFloat, relativeTo textStyle: Font.TextStyle, weight: Font.Weight, design: Font.Design) {
+        _size = ScaledMetric(wrappedValue: customSize, relativeTo: textStyle)
+        self.weight = weight
+        self.design = design
+    }
+
     /// The reader's text-size setting first, then the density preset on top of it. The order
     /// matters: density is a layout preference and must not undo a text-size choice, so it is a
     /// modest multiplier on an already-scaled value rather than a replacement for it.
@@ -152,8 +159,11 @@ struct HisingenScaledType: ViewModifier {
             .font(.system(size: renderedSize, weight: weight, design: design))
             // Tracking follows the *rendered* size, so a reader who enlarges their text gets the
             // same optical relationship the fixed sizes were tuned for instead of a 9pt tracking
-            // value applied to 13pt type.
-            .tracking(HisingenTheme.tracking(forSize: renderedSize))
+            // value applied to 13pt type. From displaySmall up the text is display type, so the
+            // negative display ratio applies instead of the small-text table.
+            .tracking(renderedSize >= HisingenTheme.TypeTier.displaySmall.baseSize
+                      ? HisingenTheme.displayTracking(forSize: renderedSize)
+                      : HisingenTheme.tracking(forSize: renderedSize))
     }
 }
 
@@ -166,5 +176,49 @@ extension View {
         design: Font.Design = .default
     ) -> some View {
         modifier(HisingenScaledType(tier: tier, weight: weight, design: design))
+    }
+
+    /// A bespoke composition figure that still obeys the ramp's mechanics: the size is the
+    /// call site's choice (the award compositions carry their own 24–42pt instrument scale),
+    /// while text-size scaling, the density multiplier and optical tracking stay owned here.
+    /// Frozen `.font(.system(size:))` at a call site remains a violation; this is the way to
+    /// opt out of the tier list without opting out of the system.
+    @MainActor
+    func hisType(
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .largeTitle,
+        weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> some View {
+        modifier(HisingenScaledType(customSize: size, relativeTo: textStyle, weight: weight, design: design))
+    }
+
+    /// An SF Symbol that scales with the reader's text size. Symbols frozen at a point size
+    /// stay put while the ``hisType`` text beside them grows, which breaks the row they sit in.
+    @MainActor
+    func hisSymbolSize(
+        _ size: CGFloat,
+        relativeTo textStyle: Font.TextStyle = .body,
+        weight: Font.Weight = .regular
+    ) -> some View {
+        modifier(HisingenScaledSymbol(size: size, relativeTo: textStyle, weight: weight))
+    }
+}
+
+/// A symbol size that tracks the reader's text setting, for the ``View/hisSymbolSize``
+/// modifier. The density multiplier does not apply: a glyph sits in a text row, not on the
+/// instrument scale.
+@MainActor
+struct HisingenScaledSymbol: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, relativeTo textStyle: Font.TextStyle, weight: Font.Weight) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: textStyle)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
     }
 }

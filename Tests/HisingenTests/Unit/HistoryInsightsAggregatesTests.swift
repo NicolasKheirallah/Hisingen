@@ -56,12 +56,6 @@ struct HistoryInsightsAggregatesTests {
                             degradationPct: 100 - sohPct, effectiveUsableKwh: 75 * sohPct / 100)
     }
 
-    private func airQuality(_ id: Int64, daysAfterStart: Double, index: Double?) -> AirQualityRecord {
-        AirQualityRecord(id: id, vin: "VIN", timestamp: start.addingTimeInterval(daysAfterStart * 86_400),
-                         airQualityIndex: index, particulateMatter25: nil, particulateMatter10: nil,
-                         filterRemainingPercent: nil)
-    }
-
     private func command(_ id: String, minutesAfterStart: Double, name: String, status: String) -> RemoteCommandAuditRecord {
         RemoteCommandAuditRecord(id: id, vin: "VIN", command: name, status: status,
                                  executedAt: start.addingTimeInterval(minutesAfterStart * 60), durationMs: nil, errorMessage: nil)
@@ -369,17 +363,6 @@ struct HistoryInsightsAggregatesTests {
         // come back nil rather than a nonsensical negative "health".
         let records = [batteryHealth(1, odometerKm: 0, sohPct: 100), batteryHealth(2, odometerKm: 1_000, sohPct: 50)]
         #expect(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 100_000) == nil)
-    }
-
-    // MARK: - Air quality trend
-
-    @Test
-    func testAirQualityTrendDropsNilAndSortsChronologically() {
-        let records = [airQuality(1, daysAfterStart: 1, index: 20), airQuality(2, daysAfterStart: 0, index: 10),
-                       airQuality(3, daysAfterStart: 0.5, index: nil)]
-        let points = HistoryInsights.airQualityTrend(from: records)
-        #expect(points.map(\.id) == [2, 1])
-        #expect(points.first!.timestamp < points.last!.timestamp)
     }
 
     // MARK: - Command statistics

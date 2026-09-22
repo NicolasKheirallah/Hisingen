@@ -24,13 +24,26 @@ struct PanelModelTests {
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {},
             onOpenUpdate: {}, onRemoteCommand: { _ in }, onSelectCar: { _ in },
             onDismissCommandReceipt: { _ in }, onSettingsChanged: { _ in },
-            onSignOut: {}, onTestConnection: { _ in (false, "", nil) }, onCompleteSetup: {})
+            onSignOut: {}, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
+    }
+
+    /// A store and keychain scoped to this test, paired into the connection model and the
+    /// history workspace the panel serves.
+    private func makeAccountServices(database: VehicleDatabase) -> (accountConnection: AccountConnectionModel, history: HistoryWorkspace) {
+        let suite = "HisingenTests.PanelModel.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        let store = PreferencesStore(defaults: defaults, keychain: keychain)
+        return (AccountConnectionModel(preferences: store, keychain: keychain),
+                HistoryWorkspace(database: database, preferences: store))
     }
 
     @Test func updatePublishesTheWholeDisplay() {
         let raw = try! SQLiteDatabase.inMemory()
+        let services = makeAccountServices(database: VehicleDatabase(database: raw))
         let model = PanelModel(display: makeDisplay(), actions: makeActions(),
-                               database: VehicleDatabase(database: raw),
+                               history: services.history,
+                               accountConnection: services.accountConnection,
                                reverseGeocoder: ReverseGeocoder(), imageCache: CarImageCache())
         var published = 0
         let cancellable = model.objectWillChange.sink { published += 1 }
@@ -55,9 +68,11 @@ struct PanelModelTests {
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {},
             onOpenUpdate: {}, onRemoteCommand: { _ in }, onSelectCar: { selectedVIN = $0 },
             onDismissCommandReceipt: { _ in }, onSettingsChanged: { _ in },
-            onSignOut: {}, onTestConnection: { _ in (false, "", nil) }, onCompleteSetup: {})
+            onSignOut: {}, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
+        let services = makeAccountServices(database: VehicleDatabase(database: raw))
         let model = PanelModel(display: makeDisplay(), actions: actions,
-                               database: VehicleDatabase(database: raw),
+                               history: services.history,
+                               accountConnection: services.accountConnection,
                                reverseGeocoder: ReverseGeocoder(), imageCache: CarImageCache())
 
         model.update(makeDisplay())

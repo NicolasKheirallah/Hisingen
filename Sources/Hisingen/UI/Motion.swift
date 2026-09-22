@@ -263,12 +263,6 @@ extension View {
         self.animation(Motion.resolveCrossfade(animation), value: value)
     }
 
-    /// The same, for a change that should become an instant swap rather than a crossfade under
-    /// Reduce Motion — a value settling rather than a state changing.
-    func hisSettlingAnimation<V: Equatable>(_ animation: Animation?, value: V) -> some View {
-        self.animation(Motion.resolve(animation), value: value)
-    }
-
     func hisTelemetryValue<V: Equatable>(_ value: V, reduceMotion: Bool) -> some View {
         contentTransition(reduceMotion ? .identity : .numericText())
             .monospacedDigit()
@@ -301,6 +295,7 @@ struct PressableButtonBody: View {
     let pressedOpacity: Double
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isFocused) private var isFocused
+    @State private var hovered = false
 
     /// The smallest comfortable target. The style used to leave the hit area entirely to the
     /// label, so the receipt dismiss button and both pager chevrons had ~9pt targets — below the
@@ -308,12 +303,19 @@ struct PressableButtonBody: View {
     /// all 61 `.pressable` sites at once, which is the same reason the style exists.
     private static let minimumTarget: CGFloat = 24
 
+    /// The pointer-over answer. Press dims to ``pressedOpacity``; hover takes a lighter step of
+    /// the same device, so every pressable acknowledges the pointer before the click the way
+    /// system buttons do. Chips that lift their fill through `HoverChipFill` get this on top:
+    /// fill and dim read as one response, not two.
+    private static let hoveredOpacity: Double = 0.9
+
     var body: some View {
         configuration.label
             .frame(minWidth: Self.minimumTarget, minHeight: Self.minimumTarget)
             .contentShape(Rectangle())
             .scaleEffect((reduceMotion || !configuration.isPressed) ? 1 : scale)
-            .opacity(configuration.isPressed ? pressedOpacity : 1)
+            .opacity(configuration.isPressed ? pressedOpacity : (hovered ? Self.hoveredOpacity : 1))
+            .onHover { hovered = $0 }
             // Keep keyboard focus visible without wrapping the whole control in a prominent ring.
             .overlay(alignment: .bottom) {
                 Capsule()
@@ -329,6 +331,8 @@ struct PressableButtonBody: View {
                        value: configuration.isPressed)
             .animation(reduceMotion ? .linear(duration: Motion.micro) : Motion.interaction,
                        value: isFocused)
+            .animation(reduceMotion ? .linear(duration: Motion.micro) : Motion.interaction,
+                       value: hovered)
     }
 }
 

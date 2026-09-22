@@ -16,11 +16,6 @@ enum CommandClientAuthorization: Sendable, Equatable {
 }
 
 extension PolestarAPI {
-    func validAccessToken() async throws -> String? {
-        try await refreshTokenIfNeeded()
-        return accessToken
-    }
-
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
         try Task.checkCancellation()
         guard !webAuthorization.isInProgress else { throw CancellationError() }
@@ -161,7 +156,7 @@ extension PolestarAPI {
     /// callers: which keychain item means "session" in which connection mode is this
     /// adapter's knowledge, not the security module's.
     func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
-        guard let token = try Keychain.readSessionToken(), !token.isEmpty else {
+        guard let token = try keychain.readSessionToken(), !token.isEmpty else {
             throw PolestarError.authenticationRequired(.noStoredSession)
         }
         try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)

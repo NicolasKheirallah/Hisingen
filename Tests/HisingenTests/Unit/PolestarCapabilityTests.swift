@@ -191,7 +191,7 @@ struct PolestarCapabilityTests {
             .tripMeters, enabled: true, vin: "VIN-A"
         ) { throw PolestarError.grpcUnavailable(service: "odometer") }
 
-        await api.clearTransientCapabilityBackoffAfterCommand(for: "VIN-A")
+        await api.capabilityAuthority.clearTransientBackoffAfterCommand(vin: "VIN-A")
 
         let diagnostics: CapabilityState<Int> = try await api.optionalCapability(
             .connectivityDiagnostics, enabled: true, vin: "VIN-A"

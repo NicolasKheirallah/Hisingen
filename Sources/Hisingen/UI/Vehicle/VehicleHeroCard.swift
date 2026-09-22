@@ -176,20 +176,14 @@ struct VehicleHeroCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        if greeting == nil, !nickname.isEmpty {
-                            Image(systemName: "sparkles")
-                                .hisType(.body)
-                                .foregroundStyle(HisingenTheme.accent)
-                        }
                         Text(primaryTitle)
                             .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
-                            .tracking(HisingenTheme.displayTracking(forSize: 17))
                             .foregroundStyle(HisingenTheme.ink)
                         Spacer()
                         if showPlateInline, let plate {
                             Text(plate.uppercased())
                                 .hisType(.body, weight: .bold, design: .monospaced)
-                                .tracking(0.5)
+                                .tracking(0.5) // plate spacing, not type tracking
                                 .foregroundStyle(HisingenTheme.ink)
                         }
                         if showModelInline {
@@ -312,7 +306,7 @@ struct VehicleHeroCard: View {
             if let exterior = state.exteriorStatus, let locked = exterior.isLocked {
                 Pill(
                     text: locked ? L10n.text("Locked") : L10n.text("Unlocked"),
-                    color: locked ? .secondary : HisingenTheme.semanticWarning,
+                    color: locked ? HisingenTheme.inkMuted : HisingenTheme.semanticWarning,
                     symbol: locked ? "lock.fill" : "lock.open.fill"
                 )
                 .transition(.scale.combined(with: .opacity))
@@ -326,7 +320,7 @@ struct VehicleHeroCard: View {
                     text: state.energy.chargingState.displayName,
                     color: isRecognised
                         ? HisingenTheme.statusColor(state: state.energy.chargingState)
-                        : Color.secondary,
+                        : HisingenTheme.inkMuted,
                     symbol: isRecognised ? (state.isCharging ? "bolt.fill" : nil) : "questionmark.circle"
                 )
                 // The pill persists across Charging → Complete; only its
@@ -346,7 +340,7 @@ struct VehicleHeroCard: View {
             if state.powertrain.isHybrid {
                 Pill(
                     text: state.powertrain.displayName,
-                    color: .indigo,
+                    color: HisingenTheme.semanticActive,
                     symbol: "bolt.and.leaf.fill"
                 )
                 .transition(.scale.combined(with: .opacity))
@@ -395,11 +389,13 @@ struct VehicleHeroCard: View {
         if state.powertrain.isCombustionOnly {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(state.fuelSystem.levelPercent.map { String(format: "%.0f%%", $0) }
-                         ?? state.fuelSystem.amountLiters.map { String(format: "%.0f L", $0) }
+                    Text(state.fuelSystem.levelPercent.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) }
+                         ?? state.fuelSystem.amountLiters.map { String(format: "%.0f L", locale: L10n.displayLocale, $0) }
                          ?? "–")
-                        .font(.system(size: heroValueSize, weight: HisingenTheme.displayWeight))
-                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize))
+                        // ScaledMetric owns text-size scaling here; the density multiplier and
+                        // display tracking come from the same tokens the tier modifier uses.
+                        .font(.system(size: heroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
+                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize * preferences.contentDensity.typeScale))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.fuelSystem.levelPercent, reduceMotion: reduceMotion)
@@ -429,14 +425,14 @@ struct VehicleHeroCard: View {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "–")
-                            .font(.system(size: compactHeroValueSize, weight: HisingenTheme.displayWeight))
-                            .tracking(HisingenTheme.displayTracking(forSize: compactHeroValueSize))
+                        Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) } ?? "–")
+                            .font(.system(size: compactHeroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
+                            .tracking(HisingenTheme.displayTracking(forSize: compactHeroValueSize * preferences.contentDensity.typeScale))
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.ink)
                             .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
                         if let fuel = state.fuelSystem.levelPercent {
-                            Text(String(format: "· %.0f%% %@", fuel, L10n.text("fuel")))
+                            Text(String(format: "· %.0f%% %@", locale: L10n.displayLocale, fuel, L10n.text("fuel")))
                                 .hisType(.subhead, weight: .medium)
                                 .foregroundStyle(HisingenTheme.inkMuted)
                         }
@@ -464,9 +460,11 @@ struct VehicleHeroCard: View {
         } else {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "–")
-                        .font(.system(size: heroValueSize, weight: HisingenTheme.displayWeight))
-                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize))
+                    Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) } ?? "–")
+                        // ScaledMetric owns text-size scaling here; the density multiplier and
+                        // display tracking come from the same tokens the tier modifier uses.
+                        .font(.system(size: heroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
+                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize * preferences.contentDensity.typeScale))
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)

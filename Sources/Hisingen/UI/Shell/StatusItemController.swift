@@ -38,6 +38,8 @@ final class StatusItemController: NSObject {
     }
     private var panelModel: PanelModel?
     private let database: VehicleDatabase
+    private let history: HistoryWorkspace
+    let accountConnection: AccountConnectionModel
     private let reverseGeocoder: ReverseGeocoder
     private let imageCache: CarImageCache
     private let preferences: PreferencesStore
@@ -74,8 +76,8 @@ final class StatusItemController: NSObject {
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
     var onSignOut: () -> Void = {}
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
-        (false, L10n.text("Connection testing is not available."), nil)
+    var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
+        ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
 
     private var selectedTabBinding: Binding<TabRef> {
@@ -114,6 +116,8 @@ final class StatusItemController: NSObject {
         self.onCheckForUpdates = onCheckForUpdates
         self.onRemoteCommand = onRemoteCommand
         self.database = database
+        self.history = HistoryWorkspace(database: database, preferences: preferences)
+        self.accountConnection = AccountConnectionModel(preferences: preferences)
         self.reverseGeocoder = reverseGeocoder
         self.imageCache = imageCache
         self.preferences = preferences
@@ -260,7 +264,7 @@ final class StatusItemController: NSObject {
                 modelYear: state.identity.modelYear,
                 registrationNo: state.identity.registrationNo
             )
-            let battery = state.energy.batteryPercentage.map { String(format: "%.0f%%", $0) } ?? "--"
+            let battery = state.energy.batteryPercentage.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) } ?? "--"
             let range = state.energy.rangeKm.map {
                 "\(preferences.distanceUnit.convert(km: $0)) \(preferences.distanceUnit.suffix)"
             } ?? "--"
@@ -720,7 +724,8 @@ final class StatusItemController: NSObject {
         let layout = PanelLayout.resolve(from: preferences)
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
         let model = PanelModel(display: currentPanelDisplay(), actions: makePanelActions(),
-                               database: database, reverseGeocoder: reverseGeocoder, imageCache: imageCache)
+                               history: history, accountConnection: accountConnection,
+                               reverseGeocoder: reverseGeocoder, imageCache: imageCache)
         panelModel = model
         let root = AnyView(PopoverRootView(model: model) { [weak self] panel in
             self?.makeRootView(panel: panel) ?? AnyView(EmptyView())
@@ -923,13 +928,13 @@ final class StatusItemController: NSObject {
             )
             var parts: [String] = [name]
             if let battery = state?.energy.batteryPercentage {
-                var batStr = String(format: "%.0f%%", battery)
+                var batStr = String(format: "%.0f%%", locale: L10n.displayLocale, battery)
                 if state?.isCharging == true {
                     batStr += " ⚡"
                 }
                 parts.append(batStr)
             } else if let fuel = state?.fuelSystem.levelPercent {
-                parts.append(String(format: "%.0f%% fuel", fuel))
+                parts.append(String(format: "%.0f%% fuel", locale: L10n.displayLocale, fuel))
             }
             if let range = state?.primaryRangeKm {
                 parts.append(Format.distance(km: range, unit: preferences.distanceUnit))
@@ -1019,7 +1024,11 @@ final class StatusItemController: NSObject {
     private func makePanelActions() -> PanelActions {
         PanelActions(
             onRefresh: { [weak self] in self?.onRefresh() },
-            onSettings: { [weak self] in self?.toggleSettings() },
+            onSettings: { [weak self] in
+                guard let self else { return }
+                self.popover.performClose(nil)
+                self.onSettings()
+            },
             onClose: { [weak self] in self?.popover.performClose(nil) },
             onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() },
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
@@ -1031,7 +1040,7 @@ final class StatusItemController: NSObject {
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },
             onTestConnection: { [weak self] brand in
-                await self?.onTestConnection(brand) ?? (false, L10n.text("Connection testing is not available."), nil)
+                await self?.onTestConnection(brand) ?? ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
             },
             onCompleteSetup: { [weak self] in self?.completeSetupPass() }
         )

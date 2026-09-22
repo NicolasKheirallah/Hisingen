@@ -89,6 +89,20 @@ extension VehicleState {
         freshness.vehicleReportedAt = max(freshness.vehicleReportedAt ?? .distantPast, reportedAt)
     }
 
+    /// How long a carried-forward reading may still stand in for a live one and earn the
+    /// last-known banner. Some providers can never serve a domain again after a mode switch
+    /// (the Developer Portal has no software or connectivity endpoints), so without a horizon
+    /// a retained value would pin the banner forever while aging without bound. Past this
+    /// window the value is stale history: the merge drops it and the freshness line carries
+    /// the age instead.
+    static let retainedDataHorizon: TimeInterval = 7 * 24 * 3600
+
+    /// The date a carried-forward domain's data is anchored to, for horizon checks.
+    private func lastKnownAnchorDate(for reading: VehicleReading) -> Date? {
+        reportedDate(for: reading) ?? freshness.retainedDataAt
+            ?? freshness.vehicleReportedAt ?? freshness.fetchedAt
+    }
+
     func mergingLastKnown(
         from previous: VehicleState?,
         features: FeatureSelection,
@@ -115,10 +129,19 @@ extension VehicleState {
         // Polestar reports a single version string whose meaning flips once an update is
         // pending, so the running version drops out of the payload for the whole rollout.
         // Carry the last settled reading forward – otherwise "Installed Version" disappears
-        // from the moment an update is offered until it finishes installing.
+        // from the moment an update is offered until it finishes installing. The carry
+        // respects the retention horizon: a provider that can no longer serve this domain
+        // must not hold a nine-day-old reading up as last-known forever. The anchor date is
+        // the PREVIOUS snapshot's reading date — the incoming refresh, by definition, has
+        // nothing for a domain it did not serve.
+        func previousReadingIsRecent(_ reading: VehicleReading) -> Bool {
+            guard let date = previous.lastKnownAnchorDate(for: reading) else { return false }
+            return fetchedAt.timeIntervalSince(date) < Self.retainedDataHorizon
+        }
         let mergedSoftware: VehicleSoftwareInfo? = {
             guard var current = softwareInfo else {
-                return policy.keep(.softwareUpdates) ? previous.softwareInfo : nil
+                return policy.keep(.softwareUpdates) && previousReadingIsRecent(.software)
+                    ? previous.softwareInfo : nil
             }
             if current.installedVersion == nil {
                 current.installedVersion = previous.softwareInfo?.installedVersion
@@ -138,7 +161,7 @@ extension VehicleState {
                 : (features.contains(.climateStatus) ? previous.climateTimers : []),
             tripComputer: tripComputer.merging(previous: previous.tripComputer, policy: policy),
             connectivity: connectivity ?? (features.contains(.connectivityDiagnostics) && !connectivityIsUnsupported
-                ? previous.connectivity : nil),
+                && previousReadingIsRecent(.connectivity) ? previous.connectivity : nil),
             airQuality: VehicleAirQuality.merging(incoming: airQuality, previous: previous.airQuality, policy: policy),
             weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),
             location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
@@ -153,8 +176,20 @@ extension VehicleState {
         if maintenance.odometerKm == nil { merged.freshness.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
         if maintenance.details == nil { merged.freshness.readingDates[.health] = previous.reportedDate(for: .health) }
 
-        var retained = Set(previous.retainedDataCategories.filter { !policy.wasRefreshed($0) })
+        // A retained mark means "the newest refresh did not include this, and the reading we
+        // kept is still recent enough to stand in for a live one". Data past the horizon is
+        // stale history, not a stand-in: drop the mark so the banner cannot pin forever on a
+        // domain the current provider structurally never serves.
+        let previousRetainedDataIsRecent = {
+            let date = previous.retainedDataAt
+                ?? previous.vehicleReportedAt ?? previous.fetchedAt
+            return fetchedAt.timeIntervalSince(date) < Self.retainedDataHorizon
+        }
+        var retained = previousRetainedDataIsRecent()
+            ? Set(previous.retainedDataCategories.filter { !policy.wasRefreshed($0) })
+            : []
         func markRetained(_ feature: AppFeature, currentIsMissing: Bool, previousWasPresent: Bool) {
+            guard previousRetainedDataIsRecent() else { return }
             if features.contains(feature), policy.wasRefreshed(feature), currentIsMissing, previousWasPresent {
                 retained.insert(feature)
             }

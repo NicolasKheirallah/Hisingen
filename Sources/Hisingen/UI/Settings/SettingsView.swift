@@ -13,8 +13,9 @@ struct SettingsView: View {
     var showsHeaderBar = true
     let onSettingsChanged: (SettingsChange) -> Void
     let onSignOut: () -> Void
-    var onTestConnection: (VehicleBrand) async -> (success: Bool, message: String, failureKind: SignInFailureKind?) = { _ in
-        (false, L10n.text("Connection testing is not available."), nil)
+    let accountConnection: AccountConnectionModel
+    var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
+        ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
 
     @State private var selectedSettingsSection = SettingsSection.all
@@ -24,9 +25,11 @@ struct SettingsView: View {
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
 
-    /// Section cards fade and settle from 98% – a nudge, not a zoom (scale floor 0.95).
-    private static let sectionSwapTransition: AnyTransition =
-        .opacity.combined(with: .scale(scale: 0.98))
+    /// Native text fields and segmented controls must not join an implicit section transition.
+    /// AppKit rounds interpolated fitting widths independently, which can briefly invert
+    /// SwiftUI's min/max constraints. The moving section indicator carries the continuity while
+    /// the destination content swaps at its final geometry.
+    private static let sectionSwapTransition: AnyTransition = .identity
 
     private var binder: PreferenceBinder {
         PreferenceBinder(
@@ -42,14 +45,52 @@ struct SettingsView: View {
             if showsHeaderBar {
                 headerBar
             }
-            SettingsNavigationBar(
-                selection: $selectedSettingsSection,
-                searchText: $settingsSearchText
-            )
-            .padding(.horizontal, HisingenTheme.sectionSpacing)
+            if !showsHeaderBar || HisingenTheme.layoutWidth >= 800 {
+                HStack(spacing: 0) {
+                    SettingsSidebar(
+                        selection: $selectedSettingsSection,
+                        searchText: $settingsSearchText
+                    )
+                    .frame(width: 238)
+                    Divider()
+                    settingsContent
+                }
+            } else {
+                SettingsNavigationBar(
+                    selection: $selectedSettingsSection,
+                    searchText: $settingsSearchText
+                )
+                .padding(.horizontal, HisingenTheme.sectionSpacing)
+                settingsContent
+            }
+        }
+        .frame(maxWidth: showsHeaderBar ? HisingenTheme.layoutWidth : .infinity, maxHeight: .infinity)
+        .onAppear {
+            persistLocationHistory = preferences.persistLocationHistory
+        }
+        .confirmationDialog(
+            L10n.text("Enable every remote-control feature?"),
+            isPresented: $showEnableRemoteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.text("Enable Remote Controls")) {
+                var updated = preferences.features
+                for feature in AppFeature.remoteFeatures {
+                    updated.set(feature, enabled: true)
+                }
+                preferences.features = updated
+                prefsTick &+= 1
+                onSettingsChanged(.features)
+            }
+            Button(L10n.text("Cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.text("Remote features can change charging, climate, locks, windows, and vehicle software. Each command still requires an explicit action."))
+        }
+    }
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: HisingenTheme.sectionSpacing) {
+    private var settingsContent: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) {
                         Group {
                             accountCard
@@ -137,36 +178,9 @@ struct SettingsView: View {
                         .padding(.vertical, 30)
                         .transition(.opacity)
                     }
-                }
-                .padding(HisingenTheme.sectionSpacing)
-                .frame(maxWidth: .infinity)
-                // Card insertions/removals are driven by section picks and search
-                // edits; both ride Motion.cardChange so the swap reads as one system.
-                .hisAnimation(Motion.cardChange, value: selectedSettingsSection)
-                .hisAnimation(Motion.cardChange, value: settingsSearchText)
             }
-        }
-        .frame(maxWidth: HisingenTheme.layoutWidth, maxHeight: .infinity)
-        .onAppear {
-            persistLocationHistory = preferences.persistLocationHistory
-        }
-        .confirmationDialog(
-            L10n.text("Enable every remote-control feature?"),
-            isPresented: $showEnableRemoteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.text("Enable Remote Controls")) {
-                var updated = preferences.features
-                for feature in AppFeature.remoteFeatures {
-                    updated.set(feature, enabled: true)
-                }
-                preferences.features = updated
-                prefsTick &+= 1
-                onSettingsChanged(.features)
-            }
-            Button(L10n.text("Cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.text("Remote features can change charging, climate, locks, windows, and vehicle software. Each command still requires an explicit action."))
+            .padding(HisingenTheme.sectionSpacing)
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -232,12 +246,13 @@ struct SettingsView: View {
                 CardHeader(
                     symbol: "person.crop.circle",
                     title: L10n.text("Account"),
-                    color: .accentColor
+                    color: HisingenTheme.accent
                 )
                 AccountCredentialsForm(
                     style: .compact,
                     onSettingsChanged: onSettingsChanged,
-                    onTestConnection: onTestConnection
+                    onTestConnection: onTestConnection,
+                    model: accountConnection
                 )
             }
         }
@@ -257,7 +272,7 @@ struct SettingsView: View {
                 onSettingsChanged(.features)
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "sparkles")
+                    Image(systemName: "checkmark.seal.fill")
                     Text(L10n.text("Add Recommended"))
                 }
                 .hisType(.label, weight: .semibold)

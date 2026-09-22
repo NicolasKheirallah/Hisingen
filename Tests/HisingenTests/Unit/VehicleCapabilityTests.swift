@@ -118,48 +118,6 @@ struct VehicleCapabilityTests {
     }
 
     @Test
-    func featureStatusDistinguishesCapabilityFromAvailability() {
-        let profile = VehicleCapabilityProfile(modelName: "Polestar 4")
-        let onlineState = vehicle(vin: "VIN-P4")
-        let status = profile.featureStatus(for: .climateStartStop, in: onlineState)
-        #expect(status.isVisible)
-        #expect(status.isUsable)
-    }
-
-    @Test
-    func featureStatusReportsOfflineWhenVehicleUnavailable() {
-        let profile = VehicleCapabilityProfile(modelName: "Polestar 4")
-        var offlineState = vehicle(vin: "VIN-P4")
-        offlineState = VehicleState(
-            batteryPercentage: offlineState.energy.batteryPercentage, rangeKm: offlineState.energy.rangeKm,
-            chargingState: offlineState.energy.chargingState,
-            estimatedChargingTimeToFullMinutes: offlineState.energy.estimatedTimeToFullMinutes,
-            chargeTargetPercentage: offlineState.energy.targetPercentage,
-            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
-            chargingType: .unknown, chargerConnection: .unknown,
-            availability: .unavailable(reason: "Power saving"),
-            modelName: "Polestar 4", modelYear: nil, registrationNo: nil,
-            vin: "VIN-P4", ownerFirstName: nil, odometerKm: nil,
-            daysToService: nil, distanceToServiceKm: nil, serviceWarning: false,
-            fluidWarnings: [], imageData: nil, fetchedAt: Date(),
-            vehicleReportedAt: Date(), dataWarnings: []
-        )
-        let status = profile.featureStatus(for: .climateStartStop, in: offlineState)
-        #expect(status.isVisible)
-        #expect(!(status.isUsable))
-        #expect(status.availability == .vehicleOffline)
-    }
-
-    @Test
-    func unsupportedCapabilityIsNeverUsable() {
-        let profile = VehicleCapabilityProfile(modelName: "Polestar 4")
-        let state = vehicle(vin: "VIN-P4")
-        let status = profile.featureStatus(for: .chargingCurrentLimit, in: state)
-        #expect(!(status.isVisible))
-        #expect(!(status.isUsable))
-    }
-
-    @Test
     func volvoXC40AndEX40HideSelectableTemperatureAndSeatHeating() {
         let xc40Profile = VehicleCapabilityProfile(modelName: "XC40 Recharge")
         #expect(!(xc40Profile.hasSelectableClimateTemperature))

@@ -32,9 +32,6 @@ actor PolestarDataPortalAPI {
     let preferences: PreferencesStore
     let diagnosticLog: APIDiagnosticLogStore
 
-    // MARK: - Supported OAuth Scopes (EU Data Act)
-    nonisolated static let supportedScopes = "pdp-telemetry/availability pdp-telemetry/battery pdp-telemetry/exterior pdp-telemetry/health pdp-telemetry/location pdp-telemetry/odometer pdp-telemetry/parkingClimatization pdp-telemetry/preCleaning pdp-charging/ampLimit pdp-charging/chargeLocations pdp-charging/overrideChargeTimer pdp-charging/globalChargeTimer pdp-charging/isAtChargeLocation pdp-charging/parkingClimateTimer pdp-charging/targetSoc"
-
     // MARK: - Daily Quota Tracking (10,000 calls/day limit)
     nonisolated static let dailyCallLimit = 10_000
 
@@ -83,12 +80,6 @@ actor PolestarDataPortalAPI {
     }
 
     #if DEBUG
-    nonisolated static func resetDailyQuotaForTesting() {
-        if let store = quotaStateStore { store.set(0, ""); return }
-        UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_calls")
-        UserDefaults.standard.removeObject(forKey: "polestar_dataportal_daily_date")
-    }
-
     nonisolated static func setDailyQuotaForTesting(count: Int, date: Date) {
         let dateStr = quotaDateFormatter().string(from: date)
         if let store = quotaStateStore { store.set(count, dateStr); return }

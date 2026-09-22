@@ -76,8 +76,6 @@ extension VehicleState {
     var tripMeterManualKm: Double? { tripComputer.manualTripKm }
     var tripMeterAutomaticKm: Double? { tripComputer.automaticTripKm }
     var averageSpeedKmH: Double? { tripComputer.averageSpeedKmH }
-    var tripManualAverageSpeedKmH: Int? { tripComputer.manualAverageSpeedKmH }
-    var tripAutomaticAverageSpeedKmH: Int? { tripComputer.automaticAverageSpeedKmH }
     var tripComputerElectricRangeKm: Int? { tripComputer.electricRangeKm }
     var electricDistanceKm: Double? { tripComputer.electricDistanceKm }
     var fuelDistanceKm: Double? { tripComputer.fuelDistanceKm }

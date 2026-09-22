@@ -157,8 +157,8 @@ final class VehicleHistoryLedger: Sendable {
     nonisolated static func dashboardQueryStart(
         for range: ClosedRange<Date>?, now: Date = Date(), calendar: Calendar = .current
     ) -> Date? {
-        guard range != nil else { return nil }
-        var starts = [range!.lowerBound]
+        guard let range else { return nil }
+        var starts = [range.lowerBound]
         if let month = HistoryInsights.monthToDateWindows(now: now, calendar: calendar) {
             starts.append(month.previous.start)
         }
@@ -241,15 +241,6 @@ final class VehicleHistoryLedger: Sendable {
             }
             return result
         }) ?? [:]
-    }
-
-    func monthlyMileageReports(for vin: String, limit: Int = 5_000,
-                               calendar: Calendar = .current) -> [MonthlyMileageReport] {
-        MonthlyMileageReport.build(
-            from: derivedTrips(for: vin, limit: limit),
-            purposes: tripPurposes(for: vin),
-            calendar: calendar
-        )
     }
 
     // MARK: - Ambient and vehicle histories
@@ -383,12 +374,6 @@ final class VehicleHistoryLedger: Sendable {
             if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
         })
         return total
-    }
-
-    /// First→last odometer span across stored telemetry, when both ends exist (km).
-    func lifetimeOdometerSpanKm(for vin: String) -> Double? {
-        let points = HistoryInsights.odometerTrend(from: recentTelemetry(for: vin, limit: 10_000))
-        return HistoryInsights.distanceCovered(from: points)
     }
 
     // MARK: - CSV exporters

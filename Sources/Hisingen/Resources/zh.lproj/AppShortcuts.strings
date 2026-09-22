@@ -1,0 +1,25 @@
+// App Intents Siri phrases and short titles. Keys are the code-side English literals;
+// ${applicationName} is the system-supplied app name. Locales without a translation keep
+// the English entry, which is also what a missing entry falls back to.
+"Check ${applicationName} battery" = "undefined";
+"What is my ${applicationName} charge level?" = "undefined";
+"How much range is left in ${applicationName}?" = "undefined";
+"Lock my car with ${applicationName}" = "undefined";
+"Unlock my car with ${applicationName}" = "undefined";
+"Start my car climate with ${applicationName}" = "undefined";
+"Stop my car climate with ${applicationName}" = "undefined";
+"Check my vehicle with ${applicationName}" = "undefined";
+"Check charging with ${applicationName}" = "undefined";
+"Find my car with ${applicationName}" = "undefined";
+"Flash my car lights with ${applicationName}" = "undefined";
+"Summarize my trips with ${applicationName}" = "undefined";
+"Vehicle Battery" = "undefined";
+"Lock Vehicle" = "undefined";
+"Unlock Vehicle" = "undefined";
+"Start Climate" = "undefined";
+"Stop Climate" = "undefined";
+"Vehicle Status" = "undefined";
+"Charging Status" = "undefined";
+"Recent Trips" = "undefined";
+"Flash Lights" = "undefined";
+"Honk and Flash" = "undefined";

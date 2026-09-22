@@ -269,7 +269,6 @@ struct SettingsAppearanceCard: View {
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .hisCaptionLeading()
-                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
                 Divider().opacity(HisingenTheme.dividerOpacity)
@@ -378,7 +377,7 @@ struct SettingsAppearanceCard: View {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                                     .hisType(.caption)
                                     .foregroundStyle(HisingenTheme.accent)
-                                Text(String(format: "%.0f%%", contentDensity.scale * 100))
+                                Text(String(format: "%.0f%%", locale: L10n.displayLocale, contentDensity.scale * 100))
                                     .hisType(.label, weight: .semibold)
                                     .monospacedDigit()
                                 Text("· " + contentDensity.subtitle)
@@ -444,9 +443,6 @@ struct SettingsAppearanceCard: View {
                 isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05),
                 in: Capsule()
             )
-            .overlay(
-                Capsule().stroke(isSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-            )
             .foregroundStyle(isSelected ? HisingenTheme.accent : Color.primary)
         }
         .buttonStyle(.pressable)
@@ -497,21 +493,13 @@ struct SettingsAppearanceCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .hisCaptionLeading()
-                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(9)
             .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? accentColor.opacity(0.08) : Color.primary.opacity(0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        isSelected ? accentColor.opacity(0.6) : Color.primary.opacity(0.08),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
+                    .fill(isSelected ? accentColor.opacity(0.12) : Color.primary.opacity(0.04))
             )
             .contentShape(Rectangle())
         }

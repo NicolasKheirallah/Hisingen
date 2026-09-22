@@ -30,8 +30,13 @@ struct ChargingCurveView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulse = false
     @State private var isHovering = false
+    /// The sample the VoiceOver sweep is reading; nil until the reader adjusts.
+    @State private var axSampleIndex: Int? = nil
     @State private var hoverLocation: CGPoint? = nil
     @State private var curveMode: CurveMode = .soc
+    /// Leaves enough room for the endpoint halo, hover readout, and the shape of the curve.
+    /// The previous 64-point plot compressed all three into the same narrow band.
+    @ScaledMetric(relativeTo: .caption) private var curveHeight: CGFloat = 92
 
     /// Sample-derived geometry that does not depend on the hover position – rebuilt when the
     /// samples, live wattage, target or chart size change, not on every mouse move.
@@ -107,7 +112,7 @@ struct ChargingCurveView: View {
     /// evaluations never re-sort samples or rebuild point arrays.
     private func refreshGeometry(width: CGFloat, height: CGFloat) {
         let horizontalInset: CGFloat = 8
-        let verticalInset: CGFloat = 7
+        let verticalInset: CGFloat = 12
         let chartWidth = max(1, width - horizontalInset * 2)
         let chartHeight = max(1, height - verticalInset * 2)
         let (domainLow, domainHigh) = socDomain
@@ -164,27 +169,27 @@ struct ChargingCurveView: View {
         switch curveMode {
         case .power:
             if peakWatts > 0 {
-                return String(format: "%@ · %@", Format.kilowatts(watts: peakWatts), L10n.text("Peak"))
+                return String(format: "%@ · %@", locale: L10n.displayLocale, Format.kilowatts(watts: peakWatts), L10n.text("Peak"))
             }
             return ""
         case .dual:
             let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
             if peakWatts > 0 {
-                return String(format: "+%.0f%% · %@", pctAdded, Format.kilowatts(watts: peakWatts))
+                return String(format: "+%.0f%% · %@", locale: L10n.displayLocale, pctAdded, Format.kilowatts(watts: peakWatts))
             }
-            return String(format: "+%.0f%%", pctAdded)
+            return String(format: "+%.0f%%", locale: L10n.displayLocale, pctAdded)
         case .soc:
             let pctAdded = max(0, lastSample.batteryPercentage - startSample.batteryPercentage)
             if isLive {
                 if let effectiveTargetPct, effectiveTargetPct > lastSample.batteryPercentage {
-                    return String(format: "%.0f%% → %.0f%%", lastSample.batteryPercentage, effectiveTargetPct)
+                    return String(format: "%.0f%% → %.0f%%", locale: L10n.displayLocale, lastSample.batteryPercentage, effectiveTargetPct)
                 }
                 if pctAdded >= 0.5 {
-                    return String(format: "%.0f%% (+%.0f%%)", lastSample.batteryPercentage, pctAdded)
+                    return String(format: "%.0f%% (+%.0f%%)", locale: L10n.displayLocale, lastSample.batteryPercentage, pctAdded)
                 }
-                return String(format: "%.0f%%", lastSample.batteryPercentage)
+                return String(format: "%.0f%%", locale: L10n.displayLocale, lastSample.batteryPercentage)
             }
-            return String(format: "%.0f%% → %.0f%% (+%.0f%%)", startSample.batteryPercentage, lastSample.batteryPercentage, pctAdded)
+            return String(format: "%.0f%% → %.0f%% (+%.0f%%)", locale: L10n.displayLocale, startSample.batteryPercentage, lastSample.batteryPercentage, pctAdded)
         }
     }
 
@@ -199,7 +204,7 @@ struct ChargingCurveView: View {
             let totalSpan = max(60, timeEnd.timeIntervalSince(timeStart))
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .center, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Label(curveMode == .power ? L10n.text("Power Curve") : L10n.text("Charging Curve"), systemImage: curveMode == .power ? "waveform.path.ecg" : "chart.xyaxis.line")
                         .hisType(.label, weight: .medium)
                         .foregroundStyle(.secondary)
@@ -212,19 +217,7 @@ struct ChargingCurveView: View {
                         Text(L10n.text("Live"))
                             .textCase(.uppercase)
                             .hisType(.nano, weight: .bold)
-                            .tracking(0.3)
                             .foregroundStyle(HisingenTheme.semanticGood)
-                    }
-
-                    if hasPowerData {
-                        Picker("", selection: $curveMode) {
-                            ForEach(CurveMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .controlSize(.mini)
-                        .frame(width: 140)
                     }
 
                     Spacer()
@@ -233,6 +226,19 @@ struct ChargingCurveView: View {
                         .monospacedDigit()
                         .foregroundStyle(curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent)
                         .hisTelemetryValue(summaryText, reduceMotion: reduceMotion)
+                }
+
+                if hasPowerData {
+                    Picker(L10n.text("Charging Curve"), selection: $curveMode) {
+                        ForEach(CurveMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .controlSize(.mini)
+                    .frame(width: 196, alignment: .leading)
+                    .accessibilityLabel(L10n.text("Charging Curve"))
                 }
 
                 if let energySource, let confidence {
@@ -258,7 +264,7 @@ struct ChargingCurveView: View {
                     let width = geo.size.width
                     let height = geo.size.height
                     let horizontalInset: CGFloat = 8
-                    let verticalInset: CGFloat = 7
+                    let verticalInset: CGFloat = 12
                     let chartWidth = max(1, width - horizontalInset * 2)
                     let chartHeight = max(1, height - verticalInset * 2)
                     let bottomY = verticalInset + chartHeight
@@ -382,16 +388,25 @@ struct ChargingCurveView: View {
                         withAnimation(Motion.livePulse) { pulse = true }
                     }
                 }
-                .frame(height: 64)
+                .frame(height: curveHeight)
                 .padding(.vertical, 2)
                 // Was hidden outright, even though `TimeSeriesAXDescriptor` exists in this very
                 // file and is attached at six other sites: a VoiceOver reader was told nothing
                 // about the one view the card is built around.
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(L10n.text("Charging curve"))
-                .accessibilityValue(chartAccessibilityValue(points: samples.map(\.batteryPercentage)))
+                .accessibilityLabel(L10n.text("Charging Curve"))
+                .accessibilityValue(sweepAccessibilityValue)
+                // The per-point readout the pointer gets through hover, swept one sample at a
+                // time: an adjustable action speaks the closest reading without a pointer.
+.accessibilityAdjustableAction { direction in
+                        switch direction {
+                        case .increment: axSampleIndex = min((axSampleIndex ?? -1) + 1, samples.count - 1)
+                        case .decrement: axSampleIndex = max((axSampleIndex ?? 0) - 1, 0)
+                        @unknown default: break
+                        }
+                    }
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
-                    title: L10n.text("Charging curve"),
+                    title: L10n.text("Charging Curve"),
                     yLabel: "%",
                     points: samples.map { ($0.timestamp, $0.batteryPercentage) }
                 ))
@@ -416,7 +431,8 @@ struct ChargingCurveView: View {
                         pct: lastSample.batteryPercentage,
                         date: lastSample.timestamp,
                         emphasized: isLive,
-                        isLive: isLive
+                        isLive: isLive,
+                        alignment: .trailing
                     )
                     if curveMode != .power, let effectiveTargetPct {
                         Spacer()
@@ -439,9 +455,10 @@ struct ChargingCurveView: View {
         pct: Double,
         date: Date?,
         emphasized: Bool = false,
-        isLive: Bool = false
+        isLive: Bool = false,
+        alignment: HorizontalAlignment = .leading
     ) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: alignment, spacing: 1) {
             HStack(spacing: 3) {
                 if isLive {
                     Circle()
@@ -451,10 +468,9 @@ struct ChargingCurveView: View {
                 Text(title)
                     .textCase(.uppercase)
                     .hisType(.nano, weight: .semibold)
-                    .tracking(0.4)
                     .foregroundStyle(.tertiary)
             }
-            Text(String(format: "%.0f%%", pct))
+            Text(String(format: "%.0f%%", locale: L10n.displayLocale, pct))
                 .hisType(.body, weight: emphasized ? .bold : .semibold)
                 .monospacedDigit()
                 .foregroundStyle(emphasized ? HisingenTheme.accent : .primary)
@@ -496,7 +512,13 @@ struct ChargingCurveView: View {
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1.5)
                     .background(HisingenTheme.chipFill, in: Capsule())
-                    .position(x: max(32, width - 36), y: max(verticalInset + 4, guideY - 9))
+                    // Live sessions project toward the target at the chart's right edge, right
+                    // where this capsule sits, and the dashed line read through the label. A
+                    // live curve spends its left half empty, so the capsule lives there while
+                    // the projection runs; finished sessions keep it at the target line's end.
+                    .position(
+                        x: isLive ? max(40, horizontalInset + 44) : max(32, width - 36),
+                        y: max(verticalInset + 4, guideY - 9))
             }
             .transition(.opacity)
         }
@@ -657,7 +679,7 @@ struct ChargingCurveView: View {
             .position(info.point)
 
         HStack(spacing: 4) {
-            Text(String(format: "%.0f%%", info.pct))
+            Text(String(format: "%.0f%%", locale: L10n.displayLocale, info.pct))
                 .hisType(.micro, weight: .bold)
                 .monospacedDigit()
                 .foregroundStyle(HisingenTheme.accent)
@@ -680,7 +702,7 @@ struct ChargingCurveView: View {
         .padding(.vertical, 3)
         .background(HisingenTheme.chipFill, in: Capsule())
         .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+        .shadow(color: HisingenTheme.shadowTint(0.18), radius: 3, y: 1)
         .position(
             x: min(max(info.point.x, 60), width - 60),
             y: max(verticalInset + 10, info.point.y - 18)
@@ -836,3 +858,18 @@ enum ChargingCharts {
         return path
     }
 }
+
+/// The spoken readout for the VoiceOver sample sweep: one closest reading while sweeping,
+/// the usual series summary before the reader starts.
+@MainActor
+extension ChargingCurveView {
+    private var sweepAccessibilityValue: String {
+        guard let index = axSampleIndex, samples.indices.contains(index) else {
+            return chartAccessibilityValue(points: samples.map(\.batteryPercentage))
+        }
+        let sample = samples[index]
+        let watts = sample.powerWatts.map { ", \(Format.kilowatts(watts: $0))" } ?? ""
+        return "\(Format.shortTime(date: sample.timestamp)): \(Format.percent(sample.batteryPercentage))\(watts)"
+    }
+}
+

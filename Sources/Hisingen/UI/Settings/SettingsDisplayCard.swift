@@ -143,7 +143,7 @@ struct SettingsDisplayCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.storeChargingHistory, .presentation))
+                        Toggle("", isOn: binder.toggle(\.storeChargingHistory, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
@@ -280,7 +280,7 @@ struct SettingsDisplayCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.tintMenuBarIcon, .presentation))
+                        Toggle("", isOn: binder.toggle(\.tintMenuBarIcon, .presentation))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
@@ -297,7 +297,7 @@ struct SettingsDisplayCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.launchAtLogin, .launchAtLogin))
+                        Toggle("", isOn: binder.toggle(\.launchAtLogin, .launchAtLogin))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
@@ -407,7 +407,7 @@ struct SettingsDisplayCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.nightTariffEnabled))
+                        Toggle("", isOn: binder.toggle(\.nightTariffEnabled))
                             .toggleStyle(.switch)
                             .controlSize(.small)
                     }
@@ -429,7 +429,7 @@ struct SettingsDisplayCard: View {
                                     .hisType(.label)
                                     .foregroundStyle(.secondary)
                                 Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
-                                    Text(String(format: "%02d:00", preferences.nightTariffStartHour))
+                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffStartHour))
                                         .hisType(.label, design: .monospaced)
                                 }
                                 .controlSize(.small)
@@ -437,7 +437,7 @@ struct SettingsDisplayCard: View {
                                     .hisType(.label)
                                     .foregroundStyle(.secondary)
                                 Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
-                                    Text(String(format: "%02d:00", preferences.nightTariffEndHour))
+                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffEndHour))
                                         .hisType(.label, design: .monospaced)
                                 }
                                 .controlSize(.small)
@@ -492,7 +492,7 @@ struct SettingsDisplayCard: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Toggle("", isOn: binder(\.requireBiometricsForRemoteControls))
+                        Toggle("", isOn: binder.toggle(\.requireBiometricsForRemoteControls))
                             .labelsHidden()
                             .toggleStyle(.switch)
                             .controlSize(.small)
@@ -511,10 +511,10 @@ struct SettingsDisplayCard: View {
             fuelVolumeUnit = preferences.fuelVolumeUnit
             fuelEconomyUnit = preferences.fuelEconomyUnit
             energyConsumptionUnit = preferences.energyConsumptionUnit
-            electricityPrice = String(format: "%.2f", preferences.electricityPricePerKwh)
+            electricityPrice = String(format: "%.2f", locale: L10n.displayLocale, preferences.electricityPricePerKwh)
             currencySymbol = preferences.currencySymbol
-            nightElectricityPrice = String(format: "%.2f", preferences.nightElectricityPricePerKwh)
-            gridCarbonIntensity = String(format: "%.0f", preferences.gridCarbonIntensityGramsPerKwh)
+            nightElectricityPrice = String(format: "%.2f", locale: L10n.displayLocale, preferences.nightElectricityPricePerKwh)
+            gridCarbonIntensity = String(format: "%.0f", locale: L10n.displayLocale, preferences.gridCarbonIntensityGramsPerKwh)
         }
     }
 
@@ -563,7 +563,6 @@ struct SettingsDisplayCard: View {
         Text(L10n.text(title))
             .hisType(.micro, weight: .semibold)
             .textCase(.uppercase)
-            .tracking(0.4)
             .foregroundStyle(HisingenTheme.inkMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)

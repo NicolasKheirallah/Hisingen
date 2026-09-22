@@ -8,6 +8,7 @@ import SwiftUI
 /// here?" has an answer on screen.
 @MainActor
 struct TabItemPickerSheet: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let tab: TabRef
     let composition: TabComposition
     /// A tab the reader built only draws cards that stand on their own. On a shipped tab the
@@ -84,7 +85,7 @@ struct TabItemPickerSheet: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.04, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Picker("", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.title).tag($0) }
@@ -103,7 +104,6 @@ struct TabItemPickerSheet: View {
                                     .hisType(.caption, weight: .bold)
                                     .foregroundStyle(.tertiary)
                                     .textCase(.uppercase)
-                                    .tracking(0.3)
                                 ForEach(entries) { entry in
                                     row(entry)
                                 }
@@ -133,6 +133,7 @@ struct TabItemPickerSheet: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(selected.isEmpty)
                 Button(L10n.text("Close"), action: onDone)
+                    .keyboardShortcut(.cancelAction)
             }
         }
         .padding(16)

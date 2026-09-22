@@ -1,0 +1,25 @@
+// App Intents Siri phrases and short titles. Keys are the code-side English literals;
+// ${applicationName} is the system-supplied app name. Locales without a translation keep
+// the English entry, which is also what a missing entry falls back to.
+"Check ${applicationName} battery" = "Kolla ${applicationName}-batteriet";
+"What is my ${applicationName} charge level?" = "Vilken laddnivå har min ${applicationName}?";
+"How much range is left in ${applicationName}?" = "Hur mycket räckvidd finns kvar i ${applicationName}?";
+"Lock my car with ${applicationName}" = "Lås min bil med ${applicationName}";
+"Unlock my car with ${applicationName}" = "Lås upp min bil med ${applicationName}";
+"Start my car climate with ${applicationName}" = "Starta bilens klimat med ${applicationName}";
+"Stop my car climate with ${applicationName}" = "Stoppa bilens klimat med ${applicationName}";
+"Check my vehicle with ${applicationName}" = "Kolla mitt fordon med ${applicationName}";
+"Check charging with ${applicationName}" = "Kolla laddning med ${applicationName}";
+"Find my car with ${applicationName}" = "Hitta min bil med ${applicationName}";
+"Flash my car lights with ${applicationName}" = "Blinka med mina billjus med ${applicationName}";
+"Summarize my trips with ${applicationName}" = "Sammanfatta mina resor med ${applicationName}";
+"Vehicle Battery" = "Fordonsbatteri";
+"Lock Vehicle" = "Lås fordon";
+"Unlock Vehicle" = "Lås upp fordon";
+"Start Climate" = "Starta klimat";
+"Stop Climate" = "Stoppa klimat";
+"Vehicle Status" = "Fordonsstatus";
+"Charging Status" = "Laddstatus";
+"Recent Trips" = "Senaste resor";
+"Flash Lights" = "Blinka ljus";
+"Honk and Flash" = "Tuta och blinka";

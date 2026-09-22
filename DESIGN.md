@@ -3,17 +3,22 @@
 Design direction for Hisingen. Transcribed on 2026-09-18 from the shipped app
 (`Sources/Hisingen/UI`), not invented: every field below is how the app already looks and
 behaves, with the source file named. Surfaces were redesigned into Apple's 2026 Liquid Glass
-language on 2026-09-19; the surface sections below describe that language as shipped. Nico
+language on 2026-09-19. The award concept's wide production shell and focal compositions were
+wired on 2026-09-20; the surface sections below describe that combined language as shipped. Nico
 owns this file; correct anything that reads wrong. Where this file and the code disagree, the
 code wins and this file gets fixed. Tokens live in
 `Sources/Hisingen/UI/Theme/` and `Sources/Hisingen/UI/Motion.swift`.
 
 Reading this as: a macOS menu-bar utility panel for Volvo and Polestar EV owners, in a
-Scandinavian instrument-panel language, dial ENERGY 2 / RHYTHM 2 / MOTION 2.
+Scandinavian instrument-panel language, dial ENERGY 3 / RHYTHM 3 / MOTION 2.
 
-Hisingen (the Gothenburg island where Volvo builds cars) is a compact popover of sections:
-battery, climate, charging, tyres, trips, service, with remote controls. Quiet, precise,
-warm where things act.
+Hisingen (the Gothenburg island where Volvo builds cars) is a wide menu-bar instrument:
+battery, range and the vehicle itself lead; climate, charging, tyres, trips, service and remote
+controls sit one level deeper. Quiet and precise, with warmth only where energy acts.
+
+Vehicle is the glanceable operational surface. Detailed identity, specification, lighting,
+software, diagnostics, climate and schedule information belongs to Info and is not duplicated
+behind a secondary disclosure on Vehicle.
 
 The instrument layer (added 2026-09-18, same language): the hero render carries a living
 overlay drawn only from real vehicle signals (`LivingVehicleView`) — an open door or hood
@@ -21,8 +26,11 @@ places a warning-tinted marker at its body position, an active climate session b
 accent warmth from the vent line, a charging session runs the gauge's particle rail beneath
 the body; with no signals it draws nothing, because a healthy car does not glow. Commands
 report their flight from the control itself via the shared `sendingOverlay` capsule.
-Pull-to-refresh (rubber-band physics, commits on release velocity), one-step momentum
-tab swipes, and hover-handle card drag-reorder make the panel directly manipulable; the
+Pull-to-refresh (rubber-band physics, an arm tick when the pull crosses its threshold,
+commits on release velocity), one-step momentum tab swipes whose page settles on the
+flick spring from wherever the drag left it, and hover-handle card drag-reorder (the
+dragged card tracks the pointer 1:1 while its siblings part, and settles on release)
+make the panel directly manipulable; the
 flick spring (`Motion.flick`, the one sub-1.0 damping) is reserved for what a gesture
 threw. The panel materializes on arrival on the shared entrance curve. A charging session
 renders as the hero's scene (`ChargingSessionScene`): the car's own finish estimate leads
@@ -32,10 +40,10 @@ so (`ChargeTargetProjection`, `InstrumentMath`).
 
 ## Dials
 
-- **ENERGY 2** (Stripe, not GOV.UK): one composed entrance, one accent, data first. A utility
-  that must never shout; the readings are the display, not the chrome.
-- **RHYTHM 2**: one section grammar everywhere, deliberately broken by the vehicle hero, the
-  charts, and full-width banners.
+- **ENERGY 3**: the car, battery and range form one high-contrast instrument composition. The
+  amber energy rail is the only glow and is justified by live energy state.
+- **RHYTHM 3**: every destination has a different focal object before its supporting detail:
+  vehicle instrument, technical passport, history story, spatial controls, desktop settings.
 - **MOTION 2**: every state change animates, nothing bounces. Ambient motion only where the
   car is actually doing something, and only while anyone can see it. Gesture-carried motion
   (pull, swipe, reorder) may settle with the flick spring's one step of overshoot, because
@@ -65,7 +73,9 @@ active palette per theme: neutrals plus one accent, by construction.
   fault is never the same colour as a low tyre ("add air" and "book service" must not match).
 - Charts: series are data with their own tokens (`chartPositive/Info/Attention/Health`),
   checked 3:1 against the card and against each other where they share axes. Decorative tint
-  is for header glyphs only, never for plotted data.
+  is for header glyphs only, never for plotted data, and the header glyphs draw these same
+  chart tokens rather than raw system colors, so a tint varies by theme and survives the
+  contrast gate with the rest of the palette.
 
 The nine themes:
 
@@ -96,7 +106,11 @@ one ramp (`HisingenTheme+Typography.swift`):
   focal figures: one displayLarge figure per screen (the hero's battery level), a display
   headline for the charging scene's finish estimate. Every tier scales with the reader's
   text size (`@ScaledMetric`) and the density preset; no frozen point sizes at call sites.
-  Set tiers via `hisType(_:weight:design:)`.
+  Set tiers via `hisType(_:weight:design:)`; a composition that needs a figure between tiers
+(the award surfaces' 24-42pt instrument scale) uses `hisType(size:relativeTo:)`, which keeps
+text-size scaling, the density multiplier and optical tracking owned by the ramp instead of
+re-freezing a point size. Display tiers and bespoke display figures track negative from
+displaySmall up.
 - Weight ladder frozen: headings semibold, values bold, captions semibold. Below 10pt, weight
   goes up, not down.
 - Optical tracking: positive below 12pt (+0.04 per point), negative for display (-1.1% of
@@ -106,8 +120,23 @@ one ramp (`HisingenTheme+Typography.swift`):
 - Wrapped small text gets +2pt leading (`hisCaptionLeading`), because Swedish and German
   ascenders run taller than English at the same point size.
 - No monospace headings, no uppercase labels with wide tracking.
+- One formatting locale (2026-09-20): every user-facing number and date resolves through
+  `L10n.displayLocale` — the selected interface language, else the system locale. An English
+  UI on a Swedish-region Mac used to render Swedish month names and split decimal separators
+  across its own surfaces; it now renders one language's numbers everywhere, panel and menu
+  bar alike.
 
 ## Surfaces and geometry
+
+The menu-bar surface remains restrained: Standard is 620 points wide and Grand stops at 760.
+The branded header owns four primary destinations; Settings is not a tab and opens from the one
+top-right icon into a separate 1080 × 760 resizable desktop window with stable sidebar navigation.
+The window has its own saved frame and never inherits a dropdown preset. At Standard width
+(620 points) and above, all four destinations use their focal compositions: Vehicle instrument,
+Info passport, History period instrument, and spatial Controls. Factory vehicle artwork leads
+Vehicle, Info, and Controls when cached; the model-specific line silhouette is the honest fallback
+when no image exists. Compact uses a deliberately simpler reading order and an icon-only header,
+while retaining every destination, action, and reading without horizontal overflow.
 
 One radius per question, all global (`HisingenTheme.swift`): sections 12, banners 10 (a
 concentric inset of the section), gauges 5, status chips 4. Nothing is pill-shaped by default.
@@ -133,8 +162,11 @@ Transparency or Increase Contrast every surface goes opaque, per ``PopoverSurfac
 material, or when the section grammar regains a surface.
 
 Elevation belongs to windows, not to sections: the panel and the floating mini panel carry
-their system window shadows, and nothing inside the panel casts one. The only shadow drawn in
-UI is CardHeader's breathing glyph glow, a focus accent on a single element. Separators inside
+their system window shadows, and sections cast none. What the UI does draw is legibility:
+CardHeader's breathing glyph glow, the glows tied to live energy state (the rail, the hero
+overlay), the shadow under an instrument tick or a floating scrub callout so it reads over a
+glow, and the two mid-gesture `shadowTint` overlays the Surfaces token sanctions. Each exists
+to separate a foreground mark from what it sits on; none marks elevation. Separators inside
 a section are `Divider()` at `dividerOpacity`; where content passes under the tab strip or
 over the footer, the scroll edge softens through a gradient mask instead of meeting a drawn
 divider. The Increase Contrast boundary (`cardBoundary(increasedContrast:)`, 3:1, checked by
@@ -146,9 +178,14 @@ Card padding 15 and section spacing 12, both density-scaled; whitespace is struc
 Tokens grouped by why (`Motion.swift`):
 
 - **Interaction**: fast, easeOut, no overshoot (0.2s; 0.11s for micro acknowledgements).
-  Buttons press with scale 0.97 plus a slight dim, minimum 24pt target.
+  Buttons press with scale 0.97 plus a slight dim, minimum 24pt target, and answer the
+  pointer before the click: every pressable dims lightly on hover, and chips lift their fill
+  through `HoverChipFill` on top of it. Commits confirm on the tactile channel: switches,
+  saves, deletes, vehicle switches, tab swipes and clicks, command send and outcome. Pickers
+  and text input stay silent, because over-feedback trains readers to ignore all of it.
 - **State**: critically damped springs, damping 1.0. Nothing rings. Overshoot is reserved for
-  gestures that carry momentum, and the app has no drag gestures.
+  gestures that carry momentum: tab swipes, pull-to-refresh and card reordering use the flick
+  spring only after pointer movement, while state changes remain critically damped.
 - **Ambient**: breath 3.4s, live pulse 1.6s, spin 1.4s, tiny deltas (opacity 0.6 to 1.0,
   scale 1.0 to 1.04), gated by panel visibility (`ambientMotionAllowed`), frugal frame counts
   in the menu bar.
@@ -164,21 +201,36 @@ Tokens grouped by why (`Motion.swift`):
 - The dashboard's status primitive is the **instrument row** (`DashboardRow`): tinted icon,
   ink value, muted trailing label, one line, **no surface**. Tiles were tried between the card
   and the row and read as cards, because a filled rounded rectangle is a card whatever it
-  contains; rows are only typography on the panel glass, stacked on whitespace. Rows state;
+  contains; rows are only typography on the panel glass, stacked on whitespace. The same rule
+  now holds for the History overview and month-comparison metrics (2026-09-20): a metric is a
+  value over its label, columns separated by inset hairlines, not tiles. Rows state;
   the hero's living overlay shows *where*; Controls *act*. Doors-and-locks and fuel render as
   rows (`VehicleDashboardRows`); the hero owns the battery figure, so no row repeats it; a
   disconnected cable is one muted line, not a titled section
   (`VehicleChargingCard.idleCard`); the departure checker is one collapsed disclosure.
 - The tab selection and the Settings section indicator are glass capsules sliding on
   `matchedGeometryEffect`. Selection everywhere else (garage chips, pickers, schedule rows)
-  is a tinted fill with no outline.
+  is a tinted fill with no outline. Unselected chips lift to `chipHoverFill` (8 %) under
+  the pointer through `HoverChipFill`, so everything clickable answers the pointer before
+  the click; selection itself stays the accent's business.
 - Status labels are one family (`Pill`, `StateSummaryChip`, `CommandReceiptChip`) at radius 4:
   a 12 % wash of their own colour and no outline, the ceiling the accent's 4.5:1 guarantee
   covers.
 - Empty states use `HisingenEmptyState` (ContentUnavailableView) with domain-specific copy
   and real recovery actions; loading and error states are part of every data card.
+- Right-click belongs to the content macOS readers expect it on: trip rows (hide, route),
+  charging sessions (copy details), schedule rows (edit, delete), the car render. A row that
+  hosts a nested control cannot be a Button, so it answers the pointer through a hover wash
+  instead and marks the constraint where it taps.
+- Card reorder is a pointer drag and a VoiceOver verb at once: the drag handle is
+  pointer-only, and each card carries named Move Up / Move Down actions that perform the
+  same move one slot at a time.
 - SF Symbols, hierarchical rendering, domain-relevant glyphs (a fan for climate, a battery
-  for energy). If no genuinely relevant symbol exists, use none.
+  for energy). If no genuinely relevant symbol exists, use none. CardHeader accepts a drawn
+  glyph in place of the symbol for the one header whose mark is animated (climate's spinning
+  fan); it still gets the heading tier, header trait and sort priority every header shares.
+  Air cleaning uses the air-quality glyph, presets use checklist or approval marks, and linked
+  account modes use the link glyph. The generic sparkle symbol is not part of this vocabulary.
 
 ## Voice
 
@@ -190,8 +242,9 @@ length, because Swedish and German run longer than English.
 
 ## Focal point and accent
 
-- One focal point per screen: the hero reading (battery and range on the vehicle hero, the
-  active chart in history); everything else defers to it.
+- One focal point per screen: battery, range, and factory render on Vehicle; the technical
+  passport on Info; selected-period distance and real trip marks on History; the vehicle flanked
+  by climate and charge instruments on Controls. Everything else defers to it.
 - The accent is the one deliberate accent. Ink, not accent, marks focus; inkMuted, not
   accent, marks muted text; semantics, not accent, mark state. If everything is amber,
   nothing is.

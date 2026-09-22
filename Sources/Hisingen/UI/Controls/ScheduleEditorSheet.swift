@@ -25,6 +25,7 @@ struct ScheduleEditorSheet: View {
     @State private var selectedWeekdays: Set<VehicleWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
     @State private var isEnabled: Bool = true
     @State private var editingScheduleID: String? = nil
+    @State private var rowHovered = false
     /// Deleting a timer is remote and not undoable locally, so it is confirmed. It was the only
     /// destructive action in the app that fired on a single click.
     @State private var pendingDeletion: String? = nil
@@ -129,8 +130,8 @@ struct ScheduleEditorSheet: View {
                 .foregroundStyle(sched.kind == .climate ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
                 .hisType(.body)
             VStack(alignment: .leading, spacing: 1) {
-                let timeStr = String(format: "%02d:%02d", sched.startHour ?? 0, sched.startMinute ?? 0)
-                let endStr = sched.endHour.map { String(format: " - %02d:%02d", $0, sched.endMinute ?? 0) } ?? ""
+                let timeStr = String(format: "%02d:%02d", locale: L10n.displayLocale, sched.startHour ?? 0, sched.startMinute ?? 0)
+                let endStr = sched.endHour.map { String(format: " - %02d:%02d", locale: L10n.displayLocale, $0, sched.endMinute ?? 0) } ?? ""
                 Text("\(sched.kind.title): \(timeStr)\(endStr)")
                     .hisType(.label, weight: .medium)
                 if let oneShot = sched.oneShotDate {
@@ -190,6 +191,7 @@ struct ScheduleEditorSheet: View {
                     titleVisibility: .visible
                 ) {
                     Button(L10n.text("Delete"), role: .destructive) {
+                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                         onRemoteCommand(.deleteClimateTimer(id: id))
                         if editingScheduleID == id { resetToAddMode() }
                         pendingDeletion = nil
@@ -205,10 +207,28 @@ struct ScheduleEditorSheet: View {
                 : Color.primary.opacity(0.04),
             in: RoundedRectangle(cornerRadius: 6)
         )
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(rowHovered && isEditable ? 0.05 : 0))
+        )
         .hisAnimation(Motion.selection, value: editingScheduleID)
+        .onHover { rowHovered = $0 }
+        // Row hosts a nested switch control (edit and delete buttons), so no Button.
         .contentShape(Rectangle())
         .onTapGesture { if isEditable { beginEditing(sched) } }
         .accessibilityAddTraits(isEditable ? [.isButton] : [])
+        .contextMenu {
+            if isEditable {
+                Button { beginEditing(sched) } label: {
+                    Label(L10n.text("Edit"), systemImage: "pencil")
+                }
+            }
+            if let id = sched.backendID {
+                Button(role: .destructive) { pendingDeletion = id } label: {
+                    Label(L10n.text("Delete"), systemImage: "trash")
+                }
+            }
+        }
         .accessibilityHint(isEditable
                            ? L10n.text("Opens this timer for editing")
                            : L10n.text("This timer is reported by the vehicle and cannot be edited here"))
@@ -274,13 +294,13 @@ struct ScheduleEditorSheet: View {
                         .foregroundStyle(.secondary)
                     HStack(spacing: 4) {
                         Picker("", selection: $startHour) {
-                            ForEach(hours, id: \.self) { h in Text(String(format: "%02d", h)).tag(h) }
+                            ForEach(hours, id: \.self) { h in Text(String(format: "%02d", locale: L10n.displayLocale, h)).tag(h) }
                         }
                         .labelsHidden()
                         .controlSize(.small)
                         Text(":")
                         Picker("", selection: $startMinute) {
-                            ForEach(minutes, id: \.self) { m in Text(String(format: "%02d", m)).tag(m) }
+                            ForEach(minutes, id: \.self) { m in Text(String(format: "%02d", locale: L10n.displayLocale, m)).tag(m) }
                         }
                         .labelsHidden()
                         .controlSize(.small)
@@ -294,13 +314,13 @@ struct ScheduleEditorSheet: View {
                             .foregroundStyle(.secondary)
                         HStack(spacing: 4) {
                             Picker("", selection: $endHour) {
-                                ForEach(hours, id: \.self) { h in Text(String(format: "%02d", h)).tag(h) }
+                                ForEach(hours, id: \.self) { h in Text(String(format: "%02d", locale: L10n.displayLocale, h)).tag(h) }
                             }
                             .labelsHidden()
                             .controlSize(.small)
                             Text(":")
                             Picker("", selection: $endMinute) {
-                                ForEach(minutes, id: \.self) { m in Text(String(format: "%02d", m)).tag(m) }
+                                ForEach(minutes, id: \.self) { m in Text(String(format: "%02d", locale: L10n.displayLocale, m)).tag(m) }
                             }
                             .labelsHidden()
                             .controlSize(.small)
@@ -323,7 +343,13 @@ struct ScheduleEditorSheet: View {
                             Text(day.shortName)
                                 .hisType(.micro, weight: selected ? .bold : .regular)
                                 .frame(maxWidth: .infinity, minHeight: 24)
-                                .background(selected ? HisingenTheme.accent : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                                .background {
+                                    if selected {
+                                        RoundedRectangle(cornerRadius: 4).fill(HisingenTheme.accent)
+                                    } else {
+                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 4), resting: 0.06)
+                                    }
+                                }
                                 .foregroundStyle(selected ? HisingenTheme.accentOn : Color.primary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: selected)
                         }
@@ -354,6 +380,7 @@ struct ScheduleEditorSheet: View {
 
             Button(L10n.text("Save Schedule")) {
                 saveSchedule()
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 dismiss()
             }
             .buttonStyle(.borderedProminent)

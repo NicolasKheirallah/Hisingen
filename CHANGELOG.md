@@ -3,6 +3,138 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-09-21
+
+### Added
+
+- classify pending Keychain consent (`errSecInteractionRequired`) as its own, parked state
+  with its own message, instead of reporting it as a failed sign-in or storage error
+- keep the first Keychain read of a launch off the main thread, so an unanswerable ACL
+  approval can no longer hang the panel before it draws
+- show a one-sentence verdict of what the car is doing (charging with its finish time,
+  climate running) at the top of the Vehicle instrument, built only from reported signals
+- offer Verify now on an acknowledged command receipt, which refreshes so the receipt can
+  settle against a fresh vehicle reading
+- place the Smart Charging Planner on the Controls tab by default (feature- and
+  powertrain-gated as on Vehicle; a rearranged Controls tab keeps its own layout and gains
+  the planner through Tabs & Cards)
+- add a selected-trip detail line to the History overview's trip bars, pointer- and
+  keyboard-reachable
+- state which credential served a refresh: a snapshot the consumer Polestar ID session
+  delivered on the Developer Portal's behalf is labelled next to its age
+- drag card reordering as a real gesture: the dragged card tracks the pointer one-to-one
+  from where the handle took hold, siblings part as it crosses them, and release settles
+  it into its slot on the flick spring
+- lift unselected chips (garage, climate presets, charge presets, schedule days) under the
+  pointer, so every clickable answers the pointer before the click
+- tick the pull-to-refresh control when a pull crosses its threshold; hysteresis below the
+  line keeps a pull hovering at the edge from stuttering the haptic
+
+### Fixed
+
+- settle a tab swipe's page on the flick spring from wherever the drag left it, instead of
+  snapping the offset back with no animation when the swipe lands where it started
+- give the floating charging panel's close button a 24pt target and press feedback; it was
+  an 18pt plain-styled icon that answered no press
+- sweep the Info tab's refresh glyph forward on a cumulative angle instead of spinning it
+  visibly in reverse when a refresh ended
+
+### Changed
+
+- stop the "Showing last-known values" banner from pinning forever: readings carried forward
+  expire after seven days, so a domain the current provider can never serve (Developer
+  Portal software and connectivity) ages out instead of holding the banner up indefinitely
+- validate the fuel fill-up form inline and state what is wrong per field; Save was
+  previously a silent no-op on invalid input
+- draw no fake gauge on the Controls instrument map: the climate capsule filled a constant
+  width and the charge blocks showed the target setting, not progress; the charge rail now
+  fills only from real progress while actually charging
+- state both retention horizons with real numbers on the storage card
+- move the account card's decisions behind one model: connected, renewable and expired are
+  classified from typed failure kinds instead of matched message text, and the credential
+  draft lives with the sheet that edits it instead of a process-wide store, so typed
+  secrets no longer outlive the Settings window
+- route every History surface through one workspace: dashboard loading, capacity, edits and
+  exports reach the history ledgers through a single interface, and no panel view holds the
+  database directly any more
+
+### Changed
+
+- localize the App Intents surface: titles, parameters and dialogs now have keys in every
+  locale, AppShortcuts.strings exists for all sixteen languages (Swedish and German
+  translated; other locales keep English entries where translation is still pending)
+- add `Scripts/audit-l10n-literals.mjs` with a committed baseline, so new user-facing
+  strings cannot ship without an English key again; 322 pre-existing unkeyed literals are
+  recorded there for retirement
+- settle the pull-to-refresh chip's collapse on the flick spring, the gesture-carried
+  spring, rather than a fixed fade
+- roll the climate target temperature between steps like every other value on the panel
+
+## [2.0.4] - 2026-09-18
+
+### Added
+
+- make Vehicle's lock, climate, and charging status cells quick controls backed by the same
+  capability, confirmation, and in-flight command gate as the Controls tab
+- add semantic motion to Vehicle quick controls: immediate press feedback, rotating in-flight
+  acknowledgement, lock morphing, active climate fan motion, and a restrained charging pulse
+- refine the Vehicle instrument with separately scaled values and units, baseline-aligned
+  telemetry, charge-target rail context, semantic battery states, and rolling updates
+- wire the award concept into all four production destinations at the default panel width:
+  Vehicle instrument, Info passport, History period instrument, and spatial Controls
+- use cached factory vehicle artwork in the new focal compositions, with the model silhouette as
+  the no-image fallback
+- replace the Controls twin-ring layout with a climate / vehicle-lock / charge-target cockpit
+- make the header responsive: labels at Standard and wider, all four icon destinations at Compact
+- add a resizable desktop Settings window with persistent sidebar navigation
+- redesign the panel as a live instrument
+- surface consumer identity, truthful 404s and timer offsets
+- surface portal schedules, climate faults and charging estimates
+- unify polestar sign-in credential selection
+- display usage mode tire delta and trips
+- expand portal models and trip mapping
+- add eu data act telemetry and controls
+- add data portal fixtures and fix tests
+- expand Polestar Developer Portal support
+- add account id header and live portal tests
+- add polestar developer portal provider
+
+### Fixed
+
+- stop expanded charging curves from clipping their endpoint glow and hover content, give the
+  plot a readable height, separate its metric picker from the title, and remove duplicate quality
+  metadata from the session details
+- lazily build History sections so off-screen charts no longer burden every scroll frame
+- replace the decorative rail beneath the factory car with a compact state badge in the vehicle header
+- harden snapshot merging and command confirmation
+- add force-login path for polestar command sign-in
+- make polestar augmented session and fallback resilient
+- fix charger status and expand v2 states
+- rethrow primary error on fallback fail
+- support augmented mode in session resume
+- fix steering heat default and departure
+- clean duplicate tooltip and add a11y hint
+- refine control sizes and tab drag metadata
+- mark updater delegate methods nonisolated
+- synchronize climate button gate with command
+- default wire temperature to 22C for auto climate
+
+### Changed
+
+- simplify Vehicle into an at-a-glance surface by moving its duplicate More detail into Info
+- reduce the Hisingen header mark and wordmark so navigation owns the limited popover width
+- keep the menu-bar dropdown compact with four primary tabs and one Settings launcher
+- make battery the sole primary Vehicle figure, keep range deliberately secondary, group both
+  readings to the car's right, and keep the charge target with the charging rail
+- test: create the renders directory the data-portal render refreshes
+- docs: add AGENTS.md and DESIGN.md
+- chore(l10n): add portal wiring strings to all locales
+- docs(docs): update polestar developer portal url
+- docs(changelog): update polestar data portal notes
+- test(tests): add polestar 2 e2e test and sendable fixes
+- test(tests): update decode verification target
+- docs(docs): update 2.0.3 changelog with climate fix
+
 ## [2.0.3] - 2026-09-17
 
 ### Added

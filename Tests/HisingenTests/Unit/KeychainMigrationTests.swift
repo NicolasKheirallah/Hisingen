@@ -93,4 +93,45 @@ struct KeychainMigrationTests {
         #expect(throws: (any Error).self) { try store(security).saveSessionToken("replacement") }
         #expect(security.writes == 1)
     }
+
+    // MARK: - Keychain consent (errSecInteractionRequired)
+
+    @Test func consentPendingReadThrowsInteractionRequiredWithoutLegacyFallback() throws {
+        let security = RecordingKeychainSecurity()
+        security.dpReadStatus = errSecInteractionRequired
+        do {
+            _ = try store(security).readSessionToken()
+            Issue.record("A pending consent must throw, not return a value")
+        } catch let error as KeychainError {
+            #expect(error.isInteractionRequired)
+        }
+        #expect(security.legacyReads == 0)
+        #expect(security.writes == 0)
+    }
+
+    @Test func consentPendingWriteThrowsInteractionRequiredWithoutLegacyFallback() {
+        let security = RecordingKeychainSecurity()
+        security.dpWriteStatus = errSecInteractionRequired
+        let result = Result { try store(security).saveSessionToken("replacement") }
+        guard case .failure(let error) = result else {
+            Issue.record("expected the pending-consent write to fail")
+            return
+        }
+        #expect(KeychainError.isInteractionRequired(error))
+        #expect(security.writes == 1)
+    }
+
+    @Test func consentRequiredMapsToItsOwnParkedServiceError() {
+        let mapped = VehicleServiceError.map(KeychainError.interactionRequired, provider: .volvo)
+        guard case .keychainConsentRequired = mapped else {
+            Issue.record("Expected .keychainConsentRequired, got \(mapped)")
+            return
+        }
+        #expect(!mapped.allowsAutomaticRetry)
+        #expect(!mapped.requiresAuthentication)
+        if case .secureStorage = VehicleServiceError.map(KeychainError.status(errSecAuthFailed),
+                                                         provider: .volvo) {} else {
+            Issue.record("A plain KeychainError must keep mapping to .secureStorage")
+        }
+    }
 }

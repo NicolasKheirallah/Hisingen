@@ -22,7 +22,8 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testFuelVolumeUnitConversions() {
-        let liters = 50.0
+        try withPinnedInterfaceLanguage {
+            let liters = 50.0
 
         let litersConverted = FuelVolumeUnit.liters.convert(liters: liters)
         #expect(litersConverted == 50.0)
@@ -36,37 +37,41 @@ struct MeasurementUnitsAndThemeTests {
         #expect(round(ukGallons * 10) / 10 == 11.0)
         #expect(FuelVolumeUnit.gallonsUK.suffix == "UK gal")
 
-        #expect(Format.fuelVolume(liters: 45.0, unit: .liters) == "45.0 L")
-        #expect(Format.fuelVolume(liters: 45.0, unit: .gallonsUS) == "11.9 gal")
+            #expect(Format.fuelVolume(liters: 45.0, unit: .liters) == "45.0 L")
+            #expect(Format.fuelVolume(liters: 45.0, unit: .gallonsUS) == "11.9 gal")
+        }
     }
 
     @Test
     func testFuelEconomyUnitFormatting() {
-        let lPer100Km = 6.5
+        try withPinnedInterfaceLanguage {
+            let lPer100Km = 6.5
+            #expect(FuelEconomyUnit.litersPer100Km.format(lPer100Km: lPer100Km) == "6.5 L/100km")
+            #expect(FuelEconomyUnit.milesPerGallonUS.format(lPer100Km: lPer100Km) == "36.2 mpg")
+            #expect(FuelEconomyUnit.milesPerGallonUK.format(lPer100Km: lPer100Km) == "43.5 mpg (UK)")
+            #expect(FuelEconomyUnit.kmPerLiter.format(lPer100Km: lPer100Km) == "15.4 km/L")
 
-        #expect(FuelEconomyUnit.litersPer100Km.format(lPer100Km: lPer100Km) == "6.5 L/100km")
-        #expect(FuelEconomyUnit.milesPerGallonUS.format(lPer100Km: lPer100Km) == "36.2 mpg")
-        #expect(FuelEconomyUnit.milesPerGallonUK.format(lPer100Km: lPer100Km) == "43.5 mpg (UK)")
-        #expect(FuelEconomyUnit.kmPerLiter.format(lPer100Km: lPer100Km) == "15.4 km/L")
-
-        #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .litersPer100Km) == "6.5 L/100km")
-        #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .milesPerGallonUS) == "36.2 mpg")
+            #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .litersPer100Km) == "6.5 L/100km")
+            #expect(Format.fuelEconomy(lPer100Km: 6.5, unit: .milesPerGallonUS) == "36.2 mpg")
+        }
     }
 
     @Test
     func testUSUnitFormatting() {
-        #expect(Format.temperature(celsius: 20, unit: .fahrenheit) == "68.0 °F")
-        #expect(Format.pressure(kilopascals: 241.3, unit: .psi) == "35.0 psi")
-        // The decimal separator follows the test machine's locale (sv-SE formats "8,1");
-        // this test pins the conversion and the decimal count, not the separator.
-        #expect(Format.distance(km: 13.1, unit: .miles).replacingOccurrences(of: ",", with: ".") == "8.1 mi")
+        try withPinnedInterfaceLanguage {
+            #expect(Format.temperature(celsius: 20, unit: .fahrenheit) == "68.0 °F")
+            #expect(Format.pressure(kilopascals: 241.3, unit: .psi) == "35.0 psi")
+            #expect(Format.distance(km: 13.1, unit: .miles) == "8.1 mi")
+        }
     }
 
     @Test
     func testElectricConsumptionFormatting() {
-        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km) == "20.0 kWh/100 km")
-        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles) == "32.2 kWh/100 mi")
-        #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh) == "3.11 mi/kWh")
+        try withPinnedInterfaceLanguage {
+            #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km) == "20.0 kWh/100 km")
+            #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles) == "32.2 kWh/100 mi")
+            #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh) == "3.11 mi/kWh")
+        }
     }
 
     @Test
@@ -235,7 +240,7 @@ struct MeasurementUnitsAndThemeTests {
         )
 
         #expect(Format.barTitle(for: sample, style: .battery, unit: .kilometers) == "85%")
-        #expect(Format.barTitle(for: sample, style: .range, unit: .kilometers) == "350km")
+        #expect(Format.barTitle(for: sample, style: .range, unit: .kilometers) == "350 km")
         #expect(Format.barTitle(for: sample, style: .iconOnly, unit: .kilometers) == "")
         #expect(Format.barTitle(for: sample, style: .lockAndBattery, unit: .kilometers) == "85%")
         #expect(Format.lockStatusSymbol(for: sample) == "lock.fill")

@@ -41,7 +41,7 @@ struct SettingsChargingStatOrderCard: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "list.number", title: L10n.text("Charging Stat Order"), color: .indigo)
+                    CardHeader(symbol: "list.number", title: L10n.text("Charging Stat Order"), color: HisingenTheme.chartInfo)
                     Spacer()
                     if !order.isEmpty {
                         Button(L10n.text("Reset")) { setOrder([]) }

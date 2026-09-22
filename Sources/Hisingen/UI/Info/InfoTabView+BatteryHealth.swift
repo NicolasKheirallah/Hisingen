@@ -74,7 +74,7 @@ extension InfoTabView {
                                 .frame(width: 60)
                                 .tint(statusColor)
                                 .hisAnimation(Motion.progress, value: soh)
-                            Text(String(format: "%.1f%%", soh))
+                            Text(String(format: "%.1f%%", locale: L10n.displayLocale, soh))
                                 .hisType(.label, weight: .bold)
                                 .foregroundStyle(statusColor)
                                 .hisTelemetryValue(soh, reduceMotion: reduceMotion)
@@ -83,7 +83,7 @@ extension InfoTabView {
                     .padding(.vertical, 2)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Calculated state of health"))
-                    .accessibilityValue(String(format: "%.1f%%", soh))
+                    .accessibilityValue(String(format: "%.1f%%", locale: L10n.displayLocale, soh))
 
                     Text(estimate.methodologySummary)
                         .hisType(.micro)
@@ -109,8 +109,8 @@ extension InfoTabView {
                     KVRow(L10n.text("Last 100% calculation"),
                           Format.dateTimeFormatter.string(from: estimate.recordedAt),
                           symbol: "clock")
-                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
-                    KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
+                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", locale: L10n.displayLocale, deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
+                    KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", locale: L10n.displayLocale, usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
                     KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
 
                     if !history.isEmpty {
@@ -130,7 +130,7 @@ extension InfoTabView {
                                         Text(Format.distance(km: r.odometerKm, decimals: 0, unit: preferences.distanceUnit))
                                             .hisType(.caption, weight: .medium)
                                             .foregroundStyle(.secondary)
-                                        Text(String(format: "%.1f%% SoH", r.stateOfHealthPct))
+                                        Text(String(format: "%.1f%% SoH", locale: L10n.displayLocale, r.stateOfHealthPct))
                                             .hisType(.caption, weight: .semibold)
                                             .foregroundStyle(HisingenTheme.semanticGood)
                                     }
@@ -174,7 +174,15 @@ extension InfoTabView {
     }
 
     func exportBatteryHealthCSV() {
-        let csv = database.history.exportBatteryHealthCSV(for: state.identity.vin)
+        let vin = state.identity.vin
+        Task { @MainActor in
+            let csv = await history.exportCSV(.batteryHealth, scope: .fullHistory, vin: vin,
+                                              selectedSessionID: nil, periodTrips: [], periodSessions: [])
+            presentBatteryHealthSavePanel(csv: csv)
+        }
+    }
+
+    private func presentBatteryHealthSavePanel(csv: String) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = "battery_health_\(state.identity.vin.prefix(8)).csv"

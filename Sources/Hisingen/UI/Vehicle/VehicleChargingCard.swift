@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 struct VehicleChargingCard: View {
     let state: VehicleState
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -83,7 +83,7 @@ struct VehicleChargingCard: View {
                 // stated because every detail row below this line names its own.
                 parts.append(L10n.format("≈%@ to target at your %@/kWh setting",
                                           Format.currency(cost.rounded(), symbol: preferences.currencySymbol),
-                                          String(format: "%.2f", preferences.electricityPricePerKwh)))
+                                          String(format: "%.2f", locale: L10n.displayLocale, preferences.electricityPricePerKwh)))
             }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -149,7 +149,7 @@ struct VehicleChargingCard: View {
             if let value = diagnostics.averageConsumptionAutomatic { rows.append(("avgAutoTrip", KVRow(L10n.text("Avg (Automatic Trip)"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))) }
             if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), Format.energyKwh(wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
             if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
-                rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
+                rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", locale: L10n.displayLocale, powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
             }
             if let available = diagnostics.energyAvailableKwh, available > 0 {
                 rows.append(("energyAvailable", KVRow(L10n.text("Discharge Energy"), Format.energyKwh(available), symbol: "battery.100", info: L10n.text("Energy the high-voltage battery can discharge to external loads right now."))))
@@ -166,11 +166,11 @@ struct VehicleChargingCard: View {
                     if diagnostics.availableOptimizedCharging == "PRICED_OPTIMIZED_CHARGING" {
                         return L10n.text("Spot-Price Optimised")
                     } else if diagnostics.availableOptimizedCharging == "INTELLIGENT_TIMER" {
-                        return L10n.text("Intelligent Timer")
+                        return L10n.text("Intelligent timer")
                     }
                     return L10n.text("Active")
                 }()
-                rows.append(("smartCharging", KVRow(L10n.text("Smart Charging"), modeText, symbol: "bolt.badge.clock", info: L10n.text("Vehicle Dynamic Charging. Ingests grid electricity spot prices or charging schedules to optimize charging hours."))))
+                rows.append(("smartCharging", KVRow(L10n.text("Smart charging"), modeText, symbol: "bolt.badge.clock", info: L10n.text("Vehicle Dynamic Charging. Ingests grid electricity spot prices or charging schedules to optimize charging hours."))))
             }
             if let breakdown = diagnostics.energyBreakdown, breakdown.hasData {
                 if let drive = breakdown.driving {
@@ -236,7 +236,7 @@ struct VehicleChargingCard: View {
             parts.append(Format.energyKwh(wh / 1_000.0))
         }
         if let pct = item.percentage {
-            parts.append(String(format: "%.0f%%", pct))
+            parts.append(String(format: "%.0f%%", locale: L10n.displayLocale, pct))
         }
         guard !parts.isEmpty else { return "-" }
         return parts.count > 1 ? "\(parts[0]) (\(parts[1]))" : parts[0]
@@ -282,7 +282,7 @@ struct VehicleChargingCard: View {
                     Spacer()
                 }
                 .accessibilityElement(children: .combine)
-                if !persistentSessions.isEmpty { history }
+                if !persistentSessions.isEmpty { historySection }
             }
         }
     }
@@ -322,16 +322,16 @@ struct VehicleChargingCard: View {
                 if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.tertiary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
                 if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: state.estimatedChargingCompletion, isLive: state.isCharging && !state.hasOldData(), currentPowerWatts: state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
-                    Text(state.chargingExplanation).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(state.chargingExplanation).hisType(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
                 }
-                if !persistentSessions.isEmpty { history }
+                if !persistentSessions.isEmpty { historySection }
             }
             .animation(reduceMotion ? nil : Motion.cardChange, value: "\(headline ?? "")|\(readyLine ?? "")|\(secondaryLine ?? "")|\(activeSamples.count)|\(state.isComplete)")
         }
     }
 
-    private var history: some View {
+    private var historySection: some View {
         DisclosureGroup {
             VStack(spacing: 8) {
                 ForEach(persistentSessions.reversed(), id: \.id) { ChargingSessionRow(session: $0) }
@@ -353,13 +353,7 @@ struct VehicleChargingCard: View {
 
     private func loadPersistentSessions() async {
         guard eligible else { persistentSessions = []; return }
-        let database = database
-        let vin = state.identity.vin
-        let capacity = state.configuredCapacityReference(
-            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
-        let sessions = await Task.detached(priority: .userInitiated) {
-            database.charging.recentChargingSessions(for: vin).map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }.filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
-        }.value
+        let sessions = await history.persistentChargingSessions(vin: state.identity.vin, state: state)
         guard !Task.isCancelled else { return }
         persistentSessions = sessions
     }

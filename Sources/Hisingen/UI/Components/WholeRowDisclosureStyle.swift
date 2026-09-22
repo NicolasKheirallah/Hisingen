@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct ScrollRevealActionKey: EnvironmentKey {
+    static let defaultValue: @MainActor @Sendable (String) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var scrollRevealAction: @MainActor @Sendable (String) -> Void {
+        get { self[ScrollRevealActionKey.self] }
+        set { self[ScrollRevealActionKey.self] = newValue }
+    }
+}
+
 @MainActor
 struct WholeRowDisclosureStyle: DisclosureGroupStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

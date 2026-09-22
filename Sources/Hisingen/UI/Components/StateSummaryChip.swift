@@ -2,8 +2,14 @@ import SwiftUI
 
 @MainActor
 struct StateSummaryChip: View {
+    enum Prominence {
+        case standard
+        case quiet
+    }
+
     let message: String
     let severity: VehicleStateSeverity
+    var prominence: Prominence = .standard
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -42,17 +48,20 @@ struct StateSummaryChip: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
-                .hisType(.label, weight: HisingenTheme.headingWeight)
+                .hisType(prominence == .quiet ? .micro : .label, weight: HisingenTheme.headingWeight)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 .accessibilityHidden(true)
             Text(message)
-                .hisType(.body, weight: HisingenTheme.valueWeight)
-            Spacer()
+                .hisType(prominence == .quiet ? .label : .body,
+                         weight: prominence == .quiet ? .semibold : HisingenTheme.valueWeight)
         }
         .foregroundStyle(color)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: chipRadius, style: .continuous))
+        .padding(.horizontal, prominence == .quiet ? 0 : 10)
+        .padding(.vertical, prominence == .quiet ? 0 : 7)
+        .background(
+            color.opacity(prominence == .quiet ? 0 : 0.12),
+            in: RoundedRectangle(cornerRadius: chipRadius, style: .continuous)
+        )
         .hisAnimation(Motion.stateChange, value: severity)
         .hisAnimation(Motion.stateChange, value: message)
         .accessibilityElement(children: .ignore)

@@ -32,7 +32,7 @@ extension InfoTabView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
+                    CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: HisingenTheme.chartInfo)
                     Spacer()
                     Button {
                         onNavigateToHistory()
@@ -74,7 +74,7 @@ extension InfoTabView {
                                 x: .value(L10n.text("Date"), point.0),
                                 y: .value(L10n.text("Odometer"), point.1)
                             )
-                            .foregroundStyle(.indigo)
+                            .foregroundStyle(HisingenTheme.chartAttention)
                             .interpolationMethod(.monotone)
                         }
                         .chartYScale(domain: lo...hi)
@@ -141,7 +141,7 @@ extension InfoTabView {
                             }
                             if let lat = location.latitude, let lon = location.longitude {
                                 KVRow(L10n.text("Coordinates"),
-                                      String(format: "%.4f, %.4f", lat, lon),
+                                      String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon),
                                       symbol: "mappin.circle")
                                     .privacySensitive()
                             }
@@ -166,8 +166,8 @@ extension InfoTabView {
             return AnyView(EmptyView())
         }
 
-        let latStr = String(format: "%.4f° %@", abs(lat), lat >= 0 ? L10n.text("N") : L10n.text("S"))
-        let lonStr = String(format: "%.4f° %@", abs(lon), lon >= 0 ? L10n.text("E") : L10n.text("W"))
+        let latStr = String(format: "%.4f° %@", locale: L10n.displayLocale, abs(lat), lat >= 0 ? L10n.text("N") : L10n.text("S"))
+        let lonStr = String(format: "%.4f° %@", locale: L10n.displayLocale, abs(lon), lon >= 0 ? L10n.text("E") : L10n.text("W"))
         let modelTitle = state.identity.modelName ?? L10n.text("Vehicle")
 
         return AnyView(Card {
@@ -249,7 +249,7 @@ extension InfoTabView {
                     }
                     if let heading = location.heading {
                         let cardinal = headingToCardinal(heading)
-                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", heading)))", symbol: "safari.fill")
+                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", locale: L10n.displayLocale, heading)))", symbol: "safari.fill")
                     }
                     if let brake = location.parkingBrakeEngaged {
                         KVRow(L10n.text("Parking Brake"), brake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle.fill", valueWarning: !brake)
@@ -274,7 +274,7 @@ extension InfoTabView {
         switch air.cleaningState {
         case .on:
             cleaningText = L10n.text("Purifying")
-            cleaningSymbol = "sparkles"
+            cleaningSymbol = "aqi.medium"
             cleaningColor = .teal
         case .off:
             cleaningText = L10n.text("Off")
@@ -293,7 +293,7 @@ extension InfoTabView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "wind", title: L10n.text("CleanZone Air Quality & Filter"), color: .teal)
+                    CardHeader(symbol: "wind", title: L10n.text("CleanZone Air Quality & Filter"), color: HisingenTheme.chartPositive)
                     Spacer()
                     Pill(
                         text: cleaningText,
@@ -401,7 +401,7 @@ extension InfoTabView {
                                 air.cleaningState == .on
                                     ? L10n.text("Stop Air Cleaning")
                                     : L10n.text("Clean Cabin Air (PM2.5 Pre-Clean)"),
-                                systemImage: air.cleaningState == .on ? "stop.circle" : "sparkles"
+                                systemImage: air.cleaningState == .on ? "stop.circle" : "aqi.medium"
                             )
                             .hisType(.label, weight: .medium)
                             .frame(maxWidth: .infinity, minHeight: 28)

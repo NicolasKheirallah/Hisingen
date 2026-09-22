@@ -20,8 +20,7 @@ extension HistoryDashboardView {
         let lossPct: Double? = state.powertrain.hasElectricRange
             ? ChargingSessionLedger.estimatedChargingLossPct(
                 from: samples,
-                packCapacityKwh: state.configuredCapacityReference(
-                    specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh)
+                packCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state))
             : nil
         let displayedCost = session.flatMap { stored in
             stored.estimatedCost
@@ -311,8 +310,8 @@ extension HistoryDashboardView {
         switch type {
         case .ac: return HisingenTheme.chartInfo
         case .dc: return HisingenTheme.chartAttention
-        case .wireless: return .purple
-        case .none: return .gray
+        case .wireless: return HisingenTheme.chartHealth
+        case .none: return HisingenTheme.inkMuted
         case .unknown: return nil
         }
     }
@@ -360,26 +359,8 @@ extension HistoryDashboardView {
     /// cannot turn one card appearance into an unbounded fetch storm. The uncovered scan and
     /// the per-session pricing/UPDATE pass run off the main actor, like the other loads.
     private func backfillSpotCosts() async {
-        let zone = preferences.electricityPriceZone
-        let vin = state.identity.vin
-        let calendar = Self.stockholmCalendar
-        let db = VehicleDatabase.shared
-        let pricedSessions = await Task.detached(priority: .userInitiated) { () -> Int in
-            var prices = await ElectricityPriceService.shared.prices(for: zone)
-            let uncovered = db.charging.sessionsMissingSpotCost(vin: vin, limit: 400)
-            let covered = Set(prices.map { calendar.startOfDay(for: $0.startDate) })
-            let days = Set(uncovered.compactMap { session -> Date? in
-                guard session.endedAt != nil else { return nil }
-                let day = calendar.startOfDay(for: session.startedAt)
-                return covered.contains(day) ? nil : day
-            })
-            for day in days.sorted(by: >).prefix(7)
-            where Date().timeIntervalSince(day) < 8 * 86_400 {
-                prices = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
-            }
-            guard !prices.isEmpty else { return 0 }
-            return db.charging.backfillSpotEstimatedCosts(vin: vin, prices: prices)
-        }.value
+        let pricedSessions = await history.backfillSpotEstimatedCosts(
+            vin: state.identity.vin, zone: preferences.electricityPriceZone)
 
         // Back on the main actor only for the reload decision.
         guard pricedSessions > 0, !Task.isCancelled else { return }
@@ -540,7 +521,7 @@ extension HistoryDashboardView {
         let totalEnergy = max(0.001, stats.reduce(0) { $0 + $1.energyKwh })
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Charging by Location"), color: .teal)
+                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Charging by Location"), color: HisingenTheme.chartPositive)
                 ForEach(stats.prefix(6)) { stat in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {

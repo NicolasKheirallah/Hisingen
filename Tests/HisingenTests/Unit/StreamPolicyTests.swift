@@ -2,9 +2,8 @@ import Foundation
 import Testing
 @testable import Hisingen
 
-/// Unit coverage for the live-stream decision policy: the charging-only gate, the
-/// exponential backoff ladder with jitter and Retry-After, the circuit breakers, and the
-/// stability rule that only resets failures after a real connection held for a while.
+/// Unit coverage for the live-stream decision policy: the charging-only gate,
+/// the exponential backoff ladder with jitter and Retry-After, and the circuit breakers.
 struct StreamPolicyTests {
     private func state(charging: Bool, available: VehicleAvailability = .available,
                        climateActive: Bool = false) -> VehicleState {
@@ -44,19 +43,6 @@ struct StreamPolicyTests {
     func customGateOverridesDefault() {
         let policy = LiveStreamPolicy(shouldStream: { _ in true })
         #expect(policy.shouldStream(state(charging: false)))
-    }
-
-    // MARK: - Stability
-
-    /// Backoff resets only after meaningful stability – ten connected minutes – not when the
-    /// socket merely opens.
-    @Test
-    func stabilityRequiresSustainedConnection() {
-        let policy = LiveStreamPolicy(stabilityInterval: 600)
-        let now = Date()
-        #expect(!policy.isStable(connectedAt: nil, now: now))
-        #expect(!policy.isStable(connectedAt: now.addingTimeInterval(-599), now: now))
-        #expect(policy.isStable(connectedAt: now.addingTimeInterval(-600), now: now))
     }
 
     // MARK: - Backoff

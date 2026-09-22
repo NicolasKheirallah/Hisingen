@@ -47,7 +47,7 @@ enum ChargingHistoryExport {
                 try data.write(to: url, options: .atomic)
             } catch {
                 // Only Sendable values cross back to the main actor to show the alert.
-                let title = L10n.text("Export Failed")
+                let title = L10n.text("Export failed")
                 let message = L10n.text("The charging history could not be written.")
                 let detail = error.localizedDescription
                 Task { @MainActor in

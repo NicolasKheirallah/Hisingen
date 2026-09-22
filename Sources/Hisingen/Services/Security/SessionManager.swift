@@ -8,11 +8,14 @@ import Foundation
 final class SessionManager {
     enum Intent { case resume, credentialsChanged }
 
-    private let readPassword: () throws -> String?
+    /// Sendable so the read can run detached from the main actor: a stored password lives
+    /// behind the same Keychain ACL consent as every secret, and that read must not run on
+    /// the main thread during launch (a pending prompt there cannot be answered).
+    private let readPassword: @Sendable () throws -> String?
     private let clearPassword: () -> Void
     private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
-    init(readPassword: @escaping () throws -> String? = { try Keychain.readPassword() },
+    init(readPassword: @escaping @Sendable () throws -> String? = { try Keychain.readPassword() },
          clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
          configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
              try await api.prepareSession()
@@ -34,8 +37,12 @@ final class SessionManager {
 
         func passwordCredentials() async throws -> (email: String, password: String)? {
             guard brand == .polestar,
-                  await api.acceptsStoredPasswordSignIn,
-                  let password = try readPassword(), !password.isEmpty else { return nil }
+                  await api.acceptsStoredPasswordSignIn else { return nil }
+            let readStoredPassword = readPassword
+            let stored = try await Task.detached(priority: .userInitiated) {
+                try readStoredPassword()
+            }.value
+            guard let password = stored, !password.isEmpty else { return nil }
             let email = preferences.email
             return email.isEmpty ? nil : (email, password)
         }

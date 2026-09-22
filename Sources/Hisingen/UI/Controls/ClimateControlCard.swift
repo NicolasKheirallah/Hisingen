@@ -35,17 +35,17 @@ struct ClimateControlCard: View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    HStack(spacing: 7) {
-                        SpinningFanView(
+                    CardHeader(
+                        symbol: "fan.fill",
+                        title: L10n.text("Climate & Conditioning"),
+                        color: climateActive ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted,
+                        isSemantic: true,
+                        glyph: AnyView(SpinningFanView(
                             isSpinning: climateActive && !reduceMotion,
                             size: 14,
                             color: climateActive ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted
-                        )
-                        Text(L10n.text("Climate & Conditioning"))
-                            .hisType(.body, weight: .bold)
-                            .foregroundStyle(HisingenTheme.ink)
-                    }
-                    Spacer()
+                        ))
+                    )
                     if climateActive {
                         Pill(
                             text: state.climateStatus?.activity.displayName ?? L10n.text("Active"),
@@ -101,7 +101,7 @@ struct ClimateControlCard: View {
                         gate.send(actionCommand)
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "sparkles")
+                            Image(systemName: "aqi.medium")
                                 .foregroundStyle(isCleaning ? HisingenTheme.semanticGood : .secondary)
                             Text(L10n.text(isCleaning
                                 ? "Stop Air Cleaning" : "Clean Cabin Air (PM2.5 Pre-Clean)"))
@@ -186,7 +186,7 @@ struct ClimateControlCard: View {
                     if let requested = state.climateStatus?.requestedTemperatureCelsius {
                         Text("·")
                             .foregroundStyle(.tertiary)
-                        Text(L10n.text("Target:"))
+                        Text(L10n.text("Target"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
                         Text(Format.temperature(celsius: requested, unit: preferences.temperatureUnit))
@@ -237,7 +237,7 @@ struct ClimateControlCard: View {
                     if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive, remaining > 0 {
                         Text(L10n.format("%d min remaining", remaining))
                             .hisType(.caption, weight: .medium)
-                            .foregroundStyle(HisingenTheme.polestarAmber)
+                            .foregroundStyle(HisingenTheme.accent)
                             .transition(.opacity)
                     }
                 }
@@ -245,9 +245,10 @@ struct ClimateControlCard: View {
                 .hisAnimation(Motion.entrance, value: climateActive)
                 Spacer()
                 Text(Format.temperature(celsius: targetTemperature, unit: preferences.temperatureUnit))
-                    .font(.system(size: 22, weight: .bold))
+                    .hisType(.displaySmall, weight: .bold)
                     .monospacedDigit()
                     .foregroundStyle(HisingenTheme.temperatureColor(celsius: targetTemperature))
+                    .hisTelemetryValue(targetTemperature, reduceMotion: reduceMotion)
                     .accessibilityLabel(L10n.text("Target temperature"))
                     .accessibilityValue(Format.temperature(celsius: targetTemperature, unit: preferences.temperatureUnit))
             }
@@ -282,10 +283,14 @@ struct ClimateControlCard: View {
                                 .hisType(.label, weight: isSelected ? .bold : .medium)
                                 .padding(.vertical, 3)
                                 .frame(maxWidth: .infinity)
-                                .background(
-                                    isSelected ? HisingenTheme.semanticWarning.opacity(0.18) : Color.primary.opacity(0.05),
-                                    in: RoundedRectangle(cornerRadius: 6)
-                                )
+                                .background {
+                                    if isSelected {
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(HisingenTheme.semanticWarning.opacity(0.18))
+                                    } else {
+                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 6))
+                                    }
+                                }
                                 .foregroundStyle(isSelected ? HisingenTheme.semanticWarning : .secondary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: isSelected)
                         }
@@ -453,7 +458,7 @@ struct ClimateControlCard: View {
                 Image(systemName: "heat.waves")
                     .foregroundStyle(HisingenTheme.semanticWarning)
                     .hisType(.caption)
-                Text(L10n.text("Rear Seat Heating:"))
+                Text(L10n.text("Rear seat heating"))
                     .hisType(.caption, weight: .medium)
                     .foregroundStyle(.secondary)
                 Text(status)
@@ -511,7 +516,7 @@ struct ClimateControlCard: View {
             .frame(maxWidth: .infinity, minHeight: 34)
         }
         .buttonStyle(.borderedProminent)
-        .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.polestarAmber)
+        .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.accent)
         .disabled(gate.isDisabled(climateActive ? .stopClimate : startClimateCommand))
         .accessibilityHint(
             climateActive

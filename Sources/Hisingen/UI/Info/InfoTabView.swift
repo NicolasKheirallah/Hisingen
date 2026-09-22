@@ -20,7 +20,7 @@ struct InfoTabView: View {
     }
 
     let state: VehicleState
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
     let imageCache: CarImageCache
     let reverseGeocoder: ReverseGeocoder
     var onRefresh: () -> Void = {}
@@ -42,6 +42,9 @@ struct InfoTabView: View {
     @State var showAllCapabilities = false
     @State var reportError: String?
     @State private var isRefreshing = false
+    /// Cumulative sweep angle, like the footer's refresh glyph. Animating a fixed 360 back
+    /// down to 0 spun the icon visibly in reverse when a refresh ended.
+    @State private var refreshRotation: Double = 0
     @State private var selectedCategory: InfoCategory = .all
 
     enum InfoCategory: String, CaseIterable, Identifiable {
@@ -80,7 +83,7 @@ struct InfoTabView: View {
     /// memberwise initializer.
     init(
         state: VehicleState,
-        database: VehicleDatabase,
+        history: HistoryWorkspace,
         imageCache: CarImageCache,
         reverseGeocoder: ReverseGeocoder,
         onRefresh: @escaping () -> Void = {},
@@ -89,7 +92,7 @@ struct InfoTabView: View {
         layout: TabLayout = .everything
     ) {
         self.state = state
-        self.database = database
+        self.history = history
         self.imageCache = imageCache
         self.reverseGeocoder = reverseGeocoder
         self.onRefresh = onRefresh
@@ -168,12 +171,6 @@ struct InfoTabView: View {
         }
     }
 
-    /// Sections this tab builds. Exposed so the catalog can verify completeness against it.
-    static var shippedSections: [InfoSection] {
-        InfoSection.allCases
-    }
-
-
     struct InfoSectionEntry: Identifiable {
         let id: InfoSection
         let view: AnyView
@@ -239,7 +236,7 @@ struct InfoTabView: View {
             out.append(InfoSectionEntry(id: id, view: AnyView(view)))
         }
 
-        add(.overview, heroVisualSection)
+        add(.overview, HisingenTheme.layoutWidth >= 580 ? AnyView(awardVehiclePassport) : AnyView(heroVisualSection))
         add(.freshness, readingFreshnessCard)
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {
@@ -316,7 +313,7 @@ struct InfoTabView: View {
     private func activityPlaceholderCard(message: String?) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: .indigo)
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: HisingenTheme.chartInfo)
                 if let message {
                     Text(message).hisType(.label).foregroundStyle(.secondary)
                 } else {
@@ -387,6 +384,9 @@ struct InfoTabView: View {
             Button {
                 guard !isRefreshing else { return }
                 isRefreshing = true
+                withAnimation(reduceMotion ? nil : Motion.refreshSweep) {
+                    refreshRotation += 360
+                }
                 onRefresh()
                 Task {
                     // Backstop only. The spinner is normally cleared by the `.onChange` below when
@@ -399,11 +399,7 @@ struct InfoTabView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .hisType(.label, weight: .semibold)
-                    .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                    .animation(
-                        Motion.resolve(isRefreshing ? Motion.spin : .default),
-                        value: isRefreshing
-                    )
+                    .rotationEffect(.degrees(refreshRotation))
             }
             .buttonStyle(.pressable)
             .disabled(isRefreshing)
@@ -425,13 +421,7 @@ struct InfoTabView: View {
     }
 
     private func loadAsyncData() async {
-        let vin = state.identity.vin
-        let db = database
-        let capacity = state.configuredCapacityReference(
-            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
-        let loaded = await Task.detached(priority: .userInitiated) { () -> InfoAsyncData in
-            return db.history.recent(vin: vin, chargingCapacityKwh: capacity)
-        }.value
+        let loaded = await history.recentRecords(for: state)
         guard !Task.isCancelled else { return }
         asyncData = loaded
         asyncDataLoaded = true
@@ -499,8 +489,7 @@ struct InfoTabView: View {
             degradationPercent: saved.degradationPct,
             estimatedUsableCapacityKwh: saved.effectiveUsableKwh,
             recordedAt: saved.timestamp,
-            fallbackReferenceCapacityKwh: state.configuredCapacityReference(
-                specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
+            fallbackReferenceCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state)
         )
     }
 
@@ -545,7 +534,7 @@ struct InfoTabView: View {
             row(L10n.text("Odometer"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit))
         }
         if let battery = state.energy.batteryPercentage {
-            row(L10n.text("Battery"), String(format: "%.0f%%", battery))
+            row(L10n.text("Battery"), String(format: "%.0f%%", locale: L10n.displayLocale, battery))
         }
         if let range = state.primaryRangeKm {
             row(L10n.text("Range"), Format.distance(km: range, unit: preferences.distanceUnit))
@@ -575,10 +564,10 @@ struct InfoTabView: View {
 
         if let estimate = batteryHealthEstimate {
             lines.append("")
-            row(L10n.text("Calculated SoH"), String(format: "%.1f%%", estimate.stateOfHealthPercent))
+            row(L10n.text("Calculated SoH"), String(format: "%.1f%%", locale: L10n.displayLocale, estimate.stateOfHealthPercent))
             row(L10n.text("Calculation Method"), L10n.text("Full-charge range estimate"))
             row(L10n.text("Last 100% calculation"), Format.dateTimeFormatter.string(from: estimate.recordedAt))
-            row(L10n.text("Calculated Degradation"), String(format: "%.1f%%", estimate.degradationPercent))
+            row(L10n.text("Calculated Degradation"), String(format: "%.1f%%", locale: L10n.displayLocale, estimate.degradationPercent))
         }
 
         if !redacted {
@@ -587,7 +576,7 @@ struct InfoTabView: View {
                 row(L10n.text("Parking Address"), address)
             }
             if let lat = state.location?.latitude, let lon = state.location?.longitude {
-                row(L10n.text("Coordinates"), String(format: "%.5f, %.5f", lat, lon))
+                row(L10n.text("Coordinates"), String(format: "%.5f, %.5f", locale: L10n.displayLocale, lat, lon))
             }
         }
 

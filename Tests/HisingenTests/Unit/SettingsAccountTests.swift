@@ -11,6 +11,11 @@ struct SettingsAccountTests {
         #expect(SettingsValidation.isValidOptionalVIN("YSM12345678901234"))
         #expect(!SettingsValidation.isValidOptionalVIN("YSM123"))
         #expect(!SettingsValidation.isValidOptionalVIN("YSM1234567890I234"))
+        // The optional form normalizes what the reader typed; the strict form the APIs gate
+        // on does not, so the same VIN splits across the two exactly at that difference.
+        #expect(SettingsValidation.isValidOptionalVIN(" ysm12345678901234\n"))
+        #expect(!SettingsValidation.isValidVIN("ysm12345678901234"))
+        #expect(!SettingsValidation.isValidVIN(" YSM12345678901234"))
     }
 
     @Test

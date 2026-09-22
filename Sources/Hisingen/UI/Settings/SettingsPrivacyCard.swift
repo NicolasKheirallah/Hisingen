@@ -10,7 +10,7 @@ struct SettingsPrivacyCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "hand.raised.fill", title: L10n.text("Privacy Dashboard"), color: .purple)
+                CardHeader(symbol: "hand.raised.fill", title: L10n.text("Privacy Dashboard"), color: HisingenTheme.chartInfo)
                 Text(L10n.text("Hisingen keeps account secrets in the macOS Keychain and vehicle history in a local SQLite database."))
                     .hisType(.caption)
                     .foregroundStyle(.secondary)

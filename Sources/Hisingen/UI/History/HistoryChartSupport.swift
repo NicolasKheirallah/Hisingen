@@ -48,7 +48,7 @@ struct TimeSeriesAXDescriptor: AXChartDescriptorRepresentable {
     let title: String
     let yLabel: String
     let points: [(date: Date, value: Double)]
-    var valueFormat: @Sendable (Double) -> String = { String(format: "%.1f", $0) }
+    var valueFormat: @Sendable (Double) -> String = { String(format: "%.1f", locale: L10n.displayLocale, $0) }
 
     func makeChartDescriptor() -> AXChartDescriptor {
         let dates = points.map { $0.date.timeIntervalSince1970 }
@@ -136,21 +136,11 @@ enum HistoryExport {
     }
 
     // The two series a user most often wants clipped to the visible period. Column order
-    // mirrors `VehicleDatabase.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
+    // mirrors `VehicleHistoryLedger.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
     // so a period export and a full export open the same way.
 
-    /// Quotes a cell containing a comma, quote or newline, doubling embedded quotes – the
-    /// same rule as the passport export in InfoTabView+Specs, so no data the vehicle supplies
-    /// can shift the column layout.
-    static func csvField(_ value: String?) -> String {
-        guard let value, !value.isEmpty else { return "" }
-        let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
-        return value.contains(",") || value.contains("\"") || value.contains("\n")
-            ? "\"\(escaped)\"" : value
-    }
-
     private static func opt(_ value: Double?, _ places: Int) -> String {
-        value.map { String(format: "%.\(places)f", $0) } ?? ""
+        value.map { String(format: "%.\(places)f", locale: L10n.displayLocale, $0) } ?? ""
     }
 
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
@@ -159,17 +149,17 @@ enum HistoryExport {
         var rows: [String] = [header]
         for trip in trips {
             let fields: [String] = [
-                csvField(trip.id), csvField(trip.vin),
+                CSV.field(trip.id), CSV.field(trip.vin),
                 Format.iso8601.string(from: trip.startedAt),
                 Format.iso8601.string(from: trip.endedAt),
-                String(format: "%.1f", trip.duration / 60),
-                String(format: "%.2f", trip.distanceKm),
+                String(format: "%.1f", locale: L10n.displayLocale, trip.duration / 60),
+                String(format: "%.2f", locale: L10n.displayLocale, trip.distanceKm),
                 opt(trip.averageConsumption, 2),
                 opt(trip.ambientTemperatureCelsius, 1),
                 coord(trip.startLatitude), coord(trip.startLongitude),
                 coord(trip.endLatitude), coord(trip.endLongitude)
             ]
-            rows.append(fields.map(csvField).joined(separator: ","))
+            rows.append(fields.map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }
@@ -182,11 +172,11 @@ enum HistoryExport {
                 s.id, s.vin,
                 Format.iso8601.string(from: s.startedAt),
                 s.endedAt.map { Format.iso8601.string(from: $0) } ?? "",
-                String(format: "%.1f", s.startSoc),
+                String(format: "%.1f", locale: L10n.displayLocale, s.startSoc),
                 opt(s.endSoc, 1),
-                String(format: "%.2f", s.energyDeliveredKwh),
-                String(format: "%.1f", s.peakPowerKw),
-                String(format: "%.1f", s.averagePowerKw),
+                String(format: "%.2f", locale: L10n.displayLocale, s.energyDeliveredKwh),
+                String(format: "%.1f", locale: L10n.displayLocale, s.peakPowerKw),
+                String(format: "%.1f", locale: L10n.displayLocale, s.averagePowerKw),
                 s.locationName ?? "",
                 s.lifecycleState.rawValue,
                 s.completionReason?.rawValue ?? "",
@@ -204,7 +194,7 @@ enum HistoryExport {
                 opt(s.targetSoc, 1),
                 String(s.summaryVersion)
             ]
-            rows.append(fields.map(csvField).joined(separator: ","))
+            rows.append(fields.map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }

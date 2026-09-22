@@ -65,7 +65,7 @@ struct VehicleSoftwareCard: View {
                 if updateInstallable {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack {
-                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
+                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(HisingenTheme.accent)
                         Text(L10n.format("Version %@ is ready to install in Controls.", software.latestAvailableVersion ?? software.version ?? "–"))
                             .hisType(.caption, weight: .medium).foregroundStyle(HisingenTheme.ink)
                     }
@@ -131,7 +131,7 @@ struct VehicleSoftwareCard: View {
                     .hisType(.caption).foregroundStyle(.secondary)
                 if let updated = software.updatedAt { Text(L10n.format("Announced: %@", Format.dateTimeFormatter.string(from: updated))).hisType(.caption).foregroundStyle(.secondary) }
                 Text(state.otaCapabilities?.supportsCloudBasedOtaDownloadConsent == false
-                    ? L10n.text("This vehicle does not support cloud-based download consent – the update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.")
+                    ? L10n.text("This vehicle does not support cloud-based download consent. The update can only be downloaded when the car checks in with the backend autonomously. A Polestar service appointment can apply it directly.")
                     : L10n.text("If the update has been waiting for a long time, contact Polestar Support or book a service appointment. Workshops can apply it directly."))
                     .hisType(.caption).foregroundStyle(.secondary)
             }

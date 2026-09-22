@@ -52,7 +52,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                 .buttonStyle(.pressable)
                 .accessibilityLabel("\(option.title). \(option.subtitle)")
                 .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                .help("\(option.title) – \(option.subtitle)")
+                .help("\(option.title) · \(option.subtitle)")
             }
         }
     }
@@ -187,6 +187,7 @@ struct PanelCustomSizeControls: View {
                     }
                 }
             ), in: Double(range.lowerBound)...Double(range.upperBound))
+            .accessibilityLabel(label)
             Text("\(Int(value.wrappedValue))")
                 // `design: .monospaced` already gives tabular figures; the extra
                 // `.monospacedDigit()` was a no-op.

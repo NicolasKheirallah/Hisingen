@@ -46,17 +46,12 @@ struct OpeningChipView: View {
     /// it shadowed the real `HisingenTheme.chipFill` token, which is the inset surface, while this
     /// is a state tint over whatever surface the row already sits on.
     private var stateFill: Color {
+        // Hover, highlight and the open state all read through the wash alone; the row
+        // draws no outline, so the fill has to carry the whole state ladder.
         if isHovered || isHighlighted {
-            return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.06)
+            return isOpen ? HisingenTheme.semanticWarning.opacity(0.16) : Color.primary.opacity(0.08)
         }
-        return isOpen ? HisingenTheme.semanticWarning.opacity(0.07) : Color.primary.opacity(0.03)
-    }
-
-    private var chipStroke: Color {
-        if isHovered || isHighlighted {
-            return isOpen ? HisingenTheme.semanticWarning.opacity(0.6) : HisingenTheme.accent.opacity(0.5)
-        }
-        return isOpen ? HisingenTheme.semanticWarning.opacity(0.3) : Color.primary.opacity(0.04)
+        return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.04)
     }
 
     private var symbolView: some View {
@@ -98,12 +93,8 @@ struct OpeningChipView: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 4.5)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
                 .fill(stateFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(chipStroke, lineWidth: active ? 1.0 : 0.5)
         )
         .scaleEffect(active ? 1.02 : 1.0)
         // Open/close recolors icon, label and dot; the hover animation below
@@ -159,7 +150,7 @@ struct DoorsAndOpeningsCardView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo)
+                    CardHeader(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: HisingenTheme.chartInfo)
                     Spacer()
                     if hasOpen {
                         Pill(
@@ -423,14 +414,11 @@ struct TirePillView: View {
     private var activeHover: Bool { isHovered || isHighlighted }
 
     private var tireFill: Color {
-        Color.primary.opacity(activeHover ? 0.08 : 0.035)
-    }
-
-    private var tireStroke: Color {
+        // Attention rides in the wash (the row draws no outline), hover lifts the neutral fill.
         if activeHover {
-            return attention ? statusColor.opacity(0.5) : HisingenTheme.accent.opacity(0.45)
+            return attention ? statusColor.opacity(0.14) : HisingenTheme.accent.opacity(0.10)
         }
-        return Color.primary.opacity(0.06)
+        return Color.primary.opacity(0.035)
     }
 
     private var measuredColor: Color {
@@ -440,7 +428,7 @@ struct TirePillView: View {
 
     private var referenceText: String? {
         guard let ref = tyre?.referenceKilopascals, measuredText != nil else { return nil }
-        var text = L10n.format("Target: %@", Format.pressure(kilopascals: ref, unit: preferences.pressureUnit))
+        var text = L10n.format("Target %@", Format.pressure(kilopascals: ref, unit: preferences.pressureUnit))
         if let measured = tyre?.kilopascals {
             let diff = measured - ref
             if abs(diff) >= 5 {
@@ -493,12 +481,8 @@ struct TirePillView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
                 .fill(tireFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(tireStroke, lineWidth: activeHover ? 1.0 : 0.5)
         )
         .scaleEffect(activeHover ? 1.02 : 1.0)
         // Severity changes recolor the dot and rewrite the status line; the
@@ -607,22 +591,22 @@ struct LocationCardView: View {
                             // One size whichever way the lookup went. It used to step from 11pt to
                             // 10pt when the address arrived, so the line moved as a layout response
                             // to a network result.
-                            Text(String(format: "GPS: %.4f°, %.4f°", lat, lon))
+                            Text(String(format: "GPS: %.4f°, %.4f°", locale: L10n.displayLocale, lat, lon))
                                 .hisType(.caption, weight: .medium)
                                 .monospacedDigit()
                                 .foregroundStyle(streetAddress != nil ? .secondary : HisingenTheme.ink)
 
                             Button {
-                                let coords = String(format: "%.6f, %.6f", lat, lon)
+                                let coords = String(format: "%.6f, %.6f", locale: L10n.displayLocale, lat, lon)
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(coords, forType: .string)
                                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                                withAnimation(Motion.stateChange) {
+                                withAnimation(reduceMotion ? nil : Motion.stateChange) {
                                     copiedCoordinates = true
                                 }
                                 Task {
                                     try? await Task.sleep(for: .seconds(1.8))
-                                    withAnimation(Motion.interaction) {
+                                    withAnimation(reduceMotion ? nil : Motion.interaction) {
                                         copiedCoordinates = false
                                     }
                                 }
@@ -679,12 +663,12 @@ struct LocationCardView: View {
                         if altitude != nil || accuracy != nil {
                             HStack(spacing: 6) {
                                 if let altitude {
-                                    Text(String(format: "%.0f m %@", altitude, L10n.text("elevation")))
+                                    Text(String(format: "%.0f m %@", locale: L10n.displayLocale, altitude, L10n.text("elevation")))
                                         .hisType(.micro)
                                         .foregroundStyle(.secondary)
                                 }
                                 if let accuracy {
-                                    Text(String(format: "±%.1f m", accuracy))
+                                    Text(String(format: "±%.1f m", locale: L10n.displayLocale, accuracy))
                                         .hisType(.micro)
                                         .foregroundStyle(.tertiary)
                                 }

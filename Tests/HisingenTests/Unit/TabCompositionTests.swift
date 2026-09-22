@@ -59,6 +59,15 @@ struct TabCompositionTests {
         }
     }
 
+    @Test
+    func vehicleDetailCardsRetiredIntoInfoAreNotOfferedForComposition() {
+        let offered = Set(TabItemCatalog.cards.map(\.id))
+        #expect(offered.isDisjoint(with: TabItemCatalog.retiredVehicleDetailItems))
+        #expect(TabItemCatalog.items(in: .vehicle).allSatisfy {
+            !TabItemCatalog.retiredVehicleDetailItems.contains($0.id)
+        })
+    }
+
     // MARK: - Defaults
 
     @Test
@@ -180,22 +189,6 @@ struct TabCompositionTests {
     }
 
     @Test
-    func aListDragKeepsHeadersOnTop() {
-        var composition = TabComposition.default
-        // Ask for a card to move to the very top; the period picker must stay above it.
-        composition.moveCards(in: .history, fromOffsets: IndexSet(integer: 5), toOffset: 0)
-        let items = composition.items(for: .history)
-        guard let picker = items.firstIndex(of: .historyPeriodPicker),
-              let firstCard = items.firstIndex(where: { TabItemCatalog.item($0)?.isCard == true }) else {
-            Issue.record("fixture layout changed")
-            return
-        }
-        #expect(picker < firstCard)
-    }
-
-    // MARK: - Adding and removing
-
-    @Test
     func aCardFromAnotherTabCanBePlacedAndIsAddedInASensiblePosition() {
         var composition = TabComposition.default
         composition.addItem(.controlsAccess, to: .vehicle)
@@ -227,21 +220,6 @@ struct TabCompositionTests {
         composition.addItem(.vehicleTyres, to: .vehicle)
         #expect(composition.shows(.vehicleTyres))
         #expect(composition.items(for: .vehicle).contains(.vehicleTyres))
-    }
-
-    @Test
-    func restoringACardPutsItBackOnItsOwnTabAtItsShippedPosition() {
-        var composition = TabComposition.default
-        composition.removeItem(.vehicleTyres, from: .vehicle)
-        composition.restoreItem(.vehicleTyres)
-        #expect(composition.items(for: .vehicle) == TabItemCatalog.defaultItems(for: .vehicle))
-        #expect(composition.shows(.vehicleTyres))
-
-        // A card hidden on a tab of the reader's own still goes home.
-        var other = TabComposition.default
-        other.removeItem(.historyTrips, from: .history)
-        other.restoreItem(.historyTrips)
-        #expect(other.items(for: .history) == TabItemCatalog.defaultItems(for: .history))
     }
 
     // MARK: - Custom tabs

@@ -7,6 +7,7 @@ import SwiftUI
 /// tap through `onDismiss`.
 @MainActor
 struct DismissibleNoticeBanner: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let icon: String
     let title: String
     let details: [String]
@@ -75,7 +76,7 @@ struct DismissibleNoticeBanner: View {
             .help(L10n.text("Dismiss"))
         }
         .padding(9)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: bannerRadius))
+        .background(tint.opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: bannerRadius))
         .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .scale(scale: 0.95)))
     }
 }

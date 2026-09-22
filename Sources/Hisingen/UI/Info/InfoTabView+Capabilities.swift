@@ -31,7 +31,7 @@ extension InfoTabView {
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
+                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: HisingenTheme.chartPositive)
                 Text(L10n.text("Positive flags were reported by the backend. “Not reported” does not prove that the vehicle lacks a capability."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
@@ -75,7 +75,7 @@ extension InfoTabView {
                         if let lights = equipment.supportedLightWarnings, !lights.isEmpty {
                             DisclosureGroup(L10n.text("Monitored Lights")) {
                                 Text(lights.joined(separator: ", "))
-                                    .font(.caption)
+                                    .hisType(.caption)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -163,7 +163,7 @@ extension InfoTabView {
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: .teal)
+                CardHeader(symbol: "checklist", title: L10n.text("Vehicle Capabilities"), color: HisingenTheme.chartPositive)
                 Text(L10n.text("Derived from the model profile and any capabilities probed at runtime. Not a live per-VIN guarantee."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)

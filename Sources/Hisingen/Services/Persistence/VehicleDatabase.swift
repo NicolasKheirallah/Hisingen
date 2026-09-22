@@ -658,6 +658,10 @@ final class VehicleDatabase: @unchecked Sendable {
         try vacuumOrThrow()
     }
 
+    /// The horizon the storage card states next to the sample-retention picker, so the two
+    /// numbers the reader compares come from one place.
+    static let sessionRetentionDays = 730
+
     /// Bounds growth of the tables that previously had no retention path at all (manual or
     /// automatic) – `charging_sessions`, `battery_health_history`, `remote_commands_log`,
     /// and the per-hour `connectivity_history`/`cabin_climate_history` heartbeats. Defaults
@@ -666,8 +670,8 @@ final class VehicleDatabase: @unchecked Sendable {
     /// change-gated), so there's little storage pressure to justify discarding a user's
     /// longer-term charging or health history as aggressively as the high-volume samples.
     func pruneAgedHistoryOrThrow(
-        chargingSessionsOlderThanDays: Int = 730,
-        batteryHealthOlderThanDays: Int = 730,
+        chargingSessionsOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
+        batteryHealthOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
         commandAuditsOlderThanDays: Int = 180,
         airQualityOlderThanDays: Int = 365,
         connectivityOlderThanDays: Int = 180,

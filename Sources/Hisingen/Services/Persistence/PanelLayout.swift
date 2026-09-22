@@ -46,7 +46,7 @@ struct PanelLayout: Equatable {
 
     // MARK: - Bounds
 
-    static let minimumWidth: CGFloat = 340
+    static let minimumWidth: CGFloat = 460
     static let maximumWidth: CGFloat = 760
     static let minimumHeight: CGFloat = 420
     static let maximumHeight: CGFloat = 860

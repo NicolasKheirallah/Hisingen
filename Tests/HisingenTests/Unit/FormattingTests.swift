@@ -17,6 +17,7 @@ struct FormattingTests {
     private func expectedKw(_ kw: Double) -> String {
         let decimals = kw >= 10 ? 0 : 1
         let formatter = NumberFormatter()
+        formatter.locale = L10n.displayLocale
         formatter.numberStyle = .decimal
         formatter.usesGroupingSeparator = false
         formatter.minimumFractionDigits = decimals
@@ -35,6 +36,8 @@ struct FormattingTests {
     func testDistanceFormattingAndConversion() {
         #expect(DistanceUnit.kilometers.convert(km: 412) == 412)
         #expect(DistanceUnit.miles.convert(km: 412) == 256)
+        #expect(Format.distanceParts(km: 412, unit: .kilometers) == .init(value: "412", unit: "km"))
+        #expect(Format.distanceParts(km: 412, unit: .miles) == .init(value: "256", unit: "mi"))
         #expect(Format.distance(km: 412, unit: .kilometers) == "412 km")
         #expect(Format.distance(km: 412, unit: .miles) == "256 mi")
         let grouped = Format.distance(km: 23_412, grouped: true, unit: .kilometers)
@@ -215,9 +218,9 @@ struct FormattingTests {
 
     @Test
     func testVINValidationSupportsGuestAccountFallback() {
-        #expect(PolestarAPI.isValidVIN("YSMVSEDE6PL000001"))
-        #expect(!(PolestarAPI.isValidVIN("TOO-SHORT")))
-        #expect(!(PolestarAPI.isValidVIN("YSMVSEDEIPL147228")))
+        #expect(SettingsValidation.isValidVIN("YSMVSEDE6PL000001"))
+        #expect(!(SettingsValidation.isValidVIN("TOO-SHORT")))
+        #expect(!(SettingsValidation.isValidVIN("YSMVSEDEIPL147228")))
     }
 
     @Test
@@ -463,17 +466,17 @@ struct FormattingTests {
         )
 
         #expect(Format.barTitle(for: chargingCar, style: .battery, unit: .kilometers) == "82%")
-        #expect(Format.barTitle(for: chargingCar, style: .batteryAndRange, unit: .kilometers) == "82% · 348km")
+        #expect(Format.barTitle(for: chargingCar, style: .batteryAndRange, unit: .kilometers) == "82% · 348 km")
         // Charging-aware renders as "82%→90 · 1h42m": the arrow shows time-to-TARGET when a
         // sub-100 % target is set, answering "when do I unplug" rather than "when is it full".
         #expect(Format.barTitle(for: chargingCar, style: .chargingAware, unit: .kilometers) == "82%→90 · 1h42m")
         #expect(Format.barTitle(for: chargingCar, style: .compactCharging, unit: .kilometers) == "82% (1h42m)")
         #expect(Format.barTitle(for: chargingCar, style: .batteryAndPower, unit: .kilometers) == "82% · \(expectedKw(7.2))")
-        #expect(Format.barTitle(for: chargingCar, style: .range, unit: .kilometers) == "348km")
+        #expect(Format.barTitle(for: chargingCar, style: .range, unit: .kilometers) == "348 km")
 
         let idleCar = vehicle(battery: 82, state: .idle, connection: .disconnected)
         #expect(Format.barTitle(for: idleCar, style: .compactCharging, unit: .kilometers) == "82%")
-        #expect(Format.barTitle(for: idleCar, style: .batteryAndPower, unit: .kilometers) == "82% · 200km")
+        #expect(Format.barTitle(for: idleCar, style: .batteryAndPower, unit: .kilometers) == "82% · 200 km")
     }
 
     @Test
@@ -622,6 +625,7 @@ struct FormattingTests {
         let formattedUTC = Format.completionTime(from: 90, baseDate: baseDate, timeZone: utcZone)
 
         let reference = DateFormatter()
+        reference.locale = L10n.displayLocale
         reference.dateStyle = .none
         reference.timeStyle = .short
         reference.timeZone = utcZone
@@ -648,6 +652,7 @@ struct FormattingTests {
         // exact rendered instant via an identically-configured reference, plus a
         // cross-instant inequality that fails if the time component is dropped.
         let reference = DateFormatter()
+        reference.locale = L10n.displayLocale
         reference.dateStyle = .none
         reference.timeStyle = .short
         let formatted = Format.shortTime(date: date)
@@ -671,6 +676,7 @@ struct FormattingTests {
         let date = try #require(calendar.date(from: comps), "fixture construction must not silently fall back to now")
 
         let reference = DateFormatter()
+        reference.locale = L10n.displayLocale
         reference.dateStyle = .short
         reference.timeStyle = .none
         let formatted = Format.shortDate(date: date)

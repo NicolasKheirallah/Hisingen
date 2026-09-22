@@ -4,6 +4,10 @@ import Foundation
 /// telemetry rows into chart-ready series. Deliberately UI-free so every filter bound,
 /// ordering rule and downsampling decision stays unit-testable.
 enum HistoryInsights {
+    /// The footnote that discloses the petrol comparison reads this, so copy and math
+    /// can never drift apart.
+    static let petrolCarGramsCO2PerKm: Double = 170
+
 
     struct ChargingCurvePoint: Identifiable, Equatable, Sendable {
         let id: Int64
@@ -25,13 +29,6 @@ enum HistoryInsights {
         let id: Int64
         let timestamp: Date
         let odometerKm: Double
-    }
-
-    struct AirQualityPoint: Identifiable, Equatable {
-        let id: Int64
-        let timestamp: Date
-        let index: Double
-        let pm25: Double?
     }
 
     /// Sane long-term consumption bounds in kWh/100 km. Below ~2 the vehicle is coasting or
@@ -327,10 +324,14 @@ enum HistoryInsights {
     }
 
     /// Average speed in km/h. `nil` for an implausibly short duration, which would otherwise
-    /// blow the average up toward infinity rather than report something meaningful.
+    /// blow the average up toward infinity rather than report something meaningful, and `nil`
+    /// above a sustained 200 km/h; no road car averages that across a whole trip, so a value
+    /// that high means the provider's distance and duration disagree (a recorded gap, most
+    /// often) and the quotient would be our invention, not the car's.
     static func averageSpeedKmh(_ trip: TripHistoryEntry) -> Double? {
         guard trip.duration >= 30 else { return nil }
-        return trip.distanceKm / (trip.duration / 3_600)
+        let average = trip.distanceKm / (trip.duration / 3_600)
+        return average <= 200 ? average : nil
     }
 
     /// Pearson correlation between ambient temperature and consumption across trips reporting
@@ -399,18 +400,6 @@ enum HistoryInsights {
         guard let fit = Statistics.linearRegression(points) else { return nil }
         let projected = fit.value(at: target / 10_000)
         return (0...100).contains(projected) ? projected : nil
-    }
-
-    // MARK: - Air quality trend
-
-    static func airQualityTrend(from records: [AirQualityRecord]) -> [AirQualityPoint] {
-        records
-            .compactMap { record -> (AirQualityRecord, Double)? in
-                guard let index = record.airQualityIndex, index >= 0 else { return nil }
-                return (record, index)
-            }
-            .sorted { $0.0.timestamp < $1.0.timestamp }
-            .map { record, index in AirQualityPoint(id: record.id, timestamp: record.timestamp, index: index, pm25: record.particulateMatter25) }
     }
 
     // MARK: - Command statistics
@@ -889,7 +878,7 @@ extension HistoryInsights {
     static func emissionsComparison(electricKm: Double,
                                     consumptionKwhPer100Km: Double,
                                     gridGramsCO2PerKwh: Double,
-                                    petrolGramsCO2PerKm: Double = 170) -> EmissionsComparison? {
+                                    petrolGramsCO2PerKm: Double = Self.petrolCarGramsCO2PerKm) -> EmissionsComparison? {
         guard electricKm > 0, consumptionKwhPer100Km > 0, gridGramsCO2PerKwh >= 0 else { return nil }
         let energyKwh = electricKm / 100 * consumptionKwhPer100Km
         return EmissionsComparison(

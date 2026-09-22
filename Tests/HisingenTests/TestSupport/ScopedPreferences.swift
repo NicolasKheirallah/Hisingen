@@ -8,6 +8,9 @@ import Foundation
 @MainActor
 final class ScopedPreferences {
     let store: PreferencesStore
+    /// The same throwaway service the store was built on, so a test pairing the store with
+    /// an `AccountConnectionModel` or another KeychainStore consumer sees one keychain.
+    let keychain: KeychainStore
     // `removePersistentDomain` is thread-safe; nonisolated(unsafe) exists only so `deinit`
     // (which cannot be isolated) can perform the guaranteed cleanup.
     nonisolated(unsafe) let defaults: UserDefaults
@@ -16,7 +19,7 @@ final class ScopedPreferences {
     init(label: String) {
         suiteName = "HisingenTests.\(label).\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)!
-        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         store = PreferencesStore(defaults: defaults, keychain: keychain)
     }
 

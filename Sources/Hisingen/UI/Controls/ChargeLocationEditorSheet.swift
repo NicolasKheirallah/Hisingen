@@ -58,6 +58,7 @@ struct ChargeLocationEditorSheet: View {
                         let bounds = VehicleChargeBounds(capabilities: capabilities).amperageRange
                         Slider(value: $ampLimit, in: Double(bounds.lowerBound)...Double(bounds.upperBound), step: 1)
                             .tint(HisingenTheme.semanticWarning)
+                            .accessibilityLabel(L10n.text("Current limit"))
                             .disabled(capabilities?.controlSettings?.locationAmperage == false)
                             // A control greyed out with no reason reads as broken. The vehicle's
                             // own refusal is the explanation, so it is attached to the control.
@@ -81,6 +82,7 @@ struct ChargeLocationEditorSheet: View {
                                 .monospacedDigit()
                         }
                         Slider(value: $minimumSoc, in: 0...100, step: 5).tint(HisingenTheme.semanticGood)
+                            .accessibilityLabel(L10n.text("Minimum charge"))
                     }
 
                     Toggle(L10n.text("Optimised charging"), isOn: $optimised)

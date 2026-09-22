@@ -365,10 +365,6 @@ actor PolestarGRPC {
         return Self.parseBattery(batteryBytes)
     }
 
-    func fetchAvailability(vin: String, accessToken: String) async throws -> VehicleAvailability {
-        try await fetchAvailabilityReport(vin: vin, accessToken: accessToken).availability
-    }
-
     /// Wire fields of the availability payload whose meaning is decoded. Everything else is
     /// captured raw by `fetchAvailabilityReport`.
     static let decodedAvailabilityFields: Set<Int> = [1, 3, 4]
@@ -1011,13 +1007,6 @@ enum Protobuf {
     static func intField(_ number: Int, _ value: Int) -> Data {
         var out = varint(UInt64(number << 3))
         out.append(varint(UInt64(bitPattern: Int64(value))))
-        return out
-    }
-
-    static func doubleField(_ number: Int, _ value: Double) -> Data {
-        var out = varint(UInt64(number << 3 | 1))
-        var bits = value.bitPattern.littleEndian
-        withUnsafeBytes(of: &bits) { out.append(contentsOf: $0) }
         return out
     }
 

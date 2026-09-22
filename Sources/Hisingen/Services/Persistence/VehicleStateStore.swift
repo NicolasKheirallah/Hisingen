@@ -208,24 +208,12 @@ final class VehicleStateStore {
         database.commandReceipts.loadCommandReceipts(for: vin)?.records ?? []
     }
 
-    func commandReceipt(for vin: String) -> StoredCommandReceipt? {
-        commandReceipts(for: vin).last
-    }
-
     func saveCommandReceipts(_ records: [StoredCommandReceipt], for vin: String) {
         database.commandReceipts.saveCommandReceipts(StoredCommandReceipts(records: records), for: vin)
     }
 
-    func saveCommandReceipt(_ record: StoredCommandReceipt, for vin: String) {
-        saveCommandReceipts([record], for: vin)
-    }
-
     func clearCommandReceipts(for vin: String) {
         database.commandReceipts.deleteCommandReceipts(for: vin)
-    }
-
-    func clearCommandReceipt(for vin: String) {
-        clearCommandReceipts(for: vin)
     }
 
     /// Forgets a vehicle's cached snapshot and charging baseline. Durable SQLite history

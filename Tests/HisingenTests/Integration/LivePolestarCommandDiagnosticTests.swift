@@ -29,7 +29,8 @@ struct LivePolestarCommandDiagnosticTests {
         let sessionToken = try #require(storedSession, "No stored Polestar session refresh token")
         try await api.restoreSession(token: sessionToken, preferredVIN: preferredVIN, features: features)
         let vin = try #require(await api.resolvedVIN(preferred: preferredVIN))
-        let webToken = try #require(try await api.validAccessToken())
+        try await api.refreshTokenIfNeeded()
+        let webToken = try #require(await api.accessToken)
 
         _ = try? await api.grpc.fetchMyCars(vin: vin, accessToken: webToken)
         let profile = await api.capabilityProfile(for: vin)

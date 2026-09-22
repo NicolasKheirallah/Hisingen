@@ -156,7 +156,7 @@ struct CombustionAndHybridVehicleTests {
 
         #expect(Format.icon(for: iceState) == "fuelpump.fill")
         #expect(Format.barTitle(for: iceState, style: .battery, unit: .kilometers) == "74%")
-        #expect(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers) == "74% · 650km")
+        #expect(Format.barTitle(for: iceState, style: .batteryAndRange, unit: .kilometers) == "74% · 650 km")
 
         let phevState = VehicleState(
             batteryPercentage: 85.0,
@@ -190,7 +190,7 @@ struct CombustionAndHybridVehicleTests {
         )
 
         #expect(Format.icon(for: phevState) == "bolt.car.fill")
-        #expect(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers) == "85% · 545km")
+        #expect(Format.barTitle(for: phevState, style: .batteryAndRange, unit: .kilometers) == "85% · 545 km")
     }
 
     @Test

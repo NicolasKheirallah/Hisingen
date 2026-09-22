@@ -8,6 +8,7 @@ struct ControlsTabView: View {
     let remoteCommandInProgress: Bool
     var inFlightCommandID: String? = nil
     var feedback: RemoteCommandFeedback? = nil
+    var imageCache: CarImageCache = .shared
     let onRemoteCommand: (RemoteCommand) -> Void
     var onRefresh: () -> Void = {}
     /// Receipts for commands that are still awaiting confirmation, timed out, or were confirmed.
@@ -98,6 +99,14 @@ struct ControlsTabView: View {
                 }
             ),
             CardEntry(
+                id: TabItemID.controlsChargingPlanner.rawValue, item: TabItemID.controlsChargingPlanner,
+                // Same gating the Vehicle tab applies: the planner needs the feature switch
+                // and a car that can act on it.
+                isVisible: features.contains(.smartChargingPlanner) && state.powertrain.hasElectricRange
+                    && state.energy.batteryPercentage != nil && state.energy.targetPercentage != nil,
+                view: { AnyView(ChargingPlannerCard(state: state)) }
+            ),
+            CardEntry(
                 id: TabItemID.controlsAccess.rawValue, item: TabItemID.controlsAccess,
                 isVisible: features.contains(.remoteLocks),
                 view: { AnyView(AccessControlsCard(state: state, gate: gate)) }
@@ -126,6 +135,9 @@ struct ControlsTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
+            if HisingenTheme.layoutWidth >= 580 {
+                AwardControlMap(state: state, imageCache: imageCache)
+            }
             if draws(.controlsBanners) {
                 ControlsBanners(
                 state: state,
@@ -138,7 +150,8 @@ struct ControlsTabView: View {
 
             if draws(.controlsReceipts) {
                 ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
-                    CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt)
+                    CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
+                                       onVerify: { _ in onRefresh() })
                 }
             }
 
@@ -177,20 +190,22 @@ struct ControlsTabView: View {
     private var anyCardDimmed: Bool {
         let gate = commandGate
         return visibleCards.contains { entry in
-            switch entry.id {
-            case "climate":
+            // Keyed on the catalogued tab item, not the entry's string id: a rename in
+            // TabItemID used to silently strand a case on `default` and hide the re-probe.
+            switch entry.item {
+            case .controlsClimate:
                 return gate.capabilityAvailability([ClimateControlCard.probe, .startPreCleaning]) != .available
-            case "engine":
+            case .controlsEngine:
                 return gate.capabilityAvailability([
                     .startEngine(runtimeMinutes: preferences.remoteEngineRuntimeMinutes)
                 ]) != .available
-            case "charging":
+            case .controlsCharging:
                 return gate.capabilityAvailability([.setChargeTarget(80), .setAmpLimit(16), .startChargingOverride]) != .available
-            case "access":
+            case .controlsAccess:
                 return gate.capabilityAvailability([.lock, .unlock]) != .available
-            case "windows-locate":
+            case .controlsWindowsLocate:
                 return gate.capabilityAvailability([.closeWindows, .honkAndFlash, .flashLights]) != .available
-            case "ota":
+            case .controlsOTA:
                 return gate.capabilityAvailability([.installOTANow]) != .available
             default:
                 return false
@@ -202,7 +217,7 @@ struct ControlsTabView: View {
         Card {
             VStack(spacing: 8) {
                 Image(systemName: "switch.2")
-                    .font(.system(size: 24))
+                    .hisSymbolSize(24)
                     .foregroundStyle(.secondary)
                 Text(L10n.text("No Remote Controls Enabled"))
                     .hisType(.heading, weight: .semibold)

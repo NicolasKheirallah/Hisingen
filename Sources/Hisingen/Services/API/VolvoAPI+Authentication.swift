@@ -65,7 +65,7 @@ extension VolvoAPI {
     /// which keychain item means "session" is this adapter's knowledge, not the security
     /// module's.
     func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
-        guard let token = try Keychain.readVolvoSessionToken(), !token.isEmpty else {
+        guard let token = try keychain.readVolvoSessionToken(), !token.isEmpty else {
             throw VolvoError.authenticationRequired(.noStoredSession)
         }
         try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)

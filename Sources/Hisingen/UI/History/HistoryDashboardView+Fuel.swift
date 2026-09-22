@@ -8,26 +8,32 @@ extension HistoryDashboardView {
     // MARK: - Fuel entries (hybrid / combustion)
 
     var fuelEntrySheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let validation = FuelFillUpValidation.validate(
+            volumeText: fuelLitersText, priceText: fuelPriceText, odometerText: fuelOdometerText)
+        return VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("Log Fuel Fill-Up")).hisType(.heading, weight: .semibold)
-            LabeledField(title: L10n.text("Volume (litres)"), text: $fuelLitersText)
-            LabeledField(title: L10n.text("Price per litre"), text: $fuelPriceText)
-            LabeledField(title: L10n.text("Odometer (km), optional"), text: $fuelOdometerText)
+            LabeledField(title: L10n.text("Volume (litres)"), text: $fuelLitersText,
+                         reason: validation.reason(for: .volume))
+            LabeledField(title: L10n.text("Price per litre"), text: $fuelPriceText,
+                         reason: validation.reason(for: .price))
+            LabeledField(title: L10n.text("Odometer (km), optional"), text: $fuelOdometerText,
+                         reason: validation.reason(for: .odometer))
             HStack {
                 Spacer()
                 Button(L10n.text("Cancel"), role: .cancel) { showFuelSheet = false }
                 Button(L10n.text("Save")) {
-                    guard let liters = Double(fuelLitersText.replacingOccurrences(of: ",", with: ".")), liters > 0,
-                          let price = Double(fuelPriceText.replacingOccurrences(of: ",", with: ".")) else { return }
-                    let odo = Double(fuelOdometerText.replacingOccurrences(of: ",", with: "."))
-                    _ = database.history.addFuelEntry(vin: state.identity.vin, date: Date(), liters: liters,
-                                              pricePerLiter: price, odometerKm: odo)
+                    guard validation.isValid else { return }
+                    _ = history.addFuelEntry(vin: state.identity.vin, date: Date(),
+                                             liters: validation.liters,
+                                             pricePerLiter: validation.pricePerLiter,
+                                             odometerKm: validation.odometerKm)
                     fuelLitersText = ""; fuelPriceText = ""; fuelOdometerText = ""
                     showFuelSheet = false
                     bumpRefresh()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
+                .disabled(!validation.isValid)
             }
             Text(L10n.text("Fill-ups are stored locally and included in lifetime cost-per-distance estimates. Add an odometer reading to unlock the economy trend."))
                 .hisType(.micro).foregroundStyle(.tertiary)
@@ -54,7 +60,7 @@ extension HistoryDashboardView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Economy"), color: .mint)
+                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let avgEconomy {
                         Text(Format.fuelEconomy(lPer100Km: avgEconomy, unit: preferences.fuelEconomyUnit))
@@ -128,7 +134,7 @@ extension HistoryDashboardView {
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: .mint)
+                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Total Spend"), Format.currency(totalSpend, symbol: preferences.currencySymbol))
                     curveStat(L10n.text("Total Volume"), Format.fuelVolume(liters: totalLitres, unit: preferences.fuelVolumeUnit))
@@ -150,6 +156,7 @@ extension HistoryDashboardView {
                             }
                             .buttonStyle(.pressable)
                             .accessibilityLabel(L10n.text("Delete fill-up"))
+                            .help(L10n.text("Delete fill-up"))
                         }
                         if entry.id != visible.last?.id { Divider().opacity(HisingenTheme.dividerOpacity) }
                     }

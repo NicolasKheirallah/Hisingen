@@ -108,21 +108,21 @@ enum PanelSize: String, CaseIterable, Codable, Sendable {
 
     var width: CGFloat {
         switch self {
-        case .compact: return 350
-        case .standard: return 430
-        case .large: return 430
-        case .wide: return 540
-        case .grand: return 600
+        case .compact: return 460
+        case .standard: return 620
+        case .large: return 620
+        case .wide: return 700
+        case .grand: return 760
         }
     }
 
     var idealHeight: CGFloat {
         switch self {
-        case .compact: return 500
-        case .standard: return 580
-        case .large: return 700
-        case .wide: return 580
-        case .grand: return 760
+        case .compact: return 540
+        case .standard: return 660
+        case .large: return 760
+        case .wide: return 660
+        case .grand: return 780
         }
     }
 
@@ -551,16 +551,16 @@ enum FuelEconomyUnit: String, CaseIterable, Codable, Sendable {
         guard lPer100Km > 0 else { return "– \(suffix)" }
         switch self {
         case .litersPer100Km:
-            return String(format: "%.1f L/100km", lPer100Km)
+            return L10n.format("%@ L/100km", Format.number(lPer100Km, decimals: 1))
         case .milesPerGallonUS:
             let mpg = 235.214583 / lPer100Km
-            return String(format: "%.1f mpg", mpg)
+            return L10n.format("%@ mpg", Format.number(mpg, decimals: 1))
         case .milesPerGallonUK:
             let mpg = 282.481 / lPer100Km
-            return String(format: "%.1f mpg (UK)", mpg)
+            return L10n.format("%@ mpg (UK)", Format.number(mpg, decimals: 1))
         case .kmPerLiter:
             let kml = 100.0 / lPer100Km
-            return String(format: "%.1f km/L", kml)
+            return L10n.format("%@ km/L", Format.number(kml, decimals: 1))
         }
     }
 }
@@ -614,11 +614,11 @@ enum EnergyConsumptionUnit: String, CaseIterable, Codable, Sendable {
         guard value > 0 else { return "–" }
         switch self {
         case .kwhPer100Km:
-            return String(format: "%.1f kWh/100 km", value)
+            return L10n.format("%@ kWh/100 km", Format.number(value, decimals: 1))
         case .kwhPer100Miles:
-            return String(format: "%.1f kWh/100 mi", value * 1.609344)
+            return L10n.format("%@ kWh/100 mi", Format.number(value * 1.609344, decimals: 1))
         case .milesPerKwh:
-            return String(format: "%.2f mi/kWh", 62.1371192 / value)
+            return L10n.format("%@ mi/kWh", Format.number(62.1371192 / value, decimals: 2))
         }
     }
 }

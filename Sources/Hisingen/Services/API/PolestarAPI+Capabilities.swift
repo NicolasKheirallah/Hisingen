@@ -110,10 +110,6 @@ extension PolestarAPI {
         }
     }
 
-    func clearTransientCapabilityBackoffAfterCommand(for vin: String) {
-        capabilityAuthority.clearTransientBackoffAfterCommand(vin: vin)
-    }
-
     /// Software status and connectivity diagnostics for the augmented provider's overlay,
     /// served through the same optional-capability caches a full Polestar ID refresh uses,
     /// so portal-served refreshes pay at most one cached round trip per domain. A dead or

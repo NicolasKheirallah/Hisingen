@@ -2,9 +2,10 @@ import SwiftUI
 
 @MainActor
 struct HistoryDashboardView: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let state: VehicleState
 
-    let database: VehicleDatabase
+    let history: HistoryWorkspace
 
     /// A deep link from Info can target the observed activity after the initial database load.
     let initialSection: String?
@@ -115,7 +116,7 @@ struct HistoryDashboardView: View {
 
     @State var showFuelSheet = false
 
-    @State var fuelEntryPendingDeletion: VehicleDatabase.FuelEntry?
+    @State var fuelEntryPendingDeletion: HistoryWorkspace.FuelEntry?
 
     @State var exportError: String?
 
@@ -195,9 +196,9 @@ struct HistoryDashboardView: View {
 
     var allTimeTelemetryRecords: [HistoricalTelemetryRecord] { lifetime.allTimeTelemetryRecords }
 
-    var fuelEntries: [VehicleDatabase.FuelEntry] { lifetime.fuelEntries }
+    var fuelEntries: [HistoryWorkspace.FuelEntry] { lifetime.fuelEntries }
 
-    var cabinClimateRecords: [VehicleDatabase.CabinClimateRecord] { lifetime.cabinClimateRecords }
+    var cabinClimateRecords: [HistoryWorkspace.CabinClimateRecord] { lifetime.cabinClimateRecords }
 
     var efficiencyPoints: [HistoryInsights.EfficiencyPoint] {
         presentation.efficiencyPoints
@@ -256,7 +257,7 @@ struct HistoryDashboardView: View {
     var observedChangesCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: .indigo)
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: HisingenTheme.chartInfo)
                 PaginatedSection(items: snapshot.activities, pageSize: 15, resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No activity was recorded in this period.")) { visible, footer in
                     VehicleActivityList(events: Array(visible))
@@ -278,80 +279,53 @@ struct HistoryDashboardView: View {
         let id: String
         let title: String
         let isVisible: Bool
-        let content: AnyView
     }
 
     var historySections: [HistorySection] {
         [
-            HistorySection(id: "overview", title: L10n.text("Overview"), isVisible: true,
-                           content: AnyView(overviewCard)),
-            HistorySection(id: "activity", title: L10n.text("Activity"), isVisible: !snapshot.activities.isEmpty,
-                           content: AnyView(observedChangesCard)),
-            HistorySection(id: "month", title: L10n.text("Month Comparison"), isVisible: true,
-                           content: AnyView(monthComparisonCard)),
+            HistorySection(id: "overview", title: L10n.text("Overview"), isVisible: true),
+            HistorySection(id: "activity", title: L10n.text("Activity"), isVisible: !snapshot.activities.isEmpty),
+            HistorySection(id: "month", title: L10n.text("Month Comparison"), isVisible: true),
             HistorySection(id: "air-cleaning", title: L10n.text("Air Cleaning"),
-                           isVisible: snapshot.activities.contains(where: { $0.kind == .airCleaning }),
-                           content: AnyView(airCleaningCyclesCard)),
-            HistorySection(id: "emissions", title: L10n.text("Emissions"), isVisible: true,
-                           content: AnyView(emissionsCard)),
-            HistorySection(id: "driving-patterns", title: L10n.text("Driving Patterns"), isVisible: !trips.isEmpty,
-                           content: AnyView(drivingPatternsCard)),
-            HistorySection(id: "distance", title: L10n.text("Distance"), isVisible: !trips.isEmpty,
-                           content: AnyView(distanceChartCard)),
-            HistorySection(id: "monthly-mileage", title: L10n.text("Monthly Mileage"), isVisible: !trips.isEmpty,
-                           content: AnyView(monthlyMileageReportCard)),
-            HistorySection(id: "trips", title: L10n.text("Trips"), isVisible: !trips.isEmpty,
-                           content: AnyView(tripListCard)),
+                           isVisible: snapshot.activities.contains(where: { $0.kind == .airCleaning })),
+            HistorySection(id: "emissions", title: L10n.text("Emissions"), isVisible: true),
+            HistorySection(id: "driving-patterns", title: L10n.text("Driving Patterns"), isVisible: !trips.isEmpty),
+            HistorySection(id: "distance", title: L10n.text("Distance"), isVisible: !trips.isEmpty),
+            HistorySection(id: "monthly-mileage", title: L10n.text("Monthly Mileage"), isVisible: !trips.isEmpty),
+            HistorySection(id: "trips", title: L10n.text("Trips"), isVisible: !trips.isEmpty),
             HistorySection(id: "charging-sessions", title: L10n.text("Charging Sessions"),
-                           isVisible: !chargingSessions.isEmpty,
-                           content: AnyView(chargingSessionsCard)),
+                           isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charging-curve", title: L10n.text("Charging Curve"),
-                           isVisible: !chargingSessions.isEmpty && selectedSession != nil && !selectedSessionCurve.isEmpty,
-                           content: AnyView(chargingCurveCard.transition(.opacity.combined(with: .move(edge: .top))))),
+                           isVisible: !chargingSessions.isEmpty && selectedSession != nil && !selectedSessionCurve.isEmpty),
             HistorySection(id: "monthly-charging", title: L10n.text("Charging by Month"),
-                           isVisible: !chargingSessions.isEmpty,
-                           content: AnyView(monthlyChargingCard)),
+                           isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charge-locations", title: L10n.text("Charge Locations"),
-                           isVisible: !chargingSessions.isEmpty,
-                           content: AnyView(locationBreakdownCard)),
+                           isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charging-history", title: L10n.text("Charging History"),
-                           isVisible: !chargingSessions.isEmpty,
-                           content: AnyView(chargingHistoryCard)),
-            HistorySection(id: "fuel-economy", title: L10n.text("Fuel Economy"), isVisible: !fuelEntries.isEmpty,
-                           content: AnyView(fuelEconomyCard)),
-            HistorySection(id: "recent-fills", title: L10n.text("Recent Fill-ups"), isVisible: !fuelEntries.isEmpty,
-                           content: AnyView(recentFillsCard)),
+                           isVisible: !chargingSessions.isEmpty),
+            HistorySection(id: "fuel-economy", title: L10n.text("Fuel Economy"), isVisible: !fuelEntries.isEmpty),
+            HistorySection(id: "recent-fills", title: L10n.text("Recent Fill-ups"), isVisible: !fuelEntries.isEmpty),
             HistorySection(id: "efficiency", title: L10n.text("Efficiency"),
-                           isVisible: efficiencyPoints.count >= 3,
-                           content: AnyView(efficiencyChartCard)),
+                           isVisible: efficiencyPoints.count >= 3),
             HistorySection(id: "consumption", title: L10n.text("Consumption"),
-                           isVisible: combustionConsumptionPoints.count >= 3,
-                           content: AnyView(combustionConsumptionCard)),
+                           isVisible: combustionConsumptionPoints.count >= 3),
             HistorySection(id: "odometer", title: L10n.text("Odometer"),
-                           isVisible: odometerPoints.count >= 3,
-                           content: AnyView(odometerChartCard)),
+                           isVisible: odometerPoints.count >= 3),
             HistorySection(id: "battery-health", title: L10n.text("Battery Health"),
-                           isVisible: !batteryHealthRecords.isEmpty,
-                           content: AnyView(batteryHealthCard)),
+                           isVisible: !batteryHealthRecords.isEmpty),
             HistorySection(id: "air-quality", title: L10n.text("Air Quality"),
-                           isVisible: airQualityRecords.count >= 2,
-                           content: AnyView(airQualityCard)),
+                           isVisible: airQualityRecords.count >= 2),
             HistorySection(id: "cabin-climate", title: L10n.text("Cabin Climate"),
-                           isVisible: cabinClimateRecords.count >= 2,
-                           content: AnyView(cabinClimateCard)),
-            HistorySection(id: "automations", title: L10n.text("Automations"), isVisible: !commands.isEmpty,
-                           content: AnyView(automationHistoryCard)),
+                           isVisible: cabinClimateRecords.count >= 2),
+            HistorySection(id: "automations", title: L10n.text("Automations"), isVisible: !commands.isEmpty),
             // The terminal states, first because every other state is a claim about the data and
             // this one says the data could not be reached at all.
             HistorySection(id: "store-unreadable", title: L10n.text("History could not be read"),
-                           isVisible: storeUnreadable,
-                           content: AnyView(storeUnreadableCard.transition(.opacity))),
+                           isVisible: storeUnreadable),
             HistorySection(id: "empty", title: L10n.text("No history yet"),
-                           isVisible: !storeUnreadable && hasAnyDataAtAll == false,
-                           content: AnyView(emptyCard.transition(.opacity))),
+                           isVisible: !storeUnreadable && hasAnyDataAtAll == false),
             HistorySection(id: "nothing-in-range", title: L10n.text("Nothing in this period"),
-                           isVisible: !storeUnreadable && hasAnyDataAtAll && !hasAnyDataInRange,
-                           content: AnyView(nothingInRangeCard.transition(.opacity)))
+                           isVisible: !storeUnreadable && hasAnyDataAtAll && !hasAnyDataInRange)
         ]
     }
 
@@ -373,13 +347,48 @@ struct HistoryDashboardView: View {
 
     /// key flips (that precedes the async query).
     var dashboardContent: some View {
-        VStack(spacing: HisingenTheme.sectionSpacing) {
+        LazyVStack(spacing: HisingenTheme.sectionSpacing) {
             ForEach(visibleHistorySections) { section in
-                section.content.id(section.id)
+                historySectionContent(section.id).id(section.id)
             }
         }
         .hisAnimation(Motion.cardChange, value: periodDataKey)
         .hisAnimation(Motion.layout, value: sessionCurveKey)
+    }
+
+    @ViewBuilder
+    private func historySectionContent(_ id: String) -> some View {
+        switch id {
+        case "overview":
+            if HisingenTheme.layoutWidth >= 580 { awardHistoryOverview } else { overviewCard }
+        case "activity": observedChangesCard
+        case "month": monthComparisonCard
+        case "air-cleaning": airCleaningCyclesCard
+        case "emissions": emissionsCard
+        case "driving-patterns": drivingPatternsCard
+        case "distance": distanceChartCard
+        case "monthly-mileage": monthlyMileageReportCard
+        case "trips": tripListCard
+        case "charging-sessions": chargingSessionsCard
+        case "charging-curve":
+            chargingCurveCard.transition(.opacity.combined(with: .move(edge: .top)))
+        case "monthly-charging": monthlyChargingCard
+        case "charge-locations": locationBreakdownCard
+        case "charging-history": chargingHistoryCard
+        case "fuel-economy": fuelEconomyCard
+        case "recent-fills": recentFillsCard
+        case "efficiency": efficiencyChartCard
+        case "consumption": combustionConsumptionCard
+        case "odometer": odometerChartCard
+        case "battery-health": batteryHealthCard
+        case "air-quality": airQualityCard
+        case "cabin-climate": cabinClimateCard
+        case "automations": automationHistoryCard
+        case "store-unreadable": storeUnreadableCard.transition(.opacity)
+        case "empty": emptyCard.transition(.opacity)
+        case "nothing-in-range": nothingInRangeCard.transition(.opacity)
+        default: EmptyView()
+        }
     }
 
     /// Jumps the shared scroller to a card. Info has had this for its 22 sections all along; the
@@ -400,8 +409,8 @@ struct HistoryDashboardView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize(horizontal: true, vertical: false)
-        .help(L10n.text("Jump to a section"))
-        .accessibilityLabel(L10n.text("Jump to a section"))
+        .help(L10n.text("Jump to section"))
+        .accessibilityLabel(L10n.text("Jump to section"))
     }
 
     var body: some View {
@@ -446,7 +455,7 @@ struct HistoryDashboardView: View {
             presenting: fuelEntryPendingDeletion
         ) { entry in
             Button(L10n.text("Delete"), role: .destructive) {
-                database.history.deleteFuelEntry(id: entry.id)
+                history.deleteFuelEntry(id: entry.id)
                 fuelEntryPendingDeletion = nil
                 bumpRefresh()
             }
@@ -529,13 +538,6 @@ struct HistoryDashboardView: View {
             "_\(selectedSessionSamples.first?.timestamp.timeIntervalSince1970 ?? 0)"
     }
 
-    /// Folds the hidden ids (minus session restores) into the task key so hiding/restoring a
-    /// trip reloads the hidden-trip cache, while typing or scrubbing never does.
-    var hiddenTripsLoadKey: String {
-        let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
-        return "\(state.identity.vin)_\(refreshToken)_\(hidden.sorted().joined(separator: ","))"
-    }
-
     var tripPresentationKey: String {
         let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
         return "\(periodDataKey)_\(tripSort.rawValue)_\(tripFilterText)_\(hidden.sorted().joined(separator: ","))"
@@ -566,39 +568,18 @@ struct HistoryDashboardView: View {
     func loadDashboardData() async {
         isLoading = true
 
-        let vin = state.identity.vin
-        let db = database
-        let range = activeRange
-        let cap = rowCap
-        let tripLimit = tripCap
-        let chargingCapacity = state.configuredCapacityReference(
-            specification: preferences.vehicleSpecificationOverride(for: vin)).kwh
         let lifetimeKey = lifetimeLoadKey
-        let shouldLoadLifetime = loadedLifetimeKey != lifetimeKey
-        let existingLifetime = lifetime
-        let hasElectricRange = state.powertrain.hasElectricRange
-        let hasCombustion = state.powertrain.hasCombustionEngine
+        let query = HistoryWorkspace.DashboardQuery(
+            vin: state.identity.vin, range: activeRange,
+            rowCap: rowCap, tripCap: tripCap,
+            capacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state),
+            hasElectricRange: state.powertrain.hasElectricRange,
+            hasCombustionEngine: state.powertrain.hasCombustionEngine,
+            lifetimeKey: lifetimeKey)
 
-        let loaded = await Task.detached(priority: .userInitiated) {
-            let dashboard = db.history.dashboard(
-                vin: vin, range: range, rowCap: cap,
-                tripLimit: tripLimit, chargingCapacity: chargingCapacity
-            )
-            guard !Task.isCancelled else { return Optional<HistoryDashboardLoadResult>.none }
-            let lifetime = shouldLoadLifetime
-                ? db.history.lifetime(vin: vin, hasCombustionEngine: hasCombustion)
-                : existingLifetime
-            guard !Task.isCancelled else { return Optional<HistoryDashboardLoadResult>.none }
-            return HistoryDashboardLoadResult(
-                dashboard: dashboard,
-                lifetime: lifetime,
-                presentation: HistoryPresentationSnapshot.build(
-                    dashboard: dashboard, lifetime: lifetime,
-                    hasElectricRange: hasElectricRange,
-                    hasCombustionEngine: hasCombustion
-                )
-            )
-        }.value
+        let loaded = await history.dashboard(matching: query,
+                                             loadLifetime: loadedLifetimeKey != lifetimeKey,
+                                             keeping: lifetime)
 
         // A load cancelled by a newer key must not clear the loading flag the replacement
         // already set, so the flags reset only on the success path.
@@ -608,7 +589,7 @@ struct HistoryDashboardView: View {
         snapshot = loaded.dashboard
         lifetime = loaded.lifetime
         presentation = loaded.presentation
-        if shouldLoadLifetime { loadedLifetimeKey = lifetimeKey }
+        if loadedLifetimeKey != lifetimeKey { loadedLifetimeKey = lifetimeKey }
         expandedTripIDs = []
         tripDateStrings = Dictionary(
             loaded.dashboard.reportTrips.map { ($0.id, Format.dateTimeFormatter.string(from: $0.endedAt)) },
@@ -616,7 +597,7 @@ struct HistoryDashboardView: View {
         sessionLabelStrings = Dictionary(
             loaded.dashboard.chargingSessions.map { ($0.id, sessionLabel($0)) },
             uniquingKeysWith: { first, _ in first })
-        let hidden = preferences.hiddenTripIDs(for: vin).subtracting(restoredTripIDs)
+        let hidden = preferences.hiddenTripIDs(for: query.vin).subtracting(restoredTripIDs)
         hiddenTripRows = loaded.dashboard.reportTrips.filter { hidden.contains($0.id) }
         // `selectedSession` resolves to nil on its own when the remembered id isn't in the
         // current range, so the curve card just hides; the saved preference is kept so the
@@ -630,22 +611,14 @@ struct HistoryDashboardView: View {
             previousSessionCurve = []
             return
         }
-        let db = database
         let previous = overlayPreviousSession
             ? chargingSessions.drop(while: { $0.id != session.id }).dropFirst().first
             : nil
-        let curves = await Task.detached(priority: .userInitiated) {
-            let samples = db.charging.reconciledSamples(for: session)
-            let current = HistoryInsights.chargingCurve(from: samples)
-            let previousCurve = previous.map {
-                HistoryInsights.chargingCurve(from: db.charging.reconciledSamples(for: $0))
-            } ?? []
-            return (samples, current, previousCurve)
-        }.value
+        let curves = await history.sessionCurves(for: session, overlaying: previous)
         guard !Task.isCancelled else { return }
-        selectedSessionSamples = curves.0
-        selectedSessionCurvePoints = curves.1
-        previousSessionCurve = curves.2
+        selectedSessionSamples = curves.samples
+        selectedSessionCurvePoints = curves.current
+        previousSessionCurve = curves.previous
     }
 
     func loadTripPresentation() async {
@@ -694,9 +667,9 @@ struct HistoryDashboardView: View {
                 Card {
                     VStack(alignment: .leading, spacing: 10) {
                         if index == 0 {
-                            CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("Loading history…"), color: .indigo)
+                            CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("Loading history…"), color: HisingenTheme.chartInfo)
                         } else {
-                            CardHeader(symbol: "chart.xyaxis.line", title: " ", color: .indigo)
+                            CardHeader(symbol: "chart.xyaxis.line", title: " ", color: HisingenTheme.chartInfo)
                                 .accessibilityHidden(true)
                         }
                         RoundedRectangle(cornerRadius: 6).frame(height: chartHeight)
@@ -802,18 +775,24 @@ struct HistoryDashboardView: View {
             }
         }
         .padding(5)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 5))
+        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.03, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 5))
     }
 
     struct LabeledField: View {
         let title: String
         @Binding var text: String
+        var reason: String? = nil
         var body: some View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).hisType(.caption).foregroundStyle(.secondary)
                 TextField("", text: $text)
                     .textFieldStyle(.roundedBorder)
                     .hisType(.body)
+                if let reason {
+                    Text(reason)
+                        .hisType(.micro, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.semanticCritical)
+                }
             }
         }
     }

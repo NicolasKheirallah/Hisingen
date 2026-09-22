@@ -1,6 +1,7 @@
 import Foundation
 
 enum L10n {
+    private static let threadLanguageOverrideKey = "io.kheirallah.hisingen.interface-language-override"
     private static let bundleLock = NSLock()
     nonisolated(unsafe) private static var localizedBundleCache: [String: Bundle?] = [:]
 
@@ -35,7 +36,35 @@ enum L10n {
     /// Read per call (a cheap cached-preferences lookup) so language changes apply without an
     /// explicit invalidation hook; only the expensive bundle resolution is memoized.
     private static var selectedLanguageCode: String? {
-        InterfaceLanguage(rawValue: UserDefaults.standard.string(forKey: "interface_language") ?? "")?.languageCode
+        if let override = Thread.current.threadDictionary[threadLanguageOverrideKey] as? String {
+            return override
+        }
+        return InterfaceLanguage(rawValue: UserDefaults.standard.string(forKey: "interface_language") ?? "")?.languageCode
+    }
+
+    /// Test seam scoped to the calling thread. A process-global UserDefaults mutation let
+    /// parallel locale tests change the language underneath unrelated formatters.
+    static func withInterfaceLanguageOverride<T>(_ languageCode: String, body: () throws -> T) rethrows -> T {
+        let dictionary = Thread.current.threadDictionary
+        let previous = dictionary[threadLanguageOverrideKey]
+        dictionary[threadLanguageOverrideKey] = languageCode
+        defer {
+            if let previous {
+                dictionary[threadLanguageOverrideKey] = previous
+            } else {
+                dictionary.removeObject(forKey: threadLanguageOverrideKey)
+            }
+        }
+        return try body()
+    }
+
+    /// The locale every user-facing number and date follows: the selected interface language
+    /// when one is chosen, the system locale otherwise. Without this, an English UI on a
+    /// Swedish-region Mac rendered Swedish month names ("19 september 2026") and split decimal
+    /// separators across its own surfaces, because `Format`'s formatters tracked the region
+    /// while `L10n.format` tracked the language.
+    static var displayLocale: Locale {
+        selectedLanguageCode.map(Locale.init(identifier:)) ?? .current
     }
 
     private static func localizedBundle(for languageCode: String) -> Bundle? {
@@ -93,4 +122,3 @@ enum L10n {
         return String(format: text(key, languageCode: languageCode), locale: locale, arguments: arguments)
     }
 }
-

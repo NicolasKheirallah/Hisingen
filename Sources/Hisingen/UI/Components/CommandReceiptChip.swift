@@ -2,8 +2,13 @@ import SwiftUI
 
 @MainActor
 struct CommandReceiptChip: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let receipt: CommandReceipt
     let onDismiss: (UUID) -> Void
+    /// Requests a fresh reading so the receipt can settle against telemetry. Only shown
+    /// for acknowledged outcomes: the service accepted the command but no reading proves
+    /// the car carried it out, and a refresh is what moves the receipt to confirmed.
+    var onVerify: ((UUID) -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -46,6 +51,14 @@ struct CommandReceiptChip: View {
             }
             .accessibilityElement(children: .combine)
             Spacer()
+            if case .acknowledged = receipt.status, let onVerify {
+                Button(L10n.text("Verify now")) { onVerify(receipt.id) }
+                    .buttonStyle(.pressable)
+                    .hisType(.micro, weight: .semibold)
+                    .foregroundStyle(HisingenTheme.accent)
+                    .accessibilityLabel(L10n.text("Verify now"))
+                    .help(L10n.text("Verify now"))
+            }
             Button {
                 onDismiss(receipt.id)
             } label: {
@@ -56,10 +69,20 @@ struct CommandReceiptChip: View {
         }
         .padding(9)
         .background(
-            appearance.color.opacity(0.12),
+            appearance.color.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)),
             in: RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
         )
         .hisAnimation(Motion.stateChange, value: receipt.status)
+        .onChange(of: receipt.status) { _, status in
+            switch status {
+            case .confirmed, .acknowledged:
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            case .timedOut:
+                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+            case .awaiting:
+                break
+            }
+        }
         // Declared here so any host stack that animates insertions gets the
         // same drop-in the other vehicle cards use.
         .transition(.move(edge: .top).combined(with: .opacity))

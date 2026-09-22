@@ -69,6 +69,24 @@ struct InstrumentRedesignTests {
                 "the threshold is the contract, not the caller's hope")
     }
 
+    @Test
+    func reorderCrossingPicksTheCardUnderTheDragCentre() {
+        // Three stacked cards with a gap between the second and third.
+        let frames: [TabItemID: CGRect] = [
+            .vehicleHero: CGRect(x: 0, y: 0, width: 600, height: 200),
+            .vehicleCharging: CGRect(x: 0, y: 212, width: 600, height: 100),
+            .vehicleTyres: CGRect(x: 0, y: 400, width: 600, height: 80),
+        ]
+        // A centre inside a card is that card, whatever else is near.
+        #expect(TabCardStack.reorderTarget(of: .vehicleHero, center: 250, in: frames) == .vehicleCharging)
+        // In the gap, the nearest midline wins rather than nothing.
+        #expect(TabCardStack.reorderTarget(of: .vehicleHero, center: 330, in: frames) == .vehicleCharging)
+        #expect(TabCardStack.reorderTarget(of: .vehicleHero, center: 390, in: frames) == .vehicleTyres)
+        // The dragged card is never its own target, and no frames is no target.
+        #expect(TabCardStack.reorderTarget(of: .vehicleHero, center: 100, in: frames) == .vehicleCharging)
+        #expect(TabCardStack.reorderTarget(of: .vehicleHero, center: 100, in: [:]) == nil)
+    }
+
     // MARK: - Charge projection (G3): empty over deceptive
 
     @Test

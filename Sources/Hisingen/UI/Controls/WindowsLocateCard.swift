@@ -36,7 +36,7 @@ struct WindowsLocateCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: headerSymbol, title: headerTitle, color: .indigo)
+                    CardHeader(symbol: headerSymbol, title: headerTitle, color: HisingenTheme.chartInfo)
                     Spacer()
                     if showWindows {
                         windowStatusPill

@@ -1,0 +1,25 @@
+// App Intents Siri phrases and short titles. Keys are the code-side English literals;
+// ${applicationName} is the system-supplied app name. Locales without a translation keep
+// the English entry, which is also what a missing entry falls back to.
+"Check ${applicationName} battery" = "${applicationName}-Batterie prüfen";
+"What is my ${applicationName} charge level?" = "Wie hoch ist der Ladestand meines ${applicationName}?";
+"How much range is left in ${applicationName}?" = "Wie viel Restreichweite hat ${applicationName}?";
+"Lock my car with ${applicationName}" = "Auto mit ${applicationName} verriegeln";
+"Unlock my car with ${applicationName}" = "Auto mit ${applicationName} entriegeln";
+"Start my car climate with ${applicationName}" = "Fahrzeugklima mit ${applicationName} starten";
+"Stop my car climate with ${applicationName}" = "Fahrzeugklima mit ${applicationName} stoppen";
+"Check my vehicle with ${applicationName}" = "Fahrzeug mit ${applicationName} prüfen";
+"Check charging with ${applicationName}" = "Ladung mit ${applicationName} prüfen";
+"Find my car with ${applicationName}" = "Auto mit ${applicationName} finden";
+"Flash my car lights with ${applicationName}" = "Licht mit ${applicationName} blinken lassen";
+"Summarize my trips with ${applicationName}" = "Fahrten mit ${applicationName} zusammenfassen";
+"Vehicle Battery" = "Fahrzeugbatterie";
+"Lock Vehicle" = "Fahrzeug verriegeln";
+"Unlock Vehicle" = "Fahrzeug entriegeln";
+"Start Climate" = "Klima starten";
+"Stop Climate" = "Klima stoppen";
+"Vehicle Status" = "Fahrzeugstatus";
+"Charging Status" = "Ladestatus";
+"Recent Trips" = "Letzte Fahrten";
+"Flash Lights" = "Licht blinken";
+"Honk and Flash" = "Hupen und blinken";

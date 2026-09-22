@@ -25,7 +25,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "gauge.high", title: L10n.text("Consumption Trend"), color: .mint)
+                    CardHeader(symbol: "gauge.high", title: L10n.text("Consumption Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let average {
                         Text(preferences.energyConsumptionUnit.format(kwhPer100Km: average))
@@ -100,17 +100,16 @@ extension HistoryDashboardView {
                 if state.hasFreshReading(.battery), let battery = state.energy.batteryPercentage,
                    let estimate = HistoryInsights.historicalRange(
                     from: telemetryRecords, vin: state.identity.vin,
-                    usableCapacityKwh: state.configuredCapacityReference(
-                        specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh,
+                    usableCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state),
                     batteryPercentage: battery) {
                     Text(L10n.format("Range from recorded consumption: %@",
                                      Format.distance(km: estimate.typicalKm, unit: preferences.distanceUnit)))
-                        .font(.caption.weight(.medium))
+                        .hisType(.caption, weight: .medium)
                     Text(L10n.format("%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction.",
                                      Format.distance(km: estimate.shortestKm, unit: preferences.distanceUnit),
                                      Format.distance(km: estimate.longestKm, unit: preferences.distanceUnit),
                                      estimate.observationCount))
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let slopePerDay {
@@ -208,7 +207,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "road.lanes", title: L10n.text("Odometer History"), color: .indigo)
+                    CardHeader(symbol: "road.lanes", title: L10n.text("Odometer History"), color: HisingenTheme.chartInfo)
                     Spacer()
                     if let covered {
                         Text("+\(Format.distance(km: covered, decimals: 0, unit: preferences.distanceUnit))")
@@ -232,7 +231,7 @@ extension HistoryDashboardView {
                             .foregroundStyle(Color.primary.opacity(0.25))
                             .annotation(position: .top, spacing: 0,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                Text("\(Format.dateFormatter.string(from: hit.timestamp)) · \(Format.distance(km: hit.odometerKm, decimals: 0, unit: preferences.distanceUnit))")
+                                Text("\(Format.dateFormatter.string(from: hit.timestamp)) · \(Format.distance(km: hit.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true))")
                                     .historyScrubCallout()
                             }
                     }
@@ -246,7 +245,7 @@ extension HistoryDashboardView {
                     title: L10n.text("Odometer History"),
                     yLabel: preferences.distanceUnit.suffix,
                     points: odometerPoints.map { ($0.timestamp, preferences.distanceUnit.convert(km: $0.odometerKm)) },
-                    valueFormat: { String(format: "%.0f", $0) }
+                    valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }
                 ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 if monthly.count >= 2 {
@@ -285,7 +284,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "heart.text.square", title: L10n.text("Battery Health Trend"), color: .pink)
+                    CardHeader(symbol: "heart.text.square", title: L10n.text("Battery Health Trend"), color: HisingenTheme.chartHealth)
                     Spacer()
                     if let latest {
                         Text(Format.percent(latest.stateOfHealthPct, decimals: 1))
@@ -338,7 +337,7 @@ extension HistoryDashboardView {
                           Format.percent(latest.degradationPct, decimals: 1), symbol: "arrow.down.right")
                     KVRow(L10n.text("Estimated Usable Capacity"), Format.energyKwh(latest.effectiveUsableKwh), symbol: "battery.100")
                     KVRow(L10n.text("Recorded At Odometer"),
-                          Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit), symbol: "road.lanes")
+                          Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true), symbol: "road.lanes")
                     if let slope = HistoryInsights.batteryHealthTrend(from: batteryHealthRecords).stateOfHealthPctPer10kKm,
                        batteryHealthRecords.count >= 3 {
                         KVRow(L10n.text("Trend"), L10n.format("%@%% / 10,000 km", Format.signedNumber(slope, decimals: 2)), symbol: "chart.line.downtrend.xyaxis",
@@ -389,7 +388,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: .teal)
+                    CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let latestAqi = latest?.airQualityIndex {
                         Text("\(Int(latestAqi)) AQI")

@@ -29,7 +29,6 @@ struct SettingsVehicleDataCard: View {
             .hisType(.caption, weight: .bold)
             .foregroundStyle(.tertiary)
             .textCase(.uppercase)
-            .tracking(0.3)
             .padding(.top, 6)
     }
 
@@ -235,9 +234,9 @@ struct SettingsVehicleDataCard: View {
             }
             if let specification = prefs.vehicleSpecificationOverride(for: warrantyVIN) {
                 usableBatteryCapacityOverride = specification.usableBatteryCapacityKwh
-                    .map { String(format: "%.1f", $0) } ?? ""
+                    .map { String(format: "%.1f", locale: L10n.displayLocale, $0) } ?? ""
                 wltpRangeOverride = specification.wltpRangeKm
-                    .map { String(format: "%.0f", $0) } ?? ""
+                    .map { String(format: "%.0f", locale: L10n.displayLocale, $0) } ?? ""
             }
         }
     }

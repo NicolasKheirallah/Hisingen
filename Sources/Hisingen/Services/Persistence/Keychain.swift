@@ -6,12 +6,29 @@ import Security
 
 enum KeychainError: Error, LocalizedError {
     case status(OSStatus)
+    /// The item exists but macOS is waiting for the owner to approve access (an ACL consent
+    /// prompt). The prompt can be unanswerable from the current context, e.g. a background
+    /// launch, so callers must not treat this as "credential gone" and must not retry in a
+    /// loop: each retry can block its thread on the pending prompt.
+    case interactionRequired
+
+    /// macOS reports a pending ACL consent with errSecInteractionRequired.
+    var isInteractionRequired: Bool {
+        if case .interactionRequired = self { return true }
+        return false
+    }
+
+    static func isInteractionRequired(_ error: Error) -> Bool {
+        (error as? KeychainError)?.isInteractionRequired ?? false
+    }
 
     var errorDescription: String? {
         switch self {
         case .status(let code):
             let msg = SecCopyErrorMessageString(code, nil) as String? ?? "OSStatus \(code)"
             return L10n.format("Keychain error: %@", msg)
+        case .interactionRequired:
+            return L10n.text("Hisingen is waiting for Keychain access to be approved.")
         }
     }
 }
@@ -86,7 +103,6 @@ struct KeychainStore: Sendable {
     private static let commandSessionAccount = "polestar-command-refresh-token"
     private static let polestarDataPortalBundleAccount = "polestar-dataportal-credentials"
     private static let polestarDataPortalTokenAccount = "polestar-dataportal-token"
-    private static let polestarDataPortalClientSecretDraftAccount = "polestar-dataportal-client-secret-draft"
 
     /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
     /// Authentication still reads and validates the real Keychain values.
@@ -215,52 +231,6 @@ struct KeychainStore: Sendable {
         try mutateVolvoBundle { $0.apiKey = nil }
     }
 
-    private static let passwordDraftAccount = "polestar-password-draft"
-    private static let volvoClientSecretDraftAccount = "volvo-client-secret-draft"
-    private static let volvoApiKeyDraftAccount = "volvo-vcc-api-key-draft"
-
-    func savePasswordDraft(_ value: String) throws {
-        UserDefaults.standard.set(!value.isEmpty, forKey: "has_polestar_pw_draft")
-        try save(value, account: Self.passwordDraftAccount)
-    }
-
-    func readPasswordDraft() throws -> String? {
-        return try read(account: Self.passwordDraftAccount)
-    }
-
-    func deletePasswordDraft() throws {
-        UserDefaults.standard.set(false, forKey: "has_polestar_pw_draft")
-        try delete(account: Self.passwordDraftAccount)
-    }
-
-    func saveVolvoClientSecretDraft(_ value: String) throws {
-        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_secret_draft")
-        try save(value, account: Self.volvoClientSecretDraftAccount)
-    }
-
-    func readVolvoClientSecretDraft() throws -> String? {
-        return try read(account: Self.volvoClientSecretDraftAccount)
-    }
-
-    func deleteVolvoClientSecretDraft() throws {
-        UserDefaults.standard.set(false, forKey: "has_volvo_secret_draft")
-        try delete(account: Self.volvoClientSecretDraftAccount)
-    }
-
-    func saveVolvoApiKeyDraft(_ value: String) throws {
-        UserDefaults.standard.set(!value.isEmpty, forKey: "has_volvo_key_draft")
-        try save(value, account: Self.volvoApiKeyDraftAccount)
-    }
-
-    func readVolvoApiKeyDraft() throws -> String? {
-        return try read(account: Self.volvoApiKeyDraftAccount)
-    }
-
-    func deleteVolvoApiKeyDraft() throws {
-        UserDefaults.standard.set(false, forKey: "has_volvo_key_draft")
-        try delete(account: Self.volvoApiKeyDraftAccount)
-    }
-
     func savePolestarDataPortalCredentials(accountID: String? = nil, clientID: String, clientSecret: String) throws {
         try mutatePolestarDataPortalBundle {
             if let accountID { $0.accountID = accountID }
@@ -301,20 +271,6 @@ struct KeychainStore: Sendable {
     func deletePolestarDataPortalToken() throws {
         try delete(account: Self.polestarDataPortalTokenAccount)
         UserDefaults.standard.set(false, forKey: "has_polestar_dataportal_token")
-    }
-
-    func savePolestarDataPortalClientSecretDraft(_ value: String) throws {
-        UserDefaults.standard.set(!value.isEmpty, forKey: "has_polestar_dp_secret_draft")
-        try save(value, account: Self.polestarDataPortalClientSecretDraftAccount)
-    }
-
-    func readPolestarDataPortalClientSecretDraft() throws -> String? {
-        try read(account: Self.polestarDataPortalClientSecretDraftAccount)
-    }
-
-    func deletePolestarDataPortalClientSecretDraft() throws {
-        UserDefaults.standard.set(false, forKey: "has_polestar_dp_secret_draft")
-        try delete(account: Self.polestarDataPortalClientSecretDraftAccount)
     }
 
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
@@ -447,8 +403,10 @@ struct KeychainStore: Sendable {
         } else {
             let status = write(value, account: account, useDataProtection: true)
             if status != errSecSuccess {
+                guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }
                 guard Self.dataProtectionUnavailable(status) else { throw KeychainError.status(status) }
                 let legacyStatus = write(value, account: account, useDataProtection: false)
+                guard legacyStatus != errSecInteractionRequired else { throw KeychainError.interactionRequired }
                 guard legacyStatus == errSecSuccess else { throw KeychainError.status(legacyStatus) }
             }
         }
@@ -504,6 +462,9 @@ struct KeychainStore: Sendable {
             memoryCache.set(cacheKey(account: account), value: value)
             return value
         }
+        // A pending ACL consent lives in the data-protection keychain; querying the legacy
+        // keychain here could raise a second prompt, so stop at the first one.
+        guard dpStatus != errSecInteractionRequired else { throw KeychainError.interactionRequired }
         guard dpStatus == errSecItemNotFound || Self.dataProtectionUnavailable(dpStatus) else {
             throw KeychainError.status(dpStatus)
         }
@@ -513,6 +474,7 @@ struct KeychainStore: Sendable {
             memoryCache.set(cacheKey(account: account), value: nil)
             return nil
         }
+        guard legacyStatus != errSecInteractionRequired else { throw KeychainError.interactionRequired }
         guard legacyStatus == errSecSuccess else { throw KeychainError.status(legacyStatus) }
         let value = try decode(legacyData)
         // Never use the fallback writer for migration: its success might only mean
@@ -533,6 +495,7 @@ struct KeychainStore: Sendable {
         } else {
             for dataProtection in [true, false] {
                 let status = security.delete(baseQuery(account: account, useDataProtection: dataProtection))
+                guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }
                 guard status == errSecSuccess || status == errSecItemNotFound
                     || (dataProtection && Self.dataProtectionUnavailable(status)) else {
                     throw KeychainError.status(status)
@@ -555,7 +518,6 @@ enum Keychain {
     static func savePassword(_ password: String) throws { try KeychainStore.app.savePassword(password) }
     static func readPassword() throws -> String? { try KeychainStore.app.readPassword() }
     static func deletePassword() throws { try KeychainStore.app.deletePassword() }
-    static func readSessionToken() throws -> String? { try KeychainStore.app.readSessionToken() }
 
     static func readVolvoSessionToken() throws -> String? { try KeychainStore.app.readVolvoSessionToken() }
     static func saveVolvoClientSecret(_ value: String) throws { try KeychainStore.app.saveVolvoClientSecret(value) }
@@ -568,26 +530,5 @@ enum Keychain {
     }
     static func savePolestarDataPortalCredentials(accountID: String? = nil, clientID: String, clientSecret: String) throws {
         try KeychainStore.app.savePolestarDataPortalCredentials(accountID: accountID, clientID: clientID, clientSecret: clientSecret)
-    }
-    static func readPolestarDataPortalAccountID() throws -> String? {
-        try KeychainStore.app.readPolestarDataPortalAccountID()
-    }
-    static func readPolestarDataPortalClientID() throws -> String? {
-        try KeychainStore.app.readPolestarDataPortalClientID()
-    }
-    static func readPolestarDataPortalClientSecret() throws -> String? {
-        try KeychainStore.app.readPolestarDataPortalClientSecret()
-    }
-    static func deletePolestarDataPortalCredentials() throws {
-        try KeychainStore.app.deletePolestarDataPortalCredentials()
-    }
-    static func savePolestarDataPortalToken(_ token: String) throws {
-        try KeychainStore.app.savePolestarDataPortalToken(token)
-    }
-    static func readPolestarDataPortalToken() throws -> String? {
-        try KeychainStore.app.readPolestarDataPortalToken()
-    }
-    static func deletePolestarDataPortalToken() throws {
-        try KeychainStore.app.deletePolestarDataPortalToken()
     }
 }

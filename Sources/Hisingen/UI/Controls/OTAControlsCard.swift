@@ -31,7 +31,7 @@ struct OTAControlsCard: View {
                 } else {
                     otaStatusRow(
                         symbol: "questionmark.circle.fill",
-                        tint: .secondary,
+                        tint: HisingenTheme.inkMuted,
                         text: L10n.text("Software status is unavailable for this vehicle.")
                     )
                 }
@@ -109,7 +109,7 @@ struct OTAControlsCard: View {
         case .failed:
             otaStatusRow(
                 symbol: "clock.arrow.circlepath",
-                tint: .secondary,
+                tint: HisingenTheme.inkMuted,
                 text: L10n.text("An older software event is recorded, but no current update failure requires attention.")
             )
         case .completed:
@@ -123,7 +123,7 @@ struct OTAControlsCard: View {
         case .unknown:
             otaStatusRow(
                 symbol: "questionmark.circle",
-                tint: .secondary,
+                tint: HisingenTheme.inkMuted,
                 text: L10n.text("Software status is unavailable; the app cannot confirm that the vehicle is up to date.")
             )
         }
