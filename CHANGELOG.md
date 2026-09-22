@@ -3,6 +3,21 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-09-22
+
+### Added
+
+- verdict line, award surfaces, account and history models
+
+### Fixed
+
+- 
+
+### Changed
+
+- Updated UX
+- chore(updates): publish v2.0.4 appcast
+
 ## [2.0.5] - 2026-09-21
 
 ### Added
