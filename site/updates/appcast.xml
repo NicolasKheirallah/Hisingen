@@ -4,17 +4,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Hisingen</title>
         <item>
-            <title>2.0.4</title>
-            <pubDate>Fri, 18 Sep 2026 21:57:18 +0000</pubDate>
+            <title>2.0.5</title>
+            <pubDate>Tue, 22 Sep 2026 19:47:44 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/NicolasKheirallah/Hisingen/blob/main/CHANGELOG.md</sparkle:fullReleaseNotesLink>
-            <sparkle:version>22</sparkle:version>
-            <sparkle:shortVersionString>2.0.4</sparkle:shortVersionString>
+            <sparkle:version>23</sparkle:version>
+            <sparkle:shortVersionString>2.0.5</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink sparkle:edSignature="buci8lDFYHvRMxjb4EhzM6uYrLXS2HfNGz/lF+ZT26L3yL5EoG0r1AtU1OMY0/eFH2p0PQCi1xWDa6k6O6RPDw==" sparkle:length="1793">https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.4/Hisingen.app.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.4/Hisingen.app.zip" length="21920124" type="application/octet-stream" sparkle:edSignature="xgPhhRV9chaYmCfSGiDX/8tasmZ9KxwplvAt7Xu3NkGu2WsERff7egLwMk4XVXMLz+6IyrV/nVvKWRKim/KrCg=="></enclosure>
+            <sparkle:releaseNotesLink sparkle:edSignature="xYyXVkQp38Fzm+Tbzx4+8yhNu7jDjS0ASS7xSuqvATKM61NHIkqy63ateL2Op72r80QvpFwHVmVLalw52ah/AQ==" sparkle:length="4483">https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.5/Hisingen.app.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.5/Hisingen.app.zip" length="22961139" type="application/octet-stream" sparkle:edSignature="UDA7ZDUzSeGoAfH0O3GUGXEA+AfxFESE7JdTL5akO3qeR/dYovWx2ogQi6WtiTvmAePGlH7pzK3/A/bUaRm/BQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: /WEFkLsDL+VUUZ29YxAhozBrUC9nU+zCfFzgxCE6GRlUUErWIkQw/9dJEgsGxn2gFsOxbiybdk5Sb3GLNnDMCA==
+edSignature: WVTqJxsXjAPWxq/vFMNkZAFL2KcBEjvsF9ty99NC6rBeO1LIlXXDp//HvOl0OXnChoJ+EXM4939aPWngU0FdCA==
 length: 1477
 -->
