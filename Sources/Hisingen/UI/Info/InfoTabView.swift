@@ -296,6 +296,11 @@ struct InfoTabView: View {
         // empty state after it, rather than appearing only once it has something to show.
         if !asyncDataLoaded {
             add(.activity, activityPlaceholderCard(message: nil))
+        } else if asyncData.storeUnreadable {
+            add(.activity, activityPlaceholderCard(
+                message: L10n.text("Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history."),
+                retry: { Task { await loadAsyncData() } }
+            ))
         } else if asyncData.recentTelemetry.isEmpty, asyncData.recentCommands.isEmpty,
                   asyncData.recentActivities.isEmpty {
             add(.activity, activityPlaceholderCard(message: L10n.text("No local activity recorded yet.")))
@@ -310,12 +315,22 @@ struct InfoTabView: View {
     /// The activity section's loading and empty states, matching the header the loaded card uses so
     /// the section does not change shape when its rows arrive.
     @ViewBuilder
-    private func activityPlaceholderCard(message: String?) -> some View {
+    private func activityPlaceholderCard(message: String?, retry: (() -> Void)? = nil) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: HisingenTheme.chartInfo)
                 if let message {
+                    if retry != nil {
+                        Label(L10n.text("History could not be read"), systemImage: "exclamationmark.triangle.fill")
+                            .hisType(.label, weight: .semibold)
+                            .foregroundStyle(HisingenTheme.semanticWarning)
+                    }
                     Text(message).hisType(.label).foregroundStyle(.secondary)
+                    if let retry {
+                        Button(L10n.text("Refresh history"), action: retry)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 } else {
                     ProgressView().controlSize(.small)
                 }

@@ -4,9 +4,12 @@ import Testing
 
 struct RequestConstructionTests {
 
-    @Test
+    @Test(arguments: [
+        "https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html",
+        "hisingen://oauth/volvo/callback"
+    ])
     @MainActor
-    func volvoScopeTiersNarrowFromFullToCore() async throws {
+    func volvoScopeTiersNarrowFromFullToCore(callbackURI: String) async throws {
         let suite = "HisingenVolvoScopeTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -58,9 +61,27 @@ struct RequestConstructionTests {
         // can cascade to the next scope tier.
         let retryURL = try await api.beginSignIn(tier: .core)
         let state = try #require(OAuthCallback.queryValue("state", from: retryURL))
-        var callbackComponents = URLComponents(url: await api.redirectURI, resolvingAgainstBaseURL: false)!
+        for rejectedURI in [
+            "hisingen://example.invalid/volvo/callback",
+            "hisingen://oauth/polestar/callback",
+            "hisingen://oauth/volvo/callback/extra",
+            "hisingen://oauth/volvo/callback?state=wrong-state"
+        ] {
+            var rejectedComponents = try #require(URLComponents(string: rejectedURI))
+            if rejectedComponents.queryItems == nil {
+                rejectedComponents.queryItems = [URLQueryItem(name: "state", value: state)]
+            }
+            rejectedComponents.queryItems?.append(URLQueryItem(name: "error", value: "invalid_scope"))
+            do {
+                try await api.completeSignIn(callbackURL: try #require(rejectedComponents.url), preferredVIN: nil)
+                Issue.record("An invalid app callback must be rejected")
+            } catch VolvoError.authenticationRequired(.callbackRejected) {
+            }
+        }
+        var callbackComponents = try #require(URLComponents(string: callbackURI))
         callbackComponents.queryItems = [
             URLQueryItem(name: "error", value: "invalid_scope"),
+            URLQueryItem(name: "error_description", value: "The requested scope is invalid, unknown, malformed, or exceeds that which the client is permitted to request."),
             URLQueryItem(name: "state", value: state)
         ]
         do {

@@ -142,8 +142,10 @@ One radius per question, all global (`HisingenTheme.swift`): sections 12, banner
 concentric inset of the section), gauges 5, status chips 4. Nothing is pill-shaped by default.
 
 Material discipline, the app's strongest identity rule: exactly one surface in any stack.
-Panel = `.regularMaterial` glass; section = *no surface at all*, a group of content on the
-glass; chip = solid `chipFill`. Blurs never stack, and nothing competes with the material.
+Panel = `.thinMaterial` in light appearance so desktop detail remains visible through it, and
+`.regularMaterial` in dark appearance for a steadier text surface; section = *no surface at all*,
+a group of content on the glass; chip = solid `chipFill`. Blurs never stack, and nothing competes
+with the material.
 
 The 2026 language (adopted 2026-09-19; the first pass kept a lifted fill on every section and
 read as same-looking, so the fill went too): a section is **not a surface**. The old card's

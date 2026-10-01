@@ -100,11 +100,12 @@ extension HisingenTheme {
 struct PopoverSurface: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Under either setting the blur is dropped entirely and ``panelFill`` — a neutral, darker than
-    /// any canvas — supplies the panel, so the lifted card still separates from it. Otherwise
-    /// `.regularMaterial` supplies the panel, which already adapts to the appearance and to the
-    /// desktop behind the window.
+    /// any canvas — supplies the panel, so the lifted card still separates from it. In light
+    /// appearance, `.thinMaterial` reveals more of the desktop through the panel; dark appearance
+    /// keeps `.regularMaterial` for a steadier text surface.
     private var prefersOpaqueSurface: Bool {
         reduceTransparency || contrast == .increased
     }
@@ -115,6 +116,8 @@ struct PopoverSurface: View {
             // panel would have been invisible, which is exactly the defect the lifted `cardFill`
             // exists to fix, arriving by a different route.
             Rectangle().fill(HisingenTheme.panelFill)
+        } else if colorScheme == .light {
+            Rectangle().fill(.thinMaterial)
         } else {
             Rectangle().fill(.regularMaterial)
         }

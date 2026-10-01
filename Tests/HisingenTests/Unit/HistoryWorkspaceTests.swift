@@ -57,6 +57,17 @@ struct HistoryWorkspaceTests {
     private let vin = "YSMWORKSPACEVIN01"
 
     @Test
+    func recentRecordsDistinguishAnUnreadableStoreFromAnEmptyStore() {
+        let unreadableDatabase = VehicleDatabase(database: .unavailable(path: ":test-unavailable:"))
+        let unreadable = unreadableDatabase.history.recent(vin: vin, chargingCapacityKwh: nil)
+        #expect(unreadable.storeUnreadable)
+
+        let readableDatabase = VehicleDatabase.inMemory()
+        let readable = readableDatabase.history.recent(vin: vin, chargingCapacityKwh: nil)
+        #expect(!readable.storeUnreadable)
+    }
+
+    @Test
     func usableCapacityFollowsTheSpecificationOverride() {
         let harness = Harness(label: "workspace-capacity")
         defer { harness.close() }

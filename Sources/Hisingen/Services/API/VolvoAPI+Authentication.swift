@@ -45,7 +45,9 @@ extension VolvoAPI {
     func completeSignIn(callbackURL: URL, preferredVIN: String?) async throws {
         // The flow validates scheme, host, path, and state against the pending values and only
         // then consumes them, so a stray or forged callback cannot break the genuine sign-in.
-        let completion = try authorizationFlow.consume(callbackURL: callbackURL, redirectURL: redirectURI)
+        let appCallbackURI = URL(string: "hisingen://oauth/volvo/callback")!
+        let callbackRedirectURI = callbackURL.scheme == appCallbackURI.scheme ? appCallbackURI : redirectURI
+        let completion = try authorizationFlow.consume(callbackURL: callbackURL, redirectURL: callbackRedirectURI)
         try await exchangeCodeForToken(completion.code, verifier: completion.verifier)
         try await discoverVehicles(preferredVIN: preferredVIN)
     }

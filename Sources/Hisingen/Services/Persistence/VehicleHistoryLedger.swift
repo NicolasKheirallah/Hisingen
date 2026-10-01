@@ -81,6 +81,7 @@ final class VehicleHistoryLedger: Sendable {
         var connectivityHistory: [VehicleDatabase.ConnectivityRecord] = []
         var chargingSessions: [ChargingSession] = []
         var batteryHealthHistory: [BatteryHealthRecord] = []
+        var storeUnreadable = false
     }
 
     // MARK: - Curated bundles
@@ -182,6 +183,7 @@ final class VehicleHistoryLedger: Sendable {
     /// Everything the Info tab derives from the local SQLite store.
     func recent(vin: String, chargingCapacityKwh: Double?) -> RecentRecords {
         var records = RecentRecords()
+        records.storeUnreadable = !storeIsReadable()
         records.recentTelemetry = recentTelemetry(for: vin, limit: 40)
         records.recentCommands = recentCommandAudits(for: vin, limit: 5)
         records.recentActivities = recentActivities(for: vin, limit: 10)

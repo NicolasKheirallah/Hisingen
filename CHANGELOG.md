@@ -3,20 +3,17 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.5] - 2026-09-22
-
-### Added
-
-- verdict line, award surfaces, account and history models
+## [2.0.6] - 2026-10-01
 
 ### Fixed
 
-- 
+- accept Volvo's app callback URI after the HTTPS redirect bridge so OAuth errors such as
+  `invalid_scope` reach scope-recovery handling instead of being rejected as forged callbacks
 
 ### Changed
 
-- Updated UX
-- chore(updates): publish v2.0.4 appcast
+- use a thinner translucent material for the light-mode panel so more of the desktop shows
+  through; dark mode keeps its regular material
 
 ## [2.0.5] - 2026-09-21
 
