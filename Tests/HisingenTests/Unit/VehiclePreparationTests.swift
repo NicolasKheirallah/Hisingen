@@ -10,7 +10,11 @@ struct VehiclePreparationTests {
 
     private func makeAPI() async throws -> PolestarAPI {
         PreparationTransport.counts.reset()
-        let api = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.VehiclePreparation.\(UUID())"))
+        let grpcConfiguration = URLSessionConfiguration.ephemeral
+        grpcConfiguration.protocolClasses = [UnreachableGRPCTransport.self]
+        let api = PolestarAPI(
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.VehiclePreparation.\(UUID())"),
+            grpcSession: URLSession(configuration: grpcConfiguration))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PreparationTransport.self]
         let session = URLSession(configuration: configuration)
@@ -61,6 +65,20 @@ private extension PolestarAPI {
         tokenExpiry = Date().addingTimeInterval(3600)
         // Discovery must not consult another client's credentials in this transport test.
         backoffs.block(PolestarAPI.discoveryBackoff, until: Date().addingTimeInterval(3600), reason: "test")
+    }
+}
+
+/// Fails every gRPC probe locally. The gRPC client owns a hardcoded production base URL and
+/// builds its own session unless one is injected, so without this the capability probes in a
+/// `.vehicleIdentity` fetch (GetMyCars) would leave the process and a live 401 would escape the
+/// suite as `authenticationRequired` — a global failure the probe ladder deliberately rethrows.
+private final class UnreachableGRPCTransport: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
     }
 }
 

@@ -159,21 +159,22 @@ actor PolestarAPI {
 
     @MainActor
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
-         diagnosticLog: APIDiagnosticLogStore = .shared) {
+         diagnosticLog: APIDiagnosticLogStore = .shared, grpcSession: URLSession? = nil) {
         self.init(keychain: keychain, imageCache: imageCache, preferences: .shared,
-                  diagnosticLog: diagnosticLog)
+                  diagnosticLog: diagnosticLog, grpcSession: grpcSession)
     }
 
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore, diagnosticLog: APIDiagnosticLogStore = .shared,
-         backoffs: ProviderBackoffStore = ProviderBackoffStore()) {
+         backoffs: ProviderBackoffStore = ProviderBackoffStore(),
+         grpcSession: URLSession? = nil) {
         self.keychain = keychain
         self.backoffs = backoffs
         self.saveCommandToken = { try keychain.saveCommandSessionToken($0) }
         self.imageCache = imageCache
         self.preferences = preferences
         self.diagnosticLog = diagnosticLog
-        self.grpc = PolestarGRPC(diagnosticLog: diagnosticLog)
+        self.grpc = PolestarGRPC(session: grpcSession, diagnosticLog: diagnosticLog)
         self.tokens = TokenLifecycle(
             policy: .init(renewalMargin: Self.tokenRenewalMargin(lifetime:)),
             providerName: "Polestar",
