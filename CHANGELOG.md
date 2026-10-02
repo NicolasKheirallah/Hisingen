@@ -3,6 +3,21 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] - 2026-10-02
+
+### Added
+
+- 
+
+### Fixed
+
+- keep vehicle preparation probes off the live network
+
+### Changed
+
+- Updated to 2.0.6
+- chore(updates): publish v2.0.5 appcast
+
 ## [2.0.6] - 2026-10-01
 
 ### Fixed
