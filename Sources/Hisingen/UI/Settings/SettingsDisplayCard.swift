@@ -12,9 +12,6 @@ struct SettingsDisplayCard: View {
     @State private var fuelVolumeUnit = FuelVolumeUnit.liters
     @State private var fuelEconomyUnit = FuelEconomyUnit.litersPer100Km
     @State private var energyConsumptionUnit = EnergyConsumptionUnit.kwhPer100Km
-    @State private var electricityPrice = "2.00"
-    @State private var currencySymbol = "kr"
-    @State private var nightElectricityPrice = "2.00"
     @State private var gridCarbonIntensity = "120"
 
     private var preferences: PreferencesStore { binder.preferences }
@@ -358,101 +355,6 @@ struct SettingsDisplayCard: View {
 
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.text("Electricity Rate"))
-                                .hisType(.body, weight: .medium)
-                            Text(L10n.text("For charge cost estimates"))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        HStack(spacing: 4) {
-                            TextField("2.00", text: $electricityPrice)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 55)
-                                .multilineTextAlignment(.trailing)
-                                .controlSize(.small)
-                                .onChange(of: electricityPrice) { _, _ in
-                                    if let price = NumberParsing.decimal(from: electricityPrice),
-                                       (0.01...1_000).contains(price) {
-                                        preferences.electricityPricePerKwh = price
-                                    }
-                                }
-                            TextField("kr", text: $currencySymbol)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 45)
-                                .controlSize(.small)
-                                .onChange(of: currencySymbol) { _, _ in
-                                    if isValidCurrencySymbol(currencySymbol) {
-                                        preferences.currencySymbol = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    }
-                                }
-                            Text("/kWh")
-                                .hisType(.label)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if !isValidElectricityPrice(electricityPrice) {
-                        InlineValidationLabel(message: L10n.text("Enter a rate between 0.01 and 1,000."))
-                    }
-                    if !isValidCurrencySymbol(currencySymbol) {
-                        InlineValidationLabel(message: L10n.text("Enter a currency symbol or code using 1–8 characters."))
-                    }
-
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.text("Night Tariff"))
-                                .hisType(.body, weight: .medium)
-                            Text(L10n.text("Splits session cost by when energy actually flowed"))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder.toggle(\.nightTariffEnabled))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-                    if preferences.nightTariffEnabled {
-                        Group {
-                            HStack(spacing: 4) {
-                                TextField("2.00", text: $nightElectricityPrice)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 55)
-                                    .multilineTextAlignment(.trailing)
-                                    .controlSize(.small)
-                                    .onChange(of: nightElectricityPrice) { _, _ in
-                                        if let price = NumberParsing.decimal(from: nightElectricityPrice),
-                                           (0.01...1_000).contains(price) {
-                                            preferences.nightElectricityPricePerKwh = price
-                                        }
-                                    }
-                                Text(L10n.text("/kWh from"))
-                                    .hisType(.label)
-                                    .foregroundStyle(.secondary)
-                                Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
-                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffStartHour))
-                                        .hisType(.label, design: .monospaced)
-                                }
-                                .controlSize(.small)
-                                Text(L10n.text("to"))
-                                    .hisType(.label)
-                                    .foregroundStyle(.secondary)
-                                Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
-                                    Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffEndHour))
-                                        .hisType(.label, design: .monospaced)
-                                }
-                                .controlSize(.small)
-                            }
-                            if !isValidElectricityPrice(nightElectricityPrice) {
-                                InlineValidationLabel(message: L10n.text("Enter a night rate between 0.01 and 1,000."))
-                            }
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
                             Text(L10n.text("Grid Carbon Intensity"))
                                 .hisType(.body, weight: .medium)
                             Text(L10n.text("For the emissions comparison in History"))
@@ -499,9 +401,6 @@ struct SettingsDisplayCard: View {
                             .accessibilityLabel(L10n.text("Require device-owner authentication"))
                     }
                 }
-                // The night-tariff toggle writes through the binder with no
-                // transaction; this binding reveals the rate row with it.
-                .hisAnimation(Motion.layout, value: preferences.nightTariffEnabled)
             }
         }
         .onAppear {
@@ -511,24 +410,13 @@ struct SettingsDisplayCard: View {
             fuelVolumeUnit = preferences.fuelVolumeUnit
             fuelEconomyUnit = preferences.fuelEconomyUnit
             energyConsumptionUnit = preferences.energyConsumptionUnit
-            electricityPrice = String(format: "%.2f", locale: L10n.displayLocale, preferences.electricityPricePerKwh)
-            currencySymbol = preferences.currencySymbol
-            nightElectricityPrice = String(format: "%.2f", locale: L10n.displayLocale, preferences.nightElectricityPricePerKwh)
             gridCarbonIntensity = String(format: "%.0f", locale: L10n.displayLocale, preferences.gridCarbonIntensityGramsPerKwh)
         }
-    }
-
-    private func isValidElectricityPrice(_ text: String) -> Bool {
-        SettingsValidation.isValidElectricityPrice(text)
     }
 
     private func isValidGridCarbonIntensity(_ text: String) -> Bool {
         guard let value = NumberParsing.decimal(from: text) else { return false }
         return (1...1_200).contains(value)
-    }
-
-    private func isValidCurrencySymbol(_ text: String) -> Bool {
-        SettingsValidation.isValidCurrencySymbol(text)
     }
 
     /// Shared scaffolding for the unit pickers. Each caller keeps its own `onChange` because

@@ -2981,3 +2981,46 @@
 // English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@";
+
+// Electricity rate: automatic mode, contract and provider
+"Fixed rate" = "Fast pris";
+"Other provider" = "Annat elbolag";
+"15-minute price" = "Kvartspris (15 min)";
+"Hourly price" = "Timpris";
+"spot price plus %@ markup" = "spotpris plus påslag från %@";
+"Electricity rate mode" = "Typ av elpris";
+"Provider markup" = "Påslag";
+"Tax and grid fee" = "Skatt och nätavgift";
+"Contract" = "Avtal";
+"How your contract settles the market price" = "Hur ditt avtal prissätter marknadspriset";
+"Your electricity retailer" = "Ditt elhandelsbolag";
+"Electricity contract type" = "Typ av elavtal";
+"Electricity provider" = "Elhandlare";
+"Påslag from your price list, excluding VAT" = "Påslag enligt din prislista, exklusive moms";
+"Find the påslag on your %@ price list or invoice" = "Påslaget finns i din prislista eller på fakturan från %@";
+"Optional: energy tax and grid fee per kWh, excluding VAT" = "Valfritt: energiskatt och nätavgift per kWh, exklusive moms";
+"Add 25% VAT" = "Lägg till 25 % moms";
+"Spot prices exclude VAT; households pay it on the total" = "Spotpriset är exklusive moms; hushåll betalar moms på hela summan";
+"Current price" = "Pris just nu";
+"Fetching prices…" = "Hämtar priser…";
+"Market prices unavailable" = "Marknadspriser saknas";
+"%@/kWh" = "%@/kWh";
+"Rate without market prices" = "Pris utan marknadspriser";
+"Used for sessions the market prices do not cover" = "Används för laddningar som marknadspriserna inte täcker";
+"Market prices from elprisetjustnu.se. A changed contract type applies to sessions priced from now on; earlier ones keep their settlement." = "Marknadspriser från elprisetjustnu.se. Ändrar du avtalstyp gäller det laddningar som prissätts framöver; tidigare behåller sin prissättning.";
+"Price per kWh" = "Pris per kWh";
+"Typed-in rate for every session" = "Eget pris för varje laddning";
+"Night rate" = "Nattpris";
+"Currency symbol" = "Valutasymbol";
+"öre/kWh" = "öre/kWh";
+"Enter an amount between 0 and 1,000 öre." = "Ange ett belopp mellan 0 och 1 000 öre.";
+"Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "Laddningar som marknadspriserna täcker använder %@. De övriga %d använder sparad kostnad eller ditt fasta pris.";
+"≈%@ to target at the current %@/kWh" = "≈%@ till målet med nuvarande %@/kWh";
+
+// Electricity settings section and country
+"Electricity" = "El";
+"Country" = "Land";
+"Sweden" = "Sverige";
+"Other country" = "Annat land";
+"Market prices, providers and the charging planner are available" = "Marknadspriser, elhandlare och laddplaneraren är tillgängliga";
+"Market prices are available for Sweden only. Other countries use a typed-in rate." = "Marknadspriser finns bara för Sverige. Andra länder använder ett eget pris.";

@@ -102,7 +102,7 @@ struct ControlsTabView: View {
                 id: TabItemID.controlsChargingPlanner.rawValue, item: TabItemID.controlsChargingPlanner,
                 // Same gating the Vehicle tab applies: the planner needs the feature switch
                 // and a car that can act on it.
-                isVisible: features.contains(.smartChargingPlanner) && state.powertrain.hasElectricRange
+                isVisible: preferences.smartChargingPlannerAvailable && state.powertrain.hasElectricRange
                     && state.energy.batteryPercentage != nil && state.energy.targetPercentage != nil,
                 view: { AnyView(ChargingPlannerCard(state: state)) }
             ),

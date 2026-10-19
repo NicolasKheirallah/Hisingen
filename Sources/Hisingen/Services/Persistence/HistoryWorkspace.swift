@@ -192,7 +192,7 @@ final class HistoryWorkspace {
     /// are fetched lazily, bounded to the seven most recent uncovered days so a long history
     /// cannot turn one card appearance into an unbounded fetch storm. Returns how many
     /// sessions received a price.
-    func backfillSpotEstimatedCosts(vin: String, zone: ElspotZone) async -> Int {
+    func backfillSpotEstimatedCosts(vin: String, zone: ElspotZone, contract: ElectricityPriceContract = .quarterHour) async -> Int {
         let database = database
         let calendar = ElectricityPriceService.stockholmCalendar
         return await Task.detached(priority: .userInitiated) { () -> Int in
@@ -209,7 +209,7 @@ final class HistoryWorkspace {
                 prices = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
             }
             guard !prices.isEmpty else { return 0 }
-            return database.charging.backfillSpotEstimatedCosts(vin: vin, prices: prices)
+            return database.charging.backfillSpotEstimatedCosts(vin: vin, prices: contract.settle(prices))
         }.value
     }
 

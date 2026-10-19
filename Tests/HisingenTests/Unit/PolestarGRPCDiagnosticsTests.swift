@@ -48,6 +48,56 @@ struct PolestarGRPCDiagnosticsTests {
         }
     }
 
+    /// PCCS checks authorization before it resolves a method, so its `Access denied` on a Chronos
+    /// read is a verdict on that one service, not on the bearer token behind it. Reading it as an
+    /// expired session tore down a live session, showed a sign-in prompt, and spent a
+    /// refresh-token grant on every retry.
+    @Test
+    func accessDeniedOnAReadIsAServiceRefusalNotASessionExpiry() {
+        let path = "/pccs.chronos.services.v1.TargetSocService/GetTargetSoc"
+        if case .permissionDenied(let operation) = PolestarGRPC.readStatusError(
+            status: "16", message: "Access%20denied.", path: path
+        ) {
+            #expect(operation == "pccs.chronos.services.v1.TargetSocService")
+        } else {
+            Issue.record("a per-service 'Access denied' must not expire the session")
+        }
+        // Only the gateway's refusal wording means "not on this service's allowlist". An
+        // unexplained 16 still re-authenticates, which is what keeps a genuinely expired token
+        // recoverable rather than silently parked as an unsupported capability.
+        for message: String? in [nil, "token%20is%20expired"] {
+            if case .authenticationRequired = PolestarGRPC.readStatusError(
+                status: "16", message: message, path: path
+            ) {} else {
+                Issue.record("an unexplained 16 must still re-authenticate")
+            }
+        }
+    }
+
+    /// The reported symptom, end to end at the provider seam: one charging read refused with the
+    /// gateway's `Access denied` must cost that reading only, not the session.
+    @MainActor
+    @Test
+    func refusedChargingReadDegradesTheReadingInsteadOfTheSession() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [AccessDeniedPCCSTransport.self]
+        let transport = URLSession(configuration: configuration)
+        defer { transport.invalidateAndCancel() }
+        let diagnostics = APIDiagnosticLogStore()
+        let api = PolestarAPI(
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.pccs.\(UUID())"),
+            diagnosticLog: diagnostics,
+            grpcSession: transport)
+
+        let target = try await api.targetSOC(enabled: true, vin: "LPSVSEDEKML000001", token: "fresh-token")
+
+        #expect(target == nil, "a refused target-SOC read reports no reading rather than throwing")
+        let refused = await diagnostics.snapshot().filter { $0.grpcStatus == "16" }
+        #expect(refused.count == 1)
+        #expect(refused.first?.operation.contains("pccs.chronos.services.v1.TargetSocService") == true)
+        #expect(refused.first?.grpcMessage == "Access denied.")
+    }
+
     @Test
     func unimplementedReadPathIsRememberedAndSkipped() async {
         let suite = "HisingenPolestarGRPCDiagnostics.\(UUID().uuidString)"
@@ -342,6 +392,24 @@ private final class ClassifiedRejectionDiscoveryTransport: URLProtocol, @uncheck
                                        httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+/// What PCCS actually answers when a client is not on a service's allowlist: HTTP 200 with the
+/// refusal in the gRPC trailers, which is why the HTTP status alone cannot classify it.
+private final class AccessDeniedPCCSTransport: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+    override func startLoading() {
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/grpc",
+                           "grpc-status": "16",
+                           "grpc-message": "Access%20denied."])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data())
         client?.urlProtocolDidFinishLoading(self)
     }
 }

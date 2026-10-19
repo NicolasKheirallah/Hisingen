@@ -134,4 +134,15 @@ struct KeychainMigrationTests {
             Issue.record("A plain KeychainError must keep mapping to .secureStorage")
         }
     }
+
+    @Test func savingAnUnchangedSecretDoesNotRewriteTheItem() throws {
+        let security = RecordingKeychainSecurity()
+        security.dpWriteStatus = errSecSuccess
+        let keychain = store(security)
+        try keychain.saveSessionToken("token-a")
+        try keychain.saveSessionToken("token-a")
+        #expect(security.writes == 1)
+        try keychain.saveSessionToken("token-b")
+        #expect(security.writes == 2)
+    }
 }

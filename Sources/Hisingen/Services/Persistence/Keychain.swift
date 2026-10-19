@@ -398,6 +398,13 @@ struct KeychainStore: Sendable {
     private func save(_ value: String, account: String) throws {
         operationLock.lock()
         defer { operationLock.unlock() }
+        // A rewrite of an unchanged secret still touches the item's access list, and a build
+        // with a different code identity that does it can reset which apps may read it without
+        // a password. The cache holds only what this process read or stored, so a match means
+        // the Keychain already has exactly this value.
+        if case .value(let cached?) = memoryCache.get(cacheKey(account: account)), cached == value {
+            return
+        }
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: value)
         } else {

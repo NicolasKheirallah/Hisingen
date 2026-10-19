@@ -26,8 +26,11 @@ Volvo's generic `get<T>` REST helper treats a 403 specifically on a **per-vehicl
 Polestar's gRPC calls carry a `grpc-status` response header rather than relying purely on HTTP status:
 
 - `"0"`: success.
-- `"12"` (`UNIMPLEMENTED`): `RemoteCommandError.unsupported`.
+- `"12"` (`UNIMPLEMENTED`): on a read RPC `.grpcUnimplemented(service:)`, which is also remembered per path so the same read is skipped next time; on a write RPC `RemoteCommandError.unsupported`.
+- `"14"` (`UNAVAILABLE`): `.grpcUnavailable(service:)`, except when the message is the gateway's `authorization failed`: that is a stable per-service authorization gap rather than an outage, so it becomes `.permissionDenied(operation:)`.
 - `"16"` (`UNAUTHENTICATED`) on a **write** RPC: `RemoteCommandError.rejected("Polestar cloud backend requires official mobile app pairing for remote commands.")`.
+- `"16"` on a **read** RPC whose message is `Access denied`: `.permissionDenied(operation:)`. PCCS checks authorization before it resolves a method (see `docs/api/polestar-backend-map.md`), so this message reports that the client is not on that service's allowlist rather than that the bearer token is stale, and sibling RPCs succeed with the same token. The rule keys on the message and not on the host, because the same chronos services are published through both the PCCS host and the C3 gateway.
+- `"16"` on a read RPC with any other message: `.authenticationRequired(.expiredSession)`.
 - Any other non-zero status: generic `.invalidResponse(operation: "gRPC ... status \(status)")`.
 - A 401/403 **HTTP** status on the gRPC call itself (before even inspecting `grpc-status`) short-circuits directly to `.authenticationRequired(.expiredSession)`.
 - A timed-out streaming read that already received at least one frame is treated as a complete response, not a failure: an empirical workaround for the backend not always closing the HTTP/2 stream cleanly.
@@ -41,7 +44,7 @@ Polestar's gRPC calls carry a `grpc-status` response header rather than relying 
 1. **Session-wide** (`RefreshCoordinator`): a `.rateLimited` error sets `rateLimitedUntil`, blocking *any* further refresh (manual or timer) until that time passes. See [architecture/refresh-system.md](../architecture/refresh-system.md#retry-backoff).
 2. **Per-capability/per-endpoint** (inside each provider actor): a failure on one optional field sets a cooldown scoped to just that field, so one broken endpoint doesn't block the rest of the refresh. See [architecture/capabilities.md](../architecture/capabilities.md#positive-result-caching-and-negative-result-backoff).
 
-`.authenticationRequired` and `.rateLimited` are explicitly exempted from the per-capability backoff in both providers; they're treated as session-wide problems and propagate immediately rather than being absorbed into one field's cooldown.
+`.authenticationRequired` and `.rateLimited` are explicitly exempted from the per-capability backoff in both providers; they're treated as session-wide problems and propagate immediately rather than being absorbed into one field's cooldown. A service-scoped authorization refusal is deliberately **not** in that set: the `Access denied` and `authorization failed` cases above arrive as `.permissionDenied`, so they take the normal per-capability cooldown and leave the session standing. That split is what keeps one charging read the account is not entitled to from presenting as "Sign In is required." and spending a refresh-token grant on every retry.
 
 ## Where errors surface
 

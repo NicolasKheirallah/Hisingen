@@ -68,14 +68,14 @@ final class ChargingPlannerController {
     /// Re-evaluated whenever feature selection changes.
     func reload() {
         stop()
-        if preferences.features.contains(.smartChargingPlanner) {
+        if preferences.smartChargingPlannerAvailable {
             start()
         }
     }
 
     /// Fresh vehicle data arrived: re-run the plan ahead of the next tick.
     func vehicleStateDidUpdate(_ state: VehicleState) {
-        guard preferences.features.contains(.smartChargingPlanner), scheduler.isArmed else { return }
+        guard preferences.smartChargingPlannerAvailable, scheduler.isArmed else { return }
         Task { @MainActor in
             await self.evaluate()
         }
@@ -85,7 +85,7 @@ final class ChargingPlannerController {
 
     private func evaluate() async {
         guard !evaluationInProgress else { return }
-        guard preferences.features.contains(.smartChargingPlanner) else { return }
+        guard preferences.smartChargingPlannerAvailable else { return }
         evaluationInProgress = true
         defer { evaluationInProgress = false }
 
@@ -237,8 +237,9 @@ final class ChargingPlannerController {
     /// Prices freshly fetched sessions that predate the series' coverage back in time.
     /// Sessions outside coverage stay untouched so a later pass can price them.
     private func backfillSpotCosts(prices: [ElectricityPricePoint]) {
+        let contract = preferences.electricityPriceContract
         for vin in activeVINs() where !vin.isEmpty {
-            chargingLedger.backfillSpotEstimatedCosts(vin: vin, prices: prices)
+            chargingLedger.backfillSpotEstimatedCosts(vin: vin, prices: contract.settle(prices))
         }
     }
 }

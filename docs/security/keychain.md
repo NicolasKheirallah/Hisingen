@@ -58,6 +58,13 @@ verify that deleting a draft cannot delete or replace its committed value.
 
 Package and install the `.app` with the same Developer ID identity on each update.
 The standalone SwiftPM binary is ad-hoc signed and must not replace the signed app.
+An ad-hoc binary's identity is its code hash, which changes on every rebuild, and an item
+it writes can come back with a partition list (`apple:`) that the signed app is not in, so the
+signed app is then asked for the login password. `make run` signs the debug binary with the
+app's identifier and team (`Scripts/run-signed.sh`), which gives it the same designated
+requirement. If an item was already written that way, reset its partition list once with
+`security set-generic-password-partition-list -S "teamid:<TEAM>" -s io.kheirallah.hisingen -k <login password> ~/Library/Keychains/login.keychain-db`.
+`save` skips a write when the value matches what the store already holds.
 Switching from a self-signed development build can require one-time authorization
 for existing legacy items; signing cannot bypass the user's Keychain access controls.
 

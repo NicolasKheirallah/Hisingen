@@ -117,6 +117,15 @@ struct SettingsView: View {
                         }
                         .transition(Self.sectionSwapTransition)
                     }
+                    if shows(.electricity) {
+                        Group {
+                            SettingsElectricityCard(binder: binder)
+                            if preferences.marketCountry.offersMarketPricing {
+                                SettingsChargingPlannerCard(binder: binder, state: state)
+                            }
+                        }
+                        .transition(Self.sectionSwapTransition)
+                    }
                     if shows(.tabsAndCards) {
                         SettingsTabsAndCardsCard(binder: binder, state: state)
                             .transition(Self.sectionSwapTransition)
@@ -129,7 +138,6 @@ struct SettingsView: View {
                         Group {
                             featureQuickActions
                             CalendarPreconditioningSettingsCard(binder: binder)
-                            SettingsChargingPlannerCard(binder: binder, state: state)
                             SettingsVehicleDataCard(state: state, binder: binder)
                             SettingsRemoteControlsCard(state: state, binder: binder)
                             SettingsCapabilityMatrixCard(state: state)

@@ -43,7 +43,7 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
-                    if let cost = session.estimatedCost(tariff: preferences.electricityPricePerKwh) {
+                    if let cost = session.resolvedCost(policy: preferences.electricityRatePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh) {
                         KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", locale: L10n.displayLocale, cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
                     }
                     if let spotCost = session.spotCost, spotCost > 0 {
@@ -62,7 +62,10 @@ struct ChargingSessionRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Format.dateTimeFormatter.string(from: session.startDate))
                         .hisType(.label, weight: .medium)
-                    let preferredCost = session.spotCost ?? session.estimatedCost(tariff: preferences.electricityPricePerKwh)
+                    let ratePolicy = preferences.electricityRatePolicy
+                    let preferredCost = ratePolicy.isAutomatic
+                        ? session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh)
+                        : session.spotCost ?? session.estimatedCost(tariff: preferences.electricityPricePerKwh)
                     let costStr = preferredCost.map { String(format: " · %.2f %@", locale: L10n.displayLocale, $0, session.currencySymbol ?? preferences.currencySymbol) } ?? ""
                     Text(String(format: "+%.0f%% · ≈%.1f kWh%@", locale: L10n.displayLocale, session.percentageAdded, session.kwhDelivered, costStr))
                         .hisType(.caption)

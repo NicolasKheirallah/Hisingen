@@ -650,7 +650,8 @@ final class StatusItemController: NSObject {
             sessions: state.energy.sessions,
             vin: state.identity.vin,
             tariffPricePerKwh: preferences.electricityPricePerKwh,
-            currencySymbol: preferences.currencySymbol
+            currencySymbol: preferences.currencySymbol,
+            ratePolicy: preferences.electricityRatePolicy
         )
     }
 

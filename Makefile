@@ -142,9 +142,10 @@ ifneq (,$(findstring Developer ID,$(IDENTITY)))
 endif
 	@echo "Done → $(DMG)"
 
-## Quick run without a bundle (launch-at-login disabled in this mode)
+## Quick run without a bundle (launch-at-login disabled in this mode). The binary is signed
+## with the app's identity first, so Keychain access carries over from the installed app.
 run:
-	swift run
+	sh Scripts/run-signed.sh
 
 test: doctor inject-secrets
 	# --no-parallel matches every other gate that runs this suite; see the comment in ci.yml.

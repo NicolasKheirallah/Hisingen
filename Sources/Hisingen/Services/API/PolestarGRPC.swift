@@ -88,8 +88,9 @@ actor PolestarGRPC {
     var myCarsInFlight: [String: PolestarInFlightRequest<Data>] = [:]
 
     /// Maps a non-zero gRPC status on a *read* RPC to a typed `PolestarError` so that
-    /// permanently unimplemented services (12), transient unavailability (14), and
-    /// authentication failures (16) each receive distinct handling.
+    /// permanently unimplemented services (12), transient unavailability (14), a service-scoped
+    /// authorization refusal (16 carrying the gateway's own `Access denied`), and an
+    /// authentication failure (any other 16) each receive distinct handling.
     static func readStatusError(status: String, message: String? = nil, path: String) -> PolestarError {
         let service = path.split(separator: "/").first.map(String.init) ?? path
         let decoded = (message?.removingPercentEncoding ?? message)?
@@ -104,6 +105,14 @@ actor PolestarGRPC {
             // capability so the caller backs off for hours.
             return .permissionDenied(operation: service)
         case "14": return .grpcUnavailable(service: service)
+        case "16" where detail?.contains("access denied") == true:
+            // PCCS checks authorization before it resolves a method, so a Chronos read answers
+            // `Access denied` when this client is not on that service's allowlist. That is a
+            // per-service verdict, not a statement about the bearer token, and sibling RPCs
+            // succeed with the same one. Reading it as an expired session tore down a live
+            // session, showed "Sign in is required.", and spent a refresh-token grant on every
+            // retry. Same treatment as the 14 above: withhold the capability and back off.
+            return .permissionDenied(operation: service)
         case "16": return .authenticationRequired(.expiredSession)
         default:
             // Keep the server's own explanation. For INVALID_ARGUMENT (3) the message is the

@@ -175,7 +175,13 @@ extension PolestarAPI {
         try Task.checkCancellation()
         guard !webAuthorization.isInProgress else { throw CancellationError() }
         guard !token.isEmpty else { throw PolestarError.authenticationRequired(.noStoredSession) }
-        clearAccountState(keepRefreshToken: true)
+        // A restore that finds the grant this process is already using is the refresh-retry path,
+        // not a launch: the stored credential has not changed and the access token it produced is
+        // still the right one. Proving the grant again would rotate the refresh credential on
+        // every retry, so the token material survives the reset here and only a cold restore (or
+        // a session whose access token is already gone) pays for a grant.
+        let isLiveGrant = accessToken != nil && refreshToken == token
+        clearAccountState(keepRefreshToken: true, keepAccessToken: isLiveGrant)
         let epoch = sessionEpoch
         if let commandRefresh = (try? keychain.readCommandSessionToken()) ?? nil, !commandRefresh.isEmpty {
             commandRefreshToken = commandRefresh
@@ -184,7 +190,11 @@ extension PolestarAPI {
         try requireSession(epoch)
         refreshToken = token
         do {
-            try await refreshAccessToken(force: true)
+            if isLiveGrant {
+                try await refreshTokenIfNeeded()
+            } else {
+                try await refreshAccessToken(force: true)
+            }
         } catch let error as PolestarError where error.requiresAuthentication {
             try requireSession(epoch)
             refreshToken = nil

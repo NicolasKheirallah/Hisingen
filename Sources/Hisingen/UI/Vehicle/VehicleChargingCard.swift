@@ -8,6 +8,9 @@ struct VehicleChargingCard: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var persistentSessions: [ChargingSession] = []
+    /// Spot price in effect right now, settled the way the user's contract bills it. Only
+    /// loaded in automatic rate mode; nil until the first fetch lands or when none exists.
+    @State private var currentSpotPrice: Double?
 
     private var features: FeatureSelection { preferences.features }
     private var loadIdentifier: String {
@@ -43,6 +46,24 @@ struct VehicleChargingCard: View {
             }
         }
         .task(id: loadIdentifier) { await loadPersistentSessions() }
+        .task(id: "\(preferences.electricityRateMode.rawValue)|\(preferences.electricityPriceZone.rawValue)|\(preferences.electricityPriceContract.rawValue)|\(loadIdentifier)") {
+            await loadCurrentSpotPrice()
+        }
+    }
+
+    private func loadCurrentSpotPrice() async {
+        guard preferences.electricityRateMode == .automatic else { currentSpotPrice = nil; return }
+        let prices = await ElectricityPriceService.shared.prices(for: preferences.electricityPriceZone)
+        let settled = preferences.electricityPriceContract.settle(prices)
+        currentSpotPrice = ChargingPlanner.currentPrice(prices: settled, at: Date())
+    }
+
+    /// The per-kWh price the charge-to-target estimate uses: the live market price plus the
+    /// user's markup in automatic mode, the typed-in rate otherwise or while no price is known.
+    private var estimateRatePerKwh: Double {
+        let policy = preferences.electricityRatePolicy
+        guard policy.isAutomatic, let spot = currentSpotPrice else { return preferences.electricityPricePerKwh }
+        return policy.retailPrice(spotSekPerKwh: spot)
     }
 
     private var headline: String? {
@@ -76,14 +97,15 @@ struct VehicleChargingCard: View {
         if let rate = state.formattedChargingRate(unit: preferences.distanceUnit) { parts.append(rate) }
         if let battery = state.energy.batteryPercentage, let target = state.energy.targetPercentage, battery < Double(target) {
             let capacity = preferences.vehicleSpecificationOverride(for: state.identity.vin)?.usableBatteryCapacityKwh ?? state.factoryUsableBatteryCapacityKwh
-            let cost = ((Double(target) - battery) / 100) * capacity * preferences.electricityPricePerKwh
+            let cost = ((Double(target) - battery) / 100) * capacity * estimateRatePerKwh
             if cost > 0 {
                 // Whole units: the inputs are an assumed usable capacity and a static price, so
                 // hundredths implied precision the calculation does not have. The basis is
                 // stated because every detail row below this line names its own.
-                parts.append(L10n.format("≈%@ to target at your %@/kWh setting",
+                let isMarketRate = preferences.electricityRatePolicy.isAutomatic && currentSpotPrice != nil
+                parts.append(L10n.format(isMarketRate ? "≈%@ to target at the current %@/kWh" : "≈%@ to target at your %@/kWh setting",
                                           Format.currency(cost.rounded(), symbol: preferences.currencySymbol),
-                                          String(format: "%.2f", locale: L10n.displayLocale, preferences.electricityPricePerKwh)))
+                                          String(format: "%.2f", locale: L10n.displayLocale, estimateRatePerKwh)))
             }
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
@@ -339,7 +361,7 @@ struct VehicleChargingCard: View {
                 HStack {
                     Spacer()
                     Menu {
-                        Button(L10n.text("Export as CSV...")) { ChargingHistoryExport.saveCSV(sessions: persistentSessions, vin: state.identity.vin, tariffPricePerKwh: preferences.electricityPricePerKwh, currencySymbol: preferences.currencySymbol) }
+                        Button(L10n.text("Export as CSV...")) { ChargingHistoryExport.saveCSV(sessions: persistentSessions, vin: state.identity.vin, tariffPricePerKwh: preferences.electricityPricePerKwh, currencySymbol: preferences.currencySymbol, ratePolicy: preferences.electricityRatePolicy) }
                         Button(L10n.text("Export as JSON...")) { ChargingHistoryExport.saveJSON(sessions: persistentSessions, vin: state.identity.vin) }
                     } label: { HStack(spacing: 4) { Image(systemName: "square.and.arrow.up"); Text(L10n.text("Export")) }.hisType(.caption, weight: .medium) }
                     .menuStyle(.borderlessButton).controlSize(.mini)

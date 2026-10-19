@@ -3,6 +3,44 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- add an Electricity section to Settings with a country choice (Sweden or other country);
+  market-linked pricing and the Charging Planner are offered for Sweden, every other country
+  uses the typed-in rate and the optional night tariff
+- add an Automatic electricity rate for Sweden that prices charging from the spot price for
+  your zone (SE1 to SE4) plus your provider's markup, with optional tax and grid fee in
+  öre/kWh and a VAT toggle, instead of a single typed-in price
+- choose the contract type for Automatic pricing: 15-minute price, as the market publishes
+  it, or hourly price, which averages the four quarters in each hour
+- choose a Swedish electricity provider (Vattenfall, Fortum, E.ON, Tibber, Bixia, Greenely,
+  Göteborg Energi, Skellefteå Kraft, Telge Energi, Jämtkraft, or other); the provider names
+  the contract and carries no prices, because markups differ per agreement
+- show the current price your settings produce next to the Automatic controls, with
+  fetching and unavailable states
+
+### Fixed
+
+- stop the repeated Keychain password prompts after rebuilding: `make run` now signs the debug
+  binary with the app's identifier and team, so it has the same Keychain identity as the
+  installed app instead of a code hash that changes on every build
+- skip writing a Keychain secret that has not changed, so an unchanged password, email or token
+  no longer rewrites its item and its access list on every sign-in
+
+### Changed
+
+- charge costs follow the chosen rate everywhere: the charge-to-target estimate on the
+  charging card, session costs, History totals, monthly and per-location breakdowns, cost
+  per distance, and the CSV export; changing the markup re-prices past sessions that have a
+  stored market cost, while sessions the market prices do not cover keep their saved cost
+  or your fixed rate
+- move the electricity rate and night tariff out of Display, Units & Energy, and the
+  Charging Planner out of Features, into the new Electricity section
+- the Charging Planner requires Sweden as well as its feature switch; choosing another
+  country stops it and keeps its settings for when Sweden is selected again
+
 ## [2.0.7] - 2026-10-19
 
 ### Added

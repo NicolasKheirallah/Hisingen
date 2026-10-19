@@ -22,8 +22,12 @@ extension HistoryDashboardView {
                 from: samples,
                 packCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state))
             : nil
-        let displayedCost = session.flatMap { stored in
-            stored.estimatedCost
+        let ratePolicy = preferences.electricityRatePolicy
+        let displayedCost = session.flatMap { stored -> Double? in
+            if ratePolicy.isAutomatic, stored.spotEstimatedCost != nil {
+                return stored.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh).amount
+            }
+            return stored.estimatedCost
                 ?? stored.tariffPricePerKwh.map { $0 * stored.energyDeliveredKwh }
                 ?? (stored.summaryVersion < 2 ? preferences.electricityPricePerKwh * stored.energyDeliveredKwh : nil)
         }
@@ -360,7 +364,8 @@ extension HistoryDashboardView {
     /// the per-session pricing/UPDATE pass run off the main actor, like the other loads.
     private func backfillSpotCosts() async {
         let pricedSessions = await history.backfillSpotEstimatedCosts(
-            vin: state.identity.vin, zone: preferences.electricityPriceZone)
+            vin: state.identity.vin, zone: preferences.electricityPriceZone,
+            contract: preferences.electricityPriceContract)
 
         // Back on the main actor only for the reload decision.
         guard pricedSessions > 0, !Task.isCancelled else { return }
@@ -370,8 +375,10 @@ extension HistoryDashboardView {
     static let stockholmCalendar = ElectricityPriceService.stockholmCalendar
 
     func chargingSessionRow(_ session: HistoricalChargingSession, flagged: Bool) -> some View {
-        let cost = session.estimatedCost
-            ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
+        let ratePolicy = preferences.electricityRatePolicy
+        let cost: Double? = ratePolicy.isAutomatic && session.spotEstimatedCost != nil
+            ? session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh).amount
+            : session.estimatedCost ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
         let added = (session.endSoc ?? session.startSoc) - session.startSoc
         return HStack(spacing: 8) {
             Image(systemName: selectedSessionID == session.id ? "chart.dots.scatter" : "bolt.circle")
@@ -441,7 +448,8 @@ extension HistoryDashboardView {
         let monthly = HistoryInsights.monthlyChargingEnergy(
             from: chargingSessions,
             fallbackPricePerKwh: preferences.electricityPricePerKwh,
-            fallbackCurrency: preferences.currencySymbol
+            fallbackCurrency: preferences.currencySymbol,
+            ratePolicy: preferences.electricityRatePolicy
         )
         guard monthly.count >= 2 else {
             return AnyView(Card {
@@ -507,6 +515,7 @@ extension HistoryDashboardView {
             from: chargingSessions,
             fallbackPricePerKwh: preferences.electricityPricePerKwh,
             fallbackCurrency: preferences.currencySymbol,
+            ratePolicy: preferences.electricityRatePolicy,
             unknownLabel: L10n.text("Unknown location")
         )
         guard stats.count >= 2 else {
@@ -581,7 +590,10 @@ extension HistoryDashboardView {
                 }
                 if let cost {
                     KVRow(L10n.text("Estimated Cost"), Format.currency(cost.amount, symbol: cost.currency), symbol: "creditcard",
-                          info: cost.fallbackSessions == 0
+                          info: preferences.electricityRatePolicy.isAutomatic
+                              ? L10n.format("Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate.",
+                                            preferences.electricityRatePolicy.basisDescription, cost.fallbackSessions)
+                              : cost.fallbackSessions == 0
                               ? L10n.text("Uses each session's saved tariff instead of recalculating old charges with today's settings.")
                               : L10n.format("Uses each session's saved cost or tariff where one was recorded. %d of %d sessions had neither and fall back to your current electricity price.",
                                             cost.fallbackSessions, chargingSessions.count))

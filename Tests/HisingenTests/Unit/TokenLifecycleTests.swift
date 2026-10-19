@@ -284,6 +284,23 @@ struct TokenLifecycleTests {
         #expect(lifecycle.refreshToken == "stored")
     }
 
+    /// A restore that re-establishes a session this process already holds keeps the live access
+    /// token, so the refresh path has nothing to re-grant.
+    @Test func resettingForARestoreOfTheLiveGrantKeepsTheAccessToken() async throws {
+        let lifecycle = makeLifecycle()
+        lifecycle.accessToken = "live"
+        lifecycle.refreshToken = "stored"
+        lifecycle.tokenLifetime = 300
+        lifecycle.tokenExpiry = now.addingTimeInterval(300)
+
+        lifecycle.reset(keepingRefreshToken: true, keepingAccessToken: true)
+
+        #expect(lifecycle.accessToken == "live")
+        #expect(lifecycle.refreshToken == "stored")
+        #expect(lifecycle.tokenExpiry == now.addingTimeInterval(300))
+        #expect(lifecycle.tokenLifetime == 300)
+    }
+
     // MARK: - Provider policy
 
     @Test func theTwoStacksScaleTheirRenewalMarginsToTheAdvertisedLifetime() {

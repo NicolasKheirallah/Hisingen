@@ -731,13 +731,23 @@ struct HistoryDashboardView: View {
         guard currencies.count <= 1 else { return nil }
         let currency = currencies.first ?? preferences.currencySymbol
         var fallbackSessions = 0
+        let policy = preferences.electricityRatePolicy
         let total = chargingSessions.reduce(0.0) { total, session in
-            if let stored = session.estimatedCost { return total + stored }
-            if session.tariffPricePerKwh == nil { fallbackSessions += 1 }
-            let dayRate = session.tariffPricePerKwh ?? preferences.electricityPricePerKwh
-            return total + session.energyDeliveredKwh * dayRate
+            let resolved = session.resolvedCost(policy: policy, fallbackPricePerKwh: preferences.electricityPricePerKwh)
+            if resolved.usedFallback { fallbackSessions += 1 }
+            return total + resolved.amount
         }
         return (total, currency, fallbackSessions)
+    }
+
+    /// The per-kWh price behind lifetime cost-per-distance. A fixed rate is used as typed; in
+    /// automatic mode the rate is what the stored sessions actually cost on average, so the
+    /// figure follows the market-priced totals instead of a stale typed-in number.
+    func effectiveLifetimePricePerKwh() -> Double {
+        let fixed = preferences.electricityPricePerKwh
+        guard preferences.electricityRatePolicy.isAutomatic, let cost = aggregateChargingCost() else { return fixed }
+        let energy = chargingSessions.reduce(0.0) { $0 + $1.energyDeliveredKwh }
+        return energy > 0 ? cost.amount / energy : fixed
     }
 
     func dataConfidenceNote(for timestamps: [Date]) -> some View {

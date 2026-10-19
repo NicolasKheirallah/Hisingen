@@ -685,6 +685,7 @@ extension HistoryInsights {
     static func monthlyChargingEnergy(from sessions: [HistoricalChargingSession],
                                      fallbackPricePerKwh: Double,
                                      fallbackCurrency: String,
+                                     ratePolicy: ElectricityRatePolicy = .fixed,
                                      calendar: Calendar = .current) -> [MonthlyEnergy] {
         var energyByMonth: [Date: Double] = [:]
         var costByMonth: [Date: Double] = [:]
@@ -694,9 +695,7 @@ extension HistoryInsights {
             energyByMonth[bucket, default: 0] += session.energyDeliveredKwh
             let currency = session.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
             currenciesByMonth[bucket, default: []].insert(currency?.isEmpty == false ? currency! : fallbackCurrency)
-            let cost = session.estimatedCost
-                ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
-                ?? fallbackPricePerKwh * session.energyDeliveredKwh
+            let cost = session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: fallbackPricePerKwh).amount
             costByMonth[bucket, default: 0] += cost
         }
         return energyByMonth.keys.sorted().map { month in
@@ -728,6 +727,7 @@ extension HistoryInsights {
     static func locationStats(from sessions: [HistoricalChargingSession],
                               fallbackPricePerKwh: Double,
                               fallbackCurrency: String,
+                              ratePolicy: ElectricityRatePolicy = .fixed,
                               unknownLabel: String) -> [LocationStat] {
         struct Accumulator { var count = 0; var energy = 0.0; var peakSum = 0.0; var peakCount = 0
                              var cost = 0.0; var currencies: Set<String> = [] }
@@ -739,9 +739,7 @@ extension HistoryInsights {
             acc.count += 1
             acc.energy += session.energyDeliveredKwh
             if session.peakPowerKw > 0 { acc.peakSum += session.peakPowerKw; acc.peakCount += 1 }
-            acc.cost += session.estimatedCost
-                ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh }
-                ?? fallbackPricePerKwh * session.energyDeliveredKwh
+            acc.cost += session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: fallbackPricePerKwh).amount
             let currency = session.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
             acc.currencies.insert(currency?.isEmpty == false ? currency! : fallbackCurrency)
             byName[name] = acc

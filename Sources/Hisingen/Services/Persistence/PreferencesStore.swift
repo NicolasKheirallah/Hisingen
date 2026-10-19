@@ -612,6 +612,59 @@ final class PreferencesStore {
         get { ElspotZone(rawValue: d.string(forKey: "electricity_price_zone") ?? "") ?? .se3 }
         set { d.set(newValue.rawValue, forKey: "electricity_price_zone") }
     }
+    /// Country for electricity pricing. Unset installs infer it once: anyone already using the
+    /// planner or automatic pricing is in Sweden by construction, otherwise the Mac's region
+    /// decides. An explicit pick always wins and is never overwritten.
+    var marketCountry: MarketCountry {
+        get {
+            if let stored = MarketCountry(rawValue: d.string(forKey: "electricity_market_country") ?? "") { return stored }
+            if features.contains(.smartChargingPlanner) || d.string(forKey: "electricity_rate_mode") == ElectricityRateMode.automatic.rawValue {
+                // Pinned the first time it is inferred, so turning the planner off later
+                // cannot move an existing Swedish install to "Other country".
+                d.set(MarketCountry.sweden.rawValue, forKey: "electricity_market_country")
+                return .sweden
+            }
+            return Locale.current.region?.identifier == "SE" ? .sweden : .other
+        }
+        set { d.set(newValue.rawValue, forKey: "electricity_market_country") }
+    }
+    /// The planner needs Swedish spot prices, so the feature switch alone is not enough.
+    var smartChargingPlannerAvailable: Bool {
+        marketCountry.offersMarketPricing && features.contains(.smartChargingPlanner)
+    }
+    /// Fixed rate (the typed-in price per kWh) or automatic (spot price plus provider markup).
+    /// Fixed by default so existing installs keep their figures until the user opts in.
+    var electricityRateMode: ElectricityRateMode {
+        get { ElectricityRateMode(rawValue: d.string(forKey: "electricity_rate_mode") ?? "") ?? .fixed }
+        set { d.set(newValue.rawValue, forKey: "electricity_rate_mode") }
+    }
+    var electricityProvider: ElectricityProvider {
+        get { ElectricityProvider(rawValue: d.string(forKey: "electricity_provider") ?? "") ?? .other }
+        set { d.set(newValue.rawValue, forKey: "electricity_provider") }
+    }
+    /// 15-minute is the market's own granularity since 2025-10-01, so it is the default.
+    var electricityPriceContract: ElectricityPriceContract {
+        get { ElectricityPriceContract(rawValue: d.string(forKey: "electricity_price_contract") ?? "") ?? .quarterHour }
+        set { d.set(newValue.rawValue, forKey: "electricity_price_contract") }
+    }
+    /// The provider's markup (påslag) over spot, in öre/kWh excluding VAT.
+    var electricityMarkupOrePerKwh: Double {
+        get { max(0, d.double(forKey: "electricity_markup_ore_per_kwh")) }
+        set { d.set(min(max(newValue, 0), 1_000), forKey: "electricity_markup_ore_per_kwh") }
+    }
+    /// Energy tax, grid fee and anything else the user wants counted, in öre/kWh excluding VAT.
+    var electricityOtherChargesOrePerKwh: Double {
+        get { max(0, d.double(forKey: "electricity_other_charges_ore_per_kwh")) }
+        set { d.set(min(max(newValue, 0), 1_000), forKey: "electricity_other_charges_ore_per_kwh") }
+    }
+    var electricityIncludesVAT: Bool { get { boolDefaultTrue("electricity_includes_vat") } set { d.set(newValue, forKey: "electricity_includes_vat") } }
+    var electricityRatePolicy: ElectricityRatePolicy {
+        ElectricityRatePolicy(
+            mode: marketCountry.offersMarketPricing ? electricityRateMode : .fixed, provider: electricityProvider, contract: electricityPriceContract,
+            markupOrePerKwh: electricityMarkupOrePerKwh, otherChargesOrePerKwh: electricityOtherChargesOrePerKwh,
+            includesVAT: electricityIncludesVAT
+        )
+    }
     /// Assumed charger output used to convert the energy still needed into whole
     /// charging hours when the vehicle is not reporting a live charging rate.
     var electricityChargerPowerKw: Double {

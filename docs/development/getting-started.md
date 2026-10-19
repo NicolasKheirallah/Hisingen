@@ -22,10 +22,10 @@ open releases/Hisingen.app
 ## Faster iteration: `swift run`
 
 ```bash
-make run     # equivalent to `swift run`
+make run     # builds, signs the debug binary with your signing identity, and runs it
 ```
 
-Runs unbundled: no `.app` wrapper, no launch-at-login registration, no stable code-signing identity. Good for quick iteration on logic that doesn't depend on being a proper bundle (note: `Notifier` disables itself entirely when `Bundle.main.bundleURL.pathExtension != "app"`; see [architecture/technical-debt.md](../architecture/technical-debt.md) and [domain/notifications.md](../domain/notifications.md), so notification behavior can't be exercised via `swift run`, only via `make app`).
+Runs unbundled: no `.app` wrapper and no launch-at-login registration. `Scripts/run-signed.sh` signs the binary with the identifier `io.kheirallah.hisingen` and the identity from `Scripts/signing-identity.sh`, so it has the same designated requirement as the shipped app and macOS does not ask for the Keychain password after each rebuild; with no identity installed it runs ad-hoc and says so. Plain `swift run` skips the signing step and brings those prompts back. Good for quick iteration on logic that doesn't depend on being a proper bundle (note: `Notifier` disables itself entirely when `Bundle.main.bundleURL.pathExtension != "app"`; see [architecture/technical-debt.md](../architecture/technical-debt.md) and [domain/notifications.md](../domain/notifications.md), so notification behavior can't be exercised via `swift run`, only via `make app`).
 
 ## Running a subset of tests
 

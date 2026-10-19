@@ -257,14 +257,19 @@ final class TokenLifecycle: @unchecked Sendable {
 
     /// Clears the in-memory session and cancels any in-flight grant. `keepingRefreshToken` is for
     /// the re-sign-in path, which discards the access token but is about to reuse the credential.
+    /// `keepingAccessToken` keeps the live access token, expiry and lifetime as well, for a
+    /// restore that re-establishes a session this process already holds: the credential has not
+    /// changed, and a redundant `.serverRefused(nil)` grant rotates the refresh token for nothing.
     /// Persisted tokens are deliberately untouched: only `signOut` and a dead grant delete those.
-    func reset(keepingRefreshToken: Bool = false) {
+    func reset(keepingRefreshToken: Bool = false, keepingAccessToken: Bool = false) {
         cancelInFlightGrant()
         locked {
-            storedAccessToken = nil
-            storedTokenExpiry = nil
-            storedTokenLifetime = 0
             lastGrantAt = nil
+            if !keepingAccessToken {
+                storedAccessToken = nil
+                storedTokenExpiry = nil
+                storedTokenLifetime = 0
+            }
             if !keepingRefreshToken { storedRefreshToken = nil }
         }
     }

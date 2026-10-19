@@ -28,6 +28,12 @@ enum SettingsValidation {
         return (0.01...1_000).contains(value)
     }
 
+    /// A markup or charge in öre per kWh: zero is a real answer (no markup), so it is allowed.
+    static func isValidOre(_ text: String) -> Bool {
+        guard let value = NumberParsing.decimal(from: text) else { return false }
+        return (0...1_000).contains(value)
+    }
+
     static func isValidCurrencySymbol(_ text: String) -> Bool {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return (1...8).contains(value.count) && !value.contains(where: \.isNewline)

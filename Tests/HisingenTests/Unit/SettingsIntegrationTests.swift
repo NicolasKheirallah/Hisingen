@@ -4,13 +4,15 @@ import Testing
 struct SettingsIntegrationTests {
     @Test
     func everySettingsDestinationHasSearchMetadata() {
-        #expect(SettingsSection.allCases.count == 10)
+        #expect(SettingsSection.allCases.count == 11)
         for section in SettingsSection.allCases {
             #expect(!section.title.isEmpty)
             #expect(!section.symbol.isEmpty)
         }
         #expect(SettingsSection.updates.matches("release"))
         #expect(SettingsSection.privacyData.matches("retention"))
+        #expect(SettingsSection.electricity.matches("spot price"))
+        #expect(!SettingsSection.features.matches("elspot"))
     }
 
     @Test

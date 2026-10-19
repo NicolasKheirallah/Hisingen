@@ -1099,12 +1099,12 @@ actor PolestarAPI {
     }
 
 
-    func clearAccountState(keepRefreshToken: Bool = false) {
+    func clearAccountState(keepRefreshToken: Bool = false, keepAccessToken: Bool = false) {
         sessionEpoch &+= 1
         cancelImageDownloads()
         webAuthorization.invalidate()
         invalidateCommandAuthorization()
-        tokens.reset(keepingRefreshToken: keepRefreshToken)
+        tokens.reset(keepingRefreshToken: keepRefreshToken, keepingAccessToken: keepAccessToken)
         cars = []
         identities = [:]
         imagePreparationAttempts = [:]

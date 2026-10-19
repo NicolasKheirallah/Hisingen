@@ -142,6 +142,41 @@ struct MultiCarFleetSwitchingTests {
                 "a 5xx token exchange must not discard a grant that may still be valid")
     }
 
+    /// A restore that re-establishes a session this process already holds must reuse the live
+    /// access token. Re-proving the grant on every retry rotated the refresh credential with each
+    /// refresh cycle and spent a token the next cycle had to replace.
+    @Test
+    func repeatRestoreOfTheLiveGrantSpendsNoSecondGrant() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        defer { try? keychain.deleteSessionToken() }
+        try keychain.saveSessionToken("stored-refresh")
+
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
+        let polestarAPI = PolestarAPI(keychain: keychain, preferences: preferences,
+                                      diagnosticLog: APIDiagnosticLogStore())
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LiveGrantTransport.self]
+        let transport = URLSession(configuration: configuration)
+        defer { transport.invalidateAndCancel() }
+        await polestarAPI.installRestoreTestSession(transport)
+        LiveGrantTransport.grants.reset()
+
+        let noFeatures = FeatureSelection(enabled: [])
+        // Cold: the stored credential has to be proven before the session can be trusted.
+        try await polestarAPI.restoreSession(token: "stored-refresh", preferredVIN: nil, features: noFeatures)
+        #expect(LiveGrantTransport.grants.value == 1)
+
+        // The retry path arrives here again, with the rotated credential the first grant just
+        // persisted. Keeping the live access token is what makes this second pass free.
+        let rotated = try #require(try keychain.readSessionToken())
+        try await polestarAPI.restoreSession(token: rotated, preferredVIN: nil, features: noFeatures)
+        #expect(LiveGrantTransport.grants.value == 1,
+                "a repeat restore of the live grant must reuse the access token")
+    }
+
     @Test
     func statusItemControllerAvailableVehiclesIncludesAllFleetVINs() {
         let cars = [
@@ -263,6 +298,46 @@ private final class DeadGrantTransport: TokenEndpointTransport, @unchecked Senda
 private final class ServerErrorTransport: TokenEndpointTransport, @unchecked Sendable {
     override class var tokenStatus: Int { 500 }
     override class var tokenBody: Data { Data(#"{"error":"server_error"}"#.utf8) }
+}
+
+private final class GrantCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func reset() { lock.lock(); defer { lock.unlock() }; count = 0 }
+    func increment() { lock.lock(); defer { lock.unlock() }; count += 1 }
+}
+
+/// Serves the IdP discovery document, counts token grants, and answers vehicle discovery, so a
+/// restore can run to completion without the live network.
+private final class LiveGrantTransport: URLProtocol, @unchecked Sendable {
+    static let grants = GrantCounter()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let url = request.url ?? URL(string: "https://polestarid.eu.polestar.com")!
+        let body: Data
+        if url.path.hasSuffix(".well-known/openid-configuration") {
+            body = Data(#"""
+            {"issuer":"https://polestarid.eu.polestar.com",
+             "token_endpoint":"https://polestarid.eu.polestar.com/token",
+             "authorization_endpoint":"https://polestarid.eu.polestar.com/authorize",
+             "userinfo_endpoint":"https://polestarid.eu.polestar.com/userinfo"}
+            """#.utf8)
+        } else if url.path == "/token" {
+            Self.grants.increment()
+            body = Data(#"{"access_token":"granted-access","refresh_token":"rotated-refresh","expires_in":3600}"#.utf8)
+        } else {
+            body = Data(#"{"data":{"getConsumerCarsV2":[{"vin":"YS2E1111111111111","modelName":"Polestar 2"}]}}"#.utf8)
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }
 
 private extension PolestarAPI {

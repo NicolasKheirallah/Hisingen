@@ -1268,7 +1268,7 @@ Useful targets:
 | `make app`     | Build `releases/Hisingen.app`                    |
 | `make dmg`     | Package `releases/Hisingen.dmg` from the app     |
 | `make notarize`| Notarize and staple the built app and dmg        |
-| `make run`     | Build and launch a debug build                   |
+| `make run`     | Build, sign and launch a debug build             |
 | `make clean`   | Remove build artifacts                           |
 
 Then open the app:

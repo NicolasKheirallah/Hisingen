@@ -190,13 +190,14 @@ extension HistoryDashboardView {
                     .accessibilityElement(children: .combine)
                 }
                 let fuelSpend = lifetime.lifetimeFuelCost
+                let lifetimePrice = effectiveLifetimePricePerKwh()
                 let lifetimeCostPerKm = HistoryInsights.costPerKm(
                     totalEnergyKwh: lifetime.lifetimeChargingEnergyKwh,
-                    pricePerKwh: preferences.electricityPricePerKwh,
+                    pricePerKwh: lifetimePrice,
                     odometerPoints: allTimeOdometerPoints,
                     fuelCost: fuelSpend
                 )
-                if let costPerKm = lifetimeCostPerKm, preferences.electricityPricePerKwh > 0 {
+                if let costPerKm = lifetimeCostPerKm, lifetimePrice > 0 {
                     let perUnit = costPerKm * (preferences.distanceUnit == .kilometers ? 1 : UnitConversion.kilometersPerMile)
                     HStack(spacing: 5) {
                         Image(systemName: "speedometer")

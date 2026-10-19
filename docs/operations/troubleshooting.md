@@ -150,7 +150,9 @@ C3 discovery (`cnepmob.volvocars.com`) failing entirely would take down every C3
 
 ### PCCS/Chronos changes behavior
 
-Affects charge target, amp limit, schedules, and remote command dispatch specifically (`api.pccs-prod.plstr.io:443`, a fixed host, no discovery step); a fixed host means there's no discovery-layer failure mode to rule out first; a PCCS problem is either a network/outage issue or a genuine API change on Polestar's side.
+Affects charge target, amp limit, schedules, and remote command dispatch specifically (`api.pccs-prod.plstr.io:443`, a fixed host, no discovery step); a fixed host means there's no discovery-layer failure mode to rule out first; a PCCS problem is either a network/outage issue, a per-service entitlement gap for this client, or a genuine API change on Polestar's side.
+
+A refusal is not an expired session. If the app says "Sign In is required." while a charging read is failing, look in `api-diagnostics.json` for rows with `grpcStatus` `16` and `grpcMessage` `Access denied.`, then compare them with the same cycle's GraphQL and C3 calls: if those succeeded with the identical bearer token, the token was fine and the gateway was refusing that one service. PCCS checks authorization before it resolves a method, so `Access denied` there means "this client is not on this service's allowlist" (per-account or per-market, as with `pccs.invocation.v1.InvocationService`), which the app classifies as `.permissionDenied` and parks in that capability's cooldown. A `16` with any other message stays a session problem and still prompts for sign-in; if *every* backend row in the cycle is refused, suspect the credential or the account rather than one service.
 
 ### An API starts aggressively rate limiting
 

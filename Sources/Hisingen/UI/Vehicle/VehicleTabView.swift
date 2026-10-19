@@ -60,7 +60,7 @@ struct VehicleTabView: View {
     /// Inputs of the smart-charging-planner presence guard, so the declared
     /// card transition actually fires when a threshold is crossed.
     private var plannerSignature: String {
-        "\(features.contains(.smartChargingPlanner))|\(state.powertrain.hasElectricRange)|\(String(describing: state.energy.batteryPercentage))|\(String(describing: state.energy.targetPercentage))"
+        "\(preferences.smartChargingPlannerAvailable)|\(state.powertrain.hasElectricRange)|\(String(describing: state.energy.batteryPercentage))|\(String(describing: state.energy.targetPercentage))"
     }
     private var displayedStateSummary: VehicleStateSummary {
         if let software = state.softwareInfo, software.hasActionableFailure(),
@@ -238,7 +238,7 @@ struct VehicleTabView: View {
     }
 
     private var chargingPlannerCard: AnyView? {
-        guard features.contains(.smartChargingPlanner), state.powertrain.hasElectricRange,
+        guard preferences.smartChargingPlannerAvailable, state.powertrain.hasElectricRange,
               state.energy.batteryPercentage != nil, state.energy.targetPercentage != nil else { return nil }
         return AnyView(ChargingPlannerCard(state: state))
     }

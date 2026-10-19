@@ -3,7 +3,7 @@ import SwiftUI
 /// Stable, testable settings destinations. Search is intentionally section based: it
 /// keeps every control in its explanatory card instead of returning orphaned toggles.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case all, accounts, appearance, tabsAndCards, general, features, notifications, privacyData, updates, about
+    case all, accounts, appearance, tabsAndCards, general, electricity, features, notifications, privacyData, updates, about
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return L10n.text("Appearance")
         case .tabsAndCards: return L10n.text("Tabs & Cards")
         case .general: return L10n.text("General")
+        case .electricity: return L10n.text("Electricity")
         case .features: return L10n.text("Features")
         case .notifications: return L10n.text("Notifications")
         case .privacyData: return L10n.text("Privacy & Data")
@@ -29,6 +30,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "paintpalette"
         case .tabsAndCards: return "rectangle.3.group"
         case .general: return "gearshape"
+        case .electricity: return "bolt.circle"
         case .features: return "switch.2"
         case .notifications: return "bell"
         case .privacyData: return "hand.raised"
@@ -44,7 +46,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image"
         case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels"
         case .general: return "general display menu bar panel size density units language launch charging order"
-        case .features: return "feature capability vehicle data remote control lock climate charge schedule location weather charging planner spot price elspot zone"
+        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris"
+        case .features: return "feature capability vehicle data remote control lock climate charge schedule location weather"
         case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
         case .privacyData: return "privacy data database storage history retention export backup diagnostics location"
         case .updates: return "update automatic frequency interval download version channel release"

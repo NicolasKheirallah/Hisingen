@@ -2971,3 +2971,46 @@
 // English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@";
+
+// English fallback values pending translation
+"Fixed rate" = "Fixed rate";
+"Other provider" = "Other provider";
+"15-minute price" = "15-minute price";
+"Hourly price" = "Hourly price";
+"spot price plus %@ markup" = "spot price plus %@ markup";
+"Electricity rate mode" = "Electricity rate mode";
+"Provider markup" = "Provider markup";
+"Tax and grid fee" = "Tax and grid fee";
+"Contract" = "Contract";
+"How your contract settles the market price" = "How your contract settles the market price";
+"Your electricity retailer" = "Your electricity retailer";
+"Electricity contract type" = "Electricity contract type";
+"Electricity provider" = "Electricity provider";
+"Påslag from your price list, excluding VAT" = "Påslag from your price list, excluding VAT";
+"Find the påslag on your %@ price list or invoice" = "Find the påslag on your %@ price list or invoice";
+"Optional: energy tax and grid fee per kWh, excluding VAT" = "Optional: energy tax and grid fee per kWh, excluding VAT";
+"Add 25% VAT" = "Add 25% VAT";
+"Spot prices exclude VAT; households pay it on the total" = "Spot prices exclude VAT; households pay it on the total";
+"Current price" = "Current price";
+"Fetching prices…" = "Fetching prices…";
+"Market prices unavailable" = "Market prices unavailable";
+"%@/kWh" = "%@/kWh";
+"Rate without market prices" = "Rate without market prices";
+"Used for sessions the market prices do not cover" = "Used for sessions the market prices do not cover";
+"Market prices from elprisetjustnu.se. A changed contract type applies to sessions priced from now on; earlier ones keep their settlement." = "Market prices from elprisetjustnu.se. A changed contract type applies to sessions priced from now on; earlier ones keep their settlement.";
+"Price per kWh" = "Price per kWh";
+"Typed-in rate for every session" = "Typed-in rate for every session";
+"Night rate" = "Night rate";
+"Currency symbol" = "Currency symbol";
+"öre/kWh" = "öre/kWh";
+"Enter an amount between 0 and 1,000 öre." = "Enter an amount between 0 and 1,000 öre.";
+"Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate.";
+"≈%@ to target at the current %@/kWh" = "≈%@ to target at the current %@/kWh";
+
+// English fallback values pending translation
+"Electricity" = "Electricity";
+"Country" = "Country";
+"Sweden" = "Sweden";
+"Other country" = "Other country";
+"Market prices, providers and the charging planner are available" = "Market prices, providers and the charging planner are available";
+"Market prices are available for Sweden only. Other countries use a typed-in rate." = "Market prices are available for Sweden only. Other countries use a typed-in rate.";
