@@ -41,7 +41,7 @@ is_developer_id_signed() {
 if [ -d "$APP_PATH" ]; then
     codesign --verify --deep --strict --verbose=2 "$APP_PATH"
     if is_developer_id_signed "$APP_PATH"; then
-        xcrun stapler validate "$APP_PATH" || {
+        sh Scripts/stapler-validate.sh "$APP_PATH" || {
             echo "$APP_PATH is Developer ID signed but has no notarization ticket stapled." >&2
             echo "Configure notarization credentials (see docs/operations/build.md), rebuild, or build with a development identity instead." >&2
             exit 1
@@ -58,7 +58,7 @@ if [ -f "$DMG_PATH" ]; then
     command -v hdiutil >/dev/null 2>&1 || { echo "hdiutil is required to validate a DMG" >&2; exit 1; }
     hdiutil verify "$DMG_PATH"
     if is_developer_id_signed "$DMG_PATH"; then
-        xcrun stapler validate "$DMG_PATH" || {
+        sh Scripts/stapler-validate.sh "$DMG_PATH" || {
             echo "$DMG_PATH is Developer ID signed but has no notarization ticket stapled." >&2
             echo "Configure notarization credentials (see docs/operations/build.md) and rebuild." >&2
             exit 1

@@ -100,7 +100,7 @@ done
 
 echo "==> Stapling $(basename "$ARTIFACT")"
 xcrun stapler staple "$ARTIFACT"
-xcrun stapler validate "$ARTIFACT"
+sh "$(dirname "$0")/stapler-validate.sh" "$ARTIFACT"
 if [ "$ASSESS_TYPE" = 'open' ]; then
     spctl --assess --type open --context context:primary-signature --verbose=2 "$ARTIFACT"
 else

@@ -154,7 +154,7 @@ jobs:
           ditto -c -k --keepParent Hisingen.app notarize-app.zip
           xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
           xcrun stapler staple Hisingen.app
-          xcrun stapler validate Hisingen.app
+          sh Scripts/stapler-validate.sh Hisingen.app
           spctl --assess --type execute --verbose=2 Hisingen.app
 
       - name: Package disk image and archives (Developer ID signed DMG)
@@ -171,7 +171,7 @@ jobs:
           codesign --verify --verbose=2 Hisingen.dmg
           xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
           xcrun stapler staple Hisingen.dmg
-          xcrun stapler validate Hisingen.dmg
+          sh Scripts/stapler-validate.sh Hisingen.dmg
           spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
           ditto -c -k --keepParent Hisingen.app Hisingen.zip
           ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
