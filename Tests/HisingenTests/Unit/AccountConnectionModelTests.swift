@@ -141,6 +141,7 @@ struct AccountConnectionModelTests {
         withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-health-volvo")
             let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            scoped.store.volvoClientID = "client-id"
             scoped.store.setVin("YV1TESTVNN0000001", for: .volvo)
 
             // The app-credentials presence bit is derived from the test service's store.
