@@ -3,6 +3,21 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - 2026-10-19
+
+### Added
+
+- 
+
+### Fixed
+
+- 
+
+### Changed
+
+- test: make Volvo renewability setup deterministic
+- chore(updates): publish v2.0.6 appcast
+
 ## [2.0.6] - 2026-10-02
 
 ### Added
