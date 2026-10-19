@@ -3,6 +3,20 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.9] - 2026-10-19
+
+### Added
+
+- 
+
+### Fixed
+
+- retry transient notarization validation failures
+
+### Changed
+
+- 
+
 ## [2.0.8] - 2026-10-19
 
 ### Added
