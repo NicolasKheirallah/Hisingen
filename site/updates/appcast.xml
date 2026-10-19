@@ -4,17 +4,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Hisingen</title>
         <item>
-            <title>2.0.6</title>
-            <pubDate>Fri, 02 Oct 2026 18:02:31 +0000</pubDate>
+            <title>2.0.10</title>
+            <pubDate>Mon, 19 Oct 2026 15:26:04 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/NicolasKheirallah/Hisingen/blob/main/CHANGELOG.md</sparkle:fullReleaseNotesLink>
-            <sparkle:version>24</sparkle:version>
-            <sparkle:shortVersionString>2.0.6</sparkle:shortVersionString>
+            <sparkle:version>28</sparkle:version>
+            <sparkle:shortVersionString>2.0.10</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink sparkle:edSignature="k1qk5RoFYfpbxLBtvdB4HXeIto3VEJ9/x9czSOBSjtx81Rr3Qoh5CNlX4sTxqYq7XTMo6WTnHFpMJfRcD1zNDA==" sparkle:length="790">https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.6/Hisingen.app.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.6/Hisingen.app.zip" length="22971519" type="application/octet-stream" sparkle:edSignature="eQqlhstBDYDM5FL+c7Xtf/3Y5g0W4W+e/AUKxfZLushjV5kY1o7TwhnHSWRLX2E0gEdc4wpexST8B7emRcG9Ag=="></enclosure>
+            <sparkle:releaseNotesLink sparkle:edSignature="xyKVQA3qLALPtxUtvnxnvj/yu5CX2/8sL4Egqy8rL4gz814CKdogmNTAyeQ7m1JeC+TCJzpZHd0kRIMFdH2cAQ==" sparkle:length="348">https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.10/Hisingen.app.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v2.0.10/Hisingen.app.zip" length="23152810" type="application/octet-stream" sparkle:edSignature="xMTvPMRwGn7OZbgYdg+a2lWcXShxvTBqI34B9QFY3No1C+gtze52Ju5vXmjbMx/GGlSxGOe3x7clYAWnrcRTAA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: KHQXa5d4t19XON8Bs73eD0TXVam1XRZYmACwIBp/aATKbl1qLlJza7KMyd8ylV2Kw0ClPzBmjhUTi5WWBGHACw==
-length: 1476
+edSignature: ORvJOPTIYWVoDS/1MPg/8kahpyJ/04hU+3OrNcKzx3qHRbeQQMZKAXfgU+2mgyNY7eejeqEQAh9XFwEPcwUYBA==
+length: 1480
 -->
