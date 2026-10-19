@@ -55,7 +55,9 @@ try {
       rmSync(staging, { recursive: true, force: true });
     }
   } else if (mode === 'release-pipeline') {
-    for (const value of ['SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'generate_appcast', '--ed-key-file', 'verify-sparkle-keypair.mjs', 'verify-updater.mjs appcast', 'publish-appcast.sh', 'xcrun notarytool submit', 'xcrun stapler staple']) requireText(`${workflow}\n${requireFile('Scripts/publish-appcast.sh')}`, value, 'release security control');
+    const stapleScript = requireFile('Scripts/stapler-staple.sh');
+    const releasePipeline = `${workflow}\n${requireFile('Scripts/publish-appcast.sh')}\n${stapleScript}`;
+    for (const value of ['SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'generate_appcast', '--ed-key-file', 'verify-sparkle-keypair.mjs', 'verify-updater.mjs appcast', 'publish-appcast.sh', 'xcrun notarytool submit', 'Scripts/stapler-staple.sh', 'xcrun stapler staple']) requireText(releasePipeline, value, 'release security control');
     if (!/- name: Generate signed Sparkle appcast and release notes[\s\S]*?env:[\s\S]*?SPARKLE_PUBLIC_ED_KEY:[\s\S]*?SPARKLE_PRIVATE_ED_KEY:/.test(workflow)) {
       throw new Error('Appcast generation step does not receive both Sparkle keys');
     }
