@@ -55,7 +55,7 @@ let package = Package(
     dependencies: [
         // Sparkle supplies the hardened, signature-verifying installer rather than
         // treating a GitHub release asset as executable input in application code.
-        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.9.6")
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.0")
     ],
     targets: [
         .executableTarget(
