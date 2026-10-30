@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 CERT_NAME="Hisingen Development"
 KEYCHAIN="${HOME}/Library/Keychains/login.keychain-db"
@@ -8,10 +11,15 @@ if [ ! -f "$KEYCHAIN" ]; then
     KEYCHAIN="${HOME}/Library/Keychains/login.keychain"
 fi
 
-if security find-identity -p codesigning | grep -q "\"$CERT_NAME\""; then
-    echo "✅ Found existing certificate \"$CERT_NAME\"."
-    exit 0
-fi
+# Capture the identity list instead of piping it into `grep -q`: an early grep exit can SIGPIPE
+# security, and pipefail would then hide a certificate that is present.
+IDENTITIES=$(security find-identity -p codesigning || true)
+case "$IDENTITIES" in
+    *"\"$CERT_NAME\""*)
+        echo "✅ Found existing certificate \"$CERT_NAME\"."
+        exit 0
+        ;;
+esac
 
 echo "==> Generating local self-signed code signing certificate \"$CERT_NAME\"..."
 

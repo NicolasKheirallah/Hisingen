@@ -3007,3 +3007,13 @@
 "Other country" = "Other country";
 "Market prices, providers and the charging planner are available" = "Market prices, providers and the charging planner are available";
 "Market prices are available for Sweden only. Other countries use a typed-in rate." = "Market prices are available for Sweden only. Other countries use a typed-in rate.";
+"%d AQI" = "%d AQI";
+"/kWh" = "/kWh";
+"kWh" = "kWh";
+"Update check failed. Please try again later." = "업데이트 확인에 실패했습니다. 나중에 다시 시도하세요.";
+"Secure updates are unavailable in this build." = "이 빌드에서는 보안 업데이트를 사용할 수 없습니다.";
+"Unable to start the secure updater. Please try again later." = "보안 업데이트 프로그램을 시작할 수 없습니다. 나중에 다시 시도하세요.";
+"Update download failed for %@. Please try again later." = "%@ 업데이트를 다운로드하지 못했습니다. 나중에 다시 시도하세요.";
+"Unknown Command" = "알 수 없는 명령";
+"Hisingen does not recognize that link." = "Hisingen이 이 링크를 인식하지 못합니다.";
+"No vehicle in Hisingen matches that name or VIN." = "Hisingen에 해당 이름이나 VIN과 일치하는 차량이 없습니다.";

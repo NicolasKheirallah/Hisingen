@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 PLIST_PATH=${1:?Usage: configure-updater.sh PATH/TO/Info.plist}
 PLACEHOLDER='__SPARKLE_PUBLIC_ED_KEY__'

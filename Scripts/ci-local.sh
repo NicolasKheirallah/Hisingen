@@ -3,6 +3,9 @@
 # cannot fail on a check that only exists there. actionlint and shellcheck
 # must be installed (brew install actionlint shellcheck).
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 fail() {
     echo "$1" >&2

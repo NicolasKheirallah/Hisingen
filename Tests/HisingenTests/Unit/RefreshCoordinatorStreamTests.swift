@@ -26,7 +26,8 @@ struct RefreshCoordinatorStreamTests {
         commandWindow: TimeInterval = 5 * 60,
         commandInitialPollDelay: TimeInterval = 2,
         commandPollInterval: TimeInterval = 3,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        scheduler: AsyncTimerLoop? = nil
     ) -> RefreshCoordinator {
         let preferences = PreferencesStore(defaults: defaults)
         var features = FeatureSelection.default
@@ -41,12 +42,29 @@ struct RefreshCoordinatorStreamTests {
             preferences: preferences,
             sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
             liveStreamPolicy: policy,
+            scheduler: scheduler ?? AsyncTimerLoop(),
             streaming: provider,
             now: now,
             commandConfirmationWindow: commandWindow,
             commandConfirmationInitialPollDelay: commandInitialPollDelay,
             commandConfirmationPollInterval: commandPollInterval
         )
+    }
+
+    /// A scheduler whose every cadence wait parks on `clock` until the test releases it.
+    private func makeManualScheduler(_ clock: ManualTickClock) -> AsyncTimerLoop {
+        AsyncTimerLoop(wait: { duration in await clock.park(duration) })
+    }
+
+    /// Re-checks `condition` up to a fixed number of passes, sleeping briefly between them. The
+    /// bound is a pass count, not a deadline on the wall clock, so it measures work done rather
+    /// than elapsed time; no cadence waits on it, because every tick runs on the manual clock.
+    private func settle(_ condition: () async -> Bool) async throws -> Bool {
+        for _ in 0..<2_000 {
+            if await condition() { return true }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        return await condition()
     }
 
     /// Polls until the recorded diagnostics satisfy `condition`, with a timeout that fails
@@ -83,7 +101,10 @@ struct RefreshCoordinatorStreamTests {
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [.healthy(frames: 2)], recorder: recorder)
         let events = DiagnosticsRecorder()
-        let coordinator = makeCoordinator(provider: provider, defaults: defaults)
+        let clock = ManualTickClock()
+        let coordinator = makeCoordinator(
+            provider: provider, defaults: defaults, scheduler: makeManualScheduler(clock)
+        )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
@@ -100,11 +121,16 @@ struct RefreshCoordinatorStreamTests {
         #expect(recorder.purposes == [.charging])
         #expect(recorder.maxConcurrent == 1)
 
-        // Far shorter than the routine charging cadence: a routine poll would have fired.
-        try await Task.sleep(for: .seconds(1.5))
+        // The newest tick the coordinator armed is the integrity tick, not the 120 s routine poll.
+        // Every tick parks on the manual clock and only the test releases one, so the armed tick
+        // is the one that decides what runs next, and no routine poll can fire unseen.
+        let integrityArmed = try await settle { (clock.waits.last ?? 0) > 1_500 }
+        #expect(integrityArmed, "Expected the integrity tick to be armed, got \(String(describing: clock.waits.last)) s")
+        #expect(clock.pendingDuration == clock.waits.last)
         let fetches = await provider.fetchCount
         #expect(fetches == 1, "Healthy stream must suppress routine polling, saw \(fetches) fetches")
         coordinator.stop()
+        clock.releaseAll()
     }
 
     @Test
@@ -119,12 +145,10 @@ struct RefreshCoordinatorStreamTests {
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
-        let deadline = Date().addingTimeInterval(2)
-        while events.states.last?.energy.batteryPercentage != 61, Date() < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(events.states.last?.energy.batteryPercentage == 61)
-        try await Task.sleep(for: .milliseconds(100))
+        let applied = try await settle { events.states.last?.energy.batteryPercentage == 61 }
+        #expect(applied, "Expected the first live frame to publish state")
+        // The second identical frame is dropped by the engine in the same main-actor pass that
+        // applied the first, so no fixed grace period is needed before counting events.
         #expect(events.states.count == 2,
                 "Expected the initial fetch and one changed live state, not one event per identical frame")
         coordinator.stop()
@@ -140,20 +164,37 @@ struct RefreshCoordinatorStreamTests {
         let provider = StreamingMockProvider(script: [.healthy(frames: 1)], recorder: recorder)
         let events = DiagnosticsRecorder()
         let policy = LiveStreamPolicy(integrityPollInterval: 0.3, retrySteps: [0.1])
+        let clock = ManualTickClock()
         let coordinator = makeCoordinator(provider: provider, defaults: defaults,
-                                          policy: policy)
+                                          policy: policy, scheduler: makeManualScheduler(clock))
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
         _ = try #require(await waitUntil(events) { $0.liveStreamConnected })
-        // Several integrity ticks elapse (tick period 0.3–1.3 s with jitter); each may
-        // fetch exactly once, and no stream churn may accompany them.
-        try await Task.sleep(for: .seconds(3))
-        let fetches = await provider.fetchCount
-        #expect(fetches >= 2, "Integrity ticks should fetch while healthy, saw \(fetches)")
+        // Each integrity tick is released by the test, one at a time, instead of waiting out its
+        // 0.3–1.3 s jittered delay. A released tick runs its refresh, then arms the next integrity
+        // tick, which parks until the following release.
+        for round in 1...2 {
+            // The re-armed tick parks on the clock a pass after its schedule call, so wait for a
+            // short (integrity-cadence) wait to be the newest one rather than reading a stale entry.
+            let armed = try await settle { (clock.pendingDuration ?? .infinity) < 2 }
+            #expect(armed, "Expected an integrity tick to be armed before release \(round)")
+            let parked = clock.pendingDuration ?? .infinity
+            #expect(parked < 2, "The armed tick should be the integrity cadence, got \(parked) s")
+            let waitsBefore = clock.waits.count
+            let fetchesBefore = await provider.fetchCount
+            clock.releaseLatest()
+            let refreshed = try await settle {
+                let fetches = await provider.fetchCount
+                return clock.waits.count > waitsBefore && fetches > fetchesBefore
+            }
+            #expect(refreshed, "Integrity tick \(round) should fetch and re-arm while the stream is healthy")
+        }
+        #expect(await provider.fetchCount >= 3, "Two released integrity ticks should each fetch once")
         #expect(recorder.purposes == [.charging], "Integrity polling must not restart the stream")
         #expect(recorder.maxConcurrent == 1)
         coordinator.stop()
+        clock.releaseAll()
     }
 
     // MARK: - Reconnect behavior
@@ -1337,6 +1378,55 @@ private enum StreamBehavior: Sendable {
     case healthy(frames: Int)
     case repeatedBattery(frames: Int)
     case exteriorLocked
+}
+
+/// Virtual clock for the coordinator's cadence waits. Each requested wait is recorded and then
+/// parked until the test releases it, so the test decides when a tick fires. Released in LIFO
+/// order: the newest armed tick is the one that is live; older parked waits were superseded by a
+/// later `scheduleOnce`, and resuming them only lets their cancelled task exit.
+private final class ManualTickClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requested: [TimeInterval] = []
+    private var parked: [(duration: TimeInterval, continuation: CheckedContinuation<Void, Never>)] = []
+
+    var waits: [TimeInterval] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requested
+    }
+
+    /// The duration of the newest wait still parked, or nil when nothing is armed.
+    var pendingDuration: TimeInterval? {
+        lock.lock()
+        defer { lock.unlock() }
+        return parked.last?.duration
+    }
+
+    func park(_ duration: TimeInterval) async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            requested.append(duration)
+            parked.append((duration: duration, continuation: continuation))
+            lock.unlock()
+        }
+    }
+
+    /// Resumes the newest parked wait, letting the tick it guards run.
+    func releaseLatest() {
+        lock.lock()
+        let next = parked.popLast()
+        lock.unlock()
+        next?.continuation.resume()
+    }
+
+    /// Resumes every parked wait. Call after `stop()` so no parked task is left suspended.
+    func releaseAll() {
+        lock.lock()
+        let all = parked
+        parked = []
+        lock.unlock()
+        all.forEach { $0.continuation.resume() }
+    }
 }
 
 /// Lock-protected record of stream opens. `onTermination` runs on an arbitrary executor, so

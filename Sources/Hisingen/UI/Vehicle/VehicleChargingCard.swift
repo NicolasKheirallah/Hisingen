@@ -244,11 +244,11 @@ struct VehicleChargingCard: View {
     /// (RCS cloud service, APP client). An unknown token renders raw rather than guessed;
     /// nil means the provider said nothing.
     static func chargingSourceSuffix(_ source: String?) -> String? {
-        switch source?.uppercased() {
-        case nil, "": return nil
-        case "RCS": return L10n.text("Set remotely")
-        case "APP": return L10n.text("Set from app")
-        case let other: return other
+        guard let source, !source.isEmpty else { return nil }
+        switch ChargeSettingSource(wireToken: source) {
+        case .remote: return L10n.text("Set remotely")
+        case .app: return L10n.text("Set from app")
+        case nil: return source.uppercased()
         }
     }
 

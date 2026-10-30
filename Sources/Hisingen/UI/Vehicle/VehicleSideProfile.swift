@@ -98,7 +98,7 @@ private struct VehicleGroundShadow: View {
     var body: some View {
         let shadow = og.groundShadow(for: spec)
         Ellipse()
-            .fill(Color.black.opacity(0.12))
+            .fill(HisingenTheme.elevationShadow.opacity(0.12))
             .frame(width: shadow.size.width, height: shadow.size.height)
             .position(shadow.center)
             .blur(radius: 3)
@@ -158,7 +158,7 @@ struct VehicleSideProfileDoorsView: View {
     }
 
     private var hoverTint: Color {
-        hoveredOpeningIsOppositeSide ? Color.gray : HisingenTheme.accent
+        hoveredOpeningIsOppositeSide ? HisingenTheme.neutralHoverTint : HisingenTheme.accent
     }
 
     private var hoverAbbreviation: String? {
@@ -399,7 +399,7 @@ struct VehicleSideProfileDoorsView: View {
             shape.fill(color.opacity(open ? 0.60 : 0.40))
             shape.stroke(color, lineWidth: open ? 1.5 : 1.0)
             Circle()
-                .fill(Color.white)
+                .fill(HisingenTheme.highlightWhite)
                 .frame(width: 4, height: 4)
         }
         .frame(width: resolved.frame.width, height: resolved.frame.height)
@@ -527,7 +527,7 @@ struct VehicleSideProfileTiresView: View {
             Circle()
                 .fill(activeColor)
                 .frame(width: 8, height: 8)
-                .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1))
+                .overlay(Circle().stroke(HisingenTheme.highlightWhite.opacity(0.8), lineWidth: 1))
         }
         .position(pos)
         // Severity escalation (low→veryLow) recolors and thickens; keyed on the

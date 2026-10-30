@@ -29,7 +29,7 @@ for (const field of ["supportsSunroofControl", "userIsLinked", "userIsOwner", "r
 const grpc = read("Sources/Hisingen/Services/API/PolestarGRPC.swift");
 require_(grpc.includes("let reportedBatteryCapacityKwh: Double?"), "GrpcBatteryExtras capacity missing");
 require_(grpc.includes("let unknownFields: [PolestarRawWireField]"), "GrpcBatteryExtras.unknownFields missing");
-require_(grpc.includes("capacityKwh = Protobuf.double(from: field.data)"), "battery wire field 12 (capacity) parse missing");
+require_(grpc.includes("static let capacityKwh = 12"), "battery wire field 12 (capacity) parse missing");
 require_(grpc.includes("static let unmappedBatteryFields"), "unmappedBatteryFields set missing");
 require_(grpc.includes("static func rawField("), "rawField capture missing");
 require_(grpc.includes("Transport error"), "availability reason 7 missing");

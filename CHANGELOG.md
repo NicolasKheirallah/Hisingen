@@ -3,6 +3,32 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- add THIRD_PARTY_NOTICES.md crediting Polaris, pypolestar and polestar_api, Sparkle,
+  Open-Meteo and Elpriset just nu.se; the app bundle now carries it with LICENSE and
+  Sparkle's own license
+- credit Polaris in the README for the Polestar code that was adapted from it (#33)
+
+### Fixed
+
+- show Polestar battery, availability, target charge and amp limit as unknown when a gRPC
+  reply is malformed or cut off, instead of a partial state that looks real
+- skip unrelated URLs on the Polestar sign-in page instead of posting the password to the
+  first match; the target must now be a same-host resume path
+- reject a C3 discovery host that is not a plain domain name or has an invalid port
+- keep the other car renders when one render in the image list has an unexpected field
+
+### Changed
+
+- build every Polestar gRPC request and read every reply through one shared builder and
+  frame reader; all calls now send `TE: trailers` and `grpc-accept-encoding: identity`
+- look up the Polestar C3 host again every 12 hours, keeping the last working host if the
+  lookup fails
+- decode the Polestar battery message from a field table instead of a hand-written switch
+
 ## [2.0.10] - 2026-10-19
 
 ### Added

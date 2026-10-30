@@ -27,19 +27,23 @@ enum HTTPExchange {
             }
             var data = Data()
             data.reserveCapacity(min(max(0, Int(http.expectedContentLength)), limit))
-            // Append straight into the result and re-check the size bound only at chunk
-            // boundaries: the per-byte loop used to pay a staging-buffer append plus a
-            // two-term comparison on every element of every response in the app.
-            var nextLimitCheck = 64 * 1_024
+            // Bytes are staged in a small array and copied into `data` a chunk at a time, so the
+            // per-byte work is a plain array append. The size bound and cancellation are checked
+            // at chunk boundaries rather than on every byte.
+            let chunkSize = 16 * 1_024
+            var chunk: [UInt8] = []
+            chunk.reserveCapacity(chunkSize)
             for try await byte in bytes {
-                data.append(byte)
-                if data.count >= nextLimitCheck {
-                    guard data.count < limit else {
-                        throw Self.responseTooLarge(operation: operation, provider: provider)
-                    }
-                    nextLimitCheck = data.count + 64 * 1_024
+                chunk.append(byte)
+                guard chunk.count == chunkSize else { continue }
+                data.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+                guard data.count < limit else {
+                    throw Self.responseTooLarge(operation: operation, provider: provider)
                 }
+                try Task.checkCancellation()
             }
+            data.append(contentsOf: chunk)
             guard data.count < limit else {
                 throw Self.responseTooLarge(operation: operation, provider: provider)
             }

@@ -319,7 +319,7 @@ struct VehicleCapabilityParsingTests {
     }
 
     @Test
-    func testOdometerTripMetersAndBatteryDiagnosticsDecode() {
+    func testOdometerTripMetersAndBatteryDiagnosticsDecode() throws {
         var odometer = Data()
         odometer.append(Protobuf.intField(2, 25_123_000))
         odometer.append(Protobuf.doubleField(3, 42.5))
@@ -335,7 +335,7 @@ struct VehicleCapabilityParsingTests {
         battery.append(Protobuf.doubleField(13, 19.1))
         battery.append(Protobuf.doubleField(16, 12_400))
         battery.append(Protobuf.intField(26, 4))
-        let diagnostics = PolestarGRPC.parseBattery(battery).diagnostics
+        let diagnostics = try PolestarGRPC.parseBattery(battery).diagnostics
         #expect(diagnostics.chargerPowerState == .providingPower)
         #expect(diagnostics.timeToTargetMinutes == 60)
         #expect(diagnostics.energyUsedSinceChargeWh == 12_400)

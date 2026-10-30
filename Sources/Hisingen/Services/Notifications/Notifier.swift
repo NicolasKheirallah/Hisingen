@@ -122,9 +122,14 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.sustainedNotificationsDelivered = Set(defaults.stringArray(forKey: "notifier_sustained_delivered_v1") ?? [])
         self.serviceDueByVIN = (defaults.dictionary(forKey: "notifier_service_due_v1") as? [String: Bool]) ?? [:]
         // One-time cleanup: builds before the bounded latch below leaked one persistent
-        // "anomaly_<session id>" defaults key per charging session, forever.
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("anomaly_") {
-            defaults.removeObject(forKey: key)
+        // "anomaly_<session id>" defaults key per charging session, forever. The done-flag
+        // keeps every later launch from scanning the whole defaults domain again.
+        let anomalyCleanupKey = "notifier_anomaly_key_cleanup_v1"
+        if !defaults.bool(forKey: anomalyCleanupKey) {
+            for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("anomaly_") {
+                defaults.removeObject(forKey: key)
+            }
+            defaults.set(true, forKey: anomalyCleanupKey)
         }
         super.init()
         guard available else { return }
@@ -404,8 +409,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         // The was-due flag persists across launches: without it, staying due re-fired
         // the banner on every relaunch because the in-memory previous state was empty.
         let wasDue = serviceDueByVIN[current.identity.vin] ?? false
-        serviceDueByVIN[current.identity.vin] = due
-        defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
+        if serviceDueByVIN[current.identity.vin] != due {
+            serviceDueByVIN[current.identity.vin] = due
+            defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
+        }
         guard due, !wasDue else { return }
         var details: [String] = []
         if let days = current.maintenance.service.daysToService { details.append(L10n.format("%d days", days)) }
@@ -668,7 +675,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard available else { return }
         let vin = preferences.vin
         let name = vin.isEmpty ? nil : displayName(forVIN: vin)
-        postNotice(identifier: "hisingen.notice.test-\(UUID().uuidString)",
+        postNotice(identifier: "hisingen.notice.test",
                    thread: "hisingen.notices",
                    title: L10n.text("Test notification"),
                    body: privateBody(L10n.text("This is how Hisingen alerts will look.")),
@@ -745,9 +752,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         )
     }
 
+    /// Keyed by title so a repeat of the same notice replaces the banner already on screen
+    /// instead of stacking a second copy.
     func notifyCommandNotice(title: String, body: String, subtitle: String? = nil) {
         postNotice(
-            identifier: "hisingen.notice.\(UUID().uuidString)",
+            identifier: "hisingen.notice.command.\(title)",
             thread: "hisingen.notices",
             title: title,
             body: body,
@@ -759,7 +768,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// through the same privacy gate as vehicle telemetry banners.
     func notifyChargingAnomaly(locationName: String, vin: String) {
         postNotice(
-            identifier: "hisingen.notice.\(UUID().uuidString)",
+            identifier: "hisingen.notice.charging-anomaly.\(vin)",
             thread: "hisingen.charging.\(vin)",
             title: L10n.text("Unusually slow charging"),
             body: privateBody(L10n.format("Peak power at %@ was far below this location's usual level. The cable or charger may be derating.", locationName)),
@@ -816,6 +825,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                             body: String, subtitle: String? = nil, vin: String? = nil,
                             urgency: Urgency = .info, category: String? = nil,
                             respectQuietHours: Bool = true) {
+        // Every banner funnels through here, so the Notifications switch covers the notice
+        // entry points too, not only the telemetry path that checks it before calling in.
+        guard preferences.features.contains(.notifications) else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -915,6 +927,7 @@ extension Notifier: VehicleMemoryCaching {
     /// re-added car inherit half-elapsed state from the vehicle that was erased.
     func dropCachedVehicles(_ scope: VehicleScope) {
         dropCachedSnapshots(scope)
+        let serviceDueCountBefore = serviceDueByVIN.count
         serviceDueByVIN = serviceDueByVIN.filter { !scope.covers($0.key) }
         let warningCountBefore = warningVehicles.count
         warningVehicles = warningVehicles.filter { !scope.covers($0) }
@@ -930,7 +943,9 @@ extension Notifier: VehicleMemoryCaching {
         }
         sustainedConditionStartedAt = sustainedConditionStartedAt.filter { !belongsToErasedVehicle($0.key) }
         sustainedNotificationsDelivered = sustainedNotificationsDelivered.filter { !belongsToErasedVehicle($0) }
-        defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
+        if serviceDueByVIN.count != serviceDueCountBefore {
+            defaults.set(serviceDueByVIN, forKey: "notifier_service_due_v1")
+        }
         persistSustainedState()
     }
 

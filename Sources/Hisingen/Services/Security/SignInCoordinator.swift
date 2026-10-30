@@ -97,17 +97,29 @@ final class SignInCoordinator {
             return
         }
 
-        var effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
-        if effectiveSecret.isEmpty && BuiltinVolvoSecrets.isConfigured {
-            effectiveSecret = BuiltinVolvoSecrets.clientSecret
+        let effectiveSecret: String
+        let effectiveApiKey: String
+        do {
+            effectiveSecret = try Self.effectiveVolvoValue(
+                typed: clientSecret, read: Keychain.readVolvoClientSecret,
+                builtin: { BuiltinVolvoSecrets.clientSecret })
+            effectiveApiKey = try Self.effectiveVolvoValue(
+                typed: vccApiKey, read: Keychain.readVolvoApiKey,
+                builtin: { BuiltinVolvoSecrets.vccApiKey })
+        } catch {
+            presentVolvoSignInFailure(error)
+            return
         }
 
-        var effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
-        if effectiveApiKey.isEmpty && BuiltinVolvoSecrets.isConfigured {
-            effectiveApiKey = BuiltinVolvoSecrets.vccApiKey
+        let sessionToken: String?
+        do {
+            sessionToken = try Keychain.readVolvoSessionToken()
+        } catch {
+            // Not a credential fallback: without a readable token the fast path is skipped and the
+            // full browser sign-in runs, which writes a fresh token anyway.
+            logger.error("Could not read stored Volvo session token; signing in again: \(String(describing: error), privacy: .public)")
+            sessionToken = nil
         }
-
-        let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         // Already fully configured and the form came back blank: there is nothing to
         // re-authorize – just re-adopt the Volvo brand and resume from the stored token.
@@ -173,9 +185,11 @@ final class SignInCoordinator {
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
         try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil)
-        preferences.volvoClientID = clientID
+        // Keychain first: a denied save must not leave a client ID on file that points at
+        // secrets which were never stored.
         try Keychain.saveVolvoClientSecret(clientSecret)
         try Keychain.saveVolvoApiKey(vccApiKey)
+        preferences.volvoClientID = clientID
         // Awaited inline, before the brand switch, so the first `CarSummary` the switch builds
         // already carries the user's nickname.
         await assignVolvoNickname(nickname)
@@ -190,6 +204,18 @@ final class SignInCoordinator {
                 success: true
             )
         }
+    }
+
+    /// Typed value, then the Keychain, then the compiled-in builtin. Keychain "not found" comes
+    /// back as nil, so a throw is a real failure (access denied, pending ACL consent). That is
+    /// surfaced rather than read as "no secret", which used to slide silently onto the builtin
+    /// credentials.
+    private static func effectiveVolvoValue(typed: String, read: () throws -> String?,
+                                            builtin: () -> String) throws -> String {
+        if !typed.isEmpty { return typed }
+        let stored = try read() ?? ""
+        if !stored.isEmpty { return stored }
+        return BuiltinVolvoSecrets.isConfigured ? builtin() : ""
     }
 
     private static func isInvalidScope(_ error: VolvoError) -> Bool {

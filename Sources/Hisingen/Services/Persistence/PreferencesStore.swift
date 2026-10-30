@@ -22,6 +22,9 @@ final class PreferencesStore {
         self.keychain = keychain
     }
     private var cachedEmail: String?
+    /// One Keychain migration attempt per process. A failed attempt leaves the legacy value in
+    /// UserDefaults, so without this flag every cache refill would retry the same failing write.
+    private var legacyEmailMigrationAttempted = false
     private var cachedHasResumableSession: [VehicleBrand: Bool] = [:]
 
     func invalidateSessionCache() {
@@ -210,9 +213,9 @@ final class PreferencesStore {
     /// vehicle the reader acted on.
     ///
     /// The VIN is normalized the way every writer normalizes it, so a caller holding a
-    /// lower-case or padded identifier still reaches the entry that was written. Corrupt legacy
-    /// payloads are removed wholesale because retaining an undecodable cache is less safe than
-    /// requiring the affected vehicle to refresh again.
+    /// lower-case or padded identifier still reaches the entry that was written. An undecodable
+    /// legacy payload is left in place rather than removed, because removing it would take every
+    /// other vehicle's entries with it.
     func clearLocalVehicleDefaults(for vin: String) {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         // An empty VIN names no vehicle; it never stands for all of them.
@@ -261,9 +264,12 @@ final class PreferencesStore {
     private nonisolated static func removeJSONEntry<Value: Codable>(
         _ type: Value.Type, key: String, vin: String, from d: UserDefaults
     ) {
-        guard let data = d.data(forKey: key),
-              var values = try? JSONDecoder().decode([String: Value].self, from: data) else {
-            d.removeObject(forKey: key)
+        guard let data = d.data(forKey: key) else { return }
+        guard var values = try? JSONDecoder().decode([String: Value].self, from: data) else {
+            // The blob holds every vehicle's entries, so removing it here would erase the other
+            // vehicles too. Readers already treat an undecodable payload as absent, so leaving it
+            // in place is harmless; it is logged so the corruption is not silent.
+            AppLog.logger("preferences").error("Leaving undecodable \(key, privacy: .public) in place while erasing one vehicle.")
             return
         }
         values.removeValue(forKey: vin)
@@ -305,13 +311,21 @@ final class PreferencesStore {
                 // background launch). Leave the cache unset: once the owner approves access,
                 // the next read must actually retry instead of replaying a cached empty.
                 return ""
-            } catch {}
+            } catch {
+                logger.error("Reading the account email from the Keychain failed; falling back to the legacy value: \(String(describing: error), privacy: .public)")
+            }
             let legacy = d.string(forKey: "polestar_email")
             if let legacy, !legacy.isEmpty {
-                do {
-                    try keychain.saveEmail(legacy)
-                    d.removeObject(forKey: "polestar_email")
-                } catch {}
+                // The legacy UserDefaults copy is removed only once the Keychain write succeeds.
+                if !legacyEmailMigrationAttempted {
+                    legacyEmailMigrationAttempted = true
+                    do {
+                        try keychain.saveEmail(legacy)
+                        d.removeObject(forKey: "polestar_email")
+                    } catch {
+                        logger.error("Migrating the account email to the Keychain failed; the legacy value stays in UserDefaults until the next launch: \(String(describing: error), privacy: .public)")
+                    }
+                }
                 cachedEmail = legacy
                 return legacy
             }
@@ -323,7 +337,11 @@ final class PreferencesStore {
             cachedEmail = newValue
             cachedHasResumableSession[.polestar] = nil
             if newValue.isEmpty {
-                try? keychain.deleteEmail()
+                do {
+                    try keychain.deleteEmail()
+                } catch {
+                    logger.error("Deleting the account email from the Keychain failed: \(String(describing: error), privacy: .public)")
+                }
                 d.removeObject(forKey: "polestar_email")
             } else {
                 do {

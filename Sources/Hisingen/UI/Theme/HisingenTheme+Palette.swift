@@ -76,4 +76,21 @@ extension HisingenTheme {
     static func accentOn(for theme: AppTheme) -> Color {
         palette(for: theme).accentOn
     }
+
+    // MARK: - Fixed Overlay Colours
+
+    // Neutral marks drawn over data colours. They are the same in every theme and appearance on
+    // purpose: a rim has to contrast with whatever colour it outlines, and a shadow has to read as
+    // a shadow in both appearances, so neither should follow the palette.
+
+    /// The white used for highlights on coloured marks: the rim and centre dot of a charge-lid
+    /// marker, the hub of a tyre, and the brightness lift when a gauge completes.
+    static var highlightWhite: Color { Color.white }
+
+    /// The neutral tint for a hovered opening on the far side of the car, which the left-side
+    /// schematic cannot resolve to a labelled door.
+    static var neutralHoverTint: Color { Color.gray }
+
+    /// Black, for drop shadows under data marks. Callers pass their own opacity.
+    static var elevationShadow: Color { Color.black }
 }

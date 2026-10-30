@@ -167,16 +167,32 @@ struct ElectricityRatePolicy: Equatable, Sendable {
     }
 }
 
+/// The cost a session resolves to before any fallback is applied. Automatic mode prices from the
+/// market cost when the session has one. Otherwise the stored cost wins, then the session's own
+/// tariff. `nil` means the session has no price of its own.
+private func ownSessionCost(
+    policy: ElectricityRatePolicy,
+    spotCost: Double?,
+    energyKwh: Double,
+    storedCost: Double?,
+    tariffPricePerKwh: Double?
+) -> Double? {
+    if policy.isAutomatic, let spotCost {
+        return policy.retailCost(spotCost: spotCost, energyKwh: energyKwh)
+    }
+    if let storedCost { return storedCost }
+    return tariffPricePerKwh.map { $0 * energyKwh }
+}
+
 extension HistoricalChargingSession {
     /// The session's cost under the active policy. Automatic mode prices from the stored
     /// market cost; a session the spot series never covered keeps the fixed-rate figure,
     /// which `usedFallback` reports so totals can say how many sessions were not market-priced.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double) -> (amount: Double, usedFallback: Bool) {
-        if policy.isAutomatic, let spot = spotEstimatedCost {
-            return (policy.retailCost(spotCost: spot, energyKwh: energyDeliveredKwh), false)
+        if let own = ownSessionCost(policy: policy, spotCost: spotEstimatedCost, energyKwh: energyDeliveredKwh,
+                                    storedCost: estimatedCost, tariffPricePerKwh: tariffPricePerKwh) {
+            return (own, false)
         }
-        if let stored = estimatedCost { return (stored, false) }
-        if let tariff = tariffPricePerKwh { return (tariff * energyDeliveredKwh, false) }
         return (fallbackPricePerKwh * energyDeliveredKwh, true)
     }
 }
@@ -185,9 +201,10 @@ extension ChargingSession {
     /// Same contract as `HistoricalChargingSession.resolvedCost`, for the in-memory session
     /// the charging card and CSV export read. Returns nil only when no price is known at all.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double?) -> Double? {
-        if policy.isAutomatic, let spot = spotCost {
-            return policy.retailCost(spotCost: spot, energyKwh: kwhDelivered)
+        if let own = ownSessionCost(policy: policy, spotCost: spotCost, energyKwh: kwhDelivered,
+                                    storedCost: cost, tariffPricePerKwh: tariffPricePerKwh) {
+            return own
         }
-        return estimatedCost(tariff: fallbackPricePerKwh)
+        return fallbackPricePerKwh.map { $0 * kwhDelivered }
     }
 }

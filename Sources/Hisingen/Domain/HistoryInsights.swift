@@ -92,14 +92,30 @@ enum HistoryInsights {
     /// column (`chargingType == nil`) or the vehicle reported `.unknown` throughout.
     static func chargingType(from samples: [HistoricalChargingSample], peakPowerKw: Double?) -> ChargingType {
         let reported = samples
+            .sorted { $0.timestamp < $1.timestamp }
             .compactMap { $0.chargingType.flatMap(ChargingType.init(rawValue:)) }
             .filter { $0 != .unknown }
-        if let mostCommon = Dictionary(grouping: reported, by: { $0 })
-            .max(by: { $0.value.count < $1.value.count })?.key {
+        if let mostCommon = mostCommonValue(reported) {
             return mostCommon
         }
         guard let peakPowerKw else { return .unknown }
         return peakPowerKw > dcPowerThresholdKw ? .dc : .ac
+    }
+
+    /// The most frequent value in `values`. A tie goes to whichever value appears first, so the
+    /// result never depends on dictionary iteration order.
+    private static func mostCommonValue<T: Hashable>(_ values: [T]) -> T? {
+        var counts: [T: Int] = [:]
+        var firstIndex: [T: Int] = [:]
+        for (index, value) in values.enumerated() {
+            counts[value, default: 0] += 1
+            firstIndex[value] = firstIndex[value] ?? index
+        }
+        return counts.max { lhs, rhs in
+            lhs.value != rhs.value
+                ? lhs.value < rhs.value
+                : firstIndex[lhs.key, default: .max] > firstIndex[rhs.key, default: .max]
+        }?.key
     }
 
     /// Wall-clock time spent charging from 10% to 80% state of charge, interpolated between
@@ -129,7 +145,7 @@ enum HistoryInsights {
         guard let last = curve.last else { return nil }
         var tailStart: ChargingCurvePoint?
         for point in curve.reversed() {
-            guard point.soc >= socThreshold, (point.powerKw ?? 0) < powerThresholdKw else { break }
+            guard point.soc >= socThreshold, let power = point.powerKw, power < powerThresholdKw else { break }
             tailStart = point
         }
         guard let tailStart, tailStart.timestamp < last.timestamp else { return nil }
@@ -298,11 +314,8 @@ enum HistoryInsights {
     }
 
     static func dailyDistance(from trips: [TripHistoryEntry], calendar: Calendar = .current) -> [DailyDistance] {
-        var totals: [Date: Double] = [:]
-        for trip in trips {
-            totals[dayBucket(trip.endedAt, calendar: calendar), default: 0] += trip.distanceKm
-        }
-        return totals.map { DailyDistance(day: $0.key, distanceKm: $0.value) }.sorted { $0.day < $1.day }
+        distanceByBucket(trips) { dayBucket($0, calendar: calendar) }
+            .map { DailyDistance(day: $0.bucket, distanceKm: $0.distanceKm) }
     }
 
     struct WeeklyDistance: Identifiable, Equatable {
@@ -312,11 +325,18 @@ enum HistoryInsights {
     }
 
     static func weeklyDistance(from trips: [TripHistoryEntry], calendar: Calendar = .current) -> [WeeklyDistance] {
+        distanceByBucket(trips) { weekBucket($0, calendar: calendar) }
+            .map { WeeklyDistance(week: $0.bucket, distanceKm: $0.distanceKm) }
+    }
+
+    /// Distance summed per bucket, keyed by each trip's end time and sorted oldest first.
+    private static func distanceByBucket(_ trips: [TripHistoryEntry],
+                                         bucket: (Date) -> Date) -> [(bucket: Date, distanceKm: Double)] {
         var totals: [Date: Double] = [:]
         for trip in trips {
-            totals[weekBucket(trip.endedAt, calendar: calendar), default: 0] += trip.distanceKm
+            totals[bucket(trip.endedAt), default: 0] += trip.distanceKm
         }
-        return totals.map { WeeklyDistance(week: $0.key, distanceKm: $0.value) }.sorted { $0.week < $1.week }
+        return totals.map { (bucket: $0.key, distanceKm: $0.value) }.sorted { $0.bucket < $1.bucket }
     }
 
     static func longestTrip(from trips: [TripHistoryEntry]) -> TripHistoryEntry? {
@@ -338,14 +358,20 @@ enum HistoryInsights {
     /// both. Negative – the expected case – means colder trips consume more. `nil` under 5
     /// trips, where a correlation coefficient is mostly noise.
     static func temperatureConsumptionCorrelation(from trips: [TripHistoryEntry]) -> Double? {
-        let pairs = trips.compactMap { trip -> (Double, Double)? in
+        let pairs = temperatureConsumptionPairs(from: trips)
+        guard pairs.count >= 5 else { return nil }
+        return Statistics.pearsonCorrelation(pairs.map { ($0.x, $0.y) })
+    }
+
+    /// (temperature, consumption) for every trip reporting both, with consumption outside
+    /// `efficiencyBounds` dropped.
+    private static func temperatureConsumptionPairs(from trips: [TripHistoryEntry]) -> [(x: Double, y: Double)] {
+        trips.compactMap { trip -> (x: Double, y: Double)? in
             guard let temperature = trip.ambientTemperatureCelsius,
                   let consumption = trip.averageConsumption,
                   efficiencyBounds.contains(consumption) else { return nil }
             return (temperature, consumption)
         }
-        guard pairs.count >= 5 else { return nil }
-        return Statistics.pearsonCorrelation(pairs)
     }
 
     struct ConsumptionTemperatureSlope: Equatable {
@@ -361,12 +387,7 @@ enum HistoryInsights {
     /// `nil` below five paired trips, when the fit runs the wrong way, or when the effect
     /// is small enough to sit within ordinary trip-to-trip noise.
     static func temperatureConsumptionSlope(from trips: [TripHistoryEntry]) -> ConsumptionTemperatureSlope? {
-        let pairs: [(x: Double, y: Double)] = trips.compactMap { trip in
-            guard let temperature = trip.ambientTemperatureCelsius,
-                  let consumption = trip.averageConsumption,
-                  efficiencyBounds.contains(consumption) else { return nil }
-            return (temperature, consumption)
-        }
+        let pairs = temperatureConsumptionPairs(from: trips)
         guard pairs.count >= 5,
               let fit = Statistics.linearRegression(pairs),
               fit.slope < 0 else { return nil }
@@ -415,17 +436,15 @@ enum HistoryInsights {
         guard !records.isEmpty else {
             return CommandStatistics(totalCount: 0, successCount: 0, successRatePct: nil, mostUsedCommand: nil)
         }
-        // Only known-good outcomes count as success (statuses written by
-        // CommandCoordinator/CommandReceiptLedger). A vehicle that silently ignored a
+        // Only known-good outcomes count as success. A vehicle that silently ignored a
         // command ends up "confirmation_timed_out" – or stays pending on "accepted"/"delivered" –
         // and neither may inflate the rate the way a plain != "failed" test allowed.
-        let successCount = records.filter { ["completed", "confirmed", "acknowledged"].contains($0.status) }.count
-        let counts = Dictionary(grouping: records, by: \.command).mapValues(\.count)
+        let successCount = records.filter { CommandReceiptLedger.successAuditStatuses.contains($0.status) }.count
         return CommandStatistics(
             totalCount: records.count,
             successCount: successCount,
             successRatePct: Double(successCount) / Double(records.count) * 100,
-            mostUsedCommand: counts.max { $0.value < $1.value }?.key
+            mostUsedCommand: mostCommonValue(records.sorted { $0.executedAt < $1.executedAt }.map(\.command))
         )
     }
 
@@ -581,6 +600,25 @@ extension HistoryInsights {
                           odometerPoints: [OdometerPoint],
                           fuelCost: Double = 0) -> Double? {
         let electricSpend = totalEnergyKwh.map { $0 * pricePerKwh } ?? 0
+        return costPerKm(electricSpend: electricSpend, odometerPoints: odometerPoints, fuelCost: fuelCost)
+    }
+
+    /// Lifetime cost per distance driven, summing each session's resolved cost under the active
+    /// rate policy, so stored tariffs and spot prices count the way the monthly and location
+    /// totals count them. Sessions without a price fall back to `fallbackPricePerKwh`.
+    static func costPerKm(sessions: [HistoricalChargingSession],
+                          fallbackPricePerKwh: Double,
+                          ratePolicy: ElectricityRatePolicy = .fixed,
+                          odometerPoints: [OdometerPoint],
+                          fuelCost: Double = 0) -> Double? {
+        let electricSpend = sessions.reduce(0) {
+            $0 + $1.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: fallbackPricePerKwh).amount
+        }
+        return costPerKm(electricSpend: electricSpend, odometerPoints: odometerPoints, fuelCost: fuelCost)
+    }
+
+    private static func costPerKm(electricSpend: Double, odometerPoints: [OdometerPoint],
+                                  fuelCost: Double) -> Double? {
         let totalSpend = electricSpend + max(0, fuelCost)
         guard totalSpend > 0,
               let distance = distanceCovered(from: odometerPoints), distance >= 100 else { return nil }
@@ -594,10 +632,8 @@ extension HistoryInsights {
     /// signal. Requires ≥3 comparable sessions so a first visit can never trigger it.
     static func sessionPeakAnomaly(currentPeakKw: Double,
                                    priorPeaksKwAtSameLocation: [Double]) -> Bool {
-        guard priorPeaksKwAtSameLocation.count >= 3 else { return false }
-        let sorted = priorPeaksKwAtSameLocation.sorted()
-        let median = sorted[sorted.count / 2]
-        guard median > 0 else { return false }
+        guard priorPeaksKwAtSameLocation.count >= 3,
+              let median = Statistics.median(priorPeaksKwAtSameLocation), median > 0 else { return false }
         return currentPeakKw < median * 0.6
     }
 
@@ -784,10 +820,14 @@ extension HistoryInsights {
         let weekendKm: Double
         let weekdayTripCount: Int
         let weekendTripCount: Int
-        /// Distance per calendar day for the five weekdays vs the two weekend days, so the
-        /// two figures are comparable despite the 5:2 split.
-        var weekdayKmPerDay: Double { weekdayKm / 5 }
-        var weekendKmPerDay: Double { weekendKm / 2 }
+        /// Calendar weekdays and weekend days from the first trip's day to the last, inclusive.
+        /// Days without a trip count too, so an idle week lowers the per-day figure.
+        var weekdayDayCount: Int = 0
+        var weekendDayCount: Int = 0
+        /// Distance per calendar day, so weekday and weekend are comparable despite the 5:2
+        /// split. Zero when the span holds no day of that kind.
+        var weekdayKmPerDay: Double { weekdayDayCount > 0 ? weekdayKm / Double(weekdayDayCount) : 0 }
+        var weekendKmPerDay: Double { weekendDayCount > 0 ? weekendKm / Double(weekendDayCount) : 0 }
     }
 
     static func weekdayWeekendDistance(from trips: [TripHistoryEntry],
@@ -800,8 +840,24 @@ extension HistoryInsights {
                 weekdayKm += trip.distanceKm; weekdayCount += 1
             }
         }
+        let days = calendarDays(spanning: trips.map(\.startedAt), calendar: calendar)
         return WeekdayWeekendSplit(weekdayKm: weekdayKm, weekendKm: weekendKm,
-                                   weekdayTripCount: weekdayCount, weekendTripCount: weekendCount)
+                                   weekdayTripCount: weekdayCount, weekendTripCount: weekendCount,
+                                   weekdayDayCount: days.weekday, weekendDayCount: days.weekend)
+    }
+
+    /// Weekday and weekend calendar days from the earliest date's day through the latest, inclusive.
+    private static func calendarDays(spanning dates: [Date], calendar: Calendar) -> (weekday: Int, weekend: Int) {
+        guard let first = dates.min(), let last = dates.max() else { return (0, 0) }
+        let end = calendar.startOfDay(for: last)
+        var day = calendar.startOfDay(for: first)
+        var weekday = 0, weekend = 0
+        while day <= end {
+            if calendar.isDateInWeekend(day) { weekend += 1 } else { weekday += 1 }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return (weekday, weekend)
     }
 }
 

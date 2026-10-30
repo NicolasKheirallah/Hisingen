@@ -332,7 +332,12 @@ final class VehicleDatabase: @unchecked Sendable {
         do {
             try db.execute(sql: sql)
             let currentVersion = schemaVersion()
-            backupBeforeMigration(from: currentVersion)
+            if !backupBeforeMigration(from: currentVersion) {
+                // Migrations still run: the charging ledger inserts and reads the newer columns,
+                // so skipping them would stop session recording. A bad data rewrite then has no
+                // recovery copy until a later launch's backup succeeds.
+                logger.fault("Running schema migrations from v\(currentVersion) without a pre-migration backup")
+            }
             runMigrations(from: currentVersion)
             pruneMigrationBackups()
         } catch {
@@ -371,19 +376,34 @@ final class VehicleDatabase: @unchecked Sendable {
     /// One-shot copy of the database taken immediately before a schema migration, so a bad
     /// migration or a mid-upgrade crash leaves a recoverable "before" file. Skipped for fresh
     /// installs (nothing to lose) and in-memory databases; never overwrites an existing
-    /// backup for the same target version.
-    private func backupBeforeMigration(from currentVersion: Int) {
+    /// backup for the same target version. Returns `false` only when a needed backup could not
+    /// be written, so the caller can flag the migration that follows as unprotected.
+    private func backupBeforeMigration(from currentVersion: Int) -> Bool {
         guard databaseFilePreexisted,
               currentVersion < Self.latestSchemaVersion,
-              db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return }
+              db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return true }
         let backupPath = db.path + ".pre-v\(Self.latestSchemaVersion).bak"
-        guard !FileManager.default.fileExists(atPath: backupPath) else { return }
+        guard !FileManager.default.fileExists(atPath: backupPath) else { return true }
         let escaped = backupPath.replacingOccurrences(of: "'", with: "''")
         do {
             try db.execute(sql: "VACUUM INTO '\(escaped)';")
             logger.notice("Wrote pre-migration database backup to \(backupPath, privacy: .public)")
+            return true
         } catch {
             logger.error("Pre-migration database backup failed: \(error, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Adds a column unless it already exists. A failed ALTER is logged with its statement; the
+    /// callers re-check `columnExists` before advancing `user_version`, so a failure retries.
+    private func addColumnIfMissing(table: String, column: String, declaration: String) {
+        guard !columnExists(table: table, column: column) else { return }
+        let sql = "ALTER TABLE \(table) ADD COLUMN \(column) \(declaration);"
+        do {
+            try db.execute(sql: sql)
+        } catch {
+            logger.error("Migration statement failed: \(sql, privacy: .public) – \(error, privacy: .public)")
         }
     }
 
@@ -421,15 +441,10 @@ final class VehicleDatabase: @unchecked Sendable {
         // v1: quarantine legacy battery-health rows + add the disambiguation columns the
         // baseline now creates for new installs. Idempotent per table.
         if version < 1 {
-            if !columnExists(table: "battery_health_history", column: "measurement_source") {
-                try? db.execute(sql: "ALTER TABLE battery_health_history ADD COLUMN measurement_source TEXT NOT NULL DEFAULT 'legacy';")
-            }
-            if !columnExists(table: "telemetry_logs", column: "avg_consumption_unit") {
-                try? db.execute(sql: "ALTER TABLE telemetry_logs ADD COLUMN avg_consumption_unit TEXT;")
-            }
-            if !columnExists(table: "charging_samples", column: "charging_type") {
-                try? db.execute(sql: "ALTER TABLE charging_samples ADD COLUMN charging_type TEXT;")
-            }
+            addColumnIfMissing(table: "battery_health_history", column: "measurement_source",
+                               declaration: "TEXT NOT NULL DEFAULT 'legacy'")
+            addColumnIfMissing(table: "telemetry_logs", column: "avg_consumption_unit", declaration: "TEXT")
+            addColumnIfMissing(table: "charging_samples", column: "charging_type", declaration: "TEXT")
             let v1ColumnsReady = columnExists(table: "battery_health_history", column: "measurement_source")
                 && columnExists(table: "telemetry_logs", column: "avg_consumption_unit")
                 && columnExists(table: "charging_samples", column: "charging_type")
@@ -474,8 +489,8 @@ final class VehicleDatabase: @unchecked Sendable {
                 ("pending_stop_count", "INTEGER NOT NULL DEFAULT 0"),
                 ("estimated_cost", "REAL")
             ]
-            for (column, declaration) in additions where !columnExists(table: "charging_sessions", column: column) {
-                try? db.execute(sql: "ALTER TABLE charging_sessions ADD COLUMN \(column) \(declaration);")
+            for (column, declaration) in additions {
+                addColumnIfMissing(table: "charging_sessions", column: column, declaration: declaration)
             }
             if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0.0) }) {
                 do {
@@ -600,17 +615,11 @@ final class VehicleDatabase: @unchecked Sendable {
 
     // MARK: - Database Diagnostics & Maintenance
 
+    /// Size of the database file and its WAL/SHM siblings. Uses the handle's own path, so an
+    /// in-memory or unavailable handle reports 0 instead of the on-disk file's size.
     var databaseSizeBytes: Int64 {
-        let baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let appSupport = baseDirectory
-            .appendingPathComponent("Hisingen", isDirectory: true)
-        let main = appSupport.appendingPathComponent("hisingen.sqlite3")
-        let wal = appSupport.appendingPathComponent("hisingen.sqlite3-wal")
-        let shm = appSupport.appendingPathComponent("hisingen.sqlite3-shm")
-        let files = [main, wal, shm]
-        return files.reduce(0) { total, url in
-            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+        [db.path, db.path + "-wal", db.path + "-shm"].reduce(0) { total, path in
+            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64) ?? 0
             return total + size
         }
     }
@@ -669,6 +678,9 @@ final class VehicleDatabase: @unchecked Sendable {
     /// audit rows are low-volume summaries (one per charge, one per command, health is
     /// change-gated), so there's little storage pressure to justify discarding a user's
     /// longer-term charging or health history as aggressively as the high-volume samples.
+    /// `sampleRetentionDays` is opt-in: when set, `charging_samples` and `telemetry_logs` are
+    /// pruned to that horizon too (the Settings retention picker). The one VACUUM at the end
+    /// covers every table in the pass.
     func pruneAgedHistoryOrThrow(
         chargingSessionsOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
         batteryHealthOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
@@ -677,9 +689,10 @@ final class VehicleDatabase: @unchecked Sendable {
         connectivityOlderThanDays: Int = 180,
         cabinClimateOlderThanDays: Int = 180,
         vehicleImagesOlderThanDays: Int = 120,
-        vehicleImagesHardCap: Int = 24
+        vehicleImagesHardCap: Int = 24,
+        sampleRetentionDays: Int? = nil
     ) throws {
-        let cutoffs: [(sql: String, column: String, days: Int)] = [
+        var cutoffs: [(sql: String, column: String, days: Int)] = [
             ("DELETE FROM charging_sessions WHERE started_at < ?;", "started_at", chargingSessionsOlderThanDays),
             ("DELETE FROM battery_health_history WHERE timestamp < ?;", "timestamp", batteryHealthOlderThanDays),
             ("DELETE FROM remote_commands_log WHERE executed_at < ?;", "executed_at", commandAuditsOlderThanDays),
@@ -692,6 +705,12 @@ final class VehicleDatabase: @unchecked Sendable {
             // multi-megabyte database on accounts that have tried several render angles.
             ("DELETE FROM vehicle_images WHERE updated_at < ?;", "updated_at", vehicleImagesOlderThanDays)
         ]
+        if let sampleRetentionDays {
+            cutoffs += [
+                ("DELETE FROM charging_samples WHERE timestamp < ?;", "timestamp", sampleRetentionDays),
+                ("DELETE FROM telemetry_logs WHERE timestamp < ?;", "timestamp", sampleRetentionDays)
+            ]
+        }
         try db.withTransaction {
             for (sql, _, days) in cutoffs {
                 let cutoff = Date().addingTimeInterval(-Double(days * 86400))

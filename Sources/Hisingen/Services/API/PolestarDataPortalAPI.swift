@@ -58,7 +58,15 @@ actor PolestarDataPortalAPI {
     /// The quota counter's backing store. Injectable so a test can own its state: the
     /// process-global defaults are shared by every portal call in every suite, and a
     /// concurrent test's recorded call would otherwise land inside another test's assert.
-    nonisolated(unsafe) static var quotaStateStore: QuotaStateStore? = nil
+    /// Guards the store slot and the counter's read-modify-write. Recursive because
+    /// `readQuotaState` reads the slot while a write already holds the lock.
+    private nonisolated static let quotaLock = NSRecursiveLock()
+    nonisolated(unsafe) private static var quotaStore: QuotaStateStore? = nil
+
+    nonisolated static var quotaStateStore: QuotaStateStore? {
+        get { quotaLock.withLock { quotaStore } }
+        set { quotaLock.withLock { quotaStore = newValue } }
+    }
 
     private nonisolated static func readQuotaState() -> (count: Int, dateString: String) {
         if let store = Self.quotaStateStore { return store.get() }
@@ -69,22 +77,26 @@ actor PolestarDataPortalAPI {
 
     private func recordApiCall(on date: Date = Date()) {
         let todayStr = Self.quotaDateFormatter().string(from: date)
-        let (currentCount, lastDate) = Self.readQuotaState()
-        let nextCount = (lastDate == todayStr) ? (currentCount + 1) : 1
-        if let store = Self.quotaStateStore {
-            store.set(nextCount, todayStr)
-            return
+        Self.quotaLock.withLock {
+            let (currentCount, lastDate) = Self.readQuotaState()
+            let nextCount = (lastDate == todayStr) ? (currentCount + 1) : 1
+            if let store = Self.quotaStateStore {
+                store.set(nextCount, todayStr)
+                return
+            }
+            UserDefaults.standard.set(nextCount, forKey: "polestar_dataportal_daily_calls")
+            UserDefaults.standard.set(todayStr, forKey: "polestar_dataportal_daily_date")
         }
-        UserDefaults.standard.set(nextCount, forKey: "polestar_dataportal_daily_calls")
-        UserDefaults.standard.set(todayStr, forKey: "polestar_dataportal_daily_date")
     }
 
     #if DEBUG
     nonisolated static func setDailyQuotaForTesting(count: Int, date: Date) {
         let dateStr = quotaDateFormatter().string(from: date)
-        if let store = quotaStateStore { store.set(count, dateStr); return }
-        UserDefaults.standard.set(count, forKey: "polestar_dataportal_daily_calls")
-        UserDefaults.standard.set(dateStr, forKey: "polestar_dataportal_daily_date")
+        quotaLock.withLock {
+            if let store = quotaStateStore { store.set(count, dateStr); return }
+            UserDefaults.standard.set(count, forKey: "polestar_dataportal_daily_calls")
+            UserDefaults.standard.set(dateStr, forKey: "polestar_dataportal_daily_date")
+        }
     }
 
     func setSessionForTesting(_ session: URLSession) {
@@ -280,7 +292,7 @@ actor PolestarDataPortalAPI {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let headerClientID = (accountID?.isEmpty == false) ? accountID! : (clientID ?? "")
+        let headerClientID = accountID.flatMap { $0.isEmpty ? nil : $0 } ?? clientID ?? ""
         if !headerClientID.isEmpty {
             request.setValue(headerClientID, forHTTPHeaderField: "x-client-id")
         }
@@ -413,8 +425,12 @@ actor PolestarDataPortalAPI {
     }
 
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
-        if let until = vinAccessDeniedUntil, Date() < until {
-            throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry (access revoked; retrying hourly)")
+        if let until = vinAccessDeniedUntil {
+            guard Date() >= until else {
+                throw PolestarDataPortalError.permissionDenied(operation: "VIN telemetry (access revoked; retrying hourly)")
+            }
+            // The hour has passed. Clear the stamp so the quota guard below applies again.
+            vinAccessDeniedUntil = nil
         }
         do {
             return try await performFetch(vin: vin, features: features)
@@ -426,7 +442,7 @@ actor PolestarDataPortalAPI {
 
     private func performFetch(vin: String, features: FeatureSelection) async throws -> VehicleState {
         // The token grant POST is itself metered; refuse before spending it, not after.
-        if vinAccessDeniedUntil == nil, Self.dailyCallCount >= Self.dailyCallLimit {
+        if Self.dailyCallCount >= Self.dailyCallLimit {
             var utcCalendar = Calendar(identifier: .gregorian)
             utcCalendar.timeZone = TimeZone(identifier: "UTC") ?? .current
             let midnight = utcCalendar.startOfDay(
@@ -554,13 +570,14 @@ actor PolestarDataPortalAPI {
         do {
             return PortalReading(value: try await authenticatedGET(path), failedRead: false)
         } catch {
-            logger.warning("Data Portal telemetry failed for \(path): \(String(describing: error), privacy: .public)")
+            // Paths carry the VIN and the error can echo one, so both stay private.
+            logger.warning("Data Portal telemetry failed for \(path, privacy: .private): \(String(describing: error), privacy: .private)")
             if let portalError = error as? PolestarDataPortalError {
                 if portalError.isRefreshFatal { throw error }
                 // A truthful "this vehicle has no such data" is not a miss: serve an empty
                 // reading without marking the endpoint's features unavailable.
                 if portalError.isDataNotAvailable {
-                    logger.info("Data Portal reports no \(path, privacy: .public) data for this vehicle.")
+                    logger.info("Data Portal reports no \(path, privacy: .private) data for this vehicle.")
                     return PortalReading(value: nil, failedRead: false)
                 }
             }

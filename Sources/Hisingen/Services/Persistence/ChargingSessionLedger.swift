@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// The Charging Session ledger – the sole owner of the Charging Session lifecycle.
 ///
@@ -250,6 +251,7 @@ final class ChargingSessionLedger: Sendable {
     static let maximumContinuityGap: TimeInterval = 48 * 60 * 60
 
     private let sql: SQLiteDatabase
+    private let logger = AppLog.logger("charging-ledger")
 
     init(sql: SQLiteDatabase) {
         self.sql = sql
@@ -535,11 +537,13 @@ final class ChargingSessionLedger: Sendable {
     }
 
     func updateSpotEstimatedCost(id: String, cost: Double) {
-        try? sql.query(sql: "UPDATE charging_sessions SET spot_estimated_cost = ? WHERE id = ?;") { stmt in
-            try stmt.bindDouble(cost, at: 1)
-            try stmt.bindText(id, at: 2)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("spot cost update") {
+            try sql.query(sql: "UPDATE charging_sessions SET spot_estimated_cost = ? WHERE id = ?;") { stmt in
+                try stmt.bindDouble(cost, at: 1)
+                try stmt.bindText(id, at: 2)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     /// Computes spot costs for every uncosted completed session the price series fully
@@ -761,19 +765,21 @@ final class ChargingSessionLedger: Sendable {
             let repaired = reconciled(candidate, usableCapacityKwh: capacity)
             guard repaired.energyDeliveredKwh > 0,
                   let endSoc = repaired.endSoc, endSoc > repaired.startSoc else { continue }
-            try? sql.query(sql: """
-                UPDATE charging_sessions SET
-                    end_soc = ?, energy_delivered_kwh = ?,
-                    peak_power_kw = ?, average_power_kw = ?
-                WHERE id = ? AND ended_at IS NOT NULL;
-                """) { stmt in
-                try stmt.bindDouble(endSoc, at: 1)
-                try stmt.bindDouble(repaired.energyDeliveredKwh, at: 2)
-                try stmt.bindDouble(repaired.peakPowerKw, at: 3)
-                try stmt.bindDouble(repaired.averagePowerKw, at: 4)
-                try stmt.bindText(repaired.id, at: 5)
-                try stmt.executeUpdate()
-            } process: { _ in }
+            logOnFailure("session reconcile") {
+                try sql.query(sql: """
+                    UPDATE charging_sessions SET
+                        end_soc = ?, energy_delivered_kwh = ?,
+                        peak_power_kw = ?, average_power_kw = ?
+                    WHERE id = ? AND ended_at IS NOT NULL;
+                    """) { stmt in
+                    try stmt.bindDouble(endSoc, at: 1)
+                    try stmt.bindDouble(repaired.energyDeliveredKwh, at: 2)
+                    try stmt.bindDouble(repaired.peakPowerKw, at: 3)
+                    try stmt.bindDouble(repaired.averagePowerKw, at: 4)
+                    try stmt.bindText(repaired.id, at: 5)
+                    try stmt.executeUpdate()
+                } process: { _ in }
+            }
         }
     }
 
@@ -845,6 +851,16 @@ final class ChargingSessionLedger: Sendable {
 
     // MARK: - Session storage
 
+    /// Runs one write and logs it on failure. Public writers stay non-throwing, so this log is
+    /// the only record of a lost lifecycle update or discard.
+    private func logOnFailure(_ operation: String, _ write: () throws -> Void) {
+        do {
+            try write()
+        } catch {
+            logger.error("Charging ledger \(operation, privacy: .public) failed: \(error, privacy: .public)")
+        }
+    }
+
     @discardableResult
     func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double,
                               location: String? = nil, startedAt: Date = Date(),
@@ -868,25 +884,27 @@ final class ChargingSessionLedger: Sendable {
         ) VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?, ?, 'soc_capacity_estimate',
                   'low', ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 0);
         """
-        try? sql.query(sql: statement) { stmt in
-            try stmt.bindText(id, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(startedAt, at: 3)
-            try stmt.bindDouble(startSoc, at: 4)
-            try stmt.bindText(location, at: 5)
-            try stmt.bindDate(startedAt, at: 6)
-            try stmt.bindText(lifecycleState.rawValue, at: 7)
-            try stmt.bindDouble(usableCapacityKwh, at: 8)
-            try stmt.bindDouble(tariffPricePerKwh, at: 9)
-            try stmt.bindText(currencySymbol, at: 10)
-            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 11)
-            try stmt.bindDouble(nightTariffPricePerKwh, at: 12)
-            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 13)
-            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 14)
-            try stmt.bindDouble(targetSoc, at: 15)
-            try stmt.bindDate(startedAt, at: 16)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("session start") {
+            try sql.query(sql: statement) { stmt in
+                try stmt.bindText(id, at: 1)
+                try stmt.bindText(vin, at: 2)
+                try stmt.bindDate(startedAt, at: 3)
+                try stmt.bindDouble(startSoc, at: 4)
+                try stmt.bindText(location, at: 5)
+                try stmt.bindDate(startedAt, at: 6)
+                try stmt.bindText(lifecycleState.rawValue, at: 7)
+                try stmt.bindDouble(usableCapacityKwh, at: 8)
+                try stmt.bindDouble(tariffPricePerKwh, at: 9)
+                try stmt.bindText(currencySymbol, at: 10)
+                try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 11)
+                try stmt.bindDouble(nightTariffPricePerKwh, at: 12)
+                try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 13)
+                try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 14)
+                try stmt.bindDouble(targetSoc, at: 15)
+                try stmt.bindDate(startedAt, at: 16)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
         return id
     }
 
@@ -897,17 +915,19 @@ final class ChargingSessionLedger: Sendable {
         INSERT INTO charging_samples (session_id, vin, timestamp, soc, power_kw, voltage_volts, current_amps, charging_type)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         """
-        try? sql.query(sql: statement) { stmt in
-            try stmt.bindText(sessionId, at: 1)
-            try stmt.bindText(vin, at: 2)
-            try stmt.bindDate(timestamp, at: 3)
-            try stmt.bindDouble(soc, at: 4)
-            try stmt.bindDouble(powerKw, at: 5)
-            try stmt.bindDouble(voltage, at: 6)
-            try stmt.bindDouble(current, at: 7)
-            try stmt.bindText(chargingType, at: 8)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("sample insert") {
+            try sql.query(sql: statement) { stmt in
+                try stmt.bindText(sessionId, at: 1)
+                try stmt.bindText(vin, at: 2)
+                try stmt.bindDate(timestamp, at: 3)
+                try stmt.bindDouble(soc, at: 4)
+                try stmt.bindDouble(powerKw, at: 5)
+                try stmt.bindDouble(voltage, at: 6)
+                try stmt.bindDouble(current, at: 7)
+                try stmt.bindText(chargingType, at: 8)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     func completeChargingSession(id: String, endSoc: Double, energyDeliveredKwh: Double,
@@ -948,78 +968,86 @@ final class ChargingSessionLedger: Sendable {
             estimated_cost = ?
         WHERE id = ?;
         """
-        try? sql.query(sql: statement) { stmt in
-            try stmt.bindDate(endedAt, at: 1)
-            try stmt.bindDouble(endSoc, at: 2)
-            try stmt.bindDouble(energyDeliveredKwh, at: 3)
-            try stmt.bindDouble(peakPowerKw, at: 4)
-            try stmt.bindDouble(averagePowerKw, at: 5)
-            try stmt.bindText(lifecycleState.rawValue, at: 6)
-            try stmt.bindText(completionReason.rawValue, at: 7)
-            try stmt.bindText(energySource.rawValue, at: 8)
-            try stmt.bindText(confidence.rawValue, at: 9)
-            try stmt.bindDouble(sampleCoverage, at: 10)
-            try stmt.bindDouble(usableCapacityKwh, at: 11)
-            try stmt.bindDouble(tariffPricePerKwh, at: 12)
-            try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 13)
-            try stmt.bindDouble(nightTariffPricePerKwh, at: 14)
-            try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 15)
-            try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 16)
-            try stmt.bindText(currencySymbol, at: 17)
-            try stmt.bindDouble(targetSoc, at: 18)
-            try stmt.bindDate(endedAt, at: 19)
-            try stmt.bindDouble(estimatedCost, at: 20)
-            try stmt.bindText(id, at: 21)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("session completion") {
+            try sql.query(sql: statement) { stmt in
+                try stmt.bindDate(endedAt, at: 1)
+                try stmt.bindDouble(endSoc, at: 2)
+                try stmt.bindDouble(energyDeliveredKwh, at: 3)
+                try stmt.bindDouble(peakPowerKw, at: 4)
+                try stmt.bindDouble(averagePowerKw, at: 5)
+                try stmt.bindText(lifecycleState.rawValue, at: 6)
+                try stmt.bindText(completionReason.rawValue, at: 7)
+                try stmt.bindText(energySource.rawValue, at: 8)
+                try stmt.bindText(confidence.rawValue, at: 9)
+                try stmt.bindDouble(sampleCoverage, at: 10)
+                try stmt.bindDouble(usableCapacityKwh, at: 11)
+                try stmt.bindDouble(tariffPricePerKwh, at: 12)
+                try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 13)
+                try stmt.bindDouble(nightTariffPricePerKwh, at: 14)
+                try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 15)
+                try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 16)
+                try stmt.bindText(currencySymbol, at: 17)
+                try stmt.bindDouble(targetSoc, at: 18)
+                try stmt.bindDate(endedAt, at: 19)
+                try stmt.bindDouble(estimatedCost, at: 20)
+                try stmt.bindText(id, at: 21)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     func updateChargingSessionLifecycle(
         id: String, state: ChargingSessionLifecycleState, observedAt: Date,
         pendingStopCount: Int, targetSoc: Double?
     ) {
-        try? sql.query(sql: """
-            UPDATE charging_sessions SET lifecycle_state = ?, last_observed_at = ?,
-                pending_stop_count = ?, target_soc = COALESCE(?, target_soc)
-            WHERE id = ? AND ended_at IS NULL;
-            """) { stmt in
-            try stmt.bindText(state.rawValue, at: 1)
-            try stmt.bindDate(observedAt, at: 2)
-            try stmt.bindInt64(Int64(max(0, pendingStopCount)), at: 3)
-            try stmt.bindDouble(targetSoc, at: 4)
-            try stmt.bindText(id, at: 5)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("lifecycle update") {
+            try sql.query(sql: """
+                UPDATE charging_sessions SET lifecycle_state = ?, last_observed_at = ?,
+                    pending_stop_count = ?, target_soc = COALESCE(?, target_soc)
+                WHERE id = ? AND ended_at IS NULL;
+                """) { stmt in
+                try stmt.bindText(state.rawValue, at: 1)
+                try stmt.bindDate(observedAt, at: 2)
+                try stmt.bindInt64(Int64(max(0, pendingStopCount)), at: 3)
+                try stmt.bindDouble(targetSoc, at: 4)
+                try stmt.bindText(id, at: 5)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     func abandonChargingSession(id: String, endedAt: Date,
                                 reason: ChargingSessionCompletionReason) {
-        try? sql.query(sql: """
-            UPDATE charging_sessions SET ended_at = ?, lifecycle_state = 'abandoned',
-                completion_reason = ?, last_observed_at = ?, pending_stop_count = 0,
-                summary_version = 2
-            WHERE id = ? AND ended_at IS NULL;
-            """) { stmt in
-            try stmt.bindDate(endedAt, at: 1)
-            try stmt.bindText(reason.rawValue, at: 2)
-            try stmt.bindDate(endedAt, at: 3)
-            try stmt.bindText(id, at: 4)
-            try stmt.executeUpdate()
-        } process: { _ in }
+        logOnFailure("abandon") {
+            try sql.query(sql: """
+                UPDATE charging_sessions SET ended_at = ?, lifecycle_state = 'abandoned',
+                    completion_reason = ?, last_observed_at = ?, pending_stop_count = 0,
+                    summary_version = 2
+                WHERE id = ? AND ended_at IS NULL;
+                """) { stmt in
+                try stmt.bindDate(endedAt, at: 1)
+                try stmt.bindText(reason.rawValue, at: 2)
+                try stmt.bindDate(endedAt, at: 3)
+                try stmt.bindText(id, at: 4)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     /// Removes an unfinished observation that never produced a measurable SoC gain. Keeping
     /// these rows made an interrupted poll look like a completed 0 kWh / 0 cost charge.
     func discardChargingSession(id: String) {
-        try? sql.withTransaction {
-            try sql.query(sql: "DELETE FROM charging_samples WHERE session_id = ?;") { stmt in
-                try stmt.bindText(id, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-            try sql.query(sql: "DELETE FROM charging_sessions WHERE id = ? AND ended_at IS NULL;") { stmt in
-                try stmt.bindText(id, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
+        logOnFailure("discard") {
+            try sql.withTransaction {
+                try sql.query(sql: "DELETE FROM charging_samples WHERE session_id = ?;") { stmt in
+                    try stmt.bindText(id, at: 1)
+                    try stmt.executeUpdate()
+                } process: { _ in }
+                try sql.query(sql: "DELETE FROM charging_sessions WHERE id = ? AND ended_at IS NULL;") { stmt in
+                    try stmt.bindText(id, at: 1)
+                    try stmt.executeUpdate()
+                } process: { _ in }
+            }
         }
     }
 

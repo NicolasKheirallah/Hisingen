@@ -5,11 +5,19 @@ extension VolvoAPI {
         try await refreshTokenIfNeeded()
         guard accessToken != nil else { throw VolvoError.authenticationRequired(.expiredSession) }
 
-        let details = (try? await vehicleDetails(vin: vin)) ?? VolvoVehicleDetailsDTO(
-            vin: vin, modelYear: nil,
-            descriptions: VolvoVehicleDetailsDTO.Descriptions(model: "Volvo", upholstery: nil, steering: nil),
-            fuelType: "ELECTRIC", externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil
-        )
+        let details: VolvoVehicleDetailsDTO
+        do {
+            details = try await vehicleDetails(vin: vin)
+        } catch {
+            // Auth, rate-limit and outage errors must reach the caller. Only a provider-specific
+            // gap falls back, and with nil fields so the powertrain stays unknown instead of
+            // assuming an electric car.
+            if Self.isRequestLevelFailure(error) { throw error }
+            details = VolvoVehicleDetailsDTO(
+                vin: vin, modelYear: nil, descriptions: nil,
+                fuelType: nil, externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil
+            )
+        }
         let powertrain = VolvoPowertrain.classify(fuelType: details.fuelType)
         let needsEnergy = powertrain.hasElectricRange
             && (features.contains(.chargingDetails) || features.contains(.remoteCharging)

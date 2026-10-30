@@ -10,6 +10,9 @@ RESOURCE_BUNDLE = Hisingen_Hisingen.bundle
 # Keep this recursively expanded: a clean `make app` resolves SwiftPM artifacts only after
 # the `build` prerequisite has completed.
 SPARKLE_FRAMEWORK = $(shell find .build .build-arm64 .build-x86_64 -type d -name Sparkle.framework -print 2>/dev/null | head -n 1)
+# The SwiftPM binary artifact carries Sparkle's full LICENSE, which its bundled components require
+# redistributed with the framework.
+SPARKLE_LICENSE = $(shell find .build .build-arm64 .build-x86_64 -path '*artifacts/sparkle/Sparkle/LICENSE' -print 2>/dev/null | head -n 1)
 
 # Code-signing identity resolution.
 # Auto-detects local developer certificate or provisions "Hisingen Development"
@@ -76,6 +79,12 @@ app: $(if $(SKIP_BUILD),,build)
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	sh Scripts/configure-updater.sh $(APP)/Contents/Info.plist
 	cp Resources/Hisingen.icns $(APP)/Contents/Resources/Hisingen.icns
+	cp LICENSE THIRD_PARTY_NOTICES.md $(APP)/Contents/Resources/
+	@if [ -n "$(SPARKLE_LICENSE)" ] && [ -f "$(SPARKLE_LICENSE)" ]; then \
+		cp "$(SPARKLE_LICENSE)" "$(APP)/Contents/Resources/Sparkle-LICENSE.txt"; \
+	else \
+		echo "warning: Sparkle LICENSE not found; Sparkle-LICENSE.txt not bundled" >&2; \
+	fi
 	mkdir -p $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)/
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/

@@ -67,10 +67,11 @@ struct CommandReceiptChip: View {
             .buttonStyle(.pressable)
             .accessibilityLabel(L10n.text("Dismiss command status"))
         }
-        .padding(9)
-        .background(
-            appearance.color.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)),
-            in: RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
+        .statusChipSurface(
+            tint: appearance.color,
+            wash: HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased),
+            horizontal: 9,
+            vertical: 9
         )
         .hisAnimation(Motion.stateChange, value: receipt.status)
         .onChange(of: receipt.status) { _, status in

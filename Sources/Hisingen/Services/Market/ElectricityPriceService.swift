@@ -184,8 +184,13 @@ actor ElectricityPriceService {
         var points = try await fetchPoints(from: Self.priceURL(zone: zone, date: now))
         do {
             points += try await fetchPoints(from: Self.priceURL(zone: zone, date: now.addingTimeInterval(86_400)))
+        } catch is CancellationError {
+            throw CancellationError()
         } catch PriceFetchError.notPublished {
             logger.notice("Tomorrow's prices not published yet for \(zone.rawValue, privacy: .public)")
+        } catch {
+            // Today's points are already fetched; a broken tomorrow file must not discard them.
+            logger.error("Tomorrow's prices failed for \(zone.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
         }
         var seen = Set<Date>()
         let merged = points

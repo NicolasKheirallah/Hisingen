@@ -142,8 +142,8 @@ actor VolvoAPI {
         // `PreferencesStore` is MainActor-backed; this adapter is not.
         let configuredClientID = await MainActor.run { preferences.volvoClientID }
         let clientID = configuredClientID.isEmpty ? BuiltinVolvoSecrets.clientID : configuredClientID
-        let secret = (try Keychain.readVolvoClientSecret()) ?? BuiltinVolvoSecrets.clientSecret
-        let apiKey = (try Keychain.readVolvoApiKey()) ?? BuiltinVolvoSecrets.vccApiKey
+        let secret = (try keychain.readVolvoClientSecret()) ?? BuiltinVolvoSecrets.clientSecret
+        let apiKey = (try keychain.readVolvoApiKey()) ?? BuiltinVolvoSecrets.vccApiKey
         guard !clientID.isEmpty, !secret.isEmpty, !apiKey.isEmpty else {
             throw VehicleServiceError.authenticationRequired(provider: .volvo, reason: .noStoredSession)
         }
@@ -221,7 +221,7 @@ actor VolvoAPI {
                 }
                 logger.error("""
                     Volvo command \(commandName, privacy: .public) failed \
-                    (HTTP \(response.statusCode, privacy: .public)): \(text, privacy: .public)
+                    (HTTP \(response.statusCode, privacy: .public)): \(DiagnosticRedaction.redact(text), privacy: .private)
                     """)
             }
             throw failure
@@ -256,12 +256,21 @@ actor VolvoAPI {
     /// stays inside Volvo's 10 requests/minute command-endpoint quota.
     private func throttleCommandDispatch() async throws {
         let now = Date()
-        let earliest = max(now, nextCommandDispatchAt ?? .distantPast)
-        nextCommandDispatchAt = earliest.addingTimeInterval(Self.minCommandInterval)
+        let previous = nextCommandDispatchAt
+        let earliest = max(now, previous ?? .distantPast)
+        let reserved = earliest.addingTimeInterval(Self.minCommandInterval)
+        nextCommandDispatchAt = reserved
         let wait = earliest.timeIntervalSince(now)
         guard wait > 0 else { return }
         logger.info("Delaying Volvo command \(String(format: "%.1f", wait), privacy: .public)s to respect the 10/min command limit")
-        try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        do {
+            try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        } catch {
+            // A cancelled wait never sends its POST, so give the slot back. Skip the rollback if a
+            // later caller has already chained onto this reservation.
+            if nextCommandDispatchAt == reserved { nextCommandDispatchAt = previous }
+            throw error
+        }
     }
 
     /// The path embeds server-supplied data (the VIN), so a malformed value must fail the
@@ -293,7 +302,14 @@ actor VolvoAPI {
             let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
             var summaries: [CarSummary] = []
             for entry in list {
-                let details = try? await vehicleDetails(vin: entry.vin)
+                let details: VolvoVehicleDetailsDTO?
+                do {
+                    details = try await vehicleDetails(vin: entry.vin)
+                } catch {
+                    // Request-level failures abort discovery below rather than producing a placeholder title.
+                    if Self.isRequestLevelFailure(error) { throw error }
+                    details = nil
+                }
                 let model = details?.descriptions?.model
                 let year = details?.modelYear.map(String.init)
                 let title = [model, year]
@@ -454,7 +470,7 @@ actor VolvoAPI {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let err = json["error"] as? String ?? "auth_error"
                 let desc = json["error_description"] as? String ?? ""
-                logger.error("Volvo token request rejected: \(err, privacy: .public) - \(desc, privacy: .private)")
+                logger.error("Volvo token request rejected: \(DiagnosticRedaction.redact(err), privacy: .private) - \(DiagnosticRedaction.redact(desc), privacy: .private)")
                 // A 400 is not always bad credentials: `invalid_client` means the app's own
                 // credentials are wrong, while anything else at 401 genuinely is a session
                 // problem. Previously every 4xx here reported "invalid credentials", sending
@@ -531,14 +547,18 @@ actor VolvoAPI {
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
         if let value = envelope?.data { return value }
-        guard let direct = try? JSONDecoder.volvo.decode(T.self, from: data) else {
-            // Keep the underlying decode error in the (private) log: `DecodingError` names
-            // the exact missing/mismatched key, which is the difference between a five-minute
-            // diagnosis and a guessing game when Volvo changes a payload shape.
-            logger.error("Volvo response for \(DiagnosticRedaction.redact(path), privacy: .public) matched neither envelope nor direct decoding")
+        do {
+            return try JSONDecoder.volvo.decode(T.self, from: data)
+        } catch {
+            // Keep both decode errors in the (private) log: `DecodingError` names the exact
+            // missing/mismatched key, which is the difference between a five-minute diagnosis
+            // and a guessing game when Volvo changes a payload shape.
+            logger.error("""
+                Volvo response for \(DiagnosticRedaction.redact(path), privacy: .public) matched neither envelope nor direct decoding \
+                (envelope: \(String(describing: envelope?.payloadError), privacy: .private); direct: \(String(describing: error), privacy: .private))
+                """)
             throw VolvoError.decoding(operation: path)
         }
-        return direct
     }
 
     func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {

@@ -314,3 +314,53 @@ struct TokenResponseDTO: Decodable, Sendable {
         idToken = try container.decodeIfPresent(String.self, forKey: .idToken)
     }
 }
+
+struct CarImagesPayloadDTO: Decodable {
+    let getCarImages: CarImagesDTO?
+}
+
+/// Studio renders for one car. The selection rule (transparent first, then the user's angle)
+/// is the part worth testing, so it lives here rather than inline in the fetch.
+struct CarImagesDTO: Decodable {
+    let transparent: [CarImageDTO]?
+    let opaque: [CarImageDTO]?
+
+    /// Transparent renders when there are any, otherwise opaque ones.
+    var pool: [CarImageDTO] {
+        let transparent = transparent ?? []
+        return transparent.isEmpty ? (opaque ?? []) : transparent
+    }
+
+    /// The requested angle, then front three-quarter (1), then side (0), then anything.
+    static func preferred(in pool: [CarImageDTO], angle: Int) -> CarImageDTO? {
+        pool.first { $0.angle == angle }
+            ?? pool.first { $0.angle == 1 }
+            ?? pool.first { $0.angle == 0 }
+            ?? pool.first
+    }
+}
+
+struct CarImageDTO: Decodable {
+    let url: String?
+    let angle: Int?
+
+    /// Only HTTPS render URLs are fetched.
+    var httpsURL: URL? {
+        guard let url = url.flatMap(URL.init(string:)), url.scheme == "https" else { return nil }
+        return url
+    }
+
+    private enum CodingKeys: String, CodingKey { case url, angle }
+
+    // One render with an odd field must not drop the whole list.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        url = try? container.decode(String.self, forKey: .url)
+        angle = try? container.decode(Int.self, forKey: .angle)
+    }
+
+    init(url: String?, angle: Int?) {
+        self.url = url
+        self.angle = angle
+    }
+}

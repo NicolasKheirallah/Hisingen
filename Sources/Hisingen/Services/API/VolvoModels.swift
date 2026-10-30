@@ -52,7 +52,7 @@ private enum VolvoUnits {
     static func kilometers(_ value: Double?, unit: String?) -> Double? {
         guard let value else { return nil }
         switch unit?.lowercased() {
-        case "mi", "mile", "miles": return value / 0.621371
+        case "mi", "mile", "miles": return value / UnitConversion.kilometersPerMile
         case "m", "meter", "meters", "metre", "metres": return value / 1_000
         default: return value
         }
@@ -70,13 +70,23 @@ private struct VolvoEnvelopeWrapper<Payload: Decodable & Sendable>: Decodable, S
 
 struct VolvoEnvelope<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload?
+    /// Why `data` stayed nil when the payload failed to decode. Lenient decoding is unchanged;
+    /// this only keeps the error for the caller's private log.
+    let payloadError: Error?
 
     init(from decoder: Decoder) throws {
         if let wrapped = try? VolvoEnvelopeWrapper<Payload>(from: decoder) {
             data = wrapped.data
+            payloadError = nil
             return
         }
-        data = try? Payload(from: decoder)
+        do {
+            data = try Payload(from: decoder)
+            payloadError = nil
+        } catch {
+            data = nil
+            payloadError = error
+        }
     }
 }
 
@@ -201,7 +211,7 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     var rangeKm: Int? {
         guard let value = electricRange?.value else { return nil }
         switch electricRange?.unit?.lowercased() {
-        case "mi", "mile", "miles": return Int((value / 0.621371).rounded())
+        case "mi", "mile", "miles": return Int((value / UnitConversion.kilometersPerMile).rounded())
         default: return Int(value.rounded())
         }
     }
@@ -574,7 +584,7 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     var averageSpeedKmH: Double? {
         let field = averageSpeedAutomatic ?? averageSpeed
         guard let value = field?.value else { return nil }
-        return field?.unit?.lowercased() == "mph" ? value / 0.621371 : value
+        return field?.unit?.lowercased() == "mph" ? value / UnitConversion.kilometersPerMile : value
     }
 
     var regeneratedEnergyKwh: Double? {

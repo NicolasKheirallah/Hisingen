@@ -40,7 +40,7 @@ struct UpdateServiceTests {
         let available = UpdateService.State.updateAvailable(.init(marketingVersion: "1.4.0", build: "6"))
         let existingFailure = UpdateService.State.failed("Download failed")
 
-        #expect(UpdateService.stateAfterAbortedCycle(.checking) == .failed("Update check failed. Please try again later."))
+        #expect(UpdateService.stateAfterAbortedCycle(.checking) == .failed(L10n.text("Update check failed. Please try again later.")))
         #expect(UpdateService.stateAfterAbortedCycle(.idle) == .idle)
         #expect(UpdateService.stateAfterAbortedCycle(available) == available)
         #expect(UpdateService.stateAfterAbortedCycle(existingFailure) == existingFailure)

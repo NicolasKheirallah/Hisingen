@@ -225,7 +225,11 @@ final class VehicleStateStore {
     /// ordering between them belong to `LocalDataEraser`; this only chooses the scope.
     func clear(vin: String, eraseHistory: Bool = false) {
         historyRecorder.resetTransientState(vin: vin)
-        try? eraser.perform(eraseHistory ? .everything(.vehicle(vin)) : .session(.vehicle(vin)))
+        do {
+            try eraser.perform(eraseHistory ? .everything(.vehicle(vin)) : .session(.vehicle(vin)))
+        } catch {
+            logger.error("Could not erase local data for vehicle: \(error, privacy: .public)")
+        }
     }
 
     /// The fleet-wide counterpart, for a sign-out that no longer knows any vehicle. Its own
@@ -235,7 +239,11 @@ final class VehicleStateStore {
     /// deliberate action takes them with the vehicle.
     func clearAll(eraseHistory: Bool = false) {
         historyRecorder.resetTransientState()
-        try? eraser.perform(eraseHistory ? .everything(.all) : .session(.all))
+        do {
+            try eraser.perform(eraseHistory ? .everything(.all) : .session(.all))
+        } catch {
+            logger.error("Could not erase local data on sign-out: \(error, privacy: .public)")
+        }
     }
 
     private func load<T: Decodable>(_ type: T.Type, key: String) -> T? {

@@ -55,10 +55,19 @@ extension PolestarAPI {
     /// classification live in `commandTokens` (a `TokenLifecycle`), the same invariants the
     /// session grant already owns; the wire part is `refreshCommandGrant`.
     func commandClientAuthorization() async -> CommandClientAuthorization {
-        guard !commandAuthorization.isInProgress else { return .notAuthorized }
+        // A grant is already in flight, so the authorization exists; only the answer is pending.
+        guard !commandAuthorization.isInProgress else { return .unavailable }
         let requestEpoch = sessionEpoch
         let commandEpoch = commandAuthorization.generation
-        let stored = commandRefreshToken ?? ((try? keychain.readCommandSessionToken()) ?? nil)
+        let stored: String?
+        do {
+            stored = try commandRefreshToken ?? keychain.readCommandSessionToken()
+        } catch {
+            // A locked or unreadable Keychain does not mean "never authorized": the token may be
+            // there, so report storage trouble instead of sending the user back to Settings.
+            logger.error("Polestar command token could not be read from Keychain: \(String(describing: error), privacy: .public)")
+            return .storageFailure
+        }
         guard let refresh = stored, !refresh.isEmpty, tokenEndpoint != nil else { return .notAuthorized }
         commandTokens.refreshToken = refresh
         do {
@@ -119,16 +128,15 @@ extension PolestarAPI {
         guard isSessionCurrent(requestEpoch), commandAuthorization.isCurrent(commandEpoch) else {
             throw CancellationError()
         }
-        // Rotation already happened at the server, even if account verification is unavailable:
-        // keep the rotated token in memory now so a transient verification failure cannot make
-        // the next retry present the token the server just invalidated. Persistence still waits
-        // for adoption after verification.
-        commandTokens.refreshToken = token.refreshToken ?? refresh
+        // Rotation already happened at the server, so the presented token is dead whatever happens
+        // next. Keep the rotated token in memory and in the Keychain before verification: a transient
+        // verification failure must not leave the rotated-out token behind for a restart to replay.
+        // A definitive account mismatch is still a dead grant to the lifecycle, which clears it.
+        let rotated = token.refreshToken ?? refresh
+        commandTokens.refreshToken = rotated
+        // A locked Keychain surfaces as a storage failure instead of a session a restart would lose.
+        try saveCommandToken(rotated)
         try await verifyCommandAccount(accessToken: token.accessToken)
-        // Persistence is the grant's own last step, not adoption's: a locked Keychain must
-        // surface as a storage failure instead of a session a restart would lose, and the
-        // lifecycle would otherwise skip persisting a token it already sees as current.
-        try saveCommandToken(commandTokens.refreshToken ?? refresh)
         return TokenLifecycle.Grant(accessToken: token.accessToken,
                                     refreshToken: token.refreshToken,
                                     expiresIn: TimeInterval(token.expiresIn))
@@ -142,7 +150,9 @@ extension PolestarAPI {
 
     func clearCommandAuthorization() {
         invalidateCommandAuthorization()
-        try? keychain.deleteCommandSessionToken()
+        do { try keychain.deleteCommandSessionToken() } catch {
+            logger.error("Polestar command token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// See `VehicleProviding.hasWarmSession`. A stored refresh token plus known vehicles and a
@@ -183,8 +193,14 @@ extension PolestarAPI {
         let isLiveGrant = accessToken != nil && refreshToken == token
         clearAccountState(keepRefreshToken: true, keepAccessToken: isLiveGrant)
         let epoch = sessionEpoch
-        if let commandRefresh = (try? keychain.readCommandSessionToken()) ?? nil, !commandRefresh.isEmpty {
-            commandRefreshToken = commandRefresh
+        do {
+            if let commandRefresh = try keychain.readCommandSessionToken(), !commandRefresh.isEmpty {
+                commandRefreshToken = commandRefresh
+            }
+        } catch {
+            // Not fatal to the web session: `commandClientAuthorization` reads the Keychain again when a
+            // remote command needs it, and reports the failure then.
+            logger.error("Polestar command token could not be read during restore: \(String(describing: error), privacy: .public)")
         }
         try await discoverOIDCConfiguration()
         try requireSession(epoch)

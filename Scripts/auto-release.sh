@@ -1,10 +1,14 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 # Auto-release: take the release version from Resources/Info.plist (shipping a
 # manual bump as-is, otherwise incrementing the last release's patch number),
-# generate a CHANGELOG entry from the commits since the last tag, commit, tag,
-# and dispatch the release workflow.
+# generate a CHANGELOG entry from the commits since the last tag (folding in a
+# top `## [Unreleased]` section if there is one), commit, tag, and dispatch the
+# release workflow.
 # Called by .github/workflows/auto-release.yml after a green CI run on main,
 # with GH_TOKEN exported and `gh auth setup-git` configured for the push.
 #
@@ -98,6 +102,52 @@ ADDED=$(bulletize "$(printf '%s\n' "$RELEASABLE" | grep -E '^feat' || true)")
 FIXED=$(bulletize "$(printf '%s\n' "$RELEASABLE" | grep -E '^fix' || true)")
 CHANGED=$(bulletize "$(printf '%s\n' "$RELEASABLE" | grep -vE '^(feat|fix)' || true)")
 
+# A hand-written `## [Unreleased]` section at the top of CHANGELOG.md is folded into this
+# release: its notes come first in each section, commit-derived bullets it does not already
+# contain follow, and the Unreleased heading is replaced by the version entry. Without this
+# the new version is inserted above Unreleased and the curated notes are stranded.
+FIRST_HEADING_TEXT=$(grep -m 1 '^## \[' CHANGELOG.md || true)
+FOLD_UNRELEASED=0
+[ "$FIRST_HEADING_TEXT" = "## [Unreleased]" ] && FOLD_UNRELEASED=1
+
+# Body lines of one `### NAME` section inside the top Unreleased block, without blank lines
+# or the empty `- ` placeholder.
+unreleased_section() {
+    awk -v name="$1" '
+        /^## \[/ { if (inside) exit; inside = ($0 == "## [Unreleased]"); next }
+        !inside { next }
+        /^### / { current = substr($0, 5); next }
+        current == name && $0 !~ /^[[:space:]]*$/ && $0 !~ /^-[[:space:]]*$/ { print }
+    ' CHANGELOG.md
+}
+
+unreleased_section_names() {
+    awk '
+        /^## \[/ { if (inside) exit; inside = ($0 == "## [Unreleased]"); next }
+        inside && /^### / { print substr($0, 5) }
+    ' CHANGELOG.md
+}
+
+# Hand-written lines, then generated lines that do not repeat one of them exactly.
+merge_notes() {
+    if [ -z "$1" ]; then printf '%s' "$2"; return; fi
+    if [ -z "$2" ]; then printf '%s' "$1"; return; fi
+    printf '%s\n' "$1" > "$NOTES_FILE"
+    EXTRA=$(printf '%s\n' "$2" | grep -Fxv -f "$NOTES_FILE" || true)
+    if [ -n "$EXTRA" ]; then printf '%s\n%s' "$1" "$EXTRA"; else printf '%s' "$1"; fi
+}
+
+NOTES_FILE=$(mktemp "${TMPDIR:-/tmp}/hisingen-release-notes.XXXXXX")
+TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/hisingen-auto-release.XXXXXX")
+cleanup() { rm -f "$TMP_FILE" "$NOTES_FILE"; }
+trap cleanup EXIT HUP INT TERM
+
+if [ "$FOLD_UNRELEASED" = "1" ]; then
+    ADDED=$(merge_notes "$(unreleased_section Added)" "$ADDED")
+    FIXED=$(merge_notes "$(unreleased_section Fixed)" "$FIXED")
+    CHANGED=$(merge_notes "$(unreleased_section Changed)" "$CHANGED")
+fi
+
 ENTRY="## [$NEW_VERSION] - $DATE"
 add_section() {
     if [ -n "$2" ]; then
@@ -112,22 +162,37 @@ add_section "Added" "$ADDED"
 add_section "Fixed" "$FIXED"
 add_section "Changed" "$CHANGED"
 
+# Any other Unreleased sections (Removed, Security, ...) keep their name and order.
+if [ "$FOLD_UNRELEASED" = "1" ]; then
+    OTHER_SECTIONS=$(unreleased_section_names | grep -vxE 'Added|Fixed|Changed' || true)
+    if [ -n "$OTHER_SECTIONS" ]; then
+        while IFS= read -r SECTION; do
+            add_section "$SECTION" "$(unreleased_section "$SECTION")"
+        done <<EOF
+$OTHER_SECTIONS
+EOF
+    fi
+fi
+
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" Resources/Info.plist
 CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist 2>/dev/null || echo "0")
 NEXT_BUILD=$((CURRENT_BUILD + 1))
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEXT_BUILD" Resources/Info.plist
 
-TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/hisingen-auto-release.XXXXXX")
-cleanup() { rm -f "$TMP_FILE"; }
-trap cleanup EXIT HUP INT TERM
-
 FIRST_HEADING=$(grep -n '^## \[' CHANGELOG.md | head -n 1 | cut -d: -f1 || true)
+# When folding, the Unreleased block (up to the next version heading) is replaced.
+REST_START=$FIRST_HEADING
+if [ "$FOLD_UNRELEASED" = "1" ]; then
+    REST_START=$(grep -n '^## \[' CHANGELOG.md | sed -n 2p | cut -d: -f1 || true)
+fi
 {
     if [ -n "$FIRST_HEADING" ]; then
         head -n $((FIRST_HEADING - 1)) CHANGELOG.md
         printf '%s\n' "$ENTRY"
-        printf '\n'
-        tail -n "+$FIRST_HEADING" CHANGELOG.md
+        if [ -n "$REST_START" ]; then
+            printf '\n'
+            tail -n "+$REST_START" CHANGELOG.md
+        fi
     else
         cat CHANGELOG.md
         printf '%s\n' "$ENTRY"

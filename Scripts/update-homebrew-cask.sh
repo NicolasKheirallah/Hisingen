@@ -11,6 +11,9 @@
 #   git clone git@github.com:NicolasKheirallah/homebrew-tap.git /tmp/tap
 #   sh Scripts/update-homebrew-cask.sh X.Y.Z "$SHASUM" /tmp/tap
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 if [ "$#" -lt 2 ]; then
 	echo "Usage: $0 VERSION SHA256 [PATH_TO_TAP_CHECKOUT]" >&2

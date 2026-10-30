@@ -92,155 +92,11 @@ struct SettingsAppearanceCard: View {
         let supportsMultipleAngles = availableAngles.count > 1
         return Card {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
-                    Spacer()
-                    Text(L10n.format("%d Themes", AppTheme.allCases.count))
-                        .hisType(.caption, weight: .bold)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
-                        .foregroundStyle(HisingenTheme.accent)
-                }
+                headerSection
 
-                // Appearance Mode Selector (System / Light / Dark)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Screenshot Privacy Mode"))
-                                .hisType(.label, weight: .semibold)
-                                .foregroundStyle(HisingenTheme.ink)
-                            Text(L10n.text("Blurs VIN, plate and coordinates across the app for safe sharing."))
-                                .hisType(.micro)
-                                .hisCaptionLeading()
-                                .fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder(\.privacyRedactionEnabled, .presentation))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .accessibilityLabel(L10n.text("Screenshot Privacy Mode"))
-                    }
-                    .padding(.vertical, 2)
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Floating Charging Panel"))
-                                .hisType(.label, weight: .semibold)
-                                .foregroundStyle(HisingenTheme.ink)
-                            Text(L10n.text("Small always-on-top panel with charge progress while plugged in."))
-                                .hisType(.micro)
-                                .hisCaptionLeading()
-                                .fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder(\.floatingChargingPanelEnabled, .presentation))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .accessibilityLabel(L10n.text("Floating Charging Panel"))
-                    }
-                    .padding(.vertical, 2)
+                appearanceModeSection
 
-                    Text(L10n.text("Mode"))
-                        .hisType(.label, weight: .semibold)
-                        .foregroundStyle(HisingenTheme.ink)
-
-                    HStack(spacing: 8) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            let isModeSelected = appearanceMode == mode
-                            Button {
-                                withAnimation(reduceMotion ? nil : Motion.interaction) {
-                                    appearanceMode = mode
-                                    preferences.appearanceMode = mode
-                                }
-                                binder.notify(.presentation)
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: mode.symbol)
-                                        .hisType(.label, weight: isModeSelected ? .semibold : .regular)
-                                    Text(mode.title)
-                                        .hisType(.label, weight: isModeSelected ? .semibold : .regular)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .background(
-                                    isModeSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                                )
-                                .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
-                            }
-                            .buttonStyle(.pressable)
-                            .accessibilityAddTraits(isModeSelected ? [.isSelected] : [])
-                        }
-                    }
-                }
-
-                // Vehicle Image Perspective & Studio Render Preview
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(L10n.text(supportsMultipleAngles ? "Vehicle Perspective" : "Vehicle Image"))
-                            .hisType(.label, weight: .semibold)
-                            .foregroundStyle(HisingenTheme.ink)
-                        Spacer()
-                        if supportsMultipleAngles {
-                            Text(carRenderAngle.title)
-                                .hisType(.caption, weight: .medium)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    // Live Studio Render Preview (Async Decoded & Cached)
-                    SettingsStudioRenderPreview(
-                        vin: settingsVehicleVIN,
-                        angle: supportsMultipleAngles ? carRenderAngle.rawValue : (availableAngles.first?.rawValue ?? 0),
-                        imageCache: imageCache
-                    )
-
-                    if supportsMultipleAngles {
-                        LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
-                            ForEach(availableAngles, id: \.self) { angle in
-                                let isAngleSelected = carRenderAngle == angle
-                                Button {
-                                    withAnimation(reduceMotion ? nil : Motion.interaction) {
-                                        carRenderAngle = angle
-                                        preferences.carRenderAngle = angle
-                                    }
-                                    binder.notify(.presentation)
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: angle.symbol)
-                                            .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
-                                        Text(angle.title)
-                                            .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.9)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 6)
-                                    .padding(.horizontal, 4)
-                                    .background(
-                                        isAngleSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                            .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
-                                    )
-                                    .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
-                                }
-                                .buttonStyle(.pressable)
-                                .accessibilityAddTraits(isAngleSelected ? [.isSelected] : [])
-                            }
-                        }
-                    }
-                }
+                vehicleImageSection(availableAngles: availableAngles, supportsMultipleAngles: supportsMultipleAngles)
 
                 Divider().opacity(HisingenTheme.dividerOpacity)
 
@@ -248,151 +104,15 @@ struct SettingsAppearanceCard: View {
                     .hisType(.caption)
                     .foregroundStyle(.secondary)
 
-                // Category Filter Pills
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(ThemeCategory.allCases, id: \.self) { cat in
-                            categoryFilterButton(cat)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
+                themeCategorySection
 
-                // 2-Column Responsive Grid of Themes
-                LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
-                    ForEach(filteredThemes, id: \.self) { theme in
-                        themeTile(theme)
-                    }
-                }
+                themeGridSection
 
-                Text(L10n.text("Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .hisCaptionLeading()
-                    .fixedSize(horizontal: false, vertical: true)
+                panelSizeSection
 
                 Divider().opacity(HisingenTheme.dividerOpacity)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                HStack(spacing: 5) {
-                                    Text(L10n.text("Panel Size"))
-                                        .hisType(.body, weight: .medium)
-                                    if customSizeEnabled {
-                                        Text(L10n.text("Custom"))
-                                            .hisType(.micro, weight: .bold)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 1.5)
-                                            .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
-                                            .foregroundStyle(HisingenTheme.accent)
-                                    }
-                                }
-                                Text(L10n.text("Dropdown panel preset: applies instantly"))
-                                    .hisType(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Picker("", selection: $panelSize) {
-                                ForEach(PanelSize.allCases, id: \.self) { size in
-                                    Text(size.title).tag(size)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 160)
-                        }
-
-                        PanelCustomSizeControls(
-                            isEnabled: $customSizeEnabled,
-                            width: $customWidth,
-                            height: $customHeight,
-                            hasCommittedSize: preferences.customPanelSizeEnabled,
-                            seedValues: { [panelSize] in
-                                (Double(panelSize.width), Double(panelSize.idealHeight))
-                            },
-                            onCommit: {
-                                preferences.customPanelSizeEnabled = customSizeEnabled
-                                preferences.customPanelWidth = customWidth
-                                preferences.customPanelHeight = customHeight
-                                binder.notify(.presentation)
-                            }
-                        )
-
-                        HStack(spacing: 8) {
-                            HStack(spacing: 6) {
-                                Text(L10n.text("Current:"))
-                                    .hisType(.label, weight: .medium)
-                                    .foregroundStyle(.secondary)
-                                Image(systemName: "ruler")
-                                    .hisType(.caption)
-                                    .foregroundStyle(HisingenTheme.accent)
-                                Text(resolvedLayout.dimensionsLabel)
-                                    .hisType(.label, weight: .semibold)
-                                    .monospacedDigit()
-                            }
-                            Spacer(minLength: 8)
-                            PanelProportionPreview(layout: resolvedLayout)
-                            Button {
-                                resetPanelGeometry()
-                            } label: {
-                                Text(L10n.text("Reset Sizes"))
-                                    .hisType(.caption, weight: .semibold)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .help(L10n.text("Back to Standard panel and density"))
-                        }
-                        .padding(.vertical, 2)
-                    }
-
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(L10n.text("Content Density"))
-                                    .hisType(.body, weight: .medium)
-                                Text(L10n.text("Zoom content independently of panel size: compact shows more before scrolling"))
-                                    .hisType(.caption)
-                                    .hisCaptionLeading()
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Picker("", selection: $contentDensity) {
-                                ForEach(ContentDensity.allCases, id: \.self) { density in
-                                    Text(density.title).tag(density)
-                                }
-                            }
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .frame(maxWidth: 160)
-                        }
-
-                        HStack(spacing: 6) {
-                            Text(L10n.text("Current:"))
-                                .hisType(.label, weight: .medium)
-                                .foregroundStyle(.secondary)
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                    .hisType(.caption)
-                                    .foregroundStyle(HisingenTheme.accent)
-                                Text(String(format: "%.0f%%", locale: L10n.displayLocale, contentDensity.scale * 100))
-                                    .hisType(.label, weight: .semibold)
-                                    .monospacedDigit()
-                                Text("· " + contentDensity.subtitle)
-                                    .hisType(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.9)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
-                            Spacer()
-                        }
-                        .padding(.vertical, 2)
-                    }
+                contentDensitySection
             }
         }
         .onChange(of: panelSize) { _, newSize in
@@ -421,6 +141,326 @@ struct SettingsAppearanceCard: View {
                 : Double(PanelSize.standard.idealHeight)
         }
     }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private var headerSection: some View {
+        HStack {
+            CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
+            Spacer()
+            Text(L10n.format("%d Themes", AppTheme.allCases.count))
+                .hisType(.caption, weight: .bold)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2.5)
+                .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                .foregroundStyle(HisingenTheme.accent)
+        }
+    }
+
+    /// Appearance Mode Selector (System / Light / Dark), plus the two privacy-adjacent toggles.
+    @ViewBuilder
+    private var appearanceModeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(L10n.text("Screenshot Privacy Mode"))
+                        .hisType(.label, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.ink)
+                    Text(L10n.text("Blurs VIN, plate and coordinates across the app for safe sharing."))
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: binder(\.privacyRedactionEnabled, .presentation))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .accessibilityLabel(L10n.text("Screenshot Privacy Mode"))
+            }
+            .padding(.vertical, 2)
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(L10n.text("Floating Charging Panel"))
+                        .hisType(.label, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.ink)
+                    Text(L10n.text("Small always-on-top panel with charge progress while plugged in."))
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("", isOn: binder(\.floatingChargingPanelEnabled, .presentation))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .accessibilityLabel(L10n.text("Floating Charging Panel"))
+            }
+            .padding(.vertical, 2)
+
+            Text(L10n.text("Mode"))
+                .hisType(.label, weight: .semibold)
+                .foregroundStyle(HisingenTheme.ink)
+
+            HStack(spacing: 8) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    let isModeSelected = appearanceMode == mode
+                    Button {
+                        withAnimation(reduceMotion ? nil : Motion.interaction) {
+                            appearanceMode = mode
+                            preferences.appearanceMode = mode
+                        }
+                        binder.notify(.presentation)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: mode.symbol)
+                                .hisType(.label, weight: isModeSelected ? .semibold : .regular)
+                            Text(mode.title)
+                                .hisType(.label, weight: isModeSelected ? .semibold : .regular)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(
+                            isModeSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                        )
+                        .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityAddTraits(isModeSelected ? [.isSelected] : [])
+                }
+            }
+        }
+    }
+
+    /// Vehicle Image Perspective & Studio Render Preview.
+    @ViewBuilder
+    private func vehicleImageSection(availableAngles: [CarRenderAngle], supportsMultipleAngles: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L10n.text(supportsMultipleAngles ? "Vehicle Perspective" : "Vehicle Image"))
+                    .hisType(.label, weight: .semibold)
+                    .foregroundStyle(HisingenTheme.ink)
+                Spacer()
+                if supportsMultipleAngles {
+                    Text(carRenderAngle.title)
+                        .hisType(.caption, weight: .medium)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Live Studio Render Preview (Async Decoded & Cached)
+            SettingsStudioRenderPreview(
+                vin: settingsVehicleVIN,
+                angle: supportsMultipleAngles ? carRenderAngle.rawValue : (availableAngles.first?.rawValue ?? 0),
+                imageCache: imageCache
+            )
+
+            if supportsMultipleAngles {
+                LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
+                    ForEach(availableAngles, id: \.self) { angle in
+                        let isAngleSelected = carRenderAngle == angle
+                        Button {
+                            withAnimation(reduceMotion ? nil : Motion.interaction) {
+                                carRenderAngle = angle
+                                preferences.carRenderAngle = angle
+                            }
+                            binder.notify(.presentation)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: angle.symbol)
+                                    .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
+                                Text(angle.title)
+                                    .hisType(.label, weight: isAngleSelected ? .semibold : .regular)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.9)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 4)
+                            .background(
+                                isAngleSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
+                            )
+                            .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
+                        }
+                        .buttonStyle(.pressable)
+                        .accessibilityAddTraits(isAngleSelected ? [.isSelected] : [])
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var themeCategorySection: some View {
+        // Category Filter Pills
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(ThemeCategory.allCases, id: \.self) { cat in
+                    categoryFilterButton(cat)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var themeGridSection: some View {
+        // 2-Column Responsive Grid of Themes
+        LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
+            ForEach(filteredThemes, id: \.self) { theme in
+                themeTile(theme)
+            }
+        }
+
+        Text(L10n.text("Monochrome Precision and Heritage Blue are independent themes based on publicly documented design principles from Polestar and Volvo Cars. No affiliation or endorsement is implied."))
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .hisCaptionLeading()
+            .fixedSize(horizontal: false, vertical: true)
+
+        Divider().opacity(HisingenTheme.dividerOpacity)
+    }
+
+    @ViewBuilder
+    private var panelSizeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(L10n.text("Panel Size"))
+                            .hisType(.body, weight: .medium)
+                        if customSizeEnabled {
+                            Text(L10n.text("Custom"))
+                                .hisType(.micro, weight: .bold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1.5)
+                                .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                    }
+                    Text(L10n.text("Dropdown panel preset: applies instantly"))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("", selection: $panelSize) {
+                    ForEach(PanelSize.allCases, id: \.self) { size in
+                        Text(size.title).tag(size)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 160)
+            }
+
+            PanelCustomSizeControls(
+                isEnabled: $customSizeEnabled,
+                width: $customWidth,
+                height: $customHeight,
+                hasCommittedSize: preferences.customPanelSizeEnabled,
+                seedValues: { [panelSize] in
+                    (Double(panelSize.width), Double(panelSize.idealHeight))
+                },
+                onCommit: {
+                    preferences.customPanelSizeEnabled = customSizeEnabled
+                    preferences.customPanelWidth = customWidth
+                    preferences.customPanelHeight = customHeight
+                    binder.notify(.presentation)
+                }
+            )
+
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(L10n.text("Current:"))
+                        .hisType(.label, weight: .medium)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "ruler")
+                        .hisType(.caption)
+                        .foregroundStyle(HisingenTheme.accent)
+                    Text(resolvedLayout.dimensionsLabel)
+                        .hisType(.label, weight: .semibold)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 8)
+                PanelProportionPreview(layout: resolvedLayout)
+                Button {
+                    resetPanelGeometry()
+                } label: {
+                    Text(L10n.text("Reset Sizes"))
+                        .hisType(.caption, weight: .semibold)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(L10n.text("Back to Standard panel and density"))
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var contentDensitySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(L10n.text("Content Density"))
+                        .hisType(.body, weight: .medium)
+                    Text(L10n.text("Zoom content independently of panel size: compact shows more before scrolling"))
+                        .hisType(.caption)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("", selection: $contentDensity) {
+                    ForEach(ContentDensity.allCases, id: \.self) { density in
+                        Text(density.title).tag(density)
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 160)
+            }
+
+            HStack(spacing: 6) {
+                Text(L10n.text("Current:"))
+                    .hisType(.label, weight: .medium)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .hisType(.caption)
+                        .foregroundStyle(HisingenTheme.accent)
+                    Text(String(format: "%.0f%%", locale: L10n.displayLocale, contentDensity.scale * 100))
+                        .hisType(.label, weight: .semibold)
+                        .monospacedDigit()
+                    Text("· " + contentDensity.subtitle)
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                Spacer()
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    // MARK: - Helpers
 
     private func categoryFilterButton(_ cat: ThemeCategory) -> some View {
         let isSelected = selectedThemeCategory == cat
@@ -466,7 +506,7 @@ struct SettingsAppearanceCard: View {
                     HStack(spacing: 3) {
                         ForEach(theme.previewHexColors, id: \.self) { hex in
                             Circle()
-                                .fill(Color(hex: hex) ?? Color.gray)
+                                .fill(swatchColor(hex))
                                 .frame(width: 8, height: 8)
                         }
                     }
@@ -507,6 +547,17 @@ struct SettingsAppearanceCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(theme.title): \(theme.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    /// Swatch colour for a `Palette` preview hex. Those values are compile-time literals, so a
+    /// parse failure is a programming error: it asserts in debug and falls back to the
+    /// neutral ink token in release instead of an off-palette grey.
+    private func swatchColor(_ hex: String) -> Color {
+        guard let color = Color(hex: hex) else {
+            assertionFailure("Invalid theme swatch hex: \(hex)")
+            return HisingenTheme.inkMuted
+        }
+        return color
     }
 }
 

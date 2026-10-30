@@ -216,7 +216,23 @@ struct ScheduleEditorSheet: View {
         // Row hosts a nested switch control (edit and delete buttons), so no Button.
         .contentShape(Rectangle())
         .onTapGesture { if isEditable { beginEditing(sched) } }
+        .focusable(isEditable)
+        .onKeyPress(keys: [.return, .space]) { _ in
+            guard isEditable else { return .ignored }
+            beginEditing(sched)
+            return .handled
+        }
         .accessibilityAddTraits(isEditable ? [.isButton] : [])
+        // Same actions as the context menu, named for the rotor; a Button per action so a
+        // view-only row offers neither.
+        .accessibilityActions {
+            if isEditable {
+                Button(L10n.text("Edit")) { beginEditing(sched) }
+            }
+            if let id = sched.backendID {
+                Button(L10n.text("Delete")) { pendingDeletion = id }
+            }
+        }
         .contextMenu {
             if isEditable {
                 Button { beginEditing(sched) } label: {

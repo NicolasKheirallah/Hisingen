@@ -78,9 +78,16 @@ struct PolestarDataPortalVehiclesDTO: Codable, Sendable {
                     self.vins = objList.map(\.vin)
                     return
                 }
+                // An explicit `"data": null` is an account with no linked vehicles, not a new shape.
+                if (try? keyed.decodeNil(forKey: dataKey)) == true {
+                    self.vins = []
+                    return
+                }
             }
         }
-        self.vins = []
+        throw DecodingError.dataCorrupted(DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription: "Expected a VIN array, or an envelope whose data is a VIN array or VIN objects"))
     }
 
     private struct VINObject: Decodable {

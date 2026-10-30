@@ -101,7 +101,7 @@ struct BatteryGauge: View {
                 // One-shot acknowledgement as the pack reaches 100 %: a brief
                 // brightness lift, then the bar settles to static green.
                 RoundedRectangle(cornerRadius: gaugeRadius, style: .continuous)
-                    .fill(Color.white.opacity(completionPulse ? 0.12 : 0))
+                    .fill(HisingenTheme.highlightWhite.opacity(completionPulse ? 0.12 : 0))
                     .frame(width: currentWidth, height: 9)
                     .allowsHitTesting(false)
                     // The acknowledgement is a brightness lift on a bar, so it carries no
@@ -153,7 +153,7 @@ struct BatteryGauge: View {
                         .fill(HisingenTheme.ink.opacity(0.75))
                         .frame(width: 3, height: 13)
                         .offset(x: targetX, y: -2)
-                        .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+                        .shadow(color: HisingenTheme.elevationShadow.opacity(0.2), radius: 1, x: 0, y: 1)
                         .hisAnimation(Motion.progress, value: targetFraction)
                 }
             }

@@ -139,10 +139,9 @@ jobs:
         run: |
           set -euo pipefail
           sh Scripts/test.sh --skip Live --no-parallel
-      - name: Validate localization and documentation
-        run: |
-          python3 Scripts/check-localization.py
-          python3 Scripts/check-docs-links.py
+      # check-localization.py and check-docs-links.py run in their own ubuntu jobs above and in
+      # Scripts/ci-local.sh; they are not repeated here. If you add a validator, add it to the
+      # ubuntu job set and to ci-local.sh, not to this job.
       - name: Validate repository and release inputs
         run: sh Scripts/validate-release.sh
       - name: Build ad-hoc app bundle

@@ -1,5 +1,7 @@
 import Foundation
 
+private let sessionLogger = AppLog.logger("session")
+
 /// Credential precedence and provider configuration for every session restoration path.
 /// Which stored credential resumes which adapter, and whether a stored password is a valid
 /// fallback, are answered by the adapter through `VehicleProviding`; this module owns the
@@ -16,7 +18,14 @@ final class SessionManager {
     private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
     init(readPassword: @escaping @Sendable () throws -> String? = { try Keychain.readPassword() },
-         clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
+         clearPassword: @escaping () -> Void = {
+             do {
+                 try Keychain.deletePassword()
+             } catch {
+                 // A stale password left behind is replayed on the next launch, so say so in the logs.
+                 sessionLogger.error("Could not clear the stored Polestar password: \(String(describing: error), privacy: .public)")
+             }
+         },
          configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
              try await api.prepareSession()
          }) {

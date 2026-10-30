@@ -371,6 +371,27 @@ struct PolestarDataPortalTests {
         #expect(PolestarDataPortalAPI.dailyCallCount == 0)
     }
 
+    @Test
+    @MainActor
+    func exhaustedDailyQuotaRefusesBeforeTheTokenGrant() async {
+        let box = QuotaBox()
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { box.value },
+            set: { count, date in box.value = (count, date) })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
+        PolestarDataPortalAPI.setDailyQuotaForTesting(count: PolestarDataPortalAPI.dailyCallLimit, date: Date())
+
+        let api = PolestarDataPortalAPI()
+        do {
+            _ = try await api.fetchVehicleState(vin: "YSMTESTVIN0000001", features: FeatureSelection(enabled: []))
+            Issue.record("Expected the quota guard to refuse the fetch")
+        } catch PolestarDataPortalError.rateLimited {
+        } catch {
+            Issue.record("Expected rateLimited, got \(error)")
+        }
+        #expect(PolestarDataPortalAPI.dailyCallCount == PolestarDataPortalAPI.dailyCallLimit)
+    }
+
     // MARK: - Command Catalog & Read-Only Gating Tests
 
     @Test

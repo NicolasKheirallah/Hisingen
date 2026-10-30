@@ -137,7 +137,7 @@ struct SettingsVehicleDataCard: View {
                                 .frame(width: 70)
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
-                            Text("kWh").hisType(.micro).foregroundStyle(.secondary)
+                            Text(L10n.text("kWh")).hisType(.micro).foregroundStyle(.secondary)
                         }
                         HStack {
                             Text(L10n.text("WLTP reference range"))

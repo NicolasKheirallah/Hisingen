@@ -54,10 +54,19 @@ enum AutomationHandoff {
     static func send(_ command: RemoteCommand, vehicle: String?,
                      preferences: PreferencesStore = .shared) async -> String {
         let context = await waitForContext()
-        let targetVin = resolveVIN(from: vehicle, preferences: preferences)
+        let targetVin: String?
+        if vehicle?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            // A named vehicle that matches nothing is refused here, before any provider call.
+            guard let resolved = resolveVIN(from: vehicle, preferences: preferences) else {
+                return L10n.text("No vehicle in Hisingen matches that name or VIN.")
+            }
+            targetVin = resolved
+        } else {
+            targetVin = resolveVIN(from: nil, preferences: preferences)
+        }
         let outcome = await context.perform(
             command,
-            targetVIN: targetVin.isEmpty ? nil : targetVin,
+            targetVIN: targetVin,
             origin: .userInitiated
         )
         switch outcome {
@@ -67,20 +76,27 @@ enum AutomationHandoff {
         }
     }
 
-    static func resolveVIN(from input: String?) -> String {
+    static func resolveVIN(from input: String?) -> String? {
         resolveVIN(from: input, preferences: .shared)
     }
 
-    static func resolveVIN(from input: String?, preferences: PreferencesStore) -> String {
+    /// Maps a Shortcuts vehicle argument to a configured VIN. No argument means the default
+    /// vehicle, as before. A named argument resolves to a configured VIN or a nickname or model
+    /// match, and returns nil when nothing matches. A typed VIN must have the valid VIN shape and
+    /// belong to a configured or known vehicle, so an unknown VIN never reaches the provider.
+    static func resolveVIN(from input: String?, preferences: PreferencesStore) -> String? {
         guard let input = input?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty else {
-            return preferences.vin
+            let defaultVIN = preferences.vin
+            return defaultVIN.isEmpty ? nil : defaultVIN
         }
         let upper = input.uppercased()
         let store = AutomationHandoff.sharedStateStore
-        if store.snapshot(for: upper) != nil {
+        let brandVINs = [preferences.vin(for: .polestar), preferences.vin(for: .volvo)].filter { !$0.isEmpty }
+        if SettingsValidation.isValidVIN(upper),
+           brandVINs.contains(upper) || store.snapshot(for: upper) != nil {
             return upper
         }
-        for vin in [preferences.vin(for: .polestar), preferences.vin(for: .volvo)] where !vin.isEmpty {
+        for vin in brandVINs {
             let nick = preferences.vehicleNickname(for: vin)
             if nick.localizedCaseInsensitiveContains(input) || vin.localizedCaseInsensitiveContains(input) {
                 return vin
@@ -89,13 +105,12 @@ enum AutomationHandoff {
                 return vin
             }
         }
-        return upper
+        return nil
     }
 
     static func snapshot(for input: String? = nil) -> (VehicleState, PreferencesStore)? {
         let preferences = PreferencesStore.shared
-        let vin = resolveVIN(from: input)
-        guard !vin.isEmpty,
+        guard let vin = resolveVIN(from: input),
               let state = sharedStateStore.snapshot(for: vin)
         else { return nil }
         return (state, preferences)
@@ -113,9 +128,9 @@ struct GetVehicleBatteryIntent: AppIntent {
     @MainActor
     func perform() async throws -> some ProvidesDialog & ReturnsValue<String> {
         let preferences = PreferencesStore.shared
-        let vin = AutomationHandoff.resolveVIN(from: vehicle)
         let store = AutomationHandoff.sharedStateStore
-        guard let state = store.snapshot(for: vin) else {
+        guard let vin = AutomationHandoff.resolveVIN(from: vehicle),
+              let state = store.snapshot(for: vin) else {
             return .result(value: "--", dialog: IntentDialog(stringLiteral: L10n.text("No vehicle telemetry available in Hisingen.")))
         }
         var parts: [String] = []

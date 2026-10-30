@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 ARTIFACT=${1:?Usage: stapler-staple.sh PATH/TO/ARTIFACT}
 MAX_ATTEMPTS=${STAPLER_STAPLE_RETRIES:-5}

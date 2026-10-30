@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Owns the complete persistence workflow for one fresh vehicle snapshot.
 ///
@@ -63,9 +64,15 @@ final class VehicleHistoryRecorder {
     /// a dropped one is a lost session boundary. Every observation is therefore delivered, in
     /// the order it was enqueued, and `drain()` waits for all of them.
     private final class Writer: @unchecked Sendable {
+        /// Backlog size that gets logged. Nothing is dropped at this point; the warning only
+        /// flags a writer that is falling behind the observations queued behind it.
+        private static let pendingHighWaterMark = 1000
+
         private let lock = NSLock()
         private let queue = DispatchQueue(label: "com.hisingen.history-writer", qos: .utility)
+        private let logger = AppLog.logger("history-writer")
         private var pending: [RecordingRequest] = []
+        private var backlogReported = false
         private var draining = false
         private var idleWaiters: [CheckedContinuation<Void, Never>] = []
         private let beforePersist: (@Sendable () -> Void)?
@@ -77,6 +84,10 @@ final class VehicleHistoryRecorder {
         func enqueue(_ request: RecordingRequest) {
             lock.lock()
             pending.append(request)
+            if pending.count > Self.pendingHighWaterMark && !backlogReported {
+                backlogReported = true
+                logger.warning("History writer backlog exceeded \(Self.pendingHighWaterMark, privacy: .public) pending observations")
+            }
             let shouldStart = !draining
             if shouldStart { draining = true }
             lock.unlock()
@@ -111,10 +122,17 @@ final class VehicleHistoryRecorder {
                     waiters.forEach { $0.resume() }
                     return
                 }
-                let request = pending.removeFirst()
+                // Take the whole backlog in one swap instead of `removeFirst()` per request, which
+                // shifted the rest of the array every time. `draining` stays true while the batch
+                // is written, so `drain()` still waits for it.
+                let batch = pending
+                pending = []
+                backlogReported = false
                 lock.unlock()
-                beforePersist?()
-                VehicleHistoryRecorder.persistHistory(request)
+                for request in batch {
+                    beforePersist?()
+                    VehicleHistoryRecorder.persistHistory(request)
+                }
             }
         }
     }

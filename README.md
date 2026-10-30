@@ -1349,13 +1349,29 @@ Hisingen is maintained by [Nicolas Kheirallah](https://github.com/NicolasKheiral
 
 Thanks as well to everyone testing the app on different cars and configurations. Real-world feedback is one of the most useful ways to improve Hisingen, especially when vehicle behaviour differs between models in ways that aren't obvious from documentation alone.
 
-Thanks to the [pypolestar devs](https://github.com/pypolestar/polestar_api/) who have made much of this work possible!
+### Functionality adapted from other projects
+
+* **[Polaris](https://github.com/simonbusborg/polaris)** by Simon Busborg. Some Polestar
+  functionality was adapted from Polaris: the gRPC client's protobuf codec, call transport,
+  battery decoding and host discovery, plus the sign-in resume-path patterns and the car-image
+  query. I should have credited it from the start.
+  Thank you to Simon for raising it in [#33](https://github.com/NicolasKheirallah/Hisingen/issues/33).
+* **[pypolestar](https://github.com/pypolestar/pypolestar)** and
+  **[polestar_api](https://github.com/pypolestar/polestar_api/)** by Tuen Lee and
+  contributors. Their reverse engineering of the Polestar backend made much of this possible.
+* **[Sparkle](https://github.com/sparkle-project/Sparkle)** handles signed in-app updates.
+* **[Open-Meteo](https://open-meteo.com/)** supplies the weather data (CC BY 4.0) and
+  **[Elpriset just nu.se](https://www.elprisetjustnu.se/)** the Swedish spot prices.
+
+Copyright notices and license texts are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+which also ships inside the app bundle.
 
 ---
 
 ## License
 
-Hisingen is released under the [MIT License](LICENSE).
+Hisingen is released under the [MIT License](LICENSE). Code and services it builds on are
+listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 

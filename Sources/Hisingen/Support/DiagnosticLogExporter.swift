@@ -23,9 +23,12 @@ enum DiagnosticRedaction {
     private static let vinExpression = try? NSRegularExpression(pattern: "(?i)[A-HJ-NPR-Z0-9]{17}")
     private static let uuidExpression = try? NSRegularExpression(
         pattern: "(?i)[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
-    /// `token=x` – secret directly after the separator, no space.
+    /// `token=x`, `"refresh_token": "abc"`, `password: hunter2`. Quotes and spaces may sit
+    /// around the separator; a quoted value is replaced inside its quotes so the JSON shape
+    /// survives. `(?!…)` leaves an already-redacted value and the `Bearer` word of an
+    /// `Authorization` header to the rules above.
     private static let delimiterSecretExpression = try? NSRegularExpression(
-        pattern: "(?i)(bearer|token|authorization|client_secret|password|api[_-]?key)[=:][^,; ]+")
+        pattern: "(?i)([\"']?(?:bearer|token|authorization|client_secret|password|api[_-]?key)[\"']?\\s*[=:]\\s*)(?!<redacted>|bearer\\s)(?:(\")[^\"]*(\")|(')[^']*(')|[^,;\\s\"'}\\]]+)")
     /// `Authorization: Bearer eyJ…` – the canonical header form has a space after the
     /// colon, which the no-space rule above never matches.
     private static let authorizationBearerExpression = try? NSRegularExpression(
@@ -63,7 +66,9 @@ enum DiagnosticRedaction {
         result = replacingMatches(in: result, expression: authorizationBearerExpression, replacement: "$1Bearer <redacted>")
         result = replacingMatches(in: result, expression: bearerTokenExpression, replacement: "$1 <redacted>")
         result = replacingMatches(in: result, expression: uuidExpression, replacement: "<identifier>")
-        result = replacingMatches(in: result, expression: delimiterSecretExpression, replacement: "$1=<redacted>")
+        // Groups: 1 key and separator, 2/3 double quotes, 4/5 single quotes. Unmatched groups
+        // expand to nothing, so an unquoted value yields just the placeholder.
+        result = replacingMatches(in: result, expression: delimiterSecretExpression, replacement: "$1$2$4<redacted>$3$5")
         return result
     }
 

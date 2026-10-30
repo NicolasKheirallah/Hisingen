@@ -3007,3 +3007,13 @@
 "Other country" = "Other country";
 "Market prices, providers and the charging planner are available" = "Market prices, providers and the charging planner are available";
 "Market prices are available for Sweden only. Other countries use a typed-in rate." = "Market prices are available for Sweden only. Other countries use a typed-in rate.";
+"%d AQI" = "%d AQI";
+"/kWh" = "/kWh";
+"kWh" = "kWh";
+"Update check failed. Please try again later." = "检查更新失败。请稍后再试。";
+"Secure updates are unavailable in this build." = "此版本不支持安全更新。";
+"Unable to start the secure updater. Please try again later." = "无法启动安全更新程序。请稍后再试。";
+"Update download failed for %@. Please try again later." = "%@ 的更新下载失败。请稍后再试。";
+"Unknown Command" = "未知命令";
+"Hisingen does not recognize that link." = "Hisingen 无法识别该链接。";
+"No vehicle in Hisingen matches that name or VIN." = "Hisingen 中没有与该名称或 VIN 匹配的车辆。";

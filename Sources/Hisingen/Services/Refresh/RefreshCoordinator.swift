@@ -52,8 +52,13 @@ struct DiagnosticsSnapshot: Sendable {
 actor LatestDiagnosticsStore {
     static let shared = LatestDiagnosticsStore()
     private(set) var latest: DiagnosticsSnapshot?
+    /// Sequence of the snapshot in `latest`. Publishes hop onto this actor in separate tasks,
+    /// so a snapshot from an earlier publish can arrive after a newer one.
+    private var latestSequence: UInt64 = 0
 
-    func update(_ snapshot: DiagnosticsSnapshot) {
+    func update(_ snapshot: DiagnosticsSnapshot, sequence: UInt64) {
+        guard sequence > latestSequence else { return }
+        latestSequence = sequence
         latest = snapshot
     }
 
@@ -224,6 +229,8 @@ final class RefreshCoordinator {
     private let streaming: (any VehicleLiveStreaming)?
     private var task: Task<Void, Never>?
     private var generation: UInt64 = 0
+    /// Orders diagnostics publishes for `LatestDiagnosticsStore`, which may receive them late.
+    private var diagnosticsSequence: UInt64 = 0
     private var failureCount = 0
     private var rateLimitedUntil: Date?
     private var lastManualRefresh: Date?
@@ -1174,7 +1181,9 @@ final class RefreshCoordinator {
         )
         // The diagnostics log exporter is fed here, where the snapshot is built, rather than
         // by every event handler, so the store can never drift from what was published.
-        Task { await LatestDiagnosticsStore.shared.update(snapshot) }
+        diagnosticsSequence &+= 1
+        let sequence = diagnosticsSequence
+        Task { await LatestDiagnosticsStore.shared.update(snapshot, sequence: sequence) }
         onEvent?(.diagnostics(snapshot))
     }
 

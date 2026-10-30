@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 command -v swift >/dev/null 2>&1 || { echo "Swift toolchain is required" >&2; exit 1; }
 command -v shasum >/dev/null 2>&1 || { echo "shasum is required" >&2; exit 1; }
@@ -19,7 +22,11 @@ if git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.p12|.*\.key)$' >/dev/null 2>&
     exit 1
 fi
 
-if git ls-files -z | xargs -0 grep -IlE '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}' 2>/dev/null | grep . >/dev/null 2>&1; then
+# `-e` is required: the pattern starts with `-`, so without it grep reads it as an option, fails, and
+# the 2>/dev/null used to hide that, so this scan never matched anything.
+# xargs exits non-zero when any batch has no match, which pipefail would report as a failure even
+# when another batch matched. The group below forces success so only `grep .` decides.
+if git ls-files -z | { xargs -0 grep -IlE -e '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}' 2>/dev/null || true; } | grep . >/dev/null 2>&1; then
     echo "Credential pattern detected in tracked source" >&2
     exit 1
 fi
@@ -35,7 +42,13 @@ DMG_CHECKSUM_PATH=${DMG_CHECKSUM_PATH:-"$OUTPUT_DIR/Hisingen.dmg.sha256"}
 # and stapled. Ad-hoc and development-identity builds are local-only and skip
 # this check.
 is_developer_id_signed() {
-    codesign -dvv "$1" 2>&1 | grep -q 'Authority=Developer ID Application'
+    # Capture instead of piping into `grep -q`: an early exit would SIGPIPE codesign, and pipefail
+    # would then report a Developer ID app as not Developer ID signed and skip the stapler check.
+    codesign_info=$(codesign -dvv "$1" 2>&1 || true)
+    case "$codesign_info" in
+        *'Authority=Developer ID Application'*) return 0 ;;
+    esac
+    return 1
 }
 
 if [ -d "$APP_PATH" ]; then

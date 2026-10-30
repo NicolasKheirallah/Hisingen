@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 developer_dir=${DEVELOPER_DIR:-}
 if [ -z "$developer_dir" ]; then
@@ -21,7 +24,7 @@ xcrun --show-sdk-path
 # Package.swift declares swift-tools-version:6.0 and builds in the Swift 6 language
 # mode. A 5.x toolchain cannot parse the manifest, so fail early with a clear message
 # instead of a cryptic manifest-parse error later.
-swift_version=$(xcrun swift --version 2>/dev/null | sed -nE 's/.*Swift version ([0-9]+)\.([0-9]+).*/\1 \2/p' | head -n1)
+swift_version=$(xcrun swift --version 2>/dev/null | sed -nE 's/.*Swift version ([0-9]+)\.([0-9]+).*/\1 \2/p' | head -n1 || true)
 swift_major=${swift_version%% *}
 if [ -n "$swift_major" ] && [ "$swift_major" -lt 6 ]; then
   echo "Swift 6.0 or newer is required (found $swift_version). Install Xcode 16 or newer." >&2

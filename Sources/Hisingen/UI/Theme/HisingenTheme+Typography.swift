@@ -58,6 +58,15 @@ extension HisingenTheme {
         size * displayTrackingRatio
     }
 
+    /// The licence-plate face: bold monospaced at a fixed point size.
+    ///
+    /// A plate is printed geometry, not running text, so it does not ride the ramp. Its size is a
+    /// call-site choice (the pill, the header and the overlay each carry their own), and only the
+    /// face and weight live here.
+    static func plateFont(size: CGFloat) -> Font {
+        .system(size: size, weight: .bold, design: .monospaced)
+    }
+
     // MARK: - Shared-layer type ramp
 
     /// The shared layer's type tiers.

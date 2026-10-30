@@ -85,18 +85,20 @@ extension VehicleState {
         climateStatus?.activity.isActiveSession == true
     }
 
+    /// Models that share the 2024 long-range pack revision (82 kWh nominal, 79 kWh usable).
+    private var hasSharedPack2024: Bool {
+        guard let yearInt = modelYear.flatMap(Int.init), yearInt >= 2024 else { return false }
+        return model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40
+    }
+
     /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
     /// (the base per-model table) – not an independent capacity table. Falls through to the base
     /// table for anything without a known year-specific pack revision or a PHEV-specific figure.
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = modelYear.flatMap(Int.init)
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
-           let yearInt, yearInt >= 2024 {
-            return 82.0
-        }
+        if hasSharedPack2024 { return 82.0 }
         if powertrain == .phev {
-            guard let yearInt else { return model.nominalBatteryCapacityKwh }
+            guard let yearInt = modelYear.flatMap(Int.init) else { return model.nominalBatteryCapacityKwh }
             return yearInt >= 2022 ? 18.8 : 11.6
         }
         return model.nominalBatteryCapacityKwh
@@ -104,13 +106,9 @@ extension VehicleState {
 
     var factoryUsableBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
-        let yearInt = modelYear.flatMap(Int.init)
-        if (model == .polestar2 || model == .volvoXC40 || model == .volvoEX40 || model == .volvoC40 || model == .volvoEC40),
-           let yearInt, yearInt >= 2024 {
-            return 79.0
-        }
+        if hasSharedPack2024 { return 79.0 }
         if powertrain == .phev {
-            guard let yearInt else { return model.nominalUsableCapacityKwh }
+            guard let yearInt = modelYear.flatMap(Int.init) else { return model.nominalUsableCapacityKwh }
             return yearInt >= 2022 ? 14.9 : 9.1
         }
         return model.nominalUsableCapacityKwh
@@ -237,28 +235,27 @@ extension VehicleState {
         }
     }
 
-    /// Derived label. Because neither provider exposes a measured SoH (see
-    /// `batteryDegradationPercent`), this currently always reads "Unavailable" – it exists so
-    /// a future verified source plugs into exactly one place.
+    /// Derived label. Neither provider exposes a measured SoH, so `batteryDegradationPercent` is
+    /// always nil and this always reads "Unavailable". The Optimal / Good / Normal / Service
+    /// Advised ladder that used to sit behind that check is unreachable and was removed; restore
+    /// it from history when a verified SoH source lands.
     var batteryHealthStatus: String {
-        guard powertrain.hasElectricRange, let deg = batteryDegradationPercent else {
-            return L10n.text("Unavailable")
-        }
-        let soh = max(50.0, min(100.0, 100.0 - deg))
-        if soh >= 95.0 { return L10n.text("Optimal") }
-        if soh >= 85.0 { return L10n.text("Good") }
-        if soh >= 75.0 { return L10n.text("Normal") }
-        return L10n.text("Service Advised")
+        L10n.text("Unavailable")
     }
+
+    /// Fuel reading at or below which the summary reports "Low fuel".
+    private static let lowFuelPercentage = 12.0
 
     var stateSummary: VehicleStateSummary {
         if exteriorStatus?.alarmTriggered == true {
             return VehicleStateSummary(message: L10n.text("Alarm triggered"), severity: .critical)
         }
-        if let battery = batteryPercentage, battery <= 15, !isCharging, powertrain.hasElectricRange {
+        // A plugged-in pack is already being fixed, so the summary only raises the alarm while it
+        // is discharging. The hero gauge's `batteryLevel` stays critical either way.
+        if let battery = batteryPercentage, battery <= BatteryLevel.criticalPercentage, !isCharging, powertrain.hasElectricRange {
             return VehicleStateSummary(message: L10n.text("Low battery"), severity: .critical)
         }
-        if let fuel = fuelLevelPercent, fuel <= 12, powertrain.hasFuelRange {
+        if let fuel = fuelLevelPercent, fuel <= Self.lowFuelPercentage, powertrain.hasFuelRange {
             return VehicleStateSummary(message: L10n.text("Low fuel"), severity: .critical)
         }
         if let openings = exteriorStatus?.itemsNeedingAttention, !openings.isEmpty {

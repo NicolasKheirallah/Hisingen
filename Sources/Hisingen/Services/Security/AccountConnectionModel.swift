@@ -96,6 +96,59 @@ final class AccountConnectionModel: ObservableObject {
         }
     }
 
+    /// The interactive sign-in kind a failed live check implies. Only Polestar opens a browser
+    /// fallback for these; nil means the check leaves the sign-in surface as it was.
+    static func interactiveFallbackKind(for result: ConnectionCheck, brand: VehicleBrand) -> SignInFailureKind? {
+        guard brand == .polestar, let kind = result.failureKind, kind.interactiveSignInHelps else { return nil }
+        return kind
+    }
+
+    // MARK: - Polestar sign-in options
+
+    /// The two Polestar sign-in options the reader can enable. Both may be on (augmented);
+    /// at least one is always on, and `mode` is the connection mode they add up to.
+    struct PolestarCredentialSelection: Equatable {
+        private(set) var enablePolestarID: Bool
+        private(set) var enableDataPortal: Bool
+
+        init(mode: PreferencesStore.PolestarConnectionMode) {
+            switch mode {
+            case .polestarID:
+                (enablePolestarID, enableDataPortal) = (true, false)
+            case .dataPortal:
+                (enablePolestarID, enableDataPortal) = (false, true)
+            case .augmented:
+                (enablePolestarID, enableDataPortal) = (true, true)
+            }
+        }
+
+        var mode: PreferencesStore.PolestarConnectionMode {
+            if enablePolestarID && enableDataPortal {
+                return .augmented
+            } else if enableDataPortal {
+                return .dataPortal
+            } else {
+                return .polestarID
+            }
+        }
+
+        /// Flips one option. Switching off the last enabled option switches the other one on,
+        /// so the selection never goes empty.
+        mutating func toggle(polestarID: Bool) {
+            if polestarID {
+                enablePolestarID.toggle()
+                if !enablePolestarID && !enableDataPortal {
+                    enableDataPortal = true
+                }
+            } else {
+                enableDataPortal.toggle()
+                if !enablePolestarID && !enableDataPortal {
+                    enablePolestarID = true
+                }
+            }
+        }
+    }
+
     // MARK: - Draft
 
     struct Draft: Equatable {

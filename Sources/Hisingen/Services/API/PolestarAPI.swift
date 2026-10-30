@@ -581,11 +581,16 @@ actor PolestarAPI {
     /// still resolves its own outcome (`.notAuthorized`) from the now-empty storage.
     func discardDeadRefreshToken() async {
         tokens.reset()
-        try? keychain.deleteSessionToken()
+        // A failed delete leaves the dead token readable, so it is logged loudly rather than dropped.
+        do { try keychain.deleteSessionToken() } catch {
+            logger.error("Polestar dead session token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
+        }
         commandAccessToken = nil
         commandRefreshToken = nil
         commandTokenExpiry = nil
-        try? keychain.deleteCommandSessionToken()
+        do { try keychain.deleteCommandSessionToken() } catch {
+            logger.error("Polestar dead command token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
+        }
         // `PreferencesStore.hasResumableSession` memoises a per-brand answer. Without this the
         // garage scanner and account cards keep believing Polestar is resumable for the rest of
         // the process and replay the grant the IdP just refused.
@@ -981,7 +986,6 @@ actor PolestarAPI {
         ownerFirstName = info.givenName ?? info.firstName
         market = info.market?.isEmpty == false ? info.market : nil
     }
-
     func fetchCarImage(vin: String) async {
         let epoch = sessionEpoch
         let requestedAngle = await MainActor.run { preferences.carRenderAngle.rawValue }
@@ -1012,19 +1016,13 @@ actor PolestarAPI {
                   for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata",
                   provider: .polestar, diagnosticLog: diagnosticLog),
               response.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let payload = json["data"] as? [String: Any],
-              let images = payload["getCarImages"] as? [String: Any] else { return }
+              let images = (try? JSONDecoder().decode(GraphQLResponse<CarImagesPayloadDTO>.self, from: data))?
+                  .data?.getCarImages else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
-        let transparent = images["transparent"] as? [[String: Any]] ?? []
-        let opaque = images["opaque"] as? [[String: Any]] ?? []
-        let pool = transparent.isEmpty ? opaque : transparent
-        let pick = pool.first(where: { ($0["angle"] as? Int) == requestedAngle })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 1 })
-            ?? pool.first(where: { ($0["angle"] as? Int) == 0 }) ?? pool.first
+        let pool = images.pool
+        let pick = CarImagesDTO.preferred(in: pool, angle: requestedAngle)
 
-        if carImages[vin] == nil, let string = pick?["url"] as? String, let url = URL(string: string),
-           url.scheme == "https" {
+        if carImages[vin] == nil, let url = pick?.httpsURL {
             if let (bytes, imageResponse) = try? await HTTPExchange.data(
                       for: URLRequest(url: url), using: session, limit: 5_000_000,
                       operation: "vehicle image", provider: .polestar,
@@ -1034,7 +1032,7 @@ actor PolestarAPI {
                   bytes.count <= 5_000_000 {
                 guard epoch == sessionEpoch, !Task.isCancelled else { return }
                 carImages[vin] = bytes
-                let angle = (pick?["angle"] as? Int) ?? requestedAngle
+                let angle = pick?.angle ?? requestedAngle
                 imageCache.save(bytes, for: vin, angle: angle)
                 imageCache.save(bytes, for: vin)
             }
@@ -1042,10 +1040,8 @@ actor PolestarAPI {
 
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
         for other in pool {
-            guard let otherAngle = other["angle"] as? Int,
-                  let otherUrlStr = other["url"] as? String,
-                  let otherUrl = URL(string: otherUrlStr),
-                  otherUrl.scheme == "https",
+            guard let otherAngle = other.angle,
+                  let otherUrl = other.httpsURL,
                   imageCache.image(for: vin, angle: otherAngle) == nil else { continue }
             enqueueImageDownload(
                 key: "\(vin)-angle-\(otherAngle)",
@@ -1178,27 +1174,40 @@ actor PolestarAPI {
         PKCE.codeChallenge(for: verifier)
     }
 
+    /// Where the sign-in page embeds its PingFederate resume path, most specific first. The
+    /// pattern list and its order come from simonbusborg/polaris (MIT); see
+    /// THIRD_PARTY_NOTICES.md.
+    private static let resumePathPatterns: [NSRegularExpression] = [
+        #"(?:url|action):\s*"([^"]+)""#,
+        #"(?:resumePath|pf\.resumePath)\s*[:=]\s*['"]([^'"]+)['"]"#,
+        #"action="([^"]+)""#,
+        #"action:\s*'([^']+)'"#,
+        #"url:\s*'([^']+)'"#,
+        #"/as/[a-zA-Z0-9\-_./]+"#
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
+
+    /// The password is posted to this path, so every match is checked, not just the first per
+    /// pattern: an unrelated `url: "/static/app.js"` earlier in the page is skipped instead of
+    /// becoming the sign-in target.
     static func extractResumePath(from html: String) -> String? {
-        let patterns = [
-            #"(?:url|action):\s*"([^"]+)""#,
-            #"(?:resumePath|pf\.resumePath)\s*[:=]\s*['"]([^'"]+)['"]"#,
-            #"action="([^"]+)""#,
-            #"action:\s*'([^']+)'"#,
-            #"url:\s*'([^']+)'"#,
-            #"/as/[a-zA-Z0-9\-_./]+"#
-        ]
-        for (index, pattern) in patterns.enumerated() {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            let range = NSRange(html.startIndex..., in: html)
-            guard let match = regex.firstMatch(in: html, range: range) else { continue }
-            let group = match.numberOfRanges > 1 ? 1 : 0
-            guard let matchRange = Range(match.range(at: group), in: html) else { continue }
-            let value = String(html[matchRange])
-            if (index == patterns.count - 1 || value.hasPrefix("/")), !value.contains("..") {
-                return value
+        let range = NSRange(html.startIndex..., in: html)
+        for regex in resumePathPatterns {
+            for match in regex.matches(in: html, range: range) {
+                let group = match.numberOfRanges > 1 ? 1 : 0
+                guard let matchRange = Range(match.range(at: group), in: html) else { continue }
+                let value = String(html[matchRange])
+                if isPlausibleResumePath(value) { return value }
             }
         }
         return nil
+    }
+
+    /// A same-host PingFederate resume path: absolute, not protocol-relative, no traversal,
+    /// URL-path characters only, and containing a `/resume` segment.
+    static func isPlausibleResumePath(_ value: String) -> Bool {
+        guard value.hasPrefix("/"), !value.hasPrefix("//"), !value.contains(".."),
+              value.contains("/resume") else { return false }
+        return value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_./~%".contains($0)) }
     }
 
 

@@ -166,19 +166,23 @@ extension PolestarGRPC {
         Self.parseChargeLocations(try await chargeLocationsBody(vin: vin, accessToken: accessToken))
     }
 
+    /// The token is part of the key so a waiter never receives a response fetched under another
+    /// token, for example one that was refreshed or belonged to a signed-out account.
+    private static func flightKey(vin: String, accessToken: String) -> String {
+        "\(vin)\n\(accessToken)"
+    }
+
     private func chargeLocationsBody(vin: String, accessToken: String) async throws -> Data {
-        if let existing = chargeLocationsInFlight[vin] { return try await existing.task.value }
-        let requestID = UUID()
-        let task = Task {
-            try await self.firstMessage(path: Self.chargeLocationsPath,
-                                        message: Self.chronosRequest(vin),
-                                        vin: vin, accessToken: accessToken, host: .pccs)
+        let key = Self.flightKey(vin: vin, accessToken: accessToken)
+        let flight = SingleFlight.join(key, in: &chargeLocationsInFlight) {
+            Task {
+                try await self.firstMessage(path: Self.chargeLocationsPath,
+                                            message: Self.chronosRequest(vin),
+                                            vin: vin, accessToken: accessToken, host: .pccs)
+            }
         }
-        chargeLocationsInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
-        defer {
-            if chargeLocationsInFlight[vin]?.id == requestID { chargeLocationsInFlight[vin] = nil }
-        }
-        return try await task.value
+        defer { SingleFlight.finish(key, flight, in: &chargeLocationsInFlight) }
+        return try await flight.task.value
     }
 
     static func parseChargeLocations(_ data: Data) -> [ChargeLocationSnapshot] {
@@ -265,18 +269,16 @@ extension PolestarGRPC {
     /// consumer, and each miss was a separate `GetMyCars` round trip – two recorded failures
     /// per launch in the diagnostic log where one explained the other.
     func myCarsBody(vin: String, accessToken: String) async throws -> Data {
-        if let existing = myCarsInFlight[vin] { return try await existing.task.value }
-        let requestID = UUID()
-        let task = Task {
-            try await self.firstMessage(path: Self.myCarsPath,
-                                        message: Self.myCarsRequest(vin: vin),
-                                        vin: vin, accessToken: accessToken)
+        let key = Self.flightKey(vin: vin, accessToken: accessToken)
+        let flight = SingleFlight.join(key, in: &myCarsInFlight) {
+            Task {
+                try await self.firstMessage(path: Self.myCarsPath,
+                                            message: Self.myCarsRequest(vin: vin),
+                                            vin: vin, accessToken: accessToken)
+            }
         }
-        myCarsInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
-        defer {
-            if myCarsInFlight[vin]?.id == requestID { myCarsInFlight[vin] = nil }
-        }
-        return try await task.value
+        defer { SingleFlight.finish(key, flight, in: &myCarsInFlight) }
+        return try await flight.task.value
     }
 
     func fetchClimate(vin: String, accessToken: String) async throws -> VehicleClimateStatus? {
@@ -420,16 +422,12 @@ extension PolestarGRPC {
 
 
     func fetchLocation(vin: String, accessToken: String) async throws -> VehicleLocation? {
-        if let existing = locationInFlight[vin] {
-            return try await existing.task.value
+        let key = Self.flightKey(vin: vin, accessToken: accessToken)
+        let flight = SingleFlight.join(key, in: &locationInFlight) {
+            Task { try await self.fetchLocationUncached(vin: vin, accessToken: accessToken) }
         }
-        let requestID = UUID()
-        let task = Task { try await self.fetchLocationUncached(vin: vin, accessToken: accessToken) }
-        locationInFlight[vin] = PolestarInFlightRequest(id: requestID, task: task)
-        defer {
-            if locationInFlight[vin]?.id == requestID { locationInFlight[vin] = nil }
-        }
-        return try await task.value
+        defer { SingleFlight.finish(key, flight, in: &locationInFlight) }
+        return try await flight.task.value
     }
 
     private func fetchLocationUncached(vin: String, accessToken: String) async throws -> VehicleLocation? {

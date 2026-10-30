@@ -14,7 +14,7 @@ struct PolestarRawDecodeTests {
         payload += Protobuf.intField(4, 270)
         payload += Protobuf.intField(5, 42)
         payload += Protobuf.doubleField(12, 78.0)
-        let extras = PolestarGRPC.parseBattery(payload)
+        let extras = try PolestarGRPC.parseBattery(payload)
         #expect(extras.batteryPercentage == 75.0)
         #expect(extras.rangeKm == 270)
         #expect(extras.estimatedChargingTimeToFullMinutes == 42)
@@ -27,7 +27,7 @@ struct PolestarRawDecodeTests {
         payload += Protobuf.intField(8, 7)
         payload += Protobuf.stringField(14, "abc")
         payload += Protobuf.doubleField(21, 3.5)
-        let extras = PolestarGRPC.parseBattery(payload)
+        let extras = try PolestarGRPC.parseBattery(payload)
         #expect(extras.batteryPercentage == nil)
         let unknown = extras.unknownFields.sorted { $0.field < $1.field }
         #expect(unknown.count == 3)
@@ -37,7 +37,7 @@ struct PolestarRawDecodeTests {
     }
 
     @Test func batteryCapacityAbsentStaysNil() throws {
-        let extras = PolestarGRPC.parseBattery(Protobuf.intField(4, 100))
+        let extras = try PolestarGRPC.parseBattery(Protobuf.intField(4, 100))
         #expect(extras.reportedBatteryCapacityKwh == nil)
         #expect(extras.rangeKm == 100)
     }

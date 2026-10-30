@@ -44,6 +44,11 @@ struct CommandReceiptFiling: Equatable {
 /// selection's.
 @MainActor
 final class CommandReceiptLedger {
+    /// Audit statuses that mean a command worked. `confirmed` is written here on telemetry
+    /// proof, `acknowledged` by the coordinator, and `completed` is the vehicle's own outcome.
+    /// History statistics read this set so their success rate matches what the ledger writes.
+    nonisolated static let successAuditStatuses: Set<String> = ["completed", "confirmed", "acknowledged"]
+
     private let store: VehicleStateStore
     private let now: () -> Date
     private let confirmationWindow: TimeInterval

@@ -93,6 +93,7 @@ struct RemoteCommandDispatchTests {
         let scoped = ScopedPreferences(label: "remote-command-dispatch-send")
         let preferences = scoped.store
         preferences.vin = vin
+        preferences.setVin(vin, for: .volvo)
         preferences.setVehicleNickname("My Volvo", for: vin)
 
         let context = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
@@ -353,7 +354,6 @@ struct RemoteCommandDispatchTests {
 @MainActor
 private final class RouterContextMock: URLCommandRouterContext {
     let activeBrand: VehicleBrand
-    var selectedVehicleVIN: String? { nil }
     var defaultRemoteClimateTemperatureCelsius: Double { 21 }
     private(set) var selectedVINs: [String] = []
     private(set) var commands: [RemoteCommand] = []

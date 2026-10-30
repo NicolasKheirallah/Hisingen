@@ -225,6 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         signInCoordinator.cancelPolestarSignIn()
         SpotlightIndexer.removeAll()
         vehicleSession.signOut()
+        // Cached addresses are derived from the signed-out account's locations.
+        Task { [reverseGeocoder] in await reverseGeocoder.clear() }
     }
 
     /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen.
@@ -598,7 +600,6 @@ extension AppDelegate: GarageScanContext {
 // MARK: - URLCommandRouterContext
 
 extension AppDelegate: URLCommandRouterContext {
-    var selectedVehicleVIN: String? { vehicleSession.latest?.identity.vin }
     var activeBrand: VehicleBrand { preferences.activeBrand }
     var defaultRemoteClimateTemperatureCelsius: Double { preferences.remoteClimateTemperature }
 

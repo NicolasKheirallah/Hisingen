@@ -391,7 +391,7 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let latestAqi = latest?.airQualityIndex {
-                        Text("\(Int(latestAqi)) AQI")
+                        Text(L10n.format("%d AQI", Int(latestAqi)))
                             .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
                             .monospacedDigit()
                     }

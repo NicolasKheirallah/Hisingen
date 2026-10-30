@@ -123,12 +123,12 @@ struct PolestarMyCarsTests {
     /// Battery fields 8 and 28 were present in the 2026-09-08 capture but are not decoded:
     /// upstream names field 8 (`estimated_distance_to_empty_miles`), and 28 has no name anywhere. They must stay
     /// unnamed and unparsed rather than guessed into the diagnostics model.
-    @Test func batteryUnverifiedFieldsStayUnnamedAndUnparsed() {
+    @Test func batteryUnverifiedFieldsStayUnnamedAndUnparsed() throws {
         var payload = Data()
         payload.append(Protobuf.doubleField(2, 75.0))
         payload.append(Protobuf.intField(8, 300))
         payload.append(Protobuf.intField(28, 7))
-        let battery = PolestarGRPC.parseBattery(payload)
+        let battery = try PolestarGRPC.parseBattery(payload)
         // The parser surfaces nothing for 8/28 – no percent/range/current mutation.
         #expect(battery.batteryPercentage == 75.0)
         #expect(battery.rangeKm == nil)

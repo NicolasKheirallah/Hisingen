@@ -39,6 +39,32 @@ enum ScheduleKind: String, Codable, Sendable {
     }
 }
 
+/// Vehicle acknowledgement of a timer or schedule setting (`syncStatus`).
+enum ScheduleSyncStatus: Equatable, Sendable {
+    case synced
+    case pending
+    /// The backend sent no acknowledgement info. This is not a sync failure.
+    case unspecified
+
+    /// Wire token to status. A token containing `UNSPECIFIED` is `.unspecified`, and an
+    /// unrecognised token gives nil.
+    init?(wireToken: String?) {
+        guard let token = wireToken?.uppercased(), !token.isEmpty else { return nil }
+        if token.contains("UNSPECIFIED") {
+            self = .unspecified
+            return
+        }
+        switch token {
+        case "SYNCED": self = .synced
+        case "PENDING": self = .pending
+        default: return nil
+        }
+    }
+
+    /// Only a real pending acknowledgement deserves the user's attention.
+    var needsAttention: Bool { self == .pending }
+}
+
 struct VehicleSchedule: Codable, Equatable, Sendable {
     /// Stable identity for a list row.
     ///
@@ -68,12 +94,12 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
     /// the backend sent no acknowledgement.
     var syncStatus: String?
 
-    /// UNSPECIFIED means "no acknowledgement info", not "the car is behind"; only a real
-    /// pending or failed acknowledgement deserves user attention.
+    var syncStatusKind: ScheduleSyncStatus? { ScheduleSyncStatus(wireToken: syncStatus) }
+
+    /// An unrecognised token counts as needing attention, so a new backend state is never hidden.
     var syncNeedsAttention: Bool {
         guard let syncStatus, !syncStatus.isEmpty else { return false }
-        let normalized = syncStatus.uppercased()
-        return normalized != "SYNCED" && normalized != "UNSPECIFIED" && !normalized.contains("UNSPECIFIED")
+        return syncStatusKind?.needsAttention ?? true
     }
 
     init(
@@ -612,6 +638,34 @@ enum ClimateActivity: String, Codable, Sendable {
     }
 }
 
+/// `Ventilation` mode of a climate session (`VENTILATION_*` wire tokens).
+enum ClimateVentilation: Equatable, Sendable {
+    case cooling
+    case heating
+    case neutral
+    case unspecified
+
+    init?(wireToken: String?) {
+        switch wireToken {
+        case "VENTILATION_COOLING": self = .cooling
+        case "VENTILATION_HEATING": self = .heating
+        case "VENTILATION_NEUTRAL": self = .neutral
+        case "VENTILATION_UNSPECIFIED": self = .unspecified
+        default: return nil
+        }
+    }
+
+    /// nil for `unspecified`, which hides the row.
+    var displayName: String? {
+        switch self {
+        case .cooling: return L10n.text("Cooling")
+        case .heating: return L10n.text("Heating")
+        case .neutral: return L10n.text("Neutral")
+        case .unspecified: return nil
+        }
+    }
+}
+
 struct VehicleClimateStatus: Codable, Equatable, Sendable {
     let activity: ClimateActivity
     let timeRemainingMinutes: Int?
@@ -644,21 +698,17 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     /// gRPC surface keeps reporting through `timerTriggered`.
     var startReason: VehicleStartReason? = nil
 
+    var ventilationMode: ClimateVentilation? { ClimateVentilation(wireToken: ventilation) }
+
     /// `Ventilation` mode for the running session from the spec vocabulary. Unspecified and
     /// absent hide; a token outside the known set renders cleaned-up rather than guessed.
     var ventilationName: String? {
         guard let ventilation, !ventilation.isEmpty else { return nil }
-        switch ventilation {
-        case "VENTILATION_COOLING": return L10n.text("Cooling")
-        case "VENTILATION_HEATING": return L10n.text("Heating")
-        case "VENTILATION_NEUTRAL": return L10n.text("Neutral")
-        case "VENTILATION_UNSPECIFIED": return nil
-        default:
-            return ventilation
-                .replacingOccurrences(of: "VENTILATION_", with: "")
-                .replacingOccurrences(of: "_", with: " ")
-                .capitalized
-        }
+        if let mode = ventilationMode { return mode.displayName }
+        return ventilation
+            .replacingOccurrences(of: "VENTILATION_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 
     init(
@@ -995,6 +1045,23 @@ struct EnergyBreakdownSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// Who last set a charge target or amperage limit (`source` on the wire, kept raw in
+/// `BatteryDiagnostics.targetSource` / `limitSource`).
+enum ChargeSettingSource: Equatable, Sendable {
+    /// Set remotely through the backend (`RCS`).
+    case remote
+    /// Set from the Polestar app (`APP`).
+    case app
+
+    init?(wireToken: String?) {
+        switch wireToken?.uppercased() {
+        case "RCS": self = .remote
+        case "APP": self = .app
+        default: return nil
+        }
+    }
+}
+
 struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let timeToTargetMinutes: Int?
     let timeToMinimumSOCMinutes: Int?
@@ -1031,6 +1098,9 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     var targetSource: String? = nil
     /// Who last set the amperage limit (`AmpLimitValue.source`), raw wire token.
     var limitSource: String? = nil
+
+    var targetSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: targetSource) }
+    var limitSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: limitSource) }
 
     init(
         timeToTargetMinutes: Int?,
@@ -1380,6 +1450,31 @@ struct ChargingSample: Codable, Equatable, Sendable {
 /// A saved charging location from Polestar's Chronos `ChargeLocationService`.
 /// Wire shape cross-checked against the independently built
 /// `kildahldev/unofficial-polestar-api` proto schema (`GetChargeLocations`).
+/// Backend mode for optimised charging at a location (`optimisedChargingMode`).
+enum OptimisedChargingMode: Int, Equatable, Sendable {
+    case unavailable = 0
+    case intelligentTimer = 1
+    case priceOptimised = 2
+
+    /// nil when unavailable, which hides the mode row.
+    var displayName: String? {
+        switch self {
+        case .unavailable: return nil
+        case .intelligentTimer: return L10n.text("Intelligent timer")
+        case .priceOptimised: return L10n.text("Price-optimised")
+        }
+    }
+}
+
+/// Where a charge location came from (`kind`).
+enum ChargeLocationKind: Int, Equatable, Sendable {
+    case recent = 1
+    case saved = 2
+    case savedThirdParty = 3
+
+    var isSaved: Bool { self == .saved || self == .savedThirdParty }
+}
+
 struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     /// Backend identifier used by every per-location write RPC.
     let id: String
@@ -1401,15 +1496,12 @@ struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     var departureTimes: [VehicleSchedule] = []
     var chargeTimers: [VehicleSchedule] = []
 
-    var isSavedLocation: Bool { kind == 2 || kind == 3 }
+    var optimisedChargingKind: OptimisedChargingMode? { OptimisedChargingMode(rawValue: optimisedChargingMode) }
+    var locationKind: ChargeLocationKind? { ChargeLocationKind(rawValue: kind) }
 
-    var optimisedChargingModeName: String? {
-        switch optimisedChargingMode {
-        case 1: return L10n.text("Intelligent timer")
-        case 2: return L10n.text("Price-optimised")
-        default: return nil
-        }
-    }
+    var isSavedLocation: Bool { locationKind?.isSaved == true }
+
+    var optimisedChargingModeName: String? { optimisedChargingKind?.displayName }
 }
 
 struct VehicleBackendIdentity: Codable, Equatable, Sendable {

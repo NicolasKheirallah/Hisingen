@@ -42,485 +42,552 @@ struct SettingsDatabaseCard: View {
     }
 
     var body: some View {
-    let counts = stats.counts
-    let sizeStr = ByteCountFormatter.string(fromByteCount: stats.sizeBytes, countStyle: .file)
+        let counts = stats.counts
+        let sizeStr = ByteCountFormatter.string(fromByteCount: stats.sizeBytes, countStyle: .file)
 
-    Card {
-        VStack(alignment: .leading, spacing: 10) {
-            CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
+        confirmationDialogs(
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    headerSection
+                    statsSection(counts: counts, sizeStr: sizeStr)
 
-            VStack(spacing: 6) {
-                KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
-                KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
-                KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
-                KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
-                KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
-                KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
-                KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+
+                    locationHistoryRow
+
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                        .padding(.vertical, 2)
+
+                    eraseOnSignOutRow
+
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                        .padding(.vertical, 2)
+
+                    retentionRow
+
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                        .padding(.vertical, 2)
+
+                    maintenanceSection
+                }
             }
-
-            Divider().opacity(HisingenTheme.dividerOpacity)
-
-            HStack(spacing: 8) {
-                Image(systemName: "location.slash.fill")
-                    .hisType(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(L10n.text("Store precise location history"))
-                        .hisType(.label, weight: .medium)
-                    Text(L10n.text("Off by default. Live parking location still works, but coordinates are not written to history."))
-                        .hisType(.micro)
-                        .hisCaptionLeading()
-                        .fixedSize(horizontal: false, vertical: true)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: $persistLocationHistory)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .onChange(of: persistLocationHistory) { _, value in
-                        if value {
-                            preferences.persistLocationHistory = true
-                        } else if preferences.persistLocationHistory {
-                            guard selectedVIN != nil else {
-                                // Nothing is loaded to name, and an unnamed clear used to widen
-                                // to every vehicle. Fleet-wide clearing is its own action below.
-                                preferences.persistLocationHistory = false
-                                setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
-                                return
-                            }
-                            // Clearing retained coordinates is destructive; keep the
-                            // effective value on until the user confirms it below.
-                            persistLocationHistory = true
-                            showLocationClearConfirmation = true
-                        }
-                    }
-                    .accessibilityLabel(L10n.text("Store precise location history"))
+            .task {
+                persistLocationHistory = preferences.persistLocationHistory
+                retentionDays = preferences.historySampleRetentionDays
+                eraseHistoryOnSignOut = preferences.eraseHistoryOnSignOut
+                await loadStats()
             }
-
-            Divider().opacity(HisingenTheme.dividerOpacity)
-                .padding(.vertical, 2)
-
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.2.circlepath")
-                    .hisType(.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(L10n.text("Erase local history on sign out"))
-                        .hisType(.label, weight: .medium)
-                    Text(L10n.text("Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session."))
-                        .hisType(.micro)
-                        .hisCaptionLeading()
-                        .fixedSize(horizontal: false, vertical: true)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: $eraseHistoryOnSignOut)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .onChange(of: eraseHistoryOnSignOut) { _, value in
-                        preferences.eraseHistoryOnSignOut = value
-                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                    }
-                    .accessibilityLabel(L10n.text("Erase local history on sign out"))
+            .sheet(isPresented: $showAPIDiagnosticInspector) {
+                APIDiagnosticInspectorView()
             }
+        )
+    }
 
-            Divider().opacity(HisingenTheme.dividerOpacity)
-                .padding(.vertical, 2)
+    // MARK: - Sections
 
-            HStack(spacing: 8) {
-                Image(systemName: "calendar.badge.clock")
-                    .hisType(.body)
+    @ViewBuilder
+    private var headerSection: some View {
+        CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
+    }
+
+    @ViewBuilder
+    private func statsSection(counts: (snapshots: Int, chargingSessions: Int, chargingSamples: Int,
+                                        batteryHealth: Int, telemetry: Int, commands: Int),
+                              sizeStr: String) -> some View {
+        VStack(spacing: 6) {
+            KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
+            KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
+            KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
+            KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
+            KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
+            KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
+            KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
+        }
+    }
+
+    @ViewBuilder
+    private var locationHistoryRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "location.slash.fill")
+                .hisType(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text("Store precise location history"))
+                    .hisType(.label, weight: .medium)
+                Text(L10n.text("Off by default. Live parking location still works, but coordinates are not written to history."))
+                    .hisType(.micro)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(L10n.text("High-volume sample retention"))
-                        .hisType(.label, weight: .medium)
-                    Text(L10n.format("Keeps samples %d days. Charging and health summaries are kept %d days.",
-                                     retentionDays, VehicleDatabase.sessionRetentionDays))
-                        .hisType(.micro)
-                        .hisCaptionLeading()
-                        .fixedSize(horizontal: false, vertical: true)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Picker("", selection: $retentionDays) {
-                    ForEach([30, 90, 180, 365], id: \.self) { days in
-                        Text(L10n.format("%d days", days)).tag(days)
-                    }
-                }
+            }
+            Spacer()
+            Toggle("", isOn: $persistLocationHistory)
                 .labelsHidden()
-                .controlSize(.small)
-                .onChange(of: retentionDays) { _, value in preferences.historySampleRetentionDays = value }
-                .accessibilityLabel(L10n.text("High-volume sample retention"))
-            }
-
-            Divider().opacity(HisingenTheme.dividerOpacity)
-                .padding(.vertical, 2)
-
-            VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    Button {
-                        runMaintenance(.vacuum)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: justOptimised ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                            Text(justOptimised ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .onChange(of: persistLocationHistory) { _, value in
+                    if value {
+                        preferences.persistLocationHistory = true
+                    } else if preferences.persistLocationHistory {
+                        guard selectedVIN != nil else {
+                            // Nothing is loaded to name, and an unnamed clear used to widen
+                            // to every vehicle. Fleet-wide clearing is its own action below.
+                            preferences.persistLocationHistory = false
+                            setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
+                            return
                         }
-                        .frame(maxWidth: .infinity)
+                        // Clearing retained coordinates is destructive; keep the
+                        // effective value on until the user confirms it below.
+                        persistLocationHistory = true
+                        showLocationClearConfirmation = true
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(justOptimised ? HisingenTheme.semanticGood : nil)
-                    .disabled(isMaintaining)
-
-                    Button {
-                        showPruneConfirmation = true
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: justPruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
-                            Text(justPruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(justPruned ? HisingenTheme.semanticGood : nil)
-                    .disabled(isMaintaining)
                 }
+                .accessibilityLabel(L10n.text("Store precise location history"))
+        }
+    }
 
-                if isMaintaining {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text(L10n.text("Database maintenance in progress…"))
-                    }
-                    .hisType(.caption)
+    @ViewBuilder
+    private var eraseOnSignOutRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.arrow.2.circlepath")
+                .hisType(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text("Erase local history on sign out"))
+                    .hisType(.label, weight: .medium)
+                Text(L10n.text("Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session."))
+                    .hisType(.micro)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
-                    .accessibilityElement(children: .combine)
-                    .transition(.opacity)
-                }
-
-                if let feedback {
-                    Label(feedback.message, systemImage: feedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .hisType(.caption, weight: .medium)
-                        .foregroundStyle(feedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
-                        .textSelection(.enabled)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                HStack(spacing: 8) {
-                    Button {
-                        let vin = state?.identity.vin
-                        let db = database
-                        Task { @MainActor in
-                            let csv = await Task.detached(priority: .userInitiated) {
-                                db.charging.exportChargingSessionsCSV(for: vin)
-                            }.value
-                            saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L10n.text("Export Charging (CSV)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-
-                    Button {
-                        let vin = state?.identity.vin
-                        let db = database
-                        Task { @MainActor in
-                            let csv = await Task.detached(priority: .userInitiated) {
-                                db.history.exportBatteryHealthCSV(for: vin)
-                            }.value
-                            saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L10n.text("Export Health (CSV)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-
-                HStack(spacing: 8) {
-                    Button {
-                        guard let vin = state?.identity.vin else { return }
-                        let db = database
-                        Task { @MainActor in
-                            let csv = await Task.detached(priority: .userInitiated) {
-                                db.history.exportTelemetryCSV(for: vin)
-                            }.value
-                            saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L10n.text("Export Trips (CSV)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(state == nil)
-
-                    Button {
-                        guard let vin = state?.identity.vin else { return }
-                        let db = database
-                        Task { @MainActor in
-                            let csv = await Task.detached(priority: .userInitiated) {
-                                db.history.exportCommandAuditsCSV(for: vin)
-                            }.value
-                            saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L10n.text("Export Commands (CSV)"))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(state == nil)
-                }
-
-                Button {
-                    guard let vin = state?.identity.vin else { return }
-                    let db = database
-                    Task { @MainActor in
-                        let csv = await Task.detached(priority: .userInitiated) {
-                            db.history.exportAirQualityCSV(for: vin)
-                        }.value
-                        saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                        Text(L10n.text("Export Air Quality (CSV)"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button {
-                    // Full local-history backup across every stored vehicle.
-                    // Coordinates are included only when location history is opted in,
-                    // mirroring the retention preference elsewhere in this pane.
-                    let includeCoords = preferences.persistLocationHistory
-                    let db = database
-                    Task { @MainActor in
-                        let data: Data? = await Task.detached(priority: .userInitiated) {
-                            try? db.exportBackupJSON(includeCoordinates: includeCoords)
-                        }.value
-                        guard let data else {
-                            setFeedback((L10n.text("The backup could not be created."), true))
-                            return
-                        }
-                        saveDataWithPanel(
-                            suggestedFilename: "hisingen_backup_\(Int(Date().timeIntervalSince1970)).json",
-                            contentType: .json,
-                            data: data
-                        )
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "archivebox")
-                        Text(L10n.text("Export All History (JSON)"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button {
-                    showAPIDiagnosticInspector = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "waveform.path.ecg.rectangle")
-                        Text(L10n.text("Inspect Live API Log"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(L10n.text("Shows the in-memory redacted request log with live filters. No raw credentials, VINs, or locations are retained."))
-
-                Button {
-                    let db = database
-                    Task { @MainActor in
-                        let data = await Task.detached(priority: .userInitiated) {
-                            try? await DiagnosticLogExporter.buildReport(database: db)
-                        }.value
-                        guard let data else {
-                            setFeedback((L10n.text("The diagnostic report could not be created."), true))
-                            return
-                        }
-                        saveDataWithPanel(
-                            suggestedFilename: "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json",
-                            contentType: .json,
-                            data: data
-                        )
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.badge.clock")
-                        Text(L10n.text("Export Diagnostic Logs"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
-
-                Button(role: .destructive) {
-                    showWipeConfirmation = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "trash")
-                        Text(L10n.text("Erase This Vehicle’s Local Data"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(HisingenTheme.semanticCritical)
-                .disabled(selectedVIN == nil || isMaintaining)
-
-                // Fleet-wide erasing is its own labelled action with its own confirmation:
-                // the per-vehicle button must not be able to mean "every vehicle" by being
-                // pressed while no vehicle is loaded.
-                Button(role: .destructive) {
-                    showFleetWipeConfirmation = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "trash.slash")
-                        Text(L10n.text("Erase All Local Vehicle Data"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(HisingenTheme.semanticCritical)
-                .disabled(isMaintaining)
-
-                // The location toggle's dialog can only clear the loaded vehicle, so the
-                // fleet-wide clear needs an entry point of its own.
-                Button(role: .destructive) {
-                    showFleetLocationClearConfirmation = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "location.slash.fill")
-                        Text(L10n.text("Clear All Vehicles’ Locations"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(HisingenTheme.semanticCritical)
-                .disabled(isMaintaining)
             }
-            // isMaintaining flips inside Task continuations without a transaction;
-            // this binding is what crossfades the spinner row in and out.
-            .hisAnimation(Motion.stateChange, value: isMaintaining)
+            Spacer()
+            Toggle("", isOn: $eraseHistoryOnSignOut)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .onChange(of: eraseHistoryOnSignOut) { _, value in
+                    preferences.eraseHistoryOnSignOut = value
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                }
+                .accessibilityLabel(L10n.text("Erase local history on sign out"))
         }
     }
-    .task {
-        persistLocationHistory = preferences.persistLocationHistory
-        retentionDays = preferences.historySampleRetentionDays
-        eraseHistoryOnSignOut = preferences.eraseHistoryOnSignOut
-        await loadStats()
-    }
-    .sheet(isPresented: $showAPIDiagnosticInspector) {
-        APIDiagnosticInspectorView()
-    }
-    .confirmationDialog(
-        L10n.text("Prune old historical samples?"),
-        isPresented: $showPruneConfirmation,
-        titleVisibility: .visible
-    ) {
-        Button(L10n.format("Prune Samples Older Than %d Days", retentionDays), role: .destructive) {
-            runMaintenance(.prune(days: retentionDays))
-        }
-        Button(L10n.text("Cancel"), role: .cancel) {}
-    } message: {
-        Text(L10n.format("Charging samples and telemetry older than %d days will be permanently removed. Summary sessions are kept.", retentionDays))
-    }
-    .confirmationDialog(
-        L10n.text("Stop storing and clear saved locations?"),
-        isPresented: $showLocationClearConfirmation,
-        titleVisibility: .visible
-    ) {
-        // Three answers, not two. The only non-cancel option was deletion, so a reader who wanted
-        // to stop *recording* location while keeping what already exists had no path at all:
-        // destroy the data or stay opted in.
-        Button(L10n.text("Stop Storing, Keep Locations")) {
-            // The preference first, so the toggle's own `onChange` sees the effective value already
-            // off and does not re-open this dialog.
-            preferences.persistLocationHistory = false
-            persistLocationHistory = false
-            setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
-        }
-        // Offered only with a loaded vehicle: this dialog used to clear every vehicle's
-        // coordinates whenever no snapshot was loaded. That is a fleet-wide action, and it has
-        // its own labelled button and confirmation instead.
-        if let vin = selectedVIN {
-            Button(L10n.text("Stop Storing & Clear Locations"), role: .destructive) {
-                runMaintenance(.clearLocations(.vehicle(vin)))
+
+    @ViewBuilder
+    private var retentionRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar.badge.clock")
+                .hisType(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text("High-volume sample retention"))
+                    .hisType(.label, weight: .medium)
+                Text(L10n.format("Keeps samples %d days. Charging and health summaries are kept %d days.",
+                                 retentionDays, VehicleDatabase.sessionRetentionDays))
+                    .hisType(.micro)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.secondary)
             }
+            Spacer()
+            Picker("", selection: $retentionDays) {
+                ForEach([30, 90, 180, 365], id: \.self) { days in
+                    Text(L10n.format("%d days", days)).tag(days)
+                }
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .onChange(of: retentionDays) { _, value in preferences.historySampleRetentionDays = value }
+            .accessibilityLabel(L10n.text("High-volume sample retention"))
         }
-        Button(L10n.text("Cancel"), role: .cancel) {}
-    } message: {
-        Text(L10n.text("Saved coordinates for the current vehicle will be permanently removed. Live parking location will still work."))
     }
-    .confirmationDialog(
-        L10n.text("Clear saved locations for every vehicle?"),
-        isPresented: $showFleetLocationClearConfirmation,
-        titleVisibility: .visible
-    ) {
-        Button(L10n.text("Clear All Locations"), role: .destructive) {
-            runMaintenance(.clearLocations(.all))
+
+    /// Maintenance actions, status, exports and destructive actions. The animation applies to
+    /// the whole group because `isMaintaining` flips inside Task continuations without a
+    /// transaction; this binding is what crossfades the spinner row in and out.
+    @ViewBuilder
+    private var maintenanceSection: some View {
+        VStack(spacing: 8) {
+            maintenanceButtons
+            maintenanceStatus
+            csvExportButtons
+            backupAndDiagnosticButtons
+            destructiveButtons
         }
-        Button(L10n.text("Cancel"), role: .cancel) {}
-    } message: {
-        Text(L10n.text("Saved coordinates for every vehicle will be permanently removed. Live parking location will still work."))
+        .hisAnimation(Motion.stateChange, value: isMaintaining)
     }
-    .confirmationDialog(
-        L10n.text("Erase this vehicle’s local data?"),
-        isPresented: $showWipeConfirmation,
-        titleVisibility: .visible
-    ) {
-        Button(L10n.text("Erase Permanently"), role: .destructive) {
-            guard let vin = selectedVIN else { return }
-            runMaintenance(.wipe(.vehicle(vin)))
+
+    @ViewBuilder
+    private var maintenanceButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                runMaintenance(.vacuum)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: justOptimised ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                    Text(justOptimised ? L10n.text("Optimized!") : L10n.text("Vacuum & Checkpoint"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(justOptimised ? HisingenTheme.semanticGood : nil)
+            .disabled(isMaintaining)
+
+            Button {
+                showPruneConfirmation = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: justPruned ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+                    Text(justPruned ? L10n.text("Pruned!") : L10n.text("Prune Old Samples"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(justPruned ? HisingenTheme.semanticGood : nil)
+            .disabled(isMaintaining)
         }
-        Button(L10n.text("Cancel"), role: .cancel) {}
-    } message: {
-        Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept."))
     }
-    .confirmationDialog(
-        L10n.text("Erase all local vehicle data?"),
-        isPresented: $showFleetWipeConfirmation,
-        titleVisibility: .visible
-    ) {
-        Button(L10n.text("Erase Everything Permanently"), role: .destructive) {
-            runMaintenance(.wipe(.all))
+
+    @ViewBuilder
+    private var maintenanceStatus: some View {
+        if isMaintaining {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(L10n.text("Database maintenance in progress…"))
+            }
+            .hisType(.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+            .transition(.opacity)
         }
-        Button(L10n.text("Cancel"), role: .cancel) {}
-    } message: {
-        Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept."))
+
+        if let feedback {
+            Label(feedback.message, systemImage: feedback.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .hisType(.caption, weight: .medium)
+                .foregroundStyle(feedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
+                .textSelection(.enabled)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        }
     }
-}
+
+    @ViewBuilder
+    private var csvExportButtons: some View {
+        HStack(spacing: 8) {
+            Button {
+                let vin = state?.identity.vin
+                let db = database
+                Task { @MainActor in
+                    let csv = await Task.detached(priority: .userInitiated) {
+                        db.charging.exportChargingSessionsCSV(for: vin)
+                    }.value
+                    saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text(L10n.text("Export Charging (CSV)"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Button {
+                let vin = state?.identity.vin
+                let db = database
+                Task { @MainActor in
+                    let csv = await Task.detached(priority: .userInitiated) {
+                        db.history.exportBatteryHealthCSV(for: vin)
+                    }.value
+                    saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text(L10n.text("Export Health (CSV)"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+
+        HStack(spacing: 8) {
+            Button {
+                guard let vin = state?.identity.vin else { return }
+                let db = database
+                Task { @MainActor in
+                    let csv = await Task.detached(priority: .userInitiated) {
+                        db.history.exportTelemetryCSV(for: vin)
+                    }.value
+                    saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text(L10n.text("Export Trips (CSV)"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(state == nil)
+
+            Button {
+                guard let vin = state?.identity.vin else { return }
+                let db = database
+                Task { @MainActor in
+                    let csv = await Task.detached(priority: .userInitiated) {
+                        db.history.exportCommandAuditsCSV(for: vin)
+                    }.value
+                    saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text(L10n.text("Export Commands (CSV)"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(state == nil)
+        }
+
+        Button {
+            guard let vin = state?.identity.vin else { return }
+            let db = database
+            Task { @MainActor in
+                let csv = await Task.detached(priority: .userInitiated) {
+                    db.history.exportAirQualityCSV(for: vin)
+                }.value
+                saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "square.and.arrow.up")
+                Text(L10n.text("Export Air Quality (CSV)"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder
+    private var backupAndDiagnosticButtons: some View {
+        Button {
+            // Full local-history backup across every stored vehicle.
+            // Coordinates are included only when location history is opted in,
+            // mirroring the retention preference elsewhere in this pane.
+            let includeCoords = preferences.persistLocationHistory
+            let db = database
+            Task { @MainActor in
+                let data: Data? = await Task.detached(priority: .userInitiated) {
+                    try? db.exportBackupJSON(includeCoordinates: includeCoords)
+                }.value
+                guard let data else {
+                    setFeedback((L10n.text("The backup could not be created."), true))
+                    return
+                }
+                saveDataWithPanel(
+                    suggestedFilename: "hisingen_backup_\(Int(Date().timeIntervalSince1970)).json",
+                    contentType: .json,
+                    data: data
+                )
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "archivebox")
+                Text(L10n.text("Export All History (JSON)"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+
+        Button {
+            showAPIDiagnosticInspector = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "waveform.path.ecg.rectangle")
+                Text(L10n.text("Inspect Live API Log"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help(L10n.text("Shows the in-memory redacted request log with live filters. No raw credentials, VINs, or locations are retained."))
+
+        Button {
+            let db = database
+            Task { @MainActor in
+                let data = await Task.detached(priority: .userInitiated) {
+                    try? await DiagnosticLogExporter.buildReport(database: db)
+                }.value
+                guard let data else {
+                    setFeedback((L10n.text("The diagnostic report could not be created."), true))
+                    return
+                }
+                saveDataWithPanel(
+                    suggestedFilename: "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json",
+                    contentType: .json,
+                    data: data
+                )
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "doc.badge.clock")
+                Text(L10n.text("Export Diagnostic Logs"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
+    }
+
+    @ViewBuilder
+    private var destructiveButtons: some View {
+        Button(role: .destructive) {
+            showWipeConfirmation = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "trash")
+                Text(L10n.text("Erase This Vehicle’s Local Data"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(HisingenTheme.semanticCritical)
+        .disabled(selectedVIN == nil || isMaintaining)
+
+        // Fleet-wide erasing is its own labelled action with its own confirmation:
+        // the per-vehicle button must not be able to mean "every vehicle" by being
+        // pressed while no vehicle is loaded.
+        Button(role: .destructive) {
+            showFleetWipeConfirmation = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "trash.slash")
+                Text(L10n.text("Erase All Local Vehicle Data"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(HisingenTheme.semanticCritical)
+        .disabled(isMaintaining)
+
+        // The location toggle's dialog can only clear the loaded vehicle, so the
+        // fleet-wide clear needs an entry point of its own.
+        Button(role: .destructive) {
+            showFleetLocationClearConfirmation = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "location.slash.fill")
+                Text(L10n.text("Clear All Vehicles’ Locations"))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(HisingenTheme.semanticCritical)
+        .disabled(isMaintaining)
+    }
+
+    // MARK: - Confirmation dialogs
+
+    /// Attaches every destructive confirmation to the card. Applied last so the presentation
+    /// chain matches the original modifier order exactly.
+    private func confirmationDialogs<Content: View>(_ content: Content) -> some View {
+        content
+            .confirmationDialog(
+                L10n.text("Prune old historical samples?"),
+                isPresented: $showPruneConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.format("Prune Samples Older Than %d Days", retentionDays), role: .destructive) {
+                    runMaintenance(.prune(days: retentionDays))
+                }
+                Button(L10n.text("Cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.format("Charging samples and telemetry older than %d days will be permanently removed. Summary sessions are kept.", retentionDays))
+            }
+            .confirmationDialog(
+                L10n.text("Stop storing and clear saved locations?"),
+                isPresented: $showLocationClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                // Three answers, not two. The only non-cancel option was deletion, so a reader who wanted
+                // to stop *recording* location while keeping what already exists had no path at all:
+                // destroy the data or stay opted in.
+                Button(L10n.text("Stop Storing, Keep Locations")) {
+                    // The preference first, so the toggle's own `onChange` sees the effective value already
+                    // off and does not re-open this dialog.
+                    preferences.persistLocationHistory = false
+                    persistLocationHistory = false
+                    setFeedback((L10n.text("New locations will no longer be stored. Existing saved locations are kept."), false))
+                }
+                // Offered only with a loaded vehicle: this dialog used to clear every vehicle's
+                // coordinates whenever no snapshot was loaded. That is a fleet-wide action, and it has
+                // its own labelled button and confirmation instead.
+                if let vin = selectedVIN {
+                    Button(L10n.text("Stop Storing & Clear Locations"), role: .destructive) {
+                        runMaintenance(.clearLocations(.vehicle(vin)))
+                    }
+                }
+                Button(L10n.text("Cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.text("Saved coordinates for the current vehicle will be permanently removed. Live parking location will still work."))
+            }
+            .confirmationDialog(
+                L10n.text("Clear saved locations for every vehicle?"),
+                isPresented: $showFleetLocationClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.text("Clear All Locations"), role: .destructive) {
+                    runMaintenance(.clearLocations(.all))
+                }
+                Button(L10n.text("Cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.text("Saved coordinates for every vehicle will be permanently removed. Live parking location will still work."))
+            }
+            .confirmationDialog(
+                L10n.text("Erase this vehicle’s local data?"),
+                isPresented: $showWipeConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.text("Erase Permanently"), role: .destructive) {
+                    guard let vin = selectedVIN else { return }
+                    runMaintenance(.wipe(.vehicle(vin)))
+                }
+                Button(L10n.text("Cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept."))
+            }
+            .confirmationDialog(
+                L10n.text("Erase all local vehicle data?"),
+                isPresented: $showFleetWipeConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.text("Erase Everything Permanently"), role: .destructive) {
+                    runMaintenance(.wipe(.all))
+                }
+                Button(L10n.text("Cancel"), role: .cancel) {}
+            } message: {
+                Text(L10n.text("Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept."))
+            }
+    }
+
+    // MARK: - Maintenance
 
     private enum MaintenanceOperation: Equatable {
         case vacuum

@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 # Notarize and staple a .app bundle or .dmg image with notarytool, so a locally
 # built Hisingen gets the same Gatekeeper trust as CI releases.

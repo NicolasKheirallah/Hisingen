@@ -3007,3 +3007,13 @@
 "Other country" = "Other country";
 "Market prices, providers and the charging planner are available" = "Market prices, providers and the charging planner are available";
 "Market prices are available for Sweden only. Other countries use a typed-in rate." = "Market prices are available for Sweden only. Other countries use a typed-in rate.";
+"%d AQI" = "%d AQI";
+"/kWh" = "/kWh";
+"kWh" = "kWh";
+"Update check failed. Please try again later." = "Päivitysten tarkistus epäonnistui. Yritä myöhemmin uudelleen.";
+"Secure updates are unavailable in this build." = "Suojatut päivitykset eivät ole käytettävissä tässä versiossa.";
+"Unable to start the secure updater. Please try again later." = "Suojattua päivitysohjelmaa ei voitu käynnistää. Yritä myöhemmin uudelleen.";
+"Update download failed for %@. Please try again later." = "Päivityksen lataus epäonnistui: %@. Yritä myöhemmin uudelleen.";
+"Unknown Command" = "Tuntematon komento";
+"Hisingen does not recognize that link." = "Hisingen ei tunnista tätä linkkiä.";
+"No vehicle in Hisingen matches that name or VIN." = "Mikään Hisingenin ajoneuvo ei vastaa tätä nimeä tai VIN-tunnusta.";
