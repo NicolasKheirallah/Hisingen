@@ -43,4 +43,7 @@ jobs:
           CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           gh auth setup-git
+          # `git tag -a` needs a committer identity; the checkout action does not set one.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           sh Scripts/auto-release.sh
