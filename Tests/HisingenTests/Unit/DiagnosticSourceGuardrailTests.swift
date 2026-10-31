@@ -69,7 +69,7 @@ struct DiagnosticSourceGuardrailTests {
         )
 
         let preferences = packageRoot.appendingPathComponent(
-            "Sources/Hisingen/Services/Persistence/PreferencesStore.swift")
+            "Sources/Hisingen/Services/Persistence/PreferencesStore+Account.swift")
         let preferenceSource = try String(contentsOf: preferences, encoding: .utf8)
         let resumeCheck = try #require(
             preferenceSource.range(of: "func hasResumableSession(for brand: VehicleBrand) -> Bool")

@@ -25,6 +25,23 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var usageMode: String?
     var unavailableReason: String?
 
+    var usageModeDisplayName: String? {
+        guard let usageMode else { return nil }
+        let raw = usageMode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let token = raw.hasPrefix("USAGE_MODE_") ? String(raw.dropFirst("USAGE_MODE_".count)) : raw
+        switch token {
+        case "", "0", "UNSPECIFIED": return nil
+        case "ABANDONED": return L10n.text("Abandoned")
+        case "INACTIVE": return L10n.text("Inactive")
+        case "CONVENIENCE": return L10n.text("Convenience")
+        case "ACTIVE": return L10n.text("Active")
+        case "DRIVING": return L10n.text("Driving")
+        case "ENGINE_ON": return L10n.text("Engine Running")
+        case "ENGINE_OFF": return L10n.text("Engine Stopped")
+        default: return L10n.format("Unrecognised state: %@", token.replacingOccurrences(of: "_", with: " ").capitalized)
+        }
+    }
+
     init(
         availability: VehicleAvailability,
         availabilityReportedAt: Date? = nil,

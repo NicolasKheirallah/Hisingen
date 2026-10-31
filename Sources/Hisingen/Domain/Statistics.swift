@@ -55,6 +55,33 @@ enum Statistics {
         return LinearFit(slope: slope, intercept: intercept)
     }
 
+    /// Theil-Sen slope: median of all pairwise slopes. Robust to up to ~29% outliers,
+    /// where OLS follows a single bad GOM reading. O(n^2) but history series are small.
+    /// `nil` when fewer than 2 points or no x spread.
+    static func theilSenSlope(_ points: [(x: Double, y: Double)]) -> Double? {
+        guard points.count >= 2 else { return nil }
+        var slopes: [Double] = []
+        slopes.reserveCapacity(points.count * (points.count - 1) / 2)
+        for i in 0..<points.count {
+            for j in (i + 1)..<points.count {
+                let dx = points[j].x - points[i].x
+                guard dx != 0 else { continue }
+                slopes.append((points[j].y - points[i].y) / dx)
+            }
+        }
+        return median(slopes)
+    }
+
+    /// Robust line: Theil-Sen slope anchored at the median point, so one bad milestone
+    /// cannot tilt the intercept either. Falls back to OLS when Theil-Sen has no spread.
+    static func robustLinearRegression(_ points: [(x: Double, y: Double)]) -> LinearFit? {
+        guard points.count >= 2,
+              let slope = theilSenSlope(points) ?? linearRegression(points)?.slope,
+              let medianX = median(points.map(\.x)),
+              let medianY = median(points.map(\.y)) else { return nil }
+        return LinearFit(slope: slope, intercept: medianY - slope * medianX)
+    }
+
     /// Pearson correlation coefficient of `pairs`, in -1...1. `nil` when there isn't enough
     /// spread in either axis to define one (e.g. every x value identical).
     static func pearsonCorrelation(_ pairs: [(Double, Double)]) -> Double? {

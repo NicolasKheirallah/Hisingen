@@ -72,9 +72,16 @@ enum HistoryInsights {
         }
         let stride = Double(chronological.count - 1) / Double(maximumPoints - 1)
         var picked: [HistoricalChargingSample] = []
+        var lastIndex = -1
         for index in 0..<maximumPoints {
-            picked.append(chronological[min(Int((Double(index) * stride).rounded()),
-                                            chronological.count - 1)])
+            let candidate = min(Int(Double(index) * stride), chronological.count - 1)
+            guard candidate != lastIndex else { continue }
+            picked.append(chronological[candidate])
+            lastIndex = candidate
+        }
+        // Always keep the final sample so the curve ends where the session ended.
+        if lastIndex != chronological.count - 1, let last = chronological.last {
+            picked.append(last)
         }
         return picked.enumerated().map(point)
     }
@@ -121,14 +128,27 @@ enum HistoryInsights {
     /// Wall-clock time spent charging from 10% to 80% state of charge, interpolated between
     /// the bracketing samples so the estimate isn't quantized to poll frequency. `nil` when the
     /// curve never reaches both bounds (e.g. a session that started above 10% or stopped
-    /// before reaching 80%).
+    /// before reaching 80%). Plateaus (repeated identical SoC) are skipped so a flat
+    /// `10,10,11` sequence still crosses 10.
     static func tenToEightyDuration(from curve: [ChargingCurvePoint]) -> TimeInterval? {
         guard curve.count >= 2 else { return nil }
         func crossingTime(_ target: Double) -> Date? {
-            for (a, b) in zip(curve, curve.dropFirst()) where a.soc <= target && b.soc >= target && b.soc > a.soc {
+            // Collapse consecutive duplicates for bracketing; keep timestamps of first occurrence.
+            var distinct: [ChargingCurvePoint] = []
+            for point in curve {
+                if distinct.last?.soc != point.soc { distinct.append(point) }
+            }
+            if distinct.count < 2 {
+                // Single distinct level: only an exact edge can cross.
+                if curve.first?.soc == target { return curve.first?.timestamp }
+                return nil
+            }
+            for (a, b) in zip(distinct, distinct.dropFirst()) where a.soc <= target && b.soc >= target && b.soc > a.soc {
+                if a.soc == target { return a.timestamp }
                 let fraction = (target - a.soc) / (b.soc - a.soc)
                 return a.timestamp.addingTimeInterval(b.timestamp.timeIntervalSince(a.timestamp) * fraction)
             }
+            if distinct.last?.soc == target { return distinct.last?.timestamp }
             return nil
         }
         guard let start = crossingTime(10), let end = crossingTime(80), end > start else { return nil }
@@ -411,6 +431,32 @@ enum HistoryInsights {
     static func batteryHealthTrend(from records: [BatteryHealthRecord]) -> BatteryHealthTrend {
         let points = records.map { (x: $0.odometerKm / 10_000, y: $0.stateOfHealthPct) }
         return BatteryHealthTrend(stateOfHealthPctPer10kKm: Statistics.linearRegression(points)?.slope)
+    }
+
+    static func batteryHealthTrendRobust(from records: [BatteryHealthRecord]) -> BatteryHealthTrend {
+        let points = records.map { (x: $0.odometerKm / 10_000, y: $0.stateOfHealthPct) }
+        if let slope = Statistics.theilSenSlope(points) {
+            return BatteryHealthTrend(stateOfHealthPctPer10kKm: slope)
+        }
+        return batteryHealthTrend(from: records)
+    }
+
+    static func stableStateOfHealth(from records: [BatteryHealthRecord], limit: Int = 3) -> Double? {
+        BatteryHealthEstimator.stableMedianSoH(from: records, limit: limit)
+    }
+
+    /// Capacity implied by one session, without a reference pack. Shared with
+    /// the estimator so UI previews and persistence agree on the same math.
+    static func sessionImpliedUsableKwh(from session: HistoricalChargingSession) -> Double? {
+        guard let endSoc = session.endSoc, endSoc > session.startSoc,
+              session.energyDeliveredKwh > 0 else { return nil }
+        let delta = endSoc - session.startSoc
+        guard delta >= BatteryHealthEstimator.minimumSessionDeltaSoc else { return nil }
+        let efficiency = session.peakPowerKw > BatteryHealthEstimator.dcPowerThresholdKw
+            ? BatteryHealthEstimator.dcChargingEfficiency
+            : BatteryHealthEstimator.acChargingEfficiency
+        let usable = session.energyDeliveredKwh * efficiency / (delta / 100)
+        return usable.isFinite && usable > 0 ? usable : nil
     }
 
     /// Projects state of health at a future odometer reading from the fitted trend. `nil` when

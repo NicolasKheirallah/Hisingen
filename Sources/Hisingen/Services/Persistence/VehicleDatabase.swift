@@ -5,8 +5,86 @@ import OSLog
 final class VehicleDatabase: @unchecked Sendable {
     static let shared = VehicleDatabase()
 
-    private let db: SQLiteDatabase
-    private let logger = AppLog.logger("database")
+    let db: SQLiteDatabase
+    struct HistoryToken: Equatable, Sendable {
+        let vin: String
+        let fleetGeneration: UInt64
+        let vehicleGeneration: UInt64
+    }
+    private let historyBarrier = NSRecursiveLock()
+    private let historyAdmission = NSLock()
+    private var fleetHistoryGeneration: UInt64 = 0
+    private var vehicleHistoryGenerations: [String: UInt64] = [:]
+    private var fleetEraseCount = 0
+    private var vehicleEraseCounts: [String: Int] = [:]
+
+    private func historyKey(_ vin: String) -> String {
+        vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    }
+
+    func historyToken(for vin: String) -> HistoryToken? {
+        historyAdmission.lock()
+        defer { historyAdmission.unlock() }
+        let key = historyKey(vin)
+        guard fleetEraseCount == 0, vehicleEraseCounts[key, default: 0] == 0 else { return nil }
+        return HistoryToken(vin: key, fleetGeneration: fleetHistoryGeneration,
+                            vehicleGeneration: vehicleHistoryGenerations[key, default: 0])
+    }
+
+    @discardableResult
+    func recordHistory(ifCurrent token: HistoryToken, _ work: () -> Void) -> Bool {
+        historyBarrier.lock()
+        defer { historyBarrier.unlock() }
+        historyAdmission.lock()
+        let admitted = fleetEraseCount == 0 && vehicleEraseCounts[token.vin, default: 0] == 0
+            && token.fleetGeneration == fleetHistoryGeneration
+            && token.vehicleGeneration == vehicleHistoryGenerations[token.vin, default: 0]
+        historyAdmission.unlock()
+        guard admitted else { return false }
+        work()
+        return true
+    }
+
+    func beginHistoryErase(scope: LocalDataEraser.Scope) -> VehicleScope? {
+        let vehicles: VehicleScope
+        switch scope {
+        case .everything(let target), .locations(let target), .session(let target): vehicles = target
+        case .samples, .aged, .compact: return nil
+        }
+        historyAdmission.lock()
+        defer { historyAdmission.unlock() }
+        switch vehicles {
+        case .all:
+            fleetEraseCount += 1
+            fleetHistoryGeneration &+= 1
+        case .vehicle(let vin):
+            let key = historyKey(vin)
+            vehicleEraseCounts[key, default: 0] += 1
+            vehicleHistoryGenerations[key, default: 0] &+= 1
+        }
+        return vehicles
+    }
+
+    func endHistoryErase(_ vehicles: VehicleScope?) {
+        guard let vehicles else { return }
+        historyAdmission.lock()
+        defer { historyAdmission.unlock() }
+        switch vehicles {
+        case .all: fleetEraseCount -= 1
+        case .vehicle(let vin):
+            let key = historyKey(vin)
+            let remaining = vehicleEraseCounts[key, default: 0] - 1
+            if remaining == 0 { vehicleEraseCounts.removeValue(forKey: key) }
+            else { vehicleEraseCounts[key] = remaining }
+        }
+    }
+
+    func eraseWithHistoryBarrier<T>(_ work: () throws -> T) rethrows -> T {
+        historyBarrier.lock()
+        defer { historyBarrier.unlock() }
+        return try work()
+    }
+    let logger = AppLog.logger("database")
     // JSON coders and date formatters are created per operation rather than shared: this type
     // is `@unchecked Sendable` and its methods run on many threads, and `saveSnapshot` encodes
     // outside the SQLite lock, so a shared `JSONEncoder`/`ISO8601DateFormatter` was an
@@ -17,7 +95,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 5
+    static let latestSchemaVersion = 6
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -42,7 +120,7 @@ final class VehicleDatabase: @unchecked Sendable {
     /// Whether the database file already existed when this process opened it. Gates the
     /// one-shot pre-migration backup and the corruption quarantine – neither is meaningful
     /// for a database this launch just created.
-    private let databaseFilePreexisted: Bool
+    let databaseFilePreexisted: Bool
 
     init(database: SQLiteDatabase? = nil) {
         var handle: SQLiteDatabase
@@ -91,7 +169,17 @@ final class VehicleDatabase: @unchecked Sendable {
         let filePreexisted = FileManager.default.fileExists(atPath: dbURL.path)
         let handle = Self.openQuarantiningCorruption(
             at: dbURL, preexisting: filePreexisted, logger: logger)
+        Self.applyRestrictivePermissions(at: dbURL)
         return (handle, filePreexisted)
+    }
+
+    private static func applyRestrictivePermissions(at dbURL: URL) {
+        let fileManager = FileManager.default
+        for suffix in ["", "-wal", "-shm"] {
+            let path = dbURL.path + suffix
+            guard fileManager.fileExists(atPath: path) else { continue }
+            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        }
     }
 
     /// Opens the database, and if a pre-existing file fails `PRAGMA quick_check`, moves it
@@ -113,14 +201,24 @@ final class VehicleDatabase: @unchecked Sendable {
 
         logger.fault("Database failed PRAGMA quick_check; quarantining \(dbURL.lastPathComponent, privacy: .public) and starting fresh")
         handle.close()
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let baseStamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let uniqueSuffix: String = {
+            let ms = Int(Date().timeIntervalSince1970 * 1000) % 1000
+            return String(format: "%03d-%08X", ms, UInt32.random(in: 0...UInt32.max))
+        }()
+        let stamp = "\(baseStamp)-\(uniqueSuffix)"
         let fileManager = FileManager.default
         for suffix in ["", "-wal", "-shm"] {
             let source = URL(fileURLWithPath: dbURL.path + suffix)
             guard fileManager.fileExists(atPath: source.path) else { continue }
-            let destination = URL(fileURLWithPath: dbURL.path + ".corrupt-\(stamp)" + suffix)
+            var destination = URL(fileURLWithPath: dbURL.path + ".corrupt-\(stamp)" + suffix)
+            if fileManager.fileExists(atPath: destination.path) {
+                let fallback = URL(fileURLWithPath: dbURL.path + ".corrupt-\(stamp)-\(UUID().uuidString.prefix(8))" + suffix)
+                destination = fallback
+            }
             do {
                 try fileManager.moveItem(at: source, to: destination)
+                try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
             } catch {
                 logger.error("Could not quarantine \(source.lastPathComponent, privacy: .public): \(error, privacy: .public)")
             }
@@ -303,6 +401,28 @@ final class VehicleDatabase: @unchecked Sendable {
         );
         CREATE INDEX IF NOT EXISTS idx_air_quality_vin ON air_quality_history(vin, timestamp DESC);
 
+        CREATE TABLE IF NOT EXISTS tyre_pressure_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            position TEXT NOT NULL,
+            kilopascals REAL NOT NULL,
+            reference_kpa REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_tyre_pressure_vin ON tyre_pressure_history(vin, position, timestamp DESC);
+
+        -- One row per warning episode: opened when the warning first appears in a report, closed
+        -- when a report that covers the warning no longer shows it. `cleared_at` NULL means open.
+        CREATE TABLE IF NOT EXISTS vehicle_warning_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin TEXT NOT NULL,
+            warning TEXT NOT NULL,
+            first_seen REAL NOT NULL,
+            cleared_at REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_warning_events_vin ON vehicle_warning_events(vin, first_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_warning_events_open ON vehicle_warning_events(vin, warning) WHERE cleared_at IS NULL;
+
         CREATE TABLE IF NOT EXISTS vehicle_images (
             vin TEXT NOT NULL,
             angle INTEGER NOT NULL,
@@ -345,794 +465,4 @@ final class VehicleDatabase: @unchecked Sendable {
             logger.fault("Could not initialize database schema: \(error, privacy: .public)")
         }
     }
-
-    /// Removes old `*.pre-vN.bak` snapshots once the schema has fully reached the latest version,
-    /// while retaining the backup created for the current schema migration.
-    /// `backupBeforeMigration` writes one (a full-size `VACUUM INTO` copy) before each schema
-    /// bump and nothing ever deleted them, so a few version bumps left several ~20 MB copies
-    /// beside the live database. A failed migration leaves `user_version` below target, so the
-    /// backup is only eligible for rotation after the migration it guards has actually landed.
-    /// Keeping the newest one matters: a migration can complete successfully yet still reveal
-    /// a semantic data problem later, and deleting its just-created backup made that unrecoverable.
-    private func pruneMigrationBackups() {
-        guard schemaVersion() >= Self.latestSchemaVersion,
-              db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return }
-        let directory = (db.path as NSString).deletingLastPathComponent
-        let prefix = (db.path as NSString).lastPathComponent + ".pre-v"
-        let retainedName = "\(prefix)\(Self.latestSchemaVersion).bak"
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: directory) else { return }
-        for entry in entries where entry.hasPrefix(prefix) && entry.hasSuffix(".bak")
-            && entry != retainedName {
-            try? FileManager.default.removeItem(atPath: (directory as NSString).appendingPathComponent(entry))
-        }
-    }
-
-    private func schemaVersion() -> Int {
-        (try? db.query(sql: "PRAGMA user_version;") { _ in } process: { stmt -> Int in
-            stmt.step() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
-        }) ?? 0
-    }
-
-    /// One-shot copy of the database taken immediately before a schema migration, so a bad
-    /// migration or a mid-upgrade crash leaves a recoverable "before" file. Skipped for fresh
-    /// installs (nothing to lose) and in-memory databases; never overwrites an existing
-    /// backup for the same target version. Returns `false` only when a needed backup could not
-    /// be written, so the caller can flag the migration that follows as unprotected.
-    private func backupBeforeMigration(from currentVersion: Int) -> Bool {
-        guard databaseFilePreexisted,
-              currentVersion < Self.latestSchemaVersion,
-              db.path != ":memory:", db.path != ":unavailable:", !db.path.isEmpty else { return true }
-        let backupPath = db.path + ".pre-v\(Self.latestSchemaVersion).bak"
-        guard !FileManager.default.fileExists(atPath: backupPath) else { return true }
-        let escaped = backupPath.replacingOccurrences(of: "'", with: "''")
-        do {
-            try db.execute(sql: "VACUUM INTO '\(escaped)';")
-            logger.notice("Wrote pre-migration database backup to \(backupPath, privacy: .public)")
-            return true
-        } catch {
-            logger.error("Pre-migration database backup failed: \(error, privacy: .public)")
-            return false
-        }
-    }
-
-    /// Adds a column unless it already exists. A failed ALTER is logged with its statement; the
-    /// callers re-check `columnExists` before advancing `user_version`, so a failure retries.
-    private func addColumnIfMissing(table: String, column: String, declaration: String) {
-        guard !columnExists(table: table, column: column) else { return }
-        let sql = "ALTER TABLE \(table) ADD COLUMN \(column) \(declaration);"
-        do {
-            try db.execute(sql: sql)
-        } catch {
-            logger.error("Migration statement failed: \(sql, privacy: .public) – \(error, privacy: .public)")
-        }
-    }
-
-    private func columnExists(table: String, column: String) -> Bool {
-        let sql = "PRAGMA table_info(\(table));"
-        let columns = (try? db.query(sql: sql) { _ in } process: { stmt -> Set<String> in
-            var names = Set<String>()
-            while stmt.step() {
-                if let name = stmt.columnText(at: 1) { names.insert(name.lowercased()) }
-            }
-            return names
-        }) ?? []
-        return columns.contains(column.lowercased())
-    }
-
-    /// Ordered, version-gated schema migrations tracked by `PRAGMA user_version`.
-    ///
-    /// The baseline DDL above stays idempotent and runs on every launch; anything that
-    /// rewrites data or must run exactly once belongs here instead of being re-executed with
-    /// `try?` every start-up (which made a failed migration indistinguishable from success).
-    /// Version 1 reproduces the pre-`user_version` ad-hoc ALTERs for existing installs.
-    ///
-    /// Additive only: `ALTER TABLE ADD COLUMN`, `CREATE TABLE/INDEX IF NOT EXISTS`, and
-    /// in-place `UPDATE`s. A migration must never `DROP` or recreate a table that can hold
-    /// user history – `VehicleDatabaseMigrationTests` guards that rows survive an upgrade.
-    /// Internal (not private) so the migration round-trip test can drive the machinery
-    /// directly: open a store, re-run the migrator, assert the version holds steady.
-    func runMigrations(from currentVersion: Int) {
-        // Local version cursor: a block only advances it after its statements succeeded, and
-        // each block only runs when the previous one completed, so a failed migration can
-        // never be skipped by a later block bumping `user_version` past it – it retries on
-        // the next launch instead.
-        var version = currentVersion
-
-        // v1: quarantine legacy battery-health rows + add the disambiguation columns the
-        // baseline now creates for new installs. Idempotent per table.
-        if version < 1 {
-            addColumnIfMissing(table: "battery_health_history", column: "measurement_source",
-                               declaration: "TEXT NOT NULL DEFAULT 'legacy'")
-            addColumnIfMissing(table: "telemetry_logs", column: "avg_consumption_unit", declaration: "TEXT")
-            addColumnIfMissing(table: "charging_samples", column: "charging_type", declaration: "TEXT")
-            let v1ColumnsReady = columnExists(table: "battery_health_history", column: "measurement_source")
-                && columnExists(table: "telemetry_logs", column: "avg_consumption_unit")
-                && columnExists(table: "charging_samples", column: "charging_type")
-            if v1ColumnsReady {
-                // Quarantine rows from the old inferred/Volvo-capacity implementation, then
-                // record the version – in one statement group so a failed UPDATE (`sqlite3_exec`
-                // stops at the first error) never lets `user_version` advance past the
-                // quarantine. Previously the bump ran unconditionally and a transient failure
-                // skipped the quarantine forever. Mirrors the v2 block below.
-                do {
-                    try db.execute(sql: """
-                        UPDATE battery_health_history SET measurement_source = '\(BatteryHealthRecord.legacyEstimateSource)' WHERE measurement_source = 'measured';
-                        PRAGMA user_version = 1;
-                        """)
-                    version = 1
-                } catch {
-                    logger.error("Battery-health quarantine migration failed; it will retry next launch: \(error, privacy: .public)")
-                }
-            } else {
-                logger.error("Battery-health schema migration remains incomplete; it will retry next launch")
-            }
-        }
-
-        // v2: explicit charging-session lifecycle and versioned summary provenance.
-        if version == 1 {
-            let additions: [(String, String)] = [
-                ("lifecycle_state", "TEXT NOT NULL DEFAULT 'active'"),
-                ("completion_reason", "TEXT"),
-                ("energy_source", "TEXT NOT NULL DEFAULT 'soc_capacity_estimate'"),
-                ("confidence", "TEXT NOT NULL DEFAULT 'low'"),
-                ("sample_coverage", "REAL"),
-                ("usable_capacity_kwh", "REAL"),
-                ("tariff_price_per_kwh", "REAL"),
-                ("night_tariff_enabled", "INTEGER NOT NULL DEFAULT 0"),
-                ("night_tariff_price_per_kwh", "REAL"),
-                ("night_tariff_start_hour", "INTEGER"),
-                ("night_tariff_end_hour", "INTEGER"),
-                ("currency_symbol", "TEXT"),
-                ("target_soc", "REAL"),
-                ("last_observed_at", "REAL"),
-                ("summary_version", "INTEGER NOT NULL DEFAULT 2"),
-                ("pending_stop_count", "INTEGER NOT NULL DEFAULT 0"),
-                ("estimated_cost", "REAL")
-            ]
-            for (column, declaration) in additions {
-                addColumnIfMissing(table: "charging_sessions", column: column, declaration: declaration)
-            }
-            if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0.0) }) {
-                do {
-                    try db.execute(sql: """
-                        UPDATE charging_sessions SET
-                            lifecycle_state = CASE WHEN ended_at IS NULL THEN 'active' ELSE 'completed' END,
-                            completion_reason = CASE WHEN ended_at IS NULL THEN NULL ELSE 'legacy' END,
-                            energy_source = 'legacy_estimate', confidence = 'low', summary_version = 1,
-                            last_observed_at = COALESCE(ended_at, started_at);
-                        CREATE INDEX IF NOT EXISTS idx_charging_sessions_active
-                            ON charging_sessions(vin, lifecycle_state, ended_at);
-                        PRAGMA user_version = 2;
-                        """)
-                    version = 2
-                } catch {
-                    logger.error("Charging-session data migration failed; it will retry next launch: \(error, privacy: .public)")
-                }
-            } else {
-                logger.error("Charging-session schema migration remains incomplete; it will retry next launch")
-            }
-        }
-
-        // v3: durable business/private classification for locally-derived trips.
-        if version == 2 {
-            do {
-                try db.execute(sql: """
-                    CREATE TABLE IF NOT EXISTS trip_tags (
-                        trip_id TEXT NOT NULL,
-                        vin TEXT NOT NULL,
-                        purpose TEXT NOT NULL,
-                        updated_at REAL NOT NULL,
-                        PRIMARY KEY (trip_id, vin)
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_trip_tags_vin
-                        ON trip_tags(vin, updated_at DESC);
-                    PRAGMA user_version = 3;
-                    """)
-                version = 3
-            } catch {
-                logger.error("Trip-classification schema migration remains incomplete: \(error, privacy: .public)")
-            }
-        }
-        if version == 3 {
-            do {
-                try db.withTransaction {
-                    try db.execute(sql: """
-                        CREATE TABLE IF NOT EXISTS vehicle_activity (
-                            id TEXT PRIMARY KEY, vin TEXT NOT NULL,
-                            timestamp REAL NOT NULL, payload BLOB NOT NULL
-                        );
-                        CREATE INDEX IF NOT EXISTS idx_vehicle_activity_vin
-                            ON vehicle_activity(vin, timestamp DESC);
-                        PRAGMA user_version = 4;
-                        """)
-                }
-                version = 4
-            } catch {
-                logger.error("Vehicle activity migration remains incomplete: \(error, privacy: .public)")
-            }
-        }
-
-        // v5: market-price charging cost per session, backfilled from recorded samples.
-        if version == 4 {
-            do {
-                // A previous launch may have applied the ALTER but failed before the version
-                // bump; guard the ALTER so the retry completes instead of erroring forever.
-                if !columnExists(table: "charging_sessions", column: "spot_estimated_cost") {
-                    try db.execute(sql: "ALTER TABLE charging_sessions ADD COLUMN spot_estimated_cost REAL;")
-                }
-                try db.execute(sql: "PRAGMA user_version = 5;")
-            } catch {
-                logger.error("Spot-cost schema migration remains incomplete: \(error, privacy: .public)")
-            }
-        }
-    }
-
-
-    // MARK: - Command Receipts
-
-
-    // MARK: - Provider Backoff
-
-
-
-
-    // MARK: - Battery Health History
-
-    /// What makes a battery-health row a *milestone* rather than a duplicate.
-    ///
-    /// `VehicleStateStore.save(_:)` runs on every refresh – minutes apart – but state of
-    /// health moves over months. Recording unconditionally produced ~15 rows/hour that
-    /// shared 3 distinct SoH values, and nothing prunes this table, so it grew without
-    /// bound. A row is now written only when it carries new information.
-    enum BatteryHealthMilestone {
-        /// Heartbeat, so a stationary vehicle still leaves a periodic trend point.
-        static let minimumInterval: TimeInterval = 7 * 24 * 60 * 60
-        /// Real SoH movement. Below this is measurement noise, not degradation.
-        static let sohDeltaPct: Double = 0.5
-        /// Degradation tracks mileage, so meaningful distance also earns a row.
-        static let odometerDeltaKm: Double = 500
-    }
-
-
-    /// Records a battery-health milestone, skipping rows that duplicate the last one.
-    /// Returns whether a row was actually written.
-
-
-    /// Records a cabin air-quality sample, skipping ones that would just duplicate the last
-    /// recorded reading. Returns whether a row was actually written.
-
-
-    /// Records drive telemetry, skipping refreshes where the vehicle hasn't moved.
-    /// One duplicate immediately after movement is retained as a parked boundary so
-    /// short journeys can be split without storing every stationary poll.
-    /// Returns whether a row was actually written.
-
-    // MARK: - Trip classification and monthly mileage
-
-
-    // MARK: - Remote Commands Audit
-
-
-    // MARK: - Database Diagnostics & Maintenance
-
-    /// Size of the database file and its WAL/SHM siblings. Uses the handle's own path, so an
-    /// in-memory or unavailable handle reports 0 instead of the on-disk file's size.
-    var databaseSizeBytes: Int64 {
-        [db.path, db.path + "-wal", db.path + "-shm"].reduce(0) { total, path in
-            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64) ?? 0
-            return total + size
-        }
-    }
-
-    func recordCounts() -> (snapshots: Int, chargingSessions: Int, chargingSamples: Int, batteryHealth: Int, telemetry: Int, commands: Int) {
-        func count(table: String) -> Int {
-            let sql = "SELECT COUNT(*) FROM \(table);"
-            let c = try? db.query(sql: sql) { _ in } process: { stmt -> Int in
-                stmt.step() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
-            }
-            return c ?? 0
-        }
-        return (
-            snapshots: count(table: "vehicle_snapshots"),
-            chargingSessions: count(table: "charging_sessions"),
-            chargingSamples: count(table: "charging_samples"),
-            batteryHealth: count(table: "battery_health_history WHERE \(BatteryHealthRecord.measurementSourceFilter)"),
-            telemetry: count(table: "telemetry_logs"),
-            commands: count(table: "remote_commands_log")
-        )
-    }
-
-    /// Maintenance entry point for interactive callers. Throws so a caller that shows success
-    /// only reports it after the work finished; callers that want best effort write `try?` at
-    /// the call site rather than choosing it here.
-    func vacuumOrThrow() throws {
-        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE);")
-        try db.execute(sql: "VACUUM;")
-    }
-
-    /// Error-reporting variant used by Settings so success is only shown after the
-    /// transaction and compaction both finish.
-    func pruneHistoricalSamplesOrThrow(olderThanDays: Int = 90) throws {
-        let cutoff = Date().addingTimeInterval(-Double(olderThanDays * 86400))
-        try db.withTransaction {
-            try db.query(sql: "DELETE FROM charging_samples WHERE timestamp < ?;") { stmt in
-                try stmt.bindDate(cutoff, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-            try db.query(sql: "DELETE FROM telemetry_logs WHERE timestamp < ?;") { stmt in
-                try stmt.bindDate(cutoff, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-        try vacuumOrThrow()
-    }
-
-    /// The horizon the storage card states next to the sample-retention picker, so the two
-    /// numbers the reader compares come from one place.
-    static let sessionRetentionDays = 730
-
-    /// Bounds growth of the tables that previously had no retention path at all (manual or
-    /// automatic) – `charging_sessions`, `battery_health_history`, `remote_commands_log`,
-    /// and the per-hour `connectivity_history`/`cabin_climate_history` heartbeats. Defaults
-    /// are deliberately longer than `pruneHistoricalSamples`'s 90 days: the session/health/
-    /// audit rows are low-volume summaries (one per charge, one per command, health is
-    /// change-gated), so there's little storage pressure to justify discarding a user's
-    /// longer-term charging or health history as aggressively as the high-volume samples.
-    /// `sampleRetentionDays` is opt-in: when set, `charging_samples` and `telemetry_logs` are
-    /// pruned to that horizon too (the Settings retention picker). The one VACUUM at the end
-    /// covers every table in the pass.
-    func pruneAgedHistoryOrThrow(
-        chargingSessionsOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
-        batteryHealthOlderThanDays: Int = VehicleDatabase.sessionRetentionDays,
-        commandAuditsOlderThanDays: Int = 180,
-        airQualityOlderThanDays: Int = 365,
-        connectivityOlderThanDays: Int = 180,
-        cabinClimateOlderThanDays: Int = 180,
-        vehicleImagesOlderThanDays: Int = 120,
-        vehicleImagesHardCap: Int = 24,
-        sampleRetentionDays: Int? = nil
-    ) throws {
-        var cutoffs: [(sql: String, column: String, days: Int)] = [
-            ("DELETE FROM charging_sessions WHERE started_at < ?;", "started_at", chargingSessionsOlderThanDays),
-            ("DELETE FROM battery_health_history WHERE timestamp < ?;", "timestamp", batteryHealthOlderThanDays),
-            ("DELETE FROM remote_commands_log WHERE executed_at < ?;", "executed_at", commandAuditsOlderThanDays),
-            ("DELETE FROM vehicle_activity WHERE timestamp < ?;", "timestamp", commandAuditsOlderThanDays),
-            ("DELETE FROM air_quality_history WHERE timestamp < ?;", "timestamp", airQualityOlderThanDays),
-            ("DELETE FROM connectivity_history WHERE timestamp < ?;", "timestamp", connectivityOlderThanDays),
-            ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays),
-            // The render-image cache stores a full-resolution PNG plus a thumbnail per
-            // (vin, angle) and was never pruned – it is the single biggest contributor to a
-            // multi-megabyte database on accounts that have tried several render angles.
-            ("DELETE FROM vehicle_images WHERE updated_at < ?;", "updated_at", vehicleImagesOlderThanDays)
-        ]
-        if let sampleRetentionDays {
-            cutoffs += [
-                ("DELETE FROM charging_samples WHERE timestamp < ?;", "timestamp", sampleRetentionDays),
-                ("DELETE FROM telemetry_logs WHERE timestamp < ?;", "timestamp", sampleRetentionDays)
-            ]
-        }
-        try db.withTransaction {
-            for (sql, _, days) in cutoffs {
-                let cutoff = Date().addingTimeInterval(-Double(days * 86400))
-                try db.query(sql: sql) { stmt in
-                    try stmt.bindDate(cutoff, at: 1)
-                    try stmt.executeUpdate()
-                } process: { _ in }
-            }
-            // Hard ceiling regardless of age: keep only the most-recently-refreshed rows.
-            try db.query(
-                sql: "DELETE FROM vehicle_images WHERE rowid NOT IN (SELECT rowid FROM vehicle_images ORDER BY updated_at DESC LIMIT ?);"
-            ) { stmt in
-                try stmt.bindInt64(Int64(vehicleImagesHardCap), at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-        try vacuumOrThrow()
-    }
-
-    /// Privacy-sensitive, error-reporting variant used by Settings. The compaction is part
-    /// of the operation so deleted coordinates are not left behind in free SQLite pages.
-    func clearStoredLocationsOrThrow(for vin: String) throws {
-        try db.withTransaction {
-            try db.query(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL WHERE vin = ?;") { stmt in
-                try stmt.bindText(vin, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-            try db.query(sql: "UPDATE charging_sessions SET location_name = NULL WHERE vin = ?;") { stmt in
-                try stmt.bindText(vin, at: 1)
-                try stmt.executeUpdate()
-            } process: { _ in }
-        }
-        try vacuumOrThrow()
-    }
-
-    /// The fleet-wide counterpart of `clearStoredLocationsOrThrow(for:)`, named so that
-    /// clearing every vehicle's coordinates is always a deliberate call.
-    func clearAllStoredLocationsOrThrow() throws {
-        try db.withTransaction {
-            try db.execute(sql: "UPDATE telemetry_logs SET latitude = NULL, longitude = NULL;")
-            try db.execute(sql: "UPDATE charging_sessions SET location_name = NULL;")
-        }
-        try vacuumOrThrow()
-    }
-
-    // MARK: - CSV Exporters
-
-
-    // MARK: - Wipe / Purge
-
-    func wipeVehicleOrThrow(for vin: String) throws {
-        // One transaction: a crash mid-wipe previously left partially cleared history, which
-        // matters most for the sign-out path where the user expects the data to be *gone*.
-        let statements = [
-            "DELETE FROM vehicle_snapshots WHERE vin = ?;",
-            "DELETE FROM charging_baselines WHERE vin = ?;",
-            "DELETE FROM command_receipts WHERE vin = ?;",
-            "DELETE FROM provider_backoff WHERE vin = ?;",
-            "DELETE FROM vehicle_activity WHERE vin = ?;",
-            "DELETE FROM charging_sessions WHERE vin = ?;",
-            "DELETE FROM battery_health_history WHERE vin = ?;",
-            "DELETE FROM telemetry_logs WHERE vin = ?;",
-            "DELETE FROM trip_tags WHERE vin = ?;",
-            "DELETE FROM charging_samples WHERE vin = ?;",
-            "DELETE FROM remote_commands_log WHERE vin = ?;",
-            "DELETE FROM connectivity_history WHERE vin = ?;",
-            "DELETE FROM cabin_climate_history WHERE vin = ?;",
-            "DELETE FROM air_quality_history WHERE vin = ?;",
-            "DELETE FROM fuel_entries WHERE vin = ?;",
-            "DELETE FROM vehicle_images WHERE vin = ?;"
-        ]
-        try db.withTransaction {
-            for sql in statements {
-                try db.query(sql: sql) { stmt in
-                    try stmt.bindText(vin, at: 1)
-                    try stmt.executeUpdate()
-                } process: { _ in }
-            }
-        }
-        try vacuumOrThrow()
-    }
-
-    /// The fleet-wide counterpart of `wipeVehicleOrThrow(for:)`. Spelled out as its own member
-    /// because "every vehicle" must never be what a missing argument means.
-    func wipeFleetOrThrow() throws {
-        try db.withTransaction {
-            try db.execute(sql: """
-            DELETE FROM vehicle_snapshots;
-            DELETE FROM charging_baselines;
-            DELETE FROM command_receipts;
-            DELETE FROM provider_backoff;
-            DELETE FROM vehicle_activity;
-            DELETE FROM charging_sessions;
-            DELETE FROM charging_samples;
-            DELETE FROM battery_health_history;
-            DELETE FROM telemetry_logs;
-            DELETE FROM trip_tags;
-            DELETE FROM remote_commands_log;
-            DELETE FROM air_quality_history;
-            DELETE FROM connectivity_history;
-            DELETE FROM cabin_climate_history;
-            DELETE FROM fuel_entries;
-            DELETE FROM vehicle_images;
-            """)
-        }
-        try vacuumOrThrow()
-    }
-}
-
-extension VehicleDatabase {
-    /// Complete local-history export as one JSON document – every table for every vehicle.
-    /// Intended for backup/migration between Macs. Coordinates are included only when the
-    /// caller explicitly opts in, mirroring the location-history preference elsewhere.
-    /// Note: this is a snapshot for humans/backup tooling; there is deliberately no import,
-    /// to keep a tampered file from injecting fake telemetry.
-    func exportBackupJSON(includeCoordinates: Bool) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        var payload: [String: Any] = [
-            "schema": "hisingen-backup-v1",
-            "exportedAt": ISO8601DateFormatter().string(from: Date()),
-            "includesCoordinates": includeCoordinates,
-        ]
-
-        if includeCoordinates {
-            payload["chargingSessions"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupChargingSessions(includeCoordinates: true)))
-            payload["telemetry"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupTelemetry(includeCoordinates: true)))
-        } else {
-            payload["chargingSessions"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupChargingSessions(includeCoordinates: false)))
-            payload["telemetry"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupTelemetry(includeCoordinates: false)))
-        }
-        payload["chargingSamples"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(chargingSamplesAll()))
-        payload["batteryHealth"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(batteryHealthHistoryAll()))
-        payload["airQuality"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(airQualityAll()))
-        payload["remoteCommands"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(commandAuditsAll()))
-        payload["connectivity"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(connectivityAll()))
-        payload["cabinClimate"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(cabinClimateAll()))
-        payload["fuelEntries"] = try JSONSerialization.jsonObject(
-            with: encoder.encode(fuelEntriesAll()))
-        return try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
-    }
-
-    // MARK: - Backup internals
-
-    private struct BackupSession: Encodable {
-        let vin: String
-        let startedAt: String
-        let endedAt: String?
-        let startSoc: Double
-        let endSoc: Double?
-        let energyKwh: Double
-        let peakKw: Double
-        let averageKw: Double
-        let locationName: String?
-        let lifecycle: String
-        let completionReason: String?
-        let energySource: String
-        let confidence: String
-        let sampleCoverage: Double?
-        let usableCapacityKwh: Double?
-        let tariffPricePerKwh: Double?
-        let nightTariffEnabled: Bool
-        let nightTariffPricePerKwh: Double?
-        let nightTariffStartHour: Int?
-        let nightTariffEndHour: Int?
-        let estimatedCost: Double?
-        let currency: String?
-        let targetSoc: Double?
-        let summaryVersion: Int
-    }
-
-    private func backupChargingSessions(includeCoordinates: Bool) -> [BackupSession] {
-        let sql = """
-        SELECT vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh,
-               peak_power_kw, average_power_kw, location_name, lifecycle_state,
-               completion_reason, energy_source, confidence, sample_coverage,
-               usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
-               night_tariff_price_per_kwh, night_tariff_start_hour,
-               night_tariff_end_hour, estimated_cost, currency_symbol, target_soc,
-               summary_version
-        FROM charging_sessions ORDER BY started_at DESC;
-        """
-        let df = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt -> [BackupSession] in
-            var out: [BackupSession] = []
-            while stmt.step() {
-                guard let vin = stmt.columnText(at: 0), let startedAt = stmt.columnDate(at: 1),
-                      let startSoc = stmt.columnDouble(at: 3) else { continue }
-                out.append(BackupSession(
-                    vin: vin,
-                    startedAt: df.string(from: startedAt),
-                    endedAt: stmt.columnDate(at: 2).map { df.string(from: $0) },
-                    startSoc: startSoc,
-                    endSoc: stmt.columnDouble(at: 4),
-                    energyKwh: stmt.columnDouble(at: 5) ?? 0,
-                    peakKw: stmt.columnDouble(at: 6) ?? 0,
-                    averageKw: stmt.columnDouble(at: 7) ?? 0,
-                    locationName: includeCoordinates ? stmt.columnText(at: 8) : nil,
-                    lifecycle: stmt.columnText(at: 9) ?? "legacy",
-                    completionReason: stmt.columnText(at: 10),
-                    energySource: stmt.columnText(at: 11) ?? "legacy_estimate",
-                    confidence: stmt.columnText(at: 12) ?? "low",
-                    sampleCoverage: stmt.columnDouble(at: 13),
-                    usableCapacityKwh: stmt.columnDouble(at: 14),
-                    tariffPricePerKwh: stmt.columnDouble(at: 15),
-                    nightTariffEnabled: (stmt.columnInt64(at: 16) ?? 0) != 0,
-                    nightTariffPricePerKwh: stmt.columnDouble(at: 17),
-                    nightTariffStartHour: stmt.columnInt64(at: 18).map(Int.init),
-                    nightTariffEndHour: stmt.columnInt64(at: 19).map(Int.init),
-                    estimatedCost: stmt.columnDouble(at: 20),
-                    currency: stmt.columnText(at: 21),
-                    targetSoc: stmt.columnDouble(at: 22),
-                    summaryVersion: Int(stmt.columnInt64(at: 23) ?? 1)
-                ))
-            }
-            return out
-        }) ?? []
-    }
-
-    private struct BackupTelemetry: Encodable {
-        let vin: String
-        let timestamp: String
-        let odometerKm: Double?
-        let averageConsumption: Double?
-        let unit: String?
-        let ambientTempC: Double?
-        let latitude: Double?
-        let longitude: Double?
-    }
-
-    private func backupTelemetry(includeCoordinates: Bool) -> [BackupTelemetry] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.telemetry)
-        FROM telemetry_logs ORDER BY timestamp DESC;
-        """
-        let df = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.telemetry).map { row in
-                // Coordinates are dropped here rather than at the query, which is where the
-                // guarantee has always lived: `includeCoordinates` decides what reaches the
-                // file, and the file is what leaves the machine.
-                BackupTelemetry(
-                    vin: row.vin, timestamp: df.string(from: row.timestamp),
-                    odometerKm: row.odometerKm,
-                    averageConsumption: row.averageConsumption,
-                    unit: row.averageConsumptionUnit,
-                    ambientTempC: row.ambientTemperatureCelsius,
-                    latitude: includeCoordinates ? row.latitude : nil,
-                    longitude: includeCoordinates ? row.longitude : nil
-                )
-            }
-        }) ?? []
-    }
-
-    private func chargingSamplesAll() -> [HistoricalChargingSample] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.chargingSample)
-        FROM charging_samples ORDER BY timestamp ASC;
-        """
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.chargingSample)
-        }) ?? []
-    }
-
-    private func connectivityAll() -> [ConnectivityRecord] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.connectivity)
-        FROM connectivity_history ORDER BY timestamp DESC;
-        """
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.connectivity)
-        }) ?? []
-    }
-
-    private func cabinClimateAll() -> [CabinClimateRecord] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.cabinClimate)
-        FROM cabin_climate_history ORDER BY timestamp DESC;
-        """
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.cabinClimate)
-        }) ?? []
-    }
-
-    private func fuelEntriesAll() -> [FuelEntry] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.fuelEntry)
-        FROM fuel_entries ORDER BY date DESC;
-        """
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
-        }) ?? []
-    }
-
-    private struct BackupBatteryHealth: Encodable {
-        let vin: String
-        let timestamp: String
-        let odometerKm: Double
-        let stateOfHealthPct: Double
-        let degradationPct: Double
-        let effectiveUsableKwh: Double
-        let measurementSource: String
-    }
-
-    private func batteryHealthHistoryAll() -> [BackupBatteryHealth] {
-        batteryHealthHistoryAllRows().map { row in
-            BackupBatteryHealth(
-                vin: row.vin, timestamp: Format.iso8601.string(from: row.timestamp),
-                odometerKm: row.odometerKm, stateOfHealthPct: row.stateOfHealthPct,
-                degradationPct: row.degradationPct, effectiveUsableKwh: row.effectiveUsableKwh,
-                measurementSource: row.measurementSource)
-        }
-    }
-
-    private func batteryHealthHistoryAllRows() -> [BatteryHealthRecord] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.batteryHealth)
-        FROM battery_health_history
-        WHERE \(BatteryHealthRecord.measurementSourceFilter)
-        ORDER BY timestamp DESC;
-        """
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
-        }) ?? []
-    }
-
-    private struct BackupAirQuality: Encodable {
-        let vin: String
-        let timestamp: String
-        let aqi: Double?
-        let pm25: Double?
-        let pm10: Double?
-        let filterPercent: Double?
-    }
-
-    private func airQualityAll() -> [BackupAirQuality] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.airQuality)
-        FROM air_quality_history ORDER BY timestamp DESC;
-        """
-        let df = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality).map { row in
-                BackupAirQuality(
-                    vin: row.vin, timestamp: df.string(from: row.timestamp),
-                    aqi: row.airQualityIndex, pm25: row.particulateMatter25,
-                    pm10: row.particulateMatter10, filterPercent: row.filterRemainingPercent)
-            }
-        }) ?? []
-    }
-
-    private struct BackupCommandAudit: Encodable {
-        let vin: String
-        let command: String
-        let status: String
-        let executedAt: String
-        let durationMs: Int?
-        let errorMessage: String?
-    }
-
-    private func commandAuditsAll() -> [BackupCommandAudit] {
-        let sql = """
-        SELECT \(HistoryRowDecoder.Columns.commandAudit)
-        FROM remote_commands_log ORDER BY executed_at DESC;
-        """
-        let iso = ISO8601DateFormatter()
-        return (try? db.query(sql: sql) { _ in } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit).map { row in
-                BackupCommandAudit(
-                    vin: row.vin, command: row.command, status: row.status,
-                    executedAt: iso.string(from: row.executedAt),
-                    durationMs: row.durationMs, errorMessage: row.errorMessage)
-            }
-        }) ?? []
-    }
-}
-
-// MARK: - Connectivity & Cabin Climate History
-
-extension VehicleDatabase {
-
-    struct ConnectivityRecord: Codable, Equatable, Identifiable, Sendable {
-        let id: Int64
-        let vin: String
-        let timestamp: Date
-        let networkType: String?
-        let signalBars: Int?
-        let wakeReason: String?
-    }
-
-    struct CabinClimateRecord: Codable, Equatable, Identifiable, Sendable {
-        let id: Int64
-        let vin: String
-        let timestamp: Date
-        let interiorCelsius: Double?
-        let requestedCelsius: Double?
-    }
-
-}
-
-// MARK: - Manual Fuel Entries (PHEV/ICE economics)
-
-extension VehicleDatabase {
-    struct FuelEntry: Codable, Equatable, Identifiable, Sendable {
-        let id: Int64
-        let vin: String
-        let date: Date
-        let liters: Double
-        let pricePerLiter: Double
-        let odometerKm: Double?
-    }
-
 }

@@ -71,10 +71,10 @@ extension AccountCredentialsForm {
             keychainError = nil
             polestarFallbackKind = nil
             credentialSelection.toggle(polestarID: polestarID)
-            preferences.polestarConnectionMode = credentialSelection.mode
-        }
-        if preferences.hasResumableSession(for: .polestar) {
-            onSettingsChanged(.credentials)
+            // Keep the toggle local until Save: persisting mode here triggers
+            // credentialsChanged → full session re-establish (with password replay)
+            // merely from exploring options, and can disagree with an unsaved draft
+            // if Save later fails validation.
         }
     }
 
@@ -450,14 +450,29 @@ extension AccountCredentialsForm {
     }
 
     private var dataPortalQuotaView: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "gauge.with.needle")
+        // The fastest cadence the app runs (charging or climate), so the projection shows the
+        // day the governor will hold to when a scheduled refresh is at its tightest.
+        let now = Date()
+        let pacing = DataPortalQuotaGovernor.pace(
+            requestedInterval: RefreshPolicy.regularInterval(isCharging: true),
+            used: PolestarDataPortalAPI.dailyCallCount,
+            secondsUntilReset: DataPortalQuotaGovernor.secondsUntilReset(now: now),
+            now: now
+        )
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "gauge.with.needle")
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                Text(L10n.format("Daily API usage: %d / %d calls", PolestarDataPortalAPI.dailyCallCount, PolestarDataPortalAPI.dailyCallLimit))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            Text(L10n.format("Projected by midnight UTC: %d calls", pacing.projection.projectedEndOfDay))
                 .hisType(.micro)
                 .foregroundStyle(.secondary)
-            Text(L10n.format("Daily API usage: %d / %d calls", PolestarDataPortalAPI.dailyCallCount, PolestarDataPortalAPI.dailyCallLimit))
-                .hisType(.micro)
-                .foregroundStyle(.secondary)
-            Spacer()
+                .padding(.leading, 18)
         }
         .padding(.top, 2)
     }

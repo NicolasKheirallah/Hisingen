@@ -20,8 +20,7 @@ struct ProtobufDecodeTests {
         let full = Protobuf.intField(1, 7) + Protobuf.stringField(2, "complete")
         let cut = full.prefix(full.count - 3)
         #expect(throws: Protobuf.DecodeError.truncated(offset: 2)) { try Protobuf.decode(cut) }
-        // The lenient path keeps what it read before the damage.
-        #expect(Protobuf.fields(cut).map(\.number) == [1])
+        #expect(Protobuf.fields(cut).isEmpty)
     }
 
     @Test func truncatedVarintThrows() {
@@ -85,6 +84,48 @@ struct GRPCFrameReaderTests {
     @Test func splitsConsecutiveFramesIncludingEmptyOnes() throws {
         let stream = Protobuf.grpcFrame(Data([1, 2, 3])) + Protobuf.grpcFrame(Data()) + Protobuf.grpcFrame(Data([9]))
         #expect(try frames(stream) == [Data([1, 2, 3]), Data(), Data([9])])
+    }
+
+    /// Delivers `bytes` one at a time, the way `URLSession.AsyncBytes` does.
+    private func streamedFrames(_ bytes: Data) async throws -> [Data] {
+        let stream = AsyncStream<UInt8> { continuation in
+            for byte in bytes { continuation.yield(byte) }
+            continuation.finish()
+        }
+        var reader = GRPCFrameReader(context: "gRPC")
+        var messages: [Data] = []
+        try await reader.readMessages(from: stream) { message in
+            messages.append(message)
+            return true
+        }
+        return messages
+    }
+
+    @Test func streamedFrameSplitAcrossManyTinyChunksDecodes() async throws {
+        let stream = Protobuf.grpcFrame(Data([1, 2, 3])) + Protobuf.grpcFrame(Data()) + Protobuf.grpcFrame(Data([9]))
+        #expect(try await streamedFrames(stream) == [Data([1, 2, 3]), Data(), Data([9])])
+    }
+
+    @Test func streamedFramesLargerThanTheStagingBufferDecode() async throws {
+        let large = Data((0..<(GRPCFrameReader.stagingBytes * 2 + 1_000)).map { UInt8(truncatingIfNeeded: $0 &* 7) })
+        let exact = Data(repeating: 0x5A, count: GRPCFrameReader.stagingBytes)
+        let stream = Protobuf.grpcFrame(large) + Protobuf.grpcFrame(exact) + Protobuf.grpcFrame(Data([4]))
+        #expect(try await streamedFrames(stream) == [large, exact, Data([4])])
+    }
+
+    @Test func streamedReaderStopsWhenTheCallbackDeclines() async throws {
+        let stream = Protobuf.grpcFrame(Data([1])) + Protobuf.grpcFrame(Data([2]))
+        let bytes = AsyncStream<UInt8> { continuation in
+            for byte in stream { continuation.yield(byte) }
+            continuation.finish()
+        }
+        var reader = GRPCFrameReader(context: "gRPC")
+        var messages: [Data] = []
+        try await reader.readMessages(from: bytes) { message in
+            messages.append(message)
+            return false
+        }
+        #expect(messages == [Data([1])])
     }
 
     @Test func reportsAFrameStillBeingRead() throws {
@@ -249,5 +290,34 @@ struct CarImageSelectionTests {
             .data?.getCarImages
         #expect(images?.pool.count == 2)
         #expect(images?.pool.first?.angle == nil)
+    }
+}
+
+struct PolestarRequestShapeTests {
+
+    @Test func stateRequestCarriesAFreshIdThenTheVIN() throws {
+        let vin = "YSMTEST0000000001"
+        let first = try ProtoMessage(PolestarGRPC.stateRequest(vin: vin))
+        let second = try ProtoMessage(PolestarGRPC.stateRequest(vin: vin))
+        let firstID = String(decoding: try #require(first.bytes(1)), as: UTF8.self)
+        let secondID = String(decoding: try #require(second.bytes(1)), as: UTF8.self)
+        #expect(UUID(uuidString: firstID) != nil)
+        #expect(firstID != secondID)
+        #expect(String(decoding: try #require(first.bytes(2)), as: UTF8.self) == vin)
+    }
+
+    @Test func carImagesRequestFollowsTheServerSchema() throws {
+        let request = try CarImagesRequest(pno34: "P1", structureWeek: "202420", modelYear: "2024")
+            .urlRequest(endpoint: try #require(URL(string: "https://example.test/")), apiKey: "key")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "x-api-key") == "key")
+        let body = try #require(request.httpBody)
+        let payload = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let query = try #require(payload["query"] as? String)
+        #expect(query.contains("GetCarImages"))
+        #expect(query.contains("getCarImages(pno34: $pno, structureWeek: $week, modelYear: $year, locale: $locale)"))
+        let variables = try #require(payload["variables"] as? [String: String])
+        #expect(variables == ["pno": "P1", "week": "202420", "year": "2024", "locale": "en-GB"])
     }
 }

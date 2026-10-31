@@ -113,11 +113,17 @@ final class VehicleStateStore {
     private func migrateLegacySnapshots() {
         guard let legacy = load([String: VehicleState].self, key: legacySnapshotsKey) else { return }
         let now = Date()
-        for (_, snapshot) in legacy where
-            now.timeIntervalSince(snapshot.freshness.fetchedAt) <= Self.cacheRetention {
-            database.snapshots.saveSnapshot(snapshot.cacheableCopy)
+        do {
+            try database.db.withTransaction {
+                for (_, snapshot) in legacy where
+                    now.timeIntervalSince(snapshot.freshness.fetchedAt) <= Self.cacheRetention {
+                    try database.snapshots.saveSnapshotOrThrow(snapshot.cacheableCopy, preserveExisting: true)
+                }
+            }
+            defaults.removeObject(forKey: legacySnapshotsKey)
+        } catch {
+            logger.error("Legacy migration failed: \(error, privacy: .public)")
         }
-        defaults.removeObject(forKey: legacySnapshotsKey)
     }
 
     /// The baseline and receipt halves of the same move: one pass over each legacy key, the rows
@@ -126,12 +132,18 @@ final class VehicleStateStore {
     private func migrateLegacyBaselines() {
         guard let legacy = load([String: ChargingBaseline].self, key: legacyBaselinesKey) else { return }
         let now = Date()
-        for (_, baseline) in legacy {
-            guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
-                  now.timeIntervalSince(timestamp) <= Self.cacheRetention else { continue }
-            database.baselines.saveBaseline(baseline)
+        do {
+            try database.db.withTransaction {
+                for (_, baseline) in legacy {
+                    guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
+                          now.timeIntervalSince(timestamp) <= Self.cacheRetention else { continue }
+                    try database.baselines.saveBaselineOrThrow(baseline, preserveExisting: true)
+                }
+            }
+            defaults.removeObject(forKey: legacyBaselinesKey)
+        } catch {
+            logger.error("Legacy migration failed: \(error, privacy: .public)")
         }
-        defaults.removeObject(forKey: legacyBaselinesKey)
     }
 
     /// The receipt decoding is deliberately tolerant: older releases wrote one receipt where later
@@ -140,10 +152,16 @@ final class VehicleStateStore {
     private func migrateLegacyCommandReceipts() {
         guard let legacy = load([String: StoredCommandReceipts].self, key: legacyCommandReceiptsKey)
         else { return }
-        for (vin, receipts) in legacy {
-            database.commandReceipts.saveCommandReceipts(receipts, for: vin)
+        do {
+            try database.db.withTransaction {
+                for (vin, receipts) in legacy {
+                    try database.commandReceipts.saveCommandReceiptsOrThrow(receipts, for: vin, preserveExisting: true)
+                }
+            }
+            defaults.removeObject(forKey: legacyCommandReceiptsKey)
+        } catch {
+            logger.error("Legacy migration failed: \(error, privacy: .public)")
         }
-        defaults.removeObject(forKey: legacyCommandReceiptsKey)
     }
 
 
@@ -159,8 +177,7 @@ final class VehicleStateStore {
     /// which made `save` then `snapshot(for:)` not a round trip: every read-after-write had to
     /// poll for up to five seconds instead of trusting the interface.
     func save(_ state: VehicleState) {
-        historyRecorder.saveAuthoritative(state)
-        historyRecorder.record(state)
+        historyRecorder.save(state)
 
         // SQLite is the authoritative snapshot store (`database.saveSnapshot` above). The
         // UserDefaults mirror is no longer written: it previously re-encoded the entire
@@ -223,12 +240,15 @@ final class VehicleStateStore {
     ///
     /// The image tier, the `UserDefaults` mirrors, the in-memory per-VIN caches and the
     /// ordering between them belong to `LocalDataEraser`; this only chooses the scope.
-    func clear(vin: String, eraseHistory: Bool = false) {
+    @discardableResult
+    func clear(vin: String, eraseHistory: Bool = false) -> Bool {
         historyRecorder.resetTransientState(vin: vin)
         do {
             try eraser.perform(eraseHistory ? .everything(.vehicle(vin)) : .session(.vehicle(vin)))
+            return true
         } catch {
             logger.error("Could not erase local data for vehicle: \(error, privacy: .public)")
+            return false
         }
     }
 
@@ -237,12 +257,15 @@ final class VehicleStateStore {
     /// leaving the VIN out, and its `eraseHistory` choice also picks the breadth of the
     /// `UserDefaults` erase: a plain sign-out keeps the stores the reader authored, the
     /// deliberate action takes them with the vehicle.
-    func clearAll(eraseHistory: Bool = false) {
+    @discardableResult
+    func clearAll(eraseHistory: Bool = false) -> Bool {
         historyRecorder.resetTransientState()
         do {
             try eraser.perform(eraseHistory ? .everything(.all) : .session(.all))
+            return true
         } catch {
             logger.error("Could not erase local data on sign-out: \(error, privacy: .public)")
+            return false
         }
     }
 

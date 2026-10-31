@@ -1,5 +1,37 @@
 import Foundation
 
+/// The part of `chargingStatusV2` that `ChargingState` collapses. "Scheduled" alone hides
+/// whether the plan can finish; these three tokens are the answer, and the car reports them
+/// on a read Hisingen already makes.
+enum ChargingScheduleOutcome: String, Codable, Sendable {
+    case willComplete
+    case cannotComplete
+    case willNotFinish
+
+    init?(apiValue: String?) {
+        let key = (apiValue ?? "")
+            .replacingOccurrences(of: "CHARGING_STATUS_V2_", with: "")
+            .replacingOccurrences(of: "CHARGING_STATUS_", with: "")
+            .uppercased()
+        switch key {
+        case "SCHEDULED_CHARGING_WILL_COMPLETE": self = .willComplete
+        case "SCHEDULED_CHARGING_CANNOT_COMPLETE": self = .cannotComplete
+        case "SMART_CHARGING_WILL_NOT_FINISH": self = .willNotFinish
+        default: return nil
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .willComplete: return L10n.text("Scheduled charging will complete")
+        case .cannotComplete: return L10n.text("Scheduled charging cannot complete")
+        case .willNotFinish: return L10n.text("Smart charging will not finish")
+        }
+    }
+
+    var isWarning: Bool { self != .willComplete }
+}
+
 enum ChargingState: Codable, Equatable, Sendable {
     case charging
     case smartCharging

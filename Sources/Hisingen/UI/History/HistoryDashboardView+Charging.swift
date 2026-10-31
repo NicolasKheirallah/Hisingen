@@ -558,8 +558,48 @@ extension HistoryDashboardView {
                     }
                     .accessibilityElement(children: .combine)
                 }
+                let costRows = HistoryInsights.locationCostRows(
+                    from: chargingSessions,
+                    fallbackPricePerKwh: preferences.electricityPricePerKwh,
+                    fallbackCurrency: preferences.currencySymbol,
+                    ratePolicy: preferences.electricityRatePolicy,
+                    unknownLabel: L10n.text("Unknown location")
+                )
+                if !costRows.isEmpty {
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    locationCostTable(Array(costRows.prefix(8)))
+                }
             }
         })
+    }
+
+    /// One row per place and currency. Costs in different currencies stay on separate rows;
+    /// a per-kWh average is shown only where energy was recorded.
+    private func locationCostTable(_ rows: [HistoryInsights.LocationCostRow]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 5) {
+                GridRow {
+                    Text(L10n.text("Location"))
+                    Text(L10n.text("Sessions")).gridColumnAlignment(.trailing)
+                    Text(L10n.text("Energy")).gridColumnAlignment(.trailing)
+                    Text(L10n.text("Cost")).gridColumnAlignment(.trailing)
+                    Text(L10n.text("Per kWh")).gridColumnAlignment(.trailing)
+                }
+                .hisType(.nano, weight: .semibold).foregroundStyle(.tertiary)
+                ForEach(rows) { row in
+                    GridRow {
+                        Text(row.name).lineLimit(1).minimumScaleFactor(0.9)
+                        Text(Format.count(row.sessionCount)).gridColumnAlignment(.trailing)
+                        Text(Format.energyKwh(row.energyKwh)).gridColumnAlignment(.trailing)
+                        Text(Format.currency(row.totalCost, symbol: row.currency)).gridColumnAlignment(.trailing)
+                        Text(row.averageCostPerKwh.map { Format.currency($0, symbol: row.currency, decimals: 3) } ?? "–")
+                            .gridColumnAlignment(.trailing)
+                    }
+                }
+            }
+            .hisType(.micro).monospacedDigit().foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .contain)
     }
 
     var chargingHistoryCard: some View {

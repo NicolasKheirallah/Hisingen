@@ -29,11 +29,20 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDele
                 pendingContinuation = continuation
                 let window = createSignInWindow()
                 let webView = createWebView(frame: window.contentView?.bounds ?? .zero)
+                // Loading indicator so a slow IdP doesn't look like nothing happened.
+                let spinner = NSProgressIndicator(frame: NSRect(x: 220, y: 300, width: 40, height: 40))
+                spinner.style = .spinning
+                spinner.identifier = NSUserInterfaceItemIdentifier("HisingenLoadingSpinner")
+                spinner.startAnimation(nil)
                 window.contentView?.addSubview(webView)
+                window.contentView?.addSubview(spinner)
                 activeWindow = window
                 activeWebView = webView
                 webView.load(URLRequest(url: authorizeURL))
+                // LSUIElement (menu-bar) apps open behind other apps unless forced front:
+                // floating level + orderFrontRegardless + key + activate.
                 window.center()
+                window.orderFrontRegardless()
                 window.makeKeyAndOrderFront(nil)
                 NSApp.activate(ignoringOtherApps: true)
             }
@@ -55,7 +64,17 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDele
         window.title = L10n.text("Polestar Sign In")
         window.delegate = self
         window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.hidesOnDeactivate = false
+        window.isMovable = true
         return window
+    }
+
+    private func dismissSpinner() {
+        activeWindow?.contentView?.subviews.first(where: {
+            $0.identifier?.rawValue == "HisingenLoadingSpinner"
+        })?.removeFromSuperview()
     }
 
     private func createWebView(frame: NSRect) -> WKWebView {
@@ -98,6 +117,22 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDele
 
     // MARK: - WKNavigationDelegate
 
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        dismissSpinner()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        dismissSpinner()
+        // Don't strand the user on a blank window: surface the load failure and close,
+        // so a press always produces either a login page or an explanatory error.
+        if webView === activeWebView {
+            finish(with: .failure(error))
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        dismissSpinner()
+    }
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
@@ -130,7 +165,8 @@ final class PolestarWebSignInPresenter: NSObject, WKNavigationDelegate, WKUIDele
 
     func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window === activeWindow {
-            finish(with: .failure(PolestarError.authenticationRequired(.callbackRejected)))
+            // User closed the window: silent cancel, not a failure banner.
+            finish(with: .failure(CancellationError()))
         }
     }
 }

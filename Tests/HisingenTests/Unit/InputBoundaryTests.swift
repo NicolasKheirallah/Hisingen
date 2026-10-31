@@ -78,7 +78,10 @@ struct InputBoundaryTests {
             steeringWheel: .unspecified
         )
         do {
-            _ = try await PolestarGRPC().executeRemoteCommand(invalidTempCommand, vin: "YSMTEST", accessToken: "token")
+            // A command-client token, so this reaches the temperature rule instead of the
+            // authorization gate that now runs first and refuses a tokenless invocation command.
+            _ = try await PolestarGRPC().executeRemoteCommand(
+                invalidTempCommand, vin: "YSMTEST", accessToken: "token", commandToken: "command-token")
             Issue.record("Should reject non-0.5 step temperature")
         } catch RemoteCommandError.rejected(let message) {
             #expect(message != nil, "local rejection must explain what was wrong")

@@ -11,33 +11,18 @@ actor PolestarAPI {
     nonisolated let brand: VehicleBrand = .polestar
     let logger = AppLog.logger("polestar-api")
 
-    private let apiBaseURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-v2/")!
-    private let publicApiURL = URL(string: "https://pc-api.polestar.com/eu-north-1/mystar-public/")!
-    private let appBackendURL = URL(string: "https://pc-api.polestar.com/eu-north-1/app-backend/api/graphql")!
-
-
+    private let apiBaseURL = PolestarConfig.apiBaseURL
+    private let publicApiURL = PolestarConfig.publicApiURL
+    private let appBackendURL = PolestarConfig.appBackendURL
     private var publicApiKey: String { BuiltinPolestarSecrets.imageApiKey }
-    private let oidcProviderURL = URL(string: "https://polestarid.eu.polestar.com")!
+    private let oidcProviderURL = PolestarConfig.oidcProviderURL
 
-    // The polestar.com web client. The mobile-app client (`lp8dyrd_10`,
-    // `polestar-explore://explore.polestar.com`) authenticates fine but its token is rejected
-    // by `pc-api.polestar.com/mystar-v2` with `UnauthorizedException`, so vehicle discovery
-    // returns nothing and the app has no car to talk about – verified live against a real
-    // account. The `getConsumerCarsV2` query only accepts this client.
-    let oidcClientID = "l3oopkc_10"
-    let oidcRedirectURL = URL(string: "https://www.polestar.com/sign-in-callback")!
-    // `customer:attributes:write` is what the C3 `ota_mobcache.SchedulerService` write RPCs
-    // require. This client grants it on request – adding it does not disturb discovery.
-    let oidcScope = "openid profile email customer:attributes customer:attributes:write"
-
-    // Remote commands are gated on a *client-id allowlist*, separate from scope. C3 spells the
-    // rule out when it refuses: `Client id l3oopkc_10 is not a required client id: [… lp8dyrd_10 …]`.
-    // The web client above can list vehicles but cannot invoke; this one can invoke but is
-    // rejected by `mystar-v2` for reads. Neither is sufficient alone, so the app holds a token
-    // from each and picks per call. Verified live: `Lock` via C3 with this client returns
-    // `outcome = accepted`.
-    let commandClientID = "lp8dyrd_10"
-    let commandRedirectURL = URL(string: "polestar-explore://explore.polestar.com")!
+    // The OAuth clients, scope and their reasoning live in `PolestarConfig`.
+    let oidcClientID = PolestarConfig.webClientID
+    let oidcRedirectURL = PolestarConfig.webRedirectURL
+    let oidcScope = PolestarConfig.webScope
+    let commandClientID = PolestarConfig.commandClientID
+    let commandRedirectURL = PolestarConfig.commandRedirectURL
 
     var commandAuthorization = PolestarAuthorizationFlow()
     var webAuthorization = PolestarAuthorizationFlow()
@@ -48,6 +33,7 @@ actor PolestarAPI {
     /// persistence directly, because a rotated token must be durable before the session is
     /// advertised, whether or not the lifecycle saw the rotation as a change.
     let commandTokens: TokenLifecycle
+    let saveSessionToken: @Sendable (String) throws -> Void
 
     var commandAccessToken: String? {
         get { commandTokens.accessToken }
@@ -85,8 +71,9 @@ actor PolestarAPI {
     /// to this grant after the session grant is refused; presenting an expired one would replace
     /// an informative 406 with a 401 (which the ladder surfaces immediately rather than retries).
     func freshCommandAccessToken() -> String? {
-        guard let expiry = commandTokenExpiry, expiry.timeIntervalSinceNow > 0,
-              let token = commandAccessToken, !token.isEmpty else { return nil }
+        guard let expiry = commandTokenExpiry, expiry.timeIntervalSince(now()) > 0,
+              let token = commandAccessToken, !token.isEmpty,
+              verifiedCommandToken?.token == token, verifiedCommandToken?.epoch == sessionEpoch else { return nil }
         return token
     }
 
@@ -119,12 +106,18 @@ actor PolestarAPI {
 
     private(set) var cars: [CarSummary] = []
     var selectedVIN: String?
+    /// True only after a real discovery response populated `cars`. A manual-VIN
+    /// fallback (user-typed VIN when discovery returned empty) must not count as
+    /// warm – otherwise the garage scanner treats a failed discovery as a live
+    /// session and stops restoring.
+    private(set) var discoverySucceeded = false
     var imagePreparationAttempts: [String: (angle: Int, retryAt: Date)] = [:]
     var ownerInfoPrepared = false
+    var ownerInfoRetryAt: Date?
 
     /// Discovery metadata for one vehicle, keyed by VIN. Scoped per-VIN so concurrent
     /// selections cannot cross-contaminate telemetry fetches.
-    struct CarIdentity {
+    struct CarIdentity: Sendable {
         var internalVehicleIdentifier: String?
         var modelName: String?
         var modelYear: String?
@@ -136,18 +129,28 @@ actor PolestarAPI {
     }
     private(set) var identities: [String: CarIdentity] = [:]
     func identity(for vin: String?) -> CarIdentity { vin.flatMap { identities[$0] } ?? .empty }
+    /// Restores a previously saved discovery snapshot (sign-in rollback on failure/cancel
+    /// must not destroy a working session). The only cross-file mutation of the
+    /// `private(set)` discovery state; all other writes stay in this file.
+    func restoreDiscovery(cars: [CarSummary], identities: [String: CarIdentity]) {
+        self.cars = cars
+        self.identities = identities
+        discoverySucceeded = !cars.isEmpty
+    }
     var ownerFirstName: String?
     var market: String?
     /// Durable provider stand-downs: Polestar's secondary discovery source and Volvo's optional
     /// endpoints share one owner, so an erase reaches them and a test can inject one. Internal so
     /// the preparation tests can seed a stand-down without a transport round trip.
     let backoffs: ProviderBackoffStore
-    private(set) var carImages: [String: Data] = [:]
-    var targetCache: [String: (value: Int?, fetchedAt: Date)] = [:]
+    private var artwork = PolestarArtworkLoader()
+    var carImages: [String: Data] { artwork.displayed }
     /// Probe-or-cache authority for backend capabilities: cache, TTLs, backoff, and
     /// command-time invalidation live in one module (see `PolestarCapabilityAuthority`).
-    let capabilityAuthority = PolestarCapabilityAuthority()
-    var remoteCommandsInFlight: Set<String> = []
+    let capabilityAuthority: PolestarCapabilityAuthority
+    var remoteCommandsInFlight = PolestarCommandOperations()
+    var verifiedCommandToken: (token: String, epoch: Int, accountID: String)?
+    private var candidateDiscoveryCommand: PolestarCandidateCommand?
     private var imageDownloadTasks: [String: Task<Void, Never>] = [:]
     private var imageDownloadTaskIDs: [String: UUID] = [:]
     /// Bumped whenever account state is cleared/reset. Multi-step operations capture it on
@@ -156,21 +159,29 @@ actor PolestarAPI {
     /// login could otherwise repopulate `cars` after sign-out cleared them).
     var sessionEpoch = 0
     let preferences: PreferencesStore
+    let now: @Sendable () -> Date
 
     @MainActor
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
-         diagnosticLog: APIDiagnosticLogStore = .shared, grpcSession: URLSession? = nil) {
+         diagnosticLog: APIDiagnosticLogStore = .shared, grpcSession: URLSession? = nil,
+         now: @escaping @Sendable () -> Date = { Date() }) {
         self.init(keychain: keychain, imageCache: imageCache, preferences: .shared,
-                  diagnosticLog: diagnosticLog, grpcSession: grpcSession)
+                  diagnosticLog: diagnosticLog, grpcSession: grpcSession, now: now)
     }
 
     init(keychain: KeychainStore = .app, imageCache: CarImageCache = CarImageCache(),
          preferences: PreferencesStore, diagnosticLog: APIDiagnosticLogStore = .shared,
          backoffs: ProviderBackoffStore = ProviderBackoffStore(),
-         grpcSession: URLSession? = nil) {
+         grpcSession: URLSession? = nil,
+         now: @escaping @Sendable () -> Date = { Date() },
+         persistSessionToken: (@Sendable (String) throws -> Void)? = nil) {
         self.keychain = keychain
+        self.now = now
+        self.capabilityAuthority = PolestarCapabilityAuthority(now: now)
         self.backoffs = backoffs
         self.saveCommandToken = { try keychain.saveCommandSessionToken($0) }
+        let sessionPersistence: @Sendable (String) throws -> Void = persistSessionToken ?? { try keychain.saveSessionToken($0) }
+        self.saveSessionToken = sessionPersistence
         self.imageCache = imageCache
         self.preferences = preferences
         self.diagnosticLog = diagnosticLog
@@ -179,7 +190,7 @@ actor PolestarAPI {
             policy: .init(renewalMargin: Self.tokenRenewalMargin(lifetime:)),
             providerName: "Polestar",
             logger: AppLog.logger("polestar-api"),
-            persist: { try keychain.saveSessionToken($0) },
+            persist: sessionPersistence,
             isDeadGrant: { error in
                 if case PolestarError.authenticationRequired(.noStoredSession) = error { return true }
                 return false
@@ -194,8 +205,15 @@ actor PolestarAPI {
             providerName: "Polestar command client",
             logger: AppLog.logger("polestar-api"),
             persist: { try persistCommandToken($0) },
+            // Only the command grant itself being refused may clear a command authorization:
+            // `refreshCommandGrant` stamps that with `.callbackRejected` (the token endpoint
+            // answering `invalid_grant`, or a verified account mismatch). Every other auth error
+            // comes from verifying the *consumer* session, which is a transient problem for this
+            // lifecycle – keeping the stored grant lets a fresh sign-in resume commands instead of
+            // forcing the user through the browser again.
             isDeadGrant: { error in
-                (error as? PolestarError)?.requiresAuthentication == true
+                if case PolestarError.authenticationRequired(.callbackRejected) = error { return true }
+                return false
             }
         )
         let delegate = OAuthRedirectDelegate(callbackURLs: [oidcRedirectURL, commandRedirectURL])
@@ -203,25 +221,9 @@ actor PolestarAPI {
         session = Self.makeSession(delegate: delegate)
     }
 
-    private struct OIDCDiscovery: Decodable {
-        let issuer: String
-        let tokenEndpoint: String
-        let authorizationEndpoint: String
-        let userinfoEndpoint: String?
-        let revocationEndpoint: String?
-
-        private enum CodingKeys: String, CodingKey {
-            case issuer
-            case tokenEndpoint = "token_endpoint"
-            case authorizationEndpoint = "authorization_endpoint"
-            case userinfoEndpoint = "userinfo_endpoint"
-            case revocationEndpoint = "revocation_endpoint"
-        }
-    }
-
     /// Coalesces concurrent cold starts. The actor can re-enter while the network request is
     /// suspended, so the TTL check alone still allowed four identical well-known requests.
-    private var oidcDiscoveryTask: Task<OIDCDiscovery, Error>?
+    private var oidcDiscoveryTask: Task<PolestarOIDCConfiguration, Error>?
 
     /// When the OIDC well-known document was last fetched. The endpoints it returns are
     /// effectively static, so re-fetching them on every `restoreSession`/brand switch (as a
@@ -232,7 +234,7 @@ actor PolestarAPI {
     func discoverOIDCConfiguration(force: Bool = false) async throws {
         if !force, tokenEndpoint != nil, authorizationEndpoint != nil,
            let discoveredAt = oidcDiscoveredAt,
-           Date().timeIntervalSince(discoveredAt) < Self.oidcDiscoveryTTL {
+           now().timeIntervalSince(discoveredAt) < Self.oidcDiscoveryTTL {
             return
         }
         if let oidcDiscoveryTask {
@@ -245,32 +247,17 @@ actor PolestarAPI {
         try applyOIDCDiscovery(await task.value)
     }
 
-    private func loadOIDCDiscovery() async throws -> OIDCDiscovery {
-        let url = oidcProviderURL.appendingPathComponent(".well-known/openid-configuration")
-        let (data, response) = try await perform(URLRequest(url: url))
-        try validateHTTP(response)
-        guard let discovery = try? JSONDecoder().decode(OIDCDiscovery.self, from: data) else {
-            throw PolestarError.incompatibleAPI(operation: "OIDC discovery")
-        }
-        return discovery
+    private func loadOIDCDiscovery() async throws -> PolestarOIDCConfiguration {
+        try await PolestarOIDCClient(providerURL: oidcProviderURL, session: session,
+                                     diagnosticLog: diagnosticLog).discover()
     }
 
-    private func applyOIDCDiscovery(_ discovery: OIDCDiscovery) throws {
-        guard
-              let issuer = URL(string: discovery.issuer),
-              issuer.scheme == oidcProviderURL.scheme,
-              issuer.host == oidcProviderURL.host,
-              issuer.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                == oidcProviderURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
-              let token = Self.validPolestarURL(discovery.tokenEndpoint),
-              let authorization = Self.validPolestarURL(discovery.authorizationEndpoint) else {
-            throw PolestarError.incompatibleAPI(operation: "OIDC discovery")
-        }
-        tokenEndpoint = token
-        authorizationEndpoint = authorization
-        userinfoEndpoint = discovery.userinfoEndpoint.flatMap(Self.validPolestarURL)
-        revocationEndpoint = discovery.revocationEndpoint.flatMap(Self.validPolestarURL)
-        oidcDiscoveredAt = Date()
+    private func applyOIDCDiscovery(_ configuration: PolestarOIDCConfiguration) throws {
+        tokenEndpoint = configuration.tokenEndpoint
+        authorizationEndpoint = configuration.authorizationEndpoint
+        userinfoEndpoint = configuration.userinfoEndpoint
+        revocationEndpoint = configuration.revocationEndpoint
+        oidcDiscoveredAt = now()
     }
 
     func obtainAuthorizationCode(email: String, password: String,
@@ -282,9 +269,10 @@ actor PolestarAPI {
         }
         let verifier = try Self.randomURLSafeString()
         let state = try Self.randomURLSafeString()
+        let callbackURL = redirectURI ?? oidcRedirectURL
         let queryItems = Self.authorizationQueryItems(
             clientID: clientID ?? oidcClientID,
-            redirectURI: (redirectURI ?? oidcRedirectURL).absoluteString,
+            redirectURI: callbackURL.absoluteString,
             scope: scope ?? oidcScope,
             state: state,
             challenge: Self.codeChallenge(for: verifier)
@@ -303,7 +291,7 @@ actor PolestarAPI {
 
         let authorizationCallback = redirectDelegate.takeCallback() ?? response.url
         if let code = try extractValidatedCode(from: authorizationCallback, expectedState: state,
-                                              callbackURL: redirectURI ?? oidcRedirectURL) {
+                                              callbackURL: callbackURL) {
             return (code, verifier)
         }
         let html = String(decoding: data, as: UTF8.self)
@@ -316,7 +304,7 @@ actor PolestarAPI {
             email: email,
             password: password,
             expectedState: state,
-            callbackURL: redirectURI ?? oidcRedirectURL
+            callbackURL: callbackURL
         )
         return (code, verifier)
     }
@@ -357,7 +345,7 @@ actor PolestarAPI {
         }
 
         let html = String(decoding: data, as: UTF8.self)
-        if html.contains("ERR001") {
+        if PolestarSignInPage.rejectsCredentials(html) {
             throw PolestarError.authenticationRequired(.invalidCredentials)
         }
         throw PolestarError.authenticationRequired(.callbackRejected)
@@ -376,12 +364,90 @@ actor PolestarAPI {
         return Self.queryValue("code", from: url)
     }
 
+    func candidateCommand(_ token: String?, epoch: Int, flowGeneration: UInt) -> PolestarCandidateCommand? {
+        guard let token else { return nil }
+        let commandGeneration = commandAuthorization.generation
+        return PolestarCandidateCommand(token: token, isCurrent: { [self] in
+            await candidateCommandIsCurrent(token, epoch: epoch, flowGeneration: flowGeneration,
+                                            commandGeneration: commandGeneration)
+        })
+    }
+
+    private func candidateCommandIsCurrent(_ token: String, epoch: Int, flowGeneration: UInt,
+                                           commandGeneration: UInt) -> Bool {
+        sessionEpoch == epoch && webAuthorization.isCurrent(flowGeneration) &&
+            commandAuthorization.isCurrent(commandGeneration) && commandAccessToken == token &&
+            verifiedCommandToken?.token == token && (commandTokenExpiry?.timeIntervalSince(now()) ?? 0) > 0
+    }
+
+    func setCandidateDiscoveryCommand(_ command: PolestarCandidateCommand) {
+        candidateDiscoveryCommand = command
+    }
+
+    func makeLoginCandidate() async -> PolestarLoginCandidate {
+        let candidate = PolestarAPI(keychain: KeychainStore(service: "io.kheirallah.hisingen.login.\(UUID())"),
+            imageCache: imageCache, preferences: preferences, diagnosticLog: diagnosticLog, backoffs: backoffs,
+            now: now, persistSessionToken: { _ in })
+        await candidate.configureCandidate(configuration: session.configuration,
+            tokenEndpoint: tokenEndpoint, authorizationEndpoint: authorizationEndpoint,
+            userinfoEndpoint: userinfoEndpoint, revocationEndpoint: revocationEndpoint)
+        return PolestarLoginCandidate(api: candidate)
+    }
+
+    func configureCandidate(configuration: URLSessionConfiguration,
+                            tokenEndpoint: URL?, authorizationEndpoint: URL?,
+                            userinfoEndpoint: URL?, revocationEndpoint: URL?) {
+        self.session.invalidateAndCancel()
+        self.session = URLSession(configuration: configuration, delegate: redirectDelegate, delegateQueue: nil)
+        self.tokenEndpoint = tokenEndpoint
+        self.authorizationEndpoint = authorizationEndpoint
+        self.userinfoEndpoint = userinfoEndpoint
+        self.revocationEndpoint = revocationEndpoint
+    }
+
+    func installCandidateToken(_ token: TokenResponseDTO) {
+        accessToken = token.accessToken
+        refreshToken = token.refreshToken
+        tokenLifetime = TimeInterval(token.expiresIn)
+        tokenExpiry = now().addingTimeInterval(TimeInterval(token.expiresIn))
+    }
+
+    func candidateSnapshot() throws -> PolestarConsumerSession {
+        guard let accessToken, let tokenExpiry else { throw PolestarError.authenticationRequired(.expiredSession) }
+        return PolestarConsumerSession(accessToken: accessToken, refreshToken: refreshToken,
+            tokenExpiry: tokenExpiry, tokenLifetime: tokenLifetime,
+            cars: cars, identities: identities, selectedVIN: selectedVIN,
+            discoverySucceeded: discoverySucceeded, tokenEndpoint: tokenEndpoint,
+            authorizationEndpoint: authorizationEndpoint, userinfoEndpoint: userinfoEndpoint,
+            revocationEndpoint: revocationEndpoint)
+    }
+
+    func commitCandidate(_ candidate: PolestarConsumerSession, commandRefresh: String?) throws {
+        clearAccountState()
+        tokenEndpoint = candidate.tokenEndpoint
+        authorizationEndpoint = candidate.authorizationEndpoint
+        userinfoEndpoint = candidate.userinfoEndpoint
+        revocationEndpoint = candidate.revocationEndpoint
+        try tokens.adopt(.init(accessToken: candidate.accessToken,
+                               refreshToken: candidate.refreshToken,
+                               expiresIn: candidate.tokenLifetime), now: now())
+        tokenExpiry = candidate.tokenExpiry
+        if candidate.refreshToken == nil { try? keychain.deleteSessionToken() }
+        commandTokens.refreshToken = commandRefresh
+        cars = candidate.cars
+        identities = candidate.identities
+        selectedVIN = candidate.selectedVIN
+        discoverySucceeded = candidate.discoverySucceeded
+    }
+
     /// Builds the web client's authorization URL for an in-app `WKWebView` when headless PingFederate
     /// login is rejected with an interactive challenge (CAPTCHA, 2FA, Terms acceptance, etc.).
     func beginWebAuthorization() async throws -> (authorizeURL: URL, redirectURI: URL) {
         try Task.checkCancellation()
-        clearAccountState()
-        try keychain.deleteCommandSessionToken()
+        // Non-destructive: do not clear the warm session to open the window.
+        // The prior session stays usable if the user closes the window
+        // (callbackRejected) – clearing happened only on success in
+        // completeWebAuthorization via exchangeCodeForToken + fetchCarInfo.
         let epoch = sessionEpoch
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
         try requireSession(epoch)
@@ -403,7 +469,7 @@ actor PolestarAPI {
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
         }
-        webAuthorization.begin(verifier: verifier, state: state)
+        webAuthorization.begin(verifier: verifier, state: state, now: now())
         return (url, oidcRedirectURL)
     }
 
@@ -413,14 +479,24 @@ actor PolestarAPI {
                                   features: FeatureSelection = .default) async throws {
         let epoch = sessionEpoch
         let completion = try webAuthorization.consume(
-            callbackURL: callbackURL, redirectURL: oidcRedirectURL
+            callbackURL: callbackURL, redirectURL: oidcRedirectURL, now: now(), maximumAge: 600
         )
-        defer { if epoch == sessionEpoch { webAuthorization.finish(generation: completion.generation) } }
-        try await exchangeCodeForToken(completion.code, verifier: completion.verifier)
-        try await fetchCarInfo(preferredVIN: preferredVIN)
+        defer { webAuthorization.finish(generation: completion.generation) }
+        let commandRefresh = commandRefreshToken ?? (try? keychain.readCommandSessionToken())
+        let command = candidateCommand(freshCommandAccessToken(), epoch: epoch, flowGeneration: completion.generation)
+        let candidate = await makeLoginCandidate()
+        try requireWebAuthorization(epoch: epoch, generation: completion.generation)
+        let snapshot = try await candidate.exchange(code: completion.code, verifier: completion.verifier,
+                                                     preferredVIN: preferredVIN, command: command)
+        try requireWebAuthorization(epoch: epoch, generation: completion.generation)
+        await grpc.invalidateDiscoveredHost()
+        try requireWebAuthorization(epoch: epoch, generation: completion.generation)
+        try commitCandidate(snapshot, commandRefresh: commandRefresh)
+        let committedEpoch = sessionEpoch
         if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
+        try requireSession(committedEpoch)
         if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
-        try requireSession(epoch)
+        try requireSession(committedEpoch)
         logger.info("Polestar web-client token acquired via interactive web sign-in")
     }
 
@@ -443,6 +519,20 @@ actor PolestarAPI {
         let commandEpoch = commandAuthorization.generation
         if authorizationEndpoint == nil { try await discoverOIDCConfiguration() }
         try requireSession(epoch)
+        // `completeCommandAuthorization` verifies the minted grant against the consumer session
+        // and every invocation is dispatched with it. Without one the browser round-trip can
+        // only end in a discarded grant, so say so before a window opens.
+        guard accessToken != nil || refreshToken != nil else {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
+        // The grant this flow mints is only kept when `completeCommandAuthorization` can verify it
+        // against the account session, and that verification refreshes the session first. Without a
+        // refresh token the check cannot run, so the browser trip would end in a discarded grant
+        // minutes later with nothing to show for it. Refuse up front with the accurate reason: the
+        // account session needs a sign-in, not another authorization.
+        guard refreshToken != nil else {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
         guard commandAuthorization.isCurrent(commandEpoch) else { throw CancellationError() }
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
@@ -462,7 +552,7 @@ actor PolestarAPI {
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
         }
-        commandAuthorization.begin(verifier: verifier, state: state)
+        commandAuthorization.begin(verifier: verifier, state: state, now: now())
         return url
     }
 
@@ -471,23 +561,37 @@ actor PolestarAPI {
     func completeCommandAuthorization(callbackURL: URL) async throws {
         let epoch = sessionEpoch
         let completion = try commandAuthorization.consume(
-            callbackURL: callbackURL, redirectURL: commandRedirectURL, maximumAge: 600
+            callbackURL: callbackURL, redirectURL: commandRedirectURL, now: now(), maximumAge: 600
         )
         defer { commandAuthorization.finish(generation: completion.generation) }
         let token = try await exchangeCode(completion.code, verifier: completion.verifier,
                                            clientID: commandClientID, redirectURI: commandRedirectURL)
         try requireSession(epoch)
         guard commandAuthorization.isCurrent(completion.generation) else { throw CancellationError() }
-        try await verifyCommandAccount(accessToken: token.accessToken)
-        try requireSession(epoch)
-        guard commandAuthorization.isCurrent(completion.generation) else { throw CancellationError() }
         guard let durableRefresh = token.refreshToken, !durableRefresh.isEmpty else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        // Persist before verification: a transient userinfo failure must not discard
+        // a freshly-minted grant and force a second browser trip.
         try saveCommandToken(durableRefresh)
         commandAccessToken = token.accessToken
         commandRefreshToken = durableRefresh
-        commandTokenExpiry = Date().addingTimeInterval(TimeInterval(token.expiresIn))
+        commandTokenExpiry = now().addingTimeInterval(TimeInterval(token.expiresIn))
+        let verifiedAccount: AccountIdentity
+        do {
+            verifiedAccount = try await verifyCommandAccount(accessToken: token.accessToken)
+        } catch {
+            // Definitive account mismatch discards the grant; transient verification
+            // failures keep it for a later retry.
+            if isSessionCurrent(epoch), commandAuthorization.isCurrent(completion.generation),
+               let pErr = error as? PolestarError, case .authenticationRequired(.callbackRejected) = pErr {
+                clearCommandAuthorization()
+            }
+            throw error
+        }
+        try requireSession(epoch)
+        guard commandAuthorization.isCurrent(completion.generation) else { throw CancellationError() }
+        verifiedCommandToken = (token.accessToken, epoch, verifiedAccount.sub)
         logger.info("Polestar command-client token acquired via browser sign-in")
     }
 
@@ -511,15 +615,22 @@ actor PolestarAPI {
                                            diagnosticLog: diagnosticLog)
     }
 
-    func exchangeCodeForToken(_ code: String, verifier: String) async throws {
+    func exchangeCodeForToken(_ code: String, verifier: String, generation: UInt? = nil) async throws {
         let epoch = sessionEpoch
+        let generation = generation ?? webAuthorization.generation
         let token = try await exchangeCode(code, verifier: verifier,
                                            clientID: oidcClientID, redirectURI: oidcRedirectURL)
         try requireSession(epoch)
+        // Starting a new web authorization leaves the warm session in place, so it no longer
+        // bumps `sessionEpoch`. The flow's own generation is what tells this exchange that a
+        // newer attempt replaced it, and a replaced exchange must not write tokens.
+        guard webAuthorization.isCurrent(generation) else { throw CancellationError() }
+        verifiedCommandToken = nil
+        tokens.cancelInFlightGrant()
         try tokens.adopt(TokenLifecycle.Grant(
             accessToken: token.accessToken,
             refreshToken: token.refreshToken,
-            expiresIn: TimeInterval(token.expiresIn)))
+            expiresIn: TimeInterval(token.expiresIn)), now: now())
     }
 
     func refreshTokenIfNeeded() async throws {
@@ -544,7 +655,7 @@ actor PolestarAPI {
         let currentSession = session
         let diagnosticLog = diagnosticLog
         let outcome = try await tokens.refresh(
-            reason,
+            reason, now: now(),
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
                 guard let endpoint, let refresh else {
@@ -561,12 +672,16 @@ actor PolestarAPI {
                 let token = try await Self.requestToken(request: request, session: currentSession,
                                                         invalidReason: .expiredSession,
                                                         diagnosticLog: diagnosticLog,
-                                                        deadGrantReason: .noStoredSession)
+                                                        deadGrantReason: .noStoredSession,
+                                                        malformedRotation: { [self] rotated in
+                    try await preserveConsumerRotation(rotated, replacing: refresh, epoch: requestEpoch)
+                })
                 return TokenLifecycle.Grant(accessToken: token.accessToken,
                                             refreshToken: token.refreshToken,
                                             expiresIn: TimeInterval(token.expiresIn))
             }
         )
+        try requireSession(requestEpoch)
         if outcome == .deadGrant {
             await discardDeadRefreshToken()
             throw PolestarError.authenticationRequired(.noStoredSession)
@@ -575,21 +690,18 @@ actor PolestarAPI {
 
     /// The IdP rejected the refresh grant with `invalid_grant`/`expired_token`: the stored
     /// token was rotated out or revoked, and every replay is a failed login against it
-    /// (lockout risk). Drop the persisted copies – memory, Keychain, and the preferences
+    /// (lockout risk). Drop the persisted session copy – memory, Keychain, and the preferences
     /// cache – so nothing re-reads the dead token, mirroring `VolvoAPI.discardDeadRefreshToken`.
+    /// The command grant is independent (separate OAuth client `lp8dyrd_10`) and is left
+    /// intact: a dead web session does not imply a dead command grant. The command grant
+    /// is cleared only by its own dead-grant path in `commandClientAuthorization`.
     /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
-    /// still resolves its own outcome (`.notAuthorized`) from the now-empty storage.
+    /// still resolves its own outcome from current storage.
     func discardDeadRefreshToken() async {
         tokens.reset()
         // A failed delete leaves the dead token readable, so it is logged loudly rather than dropped.
         do { try keychain.deleteSessionToken() } catch {
-            logger.error("Polestar dead session token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
-        }
-        commandAccessToken = nil
-        commandRefreshToken = nil
-        commandTokenExpiry = nil
-        do { try keychain.deleteCommandSessionToken() } catch {
-            logger.error("Polestar dead command token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
+            logger.error("Polestar dead session token could not be deleted from Keychain: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
         // `PreferencesStore.hasResumableSession` memoises a per-brand answer. Without this the
         // garage scanner and account cards keep believing Polestar is resumable for the rest of
@@ -601,14 +713,16 @@ actor PolestarAPI {
     /// cent, clamped to 5...60 seconds, absorbs clock and transit skew without discarding most
     /// of a five-minute grant.
     static func tokenRenewalMargin(lifetime: TimeInterval) -> TimeInterval {
-        guard lifetime > 0 else { return 60 }
-        return min(60, max(5, lifetime * 0.1))
+        guard lifetime > 0 else { return PolestarConfig.defaultRenewalMargin }
+        let range = PolestarConfig.renewalMarginRange
+        return min(range.upperBound, max(range.lowerBound, lifetime * PolestarConfig.renewalMarginFraction))
     }
 
     static func requestToken(request: URLRequest, session: URLSession,
                              invalidReason: AuthFailureReason,
                              diagnosticLog: APIDiagnosticLogStore,
-                             deadGrantReason: AuthFailureReason? = nil) async throws -> TokenResponseDTO {
+                             deadGrantReason: AuthFailureReason? = nil,
+                             malformedRotation: (@Sendable (String) async throws -> Void)? = nil) async throws -> TokenResponseDTO {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: "Polestar token request", provider: .polestar,
@@ -619,7 +733,7 @@ actor PolestarAPI {
             // `invalid_grant`/`expired_token` mean the presented grant (a refresh token
             // rotated out or revoked) is permanently dead; only this body distinguishes it
             // from the other 400 rejections.
-            if let deadGrantReason, Self.isDeadGrant(data) {
+            if let deadGrantReason, OAuthErrorBody.isDeadGrant(data) {
                 throw PolestarError.authenticationRequired(deadGrantReason)
             }
             throw PolestarError.authenticationRequired(invalidReason)
@@ -633,177 +747,166 @@ actor PolestarAPI {
         ) {
             throw failure
         }
-        guard let token = try? JSONDecoder().decode(TokenResponseDTO.self, from: data),
-              token.expiresIn > 0 else {
+        let token: TokenResponseDTO
+        do {
+            token = try PolestarDecoding.decode(TokenResponseDTO.self, from: data,
+                operation: "token response", logger: AppLog.logger("polestar-api"))
+        } catch {
+            try await preserveMalformedRotation(data, using: malformedRotation)
+            throw error
+        }
+        guard !token.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              token.expiresIn > 0, token.expiresIn <= 31_536_000,
+              token.tokenType == nil || token.tokenType?.lowercased() == "bearer" else {
+            try await preserveMalformedRotation(data, using: malformedRotation)
             throw PolestarError.decoding(operation: "token response")
         }
         return token
     }
 
-    /// Whether a token-endpoint 400 body carries the OAuth marker of a permanently dead grant.
-    private static func isDeadGrant(_ data: Data) -> Bool {
-        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let code = body["error"] as? String else { return false }
-        return code == "invalid_grant" || code == "expired_token"
+    private struct RotatedGrant: Decodable {
+        let refreshToken: String?
+        enum CodingKeys: String, CodingKey { case refreshToken = "refresh_token" }
     }
 
-    /// The OAuth `error` code is a classification, not a credential, and it is the one field
-    /// that separates a dead grant from a misconfigured client. Extract it so the diagnostic
-    /// log can carry it even though the token body itself is never retained.
+    private static func preserveMalformedRotation(_ data: Data,
+        using persist: (@Sendable (String) async throws -> Void)?) async throws {
+        guard let persist,
+              let refresh = (try? JSONDecoder().decode(RotatedGrant.self, from: data))?.refreshToken,
+              !refresh.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try await persist(refresh)
+    }
+
+    func preserveConsumerRotation(_ rotated: String, replacing previous: String, epoch: Int) throws {
+        try requireSession(epoch)
+        guard refreshToken == previous else { throw CancellationError() }
+        refreshToken = rotated
+        do { try saveSessionToken(rotated) }
+        catch { logger.error("Polestar rotated refresh token could not be persisted") }
+    }
+
+    /// The diagnostic-log form of the OAuth `error` code; see `OAuthErrorBody`.
     static func oauthErrorCode(in data: Data) -> String? {
-        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let code = body["error"] as? String, !code.isEmpty else { return nil }
-        return "oauth:\(code)"
+        OAuthErrorBody.diagnosticCode(in: data)
     }
 
 
-    func graphQL<Payload: Decodable>(query: String, variables: [String: Any]?,
-                                             token: String, operation: String) async throws
+    /// A query that takes no variables.
+    func graphQL<Payload: Decodable>(query: String, token: String, operation: String) async throws
         -> GraphQLResponse<Payload> {
-        var body: [String: Any] = ["query": query]
-        if let variables { body["variables"] = variables }
-        var request = URLRequest(url: apiBaseURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        var bearerToken = token
-        for attempt in 0...1 {
-            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await perform(request, operation: operation)
-            if response.statusCode == 401 || response.statusCode == 403 {
-                if attempt == 0 {
-                    try await refreshAccessToken(force: true, replacing: bearerToken)
-                    guard let newToken = accessToken else {
-                        throw PolestarError.authenticationRequired(.expiredSession)
-                    }
-                    bearerToken = newToken
-                    continue
-                }
-                logger.error("""
-                    Polestar \(operation, privacy: .public) rejected after token refresh \
-                    (HTTP \(response.statusCode, privacy: .public))
-                    """)
-                if response.statusCode == 401 {
-                    throw PolestarError.authenticationRequired(.expiredSession)
-                }
-                throw PolestarError.permissionDenied(operation: operation)
-            }
-            try validateHTTP(response, operation: operation)
-            guard let decoded = try? JSONDecoder().decode(GraphQLResponse<Payload>.self, from: data) else {
-                throw PolestarError.decoding(operation: operation)
-            }
-            if decoded.data == nil, let errors = decoded.errors,
-               Self.containsAuthenticationError(errors) {
-                if attempt == 0 {
-                    try await refreshAccessToken(force: true, replacing: bearerToken)
-                    guard let newToken = accessToken else {
-                        throw PolestarError.authenticationRequired(.expiredSession)
-                    }
-                    bearerToken = newToken
-                    continue
-                }
-                // Server-supplied GraphQL messages are scrubbed before public logging –
-                // they have been known to echo account details on auth failures.
-                let authSummary = DiagnosticRedaction.redact(Self.errorSummary(errors))
-                logger.error("""
-                    Polestar \(operation, privacy: .public) returned an authentication error after \
-                    token refresh: \(authSummary, privacy: .public)
-                    """)
-                throw PolestarError.authenticationRequired(.expiredSession)
-            }
-            if decoded.data == nil, let errors = decoded.errors, !errors.isEmpty {
-                let summary = DiagnosticRedaction.redact(Self.errorSummary(errors))
-                logger.error("""
-                    Polestar \(operation, privacy: .public) failed: \
-                    \(summary, privacy: .public)
-                    """)
-                throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: false)
-            }
-            return decoded
-        }
-        throw PolestarError.authenticationRequired(.expiredSession)
+        try await graphQL(query: query, variables: NoVariables?.none, token: token, operation: operation)
     }
 
-    func fetchCarInfo(preferredVIN: String?) async throws {
+    func graphQL<Payload: Decodable, Variables: Encodable>(
+        query: String, variables: Variables?, token: String, operation: String
+    ) async throws -> GraphQLResponse<Payload> {
+        return try await makeGraphQLClient().query(query, variables: variables, token: token, operation: operation)
+    }
+
+    private func makeGraphQLClient() -> PolestarGraphQLClient {
+        PolestarGraphQLClient(endpoint: apiBaseURL, session: session,
+            diagnosticLog: diagnosticLog, appVersion: Self.appVersion,
+            refresh: { [self] rejected in try await tokenAfterRefresh(replacing: rejected) })
+    }
+
+    /// Forces a refresh of the session grant and returns the access token it produced.
+    /// `rejected` is the token the server just refused, so a refresh another caller already
+    /// completed is reused instead of repeated.
+    private func tokenAfterRefresh(replacing rejected: String) async throws -> String {
+        try await refreshAccessToken(force: true, replacing: rejected)
+        guard let refreshed = accessToken else {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        return refreshed
+    }
+
+    func fetchCarInfo(preferredVIN: String?, webGeneration: UInt? = nil) async throws {
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
         }
         let requestEpoch = sessionEpoch
-        let query = """
-        query GetConsumerCarsV2 {
-          getConsumerCarsV2 { vin internalVehicleIdentifier modelName modelYear registrationNo pno34 structureWeek }
+        let legacyCars = try await discoverLegacyCars(token: token)
+        let accountCars = try await enrichWithVDMS(legacyCars)
+        try Task.checkCancellation()
+        guard requestEpoch == sessionEpoch else {
+            logger.debug("Discarding superseded Polestar vehicle discovery")
+            return
         }
-        """
-        var accountCars: [ConsumerCarDTO] = []
-        var legacyCars: [ConsumerCarDTO] = []
-        // A failure here is only degradable when it is specific to this data source. Auth,
-        // rate-limit, server, and transport failures must propagate – previously a swallowed
-        // 401 or 429 fell through to the manual-VIN branch and surfaced as
-        // `.notConfigured` ("Open Settings to sign in"), masking the real problem.
+        if let webGeneration, !webAuthorization.isCurrent(webGeneration) { throw CancellationError() }
+        try adoptDiscoveredCars(accountCars, preferredVIN: preferredVIN)
+    }
+
+    /// The primary discovery source (`mystar-v2`). A failure is only degradable when it is
+    /// specific to this data source. Auth, rate-limit, server, and transport failures must
+    /// propagate – previously a swallowed 401 or 429 fell through to the manual-VIN branch and
+    /// surfaced as `.notConfigured` ("Open Settings to sign in"), masking the real problem.
+    private func discoverLegacyCars(token: String) async throws -> [ConsumerCarDTO] {
         do {
-            let response: GraphQLResponse<ConsumerCarsPayloadDTO> = try await graphQL(
-                query: query, variables: nil, token: token, operation: "vehicle discovery"
-            )
-            legacyCars = response.data?.getConsumerCarsV2 ?? []
+            return try await PolestarVehicleDiscovery(client: makeGraphQLClient()).primary(token: token)
         } catch {
+            try Task.checkCancellation()
             if Self.isRequestLevelFailure(error) { throw error }
             logger.warning("Polestar vehicle discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
-            legacyCars = []
+            return []
         }
-        // VDMS (`app-backend` GraphQL) validates against the *command* client's token
-        // (`lp8dyrd_10`) – the same split the invocation commands need – not the web-client
-        // session token, which it answers with "Could not validate the accessToken". Without
-        // command authorization there is nothing usable to send it, so skip the call rather
-        // than fire a request that is guaranteed to fail.
+    }
+
+    /// Adds the secondary source (`app-backend`, VDMS) to what the primary returned.
+    ///
+    /// VDMS validates against the *command* client's token (`lp8dyrd_10`) – the same split the
+    /// invocation commands need – not the web-client session token, which it answers with
+    /// "Could not validate the accessToken". Without command authorization there is nothing
+    /// usable to send it, so the call is skipped rather than fired to fail.
+    private func enrichWithVDMS(_ legacyCars: [ConsumerCarDTO]) async throws -> [ConsumerCarDTO] {
         let vdmsToken: String?
         if backoffs.blockedUntil(Self.discoveryBackoff) != nil {
             logger.info("Polestar VDMS enrichment remains in its persistent-failure backoff window")
             vdmsToken = nil
+        } else if let command = candidateDiscoveryCommand, await command.isCurrent() {
+            vdmsToken = command.token
         } else if case .authorized(let commandToken) = await commandClientAuthorization() {
             vdmsToken = commandToken
         } else {
             vdmsToken = nil
         }
-        if let vdmsToken {
-            do {
-                let vdmsCars = try await fetchAppBackendCars(token: vdmsToken)
-                backoffs.unblock(Self.discoveryBackoff)
-                accountCars = Self.mergeDiscoveryCars(primary: legacyCars, vdms: vdmsCars)
-            } catch {
-                if Self.isRequestLevelFailure(error) {
-                    // The app-backend endpoint is a secondary discovery source. If the primary
-                    // query already produced cars, keep those instead of failing the session;
-                    // only fail when we would otherwise report an empty garage.
-                    if legacyCars.isEmpty { throw error }
-                    logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
-                } else {
-                    // A client-side rejection (426), an API-shape mismatch, or a token the
-                    // app-backend refuses to validate won't fix itself on the next discovery –
-                    // stand down for a day.
-                    if Self.vdmsFailureIsPersistent(error) {
-                        backoffs.block(
-                            Self.discoveryBackoff,
-                            until: Date().addingTimeInterval(24 * 60 * 60),
-                            reason: Self.vdmsFailureCategory(error))
-                    }
-                    logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+        guard let vdmsToken else { return legacyCars }
+        do {
+            let vdmsCars = try await fetchAppBackendCars(token: vdmsToken)
+            backoffs.unblock(Self.discoveryBackoff)
+            return Self.mergeDiscoveryCars(primary: legacyCars, vdms: vdmsCars)
+        } catch {
+            try Task.checkCancellation()
+            if Self.isRequestLevelFailure(error) {
+                // The app-backend endpoint is a secondary discovery source. If the primary
+                // query already produced cars, keep those instead of failing the session;
+                // only fail when we would otherwise report an empty garage.
+                if legacyCars.isEmpty { throw error }
+                logger.info("Polestar VDMS discovery failed at request level; continuing with primary discovery results")
+            } else {
+                // A client-side rejection (426), an API-shape mismatch, or a token the
+                // app-backend refuses to validate won't fix itself on the next discovery –
+                // stand down for a day.
+                if Self.vdmsFailureIsPersistent(error) {
+                    backoffs.block(
+                        Self.discoveryBackoff,
+                        until: now().addingTimeInterval(PolestarConfig.discoveryBackoffInterval),
+                        reason: Self.vdmsFailureCategory(error))
                 }
-                accountCars = legacyCars
+                logger.info("Polestar VDMS discovery degraded (provider-specific): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             }
-        } else {
-            accountCars = legacyCars
+            return legacyCars
         }
-        guard requestEpoch == sessionEpoch else {
-            logger.debug("Discarding superseded Polestar vehicle discovery")
-            return
-        }
+    }
+
+    /// Publishes the discovered garage, or falls back to a user-typed VIN when discovery found
+    /// nothing.
+    private func adoptDiscoveredCars(_ accountCars: [ConsumerCarDTO], preferredVIN: String?) throws {
         if accountCars.isEmpty {
             guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                   SettingsValidation.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
             cars = [CarSummary(vin: manualVIN, title: manualVIN)]
+            // Manual fallback is not a successful discovery – see discoverySucceeded.
+            discoverySucceeded = false
             // An empty identity records successful discovery without borrowing another car's metadata.
             identities[manualVIN] = .empty
             selectedVIN = manualVIN
@@ -826,30 +929,11 @@ actor PolestarAPI {
         guard let vin = selected?.vin else { throw PolestarError.notConfigured }
         for car in accountCars { applyCarInfo(car) }
         selectedVIN = vin
+        discoverySucceeded = true
     }
 
-    static func mergeDiscoveryCars(
-        primary: [ConsumerCarDTO],
-        vdms: [ConsumerCarDTO]
-    ) -> [ConsumerCarDTO] {
-        guard !vdms.isEmpty else { return primary }
-        let merged = vdms.map { vdmsCar in
-            guard let matching = primary.first(where: { $0.vin == vdmsCar.vin }) else {
-                return vdmsCar
-            }
-            return ConsumerCarDTO(
-                vin: vdmsCar.vin,
-                internalVehicleIdentifier: vdmsCar.internalVehicleIdentifier ?? matching.internalVehicleIdentifier,
-                modelName: vdmsCar.modelName ?? matching.modelName,
-                modelYear: vdmsCar.modelYear ?? matching.modelYear,
-                registrationNo: vdmsCar.registrationNo ?? matching.registrationNo,
-                pno34: matching.pno34,
-                structureWeek: matching.structureWeek
-            )
-        }
-        // VDMS only enriches the primary discovery, so a partial VDMS list must not evict
-        // vehicles the primary source still reports.
-        return merged + primary.filter { car in !vdms.contains(where: { $0.vin == car.vin }) }
+    static func mergeDiscoveryCars(primary: [ConsumerCarDTO], vdms: [ConsumerCarDTO]) -> [ConsumerCarDTO] {
+        PolestarVehicleDiscovery.merge(primary: primary, vdms: vdms)
     }
 
     private func fetchAppBackendCars(token: String) async throws -> [ConsumerCarDTO] {
@@ -865,12 +949,13 @@ actor PolestarAPI {
           }
         }
         """
-        let body: [String: Any] = [
-            "operationName": "GetVDMSCars",
-            "variables": [:],
-            "query": query,
-            "extensions": ["clientLibrary": ["name": "apollo-kotlin", "version": "4.4.1"]]
-        ]
+        let body = AppBackendRequest(
+            operationName: "GetVDMSCars",
+            query: query,
+            extensions: .init(clientLibrary: .init(
+                name: PolestarAppIdentity.graphQLClientLibrary.name,
+                version: PolestarAppIdentity.graphQLClientLibrary.version))
+        )
         var request = URLRequest(url: appBackendURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -880,22 +965,14 @@ actor PolestarAPI {
         request.setValue("GetVDMSCars", forHTTPHeaderField: "X-APOLLO-OPERATION-NAME")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-APOLLO-REQUEST-UUID")
         request.setValue(Locale.current.region?.identifier ?? market ?? "SE", forHTTPHeaderField: "X-Polestar-Locale")
-        // `X-Polestar-Force-Update-Version` is an app-version gate: the app-backend answers
-        // `426 Upgrade Required` when the declared version is below its current floor (and a
-        // value that doesn't correspond to a real released build – `6.x` doesn't exist; the
-        // Polestar Android app is on 5.x – is treated the same way). Track a currently-accepted
-        // real version. Cross-checked against kildahldev/unofficial-polestar-api, which hit the
-        // same 426 and fixed it with this exact bump (5.5.0 → 5.11.0).
-        request.setValue("5.11.0", forHTTPHeaderField: "X-Polestar-Force-Update-Version")
-        request.setValue("PolestarApp/5.11.0b1111 Android/14", forHTTPHeaderField: "User-Agent")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        // The app-backend rejects clients below its app-version floor; see `PolestarAppIdentity`.
+        request.setValue(PolestarAppIdentity.version, forHTTPHeaderField: "X-Polestar-Force-Update-Version")
+        request.setValue(PolestarAppIdentity.userAgent, forHTTPHeaderField: "User-Agent")
+        request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
         try validateHTTP(response, operation: "VDMS vehicle discovery")
-        guard let decoded = try? JSONDecoder().decode(
-            GraphQLResponse<AppBackendCarsPayloadDTO>.self, from: data
-        ) else {
-            throw PolestarError.decoding(operation: "VDMS vehicle discovery")
-        }
+        let decoded = try PolestarDecoding.decode(GraphQLResponse<AppBackendCarsPayloadDTO>.self,
+            from: data, operation: "VDMS vehicle discovery", logger: logger)
         if let errors = decoded.errors, !errors.isEmpty {
             throw PolestarError.graphQL(Self.mapErrors(errors), hasPartialData: decoded.data != nil)
         }
@@ -977,69 +1054,55 @@ actor PolestarAPI {
         guard let token = accessToken, let userinfoEndpoint else { return }
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, response) = try? await HTTPExchange.data(
-                  for: request, using: session, limit: 256_000, operation: "user information",
-                  provider: .polestar, diagnosticLog: diagnosticLog),
-              response.statusCode == 200,
-              let info = try? JSONDecoder().decode(UserInfoDTO.self, from: data) else { return }
+        guard let (data, _) = await optionalBody(for: request, limit: 256_000, operation: "user information"),
+              let info = optionalDecode(UserInfoDTO.self, from: data, operation: "user information")
+        else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
         ownerFirstName = info.givenName ?? info.firstName
         market = info.market?.isEmpty == false ? info.market : nil
     }
     func fetchCarImage(vin: String) async {
         let epoch = sessionEpoch
+        let requestID = artwork.begin(vin: vin)
         let requestedAngle = await MainActor.run { preferences.carRenderAngle.rawValue }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
-        if let cached = imageCache.image(for: vin, angle: requestedAngle) {
-            carImages[vin] = cached
-        }
+        guard artwork.select(vin: vin, angle: requestedAngle, request: requestID,
+                             cached: imageCache.image(for: vin, angle: requestedAngle)) else { return }
         guard let identity = identities[vin], let pno34 = identity.pno34,
               let structureWeek = identity.structureWeek, let modelYear = identity.modelYear else { return }
-        let query = """
-        query GetCarImages($pno34: String!, $structureWeek: String!, $modelYear: String!, $locale: String) {
-          getCarImages(pno34: $pno34, structureWeek: $structureWeek, modelYear: $modelYear, locale: $locale) {
-            transparent { url angle }
-            opaque { url angle }
-          }
+        let request: URLRequest
+        do {
+            request = try CarImagesRequest(pno34: pno34, structureWeek: structureWeek, modelYear: modelYear)
+                .urlRequest(endpoint: publicApiURL, apiKey: publicApiKey)
+        } catch {
+            logger.debug("Vehicle image request could not be built: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            return
         }
-        """
-        let body: [String: Any] = ["query": query, "variables": [
-            "pno34": pno34, "structureWeek": structureWeek,
-            "modelYear": modelYear, "locale": "en-GB"
-        ]]
-        var request = URLRequest(url: publicApiURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(publicApiKey, forHTTPHeaderField: "x-api-key")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (data, response) = try? await HTTPExchange.data(
-                  for: request, using: session, limit: 1_000_000, operation: "vehicle image metadata",
-                  provider: .polestar, diagnosticLog: diagnosticLog),
-              response.statusCode == 200,
-              let images = (try? JSONDecoder().decode(GraphQLResponse<CarImagesPayloadDTO>.self, from: data))?
-                  .data?.getCarImages else { return }
+        guard let (data, _) = await optionalBody(for: request, limit: Self.maxImageMetadataBytes,
+                                                 operation: "vehicle image metadata"),
+              let images = optionalDecode(GraphQLResponse<CarImagesPayloadDTO>.self, from: data,
+                                          operation: "vehicle image metadata")?.data?.getCarImages
+        else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
         let pool = images.pool
-        let pick = CarImagesDTO.preferred(in: pool, angle: requestedAngle)
+        let pick = pool.first { $0.angle == requestedAngle }
 
-        if carImages[vin] == nil, let url = pick?.httpsURL {
-            if let (bytes, imageResponse) = try? await HTTPExchange.data(
-                      for: URLRequest(url: url), using: session, limit: 5_000_000,
-                      operation: "vehicle image", provider: .polestar,
-                      diagnosticLog: diagnosticLog),
-                  imageResponse.statusCode == 200,
-                  imageResponse.mimeType?.hasPrefix("image/") == true,
-                  bytes.count <= 5_000_000 {
-                guard epoch == sessionEpoch, !Task.isCancelled else { return }
-                carImages[vin] = bytes
+        if artwork.needsImage(vin: vin, angle: requestedAngle), let url = pick?.httpsURL {
+            if let (bytes, imageResponse) = await optionalBody(
+                   for: URLRequest(url: url), limit: Self.maxImageBytes, operation: "vehicle image"),
+               imageResponse.mimeType?.hasPrefix("image/") == true {
+                guard epoch == sessionEpoch, !Task.isCancelled,
+                      artwork.adopt(bytes, vin: vin, angle: requestedAngle, request: requestID) else { return }
                 let angle = pick?.angle ?? requestedAngle
                 imageCache.save(bytes, for: vin, angle: angle)
+                // The angle-less slot is what the hero card, fleet card and refresh coordinator
+                // read, so the picked render is stored there too.
                 imageCache.save(bytes, for: vin)
             }
         }
 
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
-        for other in pool {
+        for other in pool.prefix(4) {
             guard let otherAngle = other.angle,
                   let otherUrl = other.httpsURL,
                   imageCache.image(for: vin, angle: otherAngle) == nil else { continue }
@@ -1053,33 +1116,77 @@ actor PolestarAPI {
         }
     }
 
+    /// A 200 response for an optional fetch (owner name, artwork), or nil after recording why
+    /// there is none. These degrade to "nothing" instead of failing the session, but the reason
+    /// is logged at debug level so a missing render or name can be diagnosed. Cancellation is
+    /// expected when the session or selected vehicle changes and stays silent.
+    private func optionalBody(for request: URLRequest, limit: Int,
+                              operation: String) async -> (Data, HTTPURLResponse)? {
+        do {
+            let (data, response) = try await HTTPExchange.data(
+                for: request, using: session, limit: limit, operation: operation,
+                provider: .polestar, diagnosticLog: diagnosticLog)
+            guard response.statusCode == 200 else {
+                logger.debug("Optional \(operation, privacy: .public) returned HTTP \(response.statusCode, privacy: .public)")
+                return nil
+            }
+            return (data, response)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            logger.debug("Optional \(operation, privacy: .public) failed: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            return nil
+        }
+    }
+
+    private func optionalDecode<Value: Decodable>(_ type: Value.Type, from data: Data,
+                                                  operation: String) -> Value? {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            PolestarDecoding.log(error, operation: operation, logger: logger)
+            return nil
+        }
+    }
+
+    /// Largest image or image-metadata body accepted; `HTTPExchange` fails the request beyond it.
+    private static let maxImageBytes = 5_000_000
+    private static let maxImageMetadataBytes = 1_000_000
+
     private func enqueueImageDownload(
         key: String,
         request: URLRequest,
         operation: String,
         save: @escaping @Sendable (Data) -> Void
     ) {
-        guard imageDownloadTasks[key] == nil else { return }
+        guard imageDownloadTasks[key] == nil, imageDownloadTasks.count < 4 else { return }
+        let epoch = sessionEpoch
         let taskID = UUID()
         let task = Task { [weak self, session, diagnosticLog] in
             do {
                 let (data, response) = try await HTTPExchange.data(
-                    for: request, using: session, limit: 5_000_000, operation: operation,
+                    for: request, using: session, limit: Self.maxImageBytes, operation: operation,
                     provider: .polestar, diagnosticLog: diagnosticLog
                 )
-                if response.statusCode == 200,
-                   data.count <= 5_000_000 {
-                    save(data)
+                if response.statusCode == 200, response.mimeType?.hasPrefix("image/") == true,
+                   !Task.isCancelled {
+                    await self?.saveImageDownload(data, epoch: epoch, key: key, taskID: taskID, save: save)
                 }
             } catch is CancellationError {
                 // Cancellation is expected when the session or selected vehicle changes.
             } catch {
-                self?.logger.debug("Background image download failed for \(operation, privacy: .public): \(error, privacy: .public)")
+                self?.logger.debug("Background image download failed for \(operation, privacy: .public): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             }
             await self?.finishImageDownload(key, taskID: taskID)
         }
         imageDownloadTasks[key] = task
         imageDownloadTaskIDs[key] = taskID
+    }
+
+    private func saveImageDownload(_ data: Data, epoch: Int, key: String, taskID: UUID,
+                                   save: @Sendable (Data) -> Void) {
+        guard epoch == sessionEpoch, imageDownloadTaskIDs[key] == taskID else { return }
+        save(data)
     }
 
     private func finishImageDownload(_ key: String, taskID: UUID) {
@@ -1102,16 +1209,18 @@ actor PolestarAPI {
         invalidateCommandAuthorization()
         tokens.reset(keepingRefreshToken: keepRefreshToken, keepingAccessToken: keepAccessToken)
         cars = []
+        discoverySucceeded = false
         identities = [:]
         imagePreparationAttempts = [:]
         ownerInfoPrepared = false
-        carImages = [:]
+        ownerInfoRetryAt = nil
+        artwork.reset()
+        candidateDiscoveryCommand = nil
         selectedVIN = nil
         ownerFirstName = nil
         market = nil
-        targetCache = [:]
         capabilityAuthority.reset()
-        remoteCommandsInFlight = []
+        remoteCommandsInFlight.reset()
     }
 
     static func makeSession(delegate: URLSessionDelegate) -> URLSession {
@@ -1126,12 +1235,6 @@ actor PolestarAPI {
 
     private static var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
-    }
-
-    private static func validPolestarURL(_ string: String) -> URL? {
-        guard let url = URL(string: string), url.scheme == "https", let host = url.host,
-              host == "polestar.com" || host.hasSuffix(".polestar.com") else { return nil }
-        return url
     }
 
     static func formBody(_ fields: [String: String]) -> Data? {
@@ -1174,50 +1277,23 @@ actor PolestarAPI {
         PKCE.codeChallenge(for: verifier)
     }
 
-    /// Where the sign-in page embeds its PingFederate resume path, most specific first. The
-    /// pattern list and its order come from simonbusborg/polaris (MIT); see
-    /// THIRD_PARTY_NOTICES.md.
-    private static let resumePathPatterns: [NSRegularExpression] = [
-        #"(?:url|action):\s*"([^"]+)""#,
-        #"(?:resumePath|pf\.resumePath)\s*[:=]\s*['"]([^'"]+)['"]"#,
-        #"action="([^"]+)""#,
-        #"action:\s*'([^']+)'"#,
-        #"url:\s*'([^']+)'"#,
-        #"/as/[a-zA-Z0-9\-_./]+"#
-    ].compactMap { try? NSRegularExpression(pattern: $0) }
-
-    /// The password is posted to this path, so every match is checked, not just the first per
-    /// pattern: an unrelated `url: "/static/app.js"` earlier in the page is skipped instead of
-    /// becoming the sign-in target.
+    /// Forwards to `PolestarSignInPage`; kept so existing callers and tests keep their entry point.
     static func extractResumePath(from html: String) -> String? {
-        let range = NSRange(html.startIndex..., in: html)
-        for regex in resumePathPatterns {
-            for match in regex.matches(in: html, range: range) {
-                let group = match.numberOfRanges > 1 ? 1 : 0
-                guard let matchRange = Range(match.range(at: group), in: html) else { continue }
-                let value = String(html[matchRange])
-                if isPlausibleResumePath(value) { return value }
-            }
-        }
-        return nil
+        PolestarSignInPage.resumePath(in: html)
     }
 
-    /// A same-host PingFederate resume path: absolute, not protocol-relative, no traversal,
-    /// URL-path characters only, and containing a `/resume` segment.
     static func isPlausibleResumePath(_ value: String) -> Bool {
-        guard value.hasPrefix("/"), !value.hasPrefix("//"), !value.contains(".."),
-              value.contains("/resume") else { return false }
-        return value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_./~%".contains($0)) }
+        PolestarSignInPage.isPlausibleResumePath(value)
     }
 
 
-    private static func mapErrors(_ errors: [GraphQLErrorDTO]) -> [GraphQLServiceError] {
+    static func mapErrors(_ errors: [GraphQLErrorDTO]) -> [GraphQLServiceError] {
         errors.map { GraphQLServiceError(message: $0.message, path: $0.path, code: $0.code) }
     }
 
     /// Compact `code: message @ path` rendering used for diagnostics. GraphQL errors carry no
     /// credentials, only the field that was rejected and why.
-    private static func errorSummary(_ errors: [GraphQLErrorDTO]) -> String {
+    static func errorSummary(_ errors: [GraphQLErrorDTO]) -> String {
         errors.prefix(5).map { error in
             let code = error.code.map { "\($0): " } ?? ""
             let path = !error.path.isEmpty ? " @ \(error.path.joined(separator: "."))" : ""
@@ -1243,14 +1319,7 @@ actor PolestarAPI {
     }
 
     static func isGlobalFailure(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
-        if let error = error as? URLError, error.code == .cancelled { return true }
-        if case PolestarError.network(let error) = error, error.code == .cancelled { return true }
-        guard let error = error as? PolestarError else { return false }
-        switch error {
-        case .authenticationRequired, .rateLimited: return true
-        default: return false
-        }
+        PolestarReadFailurePolicy.abortRefresh(error)
     }
 
     /// Errors that mean the request itself failed – authentication, rate limiting, server
@@ -1258,38 +1327,9 @@ actor PolestarAPI {
     /// data" must still surface these: swallowing an expired session or a rate-limit window
     /// here is what made outages masquerade as "Open Settings to sign in".
     static func isRequestLevelFailure(_ error: Error) -> Bool {
-        switch error as? PolestarError {
-        case .authenticationRequired, .rateLimited, .server, .network, .invalidResponse,
-             .responseTooLarge:
-            return true
-        default:
-            return false
-        }
-    }
-
-    static func positive(_ value: Int?) -> Int? {
-        guard let value, value > 0 else { return nil }
-        return value
-    }
-
-    static func hasWarning(_ value: String?) -> Bool {
-        guard let value else { return false }
-        return !value.contains("NO_WARNING") && !value.contains("UNSPECIFIED")
-    }
-
-    static func fluidWarnings(_ health: HealthDTO?) -> [String] {
-        guard let health else { return [] }
-        let values = [
-            (health.brakeFluidLevelWarning, "BRAKE_FLUID_LEVEL_WARNING_", L10n.text("Brake fluid")),
-            (health.engineCoolantLevelWarning, "ENGINE_COOLANT_LEVEL_WARNING_", L10n.text("Coolant")),
-            (health.oilLevelWarning, "OIL_LEVEL_WARNING_", L10n.text("Oil"))
-        ]
-        return values.compactMap { raw, prefix, label in
-            guard let raw, hasWarning(raw) else { return nil }
-            let detail = raw.replacingOccurrences(of: prefix, with: "")
-                .replacingOccurrences(of: "_", with: " ").lowercased()
-            return "\(label) \(detail)"
-        }
+        if PolestarReadFailurePolicy.abortRefresh(error) { return true }
+        if case PolestarError.invalidResponse = error { return true }
+        return false
     }
 }
 

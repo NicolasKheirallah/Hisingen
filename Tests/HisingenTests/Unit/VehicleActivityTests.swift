@@ -599,7 +599,7 @@ let raw = try SQLiteDatabase.inMemory()
         #expect(database.history.recentActivities(for: current.identity.vin).count == 2)
         #expect(database.history.recentActivities(for: "OTHER-VIN").isEmpty)
         let version = try raw.query(sql: "PRAGMA user_version;") { statement in
-            statement.step() ? statement.columnInt64(at: 0) : nil
+            (try statement.stepOrThrow()) ? statement.columnInt64(at: 0) : nil
         }
         #expect(version == Int64(VehicleDatabase.latestSchemaVersion))
     }

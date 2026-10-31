@@ -15,7 +15,7 @@ Built with AppKit and SwiftUI. No Electron, no telemetry middlemen, and no third
 [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
-  <img src="assets/status-menubar-main-dashboard.png" width="460" alt="Hisingen menu bar vehicle overview on macOS">
+  <img src="assets/vehicle-overview-factory-art.png" width="460" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
 </p>
 
 > [!IMPORTANT]
@@ -53,9 +53,9 @@ without opening GitHub.
 
 **Quick links:** [Quick start](#quick-start) · [Installation](#installation) · [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg)
 
-**Features:** [Why Hisingen?](#why-hisingen) · [Polestar and Volvo](#polestar-and-volvo) · [What Hisingen can show](#what-hisingen-can-show) · [Remote controls](#remote-controls) · [Vehicle support](#vehicle-support) · [Product tour](#product-tour)
+**Features:** [Why Hisingen?](#why-hisingen) · [Polestar and Volvo](#polestar-and-volvo) · [What Hisingen can show](#what-hisingen-can-show) · [Remote controls](#remote-controls) · [Vehicle support](#vehicle-support) · [Product tour](#product-tour) · [Data sources & field mappings](#data-sources-and-field-mappings)
 
-**Using Hisingen:** [Multiple vehicles](#multiple-vehicles) · [Notifications](#notifications) · [macOS integration](#macos-integration) · [Make it yours](#make-it-yours) · [Privacy](#privacy)
+**Using Hisingen:** [Multiple vehicles](#multiple-vehicles) · [Notifications](#notifications) · [macOS integration](#macos-integration) · [Make it yours](#make-it-yours) · [Your data](#your-data) · [Privacy](#privacy)
 
 **Getting started:** [Installation](#installation) · [Polestar setup](#polestar-setup) · [Volvo setup](#volvo-setup)
 
@@ -93,6 +93,10 @@ With Hisingen you can:
 * log fuel fill-ups so hybrid and petrol costs count toward lifetime cost-per-distance
 * keep an optional always-on-top charging mini-panel on screen while plugged in
 * surface vehicle state in system Spotlight and act on banners with quick actions
+* price charging from Swedish spot prices and see the cheapest window to reach your target
+* retry a command that provably did not run, undo a reversible one for 30 seconds, and save
+  command routines
+* hand over a clean data pack when you sell the car, or back everything up as JSON
 
 What appears in Hisingen depends on what your individual car actually supports.
 
@@ -122,32 +126,22 @@ The Polestar integration therefore uses interfaces based on the services used by
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle status dashboard</strong><br><br>
-<img src="assets/status-menubar-main-dashboard.png" width="420" loading="lazy" alt="Hisingen Polestar vehicle status dashboard">
+<strong>Vehicle overview</strong><br><br>
+<img src="assets/vehicle-overview-factory-art.png" width="420" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
 </td>
 <td width="50%" align="center">
-<strong>Active 11 kW AC charging</strong><br><br>
-<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active 11 kW AC charging telemetry">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Exterior views & latch geometry</strong><br><br>
-<img src="assets/status-exterior-angles-door-latches.png" width="420" loading="lazy" alt="Hisingen vehicle exterior views and door/window latches">
-</td>
-<td width="50%" align="center">
-<strong>TPMS pressures & parking GPS</strong><br><br>
-<img src="assets/status-tpms-tyre-pressures-parking-gps.png" width="420" loading="lazy" alt="Hisingen tyre pressures and live GPS parking coordinates">
+<strong>Charging history</strong><br><br>
+<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Fluids, 12V battery & weather</strong><br><br>
-<img src="assets/status-fluids-12v-airpurifier-weather.png" width="420" loading="lazy" alt="Hisingen fluid levels, 12V auxiliary health and ambient weather">
+<strong>Doors &amp; openings</strong><br><br>
+<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
 </td>
 <td width="50%" align="center">
-<strong>Offline cache recovery</strong><br><br>
-<img src="assets/status-offline-cached-banner.png" width="420" loading="lazy" alt="Hisingen graceful offline telemetry cache recovery">
+<strong>Remote controls</strong><br><br>
+<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
 </td>
 </tr>
 </table>
@@ -158,38 +152,6 @@ Volvo provides official developer APIs, and Hisingen ships with default develope
 
 If you prefer, you can use your own Volvo Cars Developer application and credentials instead. See [Volvo setup](#volvo-setup).
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Hybrid & combustion telemetry</strong><br><br>
-<img src="assets/status-hybrid-fuel-engine.png" width="420" loading="lazy" alt="Hisingen showing Volvo hybrid fuel tank and engine telemetry">
-</td>
-<td width="50%" align="center">
-<strong>Live charging & powertrain</strong><br><br>
-<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active charging rates and power levels">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Trip & diagnostic information</strong><br><br>
-<img src="assets/info-trip-computer-fluids-lighting.png" width="420" loading="lazy" alt="Hisingen trip computer, fluid levels and exterior lighting check">
-</td>
-<td width="50%" align="center">
-<strong>Powertrain, health & battery SoH</strong><br><br>
-<img src="assets/info-battery-pack-soh-longevity.png" width="420" loading="lazy" alt="Hisingen powertrain specifications and battery health information">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Vehicle build spec & ownership</strong><br><br>
-<img src="assets/info-factory-build-spec-vin-capabilities.png" width="420" loading="lazy" alt="Hisingen factory build specification and vehicle identity">
-</td>
-<td width="50%" align="center">
-<strong>Remote climate & controls</strong><br><br>
-<img src="assets/controls-climate-preconditioning-airclean.png" width="420" loading="lazy" alt="Hisingen capability-aware vehicle controls and climate preconditioning">
-</td>
-</tr>
-</table>
 
 ---
 
@@ -212,6 +174,10 @@ For electric and plug-in hybrid vehicles, Hisingen can show information such as:
 * charging-current limit
 * estimated charging completion
 * energy consumption
+* energy used by driving, climate, battery conditioning and other loads, for manual trips,
+  automatic trips and since the last charge (Polestar)
+* battery discharge power limit and available energy, manual preconditioning and cold-battery
+  status, when the car reports them (Polestar)
 * one-tap amp presets (6/8/10/13/16 A) beside the current-limit slider
 * saved charge location settings (Polestar): rename, per-location current limit,
   minimum charge level, optimised-charging mode, delete
@@ -226,6 +192,14 @@ from the telemetry it has observed. This is always labelled as a calculated
 estimate, includes its input signals and confidence, and must not be confused
 with a battery-management-system measurement or a warranty diagnosis. Exact
 usable capacity and WLTP references can be entered per VIN in Settings.
+
+The estimate uses two methods: the range shown at 100% charge, and high-confidence charging
+sessions. When both agree within tolerance Hisingen shows a fused value, and when they disagree
+it shows the conflict instead of hiding it behind one number. The uncapped range-based figure is
+kept next to the displayed value, which is capped at 100%, so an understated WLTP reference stays
+visible. The trend is fitted with a median-based slope that ignores a single bad range reading.
+The range-based method applies only to battery-electric cars with a known model reference or a
+reference you set for that VIN, never to plug-in hybrids scored against a borrowed WLTP figure.
 
 ### Fuel & hybrid information
 
@@ -272,6 +246,42 @@ Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage 
 the business/private distance split per month with CSV export. Tags are stored locally per
 vehicle.
 
+A few more things that follow from the same history:
+
+* scheduled charging says whether it will finish, including "cannot complete" and "smart
+  charging will not finish", instead of collapsing every plan to "Scheduled"
+* when the car is within 150 m of a saved charge location, the card reads "At <location> since
+  <time>"
+* History has a per-location charging cost table, grouped by currency
+* the trip computer shows distance and average speed since the last charge, taken from the C3
+  odometer reading
+
+### Electricity prices & the Charging Planner
+
+**Settings → Electricity** sets the country, either Sweden or another country.
+
+* **Sweden, Automatic rate.** Charging is priced from the spot price for your zone (SE1 to SE4)
+  plus your provider's markup, with optional tax and grid fee in öre/kWh and a VAT toggle. You
+  choose the contract type: 15-minute price, as the market publishes it, or hourly price, which
+  averages the four quarters in each hour. The provider list (Vattenfall, Fortum, E.ON, Tibber,
+  Bixia, Greenely, Göteborg Energi, Skellefteå Kraft, Telge Energi, Jämtkraft, or other) only
+  names the contract. It carries no prices, because markups differ per agreement. The price your
+  settings produce is shown next to the controls.
+* **Every other country.** A typed-in rate and the optional night tariff.
+
+The rate you pick drives every cost in the app: the charge-to-target estimate on the charging
+card, session costs, History totals, monthly and per-location breakdowns, cost per distance and
+the CSV export. Changing the markup re-prices past sessions that have a stored market cost.
+Sessions the market prices do not cover keep their saved cost or your fixed rate.
+
+The **Charging Planner** needs Sweden and its feature switch. It shows an hourly price curve and
+the cheapest window to reach your target. Automatic charging commands are bound to the vehicle
+the plan was calculated for. Choosing another country stops the planner and
+keeps its settings for when Sweden is selected again. Spot prices come from
+[Elpriset just nu.se](https://www.elprisetjustnu.se/), are fetched once a day after 14:15 and
+exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
+each zone refreshes on its own schedule.
+
 ### Doors, windows & locks
 
 Hisingen can show the state reported for things such as:
@@ -307,6 +317,17 @@ Depending on the car, Hisingen can surface:
 
 Different vehicle platforms expose different levels of detail.
 
+On top of the live readings Hisingen keeps some local context:
+
+* **Tyres.** A local pressure history with a four-tyre chart and a possible-slow-leak hint.
+  Measured pressures are compared with the car's own reported reference pressures.
+* **Warnings.** A timeline records when each warning first appeared and when a report that
+  covers it cleared it. Failed exterior lamps are named individually under the lighting row.
+* **Service.** The next service date is estimated from the last 30 days of driving.
+* **Usage mode.** The reported vehicle usage mode shows in the connectivity details, including on
+  vehicles without separate network diagnostics.
+* **Weight.** The reported gross vehicle weight shows on the Info specs card (Polestar).
+
 ### Climate
 
 Hisingen can show climate information and, where supported, control climatization remotely.
@@ -328,6 +349,21 @@ A Polestar 2, for example, may allow climatization to be started without exposin
 
 Instead of presenting controls that won't work, Hisingen adjusts the interface to what's actually available.
 
+On Polestar the climate card shows the climatization type and the maximum preconditioning
+runtime the car reports, instead of one claim that fits every model. When a session starts or
+fails, Hisingen explains why, including the reported error reasons. Seat and steering-wheel
+heating are shown as requests, and an unspecified request is kept apart from an explicit off,
+because automatic heating may differ from what was asked for.
+
+Climate timers show whether they repeat weekly. Hisingen reads that flag back for the timers it
+writes itself, instead of guessing from the weekday list. The climate card also names the heater
+type the car reports and whether the car heats the seats and steering wheel on its own in cold
+weather.
+
+Before a scheduled departure, Hisingen can hint at frost or a cold battery using an hourly
+forecast. A notice appears once per climate session when the run time is nearly used up or the
+battery is too low.
+
 ### Location
 
 When enabled and available from the vehicle provider, Hisingen can show the car's latest reported location as a street **address** (with precise coordinates below), open it in Apple Maps, and chart cabin temperature trends where the vehicle reports them.
@@ -346,11 +382,49 @@ Weather data comes from [Open-Meteo](https://open-meteo.com/).
 
 Because coordinates are needed to retrieve local weather, the vehicle's latitude and longitude are sent to Open-Meteo while this feature is enabled.
 
+The hourly forecast that drives the pre-departure frost hint is fetched in the same request as the
+current weather.
+
 ### Vehicle software
 
 Where the provider exposes it, Hisingen can show vehicle software and update-related information.
 
 Polestar currently exposes more software information to Hisingen than Volvo's developer APIs do, so this section can look different between the two brands.
+
+When a car does not report update status at all, the card says "Not reported by this vehicle"
+instead of claiming that no update is available.
+
+### Info tab and the capabilities inspector
+
+The Info tab is the car's technical passport: identity and specifications on top, then the
+capabilities the backend reports for this exact vehicle.
+
+* **Specifications.** Model, year, battery capacity, charge port, reported gross vehicle weight
+  and, on Polestar, the readable groups of the `visual_id` string (vehicle type, front grille
+  variant, model year). Groups whose code table is not verified stay positional.
+* **Service date.** "Due around <day> at your current driving rate" appears when the car reports
+  a distance to service and the local store holds at least a week of odometer samples from the last
+  30 days. It is a planning hint, shown as day and month only.
+* **Export Factory Passport (CSV)** writes the specifications to a file.
+* **Export Handover Pack…** is described under [Your data](#your-data).
+
+The capabilities card lists what the provider says the car supports. Three disclosure groups sit
+under it, and each row appears only when the backend actually sent the field:
+
+* **Backend Control Settings:** charging locations, timers per location, departure times per
+  location and climate timers the car allows, plus whether it supports per-location departure
+  times, current limits and optimised charging.
+* **Backend Reporting:** statements the car makes about itself, such as reporting flags,
+  notification settings, end-of-ownership actions, account linking, parking-assistance type, trip
+  reporting, device pairing, bidirectional charging and the preconditioning duration. These are
+  not controls.
+* **Unwired Backend Fields:** wire fields the backend sends that no control uses yet, shown raw so
+  new backend data stays visible. Most `GetMyCars` tags now have a name, so this list is short.
+  Unknown fields on the air-quality, charge-target and charging-current reads are kept the same
+  way.
+
+Plug and charge is claimed only when the backend also sends the plug-and-charge identifier,
+because the wire flag and the REST value disagree on the car this was tested on.
 
 ---
 
@@ -399,6 +473,50 @@ It does **not** mean every car supports every command.
 \* Availability still depends on the vehicle, account and services available for that car.
 
 For sensitive commands such as unlocking the car, Hisingen can require device-owner authentication through Touch ID, Apple Watch, or the Mac password, depending on what macOS makes available.
+
+### What the car reports decides what you see
+
+On Polestar, Hisingen reads the car's own capability record (`GetMyCars`) and gates controls on
+it, not on a model table:
+
+* central locking and reduced-guard locking follow the reported lock type; reduced-guard locking
+  is reported where the car advertises it, but the control is Volvo-only because the Polestar
+  transport has no such command
+* remote unlock follows the reported unlock type. A trunk-only car keeps the tailgate control, and
+  a disabled Unlock on a car whose unlock type is none says why
+* preconditioning follows the reported climatization type, and charge timers and saved charge
+  locations follow the reported charging capabilities
+* honk and flash follows the per-vehicle mode the car reports. A car that reports none gets no
+  honk or flash control
+
+On Volvo, controls follow the command list the API returns for that VIN, and the Approved
+permissions scope is required for lock, honk and engine start and stop. EX30, EX90 and ES90 are not
+offered climate setpoints, windows, trunk or charging controls that the public API cannot perform.
+
+### Retry, Undo and routines
+
+* **Retry** is offered on a failed command only when the failure proves it did not run.
+* **Undo** is offered for 30 seconds on a reversible command.
+* **Routines** (Controls tab) are saved sequences of commands. Each step goes through the same
+  capability check and authorization as a single command, steps run in order, and a routine stops
+  at the first failure.
+
+### When a command's outcome is uncertain
+
+A Polestar command waits up to 15 seconds for the car's reply. Polestar's backend keeps some
+streams open after it has answered, so a complete reply followed by that deadline counts as
+success. A deadline inside a reply, or before any reply, is reported as an unknown outcome ("The
+command may have reached the vehicle"), because Hisingen cannot tell whether it ran. A deadline is
+reported as a deadline and never as you cancelling.
+
+### Authorizing remote commands (Polestar)
+
+Polestar commands need a second sign-in grant beside your Polestar ID session. The step is in
+**Settings → Accounts**, under Remote Controls, and on the banner that appears when a command is
+blocked for a missing grant. It needs a working Polestar ID session first: the browser step is
+refused up front when that session cannot be refreshed, and every failure of the flow shows an
+alert that names the step and the fix. The table of which grant each command uses is in
+[Data sources & field mappings](#data-sources-and-field-mappings).
 
 ### About Polestar remote controls
 
@@ -454,68 +572,28 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 
 ## Product tour
 
-The screenshots below show each view within the app:
+The screenshots below show the main views of the app.
 
 <details open>
-<summary><strong>Status & Telemetry</strong></summary>
+<summary><strong>Vehicle</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td colspan="2" align="center">
-<strong>Vehicle instrument with factory render</strong><br><br>
-<img src="assets/vehicle-overview-factory-art.png" width="460" loading="lazy" alt="Hisingen vehicle instrument with the factory render, battery level, estimated range and quick actions">
+<strong>Vehicle overview with factory render</strong><br><br>
+<img src="assets/vehicle-overview-factory-art.png" width="460" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Charging history & session curve</strong><br><br>
-<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with an expanded session, charging curve and estimate quality">
+<strong>Charging history &amp; session curve</strong><br><br>
+<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
 </td>
 <td width="50%" align="center">
-<strong>Charging planner & spot prices</strong><br><br>
-<img src="assets/vehicle-charging-planner.png" width="420" loading="lazy" alt="Hisingen smart charging planner with hourly spot prices and recent charging sessions">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Menu bar dashboard</strong><br><br>
-<img src="assets/status-menubar-main-dashboard.png" width="420" loading="lazy" alt="Hisingen menu bar dashboard">
-</td>
-<td width="50%" align="center">
-<strong>Active 11 kW AC charging</strong><br><br>
-<img src="assets/status-charging-active-11kw.png" width="420" loading="lazy" alt="Hisingen active 11 kW AC charging">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>TPMS pressures & GPS parking</strong><br><br>
-<img src="assets/status-tpms-tyre-pressures-parking-gps.png" width="420" loading="lazy" alt="Hisingen tyre pressures and live GPS parking coordinates">
-</td>
-<td width="50%" align="center">
-<strong>4-Corner TPMS & street address</strong><br><br>
-<img src="assets/status-tpms-location-address.png" width="420" loading="lazy" alt="Hisingen detailed tyre status and reverse-geocoded address">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Exterior views & latch geometry</strong><br><br>
-<img src="assets/status-exterior-angles-door-latches.png" width="420" loading="lazy" alt="Hisingen vehicle exterior views and door/window latches">
-</td>
-<td width="50%" align="center">
-<strong>Fluids, 12V battery & weather</strong><br><br>
-<img src="assets/status-fluids-12v-airpurifier-weather.png" width="420" loading="lazy" alt="Hisingen fluid levels, 12V auxiliary health and ambient weather">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Combustion & hybrid telemetry</strong><br><br>
-<img src="assets/status-hybrid-fuel-engine.png" width="420" loading="lazy" alt="Hisingen hybrid fuel tank and engine state">
-</td>
-<td width="50%" align="center">
-<strong>Offline cache recovery</strong><br><br>
-<img src="assets/status-offline-cached-banner.png" width="420" loading="lazy" alt="Hisingen graceful offline telemetry cache recovery">
+<strong>Charging planner &amp; spot prices</strong><br><br>
+<img src="assets/vehicle-charging-planner.png" width="420" loading="lazy" alt="Hisingen charging planner showing the cheapest window to reach 90% and an hourly spot-price chart">
 </td>
 </tr>
 </table>
@@ -523,39 +601,19 @@ The screenshots below show each view within the app:
 </details>
 
 <details>
-<summary><strong>Remote Controls & Capability Probing</strong></summary>
+<summary><strong>Remote Controls</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Controls overview & command confirmation</strong><br><br>
-<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen controls overview with remote command capabilities and a command confirmation">
+<strong>Controls overview &amp; command confirmation</strong><br><br>
+<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
 </td>
 <td width="50%" align="center">
-<strong>Climate & charging controls</strong><br><br>
-<img src="assets/controls-charging.png" width="420" loading="lazy" alt="Hisingen climate controls and charging target and current limits with saved charge locations">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Climate & CleanZone air purifier</strong><br><br>
-<img src="assets/controls-climate-preconditioning-airclean.png" width="420" loading="lazy" alt="Hisingen remote climate preconditioning and air purifier">
-</td>
-<td width="50%" align="center">
-<strong>Charging limits & current selector</strong><br><br>
-<img src="assets/controls-charging-limits-amperage.png" width="420" loading="lazy" alt="Hisingen charging target limits and 6A-32A current selector">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Capability matrix inspector</strong><br><br>
-<img src="assets/settings-capability-matrix-inspector.png" width="420" loading="lazy" alt="Hisingen built-in capability matrix inspector">
-</td>
-<td width="50%" align="center">
-<strong>Direct OAuth PKCE flow</strong><br><br>
-<img src="assets/settings-remote-commands-oauth.png" width="420" loading="lazy" alt="Hisingen direct browser OAuth PKCE authentication">
+<strong>Climate &amp; charging controls</strong><br><br>
+<img src="assets/controls-charging.png" width="420" loading="lazy" alt="Hisingen climate and charging controls with target limit and current limit selectors and Charge Now and Resume Schedule buttons">
 </td>
 </tr>
 </table>
@@ -563,55 +621,35 @@ The screenshots below show each view within the app:
 </details>
 
 <details>
-<summary><strong>History & Energy Analytics</strong></summary>
+<summary><strong>History &amp; Energy Analytics</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td colspan="2" align="center">
-<strong>History overview & observed changes</strong><br><br>
-<img src="assets/history-overview.png" width="460" loading="lazy" alt="Hisingen history overview with distance, trips, energy, cost and observed changes">
+<strong>History overview &amp; observed changes</strong><br><br>
+<img src="assets/history-overview.png" width="460" loading="lazy" alt="Hisingen History tab with a 30-day distance chart, trip, driving time, energy and cost totals, and a list of observed lock changes">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Monthly mileage & detected trips</strong><br><br>
-<img src="assets/history-trips-and-charging.png" width="420" loading="lazy" alt="Hisingen monthly mileage report, detected trips and charging sessions">
+<strong>Monthly mileage &amp; detected trips</strong><br><br>
+<img src="assets/history-trips-and-charging.png" width="420" loading="lazy" alt="Hisingen monthly mileage report split into business, private and unclassified trips, with a paged list of detected trips">
 </td>
 <td width="50%" align="center">
-<strong>Charging & consumption trends</strong><br><br>
-<img src="assets/history-charging-trends.png" width="420" loading="lazy" alt="Hisingen charging trend summary and consumption per 100 km over time">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Odometer & battery health trends</strong><br><br>
-<img src="assets/history-odometer-and-battery-health.png" width="420" loading="lazy" alt="Hisingen odometer history and battery health trend with degradation and usable capacity">
-</td>
-<td width="50%" align="center">
-<strong>Usage insights & driving patterns</strong><br><br>
-<img src="assets/history-insights.png" width="420" loading="lazy" alt="Hisingen month-over-month comparison, air-cleaning runs, emissions estimate and driving patterns">
+<strong>Charging &amp; consumption trends</strong><br><br>
+<img src="assets/history-charging-trends.png" width="420" loading="lazy" alt="Hisingen charging trends summary and a consumption trend chart in kWh per 100 km">
 </td>
 </tr>
 <tr>
 <td width="50%" align="center">
-<strong>Analytics dashboard & export</strong><br><br>
-<img src="assets/history-analytics-dashboard-overview.png" width="420" loading="lazy" alt="Hisingen history overview with distance, energy and CSV/JSON export">
+<strong>Odometer &amp; battery health trends</strong><br><br>
+<img src="assets/history-odometer-and-battery-health.png" width="420" loading="lazy" alt="Hisingen odometer history, average daily distance and a battery health trend with degradation and usable capacity">
 </td>
 <td width="50%" align="center">
-<strong>Distance & speed Swift Charts</strong><br><br>
-<img src="assets/history-distance-speed-charts.png" width="420" loading="lazy" alt="Hisingen Swift Charts distance and trip speed trends">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Odometer accumulation curve</strong><br><br>
-<img src="assets/history-odometer-mileage-chart.png" width="420" loading="lazy" alt="Hisingen historical odometer accumulation chart">
-</td>
-<td width="50%" align="center">
-<strong>Battery degradation & AQI trends</strong><br><br>
-<img src="assets/history-battery-degradation-aqi-charts.png" width="420" loading="lazy" alt="Hisingen battery degradation curve and interior air AQI trend">
+<strong>Usage insights &amp; driving patterns</strong><br><br>
+<img src="assets/history-insights.png" width="420" loading="lazy" alt="Hisingen month-over-month comparison, observed air-cleaning runs, emissions compared with a petrol car and a driving patterns chart">
 </td>
 </tr>
 </table>
@@ -619,39 +657,19 @@ The screenshots below show each view within the app:
 </details>
 
 <details>
-<summary><strong>Diagnostics & Build Specifications</strong></summary>
+<summary><strong>Vehicle Info</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<strong>Vehicle passport & reading freshness</strong><br><br>
-<img src="assets/info-vehicle-identity.png" width="420" loading="lazy" alt="Hisingen vehicle identity, key specifications and per-reading freshness timestamps">
+<strong>Vehicle identity &amp; reading freshness</strong><br><br>
+<img src="assets/info-vehicle-identity.png" width="420" loading="lazy" alt="Hisingen Info tab with vehicle identity, battery capacity, estimated range, charge port type and the time of each reading">
 </td>
 <td width="50%" align="center">
-<strong>Doors, openings & tyre status</strong><br><br>
-<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with indirect tyre pressure monitoring">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Battery pack SoH calculation (82.4%)</strong><br><br>
-<img src="assets/info-battery-pack-soh-longevity.png" width="420" loading="lazy" alt="Hisingen 78 kWh battery pack degradation and State of Health calculation">
-</td>
-<td width="50%" align="center">
-<strong>Factory build sheet & OTA flags</strong><br><br>
-<img src="assets/info-factory-build-spec-vin-capabilities.png" width="420" loading="lazy" alt="Hisingen factory build sheet decoder and OTA capabilities">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Trip computer & diagnostics</strong><br><br>
-<img src="assets/info-trip-computer-fluids-lighting.png" width="420" loading="lazy" alt="Hisingen trip computer, fluid levels and exterior lighting check">
-</td>
-<td width="50%" align="center">
-<strong>Identity & cloud connectivity</strong><br><br>
-<img src="assets/info-vehicle-identity-connectivity.png" width="420" loading="lazy" alt="Hisingen vehicle identity, VIN parameters and cloud status">
+<strong>Doors, openings &amp; tyre status</strong><br><br>
+<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
 </td>
 </tr>
 </table>
@@ -659,68 +677,231 @@ The screenshots below show each view within the app:
 </details>
 
 <details>
-<summary><strong>Preferences & Customization</strong></summary>
+<summary><strong>Preferences &amp; Customization</strong></summary>
 
 <br>
 
 <table>
 <tr>
 <td colspan="2" align="center">
-<strong>Appearance, themes & vehicle perspective</strong><br><br>
-<img src="assets/settings-appearance.png" width="460" loading="lazy" alt="Hisingen appearance settings with light and dark mode, vehicle perspective art and the theme gallery">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Multi-brand garage accounts</strong><br><br>
-<img src="assets/settings-garage-accounts.png" width="420" loading="lazy" alt="Hisingen multi-brand garage connected accounts">
-</td>
-<td width="50%" align="center">
-<strong>Themes & floating HUD</strong><br><br>
-<img src="assets/settings-appearance-privacy-hud.png" width="420" loading="lazy" alt="Hisingen screenshot privacy mode and floating charging HUD">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>9-Theme palette picker</strong><br><br>
-<img src="assets/settings-theme-selector.png" width="420" loading="lazy" alt="Hisingen 9 per-vehicle theme color palettes">
-</td>
-<td width="50%" align="center">
-<strong>16 Native languages & layout</strong><br><br>
-<img src="assets/settings-general-localization-layout.png" width="420" loading="lazy" alt="Hisingen 16 native translations and badge layout">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Window geometry & 85% density</strong><br><br>
-<img src="assets/settings-geometry-content-density.png" width="420" loading="lazy" alt="Hisingen window dimensions and compact content density">
-</td>
-<td width="50%" align="center">
-<strong>Electricity tariffs & Touch ID</strong><br><br>
-<img src="assets/settings-tariffs-biometric-auth.png" width="420" loading="lazy" alt="Hisingen day/night peak tariffs and Touch ID authentication">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Warranty & battery spec overrides</strong><br><br>
-<img src="assets/settings-warranty-battery-spec-overrides.png" width="420" loading="lazy" alt="Hisingen in-service warranty and battery spec overrides">
-</td>
-<td width="50%" align="center">
-<strong>Granular telemetry toggles</strong><br><br>
-<img src="assets/settings-telemetry-toggles.png" width="420" loading="lazy" alt="Hisingen granular charging, schedule and battery toggles">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Smart notification triggers</strong><br><br>
-<img src="assets/settings-smart-notifications-toggles.png" width="420" loading="lazy" alt="Hisingen smart notification switches">
-</td>
-<td width="50%" align="center">
-<strong>Quiet hours & SQLite storage stats</strong><br><br>
-<img src="assets/settings-quiet-hours-sqlite-storage.png" width="420" loading="lazy" alt="Hisingen night quiet hours and local SQLite storage stats">
+<strong>Appearance, themes &amp; vehicle perspective</strong><br><br>
+<img src="assets/settings-appearance.png" width="460" loading="lazy" alt="Hisingen Settings window on Appearance, with screenshot privacy mode, light and dark mode, vehicle perspective and the theme gallery">
 </td>
 </tr>
 </table>
+
+</details>
+
+---
+
+## Data sources and field mappings
+
+This section shows where each part of the app gets its data and which backend call carries each
+command. Volvo uses documented developer APIs. Everything Polestar-side below was reverse
+engineered, can change without notice, and is not endorsed by Polestar. Where a mapping is not
+confirmed, the table says so.
+
+<details>
+<summary><strong>Hosts</strong></summary>
+
+<br>
+
+| Brand | Host | Used for |
+| --- | --- | --- |
+| Polestar | `polestarid.eu.polestar.com` | Sign-in (OpenID Connect) |
+| Polestar | `pc-api.polestar.com/eu-north-1/mystar-v2/` | Vehicle discovery and telematics (GraphQL), session grant only |
+| Polestar | `pc-api.polestar.com/eu-north-1/app-backend/api/graphql` | Second discovery source (VDMS), command grant only |
+| Polestar | `pc-api.polestar.com/eu-north-1/mystar-public/` | Car renders, API key, no sign-in |
+| Polestar | `pc-api.polestar.com/eu-north-1/data-portal/m2m/` | Developer Portal REST (EU Data Act) |
+| Polestar | `cnepmob.volvocars.com` | Returns the C3 gRPC host. Looked up again every 12 hours, keeping the last working host if the lookup fails |
+| Polestar | C3 host from discovery | Vehicle-state reads, remote commands, software updates |
+| Polestar | `api.pccs-prod.plstr.io` | Charging settings: reads and writes |
+| Volvo | `volvoid.eu.volvocars.com` | Sign-in (OAuth 2 with PKCE) |
+| Volvo | `api.volvocars.com` | Connected Vehicle, Energy and Location APIs |
+
+Weather comes from Open-Meteo and Swedish spot prices from Elpriset just nu.se. See
+[Privacy](#privacy).
+
+</details>
+
+<details>
+<summary><strong>Polestar: what is read, and from where</strong></summary>
+
+<br>
+
+| Service and call | Shown in Hisingen as |
+| --- | --- |
+| `BatteryService/GetLatestBattery` | State of charge, range, charging state, power, current, voltage, energy breakdown, discharge info |
+| `AvailabilityService/GetLatestAvailability` | Whether the car is reachable, and its usage mode |
+| `ExteriorService/GetLatestExterior` | Locks, doors, windows, hood, tailgate |
+| `HealthService/GetHealth` | Tyre pressures, lamp, fluid and service warnings |
+| `OdometerService/GetOdometer`, `DashboardService/GetLatestDashboard` | Odometer |
+| `ParkingClimatizationService/GetLatestParkingClimatization` | Climate state, seat and wheel requests, climate errors and warnings |
+| `PreCleaningService/GetPreCleaning` | Cabin cleaning status and air quality |
+| `DtlInternetService/GetLastKnownLocation` | Last reported location |
+| `OtaDiscoveryService/GetSoftwareInfo`, `SchedulerService/GetSchedule` | Software version, update state and a scheduled install |
+| `TargetSocService/GetTargetSoc`, `AmpLimitService/GetAmpLimit` | Charge target and charging-current limit |
+| `ChargeLocationService/GetChargeLocations` | Saved charge locations |
+| `GlobalChargeTimerService/GetGlobalChargeTimerStream`, `ParkingClimateTimerService/GetTimers` | Charging schedule and climate timers |
+| `CarInformation/GetMyCars` | The car's capability record, which gates controls (see [Remote controls](#what-the-car-reports-decides-what-you-see)) |
+| GraphQL `getConsumerCarsV2`, `carTelematicsV2` | Vehicle discovery and the telematics fallback |
+| GraphQL `getCarImages` | Car renders |
+| GraphQL app-backend `vdms.getVehiclesInformation` | Extra discovery data for the garage |
+
+The charging-settings services run on the PCCS host. The rest run on the C3 host. The
+`charging/is-at-charge-location` read is no longer used: the backend answered
+`DATA_NOT_AVAILABLE` on every call.
+
+**Developer Portal REST.** `POST /token` issues a client-credentials token. `GET /v1/vehicles`
+discovers vehicles. Under `/v1/vehicles/{vin}/telemetry/`: `availability`, `battery`, `odometer`,
+`location`, `exterior`, `health`, `parking-climatization` and `pre-cleaning`. Under
+`/v1/vehicles/{vin}/charging/`: `target-soc`, `amp-limit`, `charge-locations`,
+`global-charge-timer`, `charge-now` and `parking-climate-timer`. The portal reports odometer and
+trip meters to the metre and adds reference tyre pressures, which the consumer interface does not.
+
+</details>
+
+<details>
+<summary><strong>Polestar: which call carries each command</strong></summary>
+
+<br>
+
+| Command | Service | Method | Grant |
+| --- | --- | --- | --- |
+| Lock | `invocation.InvocationService` | `Lock` | Command |
+| Unlock, unlock trunk | `invocation.InvocationService` | `Unlock` | Command |
+| Tailgate open, close | `invocation.InvocationService` | `TailgateControl` | Command |
+| Windows open, close | `invocation.InvocationService` | `WindowControl` | Command |
+| Climate start, stop | `invocation.InvocationService` | `ClimatizationStart`, `ClimatizationStop` | Command |
+| Horn, lights, both | `invocation.InvocationService` | `HonkFlash` | Command |
+| Cabin pre-cleaning | `invocation.InvocationService` | `PreCleaning` | Command |
+| Charge target | `TargetSocService` | `SetTargetSoc` | Session |
+| Charging-current limit | `AmpLimitService` | `SetAmpLimit` | Session |
+| Charge now, resume schedule | `ChargeNowService` | `StartOverrideChargeTimer`, `StopOverrideChargeTimer` | Session |
+| Charging schedule | `GlobalChargeTimerService` (v2) | `SetGlobalChargeTimer` | Session |
+| Climate timers | `ParkingClimateTimerService` | `SetTimer`, `DeleteTimer` | Session |
+| Saved charge locations | `ChargeLocationService` | `CreateAtTheCarLocation`, `UpdateAlias`, `UpdateAmpLimit`, `UpdateMinimumSoc`, `UpdateOptimizedSetting`, `DeleteLocation` | Session |
+| Software install | `ota_mobcache.SchedulerService` | `Schedule`, `InstallNow`, `CancelSchedule` | Session or command |
+
+Polestar gates remote commands on a list of approved OAuth client IDs that is separate from the
+sign-in scope. Neither client Hisingen can use is enough alone. The web client can list vehicles
+and change charging settings but cannot send invocation commands. The app client can send
+invocation commands but its token is rejected for reads. Hisingen therefore holds two grants, the
+**Session** grant and the **Command** grant, and picks one per call. That is why remote commands
+need the separate authorization step. The charging services use the `pccs.chronos` prefix on the
+PCCS host. Invocation commands go through the C3 host, because the PCCS invocation service
+refuses both clients.
+
+An invocation moves through queued in the cloud, acknowledged by the car, then finished.
+Rejections come back as privacy mode on, an invalid vehicle mode or a conflicting command. A
+command accepted by the server is not the same as a finished one, and Hisingen reports which one
+it knows.
+
+</details>
+
+<details>
+<summary><strong>Polestar: decoded protobuf fields</strong></summary>
+
+<br>
+
+The field numbers come from the descriptors published for Polestar's own app, checked against
+captured frames and the Developer Portal's official schema. Nested notation `35.5` means field 5
+inside field 35. Anything Hisingen cannot name is kept as a raw field.
+
+| Message | Field | Meaning | Status |
+| --- | --- | --- | --- |
+| Battery | 4, 8 | Range in km, and range in miles used only when field 4 is absent | Confirmed |
+| Battery | 12 | Average consumption, kWh/100 km, automatic | Confirmed |
+| Battery | 14, 15, 16 | Total energy used: manual trip, automatic trip, since charge (Wh) | Confirmed |
+| Battery | 20, 21, 22 | The same three periods split into other, driving, climate and battery (Wh) | Confirmed, absent on the test car |
+| Battery | 23, 24, 25 | The same split as percentages | Confirmed, absent on the test car |
+| Battery | 27 | Discharge info: energy available, increase, power limit | Confirmed |
+| Battery | 28 | Charging status: 1 charging, 5 idle, 15 error, 16 done (0 to 16) | Confirmed |
+| Battery | 29, 30 | Manual preconditioning, cold-battery status | Confirmed in the app, never seen on the test car |
+| Availability | 5 | Usage mode: 1 abandoned, 2 inactive, 3 convenience, 4 active, 5 driving, 6 engine on, 7 engine off | Confirmed |
+| Climate | 4 | Errors: fuel low, battery low, not connected to power, no start needed, service required, temporarily unavailable, persistent error, reached max runtime | Numbering confirmed, never observed |
+| Climate | 5 | Warnings: battery low, run time nearing limit | Numbering confirmed, never observed |
+| Climate | 6 | Ventilation: 1 cooling, 2 heating, 3 neutral | Confirmed |
+| Climate | 9, 10, 11, 12, 13 | Requested seat heat: front left, front right, rear left, rear right, and steering wheel (0 unspecified, 1 off, 2 low, 3 medium, 4 high) | Confirmed |
+| Climate | 17 | Main climate running status | Likely, never seen on the wire |
+| Car (`GetMyCars`) | 16 | Honk and flash mode: 1 none, 2 combined, 3 independent, 4 flash only, 5 horn only | Confirmed, gates the control |
+| Car | 36.1, 36.2 | Lock type and unlock type, gating locking and unlocking | Confirmed, in use |
+| Car | 35.10 | Charge timers and saved locations supported | Confirmed, in use |
+| Car | 35.13, 35.17, 35.18 | Per-location charge limits shown in the capabilities inspector | Confirmed, in use |
+| Car | 35.20 | Plug and charge identifier | Confirmed, in use |
+| Car | 37.1, 37.3 | Climatization type and maximum runtime | Confirmed, in use |
+| Car | 44 | Gross vehicle weight rating | Confirmed, in use |
+| Car | 47 | `visual_id`: groups for vehicle type, front grille variant and model year are named | Other 13 groups unverified |
+| Charging | 35.29 | Plug and charge supported | Conflicts with the REST value, so the app waits for the identifier |
+| Charging | 35.43 | Unknown | Unresolved: the server sends 3, the app's schema has no such tag |
+
+Legacy charging status values 7 and 8 mean smart charging paused and done, and field 28 is
+preferred when present. Seat intensities use a different scale from the Developer Portal's 0 to 3
+levels, and Hisingen converts between them. Unknown enum values and unsupported wire types stay
+raw instead of becoming a known value. Decoded tags that no control uses appear on the Info tab under
+"Unwired Backend Fields", and most `GetMyCars` tags now show under "Backend Reporting" instead.
+
+</details>
+
+<details>
+<summary><strong>Volvo: what is read</strong></summary>
+
+<br>
+
+| Endpoint | Shown in Hisingen as |
+| --- | --- |
+| `GET /connected-vehicle/v2/vehicles` and `/{vin}` | Vehicle list, model, year, colour, gearbox, fuel type, battery capacity, car renders |
+| `GET /energy/v2/vehicles/{vin}/state` | State of charge, range, charging status and type, connector state, power, current limit, target, time to target |
+| `GET /energy/v2/vehicles/{vin}/capabilities` | Which energy fields the car supports. Cached for one hour |
+| `GET /connected-vehicle/v2/vehicles/{vin}/doors`, `/windows` | Central lock, doors, hood, tailgate, charge lid, windows, sunroof |
+| `.../tyres` | Per-wheel tyre warnings. The API gives no pressure values |
+| `.../diagnostics`, `.../engine`, `.../brakes` | Service warning, days and distance to service, fluid warnings, brake fluid warning |
+| `.../warnings` | Individual lamp warnings, combined into one exterior-light warning |
+| `.../odometer`, `.../statistics` | Odometer, trip meters, average consumption and speed, distance to empty |
+| `.../engine-status` | Whether the engine is running |
+| `.../command-accessibility` | Whether commands can be delivered now, and why not (no internet, power saving, car in use) |
+| `.../commands` | The exact commands this VIN supports |
+| `GET /location/v1/vehicles/{vin}/location` | Position and heading. Needs the Location API product and approved permissions on your developer application |
+
+Fuel is read for combustion and hybrid cars. Energy endpoints are read for any car that reports
+charging data, even when `fuelType` is `NONE`.
+
+</details>
+
+<details>
+<summary><strong>Volvo: which call carries each command</strong></summary>
+
+<br>
+
+All commands are `POST /connected-vehicle/v2/vehicles/{vin}/commands/{action}`.
+
+| Command | Action |
+| --- | --- |
+| Lock | `lock` |
+| Lock, reduced guard | `lock-reduced-guard` |
+| Unlock | `unlock` |
+| Start, stop climate | `climatization-start`, `climatization-stop` |
+| Honk and flash | `honk-flash` |
+| Flash | `flash` |
+| Honk | `honk` |
+| Start engine | `engine-start` (a runtime of 1 to 15 minutes) |
+| Stop engine | `engine-stop` |
+
+Commands are throttled to one every 6 seconds to stay inside Volvo's limit of 10 requests a
+minute. Every documented failure value maps to a specific message, and a sleeping car is described
+as retryable. Everything not in this table is not available through the public API.
+
+</details>
+
+<details>
+<summary><strong>How a control gets enabled</strong></summary>
+
+<br>
+
+Hisingen separates what it knows how to request, what a model is expected to support, and what
+the provider reports for this exact car. A control appears only when all three allow it. The
+per-VIN signal is the `GetMyCars` record on Polestar and the `/commands` and energy capability
+lists on Volvo. Missing information is never turned into "closed", "locked" or "no update".
 
 </details>
 
@@ -762,12 +943,18 @@ Depending on the vehicle and the features you've enabled, notifications can incl
 * an unlocked parked vehicle
 * weather-related warnings when openings are detected
 * unusually slow charging vs a location's own history
-* interactive banners: Lock from an unlocked-vehicle alert, Resume Schedule
+* service due soon, when the car shows a service warning or reports 30 days or 1,000 km or less
+  to the next service
+* a car left in convenience mode for 30 minutes (opt-in), since convenience mode keeps systems on
+  and can drain the 12 V battery
+* a daily summary (opt-in)
+* a climate session whose run time is nearly used up, or whose battery is too low
+* interactive banners: Lock and Mute This Vehicle on vehicle alerts, Resume Schedule
   from an interrupted-charging alert
 
-<p align="center">
-<img src="assets/settings-smart-notifications-toggles.png" width="420" loading="lazy" alt="Hisingen macOS smart notifications triggers and customization">
-</p>
+Charging anomaly alerts are deduplicated per vehicle and respect the mute setting, notification
+permission and quiet hours. Sustained alerts keep their elapsed warning time across an app restart. A dead session is shown as
+signed out and asks you to sign in again even when notifications are off.
 
 Notification behaviour can be configured in Settings.
 
@@ -791,6 +978,11 @@ Depending on your preferences this can include:
 * compact status
 * icon-only status
 
+**Quick Controls** in the menu bar panel include windows, Charge Now / Resume Schedule and
+pre-cleaning, where the car supports them. The menu bar item has VoiceOver actions,
+custom tab icons have descriptive labels in every language, and the price curve reads out the hour
+and price.
+
 ### Launch at Login
 
 Hisingen can start automatically using the normal macOS Login Items system.
@@ -804,7 +996,7 @@ Global shortcuts can require macOS Accessibility permission.
 ### System Spotlight
 
 Search your car's nickname and see battery, range and charging state right in Spotlight
-results. Entirely local, no VIN stored in the index.
+results. Entirely local, and the VIN is kept out of the index.
 
 ### Screenshot Privacy Mode
 
@@ -828,19 +1020,18 @@ device-owner confirmation even when that is required for the manual controls.
 
 ### Apple Shortcuts
 
-Hisingen exposes cached vehicle information and verified Volvo command handoffs to Apple
-Shortcuts using App Intents.
+Hisingen exposes cached vehicle information and command handoffs to Apple Shortcuts using
+App Intents. The actions are:
 
-That makes it possible to use information such as:
+| Group | Actions |
+| --- | --- |
+| Status | Get Vehicle Battery, Get Vehicle Status, Get Garage Status, Get Charging Status, Get Recent Trip Summary, Get Energy Breakdown, Get Tire Pressures, Where Is My Car, Refresh Vehicle Data |
+| Charging | Set Charge Target, Set Charging Current, Charge Now, Resume Charging Schedule |
+| Climate | Start Cabin Climate, Stop Cabin Climate, Start Cabin Pre-Cleaning, Stop Cabin Pre-Cleaning, Start Engine, Stop Engine |
+| Security | Lock Vehicle, Unlock Vehicle (authenticated), Flash Vehicle Lights, Honk and Flash Vehicle |
 
-* battery percentage
-* range
-* charging state
-* lock vehicle
-* authenticated unlock
-* start or stop cabin climate
-
-inside your own macOS automations.
+That makes it possible to use this information and these commands inside your own macOS
+automations.
 
 Command intents never announce that the car changed state merely because the shortcut ran.
 They hand the request to Hisingen, apply the same capability and authentication gates as the
@@ -859,22 +1050,50 @@ for local application navigation and automation. Recognized routes:
 
 | Route | Action | Brand |
 | --- | --- | --- |
-| `hisingen://lock` | Lock vehicle | Volvo |
-| `hisingen://unlock` | Unlock vehicle | Volvo |
-| `hisingen://climate/start?temp=21` | Start climate (temp optional) | Volvo |
-| `hisingen://climate/stop` | Stop climate | Volvo |
-| `hisingen://flash` | Flash lights | Volvo |
-| `hisingen://honk-flash` | Honk + flash | Volvo |
-| `hisingen://charge-target?percent=80` | Set charge target | Polestar |
+| `hisingen://lock` | Lock vehicle | Volvo, Polestar |
+| `hisingen://unlock` | Unlock vehicle (confirmation first) | Volvo, Polestar |
+| `hisingen://climate/start?temp=21` | Start climate (temp optional, clamped to 16–30 °C) | Volvo, Polestar |
+| `hisingen://climate/stop` | Stop climate | Volvo, Polestar |
+| `hisingen://flash` | Flash lights | Volvo, Polestar |
+| `hisingen://honk-flash` | Honk + flash | Volvo, Polestar |
+| `hisingen://engine/start?minutes=15` | Start engine (`5`, `10` or `15` minutes, confirmation first) | Volvo |
+| `hisingen://engine/stop` | Stop engine | Volvo |
+| `hisingen://precleaning/start` | Start cabin pre-cleaning | Polestar |
+| `hisingen://precleaning/stop` | Stop cabin pre-cleaning | Polestar |
+| `hisingen://windows/open` | Open all windows (confirmation first) | Polestar |
+| `hisingen://windows/close` | Close all windows | Polestar |
+| `hisingen://tailgate/open` | Open tailgate (confirmation first) | Polestar |
+| `hisingen://tailgate/close` | Close tailgate | Polestar |
+| `hisingen://trunk/unlock` | Unlock trunk (confirmation first) | Polestar |
+| `hisingen://charge-target?percent=80` | Set charge target (clamped to 40–100%) | Polestar |
+| `hisingen://charge-limit?amps=16` | Set charging current (clamped to 6–32 A) | Polestar |
+| `hisingen://charging/override-start` | Charge now, overriding the schedule | Polestar |
+| `hisingen://charging/override-stop` | Resume the charging schedule | Polestar |
+| `hisingen://ota/schedule?delay=120` | Schedule software installation (`120`, `480` or `720` minutes) | Polestar |
+| `hisingen://ota/install` | Install vehicle software now (confirmation first) | Polestar |
+| `hisingen://ota/cancel` | Cancel software installation | Polestar |
 
-Commands follow the same capability gates as the in-app controls: an unsupported brand or
-vehicle answers with a local notice instead of dispatching anything to a backend.
+Links accept an optional `vin=` query to target a vehicle other than the selected one.
+
+Commands follow the same capability gates and confirmations as the in-app controls. A link
+never sends a command the active brand or the vehicle does not offer: it gets a local notice
+instead. Polestar commands also need a Polestar ID or Augmented connection; the Developer Portal
+connection is read-only. Engine runtime and schedule delay must be one of the listed options,
+or the link is refused with a notice. Temperature, charge target and charging current are
+clamped to their ranges instead.
 
 ---
 
 ## Make it yours
 
 Hisingen doesn't need to look identical on every Mac.
+
+Settings has a **Search settings** field that finds sections by what you type, for example
+"authorize" or "remote command" finds the Polestar authorization step. **Export Settings** and
+**Import Settings** move your presentation, feature, update and notification preferences to
+another Mac as one archive of up to 1 MB. Accounts, sessions, vehicles and history are not part of
+it. **Reset Preferences** returns those preferences to defaults and keeps accounts, sessions,
+vehicles and history.
 
 ### Themes
 
@@ -965,6 +1184,32 @@ Hisingen currently includes:
 * Korean
 
 You can also let Hisingen follow the system language automatically.
+
+---
+
+## Your data
+
+Everything Hisingen keeps lives on your Mac, in a local SQLite database plus the macOS Keychain
+for credentials.
+
+* **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
+  The export menu on the History tab also offers a **Full Backup (JSON)**, and Settings can export
+  your settings (see [Make it yours](#make-it-yours)).
+* **Handover pack.** **Info → Export Handover Pack…** writes a folder for a sale or trade: a
+  summary, charging and trip CSVs without locations, an optional VIN (a checkbox in the save
+  panel) and a checklist of the steps that still happen in the manufacturer app or in the car.
+* **Erase.** **Settings → Privacy & Data → Erase This Vehicle’s Local Data** and **Erase All Local Vehicle Data**
+  remove history, snapshots, activity and cached car artwork from memory, disk and SQLite.
+  Recording stays paused for the affected vehicles until the cleanup finishes, so queued writes
+  cannot bring erased data back. A failure in local erasure is reported separately from a
+  failure to clear credential storage.
+* **Sign out stays signed out.** Signing out clears the email, portal IDs, Volvo custom app, VIN
+  and Keychain items for that brand and the memory cache. An explicit per-brand flag stops
+  Hisingen from signing back in on relaunch from built-in developer credentials plus a lingering
+  server-side grant. Saving credentials or signing in again lifts it. A cancelled or failed
+  sign-in keeps your previous session.
+* **Damaged or old data.** If a database migration fails, Hisingen keeps the legacy snapshots,
+  charging baselines and command receipts and rolls back the partial write before retrying.
 
 ---
 
@@ -1060,7 +1305,7 @@ This should report `accepted` with `source=Notarized Developer ID`. If macOS eve
 
 ## Polestar setup
 
-Hisingen supports two connection modes for Polestar vehicles:
+Hisingen supports three connection modes for Polestar vehicles:
 
 ### 1. Polestar ID (Consumer Account)
 
@@ -1084,7 +1329,17 @@ For developers and fleet managers with credentials from the official [Polestar D
 > **Note on Developer Portal Mode:**
 > * **Telemetry Only**: Provides read access to battery, charging, exterior status, vehicle health, odometer, and location.
 > * **No Remote Controls**: Per the EU Data Act specification, the Developer Portal is strictly telemetry-only. Remote control cards are dimmed with an explanatory label.
-> * **Rate Limits**: Includes a generous limit of 10,000 API requests per day, tracked live in the Settings view.
+> * **Rate Limits**: Polestar allows 10,000 API requests per day. Hisingen paces its polling so a day stays under 9,000 and shows the projected count in Settings.
+> * **Your own credentials**: A custom client ID needs a custom secret. Hisingen never mixes your ID with built-in secrets.
+
+### 3. Augmented
+
+Pairs Developer Portal telemetry with your Polestar ID for interactive remote controls and gRPC
+streaming. Set up both of the above. Telemetry comes from the portal, and the Polestar ID session
+carries the commands and the live stream.
+
+Remote commands also need the extra authorization step described under
+[Remote controls](#authorizing-remote-commands-polestar).
 
 
 ---
@@ -1224,6 +1479,12 @@ A few things are worth keeping in mind:
 * Some information simply isn't exposed by every vehicle.
 * Location is the latest reported position, not guaranteed live tracking.
 * Charging energy and cost are estimates.
+* Some Polestar fields are decoded from the app's published protobuf schema and captured frames,
+  not from documentation. A few are unconfirmed, and anything Hisingen cannot name is kept as a
+  raw field you can inspect on the Info tab under Unwired Backend Fields.
+* The Polestar Android app version Hisingen reports to the app-backend endpoint has to stay
+  current, or that discovery source answers 426. Hisingen then stands down for a day and falls
+  back to the main discovery source.
 * A cloud service can accept a remote command before the physical vehicle completes it.
 * Experimental remote functionality shouldn't be relied on for safety-critical or time-critical use.
 
@@ -1263,10 +1524,12 @@ Useful targets:
 | Command        | What it does                                    |
 | -------------- | ----------------------------------------------- |
 | `make doctor`  | Check your development environment               |
-| `make ci`      | Run the same validation CI performs              |
-| `make test`    | Run the test suite                               |
+| `make ci`      | Run the CI job set locally (`Scripts/ci-local.sh`) |
+| `make test`    | Run the deterministic test suite                 |
 | `make app`     | Build `releases/Hisingen.app`                    |
-| `make dmg`     | Package `releases/Hisingen.dmg` from the app     |
+| `make dmg`     | Build the app if needed, then package `releases/Hisingen.dmg` |
+| `make package-dmg` | Package an already built and notarized app without rebuilding |
+| `make release` | Prepare the release pull request (`VERSION=patch`, `minor`, `major` or a number) |
 | `make notarize`| Notarize and staple the built app and dmg        |
 | `make run`     | Build, sign and launch a debug build             |
 | `make clean`   | Remove build artifacts                           |
@@ -1280,7 +1543,7 @@ open releases/Hisingen.app
 
 When the app is signed with a **Developer ID** certificate, the build also submits it to Apple's notary service and staples the ticket, matching what the release workflow does in CI. Credentials are read from a notarytool keychain profile (set up once with `xcrun notarytool store-credentials hisingen-notary --apple-id <APPLE_ID> --team-id <TEAM_ID> --password <APP_PASSWORD>`) or from the `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID` and `NOTARY_APP_PASSWORD` environment variables. Without credentials the step skips automatically so development builds keep working; `make notarize` notarizes an already-built app, and `NOTARIZE=never make app` disables the step.
 
-Normal CI and the deterministic test suite don't need access to a real Polestar or Volvo account. If `.env.secrets` isn't present, the build injects empty placeholder credentials and compiles cleanly; the app then asks for your own Volvo credentials at sign-in. Live integration testing is kept separate from the deterministic test suite.
+Normal CI sets `HISINGEN_BUILD_CONFIGURATION=fixture` and ignores production API variables and local environment files. It tests credential-free builds on arm64/macOS 15 and x86_64/macOS 26, using the pinned Xcode version in `.github/ci-toolchain.json`. `make ci` checks the working tree; `sh Scripts/ci-local.sh --committed` checks an isolated snapshot of HEAD. Live integration tests remain separate and manual.
 
 See [Getting Started](docs/development/getting-started.md) for the development setup.
 
@@ -1351,14 +1614,16 @@ Thanks as well to everyone testing the app on different cars and configurations.
 
 ### Functionality adapted from other projects
 
-* **[Polaris](https://github.com/simonbusborg/polaris)** by Simon Busborg. Some Polestar
-  functionality was adapted from Polaris: the gRPC client's protobuf codec, call transport,
-  battery decoding and host discovery, plus the sign-in resume-path patterns and the car-image
-  query. I should have credited it from the start.
-  Thank you to Simon for raising it in [#33](https://github.com/NicolasKheirallah/Hisingen/issues/33).
+* **[Polaris](https://github.com/simonbusborg/polaris)** by Simon Busborg. Early Polestar code
+  came from Polaris through an AI coding assistant, and the small protobuf helper set is still
+  identical to it. Thank you to Simon for raising it in
+  [#33](https://github.com/NicolasKheirallah/Hisingen/issues/33).
 * **[pypolestar](https://github.com/pypolestar/pypolestar)** and
   **[polestar_api](https://github.com/pypolestar/polestar_api/)** by Tuen Lee and
   contributors. Their reverse engineering of the Polestar backend made much of this possible.
+* **[unofficial-polestar-api](https://github.com/kildahldev/unofficial-polestar-api)** is an
+  independent Polestar client. Hisingen cross-checked gRPC field meanings against it and uses the
+  same app-version values.
 * **[Sparkle](https://github.com/sparkle-project/Sparkle)** handles signed in-app updates.
 * **[Open-Meteo](https://open-meteo.com/)** supplies the weather data (CC BY 4.0) and
   **[Elpriset just nu.se](https://www.elprisetjustnu.se/)** the Swedish spot prices.

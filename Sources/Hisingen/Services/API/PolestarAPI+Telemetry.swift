@@ -10,20 +10,22 @@ extension PolestarAPI {
         if features.contains(.vehicleImage) {
             let angle = await MainActor.run { preferences.carRenderAngle.rawValue }
             let previous = imagePreparationAttempts[vin]
-            if previous?.angle != angle || (previous?.retryAt ?? .distantPast) <= Date() {
+            if previous?.angle != angle || (previous?.retryAt ?? .distantPast) <= now() {
                 await fetchCarImage(vin: vin)
                 try Task.checkCancellation()
                 guard sessionEpoch == epoch else { throw CancellationError() }
                 // Missing artwork may be transient; retry without querying metadata on every frame.
-                let retryAt = carImages[vin] == nil ? Date().addingTimeInterval(300) : Date.distantFuture
+                let retryAt = carImages[vin] == nil ? now().addingTimeInterval(300) : Date.distantFuture
                 imagePreparationAttempts[vin] = (angle, retryAt)
             }
         }
-        if features.contains(.ownerGreeting), !ownerInfoPrepared {
+        if features.contains(.ownerGreeting), !ownerInfoPrepared,
+           (ownerInfoRetryAt ?? .distantPast) <= now() {
             if ownerFirstName == nil { await fetchOwnerInfo() }
             try Task.checkCancellation()
             guard sessionEpoch == epoch else { throw CancellationError() }
-            ownerInfoPrepared = true
+            ownerInfoPrepared = ownerFirstName != nil
+            ownerInfoRetryAt = ownerInfoPrepared ? nil : now().addingTimeInterval(300)
         }
     }
 
@@ -69,11 +71,12 @@ extension PolestarAPI {
         // Same rule as discovery: only provider-specific failures may degrade to "no
         // telematics data". A swallowed 401 here used to produce an empty-looking state
         // instead of a sign-in prompt, and a swallowed 429 looked like a dead battery read.
+        let graphQLStartedAt = now()
         let response: GraphQLResponse<TelematicsPayloadDTO>?
         do {
             response = try await graphQL(
                 query: query,
-                variables: ["vins": [vin]],
+                variables: VINListVariables(vins: [vin]),
                 token: token,
                 operation: "vehicle telematics"
             )
@@ -111,6 +114,7 @@ extension PolestarAPI {
         let bypassCommandCaches = !features.enabled.isEmpty
             && features.enabled.isSubset(of: AppFeature.remoteFeatures)
 
+        let servicesStartedAt = now()
         async let batteryExtrasTask = optionalBattery(
             enabled: needsChargingContext || features.contains(.batteryDiagnostics) || battery == nil,
             vin: vin, token: serviceToken
@@ -118,67 +122,65 @@ extension PolestarAPI {
         async let availabilityTask = optionalAvailability(
             enabled: features.contains(.vehicleAvailability), vin: vin, token: serviceToken
         )
-        async let targetTask = targetSOC(
-            enabled: needsChargingContext, vin: vin, token: serviceToken,
+        async let targetTask: CapabilityState<PCCSScalarRead> = optionalCapability(
+            .targetSOC, enabled: needsChargingContext, vin: vin,
             bypassCache: bypassCommandCaches
-        )
+        ) { try await self.grpc.fetchTargetSoc(vin: vin, accessToken: serviceToken) }
         async let exteriorTask: CapabilityState<ExteriorSnapshot> = optionalCapability(
-            features.contains(.exteriorStatus) ? .exteriorStatus : .remoteLocks,
+            .exterior,
             enabled: needsExterior, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchExterior(vin: vin, accessToken: serviceToken) }
         async let healthTask: CapabilityState<GrpcHealthReport> = optionalCapability(
-            .tyreAndWarnings,
+            .health,
             enabled: features.contains(.tyreAndWarnings) || features.contains(.vehicleHealth), vin: vin
         ) { try await self.grpc.fetchHealth(vin: vin, accessToken: serviceToken) }
         async let softwareTask: CapabilityState<VehicleSoftwareInfo> = optionalCapability(
-            features.contains(.softwareUpdates) ? .softwareUpdates : .remoteOTA,
-            enabled: needsSoftware, vin: vin
+            .software,
+            enabled: needsSoftware, vin: vin, bypassCache: bypassCommandCaches
         ) {
             try await self.grpc.fetchSoftware(vin: vin, accessToken: serviceToken,
-                                               locale: preferences.interfaceLanguage.effectiveLanguageCode)
+                                               locale: self.preferences.interfaceLanguage.effectiveLanguageCode)
         }
         async let scheduleTask: CapabilityState<[VehicleSchedule]> = optionalCapability(
-            features.contains(.chargingSchedule) ? .chargingSchedule : .remoteSchedules,
-            enabled: needsSchedules, vin: vin
+            .schedules,
+            enabled: needsSchedules, vin: vin, bypassCache: bypassCommandCaches
         ) { Optional(try await self.grpc.fetchChargingSchedules(vin: vin, accessToken: serviceToken)) }
         async let climateTask: CapabilityState<VehicleClimateStatus> = optionalCapability(
-            features.contains(.climateStatus) ? .climateStatus : .remoteClimate,
-            key: "climate-status", enabled: needsClimate, vin: vin,
+            .climate, enabled: needsClimate, vin: vin,
             bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchClimate(vin: vin, accessToken: serviceToken) }
         async let climateTimersTask: CapabilityState<[VehicleSchedule]> = optionalCapability(
-            features.contains(.climateStatus) ? .climateStatus : .remoteSchedules,
-            key: "climate-timers", enabled: needsClimateTimers, vin: vin
+            .climateTimers, enabled: needsClimateTimers, vin: vin, bypassCache: bypassCommandCaches
         ) { Optional(try await self.grpc.fetchClimateTimers(vin: vin, accessToken: serviceToken)) }
         async let tripsTask: CapabilityState<GrpcOdometerReport> = optionalCapability(
-            .tripMeters, enabled: features.contains(.tripMeters), vin: vin
+            .trips, enabled: features.contains(.tripMeters), vin: vin
         ) { try await self.grpc.fetchOdometer(vin: vin, accessToken: serviceToken) }
         async let connectivityTask: CapabilityState<VehicleConnectivity> = optionalCapability(
-            .connectivityDiagnostics,
+            .connectivity,
             enabled: features.contains(.connectivityDiagnostics) && modelProfile.permits(.connectivity),
             vin: vin
         ) { try await self.grpc.fetchConnectivity(vin: vin, accessToken: serviceToken) }
         async let airTask: CapabilityState<VehicleAirQuality> = optionalCapability(
-            features.contains(.airQuality) ? .airQuality : .remotePreCleaning,
+            PolestarReading<VehicleAirQuality>.airQuality,
             enabled: needsAirQuality, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAirQuality(vin: vin, accessToken: serviceToken) }
         async let weatherTask: CapabilityState<VehicleWeather> = optionalCapability(
-            .vehicleWeather, enabled: features.contains(.vehicleWeather), vin: vin
+            .weather, enabled: features.contains(.vehicleWeather), vin: vin
         ) { try await self.grpc.fetchWeather(vin: vin, accessToken: serviceToken) }
         async let locationTask: CapabilityState<VehicleLocation> = optionalCapability(
-            .vehicleLocation, enabled: features.contains(.vehicleLocation), vin: vin
+            .location, enabled: features.contains(.vehicleLocation), vin: vin
         ) { try await self.grpc.fetchLocation(vin: vin, accessToken: serviceToken) }
-        async let ampLimitTask: CapabilityState<Int> = optionalCapability(
-            .chargingDetails, key: "amp-limit",
+        async let ampLimitTask: CapabilityState<PCCSScalarRead> = optionalCapability(
+            .ampLimit,
             enabled: needsChargingContext && modelProfile.permits(.chargingCurrentLimit), vin: vin,
             bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
         async let chargeLocationsTask: CapabilityState<[ChargeLocationSnapshot]> = optionalCapability(
-            .chargingSchedule, key: "charge-locations", enabled: needsSchedules, vin: vin
+            .chargeLocations, enabled: needsSchedules, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
         // MyCars supplies identity fallbacks and the installed version independently of OTA discovery.
         async let myCarsTask: CapabilityState<VehicleOTACapabilities> = optionalCapability(
-            .softwareUpdates, key: "my-cars",
+            .myCars,
             enabled: features.contains(.softwareUpdates) || features.contains(.vehicleIdentity)
                 || features.contains(.batteryDiagnostics)
                 || !features.enabled.isDisjoint(with: AppFeature.remoteFeatures), vin: vin
@@ -186,7 +188,8 @@ extension PolestarAPI {
 
         let extras = try await batteryExtrasTask
         let availabilityReport = try await availabilityTask
-        let chargeTarget = try await targetTask
+        let targetReading = try await targetTask
+        let chargeTarget = targetReading.value?.value
         let exterior = try await exteriorTask
         let c3Health = try await healthTask
         let software = try await softwareTask
@@ -202,216 +205,41 @@ extension PolestarAPI {
         let chargeLocations = try await chargeLocationsTask
         let otaCapabilities = try await myCarsTask
 
-        let primaryReportedAt = battery?.timestamp?.date
-        let extrasAreNewer = extras?.reportedAt.map { reported in
-            primaryReportedAt.map { reported > $0 } ?? true
-        } ?? false
-        let batteryPercentage = extrasAreNewer
-            ? (extras?.batteryPercentage ?? battery?.batteryChargeLevelPercentage?.value)
-            : (battery?.batteryChargeLevelPercentage?.value ?? extras?.batteryPercentage)
-        let range = extrasAreNewer
-            ? (extras?.rangeKm ?? battery?.estimatedDistanceToEmptyKm?.value)
-            : (battery?.estimatedDistanceToEmptyKm?.value ?? extras?.rangeKm)
-        let primaryChargingState = battery?.chargingStatusV2.map {
-            ChargingState(apiValue: $0.value)
-        }
-        let chargingState = extrasAreNewer
-            ? (extras?.chargingState ?? primaryChargingState ?? .unknown("UNSPECIFIED"))
-            : (primaryChargingState ?? extras?.chargingState ?? .unknown("UNSPECIFIED"))
-        let minutes = extrasAreNewer
-            ? (extras?.estimatedChargingTimeToFullMinutes ?? battery?.estimatedChargingTimeToFullMinutes?.value)
-            : (battery?.estimatedChargingTimeToFullMinutes?.value ?? extras?.estimatedChargingTimeToFullMinutes)
-
-        var warnings: [String] = []
-        if response?.errors?.isEmpty == false { warnings.append(L10n.text("Some API fields were unavailable")) }
-        if battery == nil && extras == nil { warnings.append(L10n.text("Battery data was unavailable")) }
-
-        var unavailable = SnapshotAssembly.UnavailableFeatures()
-        unavailable.mark(.tyreAndWarnings, when: features.contains(.tyreAndWarnings) && c3Health.unavailable)
-        unavailable.mark(.vehicleHealth, when: features.contains(.vehicleHealth) && health == nil && c3Health.unavailable)
-        unavailable.mark(.tripMeters, when: trips.unavailable)
-        unavailable.mark(.connectivityDiagnostics, when: connectivity.unavailable)
-        unavailable.mark(.batteryDiagnostics, when: features.contains(.batteryDiagnostics) && extras == nil)
-        if needsExterior {
-            unavailable.mark(.exteriorStatus, when: features.contains(.exteriorStatus) && exterior.unavailable)
-            unavailable.mark(.remoteLocks, when: features.contains(.remoteLocks) && exterior.unavailable)
-            unavailable.mark(.remoteWindows, when: features.contains(.remoteWindows) && exterior.unavailable)
-        }
-        if needsSoftware {
-            let hasInstalledVersion = otaCapabilities.value?.installedSoftwareVersion?.isEmpty == false
-            unavailable.mark(.softwareUpdates,
-                             when: features.contains(.softwareUpdates) && software.unavailable && !hasInstalledVersion)
-            unavailable.mark(.remoteOTA, when: features.contains(.remoteOTA) && software.unavailable)
-        }
-        if needsSchedules {
-            unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule) && schedules.unavailable)
-            unavailable.mark(.remoteSchedules, when: features.contains(.remoteSchedules) && schedules.unavailable)
-        }
-        unavailable.mark(.climateStatus, when: features.contains(.climateStatus) && climate.unavailable && climateTimers.unavailable)
-        unavailable.mark(.remoteClimate, when: features.contains(.remoteClimate) && climate.unavailable)
-        unavailable.mark(.remoteSchedules, when: features.contains(.remoteSchedules) && climateTimers.unavailable)
-        if needsAirQuality {
-            unavailable.mark(.airQuality, when: features.contains(.airQuality) && air.unavailable)
-            unavailable.mark(.remotePreCleaning, when: features.contains(.remotePreCleaning) && air.unavailable)
-        }
-        unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather) && weather.unavailable)
-        let c3ServiceHealth = features.contains(.vehicleHealth) ? c3Health.value : nil
-        var probes = VehicleProbedCapabilities()
-        if exterior.value != nil { probes.record(.exteriorStatus, as: .supported) }
-        if let health = c3Health.value {
-            probes.record(.serviceWarnings, as: .supported)
-            if health.details.tyres.contains(where: { $0.kilopascals != nil }) {
-                probes.record(.tyrePressureValues, as: .supported)
-            }
-        }
-        if software.value != nil { probes.record(.softwareStatus, as: .supported) }
-        if schedules.value != nil { probes.record(.chargingSchedule, as: .supported) }
-        if climateTimers.value != nil { probes.record(.climateTimers, as: .supported) }
-        if trips.value != nil { probes.record(.tripMeters, as: .supported) }
-        if connectivity.value != nil { probes.record(.connectivity, as: .supported) }
-        else if connectivity.unsupported { probes.record(.connectivity, as: .unavailable) }
-        if chargeTarget != nil { probes.record(.chargeTarget, as: .supported) }
-        if ampLimit.value != nil { probes.record(.chargingCurrentLimit, as: .supported) }
-        if chargeLocations.value?.isEmpty == false { probes.record(.chargeLocations, as: .supported) }
-
-        let healthDetails: VehicleHealthDetails? = {
-            guard features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings) else { return nil }
-            let details = c3Health.value?.details
-            let graphFields: [(String?, VehicleWarning)] = [
-                (health?.brakeFluidLevelWarning, .brakeFluid),
-                (health?.engineCoolantLevelWarning, .engineCoolant),
-                (health?.oilLevelWarning, .oil)
-            ]
-            let reported = graphFields.compactMap { raw, warning -> VehicleWarning? in
-                guard let raw, !raw.contains("UNSPECIFIED") else { return nil }
-                return warning
-            }
-            let active = graphFields.compactMap { raw, warning in Self.hasWarning(raw) ? warning : nil }
-            guard details != nil || !reported.isEmpty else { return nil }
-            var warnings = details?.warnings ?? []
-            var reportedWarnings = details?.reportedWarnings ?? []
-            for warning in active where !warnings.contains(warning) { warnings.append(warning) }
-            for warning in reported where !reportedWarnings.contains(warning) { reportedWarnings.append(warning) }
-            return VehicleHealthDetails(
-                tyres: details?.tyres ?? [],
-                warnings: warnings,
-                reportedWarnings: reportedWarnings,
-                lightFailures: details?.lightFailures ?? []
-            )
-        }()
-
-        let capacityKwh = Self.resolvedBatteryCapacity(
-            graphQL: battery?.reportedBatteryCapacityKwh?.value,
-            batteryService: extras?.reportedBatteryCapacityKwh,
-            equipment: otaCapabilities.value?.equipment
-        )
-
-        var state = VehicleState(
-            energy: EnergyAndChargingSnapshot(
-                batteryPercentage: batteryPercentage,
-                rangeKm: range,
-                chargingState: chargingState,
-                estimatedTimeToFullMinutes: Self.positive(minutes),
-                targetPercentage: chargeTarget,
-                powerWatts: needsChargingContext ? Self.positive(extras?.chargingPowerWatts) : nil,
-                currentAmps: needsChargingContext ? Self.positive(extras?.chargingCurrentAmps) : nil,
-                voltageVolts: needsChargingContext ? Self.positive(extras?.chargingVoltageVolts) : nil,
-                type: needsChargingContext ? (extras?.chargingType ?? .unknown) : .unknown,
-                connection: needsChargingContext ? (extras?.chargerConnection ?? .unknown) : .unknown,
-                diagnostics: features.contains(.batteryDiagnostics)
-                    ? extras.map { diag -> BatteryDiagnostics in
-                        var enriched = diag.diagnostics
-                        enriched.unknownWireFields = diag.unknownFields
-                        return enriched
-                    } : nil,
-                schedules: schedules.value ?? []
-            ),
-            identity: VehicleIdentitySnapshot(
-                availability: availabilityReport.availability,
-                availabilityReportedAt: availabilityReport.reportedAt,
-                availabilityUnknownWireFields: availabilityReport.unknownFields.isEmpty
-                    ? nil : availabilityReport.unknownFields,
-                modelName: carIdentity.modelName ?? otaCapabilities.value?.identity?.modelName,
-                modelYear: features.contains(.vehicleIdentity)
-                    ? (carIdentity.modelYear ?? otaCapabilities.value?.identity?.modelYear) : nil,
-                registrationNo: features.contains(.vehicleIdentity) ? carIdentity.registrationNo : nil,
-                vin: vin,
-                ownerFirstName: features.contains(.ownerGreeting) ? ownerFirstName : nil,
-                imageData: features.contains(.vehicleImage) ? carImages[vin] : nil
-            ),
-            maintenance: MaintenanceAndHealthSnapshot(
-                odometerKm: (odometer?.odometerMeters?.value).map { $0 / 1_000 }
-                    ?? (features.contains(.vehicleHealth) ? trips.value?.odometerKm : nil),
-                details: healthDetails,
-                service: ServiceSnapshot(
-                    daysToService: health?.daysToService?.value ?? c3ServiceHealth?.daysToService,
-                    distanceToServiceKm: health?.distanceToServiceKm?.value ?? c3ServiceHealth?.distanceToServiceKm,
-                    serviceWarning: Self.hasWarning(health?.serviceWarning) || (c3ServiceHealth?.serviceWarning ?? false),
-                    fluidWarnings: Self.fluidWarnings(health)
-                )
-            ),
-            freshness: SnapshotFreshness(
-                fetchedAt: Date(),
-                vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
-                dataWarnings: warnings,
-                unavailableFeatures: unavailable.features
-            ),
-            exteriorStatus: exterior.value,
-            softwareInfo: software.value,
-            climateStatus: climate.value,
-            climateTimers: climateTimers.value ?? [],
-            tripComputer: TripComputerSnapshot(
-                manualTripKm: trips.value?.manualTripKm,
-                automaticTripKm: trips.value?.automaticTripKm
-            ),
-            connectivity: connectivity.value,
-            airQuality: air.value,
-            weather: features.contains(.vehicleWeather) ? weather.value : nil,
-            location: features.contains(.vehicleLocation) ? location.value : nil,
-            probedCapabilities: probes.count > 0 ? probes : nil,
-            otaCapabilities: otaCapabilities.value
-        )
-        state.energy.reportedBatteryCapacityKwh = capacityKwh
-        state.energy.estimatedTimeToTargetMinutes = extras?.diagnostics.timeToTargetMinutes
-        func batteryDate(primaryPresent: Bool, secondaryPresent: Bool) -> Date? {
-            let usesSecondary = extrasAreNewer ? secondaryPresent : !primaryPresent && secondaryPresent
-            return usesSecondary ? extras?.reportedAt : primaryPresent ? primaryReportedAt : nil
-        }
-        state.freshness.readingDates[.battery] = batteryDate(primaryPresent: battery?.batteryChargeLevelPercentage != nil,
-                                                  secondaryPresent: extras?.batteryPercentage != nil)
-        state.freshness.readingDates[.range] = batteryDate(primaryPresent: battery?.estimatedDistanceToEmptyKm != nil,
-                                                secondaryPresent: extras?.rangeKm != nil)
-        state.freshness.readingDates[.charging] = batteryDate(primaryPresent: primaryChargingState != nil,
-                                                   secondaryPresent: extras?.chargingState != nil)
-        // ParkingClimatization has no vehicle timestamp. A successful response is still a
-        // fresh observation from the dedicated status endpoint, so timestamp the read itself.
-        state.freshness.readingDates[.climateStatus] = climate.value == nil
-            ? nil
-            : state.freshness.fetchedAt
-        state.freshness.readingDates[.locks] = exterior.value?.isLocked != nil ? exterior.value?.reportedAt : nil
-        state.freshness.readingDates[.openings] = exterior.value?.reportedAt
-        state.freshness.readingDates[.health] = c3Health.value?.reportedAt ?? health?.timestamp?.date
-        state.freshness.readingDates[.odometer] = odometer?.odometerMeters != nil ? odometer?.timestamp?.date : trips.value?.reportedAt
-        // Odometer average speeds arrive per trip period, with explicit km/h units; keep
-        // them out of the blended `averageSpeedKmH` (Volvo statistics) so sources never
-        // overwrite each other.
-        state.tripComputer.manualAverageSpeedKmH = trips.value?.manualAverageSpeedKmH
-        state.tripComputer.automaticAverageSpeedKmH = trips.value?.automaticAverageSpeedKmH
-        // Engine hours to service is a real service-interval input (upstream Health field 2),
-        // distinct from the GraphQL-engineHours Volvo path; GraphQL keeps precedence.
-        if let engineHours = c3Health.value?.engineHoursToService, state.maintenance.service.engineHoursToService == nil {
-            state.maintenance.service.engineHoursToService = engineHours
-        }
-
-        if needsSoftware {
-            state.softwareInfo = Self.mergingSoftwareInfo(software.value, myCars: otaCapabilities.value)
-        }
-        state.identity.structureWeek = features.contains(.vehicleIdentity) ? carIdentity.structureWeek : nil
-        state.identity.internalVehicleIdentifier = features.contains(.vehicleIdentity) ? carIdentity.internalVehicleIdentifier : nil
-        state.identity.pno34 = features.contains(.vehicleIdentity) ? carIdentity.pno34 : nil
-        state.identity.accountMarket = market
-        state.energy.currentLimitAmps = ampLimit.value
-        state.energy.locations = chargeLocations.value ?? []
+        let state = PolestarConsumerSnapshotAssembler(
+            features: features,
+            vin: vin,
+            carIdentity: carIdentity,
+            ownerFirstName: ownerFirstName,
+            market: market,
+            imageData: carImages[vin],
+            fetchedAt: now(),
+            graphQLStartedAt: graphQLStartedAt,
+            servicesStartedAt: servicesStartedAt,
+            targetObservation: targetReading.observation,
+            hasGraphQLErrors: response?.errors?.isEmpty == false,
+            battery: battery,
+            odometer: odometer,
+            health: health,
+            extras: extras,
+            availabilityReport: availabilityReport,
+            chargeTarget: chargeTarget,
+            targetSocRawFields: targetReading.value?.unknownFields ?? [],
+            exterior: exterior,
+            c3Health: c3Health,
+            software: software,
+            schedules: schedules,
+            climate: climate,
+            climateTimers: climateTimers,
+            trips: trips,
+            connectivity: connectivity,
+            air: air,
+            weather: weather,
+            location: location,
+            ampLimit: ampLimit,
+            ampLimitRawFields: ampLimit.value?.unknownFields ?? [],
+            chargeLocations: chargeLocations,
+            otaCapabilities: otaCapabilities
+        ).assemble()
         try requireSession(epoch)
         return state
     }
@@ -467,4 +295,32 @@ extension PolestarAPI {
     }
 
 
+}
+
+// Mapping helpers for the telematics payload.
+extension PolestarAPI {
+    static func positive(_ value: Int?) -> Int? {
+        guard let value, value > 0 else { return nil }
+        return value
+    }
+
+    static func hasWarning(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return !value.contains("NO_WARNING") && !value.contains("UNSPECIFIED")
+    }
+
+    static func fluidWarnings(_ health: HealthDTO?) -> [String] {
+        guard let health else { return [] }
+        let values = [
+            (health.brakeFluidLevelWarning, "BRAKE_FLUID_LEVEL_WARNING_", L10n.text("Brake fluid")),
+            (health.engineCoolantLevelWarning, "ENGINE_COOLANT_LEVEL_WARNING_", L10n.text("Coolant")),
+            (health.oilLevelWarning, "OIL_LEVEL_WARNING_", L10n.text("Oil"))
+        ]
+        return values.compactMap { raw, prefix, label in
+            guard let raw, hasWarning(raw) else { return nil }
+            let detail = raw.replacingOccurrences(of: prefix, with: "")
+                .replacingOccurrences(of: "_", with: " ").lowercased()
+            return "\(label) \(detail)"
+        }
+    }
 }

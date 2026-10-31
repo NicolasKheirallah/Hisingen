@@ -15,11 +15,8 @@ extension VolvoAPI {
         FormURLEncoding.body(fields)
     }
 
-    /// The OAuth `error` code classifies a rejected grant without carrying any credential, so
-    /// the diagnostic log can record it even though the token body itself is never retained.
+    /// The diagnostic-log form of the OAuth `error` code; see `OAuthErrorBody`.
     static func oauthErrorCode(in data: Data) -> String? {
-        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let code = body["error"] as? String, !code.isEmpty else { return nil }
-        return "oauth:\(code)"
+        OAuthErrorBody.diagnosticCode(in: data)
     }
 }

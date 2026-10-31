@@ -1,4 +1,20 @@
 import AppKit
+import Sparkle
+
+if CommandLine.arguments.contains("--ci-smoke-test") {
+    let bundle = Bundle.main
+    guard bundle.bundleURL.pathExtension == "app",
+          bundle.bundleIdentifier == "io.kheirallah.hisingen",
+          bundle.url(forResource: "Localizable", withExtension: "strings", subdirectory: "en.lproj") != nil,
+          bundle.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") != nil,
+          bundle.privateFrameworksURL.map({ FileManager.default.fileExists(atPath: $0.appendingPathComponent("Sparkle.framework").path) }) == true,
+          NSClassFromString("SPUStandardUpdaterController") != nil else {
+        FileHandle.standardError.write(Data("Bundled resources or Sparkle could not be loaded\n".utf8))
+        exit(1)
+    }
+    print("bundled-app-smoke-passed")
+    exit(0)
+}
 
 @MainActor
 private func activateExistingInstanceIfNeeded() -> Bool {

@@ -320,7 +320,7 @@ struct VehicleEraseScopeTests {
         ) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> Double? in
-            guard stmt.step() else { return nil }
+            guard (try stmt.stepOrThrow()) else { return nil }
             return stmt.columnDouble(at: 0)
         }
     }

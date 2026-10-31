@@ -302,9 +302,7 @@ struct VehicleCapabilityParsingTests {
         climate.append(Protobuf.intField(6, 1))
         climate.append(Protobuf.intField(15, 3))
         let status = PolestarGRPC.parseClimate(climate)
-        // Field 6 is an unresolved activity enum (live-verified 2026-09-11: 2 during a real
-        // heating session), so an active session with no temperature pair reports .active.
-        #expect(status.activity == .active)
+        #expect(status.activity == .cooling)
         #expect(status.timeRemainingMinutes == 18)
         #expect(status.timerTriggered)
 
@@ -337,7 +335,8 @@ struct VehicleCapabilityParsingTests {
         battery.append(Protobuf.intField(26, 4))
         let diagnostics = try PolestarGRPC.parseBattery(battery).diagnostics
         #expect(diagnostics.chargerPowerState == .providingPower)
-        #expect(diagnostics.timeToTargetMinutes == 60)
+        #expect(diagnostics.timeToTargetMinutes == nil)
+        #expect(diagnostics.timeToTargetDistanceMinutes == 60)
         #expect(diagnostics.energyUsedSinceChargeWh == 12_400)
     }
 
@@ -413,7 +412,7 @@ struct VehicleCapabilityParsingTests {
     }
 
     @Test
-    func testLocationWithTimestampAndHeadingParses() {
+    func testLocationPreservesTimestampWithoutGuessingHeading() {
         var compact = Data()
         compact.append(Protobuf.doubleField(1, 10.0))
         compact.append(Protobuf.doubleField(2, 60.0))
@@ -424,7 +423,7 @@ struct VehicleCapabilityParsingTests {
         let location = PolestarGRPC.parseLocation(compact)
         #expect(location?.longitude == 10.0)
         #expect(location?.latitude == 60.0)
-        #expect(location?.heading == 180.0)
+        #expect(location?.heading == nil)
         #expect(location?.timestamp == Date(timeIntervalSince1970: 2_000_000_000))
     }
 
@@ -579,11 +578,12 @@ struct VehicleCapabilityParsingTests {
     @Test
     func testClimateParsesSeatAndSteeringWheelHeatingLevels() {
         var payload = Data()
-        payload.append(Protobuf.intField(1, 1)) // running = 1
-        payload.append(Protobuf.intField(4, 2)) // action = heating
-        payload.append(Protobuf.intField(10, 3)) // driver seat level 3
-        payload.append(Protobuf.intField(11, 2)) // passenger seat level 2
-        payload.append(Protobuf.intField(12, 1)) // steering wheel heating active
+        payload.append(Protobuf.messageField(1, Protobuf.intField(1, 1)))
+        payload.append(Protobuf.intField(2, 1))
+        payload.append(Protobuf.intField(6, 2))
+        payload.append(Protobuf.intField(9, 4))
+        payload.append(Protobuf.intField(10, 3))
+        payload.append(Protobuf.intField(13, 2))
 
         let climate = PolestarGRPC.parseClimate(payload)
         #expect(climate.activity == .heating)
@@ -617,7 +617,7 @@ struct VehicleCapabilityParsingTests {
     }
 
     @Test
-    func testLocationParsesAltitudeAccuracyParkingBrakeAndGear() {
+    func testUnverifiedLocationFieldsRemainUnknown() {
         var payload = Data()
         payload.append(Protobuf.doubleField(1, 11.9746)) // lon
         payload.append(Protobuf.doubleField(2, 57.7089)) // lat
@@ -632,12 +632,12 @@ struct VehicleCapabilityParsingTests {
         #expect(loc != nil)
         #expect(loc?.longitude == 11.9746)
         #expect(loc?.latitude == 57.7089)
-        #expect(loc?.heading == 180.0)
-        #expect(loc?.speed == 45.0)
-        #expect(loc?.altitudeMeters == 142.5)
-        #expect(loc?.accuracyMeters == 3.2)
-        #expect(loc?.parkingBrakeEngaged == true)
-        #expect(loc?.gear == "D")
+        #expect(loc?.heading == nil)
+        #expect(loc?.speed == nil)
+        #expect(loc?.altitudeMeters == nil)
+        #expect(loc?.accuracyMeters == nil)
+        #expect(loc?.parkingBrakeEngaged == nil)
+        #expect(loc?.gear == nil)
     }
 
     @Test

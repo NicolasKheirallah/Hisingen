@@ -285,6 +285,7 @@ enum DiagnosticLogExporter {
             "refreshInProgress": snapshot.refreshInProgress,
             "liveStreamConnected": snapshot.liveStreamConnected,
             "liveStreamRetryAt": snapshot.liveStreamRetryAt.map(formatter.string(from:)) as Any? ?? NSNull(),
+            "liveStreamNeedsAuthorization": snapshot.liveStreamNeedsAuthorization,
             "lastLiveFrameAt": snapshot.lastLiveFrameAt.map(formatter.string(from:)) as Any? ?? NSNull(),
             "liveStream": [
                 "connectionAttempts": metrics.connectionAttempts,
@@ -292,6 +293,7 @@ enum DiagnosticLogExporter {
                 "disconnects": metrics.disconnects,
                 "messagesReceived": metrics.messagesReceived,
                 "authorizationRefreshes": metrics.authorizationRefreshes,
+                "authorizationFailures": metrics.authorizationFailures,
                 "fallbackPolls": metrics.fallbackPolls,
                 "activeTransportStreams": metrics.activeTransportStreams,
                 "connectedAt": metrics.connectedAt.map(formatter.string(from:)) as Any? ?? NSNull(),

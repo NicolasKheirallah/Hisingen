@@ -55,13 +55,36 @@ let package = Package(
     dependencies: [
         // Sparkle supplies the hardened, signature-verifying installer rather than
         // treating a GitHub release asset as executable input in application code.
-        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.9.6")
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.1"),
+        .package(url: "https://github.com/grpc/grpc-swift-2.git", exact: "2.3.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.6.0"),
+        // Keep the transitive graph usable by Swift 6.0.
+        .package(url: "https://github.com/apple/swift-nio-transport-services.git", exact: "1.26.0"),
+        .package(url: "https://github.com/apple/swift-system.git", exact: "1.6.6"),
+        .package(url: "https://github.com/apple/swift-http-structured-headers.git", exact: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-async-algorithms.git", exact: "1.0.4"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", exact: "1.33.0"),
+        .package(url: "https://github.com/apple/swift-http-types.git", exact: "1.5.1"),
+        .package(url: "https://github.com/apple/swift-atomics.git", exact: "1.3.1"),
+        .package(url: "https://github.com/apple/swift-nio.git", exact: "2.97.1"),
+        .package(url: "https://github.com/apple/swift-log.git", exact: "1.8.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.3.1"),
+        .package(url: "https://github.com/apple/swift-asn1.git", exact: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-collections.git", exact: "1.2.1"),
+        .package(url: "https://github.com/apple/swift-numerics.git", exact: "1.1.1"),
+        .package(url: "https://github.com/apple/swift-algorithms.git", exact: "1.2.1"),
+        .package(url: "https://github.com/apple/swift-nio-http2.git", exact: "1.42.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.36.1"),
+        .package(url: "https://github.com/apple/swift-certificates.git", exact: "1.18.0"),
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", exact: "2.10.1")
     ],
     targets: [
         .executableTarget(
             name: "Hisingen",
             dependencies: [
-                .product(name: "Sparkle", package: "Sparkle")
+                .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "GRPCCore", package: "grpc-swift-2"),
+                .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport")
             ],
             path: "Sources/Hisingen",
             exclude: ["Resources"],
@@ -69,7 +92,11 @@ let package = Package(
         ),
         .testTarget(
             name: "HisingenTests",
-            dependencies: ["Hisingen"],
+            dependencies: ["Hisingen",
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOHPACK", package: "swift-nio-http2")],
             path: "Tests/HisingenTests",
             resources: [.process("Fixtures")],
             swiftSettings: testSwiftSettings,

@@ -40,6 +40,10 @@ final class URLCommandRouter: NSObject {
     /// Climate range used when a deep link asks for a temperature: the same fallback the in-app
     /// climate slider uses when a vehicle advertises no limits.
     private static let climateTemperatureRange = VehicleControlSettings().temperatureRange
+    /// The runtimes and delays the Controls tab pickers offer, so a link can only ask for what
+    /// the in-app surface can ask for.
+    private static let engineRuntimeMinutes = [5, 10, 15]
+    private static let otaScheduleDelayMinutes = [120, 480, 720]
 
     init(context: any URLCommandRouterContext) {
         self.context = context
@@ -137,6 +141,72 @@ final class URLCommandRouter: NSObject {
         case "honk-flash", "honk":
             dispatch(.honkAndFlash, targetVIN: targetVIN)
 
+        case "precleaning/start":
+            dispatch(.startPreCleaning, targetVIN: targetVIN)
+
+        case "precleaning/stop":
+            dispatch(.stopPreCleaning, targetVIN: targetVIN)
+
+        case "windows/open":
+            dispatch(.openWindows, targetVIN: targetVIN)
+
+        case "windows/close":
+            dispatch(.closeWindows, targetVIN: targetVIN)
+
+        case "tailgate/open":
+            dispatch(.openTailgate, targetVIN: targetVIN)
+
+        case "tailgate/close":
+            dispatch(.closeTailgate, targetVIN: targetVIN)
+
+        case "trunk/unlock":
+            dispatch(.unlockTrunk, targetVIN: targetVIN)
+
+        case "charge-limit":
+            // Pinned to the fallback range like the other charging links. The provider checks
+            // the vehicle's own limits before anything is sent.
+            guard let amps = queryItems?.first(where: { $0.name == "amps" })?.value.flatMap({ Int($0) }) else {
+                refuseInvalidValue(L10n.text("The charging current must be a whole number of amperes, such as amps=16."))
+                return
+            }
+            dispatch(.setAmpLimit(Self.clamped(amps, to: VehicleChargeBounds.fallbackAmperageRange)),
+                     targetVIN: targetVIN)
+
+        case "charging/override-start":
+            dispatch(.startChargingOverride, targetVIN: targetVIN)
+
+        case "charging/override-stop":
+            dispatch(.stopChargingOverride, targetVIN: targetVIN)
+
+        case "ota/install":
+            dispatch(.installOTANow, targetVIN: targetVIN)
+
+        case "ota/cancel":
+            dispatch(.cancelOTA, targetVIN: targetVIN)
+
+        case "ota/schedule":
+            // Only the delays the Controls tab's schedule picker offers (2, 8 and 12 hours).
+            guard let delay = queryItems?.first(where: { $0.name == "delay" })?.value.flatMap({ Int($0) }),
+                  Self.otaScheduleDelayMinutes.contains(delay) else {
+                refuseInvalidValue(L10n.text("Choose a delay of 120, 480 or 720 minutes."))
+                return
+            }
+            dispatch(.scheduleOTA(delayMinutes: delay), targetVIN: targetVIN)
+
+        case "engine/start":
+            // An absent runtime takes the longest option, as the Controls tab does when nothing is
+            // saved. A present value that is not one of the options is refused, never defaulted.
+            let minutesText = queryItems?.first(where: { $0.name == "minutes" })?.value
+            guard let minutes = minutesText == nil ? 15 : Int(minutesText ?? ""),
+                  Self.engineRuntimeMinutes.contains(minutes) else {
+                refuseInvalidValue(L10n.text("Engine runtime must be 5, 10 or 15 minutes."))
+                return
+            }
+            dispatch(.startEngine(runtimeMinutes: minutes), targetVIN: targetVIN)
+
+        case "engine/stop":
+            dispatch(.stopEngine, targetVIN: targetVIN)
+
         case "charge-target":
             // Polestar-only: Volvo's official API exposes no charging writes.
             guard targetVIN != nil || context.activeBrand == .polestar else {
@@ -159,6 +229,11 @@ final class URLCommandRouter: NSObject {
                 body: L10n.text("Hisingen does not recognize that link.")
             )
         }
+    }
+
+    /// A link whose value the app cannot send. Refused locally, so nothing reaches a backend.
+    private func refuseInvalidValue(_ body: String) {
+        context?.notifyCommandNotice(title: L10n.text("Invalid Value"), body: body)
     }
 
     /// Pins a deep-link value to the range the app itself accepts, so an out-of-range URL

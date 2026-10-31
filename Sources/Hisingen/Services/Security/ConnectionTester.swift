@@ -44,7 +44,7 @@ enum SignInFailureKind: Equatable, Sendable {
         case .permissionDenied where provider == .polestar:
             return .interactiveChallenge
         case .client, .permissionDenied, .responseTooLarge, .unsupported, .secureStorage,
-             .keychainConsentRequired:
+             .localDataErasure, .keychainConsentRequired, .commandOutcomeUnknown:
             return .unspecified
         }
     }

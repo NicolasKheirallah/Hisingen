@@ -21,6 +21,22 @@ AUTODETECTED_IDENTITY := $(shell sh Scripts/signing-identity.sh)
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
+# SwiftUI's @State and its siblings are external macros whose implementation plugin
+# ships with full Xcode, not with standalone Command Line Tools. When the selected
+# toolchain lacks it every @State in the view layer fails to expand, and the build
+# buries that one cause under hundreds of "self is immutable" errors. CI already pins
+# a complete Xcode through Scripts/select-xcode.sh; local builds do the same instead
+# of depending on whatever xcode-select currently points at.
+# When the pinned Xcode is not installed the script says why on stderr and selects
+# nothing. Keep any DEVELOPER_DIR the caller already set rather than overwriting it with
+# an empty value, which would silently drop a build back to Command Line Tools. Set
+# XCODE_VERSION to an installed version for a local compatibility run.
+SELECTED_XCODE := $(shell sh Scripts/select-xcode.sh | sed -n 's/^Selected Xcode developer directory: //p')
+ifneq ($(strip $(SELECTED_XCODE)),)
+DEVELOPER_DIR := $(SELECTED_XCODE)
+export DEVELOPER_DIR
+endif
+
 # Notarization. Developer ID-signed builds are submitted to Apple's notary
 # service and stapled right after signing (see Scripts/notarize.sh), matching
 # what the release workflow does in CI. Credentials come from a notarytool
@@ -31,12 +47,12 @@ NOTARYTOOL_PROFILE ?= hisingen-notary
 export NOTARIZE
 export NOTARYTOOL_PROFILE
 
-.PHONY: all dist ci doctor build universal app app-universal dmg notarize run test clean release setup-cert inject-secrets
+.PHONY: all dist ci doctor build universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets
 
 ## Default target: build both .app bundle and .dmg installer
-all: app dmg
+all: dmg
 
-dist: app dmg
+dist: dmg
 
 ## Run the full ci.yml job set locally — lint, docs, uncommitted-input checks,
 ## build, tests, repository validation, and ad-hoc bundle/DMG validation.
@@ -125,12 +141,13 @@ notarize:
 	sh Scripts/notarize.sh $(APP)
 	@if [ -f "$(DMG)" ]; then sh Scripts/notarize.sh $(DMG); fi
 
-## Package the existing bundle as a drag-to-Applications disk image.
-dmg:
-	@if [ ! -d "$(APP)" ]; then \
-		echo "==> $(APP) not found, building it first..."; \
-		$(MAKE) app IDENTITY="$(IDENTITY)"; \
-	fi
+## Build the bundle before packaging, including under parallel make.
+dmg: app
+	$(MAKE) package-dmg
+
+## Package an already signed/notarized bundle without rebuilding it.
+package-dmg:
+	@test -d "$(APP)" || { echo "$(APP) not found; run make app first" >&2; exit 1; }
 	rm -rf $(DMG_STAGING) $(DMG)
 	mkdir -p $(DMG_STAGING)
 	cp -R $(APP) $(DMG_STAGING)/
@@ -158,14 +175,12 @@ run:
 
 test: doctor inject-secrets
 	# --no-parallel matches every other gate that runs this suite; see the comment in ci.yml.
-	sh Scripts/test.sh --no-parallel
+	sh Scripts/test.sh --skip Live --no-parallel
 
 clean:
 	rm -rf .build .build-arm64 .build-x86_64 $(APP) $(DMG) $(ZIP) $(DMG_STAGING) SHA256SUMS notarize-app.zip
 	@rmdir $(OUTPUT_DIR) 2>/dev/null || true
 
-## Cut a release: make release [VERSION=1.0.0 | patch | minor | major]
-## Bumps Info.plist, commits, tags, pushes — GitHub Actions then
-## builds, packages and publishes the DMG/zip.
+## Prepare the shared release pull request: make release [VERSION=1.0.0 | patch | minor | major]
 release:
 	sh Scripts/release.sh $(VERSION)

@@ -138,7 +138,8 @@ extension InfoTabView {
     /// Static so tests can assert row content without constructing the full Info tab.
     static func batteryDiagnosticRows(energy: EnergyAndChargingSnapshot,
                                       energyUnit: EnergyConsumptionUnit) -> [KVRow] {
-        guard let diag = energy.diagnostics else { return [] }
+        let pccsRows = pccsReadRows(energy: energy)
+        guard let diag = energy.diagnostics else { return pccsRows }
         var rows: [KVRow] = []
         if diag.chargerPowerState != .unknown {
             rows.append(KVRow(L10n.text("Power Module"), diag.chargerPowerState.displayName,
@@ -182,6 +183,34 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000), symbol: "leaf.fill",
                               info: L10n.text("Vehicle Calculation. Total high-voltage energy used by powertrain and HVAC since the last charge.")))
         }
+        for (period, wh) in [(L10n.text("Trip Meter (TM)"), diag.energyUsedManualTripWh),
+                             (L10n.text("Automatic Trip (AT)"), diag.energyUsedAutomaticTripWh)] {
+            if let wh {
+                rows.append(KVRow("\(L10n.text("Energy")) (\(period))",
+                                  String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000),
+                                  symbol: "bolt.car.fill"))
+            }
+        }
+        if let periods = diag.energyBreakdownByPeriod {
+            for (period, breakdown) in [(L10n.text("Trip Meter (TM)"), periods.manualTrip),
+                                        (L10n.text("Automatic Trip (AT)"), periods.automaticTrip),
+                                        (L10n.text("Since Last Charge"), periods.sinceCharge)] {
+                if let breakdown, let summary = energyUseSummary(breakdown) {
+                    rows.append(KVRow("\(L10n.text("Energy Use")) (\(period))", summary, symbol: "chart.pie.fill",
+                                      info: L10n.text("Vehicle Calculation. Share of the period's energy used for driving, climate, the battery and other systems.")))
+                }
+            }
+        }
+        if let limit = diag.powerLimitKw, limit > 0 {
+            rows.append(KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", locale: L10n.displayLocale, limit),
+                              symbol: "gauge.with.needle",
+                              info: L10n.text("Instantaneous drivetrain output power ceiling.")))
+        }
+        if let cold = diag.coldBatteryStatus {
+            rows.append(KVRow(L10n.text("Cold Battery"), cold.displayName, symbol: "thermometer.snowflake",
+                              valueWarning: cold.limitsCharging,
+                              info: L10n.text("Charging power may be limited while the battery is cold.")))
+        }
         for field in diag.unknownWireFields.sorted(by: { $0.field < $1.field }) {
             let label = field.isBinary
                 ? L10n.format("Field %d (raw)", field.field)
@@ -189,7 +218,52 @@ extension InfoTabView {
             rows.append(KVRow(label, field.value, symbol: "curlybraces",
                               info: L10n.text("Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.")))
         }
+        rows.append(contentsOf: pccsRows)
         return rows
+    }
+
+    /// Raw payload fields from the PCCS charge-target and current-limit reads. The write
+    /// probes proved those services carry a payload status enum, so a Get payload can hold
+    /// fields this build does not decode. Rows appear only when the backend actually sent
+    /// one; nothing here is always visible.
+    static func pccsReadRows(energy: EnergyAndChargingSnapshot) -> [KVRow] {
+        var rows: [KVRow] = []
+        func append(_ fields: [VehicleRawWireField]?, info: String) {
+            for field in (fields ?? []).sorted(by: { $0.field < $1.field }) {
+                let label = field.isBinary
+                    ? L10n.format("Field %d (raw)", field.field)
+                    : L10n.format("Field %d", field.field)
+                rows.append(KVRow(label, field.value, symbol: "curlybraces", info: info))
+            }
+        }
+        append(energy.targetSocUnknownFields,
+               info: L10n.text("Field the charge-target read returned beyond the decoded value. Write probes proved this service carries a payload status enum; shown raw so new backend data is visible and reported unchanged in support exports."))
+        append(energy.ampLimitUnknownFields,
+               info: L10n.text("Field the current-limit read returned beyond the decoded value. Write probes proved this service carries a payload status enum; shown raw so new backend data is visible and reported unchanged in support exports."))
+        return rows
+    }
+
+    /// "Driving 12.5 kWh (70%) · Climate 2.5 kWh (15%)" for the categories the car reported.
+    /// Nil when none of them carries a value, so the row is not shown.
+    static func energyUseSummary(_ breakdown: EnergyBreakdownSnapshot) -> String? {
+        let categories: [(String, EnergyBreakdownItem?)] = [
+            (L10n.text("Driving"), breakdown.driving),
+            (L10n.text("Climate"), breakdown.climate),
+            (L10n.text("Battery"), breakdown.battery),
+            (L10n.text("Other"), breakdown.other)
+        ]
+        let parts = categories.compactMap { name, item -> String? in
+            guard let item else { return nil }
+            var pieces = [name]
+            if let wh = item.wattHours {
+                pieces.append(String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000))
+            }
+            if let percentage = item.percentage {
+                pieces.append(String(format: "(%.0f%%)", locale: L10n.displayLocale, percentage))
+            }
+            return pieces.count > 1 ? pieces.joined(separator: " ") : nil
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     var batteryDiagnosticsCard: some View {
@@ -271,9 +345,26 @@ extension InfoTabView {
 
     // MARK: - Connectivity & wake
 
+    static func connectivityStatusRows(identity: VehicleIdentitySnapshot,
+                                       connectivity: VehicleConnectivity?) -> [KVRow] {
+        var rows: [KVRow] = []
+        if let mode = identity.usageModeDisplayName {
+            rows.append(KVRow(L10n.text("Vehicle Mode"), mode, symbol: "car.side"))
+        }
+        if let connectivity {
+            rows.append(KVRow(L10n.text("Reported Connection"), connectivity.state.displayName, symbol: "network"))
+        }
+        let observed = connectivity == nil ? identity.availabilityReportedAt : connectivity?.updatedAt
+        if !rows.isEmpty, let observed {
+            rows.append(KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: observed), symbol: "clock"))
+        }
+        return rows
+    }
+
     var connectivityWakeCard: AnyView {
         let current = state.connectivity
-        guard current != nil else {
+        let rows = Self.connectivityStatusRows(identity: state.identity, connectivity: current)
+        guard !rows.isEmpty else {
             return AnyView(EmptyView())
         }
         let history = asyncData.connectivityHistory
@@ -282,14 +373,13 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "antenna.radiowaves.left.and.right",
                            title: L10n.text("Connectivity & Wake"), color: HisingenTheme.chartInfo)
-                KVRow(L10n.text("Reported Connection"), current?.state.displayName ?? L10n.text("Unknown"), symbol: "network")
-                if let date = current?.updatedAt {
-                    KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: date), symbol: "clock")
+                ForEach(rows.indices, id: \.self) { rows[$0] }
+                if current != nil {
+                    Text(state.hasFreshReading(.connectivity)
+                         ? L10n.text("A reported connection does not guarantee that the vehicle can accept a command immediately.")
+                         : L10n.text("Connection data is old or has no timestamp. Current reachability is unknown."))
+                        .hisType(.micro).foregroundStyle(.secondary)
                 }
-                Text(state.hasFreshReading(.connectivity)
-                     ? L10n.text("A reported connection does not guarantee that the vehicle can accept a command immediately.")
-                     : L10n.text("Connection data is old or has no timestamp. Current reachability is unknown."))
-                    .hisType(.micro).foregroundStyle(.secondary)
                 if let reason = current?.wakeReason {
                     KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
                 }
@@ -365,6 +455,9 @@ extension InfoTabView {
             let hasLight = health.warnings.contains(.exteriorLight) || !health.lightFailures.isEmpty
             let lightsReported = health.reportedWarnings.contains(.exteriorLight)
             rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb.fill", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
+            for entry in health.lightFailures {
+                rows.append(KVRow(VehicleLampFailureName.name(for: entry), L10n.text("Bulb failure"), valueWarning: true))
+            }
 
             if !health.tyres.isEmpty {
                 let hasTyreWarning = health.tyres.contains { $0.warning.needsAttention }

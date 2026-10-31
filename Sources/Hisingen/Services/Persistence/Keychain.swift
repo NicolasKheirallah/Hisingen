@@ -107,16 +107,31 @@ struct KeychainStore: Sendable {
     /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
     /// Authentication still reads and validates the real Keychain values.
     var hasStoredPolestarSession: Bool {
-        UserDefaults.standard.bool(forKey: "has_polestar_session")
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.sessionAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_polestar_session")
     }
     var hasStoredPolestarPassword: Bool {
-        UserDefaults.standard.bool(forKey: "has_polestar_password")
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.passwordAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_polestar_password")
     }
     var hasStoredPolestarEmail: Bool {
-        UserDefaults.standard.bool(forKey: "has_polestar_email")
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.emailAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_polestar_email")
     }
     var hasStoredCommandSession: Bool {
-        UserDefaults.standard.bool(forKey: "has_polestar_cmd_session")
+        // Test services keep their secrets in the process-wide test store, while the mirror
+        // below is one app-wide defaults key: reading it here would report one test's command
+        // grant for another test's keychain. Ask the store this service actually writes to.
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.commandSessionAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_polestar_cmd_session")
     }
     var hasStoredVolvoSession: Bool {
         UserDefaults.standard.bool(forKey: "has_volvo_session")
@@ -181,17 +196,23 @@ struct KeychainStore: Sendable {
 
     /// Refresh token for the Polestar command client, kept separate from the primary session
     /// because the two are issued to different OAuth clients and expire independently.
+    /// Test services skip the defaults mirror so one test's grant cannot surface in another's
+    /// keychain; `hasStoredCommandSession` reads their store instead.
     func saveCommandSessionToken(_ token: String) throws {
         try save(token, account: Self.commandSessionAccount)
+        guard !isTestService else { return }
         UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
     }
     func readCommandSessionToken() throws -> String? {
         let value = try read(account: Self.commandSessionAccount)
-        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_cmd_session")
+        if !isTestService {
+            UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_cmd_session")
+        }
         return value
     }
     func deleteCommandSessionToken() throws {
         try delete(account: Self.commandSessionAccount)
+        guard !isTestService else { return }
         UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
     }
 
@@ -290,9 +311,18 @@ struct KeychainStore: Sendable {
         // mutate this read-modify-write item must never overwrite an inaccessible bundle with
         // a partial value. Throwing also avoids three follow-on legacy queries/prompts.
         if let raw = try read(account: Self.volvoBundleAccount) {
-            let bundle = try JSONDecoder().decode(VolvoSecretBundle.self, from: Data(raw.utf8))
-            Self.updateVolvoPresenceFlags(bundle)
-            return bundle
+            do {
+                let bundle = try JSONDecoder().decode(VolvoSecretBundle.self, from: Data(raw.utf8))
+                Self.updateVolvoPresenceFlags(bundle)
+                return bundle
+            } catch {
+                // Corrupt item is otherwise undeletable: every mutating path throws
+                // before reaching the delete-empty branch. Drop it so credentials
+                // can be re-created cleanly.
+                try? delete(account: Self.volvoBundleAccount)
+                Self.updateVolvoPresenceFlags(VolvoSecretBundle(clientSecret: nil, apiKey: nil, sessionToken: nil))
+                throw KeychainError.status(errSecDecode)
+            }
         }
         let legacySecret = try read(account: "volvo-client-secret")
         let legacyApiKey = try read(account: "volvo-vcc-api-key")
@@ -510,6 +540,31 @@ struct KeychainStore: Sendable {
             }
         }
         memoryCache.set(cacheKey(account: account), value: nil)
+    }
+
+    /// Drops in-memory secrets so a sign-out cannot be resurrected from cache.
+    /// Call after any lifecycle transition that deletes credentials.
+    func invalidateMemoryCache() {
+        for account in [Self.passwordAccount, Self.emailAccount, Self.sessionAccount,
+                        Self.commandSessionAccount, Self.volvoBundleAccount,
+                        Self.polestarDataPortalBundleAccount, Self.polestarDataPortalTokenAccount,
+                        "volvo-client-secret", "volvo-vcc-api-key", "volvo-refresh-token"] {
+            memoryCache.set(cacheKey(account: account), value: nil)
+        }
+    }
+
+    /// Re-derives UserDefaults presence mirrors from a live Keychain read.
+    /// Use after catching a delete/read error that may have left flags stale.
+    func resyncPresenceFlags() {
+        _ = try? readEmail()
+        _ = try? readPassword()
+        _ = try? readSessionToken()
+        _ = try? readCommandSessionToken()
+        _ = try? readVolvoBundle()
+        if let raw = try? read(account: Self.polestarDataPortalBundleAccount), let data = raw.data(using: .utf8),
+           let bundle = try? JSONDecoder().decode(PolestarDataPortalSecretBundle.self, from: data) {
+            Self.updatePolestarDataPortalPresenceFlags(bundle)
+        }
     }
 }
 

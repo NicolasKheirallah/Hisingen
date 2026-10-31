@@ -51,6 +51,7 @@ final class VehicleHistoryRecorder {
         let state: VehicleState
         let inputs: RecordingInputs
         let database: VehicleDatabase
+        let generation: VehicleDatabase.HistoryToken
     }
 
     /// The derived history passes, delivered in order on one long-lived utility queue.
@@ -131,7 +132,9 @@ final class VehicleHistoryRecorder {
                 lock.unlock()
                 for request in batch {
                     beforePersist?()
-                    VehicleHistoryRecorder.persistHistory(request)
+                    request.database.recordHistory(ifCurrent: request.generation) {
+                        VehicleHistoryRecorder.persistHistory(request)
+                    }
                 }
             }
         }
@@ -140,18 +143,30 @@ final class VehicleHistoryRecorder {
     /// Write the authoritative snapshot for one observation, synchronously, so the caller can
     /// read it back immediately. Also derives the activity rows, which compare against the
     /// previous snapshot and therefore have to read it before it is replaced.
+    func save(_ state: VehicleState) {
+        guard let token = database.historyToken(for: state.identity.vin),
+              saveAuthoritative(state, token: token) else { return }
+        record(state, token: token)
+    }
+
     func saveAuthoritative(_ state: VehicleState) {
-        // The recording body is pure storage I/O (per-event inserts, dedupe reads, the
-        // charging-ledger ingest) with no UI dependency. The SQLite handle is Sendable and
-        // safe for cross-thread use.
-        Self.recordActivitiesAndSnapshot(
-            state,
-            parkedChargeLossActivity: parkedChargeLoss(for: state),
-            into: database
-        )
+        guard let token = database.historyToken(for: state.identity.vin) else { return }
+        _ = saveAuthoritative(state, token: token)
+    }
+
+    private func saveAuthoritative(_ state: VehicleState, token: VehicleDatabase.HistoryToken) -> Bool {
+        database.recordHistory(ifCurrent: token) {
+            Self.recordActivitiesAndSnapshot(
+                state, parkedChargeLossActivity: parkedChargeLoss(for: state), into: database)
+        }
     }
 
     func record(_ state: VehicleState) {
+        guard let token = database.historyToken(for: state.identity.vin) else { return }
+        record(state, token: token)
+    }
+
+    private func record(_ state: VehicleState, token: VehicleDatabase.HistoryToken) {
         // Main-actor-owned preference values resolved once so the storage pass can run on the
         // utility queue without capturing the non-Sendable `PreferencesStore`.
         let storeChargingHistory = preferences.storeChargingHistory
@@ -167,7 +182,7 @@ final class VehicleHistoryRecorder {
             currencySymbol: preferences.currencySymbol
         )
         writer.enqueue(RecordingRequest(
-            state: state, inputs: inputs, database: database
+            state: state, inputs: inputs, database: database, generation: token
         ))
     }
 
@@ -191,6 +206,7 @@ final class VehicleHistoryRecorder {
     /// authoritative snapshot, and that nothing reads back through `VehicleStateStore`.
     private nonisolated static func persistHistory(_ request: RecordingRequest) {
         recordAirQuality(request.state, into: request.database)
+        recordTyrePressureAndWarnings(request.state, into: request.database)
         recordTelemetry(
             request.state,
             persistLocationHistory: request.inputs.persistLocationHistory,
@@ -222,6 +238,29 @@ final class VehicleHistoryRecorder {
             filterRemainingPercent: airQuality.filterRemainingPercent.map(Double.init),
             timestamp: state.freshness.fetchedAt
         )
+    }
+
+    /// Tyre pressures and the warning timeline both come from the health report. A stale or
+    /// cached report says nothing about the present, so neither opens nor closes anything then.
+    /// Warning levels without kilopascals (indirect TPMS) are not stored as pressures.
+    private nonisolated static func recordTyrePressureAndWarnings(_ state: VehicleState, into database: VehicleDatabase) {
+        guard state.hasFreshReading(.health, now: state.freshness.fetchedAt),
+              let details = state.maintenance.details else { return }
+        let readings = details.tyres.compactMap { tyre -> VehicleDatabase.TyrePressureReading? in
+            guard let kilopascals = tyre.kilopascals else { return nil }
+            return VehicleDatabase.TyrePressureReading(
+                position: tyre.position, kilopascals: kilopascals,
+                referenceKilopascals: tyre.referenceKilopascals)
+        }
+        if !readings.isEmpty {
+            database.history.recordTyrePressure(
+                vin: state.identity.vin, readings: readings, timestamp: state.freshness.fetchedAt)
+        }
+        database.history.syncWarningEvents(
+            vin: state.identity.vin,
+            active: Set(details.warnings),
+            reported: Set(details.reportedWarnings),
+            timestamp: state.freshness.fetchedAt)
     }
 
     private nonisolated static func recordTelemetry(
@@ -306,19 +345,52 @@ final class VehicleHistoryRecorder {
         specification: VehicleSpecificationOverride?,
         database: VehicleDatabase
     ) {
-        guard let odometer = state.maintenance.odometerKm,
-              let estimate = BatteryHealthEstimator.estimate(
-                state: state,
-                specification: specification
-              ) else { return }
-        database.history.recordBatteryHealthMilestone(
-            vin: state.identity.vin,
-            odometerKm: Double(odometer),
-            sohPct: estimate.stateOfHealthPercent,
-            degPct: estimate.degradationPercent,
-            usableKwh: estimate.estimatedUsableCapacityKwh,
-            measurementSource: BatteryHealthRecord.fullChargeRangeSource,
-            timestamp: state.freshness.fetchedAt
+        guard let odometer = state.maintenance.odometerKm else { return }
+        if let estimate = BatteryHealthEstimator.estimate(
+            state: state,
+            specification: specification
+        ) {
+            database.history.recordBatteryHealthMilestone(
+                vin: state.identity.vin,
+                odometerKm: Double(odometer),
+                sohPct: estimate.stateOfHealthPercent,
+                degPct: estimate.degradationPercent,
+                usableKwh: estimate.estimatedUsableCapacityKwh,
+                measurementSource: BatteryHealthRecord.fullChargeRangeSource,
+                timestamp: state.freshness.fetchedAt
+            )
+        }
+        recordSessionBatteryHealth(
+            state, odometerKm: Double(odometer),
+            specification: specification, database: database
         )
+    }
+
+    private nonisolated static func recordSessionBatteryHealth(
+        _ state: VehicleState,
+        odometerKm: Double,
+        specification: VehicleSpecificationOverride?,
+        database: VehicleDatabase
+    ) {
+        guard state.powertrain.isElectricOnly,
+              let reference = state.measuredCapacityReference(specification: specification)?.kwh,
+              reference >= 5 else { return }
+        let sessions = database.charging.recentChargingSessions(for: state.identity.vin, limit: 5)
+        for session in sessions {
+            guard let estimate = BatteryHealthEstimator.estimateFromChargingSession(
+                session: session,
+                referenceCapacityKwh: reference
+            ) else { continue }
+            database.history.recordBatteryHealthMilestone(
+                vin: state.identity.vin,
+                odometerKm: odometerKm,
+                sohPct: estimate.stateOfHealthPercent,
+                degPct: estimate.degradationPercent,
+                usableKwh: estimate.estimatedUsableCapacityKwh,
+                measurementSource: BatteryHealthRecord.sessionEnergySource,
+                timestamp: estimate.recordedAt
+            )
+            break
+        }
     }
 }

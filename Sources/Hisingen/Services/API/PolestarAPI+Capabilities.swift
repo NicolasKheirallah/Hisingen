@@ -52,24 +52,12 @@ extension PolestarAPI {
         token: String,
         bypassCache: Bool = false
     ) async throws -> Int? {
-        try Task.checkCancellation()
-        guard enabled else { return nil }
-        let epoch = sessionEpoch
-        if !bypassCache,
-           let cached = targetCache[vin], Date().timeIntervalSince(cached.fetchedAt) < 90 {
-            return cached.value
+        let state: CapabilityState<PCCSScalarRead> = try await optionalCapability(
+            .chargingDetails, key: "target-soc", enabled: enabled, vin: vin, bypassCache: bypassCache
+        ) {
+            try await self.grpc.fetchTargetSoc(vin: vin, accessToken: token)
         }
-        let value: Int?
-        do { value = try await grpc.fetchTargetSoc(vin: vin, accessToken: token) }
-        catch {
-            try requireSession(epoch)
-            if Self.isGlobalFailure(error) { throw error }
-            logger.debug("Optional target SOC service unavailable")
-            value = nil
-        }
-        try requireSession(epoch)
-        targetCache[vin] = (value, Date())
-        return value
+        return state.value?.value
     }
 
     /// Probe-or-cache state, TTLs, backoff, and invalidation live in `capabilityAuthority`;
@@ -80,32 +68,51 @@ extension PolestarAPI {
         enabled: Bool,
         vin: String,
         bypassCache: Bool = false,
-        operation: @Sendable () async throws -> Value?
+        operation: @escaping @Sendable () async throws -> Value?
+    ) async throws -> CapabilityState<Value> {
+        let key = PolestarCapabilityAuthority.readingKey(for: feature, key: key)
+        return try await optionalCapability(.legacy(key, feature: feature), enabled: enabled,
+                                            vin: vin, bypassCache: bypassCache, operation: operation)
+    }
+
+    func optionalCapability<Value: Sendable>(
+        _ reading: PolestarReading<Value>, enabled: Bool, vin: String, bypassCache: Bool = false,
+        operation: @escaping @Sendable () async throws -> Value?
     ) async throws -> CapabilityState<Value> {
         try Task.checkCancellation()
-        // The feature is off, so nothing was asked. This used to be reported as "not unavailable
-        // and not unsupported", which reads as available; `.unknown` is what it always meant.
         guard enabled else { return .unknown }
-        let reading = PolestarCapabilityAuthority.readingKey(for: feature, key: key)
         let epoch = sessionEpoch
+        let generation = capabilityAuthority.generation(for: vin)
         switch capabilityAuthority.decision(reading: reading, vin: vin, bypassCache: bypassCache) {
-        case .serveCached(let value):
-            return .available(value as? Value)
+        case .serveCached(let value, let fetchedAt):
+            return .cached(value, fetchedAt: fetchedAt)
         case .backoff(let unsupported):
             return unsupported ? .unsupported : .unavailable
         case .probe:
             break
         }
+        let flight: CapabilityTypedFlight<Value>
+        if bypassCache {
+            flight = CapabilityTypedFlight(startedAt: now(), task: Task { try await operation() })
+        } else {
+            flight = try capabilityAuthority.join(reading, vin: vin, startedAt: now(), operation: operation)
+        }
         do {
-            let value = try await operation()
+            let value = try await waitForCapabilityFlight(flight.task)
+            try Task.checkCancellation()
             try requireSession(epoch)
-            capabilityAuthority.recordSuccess(reading: reading, vin: vin, value: value)
-            return .available(value)
+            guard generation == capabilityAuthority.generation(for: vin) else { throw CancellationError() }
+            if !bypassCache { capabilityAuthority.finish(reading, vin: vin, flight: flight) }
+            capabilityAuthority.recordSuccess(reading: reading, vin: vin, value: value, fetchedAt: flight.startedAt)
+            return .observed(value, fetchedAt: flight.startedAt)
         } catch {
             try requireSession(epoch)
+            guard generation == capabilityAuthority.generation(for: vin) else { throw CancellationError() }
+            if error is CancellationError { throw error }
+            if !bypassCache { capabilityAuthority.finish(reading, vin: vin, flight: flight) }
             if Self.isGlobalFailure(error) { throw error }
-            let unsupported = capabilityAuthority.recordFailure(reading: reading, vin: vin, error: error)
-            logger.debug("Optional \(feature.rawValue, privacy: .public) capability unavailable")
+            let unsupported = capabilityAuthority.recordFailure(reading: reading.key, vin: vin, error: error)
+            logger.debug("Optional \(reading.feature.rawValue, privacy: .public) capability unavailable")
             return unsupported ? .unsupported : .unavailable
         }
     }
@@ -125,7 +132,7 @@ extension PolestarAPI {
                 .softwareUpdates, enabled: features.contains(.softwareUpdates), vin: vin
             ) {
                 try await self.grpc.fetchSoftware(vin: vin, accessToken: token,
-                                                  locale: preferences.interfaceLanguage.effectiveLanguageCode)
+                                                  locale: self.preferences.interfaceLanguage.effectiveLanguageCode)
             }
             async let connectivity: CapabilityState<VehicleConnectivity> = optionalCapability(
                 .connectivityDiagnostics,
@@ -141,10 +148,49 @@ extension PolestarAPI {
         } catch is CancellationError {
             return nil
         } catch {
-            logger.debug("Consumer telemetry overlay unavailable: \(String(describing: error), privacy: .public)")
+            logger.debug("Consumer telemetry overlay unavailable")
             return nil
         }
     }
 
 
+}
+
+private final class CapabilityWaiter<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value?, Error>?
+    private var result: Result<Value?, Error>?
+
+    func install(_ continuation: CheckedContinuation<Value?, Error>) {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func complete(_ result: Result<Value?, Error>) {
+        lock.lock()
+        guard self.result == nil else { lock.unlock(); return }
+        self.result = result
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+}
+
+private func waitForCapabilityFlight<Value: Sendable>(_ task: Task<Value?, Error>) async throws -> Value? {
+    let waiter = CapabilityWaiter<Value>()
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { continuation in
+            waiter.install(continuation)
+            Task { waiter.complete(await task.result) }
+        }
+    } onCancel: {
+        waiter.complete(.failure(CancellationError()))
+    }
 }

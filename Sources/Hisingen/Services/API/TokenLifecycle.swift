@@ -104,6 +104,7 @@ final class TokenLifecycle: @unchecked Sendable {
     private var storedTokenExpiry: Date?
     private var storedTokenLifetime: TimeInterval = 0
     private var lastGrantAt: Date?
+    private var lastAppliedFlight: UUID?
     private var inFlight: (id: UUID, task: Task<Grant, Error>)?
     private let logger: Logger
 
@@ -218,7 +219,7 @@ final class TokenLifecycle: @unchecked Sendable {
         do {
             let grant = try await entry.task.value
             guard await epochIsCurrent() else { throw CancellationError() }
-            try adopt(grant, now: now)
+            guard try adoptIfCurrent(grant, entryID: entry.id, now: now) else { throw CancellationError() }
             return .refreshed
         } catch {
             // The epoch check comes first even for a failure: a rejected grant from a session the
@@ -226,6 +227,26 @@ final class TokenLifecycle: @unchecked Sendable {
             guard await epochIsCurrent() else { throw CancellationError() }
             if isDeadGrant(error) { return .deadGrant }
             throw error
+        }
+    }
+
+    private func adoptIfCurrent(_ grant: Grant, entryID: UUID, now: Date) throws -> Bool {
+        locked {
+            if lastAppliedFlight == entryID { return true }
+            guard inFlight?.id == entryID else { return false }
+            lastAppliedFlight = entryID
+            let previous = storedRefreshToken
+            let renewable = grant.refreshToken ?? previous
+            storedAccessToken = grant.accessToken
+            storedRefreshToken = renewable
+            storedTokenLifetime = grant.expiresIn
+            storedTokenExpiry = now.addingTimeInterval(grant.expiresIn)
+            lastGrantAt = now
+            if let renewable, renewable != previous {
+                do { try persist(renewable) }
+                catch { logger.error("\(self.providerName, privacy: .public) refresh token persistence failed") }
+            }
+            return true
         }
     }
 
@@ -248,7 +269,7 @@ final class TokenLifecycle: @unchecked Sendable {
             try persist(renewableToken)
         } catch {
             logger.error(
-                "\(self.providerName, privacy: .public) rotated refresh token could not be persisted; the session will not survive a restart: \(String(describing: error), privacy: .public)"
+                "\(self.providerName, privacy: .public) rotated refresh token could not be persisted; the session will not survive a restart: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)"
             )
         }
     }
@@ -262,16 +283,20 @@ final class TokenLifecycle: @unchecked Sendable {
     /// changed, and a redundant `.serverRefused(nil)` grant rotates the refresh token for nothing.
     /// Persisted tokens are deliberately untouched: only `signOut` and a dead grant delete those.
     func reset(keepingRefreshToken: Bool = false, keepingAccessToken: Bool = false) {
-        cancelInFlightGrant()
-        locked {
+        let task = locked { () -> Task<Grant, Error>? in
+            let task = inFlight?.task
+            inFlight = nil
             lastGrantAt = nil
+            lastAppliedFlight = nil
             if !keepingAccessToken {
                 storedAccessToken = nil
                 storedTokenExpiry = nil
                 storedTokenLifetime = 0
             }
             if !keepingRefreshToken { storedRefreshToken = nil }
+            return task
         }
+        task?.cancel()
     }
 
     /// Cancels an in-flight grant without touching the session. A new authorization is about to
@@ -280,6 +305,7 @@ final class TokenLifecycle: @unchecked Sendable {
         let task = locked { () -> Task<Grant, Error>? in
             let task = inFlight?.task
             inFlight = nil
+            lastAppliedFlight = nil
             return task
         }
         task?.cancel()

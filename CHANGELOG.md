@@ -3,31 +3,264 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.11] - 2026-10-31
 
 ### Added
 
+- decode the Polestar C3 per-period energy breakdown (driving, climate, battery, other), battery
+  discharge power limit, manual preconditioning and cold-battery status, and climate warnings;
+  show them in Battery Diagnostics and Needs Attention, and post a notice once per climate
+  session when the run time is nearly used up or the battery is too low
+- show "Not reported by this vehicle" on the software card when the car does not report update
+  status, instead of an unavailable badge
+- keep a local tyre-pressure history with a four-tyre chart and a possible-slow-leak hint, and a
+  warning timeline that records when each warning first appeared and when a covering report
+  cleared it
+- estimate the next service date from the last 30 days of driving, and hint at frost or a cold
+  battery before a scheduled departure using an hourly Open-Meteo forecast fetched in the same
+  request as current weather
+- show "At <location> since <time>" when the car is within 150 m of a saved charge location, and a
+  per-location charging cost table grouped by currency in History
+- offer Retry on a failed command when the failure proves it did not run, Undo on a reversible
+  command for 30 seconds, and saved command routines that run steps in order and stop at the first
+  failure
+- add opt-in notifications for a car left in convenience mode and a daily summary, plus Lock and
+  Mute This Vehicle actions on vehicle alerts
+- add URL routes for cabin cleaning, windows, tailgate, trunk, charge-current limit, charging
+  override, OTA and engine commands, through the same confirmation and capability checks
+- add VoiceOver actions to the menu bar item and an hour-and-price readout on the price curve
+- export a handover pack for selling the car: summary, charging and trip CSVs without locations,
+  an optional VIN, and a checklist of the steps that happen in the manufacturer app or car
+- pace Polestar Data Portal polling so a day stays under 9,000 of the 10,000 daily calls, and show
+  the projected count in Settings
+- name individual failed lamps under the exterior lighting row
+
+- document the recovered Polestar `GetMyCars` protobuf schema, with every tag of the app's own
+  `car_information` classes, its enum tables and the verification against a captured frame, in
+  docs/research/polestar-protobuf-field-decode.md
+- decode the Polestar `GetMyCars` lock, unlock, climatization and charge-timer enums and the gross
+  vehicle weight rating, and gate remote locking, remote unlocking, preconditioning and saved
+  charge locations on what the car reports instead of the model table
+- keep the tailgate control on cars whose unlock type is trunk-only, and explain a disabled
+  Unlock on cars whose unlock type is none instead of promising an unlock that cannot happen
+- show the reported climatization type and maximum preconditioning runtime on the climate card
+  instead of a fixed claim that fits every car
+- surface the per-location charge timer and departure-time limits from `GetMyCars` in the Info
+  capabilities inspector under "Backend Control Settings"
+- show the reported gross vehicle weight on the Info specs card as well as the capabilities card
+  and the factory passport export, localized in every supported language
+- claim plug and charge on the Info capabilities card only when the backend also sends the
+  plug-and-charge identifier; the wire flag and the REST projection disagree on this car
+- name the vehicle type, front grille variant and model year groups of the Polestar
+  `visual_id` string on the Info specs card, and keep the other groups positional until their
+  code table is verified
+- show reported vehicle usage mode in Info connectivity details, including vehicles without
+  separate network diagnostics
+- decode Polestar charging-status V2 and automatic-trip consumption from reconstructed
+  descriptors, correct climate seat/wheel requests and normalize their heating levels
+- add opt-in read-only field research and anonymized idle/active capture regression fixtures
+- decode Polestar C3 vehicle usage mode, use range in miles when kilometre range is absent,
+  and show separate manual-trip and automatic-trip energy totals in Battery Diagnostics
+- document accepted Polestar wire mappings and remaining evidence gaps in
+  docs/research/POLESTAR_FIELDS.md and docs/research/polestar-live-decoding-2026-10-30.md
 - add THIRD_PARTY_NOTICES.md crediting Polaris, pypolestar and polestar_api, Sparkle,
   Open-Meteo and Elpriset just nu.se; the app bundle now carries it with LICENSE and
   Sparkle's own license
-- credit Polaris in the README for the Polestar code that was adapted from it (#33)
+- add regression coverage for privacy erasure, legacy migration failures, charging planner
+  cancellation and vehicle switching, electricity price coverage, notifications and gestures
+- show whether scheduled charging will finish, including "cannot complete" and "smart charging
+  will not finish", instead of collapsing every plan to "Scheduled"
+- add since-charge distance and average speed to the trip computer from the C3 odometer reading
+- compare measured tyre pressures with the car's reported reference pressures
+- explain why a climate session started or failed, including the reported error reasons
+- show "Update status not reported" on cars that do not advertise update status, instead of
+  claiming that no update is available
+- offer windows, Charge Now / Resume Schedule and pre-cleaning from the menu-bar Quick Controls
+- erase cached car artwork from memory, disk and SQLite on sign-out and on "Erase local vehicle
+  data"
+- estimate battery health from high-confidence charging sessions in addition to the 100% range
+  reading, and show a fused value when both methods agree within tolerance instead of hiding
+  a method conflict behind one number
+- keep the uncapped range-based health figure alongside the displayed value capped at 100%,
+  so an understated WLTP reference stays visible instead of flattening to 100%
+- fit the health trend with a median-based slope that ignores a single bad range reading,
+  and report the median of recent milestones as the stable figure
+- document every backend field Hisingen does not yet wire, with wire type, enum table, the
+  live capture evidence behind it and the public cross-client sources, in
+  docs/api/polestar-unwired-fields.md
+- decode the remaining named GetMyCars tags into the capabilities inspector: the reporting
+  flags, notification matrix, end-of-ownership actions, account linking, parking assistance
+  type, trip reporting, device pairing, bidirectional charging and the preconditioning
+  duration appear as equipment rows and a new Backend Reporting disclosure, shrinking the raw
+  "Unwired Backend Fields" list to Charging 35.43, the one field no client schema names
+- caption the climate card with the reported heater type and with whether the car heats seats
+  and the steering wheel on its own in cold weather
+- read back the repeats-weekly flag on climate timers that Hisingen itself already writes,
+  instead of inferring repetition only from the weekday list
+- retain unknown wire fields on the air-quality, charge-target and amp-limit reads as
+  hidden-until-data rows, so a new backend field stays visible instead of being dropped
+- render retained raw binary fields as their decoded wire structure (for example
+  "1: 1787835643") instead of a hex dump, so backend fields no client schema names stay
+  readable until they are identified
 
 ### Fixed
 
+- stop Polestar climate start and charge-level changes from failing with "The command may have
+  reached the vehicle" when the car had answered: the backend keeps these streams open after
+  replying, so the call deadline ended them, and a complete reply followed by that deadline was
+  reported as an unknown outcome; it is now accepted, while a deadline inside a frame or before
+  any reply still reports an unknown outcome
+- wait at most 15 seconds for a Polestar command to close instead of 60, and report a call
+  deadline on the HTTP/2 connection as a deadline instead of a cancellation, which callers
+  could mistake for the user cancelling
+- replace the Siri phrase value "undefined" in 14 locales and fail the localization check on any
+  placeholder value
+- decode Volvo `INITIALIZATION`, `POWER_AVAILABLE_BUT_NOT_ACTIVATED` and
+  `OTA_INSTALLATION_IN_PROGRESS`, read location speed, and stop fuel and engine-status reads for
+  battery-electric Volvos
+- advance the database migration cursor after the v5 step, which left later migrations unreachable
+- stop a Data Portal health report without tyre fields from counting as a tyre all-clear
+- make sign-out stay signed out: an explicit per-brand flag now suppresses auto-restore
+  from built-in developer credentials plus the lingering server-side grant, and relaunch
+  no longer re-discovers the vehicle until an explicit save or sign-in clears it
+- clear all brand credentials on sign-out (email, portal IDs, Volvo custom app, VIN,
+  Keychain items, memory cache) and invalidate the session cache, so deleting
+  credentials and restarting does not auto-login
+- keep password and command grants across a cancelled or failed sign-in: authenticate
+  and web authorization no longer wipe the warm session to open the window, and a
+  dismissed login restores the prior session
+- scope dead-grant clearing to the grant the IdP refused: a dead web session no longer
+  deletes the independent command grant, and password re-login preserves and re-verifies
+  it instead of deleting it
+- discover OIDC before reporting command authorization state, persist a fresh command
+  grant before verification and only discard it on definitive account mismatch, and
+  require `maximumAge: 600` on web callbacks
+- pair custom portal credentials (custom ID requires custom secret, no builtin mixing),
+  remove the never-read portal token Keychain write, single-flight portal test grants,
+  retry portal 401 once through the lifecycle with an epoch guard, and clear portal
+  weather cache on reset
+- pass the refused Volvo token to the lifecycle for precise dedupe and skip the forced
+  grant on restore when the live grant is already active
+- stop counting manual-VIN fallback as a warm session and invalidate the resumable-session
+  cache on every VIN write, including the plain setter
+- harden Keychain presence mirrors for tests, delete corrupt Volvo bundles instead of
+  throwing forever, and add memory-cache invalidation plus presence resync after deletes
+- block resume while explicitly signed out, suppress replay of rejected passwords even
+  when deletion fails, guard background email resolution by generation, and lift
+  suppression only on explicit save or successful sign-in
+- make clearing email or portal client-ID fields delete the stored credentials (VIN
+  independent) instead of silent no-ops, and stop lighting "Configured" from unsaved
+  draft secrets; keep mode toggles local until Save
+- fix authenticate windows on menu-bar installs: floating frontmost sign-in window with
+  spinner and load-failure handling, improved command-sheet anchor, 5-minute browser
+  fallback and Volvo timeouts, debounced re-entrancy with restart feedback, strict
+  Volvo callback validation, silent window-close cancel, and mapped Volvo errors
+- put the remote-command authorization step in Settings → Accounts as well as under Remote
+  Controls, beside the account session it depends on, and make Settings search find it by
+  "authorize", "authorization" or "remote command": typing "authorize" previously matched no
+  section at all, so the one step that unblocks remote commands was the hardest one to reach
+- offer that authorization step on the refusal banner itself when a command is blocked for a
+  missing grant, instead of a sentence telling the reader to go find a control in another
+  section, and keep the banner up until it is answered or dismissed
+- answer "Authorize Remote Commands" in the window instead of only through a system notification:
+  the step is refused up front when the account session behind it cannot be refreshed, so the
+  browser no longer opens for a grant that verification would throw away, and every failure of the
+  flow now shows an alert saying which step failed and what fixes it instead of reading as a
+  button that did nothing
+- stop the live stream retrying a refused token exchange in the background all day: when the
+  authorization refresh itself fails with an expired session, or the server refuses a second
+  refreshed token, the stream now parks instead of cycling a 5 s retry and a 30 minute circuit,
+  the footer marks it as needing a sign-in rather than as reconnecting, and scheduled polling
+  keeps telemetry fresh until new credentials arrive
+- report reduced-guard locking where the car advertises it instead of hiding it behind the
+  Polestar 2 reference table, while keeping the control Volvo-only: the Polestar gRPC transport
+  has no reduced-guard command, so offering it would only fail on send
+- distinguish unspecified heater requests from explicit off values in the cabin overview;
+  label them as requests and explain that automatic heating may differ
+- prevent queued history, snapshot and activity writes from restoring erased vehicle data;
+  keep recording paused for the affected vehicles until database and local cleanup finish
+- retain legacy snapshots, charging baselines and command receipts when migration fails,
+  and roll back partially written migrations before retrying
+- make session-data deletion transactional and report local erasure failures separately
+  from credential-storage failures
+- preserve fresh snapshots during expired-cache cleanup and report SQLite read failures
+  instead of returning partial results or exporting an incomplete backup
+- stop stale charging planner evaluations after settings or vehicle changes, and bind
+  automatic charging commands to the vehicle used to calculate the plan
+- fetch missing historical electricity prices, retain recent history during daily refresh,
+  and schedule price refreshes independently for each zone
+- calculate tomorrow's electricity prices using Stockholm calendar days across daylight
+  saving changes
+- respect provider rate-limit deadlines when the Mac wakes or the network reconnects
+- let newly enabled sustained alerts notify about ongoing conditions, and preserve their
+  elapsed warning time across app restarts
+- deduplicate charging anomaly alerts per vehicle and respect mute, notification permission
+  and quiet-hours settings
+- fix the Korean History formatting crash and restore damaged translations, including
+  hidden-trip labels and counts, in every non-English locale
+- cancel pull-to-refresh when the drag reverses or leaves the scroll top, and evaluate
+  the final release position instead of a stale pull distance
+- fix the extracted AppDelegate protocol conformance that failed concurrency compilation
+- parse NUL-delimited Git paths correctly in the source-inventory check, including filenames
+  containing spaces, newlines or non-UTF-8 bytes
+- retain ambiguous battery field 12 as raw data instead of treating it as pack capacity;
+  keep unverified breakdown fields, unknown usage modes and future battery tags inspectable
+- keep Data Portal trip energy totals separate from energy used since charge, and retain
+  raw battery fields when live stream updates replace diagnostics
 - show Polestar battery, availability, target charge and amp limit as unknown when a gRPC
   reply is malformed or cut off, instead of a partial state that looks real
 - skip unrelated URLs on the Polestar sign-in page instead of posting the password to the
   first match; the target must now be a same-host resume path
 - reject a C3 discovery host that is not a plain domain name or has an invalid port
 - keep the other car renders when one render in the image list has an unexpected field
+- stop discarding Volvo charging data when `fuelType` is `NONE`; the energy endpoints are now
+  queried for those cars, while the fuel read still runs so a combustion car loses nothing
+- stop treating Volvo `UNSPECIFIED` as an active service or fluid warning
+- require the Approved-permissions scope for Volvo engine start and stop, not only for lock and
+  honk; the control could previously be tapped and then fail with a 403
+- stop offering climate setpoints, windows, trunk and charging controls on EX30, EX90 and ES90
+  that the public API cannot perform
+- carry OTA capability data through snapshot merges instead of dropping it after one refresh
+- budget Data Portal calls across the remaining UTC day, so the 120 s charging cadence no longer
+  exhausts the 10 000/day quota before midnight and leaves the app dark until reset
+- treat only `AUTHZ_VIN_UNAUTHORIZED` as revoked VIN access; a body-less 403 no longer arms the
+  hour-long block that suppressed every other portal domain
+- keep the VIN out of the Spotlight index and honour Screenshot Privacy Mode on the hero
+  registration plate
+- keep the odometer's 0.1 km precision instead of truncating the C3 metre reading
+- retain unknown climate error codes in the raw field list while decoding the known ones
+- restrict the range-based health estimate to battery-electric cars with a known model
+  reference, instead of scoring plug-in hybrids and unknown models against a borrowed WLTP
+  figure; a VIN-specific reference in Settings still covers trims the table never learned
 
 ### Changed
 
+- keep the remaining Polestar `GetMyCars` tags inspectable as raw wire records; the Info raw
+  field list drops the ten tags that now decode and keeps its other eighteen
+- rename the Info capabilities disclosure to "Unwired Backend Fields", because those tags are
+  decoded now and only lack a control; the specs climate list keeps the "Undecoded" wording for
+  the tag the app schema still does not name
+- give custom-tab icons descriptive VoiceOver labels in every supported language
+- reject blank translations, mismatched format arguments and newly untranslated keys in
+  localization checks; lower the regression baselines to the current translation backlog
+- run UI, surface and localization-usage checks in CI and local CI, with regression tests
+  for the validators and parallel packaging order
+- wait for stream events and advance test scheduling explicitly instead of using fixed
+  sleeps or polling in coordinator stream tests
+- build the app before creating a DMG under parallel make; use `make package-dmg` in CI
+  and release workflows to package an existing signed bundle without rebuilding it
 - build every Polestar gRPC request and read every reply through one shared builder and
   frame reader; all calls now send `TE: trailers` and `grpc-accept-encoding: identity`
 - look up the Polestar C3 host again every 12 hours, keeping the last working host if the
   lookup fails
 - decode the Polestar battery message from a field table instead of a hand-written switch
+
+### Removed
+
+- the `charging/is-at-charge-location` read and everything built on it, including the Charge
+  Location row and the "Here"/location pills. The backend answered `DATA_NOT_AVAILABLE` on
+  every call for this car (323 of 323 reads in one day of diagnostics), so the poll only
+  produced error traffic; the charge-location list it joined against is unchanged.
 
 ## [2.0.10] - 2026-10-19
 
@@ -70,44 +303,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 ### Changed
 
 - 
-
-## [Unreleased]
-
-### Added
-
-- add an Electricity section to Settings with a country choice (Sweden or other country);
-  market-linked pricing and the Charging Planner are offered for Sweden, every other country
-  uses the typed-in rate and the optional night tariff
-- add an Automatic electricity rate for Sweden that prices charging from the spot price for
-  your zone (SE1 to SE4) plus your provider's markup, with optional tax and grid fee in
-  öre/kWh and a VAT toggle, instead of a single typed-in price
-- choose the contract type for Automatic pricing: 15-minute price, as the market publishes
-  it, or hourly price, which averages the four quarters in each hour
-- choose a Swedish electricity provider (Vattenfall, Fortum, E.ON, Tibber, Bixia, Greenely,
-  Göteborg Energi, Skellefteå Kraft, Telge Energi, Jämtkraft, or other); the provider names
-  the contract and carries no prices, because markups differ per agreement
-- show the current price your settings produce next to the Automatic controls, with
-  fetching and unavailable states
-
-### Fixed
-
-- stop the repeated Keychain password prompts after rebuilding: `make run` now signs the debug
-  binary with the app's identifier and team, so it has the same Keychain identity as the
-  installed app instead of a code hash that changes on every build
-- skip writing a Keychain secret that has not changed, so an unchanged password, email or token
-  no longer rewrites its item and its access list on every sign-in
-
-### Changed
-
-- charge costs follow the chosen rate everywhere: the charge-to-target estimate on the
-  charging card, session costs, History totals, monthly and per-location breakdowns, cost
-  per distance, and the CSV export; changing the markup re-prices past sessions that have a
-  stored market cost, while sessions the market prices do not cover keep their saved cost
-  or your fixed rate
-- move the electricity rate and night tariff out of Display, Units & Energy, and the
-  Charging Planner out of Features, into the new Electricity section
-- the Charging Planner requires Sweden as well as its feature switch; choosing another
-  country stops it and keeps its settings for when Sweden is selected again
 
 ## [2.0.7] - 2026-10-19
 

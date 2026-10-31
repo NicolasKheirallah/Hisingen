@@ -230,13 +230,21 @@ struct VolvoDecodingTests {
 
     @Test
     func testPowertrainClassification() {
-        #expect(VolvoPowertrain.classify(fuelType: "NONE") == .unknown)
+        #expect(VolvoPowertrain.classify(fuelType: "NONE") == .bev)
         #expect(VolvoPowertrain.classify(fuelType: "ELECTRIC") == .bev)
         #expect(VolvoPowertrain.classify(fuelType: "PETROL/ELECTRIC") == .phev)
         #expect(VolvoPowertrain.classify(fuelType: "PETROL") == .ice)
         #expect(VolvoPowertrain.classify(fuelType: "DIESEL") == .ice)
         #expect(VolvoPowertrain.classify(fuelType: nil) == .unknown)
         #expect(VolvoPowertrain.classify(fuelType: "PETROL MHEV") == .mildHybrid)
+    }
+
+    @Test
+    func volvoNoWarningAndUnspecifiedAreNotFaults() {
+        #expect(!volvoWarningIsPresent("NO_WARNING"))
+        #expect(!volvoWarningIsPresent("UNSPECIFIED"))
+        #expect(!volvoWarningIsPresent(nil))
+        #expect(volvoWarningIsPresent("LOW"))
     }
 
     @Test

@@ -35,13 +35,18 @@ protocol VehicleProviding: RemoteCommandExecuting {
     /// augmented provider overlays it onto portal-served state so consumer-only metadata
     /// (model name, plate, owner greeting) survives refreshes that never touch the
     /// consumer API. Nil when the provider holds none.
-    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot?
     /// Telemetry only the consumer API serves, for the augmented provider to overlay onto
     /// portal-served state the same way `identitySnapshot` is. Nil when the provider has
     /// nothing to add (including a cold session), so a portal refresh is never poisoned
     /// by the overlay's own transport failures.
+}
+
+protocol VehicleMetadataProviding: Sendable {
+    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot?
     func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay?
 }
+
+extension PolestarAPI: VehicleMetadataProviding {}
 
 /// The consumer-API domains the M2M surface cannot serve. Carried behind the augmented
 /// provider's overlay so only one protocol surface grows if another domain appears.
@@ -51,13 +56,17 @@ struct ConsumerTelemetryOverlay: Sendable, Equatable {
 }
 
 extension VehicleProviding {
-    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot? { nil }
-    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay? { nil }
+    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot? {
+        await (self as? any VehicleMetadataProviding)?.identitySnapshot(for: vin, features: features)
+    }
+    func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay? {
+        await (self as? any VehicleMetadataProviding)?.consumerTelemetryOverlay(for: vin, features: features)
+    }
 }
 
 enum VehicleLiveUpdate: Equatable, Sendable {
     case connected(activeTransportStreams: Int)
-    case battery(GrpcBatteryExtras)
+    case battery(VehicleBatteryReading)
     case exterior(ExteriorSnapshot, reportedAt: Date?)
 }
 

@@ -11,10 +11,13 @@ struct GrpcHealthReport: Equatable, Sendable {
 
 struct GrpcOdometerReport: Equatable, Sendable {
     let odometerKm: Int?
+    let odometerKmPrecise: Double?
     let manualTripKm: Double?
     let automaticTripKm: Double?
     let manualAverageSpeedKmH: Int?
     let automaticAverageSpeedKmH: Int?
+    let sinceChargeTripKm: Double?
+    let sinceChargeAverageSpeedKmH: Int?
     let reportedAt: Date?
 }
 
@@ -33,11 +36,54 @@ extension PolestarGRPC {
     private static let weatherPath = "/weather.WeatherService/GetWeatherReport"
     private static let myCarsPath = "/car_information.CarInformation/GetMyCars"
 
+    static func validateKnownMessages(_ data: Data, paths: [[Int]]) throws {
+        let fields = try Protobuf.decode(data)
+        for field in fields where field.wire == 2 {
+            let tails = paths.filter { $0.first == field.number }.map { Array($0.dropFirst()) }
+            if !tails.isEmpty {
+                try validateKnownMessages(field.data, paths: tails.filter { !$0.isEmpty })
+            }
+        }
+    }
+
+    static func validateResponse(_ data: Data, path: String) throws {
+        let paths: [[Int]]
+        if path == myCarsPath {
+            paths = [[1], [1, 1]] + [34, 35, 36, 37, 39, 40, 42, 51, 74].map { [1, 1, $0] }
+                + [[1, 1, 35, 8], [1, 1, 35, 9], [1, 1, 37, 6], [1, 1, 37, 13]]
+        } else if path == softwarePath {
+            paths = [[1], [1, 2], [1, 5], [1, 8], [1, 8, 2], [1, 10]]
+        } else if path == softwareSchedulePath {
+            paths = [[1], [1, 3]]
+        } else if path == exteriorPath {
+            paths = [[3], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5]]
+                + (1...8).flatMap { [[3, 2, $0], [3, 3, $0], [3, 4, $0], [3, 5, $0]] }
+        } else if path == healthPath {
+            paths = [[3], [3, 1], [3, 46]]
+        } else if path == odometerPath {
+            paths = [[3], [3, 1]]
+        } else if path == climatePath {
+            paths = [[3], [3, 1], [3, 14], [3, 16]]
+        } else if path == globalChargeTimerPath {
+            paths = [[1], [1, 1], [1, 2]]
+        } else if path == chargeLocationsPath {
+            paths = [[3], [3, 4], [3, 10], [3, 10, 3], [3, 10, 4], [3, 10, 5],
+                     [3, 11], [3, 11, 3], [3, 11, 4]]
+        } else if path == climateTimersPath {
+            paths = [[3], [3, 3], [3, 6], [4], [4, 3], [4, 6], [5]]
+        } else {
+            paths = []
+        }
+        try validateKnownMessages(data, paths: paths)
+    }
+
     func fetchExterior(vin: String, accessToken: String) async throws -> ExteriorSnapshot? {
+        let generation = sessionGeneration
         let path = Self.exteriorPath
         let body = try await firstMessage(path: path, message: Self.vehicleRequest(vin),
                                            vin: vin, accessToken: accessToken)
-        guard let payload = Self.message(body, field: 3) else { return nil }
+        guard generation == sessionGeneration else { throw CancellationError() }
+        guard let payload = try Self.responsePayload(body, expectedVIN: vin) else { return nil }
         let current = Self.parseExterior(payload)
         guard let current else { return exteriorCache[vin] }
         let merged = current.merging(previous: exteriorCache[vin])
@@ -47,16 +93,16 @@ extension PolestarGRPC {
 
     func fetchHealth(vin: String, accessToken: String) async throws -> GrpcHealthReport? {
         let body = try await firstMessage(path: Self.healthPath, message: Self.healthRequest(vin),
-                                          vin: vin, accessToken: accessToken)
-        guard let payload = Self.message(body, field: 3) else { return nil }
+                                          vin: vin, accessToken: accessToken, completion: .firstSnapshot)
+        guard let payload = try Self.responsePayload(body, expectedVIN: vin) else { return nil }
         return Self.parseHealth(payload)
     }
 
     func fetchOdometer(vin: String, accessToken: String) async throws -> GrpcOdometerReport? {
         do {
             let body = try await firstMessage(path: Self.odometerPath, message: Self.healthRequest(vin),
-                                              vin: vin, accessToken: accessToken)
-            if let payload = Self.message(body, field: 3) {
+                                              vin: vin, accessToken: accessToken, completion: .firstSnapshot)
+            if let payload = try Self.responsePayload(body, expectedVIN: vin) {
                 let result = Self.parseOdometer(payload)
                 if result.odometerKm != nil || result.manualTripKm != nil || result.automaticTripKm != nil
                     || result.manualAverageSpeedKmH != nil || result.automaticAverageSpeedKmH != nil {
@@ -76,7 +122,13 @@ extension PolestarGRPC {
         return Self.parseDashboardOdometer(data)
     }
 
-    func fetchSoftware(vin: String, accessToken: String, locale: String) async throws -> VehicleSoftwareInfo? {
+    func fetchSoftware(vin: String, accessToken: String, locale: String, requireComplete: Bool = false, requireSoftwareIdentity: Bool = false) async throws -> VehicleSoftwareInfo? {
+        let generation = sessionGeneration
+        let readGeneration = (softwareReadGeneration[vin] ?? 0) &+ 1
+        softwareReadGeneration[vin] = readGeneration
+        otaSoftwareIDs[vin] = nil
+        otaSoftwareStates[vin] = nil
+        otaRawSoftwareStates[vin] = nil
         var request = Data()
         request.append(Protobuf.stringField(1, vin))
         request.append(Protobuf.stringField(2, locale))
@@ -85,7 +137,10 @@ extension PolestarGRPC {
         do {
             let body = try await firstMessage(path: Self.softwarePath, message: request,
                                               vin: vin, accessToken: accessToken)
+            guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
+            _ = try Protobuf.decode(body)
             if let payload = Self.message(body, field: 1), !payload.isEmpty {
+                _ = try Protobuf.decode(payload)
                 rememberSoftwareID(Self.string(Protobuf.fields(payload), 1), vin: vin)
                 let parsed = Self.parseSoftware(payload)
                 otaSoftwareStates[vin] = parsed.state
@@ -96,6 +151,10 @@ extension PolestarGRPC {
             try Task.checkCancellation()
             guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
             firstError = error
+        }
+
+        if requireSoftwareIdentity && otaSoftwareIDs[vin] == nil {
+            throw RemoteCommandError.missingContext
         }
 
         // `Scheduler`: 1 status, 2 relative_time, 3 scheduled_time, 4 software_id, 5 set_by.
@@ -112,15 +171,18 @@ extension PolestarGRPC {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
                                               vin: vin, accessToken: accessToken)
+            guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
+            _ = try Protobuf.decode(body)
             if let scheduler = Self.message(body, field: 1) {
+                _ = try Protobuf.decode(scheduler)
                 let fields = Protobuf.fields(scheduler)
                 scheduledAt = Self.timestamp(Self.message(fields, field: 3))
-                rememberSoftwareID(Self.string(fields, 4), vin: vin)
+                if otaSoftwareIDs[vin] == nil { rememberSoftwareID(Self.string(fields, 4), vin: vin) }
                 if let rawRelative = Self.varint(fields, 2) {
                     let signed = Int(bitPattern: UInt(truncatingIfNeeded: rawRelative))
                     if signed > 0 { relativeMinutes = signed }
                 }
-                if let setByValue = Self.varint(fields, 5), let setBy = ScheduleSetBy(rawValue: Int(setByValue)) {
+                if let setByValue = Self.varint(fields, 5), let intValue = Int(exactly: setByValue), let setBy = ScheduleSetBy(rawValue: intValue) {
                     scheduleSetBy = setBy
                 }
                 if scheduledAt != nil, otaSoftwareStates[vin] == nil {
@@ -133,6 +195,8 @@ extension PolestarGRPC {
             if firstError == nil { firstError = error }
         }
 
+        guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
+        if requireComplete, let firstError { throw firstError }
         if let info {
             var merged = info
             merged.scheduledAt = info.scheduledAt ?? scheduledAt
@@ -202,11 +266,11 @@ extension PolestarGRPC {
                 alias: string(f, 3),
                 latitude: latitude,
                 longitude: longitude,
-                ampLimit: Int(varint(f, 5) ?? 0),
-                minimumSoc: Int(varint(f, 6) ?? 0),
+                ampLimit: varint(f, 5).flatMap(Int.init(exactly:)) ?? 0,
+                minimumSoc: varint(f, 6).flatMap(Int.init(exactly:)) ?? 0,
                 optimisedChargingEnabled: (varint(f, 7) ?? 0) == 1,
-                optimisedChargingMode: Int(varint(f, 9) ?? 0),
-                kind: Int(varint(f, 12) ?? 0)
+                optimisedChargingMode: varint(f, 9).flatMap(Int.init(exactly:)) ?? 0,
+                kind: varint(f, 12).flatMap(Int.init(exactly:)) ?? 0
             )
         }
     }
@@ -216,7 +280,8 @@ extension PolestarGRPC {
         do {
             let body = try await firstMessage(path: Self.globalChargeTimerPath,
                                               message: Self.chronosRequest(vin),
-                                              vin: vin, accessToken: accessToken, host: .pccs)
+                                              vin: vin, accessToken: accessToken, host: .pccs,
+                                              completion: .firstSnapshot)
             if let timer = Self.message(body, field: 1), let parsed = Self.parseGlobalChargeTimer(timer) {
                 schedules.append(parsed)
             }
@@ -257,11 +322,13 @@ extension PolestarGRPC {
     /// version (`consumerSoftwareVersion`) – which `GetSoftwareInfo` does not provide during
     /// a rollout.
     func fetchMyCars(vin: String, accessToken: String) async throws -> VehicleOTACapabilities? {
+        let generation = sessionGeneration
         let body = try await myCarsBody(vin: vin, accessToken: accessToken)
+        guard generation == sessionGeneration else { throw CancellationError() }
         let capabilities = Self.parseMyCars(body, vin: vin)
         // Cache the backend-reported charging bounds so command validation can use the same
         // limits the vehicle itself advertises instead of hardcoded fallbacks.
-        if let capabilities { capabilityLimits[vin] = capabilities }
+        capabilityLimits[vin] = capabilities
         return capabilities
     }
 
@@ -284,7 +351,7 @@ extension PolestarGRPC {
     func fetchClimate(vin: String, accessToken: String) async throws -> VehicleClimateStatus? {
         let body = try await firstMessage(path: Self.climatePath, message: Self.vehicleRequest(vin),
                                           vin: vin, accessToken: accessToken)
-        guard let payload = Self.message(body, field: 3) else { return nil }
+        guard let payload = try Self.responsePayload(body, expectedVIN: vin) else { return nil }
         return Self.parseClimate(payload)
     }
 
@@ -299,7 +366,7 @@ extension PolestarGRPC {
     func fetchConnectivity(vin: String, accessToken: String) async throws -> VehicleConnectivity? {
         let body = try await firstMessage(path: Self.dashboardPath, message: Self.vehicleRequest(vin),
                                           vin: vin, accessToken: accessToken)
-        guard let payload = Self.message(body, field: 3) else { return nil }
+        guard let payload = try Self.responsePayload(body, expectedVIN: vin) else { return nil }
         let fields = Protobuf.fields(payload)
         let status: ConnectivityState
         switch Self.varint(fields, 1) {
@@ -353,7 +420,8 @@ extension PolestarGRPC {
         for (path, host) in Self.airQualityPaths {
             do {
                 let body = try await firstMessage(path: path, message: Self.healthRequest(vin),
-                                                  vin: vin, accessToken: accessToken, host: host)
+                                                  vin: vin, accessToken: accessToken, host: host,
+                                                  completion: path == Self.airQualityPaths[0].0 ? .firstSnapshot : .terminalStatus)
                 // The payload sits at field 3 on the verified response shape; probe the usual
                 // wrapper fields too so an alternate spelling still decodes.
                 let candidates = [
@@ -393,11 +461,31 @@ extension PolestarGRPC {
         case 3: state = .pending
         default: state = .unknown
         }
-        let errorRaw = Int(varint(fields, 13) ?? 0)
+        let errorRaw = varint(fields, 13).flatMap(Int.init(exactly:)) ?? 0
         let errorKind = AirCleaningError(rawValue: errorRaw) ?? (errorRaw > 0 ? .generic : nil)
         let hasAnyValue = [9, 10, 11, 14, 15, 16].contains { varint(fields, $0) != nil }
             || varint(fields, 6) != nil
         guard hasAnyValue else { return nil }
+        // Same posture as the climate parser: a field the decode did not consume stays
+        // visible as raw wire data instead of disappearing. Field 3 is classified (it
+        // duplicates field 1), so it is not unknown; a running status outside 1…3 or an
+        // error ordinal outside the decoded 0…5 is.
+        let decodedAirQualityFields: Set<Int> = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 14, 15, 16]
+        let unknownWireFields = fields.filter { field in
+            if field.number == 6 {
+                return field.wire != 0 || !(1...3).contains(field.varint)
+            }
+            if field.number == 13 {
+                switch field.wire {
+                case 0: return !(0...5).contains(field.varint)
+                case 2:
+                    let values = Protobuf.packedVarints(field.data) ?? []
+                    return values.isEmpty || !values.allSatisfy { (0...5).contains($0) }
+                default: return true
+                }
+            }
+            return !decodedAirQualityFields.contains(field.number)
+        }.map(PolestarGRPC.rawField)
         return VehicleAirQuality(
             cleaningState: state,
             airQualityIndex: positiveInt(varint(fields, 9)),
@@ -410,13 +498,14 @@ extension PolestarGRPC {
             reportedAt: timestamp(message(fields, field: 1)),
             startedAt: timestamp(message(fields, field: 4)),
             endingAt: timestamp(message(fields, field: 5)),
-            startReason: varint(fields, 7).flatMap { VehicleStartReason(rawValue: Int($0)) },
+            startReason: varint(fields, 7).flatMap(Int.init(exactly:)).flatMap(VehicleStartReason.init(rawValue:)),
             lastCycleValid: varint(fields, 8).map { $0 != 0 },
             errorKind: errorKind,
             // Field 2 verified live: it advances on vehicle wakes and at cycle end, i.e. the
             // last time the cabin air was actually measured (distinct from field 1, the
             // frame report time). Field 3 duplicates field 1 and stays ignored.
-            measuredAt: timestamp(message(fields, field: 2))
+            measuredAt: timestamp(message(fields, field: 2)),
+            unknownWireFields: unknownWireFields.isEmpty ? nil : unknownWireFields
         )
     }
 
@@ -446,20 +535,7 @@ extension PolestarGRPC {
                                                   message: message,
                                                   vin: vin, accessToken: accessToken, host: host)
 
-                let candidates = [
-                    body,
-                    Self.message(body, field: 5),
-                    Self.message(body, field: 1),
-                    Self.message(body, field: 3),
-                    Self.message(body, field: 2),
-                    Self.message(body, field: 4)
-                ].compactMap { $0 }
-
-                for candidate in candidates {
-                    if let loc = Self.parseLocation(candidate) {
-                        return loc
-                    }
-                }
+                if let location = Self.parseLocation(body) { return location }
             } catch {
                 try Task.checkCancellation()
                 guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
@@ -472,9 +548,9 @@ extension PolestarGRPC {
     func fetchWeather(vin: String, accessToken: String) async throws -> VehicleWeather? {
         if let location = try await fetchLocation(vin: vin, accessToken: accessToken),
            let lat = location.latitude, let lon = location.longitude,
-           abs(lat) > 0.001, abs(lon) > 0.001 {
+           lat.isFinite, lon.isFinite, (-90...90).contains(lat), (-180...180).contains(lon) {
             if let weather = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
-                .weather(latitude: lat, longitude: lon) {
+                .weatherWithForecast(latitude: lat, longitude: lon) {
                 return weather
             }
         }
@@ -491,17 +567,7 @@ extension PolestarGRPC {
                 let body = try await firstMessage(path: path,
                                                   message: message,
                                                   vin: vin, accessToken: accessToken, host: host)
-                let candidates = [
-                    body,
-                    Self.message(body, field: 1),
-                    Self.message(body, field: 3),
-                    Self.message(body, field: 2)
-                ].compactMap { $0 }
-                for candidate in candidates {
-                    if let weather = Self.parseWeather(candidate) {
-                        return weather
-                    }
-                }
+                if let weather = Self.parseWeather(body) { return weather }
             } catch {
                 try Task.checkCancellation()
                 guard Self.canTryAlternativeEndpoint(after: error) else { throw error }
@@ -511,7 +577,10 @@ extension PolestarGRPC {
     }
 
     static func parseExterior(_ data: Data) -> ExteriorSnapshot? {
-        let fields = Protobuf.fields(data)
+        let paths = [[1], [2], [3], [4], [5], [6], [7]]
+            + (1...4).flatMap { [[2, $0], [3, $0]] } + [[5, 1], [6, 1]]
+        guard (try? validateKnownMessages(data, paths: paths)) != nil,
+              let fields = try? Protobuf.decode(data) else { return nil }
         let isDigitalTwin = fields.contains { (2...16).contains($0.number) && $0.wire == 0 }
         var readings: [OpeningReading] = []
         var locked: Bool?
@@ -588,7 +657,11 @@ extension PolestarGRPC {
         let warningFields = [9, 10, 11, 12]
         // Polestar 5.11.1 Health: individual kPa readings are fields 39–42.
         // Reference pressures at 43/44 and nested statuses must never become wheel readings.
+        // They are the car's target for the axle, kept separate so "38 psi" can be read
+        // against "42 psi" instead of standing alone.
         let pressureFields = [39, 40, 41, 42]
+        let frontReference = positive(numeric(fields, 43))
+        let rearReference = positive(numeric(fields, 44))
         let positions = TyrePosition.allCases
         var tyres: [TyrePressure] = []
         for index in positions.indices {
@@ -602,7 +675,13 @@ extension PolestarGRPC {
             let pressure = numeric(fields, pressureFields[index]).flatMap {
                 $0.isFinite && $0 > 0 ? $0 : nil
             }
-            tyres.append(TyrePressure(position: positions[index], kilopascals: pressure, warning: warning))
+            let reference = index < 2 ? frontReference : rearReference
+            tyres.append(TyrePressure(
+                position: positions[index],
+                kilopascals: pressure,
+                warning: warning,
+                referenceKilopascals: reference
+            ))
         }
         var warnings: [VehicleWarning] = []
         var reportedWarnings: [VehicleWarning] = []
@@ -690,12 +769,20 @@ extension PolestarGRPC {
 
     static func parseOdometer(_ data: Data) -> GrpcOdometerReport {
         let fields = Protobuf.fields(data)
+        // Field 2 is metres. Keep the fraction for the precise odometer and the integer
+        // kilometre for the existing, coarser surfaces.
+        let odometerMetres = positiveInt(varint(fields, 2))
         return GrpcOdometerReport(
-            odometerKm: positiveInt(varint(fields, 2)).map { $0 / 1_000 },
+            odometerKm: odometerMetres.map { $0 / 1_000 },
+            odometerKmPrecise: odometerMetres.map { Double($0) / 1_000 },
             manualTripKm: positive(numeric(fields, 3)),
             automaticTripKm: positive(numeric(fields, 4)),
             manualAverageSpeedKmH: positiveInt(varint(fields, 5)),
             automaticAverageSpeedKmH: positiveInt(varint(fields, 6)),
+            // Since-charge trip and average speed. Absent on cars that do not report them;
+            // never synthesize a zero.
+            sinceChargeTripKm: positive(numeric(fields, 7)),
+            sinceChargeAverageSpeedKmH: positiveInt(varint(fields, 8)),
             reportedAt: timestamp(message(fields, field: 1))
         )
     }
@@ -703,11 +790,14 @@ extension PolestarGRPC {
     static func parseDashboardOdometer(_ data: Data) -> GrpcOdometerReport {
         let fields = Protobuf.fields(data)
         return GrpcOdometerReport(
-            odometerKm: positive(numeric(fields, 17)).map { Int($0.rounded()) },
+            odometerKm: positive(numeric(fields, 17)).flatMap { Int(exactly: $0.rounded()) },
+            odometerKmPrecise: positive(numeric(fields, 17)),
             manualTripKm: positive(numeric(fields, 18)),
             automaticTripKm: positive(numeric(fields, 19)),
             manualAverageSpeedKmH: nil,
             automaticAverageSpeedKmH: nil,
+            sinceChargeTripKm: nil,
+            sinceChargeAverageSpeedKmH: nil,
             reportedAt: nil
         )
     }
@@ -733,7 +823,7 @@ extension PolestarGRPC {
         // Field 5 is a nested message: `{1: estimated_install_duration_seconds}`.
         let installDuration = message(fields, field: 5)
             .flatMap { Protobuf.fields($0).first(where: { $0.number == 1 })?.varint }
-            .map { Int($0) }
+            .flatMap { Int(exactly: $0) }
 
         // `new_sw_version` is the only version string the backend returns, and its meaning
         // depends on `state`: while an update is pending it is the *target* version, and the
@@ -769,10 +859,12 @@ extension PolestarGRPC {
     /// Parses a `GetMyCarsResponse`: `{1: [MyCar]}` where `MyCar` = `{1: Car, 2: userIsLinked,
     /// 3: userIsOwner, 4: registrationPlate}`. Extracts the `Car` matching the VIN and reads
     /// the OTA + capability fields. The `Car` proto uses nested capability messages:
-    /// `36: Locks{5: supportsWindowControl, 6: supportsSunroofControl, 7: supportsTrunkControl,
-    ///  10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions, 9: amperageLimitSettings,
-    ///  8: targetChargeLevelSettings, 15: supportsChargeNow, 29: supportsPlugAndCharge}`,
-    /// `34: AirPurification{1: supportsRemoteStart}`, `16: honkFlashType (enum)`.
+    /// `36: Locks{1: lockType, 2: unlockType, 5: supportsWindowControl, 6: supportsSunroofControl,
+    ///  7: supportsTrunkControl, 10: supportsTrunkUnlock}`, `35: Charging{1: supportsChargingFunctions,
+    ///  9: amperageLimitSettings, 8: targetChargeLevelSettings, 10: chargeTimerType,
+    ///  13/16/17/18: per-location limits, 15: supportsChargeNow, 20: plugAndChargePcid,
+    ///  29: supportsPlugAndCharge}`, `34: AirPurification{1: supportsRemoteStart}`,
+    /// `37: ParkingClimatization{1: type, 3: maxRuntime}`, `16: honkFlashType (enum)`.
     static func myCarsRequest(vin: String) -> Data {
         vehicleRequest(vin)
     }
@@ -782,21 +874,23 @@ extension PolestarGRPC {
     /// `VehicleOTACapabilities.unknownWireFields` so the richest raw surface the backend
     /// offers loses nothing silently – mirroring the battery parser's unknown-field capture.
     static let decodedCarFields: Set<Int> = [
-        1, 2, 5, 6, 7, 9, 10, 16, 27, 32, 33, 34, 35, 36, 37, 39, 40, 42, 43, 46, 47,
-        50, 57, 62, 68, 70, 73, 74, 87
+        1, 2, 5, 6, 7, 9, 10, 16, 17, 20, 22, 26, 27, 29, 32, 33, 34, 35, 36, 37, 38, 39,
+        40, 42, 43, 44, 46, 47, 50, 51, 53, 55, 57, 62, 63, 68, 70, 73, 74, 79, 87
     ]
 
     /// Known sub-message field numbers by parent wire field. Parent numbers must all appear
     /// in `decodedCarFields`.
     static let decodedNestedCarFields: [Int: Set<Int>] = [
-        34: [1, 2, 3, 7, 8],                         // AirPurification
-        35: [1, 2, 3, 4, 8, 9, 11, 15, 16, 29, 36],  // Charging
-        36: [5, 6, 7, 10],                           // Locks
-        37: [6, 8, 9, 10, 13],                       // ClimateControlSettings
-        39: [1, 3],                                  // DigitalKey
-        40: [1, 5, 6],                               // Propulsion
-        42: [6],                                     // Infotainment
-        74: [6]                                      // RestrictedSoftware
+        34: [1, 2, 3, 7, 8],                              // AirPurification
+        35: [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 15, 16, 17, 18, 20, 27, 29, 36, 40, 41],   // Charging
+        36: [1, 2, 5, 6, 7, 10],                         // Locks
+        37: [1, 2, 3, 6, 8, 9, 10, 12, 13],              // ParkingClimatization capabilities
+        38: [1, 2],                                      // AccountLinking
+        39: [1, 3],                                      // DigitalKey
+        40: [1, 5, 6],                                   // Propulsion
+        42: [6],                                         // Infotainment
+        63: [1, 2, 3],                                   // Trips
+        74: [6]                                          // RestrictedSoftware
     ]
 
     /// Collects every undecoded field on the Car message, top-level and nested, as raw wire
@@ -820,6 +914,7 @@ extension PolestarGRPC {
     }
 
     static func parseMyCars(_ data: Data, vin: String) -> VehicleOTACapabilities? {
+        guard (try? validateResponse(data, path: myCarsPath)) != nil else { return nil }
         let outer = Protobuf.fields(data)
         for myCarField in outer where myCarField.number == 1 && myCarField.wire == 2 {
             let myCar = Protobuf.fields(myCarField.data)
@@ -835,12 +930,16 @@ extension PolestarGRPC {
             let supportsFullOtaUpdates = varint(car, 57) == 1
             let supportsCloudBasedOtaDownloadConsent = varint(car, 62) == 1
             let hasPerformanceSoftwareUpgrade = varint(car, 70) == 1
-            let honkFlashMode = varint(car, 16).flatMap { VehicleHonkFlashMode(rawValue: Int($0)) }
+            let honkFlashMode = varint(car, 16).flatMap(Int.init(exactly:)).flatMap(VehicleHonkFlashMode.init(rawValue:))
             let supportsHonkAndFlash = honkFlashMode?.permits(.honkAndFlash) == true
             let supportsFlash = honkFlashMode?.permits(.flashLights) == true
 
             // Nested Locks message (field 36)
             let locksData = message(car, field: 36).map(Protobuf.fields)
+            let climate = message(car, field: 37).map(Protobuf.fields)
+            // 36.2 RemoteUnlockType and 36.7/10 trunk booleans answer different questions: a car
+            // whose unlock type is TRUNK_ONLY still unlocks the tailgate, but not the doors.
+            let unlockType = intValue(locksData, 2).flatMap(RemoteUnlockType.init(rawValue:))
             let supportsWindowsControl = locksData?.first(where: { $0.number == 5 })?.varint == 1
             let supportsTrunkControl = locksData?.first(where: { $0.number == 7 })?.varint == 1
             let supportsTrunkUnlock = locksData?.first(where: { $0.number == 10 })?.varint == 1
@@ -863,9 +962,11 @@ extension PolestarGRPC {
                 || chargingData?.first(where: { $0.number == 8 && $0.wire == 0 })?.varint == 1
             let supportsChargeNowTimerOverride = chargingData?.first(where: { $0.number == 15 })?.varint == 1
             let supportsPlugAndCharge = chargingData?.first(where: { $0.number == 29 })?.varint == 1
+            let plugAndChargePcid = string(chargingData ?? [], 20).nilIfEmpty
 
             // Polestar 5.11.1 generated settings schemas: field 1 is the support flag.
-            // See docs/testing/polestar-mycars-field-map.md for field numbers and provenance.
+            // Field numbers are repo-internal; docs/research/POLESTAR_FIELDS.md records what the
+            // live frame corroborates and what stays unverified.
             let chargeAmperageMinLimit = plausibleLimit(
                 amperageSettings, field: 3, range: 2...64
             )
@@ -893,7 +994,7 @@ extension PolestarGRPC {
                 supportsUpdateStatus: supportsUpdateStatus,
                 hasPerformanceSoftwareUpgrade: hasPerformanceSoftwareUpgrade,
                 supportsTrunkControl: supportsTrunkControl,
-                supportsTrunkUnlock: supportsTrunkUnlock,
+                supportsTrunkUnlock: supportsTrunkUnlock || unlockType == .trunkOnly,
                 supportsHonkAndFlash: supportsHonkAndFlash,
                 supportsFlash: supportsFlash,
                 supportsChargingFunctions: supportsChargingFunctions,
@@ -906,7 +1007,12 @@ extension PolestarGRPC {
                 supportsWindowsControl: supportsWindowsControl,
                 supportsAirPurificationRemoteStart: supportsAirPurificationRemoteStart,
                 supportsPlugAndCharge: supportsPlugAndCharge,
+                plugAndChargeIdentifier: plugAndChargePcid,
                 supportsSunroofControl: supportsSunroofControl,
+                climatizationType: intValue(climate, 1).flatMap(VehicleClimatizationType.init(rawValue:)),
+                climatizationHeatingType: intValue(climate, 2).flatMap(VehicleClimatizationHeatingType.init(rawValue:)),
+                climatizationMaximumRuntimeMinutes: positiveInt(varint(climate ?? [], 3)),
+                supportsAutomaticSeatAndWheelHeating: varint(climate ?? [], 12).map { $0 != 0 },
                 userIsLinked: varint(myCar, 2).map { $0 != 0 },
                 userIsOwner: varint(myCar, 3).map { $0 != 0 },
                 registrationPlate: string(myCar, 4).nilIfEmpty
@@ -927,7 +1033,6 @@ extension PolestarGRPC {
             record(.tyrePressureValues, car, 50)
             record(.serviceWarnings, car, 87)
             record(.engineStart, car, 27)
-            let climate = message(car, field: 37).map(Protobuf.fields)
             let temperature = message(climate ?? [], field: 6).map(Protobuf.fields)
             record(.climateTemperature, temperature, 1)
             let frontSeats = varint(climate ?? [], 8).map { $0 != 0 }
@@ -941,6 +1046,45 @@ extension PolestarGRPC {
             if let mode = honkFlashMode, mode != .unspecified {
                 advertised[.honkAndFlash] = mode != .none
             }
+            // The vehicle's own enum fields say which controls exist, and on a car where the
+            // model-family table is wrong they are the only authority. Unknown ordinals are
+            // ignored so a newer backend cannot disable a control by adding a value.
+            switch intValue(locksData, 1) {           // Locks.lock_type
+            case 1:                                  // NONE
+                advertised[.locks] = false
+                advertised[.reducedGuardLock] = false
+            case 2:                                  // LOCK
+                advertised[.locks] = true
+                advertised[.reducedGuardLock] = false
+            case 3:                                  // LOCK_REDUCED_GUARD
+                advertised[.locks] = true
+                advertised[.reducedGuardLock] = true
+            default: break
+            }
+            switch unlockType {
+            case .noUnlock:                          // NONE: locking only
+                advertised[.remoteUnlock] = false
+            case .trunkOnly:                         // TRUNK_ONLY: the tailgate, not the doors
+                advertised[.remoteUnlock] = false
+                advertised[.trunk] = true
+            case .direct:                            // DIRECT: central unlock
+                advertised[.remoteUnlock] = true
+            default: break
+            }
+            switch intValue(chargingData, 10) {      // Charging.charge_timer_type
+            case 1:                                  // NONE: no charge timer at all
+                advertised[.chargingSchedule] = false
+            case 3:                                  // LOCATION_BASED: timers live on locations
+                advertised[.chargeLocations] = true
+            default: break
+            }
+            switch intValue(climate, 1) {            // ParkingClimatization.type
+            case 1:                                  // NONE
+                advertised[.climateStartStop] = false
+            case 2, 3:                               // HEATING, HEATING_AND_COOLING
+                advertised[.climateStartStop] = true
+            default: break
+            }
             capabilities.advertisedCapabilities = advertised
             let timers = message(climate ?? [], field: 13).map(Protobuf.fields) ?? []
             var settings = VehicleControlSettings()
@@ -948,6 +1092,9 @@ extension PolestarGRPC {
             settings.repeatedClimateTimers = varint(timers, 2).map { $0 != 0 }
             settings.singleClimateTimers = varint(timers, 8).map { $0 != 0 }
             settings.chargeLocationMaximum = positiveInt(varint(chargingData ?? [], 16))
+            settings.timersPerLocationMaximum = positiveInt(varint(chargingData ?? [], 13))
+            settings.departureTimesPerLocationMaximum = positiveInt(varint(chargingData ?? [], 18))
+            settings.locationDepartureTimes = varint(chargingData ?? [], 17).map { $0 != 0 }
             settings.locationAmperage = varint(amperageSettings ?? [], 2).map { $0 != 0 }
             settings.locationOptimization = varint(chargingData ?? [], 4).map { $0 != 0 }
             settings.temperatureMinimum = positiveInt(varint(temperature ?? [], 3))
@@ -991,6 +1138,7 @@ extension PolestarGRPC {
         result.chargePort = label(charging, 2, [1: "None", 2: "Left", 3: "Right"])
         result.batterySerial = string(charging, 3).nilIfEmpty
         result.batteryCapacityKwh = numeric(propulsion, 5).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        result.grossVehicleWeightRatingKg = numeric(car, 44).flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
         result.digitalKey = label(key, 1, [1: "None", 2: "Polestar 1", 3: "Polestar 2", 4: "CCC"])
         result.nfcReader = label(car, 68, [1: "None", 2: "Door handle", 3: "B-pillar"])
         let phones = nested(key, 3)
@@ -1010,6 +1158,83 @@ extension PolestarGRPC {
         result.restrictedSoftwareVersion = string(nested(car, 74), 6).nilIfEmpty
         if let contentCodes = string(car, 47).nilIfEmpty {
             result.contentCodes = contentCodes.split(separator: "-").map(String.init)
+        }
+        // Report-support booleans. `flag` reads nil when the field is absent, which proto3
+        // makes indistinguishable from false; the nil survives so the UI hides the row.
+        result.reportsAvgElectricConsumption = flag(car, 20)
+        result.reportsAvgSpeed = flag(car, 22)
+        result.reportsAvgSpeedLastTrip = flag(car, 53)
+        result.supportsDrivingJournal = flag(car, 26)
+        result.supportsStolenVehicleTracking = flag(car, 29)
+        result.reportsChargeLevelWhileCharging = flag(charging, 5)
+        result.reportsElectricRange = flag(charging, 7)
+        result.supportsChargeLocationsDepartureTimeMinChargeLevelSetting = flag(charging, 27)
+        // Car 51 `notification` carries fourteen booleans; only these five subfields have a
+        // verified name, so an unknown subfield never gains a guessed label.
+        let notification = nested(car, 51)
+        let notificationNames: [(Int, String)] = [
+            (1, L10n.text("Unlocked Reminder")),
+            (3, L10n.text("Charging Completed")),
+            (4, L10n.text("Charging Interrupted")),
+            (6, L10n.text("Climate Interrupted")),
+            (9, L10n.text("Theft"))
+        ]
+        let kinds = notificationNames.compactMap { flag(notification, $0.0) == true ? $0.1 : nil }
+        result.reportedNotificationKinds = kinds.isEmpty ? nil : kinds
+        // Car 55 `end_ownership_actions` is a packed repeated enum; the frame's own order is
+        // kept, and values with no verified name stay out of the list.
+        let actions = repeatedVarints(car, 55).compactMap { raw -> String? in
+            switch raw {
+            case 1: return L10n.text("Remove App Access")
+            case 2: return L10n.text("Remote Factory Reset")
+            case 3: return L10n.text("Revoke Internet Agreement")
+            case 6: return L10n.text("Revokes Digital Keys")
+            default: return nil
+            }
+        }
+        result.reportedEndOwnershipActions = actions.isEmpty ? nil : actions
+        // Car 17 `parking_assistance_type` (`RemoteParkingAssistanceType`): only ordinal 1
+        // (NONE) is recorded in repo evidence, so other ordinals fall back to the raw number.
+        result.parkingAssistance = label(car, 17, [1: "None"])
+        // Car 38 `account_linking`: subfield 2 carries the in-car linking type against the
+        // nine-value `InCarAccountLinkingType` table. Subfield 1 (support boolean) is absent
+        // on the captured frame and is not decoded.
+        let accountLinking = nested(car, 38)
+        result.inCarAccountLinking = label(accountLinking, 2, [
+            1: "None", 2: "MCA Sensus QR", 3: "SPA CMA Sensus QR", 4: "SPA CMA Android QR",
+            5: "SPA2 Android login", 6: "SPA2 Android QR", 7: "Geely Android QR",
+            8: "Zeekr Android QR", 9: "SPA3 Android QR"
+        ])
+        // Car 63 `trips`: one row from the kinds the car actually reports; an absent fuel
+        // flag on a battery-electric car must not read as a claimed capability.
+        let trips = nested(car, 63)
+        if !trips.isEmpty {
+            var tripKinds: [String] = []
+            if flag(trips, 1) == true { tripKinds.append("Electric Consumption") }
+            if flag(trips, 2) == true { tripKinds.append("Regeneration") }
+            if flag(trips, 3) == true { tripKinds.append("Fuel") }
+            result.tripReporting = tripKinds
+        }
+        result.supportsDevicePairing = flag(car, 79)
+        // Charging 35.40 `bidirectional_charging`: message presence is the advertisement.
+        // Subfield 4 (`transfer_limit_settings`) present but empty means no limits are
+        // configured; a non-empty submessage holds a layout this build cannot read and stays
+        // unknown rather than guessed at.
+        if let bidirectional = message(charging, field: 40) {
+            result.bidirectionalCharging = true
+            if let limits = message(bidirectional, field: 4), Protobuf.fields(limits).isEmpty {
+                result.bidirectionalTransferLimitsConfigured = false
+            }
+        }
+        // Charging 35.41 is a `google.protobuf.Duration`: {1: seconds (int64), 2: nanos
+        // (int32)}. An empty message is a zero duration and still earns its "0 min" row;
+        // an unreadable magnitude (e.g. a negative encoded duration) stays hidden.
+        if let duration = message(charging, field: 41) {
+            let durationFields = Protobuf.fields(duration)
+            let seconds = varint(durationFields, 1) ?? 0
+            let nanos = varint(durationFields, 2) ?? 0
+            let totalSeconds = Double(seconds) + Double(nanos) / 1_000_000_000
+            result.fastChargePreconditioningMinutes = Int(exactly: (totalSeconds / 60).rounded())
         }
         let lightFields = car.filter { $0.number == 73 }
         if !lightFields.isEmpty {
@@ -1076,27 +1301,30 @@ extension PolestarGRPC {
         let remaining = positiveInt(varint(fields, 3))
         let interiorTemperature = digitalTwin ? numeric(fields, 7) : nil
         let requestedTemperature = digitalTwin ? numeric(fields, 8) : nil
-        let driverSeat = varint(fields, 10).flatMap { $0 > 0 ? Int($0) : nil }
-        let passengerSeat = varint(fields, 11).flatMap { $0 > 0 ? Int($0) : nil }
-        let steeringWheel = varint(fields, 12).flatMap { $0 > 0 ? Int($0) : nil }
-        // Session-scoped timestamps: 14 = session start, 16 = session end. Field 16 was
-        // verified live to equal the report time plus the remaining minutes.
+        func requestedHeatingLevel(_ field: Int) -> Int? {
+            guard digitalTwin, let value = varint(fields, field), (1...4).contains(value) else { return nil }
+            return Int(value) - 1
+        }
+        let ventilation: String? = {
+            guard digitalTwin else { return nil }
+            switch varint(fields, 6) {
+            case 1: return "VENTILATION_COOLING"
+            case 2: return "VENTILATION_HEATING"
+            case 3: return "VENTILATION_NEUTRAL"
+            default: return nil
+            }
+        }()
         let sessionStartedAt = digitalTwin ? timestamp(message(fields, field: 14)) : nil
         let sessionEndsAt = digitalTwin ? timestamp(message(fields, field: 16)) : nil
         let activity: ClimateActivity
         if digitalTwin {
-            let active = running == 1
-            let starting = running == 3
-            if active || starting {
-                // Wire field 6 correlates with session activity (3 idle, 2 during a verified
-                // live heating session) but its enum is unresolved – it must NOT be read as a
-                // ventilation flag, which mislabelled real heating sessions as ventilating.
-                // Classify by reported vs requested temperature when both exist.
-                if let current = interiorTemperature, let requested = requestedTemperature,
-                   requested != current {
-                    activity = requested > current ? .heating : .cooling
-                } else {
-                    activity = active ? .active : .starting
+            if running == 3 {
+                activity = .starting
+            } else if running == 1 {
+                switch ventilation {
+                case "VENTILATION_HEATING": activity = .heating
+                case "VENTILATION_COOLING": activity = .cooling
+                default: activity = .active
                 }
             } else {
                 activity = .idle
@@ -1114,25 +1342,101 @@ extension PolestarGRPC {
             }
         }
         let timerTriggered = digitalTwin ? request == 3 : request == 2
-        // Retain every field this parser does not semantically decode (on the digital-twin
-        // shape: 4, 5, 6, 9, 13 – 6/9/13 are live-observed but unresolved) so their values
-        // accumulate for classification instead of disappearing.
+        // Field 15 is `start_reason` on the digital-twin frame. Its wire numbering differs
+        // from `VehicleStartReason`'s raw values (1 = car, 2 = remote, 3 = timer,
+        // 4 = keep climate), so map explicitly instead of round-tripping the raw value.
+        let startReason: VehicleStartReason? = {
+            guard digitalTwin else { return nil }
+            switch request {
+            case 1: return .manuallyFromCar
+            case 2: return .remote
+            case 3: return .timer
+            case 4: return .keepClimate
+            default: return nil
+            }
+        }()
+        // Field 4 is repeated `ErrorType` on the digital-twin frame; on the legacy frame the
+        // same number is the climate action, so this is scoped to digitalTwin.
+        let climateErrors: [String]? = {
+            guard digitalTwin else { return nil }
+            let names = repeatedVarints(fields, 4).compactMap { raw -> String? in
+                switch raw {
+                case 1: return L10n.text("Fuel level low")
+                case 2: return L10n.text("Battery level low")
+                case 3: return L10n.text("Not connected to power")
+                case 4: return L10n.text("No start needed")
+                case 5: return L10n.text("Service required")
+                case 6: return L10n.text("Temporarily unavailable")
+                case 7: return L10n.text("Persistent error")
+                case 8: return L10n.text("Maximum runtime reached")
+                default: return nil
+                }
+            }
+            return names.isEmpty ? nil : names
+        }()
+        // Field 5 is repeated `WarningType` on the digital-twin frame. Only 1 and 2 are defined.
+        let climateWarnings: [String]? = {
+            guard digitalTwin else { return nil }
+            let names = repeatedVarints(fields, 5).compactMap { raw -> String? in
+                switch raw {
+                case 1: return "BATTERY_LOW"
+                case 2: return "RUN_TIME_NEARING_LIMIT"
+                default: return nil
+                }
+            }
+            return names.isEmpty ? nil : names
+        }()
         let decodedClimateFields: Set<Int> = digitalTwin
-            ? [1, 2, 3, 7, 8, 10, 11, 12, 14, 15, 16]
+            ? [1, 2, 3, 4, 5, 7, 8, 14, 15, 16]
             : [1, 2, 3, 4]
-        let unknownWireFields = fields
-            .filter { !decodedClimateFields.contains($0.number) }
-            .map(PolestarGRPC.rawField)
+        let unknownWireFields = fields.filter { field in
+            if digitalTwin && field.number == 6 {
+                return field.wire != 0 || !(1...3).contains(field.varint)
+            }
+            if digitalTwin && (field.number == 4 || field.number == 5) {
+                // ErrorType 1…8 (field 4) and WarningType 1…2 (field 5) are decoded; anything
+                // else is a value this build does not understand and must stay visible in the
+                // raw disclosure.
+                let known: ClosedRange<UInt64> = field.number == 4 ? 1...8 : 1...2
+                switch field.wire {
+                case 0: return !known.contains(field.varint)
+                case 2:
+                    let values = Protobuf.packedVarints(field.data) ?? []
+                    return values.isEmpty || !values.allSatisfy { known.contains($0) }
+                default: return true
+                }
+            }
+            if digitalTwin && (9...13).contains(field.number) {
+                return field.wire != 0 || field.varint > 4
+            }
+            return !decodedClimateFields.contains(field.number)
+        }.map(PolestarGRPC.rawField)
         return VehicleClimateStatus(activity: activity, timeRemainingMinutes: remaining,
                                     timerTriggered: timerTriggered,
                                     interiorTemperatureCelsius: interiorTemperature,
                                     requestedTemperatureCelsius: requestedTemperature,
-                                    driverSeatHeatingLevel: driverSeat,
-                                    passengerSeatHeatingLevel: passengerSeat,
-                                    steeringWheelHeatingLevel: steeringWheel,
+                                    driverSeatHeatingLevel: requestedHeatingLevel(9),
+                                    passengerSeatHeatingLevel: requestedHeatingLevel(10),
+                                    steeringWheelHeatingLevel: requestedHeatingLevel(13),
+                                    rearLeftSeatHeatingLevel: requestedHeatingLevel(11),
+                                    rearRightSeatHeatingLevel: requestedHeatingLevel(12),
+                                    ventilation: ventilation,
                                     sessionStartedAt: sessionStartedAt,
                                     sessionEndsAt: sessionEndsAt,
-                                    unknownWireFields: unknownWireFields.isEmpty ? nil : unknownWireFields)
+                                    unknownWireFields: unknownWireFields.isEmpty ? nil : unknownWireFields,
+                                    errors: climateErrors,
+                                    climateWarnings: climateWarnings,
+                                    startReason: startReason)
+    }
+
+    /// Reads a repeated varint field whether the encoder wrote it packed (wire 2) or as
+    /// individual varints (wire 0). Climate error and warning lists can arrive either way.
+    private static func repeatedVarints(_ fields: [Protobuf.Field], _ number: Int) -> [UInt64] {
+        fields.filter { $0.number == number }.flatMap { field -> [UInt64] in
+            if field.wire == 0 { return [field.varint] }
+            if field.wire == 2, let values = Protobuf.packedVarints(field.data) { return values }
+            return []
+        }
     }
 
     static func parseClimateTimers(_ data: Data) -> [VehicleSchedule] {
@@ -1144,126 +1448,31 @@ extension PolestarGRPC {
             guard let id = string(values, 1).nilIfEmpty, !deleted.contains(id),
                   let time = dailyTime(message(values, field: 3)) else { continue }
             timers[id] = VehicleSchedule(backendID: id,
-                                         index: Int(varint(values, 2) ?? 0),
+                                         index: varint(values, 2).flatMap(Int.init(exactly:)) ?? 0,
                                          kind: .climate, startHour: time.0, startMinute: time.1,
                                          endHour: nil, endMinute: nil,
                                          weekdays: weekdays(message(values, field: 6)),
-                                         isActive: varint(values, 4) == 1)
+                                         isActive: varint(values, 4) == 1,
+                                         repeatsWeekly: varint(values, 5).map { $0 != 0 })
         }
         return timers.keys.sorted().compactMap { timers[$0] }
     }
 
 
-    static func parseLocation(_ data: Data) -> VehicleLocation? {
-        let fields = Protobuf.fields(data)
-
-        var lon: Double?
-        var lat: Double?
-        var tsMillis: UInt64?
-
-        if let f1 = fields.first(where: { $0.number == 1 }), f1.wire == 1 || f1.wire == 5 {
-            lon = numeric(fields, 1)
-            lat = numeric(fields, 2)
-            if let tsMsg = message(fields, field: 3) {
-                let tsFields = Protobuf.fields(tsMsg)
-                if let sec = varint(tsFields, 1) {
-                    tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
-                }
-            } else {
-                tsMillis = varint(fields, 3)
-            }
-        } else {
-            lon = numeric(fields, 2)
-            lat = numeric(fields, 3)
-            tsMillis = varint(fields, 4)
-        }
-
-        if (lat == nil || lon == nil), let subData = message(fields, field: 5) ?? message(fields, field: 1) ?? message(fields, field: 3) {
-            let subFields = Protobuf.fields(subData)
-            lon = lon ?? numeric(subFields, 1) ?? numeric(subFields, 2)
-            lat = lat ?? numeric(subFields, 2) ?? numeric(subFields, 3)
-            if tsMillis == nil {
-                if let tsSub = message(subFields, field: 3) {
-                    let tsFields = Protobuf.fields(tsSub)
-                    if let sec = varint(tsFields, 1) {
-                        tsMillis = sec * 1_000 + (varint(tsFields, 2) ?? 0) / 1_000_000
-                    }
-                } else {
-                    tsMillis = varint(subFields, 3) ?? varint(subFields, 4)
-                }
-            }
-        }
-
-        if lat == nil && lon == nil {
-            lon = numeric(fields, 1)
-            lat = numeric(fields, 2)
-        }
-
-        if let rawLat = lat, abs(rawLat) > 180 {
-            lat = rawLat > 1_000_000_000 ? rawLat / 10_000_000.0 : (rawLat > 100_000 ? rawLat / 1_000_000.0 : rawLat)
-        }
-        if let rawLon = lon, abs(rawLon) > 180 {
-            lon = rawLon > 1_000_000_000 ? rawLon / 10_000_000.0 : (rawLon > 100_000 ? rawLon / 1_000_000.0 : rawLon)
-        }
-
-        guard let validLat = lat, let validLon = lon, (abs(validLat) > 0.0001 || abs(validLon) > 0.0001) else {
-            return nil
-        }
-
-        let heading = [numeric(fields, 4), numeric(fields, 6), numeric(fields, 7), numeric(fields, 8)]
-            .compactMap { $0 }
-            .first(where: { val in
-                guard val >= 0 && val <= 360 else { return false }
-                if let ts = tsMillis, ts > 10_000_000 {
-                    return abs(val - Double(ts)) > 1000
-                }
-                return true
-            })
-        let speed = [numeric(fields, 5), numeric(fields, 7), numeric(fields, 8), numeric(fields, 9)]
-            .compactMap { $0 }
-            .first(where: { $0 >= 0 && $0 <= 300 })
-        let date = tsMillis.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1_000) : nil }
-        let altitude = numeric(fields, 6) ?? numeric(fields, 8)
-        let accuracy = numeric(fields, 7) ?? numeric(fields, 9)
-        let parkingBrake = varint(fields, 8).map { $0 != 0 } ?? varint(fields, 10).map { $0 != 0 }
-        let gear: String? = {
-            guard let g = varint(fields, 9) ?? varint(fields, 11) else { return nil }
-            switch g {
-            case 1: return "P"
-            case 2: return "R"
-            case 3: return "N"
-            case 4: return "D"
-            default: return nil
-            }
-        }()
-
-        return VehicleLocation(
-            latitude: validLat,
-            longitude: validLon,
-            heading: heading,
-            speed: speed,
-            timestamp: date,
-            altitudeMeters: altitude,
-            accuracyMeters: accuracy,
-            parkingBrakeEngaged: parkingBrake,
-            gear: gear
-        )
+    private static func timestampMilliseconds(seconds: UInt64, nanoseconds: UInt64) -> UInt64? {
+        guard nanoseconds < 1_000_000_000 else { return nil }
+        let (millis, overflow) = seconds.multipliedReportingOverflow(by: 1_000)
+        guard !overflow else { return nil }
+        let (result, additionOverflow) = millis.addingReportingOverflow(nanoseconds / 1_000_000)
+        return additionOverflow ? nil : result
     }
 
+    static func parseLocation(_ data: Data) -> VehicleLocation? {
+        PolestarLocationWeatherCodec.location(data)
+    }
 
     static func parseWeather(_ data: Data) -> VehicleWeather? {
-        let fields = Protobuf.fields(data)
-        let subData = message(fields, field: 1) ?? data
-        let subFields = Protobuf.fields(subData)
-
-        let millis = varint(subFields, 1).flatMap { $0 > 0 ? $0 : nil }
-        let timestamp = millis.map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000) }
-        let temp = numeric(subFields, 2)
-        let code = varint(subFields, 3).map(Int.init)
-        let condition = code.map(OpenMeteoWeatherClient.wmoDescription)
-
-        guard timestamp != nil || temp != nil else { return nil }
-        return VehicleWeather(temperatureCelsius: temp, condition: condition, timestamp: timestamp)
+        PolestarLocationWeatherCodec.weather(data)
     }
 
 
@@ -1298,6 +1507,11 @@ extension PolestarGRPC {
         guard let data, let seconds = varint(Protobuf.fields(data), 1), seconds > 0 else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
+    /// A numeric wire field as an `Int`, for ordinals and small limits where `UInt64` reads badly.
+    private static func intValue(_ fields: [Protobuf.Field]?, _ number: Int) -> Int? {
+        varint(fields ?? [], number).flatMap { Int(exactly: $0) }
+    }
+
     private static func positiveInt(_ value: UInt64?) -> Int? {
         guard let value, value > 0, value <= UInt64(Int.max) else { return nil }
         return Int(value)

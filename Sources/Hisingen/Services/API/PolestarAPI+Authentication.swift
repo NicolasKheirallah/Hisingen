@@ -19,24 +19,31 @@ extension PolestarAPI {
     func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {
         try Task.checkCancellation()
         guard !webAuthorization.isInProgress else { throw CancellationError() }
-        clearAccountState()
-        try keychain.deleteCommandSessionToken()
+        let candidateCommandToken = freshCommandAccessToken()
+        sessionEpoch &+= 1
         let epoch = sessionEpoch
+        webAuthorization.invalidate()
+        let flowGeneration = webAuthorization.generation
+        let commandRefresh = commandRefreshToken ?? (try? keychain.readCommandSessionToken())
+        let command = candidateCommand(candidateCommandToken, epoch: epoch, flowGeneration: flowGeneration)
         _ = redirectDelegate.takeCallback()
-        try await discoverOIDCConfiguration()
-        try requireSession(epoch)
-        let authorization = try await obtainAuthorizationCode(email: email, password: password)
-        try requireSession(epoch)
-        try await exchangeCodeForToken(authorization.code, verifier: authorization.verifier)
+        let candidate = await makeLoginCandidate()
+        try requireWebAuthorization(epoch: epoch, generation: flowGeneration)
+        let snapshot = try await candidate.password(email: email, password: password, preferredVIN: preferredVIN, command: command)
+        try requireWebAuthorization(epoch: epoch, generation: flowGeneration)
+        await grpc.invalidateDiscoveredHost()
+        try requireWebAuthorization(epoch: epoch, generation: flowGeneration)
+        try commitCandidate(snapshot, commandRefresh: commandRefresh)
+        let committedEpoch = sessionEpoch
+        if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
+        try requireSession(committedEpoch)
+        if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
+        try requireSession(committedEpoch)
         // Remote-command authorization (the command client) is a separate, explicit step the
         // user triggers from Settings – see `beginCommandAuthorization()`/
         // `completeCommandAuthorization(callbackURL:)` and `SignInCoordinator.beginPolestarCommandAuthorization()`.
         // It opens a real browser instead of reusing this sign-in's password, so it can't be
         // completed silently here.
-        try await fetchCarInfo(preferredVIN: preferredVIN)
-        if features.contains(.vehicleImage), let activeVIN = selectedVIN { await fetchCarImage(vin: activeVIN) }
-        if features.contains(.ownerGreeting) { await fetchOwnerInfo() }
-        try requireSession(epoch)
     }
 
     /// Resolves the command-client access token, refreshing silently from the stored refresh
@@ -65,27 +72,48 @@ extension PolestarAPI {
         } catch {
             // A locked or unreadable Keychain does not mean "never authorized": the token may be
             // there, so report storage trouble instead of sending the user back to Settings.
-            logger.error("Polestar command token could not be read from Keychain: \(String(describing: error), privacy: .public)")
+            logger.error("Polestar command token could not be read from Keychain: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             return .storageFailure
         }
-        guard let refresh = stored, !refresh.isEmpty, tokenEndpoint != nil else { return .notAuthorized }
-        commandTokens.refreshToken = refresh
+        guard let refresh = stored, !refresh.isEmpty else { return .notAuthorized }
+        // Cold start: discovery hasn't run yet (e.g. augmented telemetry-only launch).
+        // A missing endpoint means "try again after discovery", not "never authorized".
+        if tokenEndpoint == nil {
+            do {
+                try await discoverOIDCConfiguration()
+            } catch {
+                return .unavailable
+            }
+            guard tokenEndpoint != nil else { return .unavailable }
+        }
+        // Do not overwrite an in-memory rotated token with a stale Keychain value:
+        // a concurrent clearCommandAuthorization + in-flight refresh may have already
+        // persisted a rotation. Prefer live memory when present.
+        if commandTokens.refreshToken == nil {
+            commandTokens.refreshToken = refresh
+        }
         do {
             switch try await commandTokens.refresh(
-                .renewalWindow,
+                .renewalWindow, now: now(),
                 epochIsCurrent: { [self] in
                     guard await isSessionCurrent(requestEpoch) else { return false }
                     return await commandAuthorization.isCurrent(commandEpoch)
                 },
                 grant: { [self] in try await refreshCommandGrant(requestEpoch: requestEpoch, commandEpoch: commandEpoch) }
             ) {
-            case .notNeeded:
-                if let token = commandAccessToken { return .authorized(token) }
-                return .notAuthorized
-            case .refreshed:
-                if let token = commandAccessToken { return .authorized(token) }
-                return .unavailable
+            case .notNeeded, .refreshed:
+                guard let token = commandAccessToken else { return .unavailable }
+                if verifiedCommandToken?.token != token || verifiedCommandToken?.epoch != requestEpoch {
+                    let account = try await verifyCommandAccount(accessToken: token)
+                    try requireSession(requestEpoch)
+                    guard commandAuthorization.isCurrent(commandEpoch), commandAccessToken == token else {
+                        throw CancellationError()
+                    }
+                    verifiedCommandToken = (token, requestEpoch, account.sub)
+                }
+                return .authorized(token)
             case .deadGrant:
+                guard isSessionCurrent(requestEpoch), commandAuthorization.isCurrent(commandEpoch) else { return .unavailable }
                 // The refresh token itself is dead (invalid_grant / 401). Retrying it every
                 // command just re-fails; drop it so the UI flips to "not authorized" and the
                 // user is pointed at "Authorize Remote Commands" once.
@@ -93,6 +121,9 @@ extension PolestarAPI {
                 clearCommandAuthorization()
                 return .notAuthorized
             }
+        } catch let error as PolestarError where error.isCommandAccountMismatch {
+            if isSessionCurrent(requestEpoch), commandAuthorization.isCurrent(commandEpoch) { clearCommandAuthorization() }
+            return .notAuthorized
         } catch is CancellationError {
             return .unavailable
         } catch is KeychainError {
@@ -101,7 +132,7 @@ extension PolestarAPI {
         } catch {
             // Transient: offline, 5xx, rate limit, decode. The authorization is probably
             // still good – keep the stored refresh token and let a later command retry.
-            logger.warning("Polestar command-token refresh failed transiently: \(String(describing: error), privacy: .public)")
+            logger.warning("Polestar command-token refresh failed transiently: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             return .unavailable
         }
     }
@@ -124,42 +155,63 @@ extension PolestarAPI {
         ])
         let token = try await Self.requestToken(request: request, session: session,
                                                 invalidReason: .expiredSession,
-                                                diagnosticLog: diagnosticLog)
+                                                diagnosticLog: diagnosticLog,
+                                                deadGrantReason: .callbackRejected,
+                                                malformedRotation: { [self] rotated in
+            try await preserveCommandRotation(rotated, replacing: refresh, epoch: requestEpoch,
+                                              generation: commandEpoch)
+        })
         guard isSessionCurrent(requestEpoch), commandAuthorization.isCurrent(commandEpoch) else {
             throw CancellationError()
         }
         // Rotation already happened at the server, so the presented token is dead whatever happens
         // next. Keep the rotated token in memory and in the Keychain before verification: a transient
         // verification failure must not leave the rotated-out token behind for a restart to replay.
-        // A definitive account mismatch is still a dead grant to the lifecycle, which clears it.
+        // Only a definitive account mismatch is a dead grant to `commandTokens`; a failure to verify
+        // because the consumer session is missing or stale is transient and keeps the grant.
         let rotated = token.refreshToken ?? refresh
         commandTokens.refreshToken = rotated
         // A locked Keychain surfaces as a storage failure instead of a session a restart would lose.
         try saveCommandToken(rotated)
-        try await verifyCommandAccount(accessToken: token.accessToken)
+        let account = try await verifyCommandAccount(accessToken: token.accessToken)
+        try requireSession(requestEpoch)
+        guard commandAuthorization.isCurrent(commandEpoch) else { throw CancellationError() }
+        verifiedCommandToken = (token.accessToken, requestEpoch, account.sub)
         return TokenLifecycle.Grant(accessToken: token.accessToken,
                                     refreshToken: token.refreshToken,
                                     expiresIn: TimeInterval(token.expiresIn))
     }
 
+    func preserveCommandRotation(_ rotated: String, replacing previous: String,
+                                 epoch: Int, generation: UInt) throws {
+        try requireSession(epoch)
+        guard commandAuthorization.isCurrent(generation), commandRefreshToken == previous else {
+            throw CancellationError()
+        }
+        commandRefreshToken = rotated
+        try saveCommandToken(rotated)
+    }
+
     /// Invalidates in-flight grants and memory state; restoration may still use the Keychain.
     func invalidateCommandAuthorization() {
         commandAuthorization.invalidate()
+        verifiedCommandToken = nil
         commandTokens.reset()
     }
 
     func clearCommandAuthorization() {
         invalidateCommandAuthorization()
         do { try keychain.deleteCommandSessionToken() } catch {
-            logger.error("Polestar command token could not be deleted from Keychain: \(String(describing: error), privacy: .public)")
+            logger.error("Polestar command token could not be deleted from Keychain: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
     }
 
     /// See `VehicleProviding.hasWarmSession`. A stored refresh token plus known vehicles and a
     /// discovered token endpoint is enough for `fetchVehicleState` to run; the access token is
-    /// refreshed lazily inside that path.
+    /// refreshed lazily inside that path. Manual-VIN fallback does not count – it means
+    /// discovery returned empty.
     var hasWarmSession: Bool {
-        refreshToken != nil && tokenEndpoint != nil && !cars.isEmpty
+        refreshToken != nil && tokenEndpoint != nil && !cars.isEmpty && discoverySucceeded
     }
 
     /// Resolves the stored credential that resumes the consumer API. Token-free for
@@ -193,6 +245,8 @@ extension PolestarAPI {
         let isLiveGrant = accessToken != nil && refreshToken == token
         clearAccountState(keepRefreshToken: true, keepAccessToken: isLiveGrant)
         let epoch = sessionEpoch
+        await grpc.invalidateDiscoveredHost()
+        try requireSession(epoch)
         do {
             if let commandRefresh = try keychain.readCommandSessionToken(), !commandRefresh.isEmpty {
                 commandRefreshToken = commandRefresh
@@ -200,7 +254,7 @@ extension PolestarAPI {
         } catch {
             // Not fatal to the web session: `commandClientAuthorization` reads the Keychain again when a
             // remote command needs it, and reports the failure then.
-            logger.error("Polestar command token could not be read during restore: \(String(describing: error), privacy: .public)")
+            logger.error("Polestar command token could not be read during restore: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
         try await discoverOIDCConfiguration()
         try requireSession(epoch)
@@ -244,8 +298,11 @@ extension PolestarAPI {
         let endpoint = revocationEndpoint
         let revocationConfiguration = session.configuration
         resetLocalSession()
+        keychain.invalidateMemoryCache()
+        // A new account must not inherit the old account's VDMS stand-down.
+        backoffs.unblock(PolestarAPI.discoveryBackoff)
         var storageError: Error?
-        for delete in [keychain.deleteCommandSessionToken, keychain.deleteSessionToken, keychain.deletePassword] {
+        for delete in [keychain.deleteCommandSessionToken, keychain.deleteSessionToken, keychain.deletePassword, keychain.deleteEmail] {
             do { try delete() } catch { storageError = storageError ?? error }
         }
         // Local state is gone before the first suspension. Revocation owns a separate
@@ -278,6 +335,11 @@ extension PolestarAPI {
         if commandAuthorization.pendingState == state { invalidateCommandAuthorization() }
     }
 
+    func requireWebAuthorization(epoch: Int, generation: UInt) throws {
+        try requireSession(epoch)
+        guard webAuthorization.isCurrent(generation) else { throw CancellationError() }
+    }
+
     func requireSession(_ epoch: Int) throws {
         try Task.checkCancellation()
         guard epoch == sessionEpoch else { throw CancellationError() }
@@ -288,7 +350,7 @@ extension PolestarAPI {
     /// replaced it.
     func isSessionCurrent(_ epoch: Int) -> Bool { epoch == sessionEpoch }
 
-    struct AccountIdentity: Decodable {
+    struct AccountIdentity: Decodable, Sendable {
         let sub: String
         let email: String?
         let emailVerified: Bool?
@@ -306,11 +368,24 @@ extension PolestarAPI {
         }
     }
 
-    func verifyCommandAccount(accessToken commandToken: String) async throws {
+    @discardableResult
+    func verifyCommandAccount(accessToken commandToken: String) async throws -> AccountIdentity {
         let epoch = sessionEpoch
+        // There is nothing to compare against without a consumer session, and asking for a token
+        // would report a *stale* session (`expiredSession`) for what is really "no session at all".
+        if accessToken == nil, refreshToken == nil {
+            throw PolestarError.authenticationRequired(.noStoredSession)
+        }
         try await refreshTokenIfNeeded()
         try requireSession(epoch)
-        guard let baseToken = accessToken, let endpoint = userinfoEndpoint else {
+        var endpoint = userinfoEndpoint
+        if endpoint == nil {
+            // Discovery may not have run yet on a cold start; retry once before
+            // reporting a missing session.
+            try? await discoverOIDCConfiguration()
+            endpoint = userinfoEndpoint
+        }
+        guard let baseToken = accessToken, let endpoint else {
             throw PolestarError.authenticationRequired(.noStoredSession)
         }
         func identity(token: String) async throws -> AccountIdentity {
@@ -321,7 +396,8 @@ extension PolestarAPI {
                 operation: "account verification", provider: .polestar,
                 diagnosticLog: diagnosticLog)
             try validateHTTP(response, operation: "account verification")
-            let identity = try JSONDecoder().decode(AccountIdentity.self, from: data)
+            let identity = try PolestarDecoding.decode(AccountIdentity.self, from: data,
+                operation: "account verification", logger: logger)
             guard !identity.sub.isEmpty else { throw PolestarError.authenticationRequired(.callbackRejected) }
             return identity
         }
@@ -331,6 +407,7 @@ extension PolestarAPI {
         guard base.matches(command) else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
+        return base
     }
 
     func resolvedVIN(preferred: String?) -> String? {
@@ -341,6 +418,14 @@ extension PolestarAPI {
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {
         imagePreparationAttempts[vin] = nil
         ownerInfoPrepared = false
+        ownerInfoRetryAt = nil
         try await prepareVehicle(vin: vin, features: features)
+    }
+}
+
+private extension PolestarError {
+    var isCommandAccountMismatch: Bool {
+        if case .authenticationRequired(.callbackRejected) = self { return true }
+        return false
     }
 }

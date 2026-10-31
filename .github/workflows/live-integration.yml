@@ -13,7 +13,7 @@ on:
           - polestar
           - volvo
       soak_seconds:
-        description: "Stream soak duration in seconds (default 600; multi-hour runs e.g. 14400)"
+        description: "Stream soak duration in seconds (60–1800; longer soaks run locally)"
         required: false
         default: "600"
 
@@ -23,20 +23,42 @@ permissions:
 concurrency:
   group: live-account-test
   cancel-in-progress: false
+  queue: max
 
 jobs:
+  validate-inputs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out validators
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate hosted soak budget
+        env:
+          SOAK_SECONDS: ${{ inputs.soak_seconds }}
+        run: python3 Scripts/ci-summary.py soak "$SOAK_SECONDS"
+
   live-polestar:
+    needs: validate-inputs
     if: inputs.provider == 'all' || inputs.provider == 'polestar'
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     environment: live-integration
+    env:
+      HISINGEN_BUILD_CONFIGURATION: fixture
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Select available Xcode toolchain
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+
+      - name: Select pinned Xcode toolchain
         run: sh Scripts/select-xcode.sh
 
       - name: Verify Polestar credentials & toolchain
@@ -52,28 +74,37 @@ jobs:
       - name: Generate build configuration
         run: sh Scripts/inject-secrets.sh
 
-      - name: Run live Polestar read-only integration tests
+      - name: Run live Polestar account phases sequentially
         env:
           HISINGEN_TEST_EMAIL: ${{ secrets.HISINGEN_TEST_EMAIL }}
           HISINGEN_TEST_PASSWORD: ${{ secrets.HISINGEN_TEST_PASSWORD }}
           HISINGEN_TEST_VIN: ${{ secrets.HISINGEN_TEST_VIN }}
           HISINGEN_SOAK_SECONDS: ${{ inputs.soak_seconds }}
-        run: >-
-          swift test --disable-xctest --enable-swift-testing
-          --filter "LivePolestarReadOnlyIntegrationTests|LivePolestarStreamSoakTests"
+        run: |
+          set -euo pipefail
+          HISINGEN_TEST_OUTPUT_DIR="$RUNNER_TEMP/live-readonly" sh Scripts/test.sh --filter LivePolestarReadOnlyIntegrationTests --no-parallel
+          HISINGEN_TEST_OUTPUT_DIR="$RUNNER_TEMP/live-soak" sh Scripts/test.sh --filter LivePolestarStreamSoakTests --no-parallel
 
   live-volvo:
+    needs: validate-inputs
     if: inputs.provider == 'all' || inputs.provider == 'volvo'
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: live-integration
+    env:
+      HISINGEN_BUILD_CONFIGURATION: fixture
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Select available Xcode toolchain
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+
+      - name: Select pinned Xcode toolchain
         run: sh Scripts/select-xcode.sh
 
       - name: Verify Volvo credentials & toolchain
@@ -100,6 +131,4 @@ jobs:
           HISINGEN_TEST_VOLVO_VCC_API_KEY: ${{ secrets.HISINGEN_TEST_VOLVO_VCC_API_KEY }}
           HISINGEN_TEST_VOLVO_REFRESH_TOKEN: ${{ secrets.HISINGEN_TEST_VOLVO_REFRESH_TOKEN }}
           HISINGEN_TEST_VOLVO_VIN: ${{ secrets.HISINGEN_TEST_VOLVO_VIN }}
-        run: >-
-          swift test --disable-xctest --enable-swift-testing
-          --filter LiveVolvoReadOnlyIntegrationTests
+        run: sh Scripts/test.sh --filter LiveVolvoReadOnlyIntegrationTests --no-parallel

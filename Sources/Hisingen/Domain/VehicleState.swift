@@ -15,6 +15,9 @@ struct VehicleState: Codable, Equatable, Sendable {
     var airQuality: VehicleAirQuality? = nil
     var weather: VehicleWeather? = nil
     var location: VehicleLocation? = nil
+    /// Derived during the merge from `location` and the saved charge locations. Not persisted:
+    /// the cached copy drops `location`, so a restored snapshot never claims a stale spot.
+    var chargeLocationPresence: ChargeLocationPresence? = nil
     var probedCapabilities: VehicleProbedCapabilities? = nil
 
     var otaCapabilities: VehicleOTACapabilities? = nil
@@ -65,13 +68,10 @@ struct VehicleState: Codable, Equatable, Sendable {
         var cachedEnergy = energy
         cachedEnergy.locations = []
         cachedEnergy.sessions = []
-        // Presence flags are point-in-time facts about a live refresh, exactly like the
-        // location reading above: restoring them at launch would show "Here"/"Charge Now"
-        // pills computed hours ago.
-        cachedEnergy.isAtChargeLocation = nil
-        cachedEnergy.currentChargeLocationName = nil
+        // The charge-now flag is a point-in-time fact about a live refresh, exactly like the
+        // cached rows above: restoring it at launch would show a "Charge Now" pill computed
+        // hours ago.
         cachedEnergy.chargeNowActive = nil
-        cachedEnergy.arrivedAtLocationDate = nil
 
         var cachedIdentity = identity
         cachedIdentity.registrationNo = nil
@@ -82,6 +82,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         var cachedFreshness = freshness
         cachedFreshness.unavailableFeatures = []
         cachedFreshness.readingDates[.location] = nil
+        cachedFreshness.readingObservations?[.location] = nil
 
         return VehicleState(
             energy: cachedEnergy,

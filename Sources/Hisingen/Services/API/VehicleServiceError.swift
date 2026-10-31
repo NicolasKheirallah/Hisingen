@@ -20,6 +20,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
 
     case temporarilyUnavailable(provider: VehicleBrand, service: String)
     case secureStorage
+    case commandOutcomeUnknown(operation: String)
+    case localDataErasure
     /// macOS is waiting for the owner to approve Keychain access. The stored credential is
     /// probably fine; retrying before the approval cannot succeed.
     case keychainConsentRequired
@@ -63,6 +65,10 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
             return L10n.text("The vehicle service returned an unexpected response.")
         case .secureStorage:
             return L10n.text("Hisingen couldn't update its protected Keychain session.")
+        case .commandOutcomeUnknown:
+            return L10n.text("The command may have reached the vehicle. Check its status before trying again.")
+        case .localDataErasure:
+            return L10n.text("Local vehicle data could not be erased. Try again in Privacy & Data settings.")
         case .keychainConsentRequired:
             return L10n.text("macOS needs your approval to read the saved sign-in. Approve the Keychain prompt, then refresh.")
         case .notConfigured:
@@ -104,6 +110,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
              .authenticationRequired(_, .callbackRejected),
              .notConfigured,
              .secureStorage,
+             .commandOutcomeUnknown,
+             .localDataErasure,
              .keychainConsentRequired:
             return false
         default:

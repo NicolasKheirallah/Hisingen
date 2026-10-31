@@ -1,0 +1,109 @@
+{
+  "source_revision": "43a734327a2ab171c5f3d6f217242d0faacde8a2",
+  "fixtures": [
+    {
+      "file": "polestar-lw-compact.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "raw compact",
+      "endpoint": "GetLastKnownLocation / GetLastParkedLocation",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/services/location.py",
+      "expected": {
+        "longitude": -12.5,
+        "latitude": 55.5,
+        "timestamp_seconds": 2000000000.5
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-wrapped-location.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "compact in field 2",
+      "endpoint": "GetLastKnownLocation / GetLastParkedLocation",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/services/location.py",
+      "expected": {
+        "longitude": -12.5,
+        "latitude": 55.5,
+        "timestamp_seconds": 2000000000.5
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-wrapped-location-5.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "compact in field 5",
+      "endpoint": "GetLastKnownLocation / GetLastParkedLocation",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/services/location.py",
+      "expected": {
+        "longitude": -12.5,
+        "latitude": 55.5,
+        "timestamp_seconds": 2000000000.5
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-shifted.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "raw shifted",
+      "endpoint": "GetLastKnownLocation / GetLastParkedLocation",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/services/location.py",
+      "expected": {
+        "longitude": -12.5,
+        "latitude": 55.5,
+        "timestamp_seconds": 2000000000
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-weather.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "raw weather report",
+      "endpoint": "GetWeatherReport",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/models/weather.py",
+      "expected": {
+        "temperature_celsius": -5.5,
+        "timestamp_seconds": 2000000000
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-wrapped-weather.bin",
+      "provenance": "synthetic regression vector",
+      "layout": "weather report in field 1",
+      "endpoint": "GetWeatherReport",
+      "reference": "https://github.com/kildahldev/unofficial-polestar-api/blob/43a734327a2ab171c5f3d6f217242d0faacde8a2/src/polestar_api/services/weather.py",
+      "expected": {
+        "temperature_celsius": -5.5,
+        "timestamp_seconds": 2000000000
+      },
+      "validation": "synthetic decoding test; not verified against a vehicle"
+    },
+    {
+      "file": "polestar-lw-p2-owner-location.bin",
+      "provenance": "sanitized read-only owner capture, Polestar 2 model year 2023, 2026-10-31; synthetic values",
+      "layout": "shifted coordinates and milliseconds plus field 5 compact coordinates and Timestamp",
+      "expected": {
+        "longitude": -12.5,
+        "latitude": 55.5,
+        "timestamp_seconds": 2000000000
+      },
+      "sanitization": "outer field 1 removed; all values replaced",
+      "validation": "capture topology verified; identifying values removed"
+    },
+    {
+      "file": "polestar-lw-p2-owner-weather.bin",
+      "provenance": "sanitized read-only owner capture, Polestar 2 model year 2023, 2026-10-31; synthetic values",
+      "layout": "field 1 weather report",
+      "expected": {
+        "temperature_celsius": -5.5,
+        "timestamp_seconds": 2000000000
+      },
+      "sanitization": "nested field 3 removed; all values replaced",
+      "validation": "capture topology verified; identifying values removed"
+    }
+  ],
+  "real_model_coverage": {
+    "Polestar 2": "one sanitized owner capture, model year 2023; location and weather topology only",
+    "Polestar 3": "missing",
+    "Polestar 4": "missing"
+  }
+}

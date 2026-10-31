@@ -14,9 +14,9 @@ extension PolestarAPI {
         guard cars.contains(where: { $0.vin == vin }) else {
             throw RemoteCommandError.missingContext
         }
-        guard !remoteCommandsInFlight.contains(vin) else { throw RemoteCommandError.busy }
-        remoteCommandsInFlight.insert(vin)
-        defer { remoteCommandsInFlight.remove(vin) }
+        guard let operationID = remoteCommandsInFlight.begin(vin: vin) else { throw RemoteCommandError.busy }
+        let epoch = sessionEpoch
+        defer { remoteCommandsInFlight.finish(vin: vin, id: operationID) }
         try await refreshTokenIfNeeded()
         guard let token = accessToken else {
             throw PolestarError.authenticationRequired(.expiredSession)
@@ -35,9 +35,7 @@ extension PolestarAPI {
             case .authorized(let resolved):
                 commandToken = resolved
             case .notAuthorized:
-                throw RemoteCommandError.rejected(
-                    L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
-                )
+                throw RemoteCommandError.authorizationRequired
             case .storageFailure:
                 throw PolestarError.secureStorage
             case .unavailable:
@@ -48,13 +46,16 @@ extension PolestarAPI {
         } else {
             commandToken = nil
         }
+        try requireSession(epoch)
+        guard remoteCommandsInFlight.owns(vin: vin, id: operationID), cars.contains(where: { $0.vin == vin }),
+              accessToken == token else { throw CancellationError() }
         let result = try await grpc.executeRemoteCommand(
             adaptedCommand, vin: vin, accessToken: token,
             commandToken: commandToken
         )
         // An acknowledgement is not a sensor reading. Force the follow-up to read the
         // backend instead of caching the requested settings or inventing climate state.
-        targetCache[vin] = nil
+        guard isSessionCurrent(epoch), remoteCommandsInFlight.owns(vin: vin, id: operationID) else { return result }
         capabilityAuthority.invalidateTransientCaches(forVIN: vin)
         logger.info("Remote command accepted: \(adaptedCommand.identifier, privacy: .public)")
         return result

@@ -6,9 +6,8 @@ import Testing
 /// and purpose, reconnects that carry no token grants, the authorization-recovery-then-circuit
 /// rule, the command-confirmation window, and healthy-stream polling suppression.
 ///
-/// Serialized because every test drives real timers and stream tasks; interleaving them
-/// would only measure scheduler noise.
-@Suite(.serialized)
+/// Stream-engine retry tests still share a real-time scheduler; cadence waits use a virtual clock.
+@Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct RefreshCoordinatorStreamTests {
     // MARK: - Harness
@@ -29,7 +28,8 @@ struct RefreshCoordinatorStreamTests {
         now: @escaping () -> Date = Date.init,
         scheduler: AsyncTimerLoop? = nil
     ) -> RefreshCoordinator {
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults,
+                                           keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         var features = FeatureSelection.default
         features.set(.realTimeUpdates, enabled: true)
         preferences.features = features
@@ -53,41 +53,14 @@ struct RefreshCoordinatorStreamTests {
 
     /// A scheduler whose every cadence wait parks on `clock` until the test releases it.
     private func makeManualScheduler(_ clock: ManualTickClock) -> AsyncTimerLoop {
-        AsyncTimerLoop(wait: { duration in await clock.park(duration) })
+        AsyncTimerLoop(wait: { duration in try await clock.park(duration) })
     }
 
-    /// Re-checks `condition` up to a fixed number of passes, sleeping briefly between them. The
-    /// bound is a pass count, not a deadline on the wall clock, so it measures work done rather
-    /// than elapsed time; no cadence waits on it, because every tick runs on the manual clock.
-    private func settle(_ condition: () async -> Bool) async throws -> Bool {
-        for _ in 0..<2_000 {
-            if await condition() { return true }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        return await condition()
-    }
-
-    /// Polls until the recorded diagnostics satisfy `condition`, with a timeout that fails
-    /// the test rather than hanging it.
-    ///
-    /// The budget is generous on purpose. Every one of these tests drives real timers and stream
-    /// tasks on the main actor, and when the whole suite runs that actor is shared with ~130 other
-    /// suites, so a connect that takes under a second alone can take several under load. A tight
-    /// deadline turned that scheduling noise into a flaky failure. The loop still returns the
-    /// moment the condition holds, so a passing test never pays for the extra headroom.
     private func waitUntil(
         _ recorder: DiagnosticsRecorder, timeout: TimeInterval = 20,
-        _ condition: (DiagnosticsSnapshot) -> Bool
+        _ condition: @escaping @MainActor (DiagnosticsSnapshot) -> Bool
     ) async -> DiagnosticsSnapshot? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let snapshot = recorder.snapshots.last(where: condition) {
-                return snapshot
-            }
-            await Task.yield()
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return nil
+        await recorder.wait(timeout: timeout, condition: condition)
     }
 
     // MARK: - Healthy stream
@@ -124,8 +97,8 @@ struct RefreshCoordinatorStreamTests {
         // The newest tick the coordinator armed is the integrity tick, not the 120 s routine poll.
         // Every tick parks on the manual clock and only the test releases one, so the armed tick
         // is the one that decides what runs next, and no routine poll can fire unseen.
-        let integrityArmed = try await settle { (clock.waits.last ?? 0) > 1_500 }
-        #expect(integrityArmed, "Expected the integrity tick to be armed, got \(String(describing: clock.waits.last)) s")
+        try await clock.waitForPark(after: 0, minimumDuration: 1_500)
+        #expect((clock.waits.last ?? 0) > 1_500)
         #expect(clock.pendingDuration == clock.waits.last)
         let fetches = await provider.fetchCount
         #expect(fetches == 1, "Healthy stream must suppress routine polling, saw \(fetches) fetches")
@@ -145,8 +118,7 @@ struct RefreshCoordinatorStreamTests {
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
 
-        let applied = try await settle { events.states.last?.energy.batteryPercentage == 61 }
-        #expect(applied, "Expected the first live frame to publish state")
+        _ = try #require(await waitUntil(events) { _ in events.states.last?.energy.batteryPercentage == 61 })
         // The second identical frame is dropped by the engine in the same main-actor pass that
         // applied the first, so no fixed grace period is needed before counting events.
         #expect(events.states.count == 2,
@@ -177,22 +149,49 @@ struct RefreshCoordinatorStreamTests {
         for round in 1...2 {
             // The re-armed tick parks on the clock a pass after its schedule call, so wait for a
             // short (integrity-cadence) wait to be the newest one rather than reading a stale entry.
-            let armed = try await settle { (clock.pendingDuration ?? .infinity) < 2 }
-            #expect(armed, "Expected an integrity tick to be armed before release \(round)")
+            try await clock.waitForPark(after: round - 1, maximumDuration: 2)
             let parked = clock.pendingDuration ?? .infinity
             #expect(parked < 2, "The armed tick should be the integrity cadence, got \(parked) s")
             let waitsBefore = clock.waits.count
             let fetchesBefore = await provider.fetchCount
             clock.releaseLatest()
-            let refreshed = try await settle {
-                let fetches = await provider.fetchCount
-                return clock.waits.count > waitsBefore && fetches > fetchesBefore
-            }
-            #expect(refreshed, "Integrity tick \(round) should fetch and re-arm while the stream is healthy")
+            _ = try #require(await waitUntil(events) { $0.refreshSuccesses > round })
+            try await clock.waitForPark(after: waitsBefore)
+            #expect(await provider.fetchCount > fetchesBefore)
         }
         #expect(await provider.fetchCount >= 3, "Two released integrity ticks should each fetch once")
         #expect(recorder.purposes == [.charging], "Integrity polling must not restart the stream")
         #expect(recorder.maxConcurrent == 1)
+        coordinator.stop()
+        clock.releaseAll()
+    }
+
+    @Test(arguments: [true, false])
+    func recoveryDefersFetchUntilProviderDeadline(wake: Bool) async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let provider = StreamingMockProvider(script: [], recorder: StreamRecorder())
+        let events = DiagnosticsRecorder()
+        let clock = ManualTickClock()
+        var currentTime = Date()
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults,
+            now: { currentTime }, scheduler: makeManualScheduler(clock))
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 1 })
+        let deadline = currentTime.addingTimeInterval(60)
+        coordinator.rateLimitedUntil = deadline
+        if wake { coordinator.systemWillSleep() }
+        else { coordinator.networkDidChange(false) }
+        let before = clock.waits.count
+        if wake { coordinator.systemDidWake() }
+        else { coordinator.networkDidChange(true) }
+        #expect(await provider.fetchCount == 1)
+        #expect(coordinator.nextRefresh == deadline)
+        try await clock.waitForPark(after: before)
+        currentTime = deadline
+        clock.releaseLatest()
+        _ = try #require(await waitUntil(events) { $0.refreshSuccesses >= 2 })
         coordinator.stop()
         clock.releaseAll()
     }
@@ -257,6 +256,49 @@ struct RefreshCoordinatorStreamTests {
         coordinator.stop()
     }
 
+    /// The reported all-day loop, at the coordinator seam: a refused token exchange must park
+    /// the stream, publish that it needs authorization, ask the shell for a sign-in (the
+    /// `.failed` event), and never restart itself. New credentials are the only thing that
+    /// lets it try again.
+    @Test
+    func refusedTokenExchangeParksTheStreamUntilCredentialsChange() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let recorder = StreamRecorder()
+        let auth = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
+        let provider = StreamingMockProvider(script: [.fail(auth)], recorder: recorder)
+        await provider.setAuthorizationRefreshFailure(auth)
+        let events = DiagnosticsRecorder()
+        let policy = LiveStreamPolicy(repeatedFailureCircuitInterval: 0.2, retrySteps: [0.05])
+        let coordinator = makeCoordinator(provider: provider, defaults: defaults, policy: policy)
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        let parked = await waitUntil(events, timeout: 8) { $0.liveStreamNeedsAuthorization }
+        let snapshot = try #require(parked, "Expected the stream to park and ask for sign-in")
+        #expect(snapshot.liveStreamRetryAt == nil, "A parked stream is not waiting out a backoff")
+        #expect(await provider.authorizationRefreshCount == 1,
+                "A refused exchange is not retried: the session is gone, not slow")
+        #expect(await provider.streamAttemptCount == 1)
+        // The same failure the polling path emits, which is what asks the shell to sign in.
+        #expect(events.failedErrors.contains { $0.requiresAuthentication })
+
+        // Parking terminates the engine instead of arming another timed retry.
+        #expect(await provider.streamAttemptCount == 1, "The parked stream restarted itself")
+        #expect(!(coordinator.streamEngine?.isRunning ?? true))
+
+        // New credentials are the one event that heals it: the provider accepts the token
+        // exchange again, and the parked flag clears so a reconnect is allowed.
+        await provider.setAuthorizationRefreshFailure(nil)
+        coordinator.credentialsChanged(preferredVIN: StreamingMockProvider.vinA)
+        #expect(!coordinator.streamNeedsAuthorization)
+        let resumed = await waitUntil(events, timeout: 8) { $0.liveStreamConnected }
+        _ = try #require(resumed, "New credentials must let the stream connect again")
+        #expect(await provider.streamAttemptCount == 2)
+
+        coordinator.stop()
+    }
+
     // MARK: - Purpose gating
 
     /// When charging ends, the battery stream closes – it has nothing fresh to say about an
@@ -276,11 +318,12 @@ struct RefreshCoordinatorStreamTests {
 
         await provider.setCharging(false)
         coordinator.refreshNow()
+        #expect(await provider.waitForFetch(count: 2))
         let stopped = await waitUntil(events, timeout: 8) { snapshot in
-            !snapshot.liveStreamConnected && snapshot.liveStreamMetrics.activeTransportStreams == 0
+            events.states.last?.isCharging == false && !snapshot.liveStreamConnected
+                && snapshot.liveStreamMetrics.activeTransportStreams == 0 && snapshot.nextRefresh != nil
         }
         _ = try #require(stopped, "Expected the stream to stop once charging ended")
-        try await Task.sleep(for: .milliseconds(200))
         if let next = events.snapshots.last?.nextRefresh?.timeIntervalSinceNow {
             #expect(next > 550, "Expected the idle-vehicle poll cadence (~10 min) after the stream stopped, got \(next) s")
         }
@@ -584,10 +627,7 @@ struct RefreshCoordinatorStreamTests {
             #expect(reconnectedDeadline <= fallbackDeadline.addingTimeInterval(0.05),
                     "Reconnect must not postpone an already scheduled confirmation poll")
         }
-        let pollDeadline = Date().addingTimeInterval(2)
-        while await provider.fetchCount < 2, Date() < pollDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        _ = try #require(await waitUntil(events, timeout: 2) { $0.refreshSuccesses >= 2 })
         #expect(await provider.fetchCount >= 2, "Expected a confirmation poll before the normal cadence")
         #expect(recorder.maxConcurrent == 1)
         coordinator.stop()
@@ -617,13 +657,9 @@ struct RefreshCoordinatorStreamTests {
             issuedAt: Date(),
             command: .stopClimate
         ))
-        try await Task.sleep(for: .milliseconds(300))
+        _ = try #require(await waitUntil(events, timeout: 2) { $0.refreshSuccesses >= 2 })
         #expect(recorder.purposes.count == before, "Climate commands must not open any stream")
         #expect(recorder.purposes == [.charging])
-        let pollDeadline = Date().addingTimeInterval(2)
-        while await provider.fetchCount < 2, Date() < pollDeadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
         #expect(await provider.fetchCount == 2, "Climate commands retain one authoritative follow-up poll")
         coordinator.stop()
     }
@@ -713,7 +749,8 @@ struct RefreshCoordinatorStreamTests {
         let provider = StreamingMockProvider(script: [], recorder: StreamRecorder())
         await provider.setCharging(false)
         await provider.setClimate(.idle)
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = PreferencesStore(defaults: defaults,
+                                           keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID())"))
         let coordinator = RefreshCoordinator(
             api: provider,
             stateStore: VehicleStateStore(defaults: defaults, database: database),
@@ -915,6 +952,7 @@ struct RefreshCoordinatorStreamTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let recorder = StreamRecorder()
         let provider = StreamingMockProvider(script: [], recorder: recorder)
+        await provider.setCharging(false)
         let events = DiagnosticsRecorder()
         let coordinator = makeCoordinator(
             provider: provider,
@@ -932,7 +970,8 @@ struct RefreshCoordinatorStreamTests {
             command: .setChargeTarget(80)
         ))
 
-        _ = try #require(await waitUntil(events) { $0.refreshSuccesses == 2 })
+        #expect(await provider.waitForFetch(count: 2, matching: [.remoteCharging]))
+        _ = try #require(await waitUntil(events) { $0.refreshAttempts >= 2 && $0.nextRefresh != nil })
         let selections = await provider.fetchSelections
         #expect(selections.first == FeatureSelection.default)
         #expect(selections.last?.enabled == [.remoteCharging])
@@ -1275,12 +1314,14 @@ struct RefreshCoordinatorStreamTests {
             recorder: recorder
         )
         let events = DiagnosticsRecorder()
+        var currentTime = Date()
         let coordinator = makeCoordinator(
             provider: provider,
             defaults: defaults,
             commandWindow: 0.1,
             commandInitialPollDelay: 5,
-            commandPollInterval: 5
+            commandPollInterval: 5,
+            now: { currentTime }
         )
         coordinator.onEvent = { events.record($0) }
         coordinator.start(preferredVIN: StreamingMockProvider.vinA)
@@ -1296,7 +1337,7 @@ struct RefreshCoordinatorStreamTests {
         })
 
         suspend(coordinator)
-        try await Task.sleep(for: .milliseconds(200))
+        currentTime = currentTime.addingTimeInterval(0.2)
         resume(coordinator)
 
         _ = try #require(await waitUntil(events) { diagnostics in
@@ -1380,52 +1421,46 @@ private enum StreamBehavior: Sendable {
     case exteriorLocked
 }
 
-/// Virtual clock for the coordinator's cadence waits. Each requested wait is recorded and then
-/// parked until the test releases it, so the test decides when a tick fires. Released in LIFO
-/// order: the newest armed tick is the one that is live; older parked waits were superseded by a
-/// later `scheduleOnce`, and resuming them only lets their cancelled task exit.
-private final class ManualTickClock: @unchecked Sendable {
-    private let lock = NSLock()
-    private var requested: [TimeInterval] = []
-    private var parked: [(duration: TimeInterval, continuation: CheckedContinuation<Void, Never>)] = []
+/// Releases only the newest armed cadence wait; superseded waits leave through cancellation.
+@MainActor
+private final class ManualTickClock {
+    private struct Parked {
+        let id: UUID
+        let duration: TimeInterval
+        let release: TestEvent<Void>
+    }
+    private(set) var waits: [TimeInterval] = []
+    private var parked: [Parked] = []
+    private let changes = TestEvent<Void>()
 
-    var waits: [TimeInterval] {
-        lock.lock()
-        defer { lock.unlock() }
-        return requested
+    var pendingDuration: TimeInterval? { parked.last?.duration }
+
+    func park(_ duration: TimeInterval) async throws {
+        let id = UUID()
+        let release = TestEvent<Void>()
+        waits.append(duration)
+        parked.append(Parked(id: id, duration: duration, release: release))
+        changes.yield(())
+        defer { parked.removeAll { $0.id == id } }
+        try await release.next(timeout: .seconds(45))
     }
 
-    /// The duration of the newest wait still parked, or nil when nothing is armed.
-    var pendingDuration: TimeInterval? {
-        lock.lock()
-        defer { lock.unlock() }
-        return parked.last?.duration
-    }
-
-    func park(_ duration: TimeInterval) async {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            requested.append(duration)
-            parked.append((duration: duration, continuation: continuation))
-            lock.unlock()
+    func waitForPark(after count: Int, minimumDuration: TimeInterval = -.infinity,
+                     maximumDuration: TimeInterval = .infinity) async throws {
+        while !(waits.count > count && (pendingDuration.map {
+            $0 > minimumDuration && $0 < maximumDuration
+        } ?? false)) {
+            try await changes.next()
         }
     }
 
-    /// Resumes the newest parked wait, letting the tick it guards run.
-    func releaseLatest() {
-        lock.lock()
-        let next = parked.popLast()
-        lock.unlock()
-        next?.continuation.resume()
-    }
+    func releaseLatest() { parked.last?.release.yield(()) }
 
-    /// Resumes every parked wait. Call after `stop()` so no parked task is left suspended.
     func releaseAll() {
-        lock.lock()
         let all = parked
-        parked = []
-        lock.unlock()
-        all.forEach { $0.continuation.resume() }
+        parked.removeAll()
+        all.forEach { $0.release.cancel() }
+        changes.cancel()
     }
 }
 
@@ -1461,10 +1496,45 @@ private final class StreamRecorder: @unchecked Sendable {
 private final class DiagnosticsRecorder {
     private(set) var snapshots: [DiagnosticsSnapshot] = []
     private(set) var states: [VehicleState] = []
+    private(set) var failedErrors: [VehicleServiceError] = []
+
+    private struct Waiter {
+        let condition: @MainActor (DiagnosticsSnapshot) -> Bool
+        let continuation: CheckedContinuation<DiagnosticsSnapshot?, Never>
+        let timeout: Task<Void, Never>
+    }
+    private var waiters: [UUID: Waiter] = [:]
+
+    func wait(timeout: TimeInterval, condition: @escaping @MainActor (DiagnosticsSnapshot) -> Bool) async -> DiagnosticsSnapshot? {
+        if let snapshot = snapshots.last(where: condition) { return snapshot }
+        if Task.isCancelled { return nil }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let timeoutTask = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
+                    self?.finish(id, with: nil)
+                }
+                waiters[id] = Waiter(condition: condition, continuation: continuation, timeout: timeoutTask)
+            }
+        } onCancel: {
+            Task { @MainActor in self.finish(id, with: nil) }
+        }
+    }
+
+    private func finish(_ id: UUID, with snapshot: DiagnosticsSnapshot?) {
+        guard let waiter = waiters.removeValue(forKey: id) else { return }
+        waiter.timeout.cancel()
+        waiter.continuation.resume(returning: snapshot)
+    }
 
     func record(_ event: RefreshCoordinatorEvent) {
         if case .diagnostics(let snapshot) = event { snapshots.append(snapshot) }
         if case .state(let state) = event { states.append(state) }
+        if case .failed(let error) = event { failedErrors.append(error) }
+        guard let snapshot = snapshots.last else { return }
+        let matched = waiters.filter { $0.value.condition(snapshot) }.map(\.key)
+        for id in matched { finish(id, with: snapshot) }
     }
 }
 
@@ -1481,7 +1551,16 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     private(set) var fetchCount = 0
     private(set) var fetchSelections: [FeatureSelection] = []
     private(set) var authorizationRefreshCount = 0
+    private(set) var streamAttemptCount = 0
     private(set) var remoteCommandCount = 0
+    private var refreshFailure: VehicleServiceError?
+    private struct FetchWaiter {
+        let count: Int
+        let selection: Set<AppFeature>?
+        let continuation: CheckedContinuation<Bool, Never>
+        let timeout: Task<Void, Never>
+    }
+    private var fetchWaiters: [UUID: FetchWaiter] = [:]
     private var charging = true
     private var climateActivity: ClimateActivity?
     private var nextFetchFailure: VehicleServiceError?
@@ -1493,9 +1572,33 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
         self.recorder = recorder
     }
 
+    func waitForFetch(count: Int, matching selection: Set<AppFeature>? = nil) async -> Bool {
+        if fetchCount >= count && (selection == nil || fetchSelections.contains { $0.enabled == selection }) { return true }
+        if Task.isCancelled { return false }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                let timeout = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    await self?.finishFetchWaiter(id, success: false)
+                }
+                fetchWaiters[id] = FetchWaiter(count: count, selection: selection, continuation: continuation, timeout: timeout)
+            }
+        } onCancel: {
+            Task { await self.finishFetchWaiter(id, success: false) }
+        }
+    }
+
+    private func finishFetchWaiter(_ id: UUID, success: Bool) {
+        guard let waiter = fetchWaiters.removeValue(forKey: id) else { return }
+        waiter.timeout.cancel()
+        waiter.continuation.resume(returning: success)
+    }
+
     func setCharging(_ enabled: Bool) { charging = enabled }
     func setClimate(_ activity: ClimateActivity?) { climateActivity = activity }
     func failNextFetch(_ error: VehicleServiceError) { nextFetchFailure = error }
+    func setAuthorizationRefreshFailure(_ error: VehicleServiceError?) { refreshFailure = error }
 
     // VehicleProviding
 
@@ -1514,6 +1617,11 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         fetchCount += 1
         fetchSelections.append(features)
+        let ready = fetchWaiters.filter { waiter in
+            fetchCount >= waiter.value.count && (waiter.value.selection == nil
+                || features.enabled == waiter.value.selection)
+        }.map(\.key)
+        for id in ready { finishFetchWaiter(id, success: true) }
         if let nextFetchFailure {
             self.nextFetchFailure = nil
             throw nextFetchFailure
@@ -1540,6 +1648,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
     func liveVehicleUpdates(
         vin: String, purpose: VehicleLiveStreamPurpose
     ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        streamAttemptCount += 1
         let behavior = script.isEmpty ? StreamBehavior.healthy(frames: 1) : script.removeFirst()
         switch behavior {
         case .fail(let error):
@@ -1587,6 +1696,7 @@ private actor StreamingMockProvider: VehicleProviding, VehicleLiveStreaming {
 
     func refreshLiveStreamAuthorization() async throws {
         authorizationRefreshCount += 1
+        if let refreshFailure { throw refreshFailure }
     }
 
     private static func makeMockState(vin: String, charging: Bool) -> VehicleState {

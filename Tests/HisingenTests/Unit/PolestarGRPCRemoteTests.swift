@@ -185,14 +185,9 @@ struct PolestarGRPCRemoteTests {
     }
 
     @Test
-    func unknownInvocationStatusRejectsWithTheVehicleMessage() {
-        do {
+    func unknownInvocationStatusDoesNotClaimTheCommandWasRefused() {
+        #expect(throws: PolestarError.self) {
             _ = try PolestarGRPC.parseInvocationResult(invocation(status: 77, message: "No such command"))
-            Issue.record("Expected an unknown status to be rejected")
-        } catch RemoteCommandError.rejected(let message) {
-            #expect(message == "No such command")
-        } catch {
-            Issue.record("Unexpected error: \(error)")
         }
     }
 
@@ -207,7 +202,16 @@ struct PolestarGRPCRemoteTests {
             #expect(try PolestarGRPC.chronosResult(chronos(status), statusField: 1).outcome == .completed,
                     "Chronos status \(status) should complete")
         }
-        for status in [0, 5, 6, 7, 99] {
+        for status in [0, 99] {
+            do {
+                _ = try PolestarGRPC.chronosResult(chronos(status), statusField: 1)
+                Issue.record("Unknown status must not claim an outcome")
+            } catch PolestarError.commandOutcomeUnknown {
+            } catch {
+                Issue.record("Unexpected error for unknown status \(status): \(error)")
+            }
+        }
+        for status in [5, 6, 7] {
             do {
                 _ = try PolestarGRPC.chronosResult(chronos(status), statusField: 1)
                 Issue.record("Chronos status \(status) should be rejected")

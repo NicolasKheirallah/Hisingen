@@ -16,7 +16,7 @@ struct SQLiteDatabaseTests {
         } process: { _ in }
 
         let name = try db.query(sql: "SELECT name FROM test WHERE id = 1;") { _ in } process: { stmt -> String? in
-            guard stmt.step() else { return nil }
+            guard (try stmt.stepOrThrow()) else { return nil }
             return stmt.columnText(at: 0)
         }
         #expect(name == "Polestar")
@@ -49,7 +49,7 @@ struct SQLiteDatabaseTests {
             let row = try db.query(sql: "SELECT text_value, blob_value FROM payloads WHERE id = ?;") { stmt in
                 try stmt.bindInt64(Int64(id), at: 1)
             } process: { stmt -> (String, Data)? in
-                guard stmt.step(),
+                guard (try stmt.stepOrThrow()),
                       let t = stmt.columnText(at: 0),
                       let b = stmt.columnBlob(at: 1) else { return nil }
                 return (t, b)
@@ -71,7 +71,7 @@ struct SQLiteDatabaseTests {
         }
 
         let count = try db.query(sql: "SELECT COUNT(*) FROM items;") { _ in } process: { stmt -> Int64 in
-            stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
+            (try stmt.stepOrThrow()) ? (stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(count == 2)
 
@@ -86,7 +86,7 @@ struct SQLiteDatabaseTests {
         }
 
         let countAfterRollback = try db.query(sql: "SELECT COUNT(*) FROM items;") { _ in } process: { stmt -> Int64 in
-            stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
+            (try stmt.stepOrThrow()) ? (stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(countAfterRollback == 2)
     }
@@ -351,7 +351,7 @@ let raw = try SQLiteDatabase.inMemory()
         let count = try raw.query(sql: "SELECT COUNT(*) FROM remote_commands_log WHERE vin = ?;") { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> Int64 in
-            stmt.step() ? (stmt.columnInt64(at: 0) ?? 0) : 0
+            (try stmt.stepOrThrow()) ? (stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(count == 1)
         let audit = try #require(vdb.history.recentCommandAudits(for: vin).first)
@@ -409,7 +409,7 @@ let raw = try SQLiteDatabase.inMemory()
         let remaining = try raw.query(sql: "SELECT latitude, longitude FROM telemetry_logs WHERE vin = ? LIMIT 1;") { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> (Double?, Double?) in
-            guard stmt.step() else { return (nil, nil) }
+            guard (try stmt.stepOrThrow()) else { return (nil, nil) }
             return (stmt.columnDouble(at: 0), stmt.columnDouble(at: 1))
         }
         #expect(remaining.0 == nil)

@@ -33,6 +33,7 @@ struct SettingsNotificationsCard: View {
                         vehicleAlertRows
                         serviceAndTelemetryRows
                         environmentRows
+                        summaryRows
                         soundAndQuietRows
                         badgeAndMuteRows
                         testAndPrivacyRows
@@ -52,6 +53,7 @@ struct SettingsNotificationsCard: View {
                 .hisAnimation(Motion.layout, value: prefs.notifyPlugInReminder)
                 .hisAnimation(Motion.layout, value: prefs.notifyLowBattery)
                 .hisAnimation(Motion.layout, value: prefs.notifyEveningUnlocked)
+                .hisAnimation(Motion.layout, value: prefs.notifyDailySummary)
                 .hisAnimation(Motion.layout, value: prefs.quietHoursEnabled)
             }
             .hisAnimation(Motion.entrance, value: notificationPermission)
@@ -178,6 +180,13 @@ struct SettingsNotificationsCard: View {
             )
             .transition(Self.dependentRowTransition)
         }
+
+        notificationRow(
+            symbol: "bolt.car.fill",
+            title: "Left in Convenience Mode",
+            detail: "Alert after 30 minutes in convenience mode, which keeps systems on and drains the 12 V battery",
+            \.notifyUsageModeConvenience
+        )
     }
 
     @ViewBuilder
@@ -282,6 +291,28 @@ struct SettingsNotificationsCard: View {
                 title: L10n.text("Evening reminder starts"),
                 \.eveningUnlockedStartHour,
                 values: Array(18...23),
+                label: { String(format: "%02d:00", locale: L10n.displayLocale, $0) }
+            )
+            .transition(Self.dependentRowTransition)
+        }
+    }
+
+    @ViewBuilder
+    private var summaryRows: some View {
+        Divider().opacity(HisingenTheme.dividerOpacity)
+            .padding(.vertical, 2)
+
+        notificationRow(
+            symbol: "list.bullet.rectangle.fill",
+            title: "Daily Summary",
+            detail: "One notification a day with battery, range, charging, warnings, service and failed commands",
+            \.notifyDailySummary
+        )
+        if prefs.notifyDailySummary {
+            notificationThresholdRow(
+                title: L10n.text("Summary time"),
+                \.dailySummaryHour,
+                values: Array(0..<24),
                 label: { String(format: "%02d:00", locale: L10n.displayLocale, $0) }
             )
             .transition(Self.dependentRowTransition)

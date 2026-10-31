@@ -18,7 +18,10 @@ OUTPUT_SWIFT="$ROOT_DIR/Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swif
 POLESTAR_OUTPUT_SWIFT="$ROOT_DIR/Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift"
 
 # Load from file if env vars not already set
-if [ -f "$SECRETS_FILE" ]; then
+if [ "${HISINGEN_BUILD_CONFIGURATION:-local}" = fixture ]; then
+    unset VOLVO_CLIENT_ID VOLVO_CLIENT_SECRET VOLVO_VCC_API_KEY
+    unset POLESTAR_IMAGE_API_KEY POLESTAR_ACCOUNT_ID POLESTAR_CLIENT_ID POLESTAR_CLIENT_SECRET
+elif [ -f "$SECRETS_FILE" ]; then
     # shellcheck disable=SC1090
     . "$SECRETS_FILE"
 elif [ -f "$LOCAL_ENV_FILE" ]; then

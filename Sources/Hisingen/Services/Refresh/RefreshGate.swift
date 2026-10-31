@@ -141,8 +141,10 @@ extension RefreshIntent {
         switch self {
         case .manual:
             return [.rateLimit, .sleep, .network, .session, .workInFlight, .selection]
-        case .scheduled, .wake, .networkRestored:
+        case .scheduled:
             return [.workInFlight, .sleep, .network, .session, .selection]
+        case .wake, .networkRestored:
+            return [.rateLimit, .workInFlight, .sleep, .network, .session, .selection]
         case .metadata:
             return [.rateLimit, .workInFlight, .session, .selection]
         case .selection:

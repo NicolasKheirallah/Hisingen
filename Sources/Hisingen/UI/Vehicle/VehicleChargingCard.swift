@@ -136,6 +136,14 @@ struct VehicleChargingCard: View {
                 if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.targetSource) { value += " (\(suffix))" }
                 rows.append(("target", KVRow(L10n.text("Target Limit"), value, symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target."))))
             }
+            if let outcome = state.energy.scheduleOutcome {
+                rows.append(("scheduleVerdict", KVRow(
+                    L10n.text("Charge Plan"),
+                    outcome.displayName,
+                    symbol: "calendar.badge.clock",
+                    valueWarning: outcome.isWarning
+                )))
+            }
             // The energy-snapshot slot for the same estimate the diagnostics block renders as
             // "Time to Target". Shown only when that diagnostics row is not already present, so
             // one figure never appears twice in one card.
@@ -149,17 +157,6 @@ struct VehicleChargingCard: View {
             }
             if let minutes = state.energy.estimatedTimeToFullMinutes, minutes > 0 {
                 rows.append(("timeToFull", KVRow(L10n.text("Time to Full"), Format.shortDuration(minutes: minutes), symbol: "battery.100.bolt", info: L10n.text("Vehicle Estimate. Time until the high-voltage battery reaches a full charge."))))
-            }
-            if state.energy.isAtChargeLocation == true {
-                var locationValue = state.energy.currentChargeLocationName ?? L10n.text("Saved Location")
-                // Dwell: how long the car has been sitting at this charger. Only appended once a
-                // full minute has elapsed and never for a future timestamp (clock skew), so the
-                // row never reads "parked for 0min".
-                if let arrived = state.energy.arrivedAtLocationDate {
-                    let minutes = Int(Date().timeIntervalSince(arrived) / 60)
-                    if minutes >= 1 { locationValue += " · " + L10n.format("parked for %@", Format.shortDuration(minutes: minutes)) }
-                }
-                rows.append(("chargeLocation", KVRow(L10n.text("Charge Location"), locationValue, symbol: "mappin.and.ellipse", info: L10n.text("Location Awareness. Vehicle is connected at a recognized charge location."))))
             }
         }
         if features.contains(.batteryDiagnostics), let diagnostics = state.energy.diagnostics {
@@ -315,16 +312,11 @@ struct VehicleChargingCard: View {
                 HStack(spacing: 6) {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true, isPulsing: state.isCharging)
                     if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
-                    if state.energy.chargeNowActive == true || state.energy.isAtChargeLocation == true {
+                    if state.energy.chargeNowActive == true {
                         Spacer()
                     }
                     if state.energy.chargeNowActive == true {
                         Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
-                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
-                    }
-                    if state.energy.isAtChargeLocation == true {
-                        let locationName = state.energy.currentChargeLocationName ?? L10n.text("Saved Location")
-                        Pill(text: locationName, color: HisingenTheme.accent, symbol: "mappin.and.ellipse")
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }

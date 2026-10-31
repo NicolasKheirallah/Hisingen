@@ -19,10 +19,33 @@ struct ConnectionCheck: Equatable, Sendable {
 final class AccountConnectionModel: ObservableObject {
     private let preferences: PreferencesStore
     private let keychain: KeychainStore
+    private let builtinCredentials: BuiltinCredentials
 
-    init(preferences: PreferencesStore, keychain: KeychainStore = .app) {
+    struct BuiltinCredentials {
+        var volvoClientID = ""
+        var volvoClientSecret = ""
+        var volvoAPIKey = ""
+        var portalClientID = ""
+        var portalClientSecret = ""
+
+        var volvoIsConfigured: Bool {
+            !volvoClientID.isEmpty && !volvoClientSecret.isEmpty && !volvoAPIKey.isEmpty
+        }
+
+        static var application: Self {
+            Self(volvoClientID: BuiltinVolvoSecrets.clientID,
+                 volvoClientSecret: BuiltinVolvoSecrets.clientSecret,
+                 volvoAPIKey: BuiltinVolvoSecrets.vccApiKey,
+                 portalClientID: BuiltinPolestarSecrets.dataPortalClientID,
+                 portalClientSecret: BuiltinPolestarSecrets.dataPortalClientSecret)
+        }
+    }
+
+    init(preferences: PreferencesStore, keychain: KeychainStore = .app,
+         builtinCredentials: BuiltinCredentials = .application) {
         self.preferences = preferences
         self.keychain = keychain
+        self.builtinCredentials = builtinCredentials
     }
 
     // MARK: - Connection facts
@@ -60,16 +83,16 @@ final class AccountConnectionModel: ObservableObject {
                 return keychain.hasStoredPolestarEmail
             }
         case .volvo:
-            let hasClientID = !preferences.volvoClientID.isEmpty || BuiltinVolvoSecrets.isConfigured
-            let hasSecrets = BuiltinVolvoSecrets.isConfigured
+            let hasClientID = !preferences.volvoClientID.isEmpty || builtinCredentials.volvoIsConfigured
+            let hasSecrets = builtinCredentials.volvoIsConfigured
                 || keychain.hasStoredVolvoAppCredentials
             return hasClientID && hasSecrets
         }
     }
 
     private var hasStoredPortalFacts: Bool {
-        let hasID = !preferences.polestarDataPortalClientID.isEmpty || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
-        let hasSecret = keychain.hasStoredPolestarDataPortalCredentials || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
+        let hasID = !preferences.polestarDataPortalClientID.isEmpty || !builtinCredentials.portalClientID.isEmpty
+        let hasSecret = keychain.hasStoredPolestarDataPortalCredentials || !builtinCredentials.portalClientSecret.isEmpty
         return hasID && hasSecret
     }
 
@@ -189,21 +212,23 @@ final class AccountConnectionModel: ObservableObject {
         )
     }
 
-    /// Portal facts including what the reader has typed but not saved yet.
+    /// Portal facts that are actually stored (or built in). An unsaved draft secret
+    /// must not light the "Configured" banner before it reaches the Keychain.
     var isDataPortalConfigured: Bool {
-        let hasID = !draft.polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+        let hasID = !preferences.polestarDataPortalClientID.isEmpty
+            || !builtinCredentials.portalClientID.isEmpty
         let hasSecret = keychain.hasStoredPolestarDataPortalCredentials
-            || !BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty
-            || !draft.polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !builtinCredentials.portalClientSecret.isEmpty
         return hasID && hasSecret
     }
 
     /// Enough to attempt a portal-only connect: an ID from the reader or the built-ins,
-    /// and a VIN that would not corrupt the vehicle map.
+    /// and a VIN that would not corrupt the vehicle map. Secret presence is checked
+    /// at grant time; builtins cover the ID-only case.
     var canConnectDataPortal: Bool {
         let hasID = !draft.polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !BuiltinPolestarSecrets.dataPortalClientID.isEmpty
+            || !preferences.polestarDataPortalClientID.isEmpty
+            || !builtinCredentials.portalClientID.isEmpty
         return hasID && SettingsValidation.isValidOptionalVIN(draft.polestarVIN)
     }
 
@@ -267,9 +292,37 @@ final class AccountConnectionModel: ObservableObject {
     }
 
     private func savePolestarIDCredentials(savingAs mode: PolestarConnectionMode) -> PolestarSaveOutcome? {
+        let trimmedEmail = draft.polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Clearing the email field is a removal, not a no-op: previously an empty
+        // email failed validation and left the Keychain untouched, so "deleting
+        // credentials" did nothing. Delete path never validates VIN – a stale or
+        // mistyped VIN must not veto credential removal.
+        if trimmedEmail.isEmpty {
+            let hadCredentials = !preferences.email.isEmpty
+                || keychain.hasStoredPolestarSession
+                || keychain.hasStoredPolestarPassword
+            guard hadCredentials else { return nil }
+            do {
+                try keychain.deletePassword()
+            } catch { /* absent is fine */ }
+            do { try keychain.deleteSessionToken() } catch { return PolestarSaveOutcome(saved: false, keychainError: L10n.text("Couldn't remove credentials from the Keychain. Please try again."), effect: nil) }
+            do { try keychain.deleteCommandSessionToken() } catch { /* absent is fine */ }
+            try? keychain.deleteEmail()
+            keychain.invalidateMemoryCache()
+            preferences.polestarConnectionMode = mode
+            preferences.email = ""
+            // Only persist a VIN that validates; never store garbage from the delete form.
+            let candidateVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if candidateVIN.isEmpty || SettingsValidation.isValidVIN(candidateVIN) {
+                preferences.setVin(candidateVIN, for: .polestar)
+            }
+            preferences.setExplicitSignOut(for: .polestar)
+            draft.polestarPassword = ""
+            return PolestarSaveOutcome(saved: true, keychainError: nil, effect: .credentialsChanged)
+        }
         guard SettingsValidation.isValidEmail(draft.polestarEmail),
               SettingsValidation.isValidOptionalVIN(draft.polestarVIN) else { return nil }
-        let normalizedEmail = draft.polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = trimmedEmail
         let upperVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let oldVIN = preferences.vin(for: .polestar)
         let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
@@ -293,6 +346,7 @@ final class AccountConnectionModel: ObservableObject {
         preferences.polestarConnectionMode = mode
         preferences.email = normalizedEmail
         preferences.setVin(upperVIN, for: .polestar)
+        preferences.clearExplicitSignOut(for: .polestar)
         if !nicknameVIN.isEmpty {
             preferences.setVehicleNickname(draft.polestarNickname, for: nicknameVIN)
         }
@@ -304,7 +358,37 @@ final class AccountConnectionModel: ObservableObject {
         let trimmedID = draft.polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSecret = draft.polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAccountID = draft.polestarDataPortalAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty else { return nil }
+        // Clearing the client-ID field removes the custom developer app and reverts
+        // to the built-ins. Previously an empty ID silently kept the old secret.
+        // Delete path never validates VIN – removal must not be vetoed by a bad VIN.
+        if trimmedID.isEmpty {
+            let hadCustom = !preferences.polestarDataPortalClientID.isEmpty
+                || !preferences.polestarDataPortalAccountID.isEmpty
+                || keychain.hasStoredPolestarDataPortalCredentials
+            guard hadCustom else { return nil }
+            do {
+                try keychain.deletePolestarDataPortalCredentials()
+                try? keychain.deletePolestarDataPortalToken()
+                keychain.invalidateMemoryCache()
+            } catch {
+                return PolestarSaveOutcome(saved: false, keychainError: L10n.text("Couldn't remove credentials from the Keychain. Please try again."), effect: nil)
+            }
+            if mode == .dataPortal || mode == .augmented {
+                preferences.polestarConnectionMode = mode
+            }
+            preferences.polestarDataPortalAccountID = ""
+            preferences.polestarDataPortalClientID = ""
+            let candidateVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if candidateVIN.isEmpty || SettingsValidation.isValidVIN(candidateVIN) {
+                preferences.setVin(candidateVIN, for: .polestar)
+            }
+            // Removing the custom app alone does not sign out when built-ins exist;
+            // the caller (sign-out) sets the suppression flag. A save means the user
+            // is actively configuring, so lift any prior suppression.
+            preferences.clearExplicitSignOut(for: .polestar)
+            draft.polestarDataPortalClientSecret = ""
+            return PolestarSaveOutcome(saved: true, keychainError: nil, effect: .credentialsChanged)
+        }
 
         var keychainError: String?
         if !trimmedSecret.isEmpty {
@@ -329,11 +413,30 @@ final class AccountConnectionModel: ObservableObject {
         preferences.polestarDataPortalClientID = trimmedID
         let upperVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         preferences.setVin(upperVIN, for: .polestar)
+        preferences.clearExplicitSignOut(for: .polestar)
         let nickVIN = !upperVIN.isEmpty ? upperVIN : preferences.vin(for: .polestar)
         if !nickVIN.isEmpty {
             preferences.setVehicleNickname(draft.polestarNickname, for: nickVIN)
         }
         return PolestarSaveOutcome(saved: true, keychainError: nil, effect: .credentialsChanged)
+    }
+
+    /// Full removal used by sign-out and by clearing the form: Keychain + prefs +
+    /// suppression flag so built-ins cannot auto-restore. Idempotent.
+    func removePolestarCredentials() {
+        try? keychain.deletePassword()
+        try? keychain.deleteSessionToken()
+        try? keychain.deleteCommandSessionToken()
+        try? keychain.deletePolestarDataPortalCredentials()
+        try? keychain.deletePolestarDataPortalToken()
+        try? keychain.deleteEmail()
+        preferences.email = ""
+        preferences.setVin("", for: .polestar)
+        preferences.polestarDataPortalAccountID = ""
+        preferences.polestarDataPortalClientID = ""
+        preferences.setExplicitSignOut(for: .polestar)
+        draft.polestarPassword = ""
+        draft.polestarDataPortalClientSecret = ""
     }
 
     // MARK: - Volvo sign-in handoff
@@ -356,18 +459,30 @@ final class AccountConnectionModel: ObservableObject {
         let oldVIN = preferences.vin(for: .volvo)
         preferences.volvoClientID = trimmedClientID
         preferences.setVin(upperVIN, for: .volvo)
+        preferences.clearExplicitSignOut(for: .volvo)
         if !upperVIN.isEmpty {
             preferences.setVehicleNickname(draft.volvoNickname, for: upperVIN)
         } else if !oldVIN.isEmpty {
             preferences.setVehicleNickname(draft.volvoNickname, for: oldVIN)
         }
         let request = VolvoSignInRequest(
-            clientID: !trimmedClientID.isEmpty ? trimmedClientID : BuiltinVolvoSecrets.clientID,
-            clientSecret: !draft.volvoClientSecret.isEmpty ? draft.volvoClientSecret : BuiltinVolvoSecrets.clientSecret,
-            vccApiKey: !draft.volvoApiKey.isEmpty ? draft.volvoApiKey : BuiltinVolvoSecrets.vccApiKey,
+            clientID: !trimmedClientID.isEmpty ? trimmedClientID : builtinCredentials.volvoClientID,
+            clientSecret: !draft.volvoClientSecret.isEmpty ? draft.volvoClientSecret : builtinCredentials.volvoClientSecret,
+            vccApiKey: !draft.volvoApiKey.isEmpty ? draft.volvoApiKey : builtinCredentials.volvoAPIKey,
             nickname: draft.volvoNickname)
         draft.volvoClientSecret = ""
         draft.volvoApiKey = ""
         return request
+    }
+
+    func removeVolvoCredentials() {
+        try? keychain.deleteVolvoSessionToken()
+        try? keychain.deleteVolvoClientSecret()
+        try? keychain.deleteVolvoApiKey()
+        preferences.volvoClientID = ""
+        preferences.setVin("", for: .volvo)
+        preferences.setExplicitSignOut(for: .volvo)
+        draft.volvoClientSecret = ""
+        draft.volvoApiKey = ""
     }
 }

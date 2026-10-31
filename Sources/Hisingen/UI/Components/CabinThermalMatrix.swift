@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// 2D cabin thermal layout: seat and steering-wheel heating levels rendered in their physical
-/// positions (driver left / passenger right, LHD/RHD-aware where the backend reports
-/// orientation), plus the interior/requested temperatures. Reads only from the already-decoded
-/// `VehicleClimateStatus` levels (0 = off, 1–3 = level) – it never infers heat from the vehicle
-/// name or exposes a control; remote heating stays in Controls.
+/// Requested heater levels (0 off, 1-3 intensity). Missing requests stay unknown;
+/// the vehicle can apply automatic heating independently.
 struct CabinThermalMatrix: View {
     let driverSeatLevel: Int?
     let passengerSeatLevel: Int?
@@ -30,17 +27,17 @@ struct CabinThermalMatrix: View {
             HStack(spacing: 6) {
                 Image(systemName: "thermometer.and.liquid.waves")
                     .hisType(.caption)
-                    .foregroundStyle(.secondary)
-                Text(L10n.text("Cabin Thermal Overview"))
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                Text(L10n.text("Heating Requests"))
                     .hisType(.caption, weight: .medium)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                 Spacer()
                 Text(cabinLabel)
                     .hisType(.micro, weight: .bold, design: .rounded)
                     .monospacedDigit()
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(activityBadgeColor.opacity(0.15), in: Capsule())
+                    .background(activityBadgeColor.opacity(0.12), in: Capsule())
                     .foregroundStyle(activityBadgeColor)
                     .hisAnimation(Motion.stateChange, value: activity)
             }
@@ -66,8 +63,13 @@ struct CabinThermalMatrix: View {
             if let interior = interiorTemperatureCelsius {
                 Text(temperatureLine(interior: interior))
                     .hisType(.micro)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
             }
+            Text(L10n.text("Heater requests may differ from automatic heating in the car."))
+                .hisType(.micro)
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .hisCaptionLeading()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
@@ -77,9 +79,9 @@ struct CabinThermalMatrix: View {
         switch activity {
         case .heating: return HisingenTheme.semanticWarning
         case .cooling: return HisingenTheme.semanticActive
-        case .ventilating: return .teal
+        case .ventilating: return HisingenTheme.chartInfo
         case .active, .starting: return HisingenTheme.semanticGood
-        case .idle, .unknown: return .secondary
+        case .idle, .unknown: return HisingenTheme.inkMuted
         }
     }
 
@@ -98,44 +100,48 @@ struct CabinThermalMatrix: View {
     /// Combined VoiceOver description of the cabin thermal state. Internal so the wiring
     /// tests can assert which heaters and temperatures are announced.
     var accessibilitySummary: String {
-        var parts: [String] = [cabinLabel]
+        var parts: [String] = [L10n.text("Heating Requests"), cabinLabel]
         for (title, level) in [
             (L10n.text("Driver Seat"), driverSeatLevel),
             (L10n.text("Passenger Seat"), passengerSeatLevel),
             (L10n.text("Steering Wheel"), steeringWheelLevel),
         ] {
-            if let level, level > 0 {
+            if let level, (1...3).contains(level) {
                 parts.append(L10n.format("%@: level %d", title, level))
+            } else {
+                parts.append("\(title): \(Self.heaterLevelText(level))")
             }
         }
         if let interior = interiorTemperatureCelsius {
             parts.append(temperatureLine(interior: interior))
         }
+        parts.append(L10n.text("Heater requests may differ from automatic heating in the car."))
         return parts.joined(separator: ", ")
+    }
+
+    static func heaterLevelText(_ level: Int?) -> String {
+        guard let level, (0...3).contains(level) else { return L10n.text("Not reported") }
+        return level == 0 ? L10n.text("Off") : L10n.format("Level %d", level)
     }
 
     @ViewBuilder
     private func heaterTile(title: String, level: Int?, symbol: String) -> some View {
-        let active = (level ?? 0) > 0
+        let active = (1...3).contains(level ?? 0)
         VStack(spacing: 4) {
             Image(systemName: symbol)
                 .hisType(.heading)
-                .foregroundStyle(active ? HisingenTheme.semanticWarning : .secondary)
+                .foregroundStyle(active ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
             Text(title)
                 .hisType(.micro, weight: HisingenTheme.captionWeight)
-                .foregroundStyle(.secondary)
-            Text(active
-                 ? L10n.format("Level %d", level ?? 0)
-                 : L10n.text("Off"))
+                .foregroundStyle(HisingenTheme.ink)
+            Text(Self.heaterLevelText(level))
                 .hisType(.micro, weight: .semibold, design: .rounded)
                 .monospacedDigit()
-                .foregroundStyle(active ? .primary : .secondary)
+                .foregroundStyle(HisingenTheme.ink)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        // 3 % over two stacked materials is below the threshold of perception, so the matrix lost
-        // its structure in exactly the state most of its cells are in. 8 % reads as a cell.
-        .background(active ? HisingenTheme.semanticWarning.opacity(0.14) : Color.primary.opacity(0.08),
+        .background(active ? HisingenTheme.semanticWarning.opacity(0.12) : HisingenTheme.chipFill,
                     in: RoundedRectangle(cornerRadius: 6))
         .hisAnimation(Motion.stateChange, value: level)
     }

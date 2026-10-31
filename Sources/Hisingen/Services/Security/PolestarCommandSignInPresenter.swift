@@ -45,8 +45,11 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
             defer: false)
         window.isReleasedWhenClosed = false
         window.alphaValue = 0.02
+        window.ignoresMouseEvents = true
+        window.hidesOnDeactivate = false
+        window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         anchorWindow = window
         return window
     }
@@ -59,6 +62,7 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
         flow = PolestarBrowserFlow(authorizeURL: authorizeURL,
                                   redirectURI: URL(string: "polestar-explore://explore.polestar.com")!)
         NSApp.activate(ignoringOtherApps: true)
+        _ = presentationWindow()
         presentingForceLogin = forceLogin
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -71,6 +75,14 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
                         cancel(with: PolestarError.authenticationRequired(.callbackRejected))
                     } else if !NSWorkspace.shared.open(authorizeURL) {
                         cancel()
+                    } else {
+                        Self.recordSignInTrace("presenter:browser-fallback-waiting")
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(for: .seconds(300))
+                            guard let self, self.flowID == id, self.pendingContinuation != nil else { return }
+                            Self.recordSignInTrace("presenter:browser-fallback-timeout")
+                            self.cancel(with: PolestarError.authenticationRequired(.callbackRejected))
+                        }
                     }
                 }
             }

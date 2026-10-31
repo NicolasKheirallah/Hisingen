@@ -57,16 +57,14 @@ struct RegressionFixTests {
 
     @Test
     func testDigitalTwinClimateActiveDoesNotMisreportVentilating() {
-        // Live-verified 2026-09-11: wire field 6 = 2 throughout a real *heating* session, and
-        // 3 while idle – it is an unresolved activity enum, not a ventilation flag. An active
-        // session with no temperature pair must report plain .active, never .ventilating.
+        // Ventilation is an enum: value 2 means heating, not ventilation-only.
         var climate = Data()
         climate.append(Protobuf.messageField(1, Protobuf.intField(1, 2_000_000_000)))
         climate.append(Protobuf.intField(2, 1))
         climate.append(Protobuf.intField(6, 2))
 
         let status = PolestarGRPC.parseClimate(climate)
-        #expect(status.activity == .active)
+        #expect(status.activity == .heating)
     }
 
 

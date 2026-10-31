@@ -22,7 +22,7 @@ def untracked_files() -> list[str]:
         capture_output=True,
         check=True,
     )
-    return sorted(line for line in res.stdout.decode().splitlines() if line)
+    return sorted(path.decode(errors="surrogateescape") for path in res.stdout.split(b"\0") if path)
 
 
 def main() -> int:
@@ -32,7 +32,7 @@ def main() -> int:
         return 0
     print("Untracked files exist under watched paths; a sync to GitHub will NOT include them:", file=sys.stderr)
     for path in pending:
-        print(f"  {path}", file=sys.stderr)
+        print(f"  {path!r}", file=sys.stderr)
     print("Commit them (git add) or remove them before pushing.", file=sys.stderr)
     return 1
 

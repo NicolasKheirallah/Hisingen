@@ -59,28 +59,38 @@ final class LocalDataEraser {
     private let preferences: PreferencesStore
     private let imageCache: CarImageCache
     private let memoryCaches: VehicleMemoryCacheRegistry
+    private let beforeSQL: (@Sendable () -> Void)?
 
     init(database: VehicleDatabase, preferences: PreferencesStore, imageCache: CarImageCache,
-         memoryCaches: VehicleMemoryCacheRegistry = .shared) {
+         memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil) {
         self.database = database
         self.preferences = preferences
         self.imageCache = imageCache
         self.memoryCaches = memoryCaches
+        self.beforeSQL = beforeSQL
     }
 
     /// The complete sequence on the calling actor. The session teardown path uses this: it must
     /// finish before the provider sign-out that follows it.
     func perform(_ scope: Scope) throws {
-        try Self.runSQL(scope, database: database)
+        let lease = database.beginHistoryErase(scope: scope)
+        defer { database.endHistoryErase(lease) }
+        beforeSQL?()
+        try database.eraseWithHistoryBarrier { try Self.runSQL(scope, database: database) }
         applyLocalTiers(scope)
     }
 
     /// The same sequence with the SQL half on a utility task. The Settings actions use this
     /// because `compact` and `everything` rewrite the whole file.
     func performInBackground(_ scope: Scope) async throws {
+        let lease = database.beginHistoryErase(scope: scope)
+        defer { database.endHistoryErase(lease) }
+        if case .locations = scope { preferences.persistLocationHistory = false }
         let database = database
+        let beforeSQL = beforeSQL
         try await Task.detached(priority: .utility) {
-            try Self.runSQL(scope, database: database)
+            beforeSQL?()
+            try database.eraseWithHistoryBarrier { try Self.runSQL(scope, database: database) }
         }.value
         applyLocalTiers(scope)
     }
@@ -89,16 +99,22 @@ final class LocalDataEraser {
     /// mirrors must not be dropped before the delete they mirror has committed.
     private nonisolated static func runSQL(_ scope: Scope, database: VehicleDatabase) throws {
         switch scope {
-        case .session(.vehicle(let vin)):
-            database.snapshots.deleteSnapshot(for: vin)
-            database.baselines.deleteBaseline(for: vin)
-            database.commandReceipts.deleteCommandReceipts(for: vin)
-            database.providerBackoffs.deleteProviderBackoffs(for: vin)
-        case .session(.all):
-            database.snapshots.deleteAllSnapshots()
-            database.baselines.deleteAllBaselines()
-            database.commandReceipts.deleteAllCommandReceipts()
-            database.providerBackoffs.deleteVehicleScopedProviderBackoffs()
+        case .session(let vehicles):
+            try database.db.withTransaction {
+                let tables = ["vehicle_snapshots", "charging_baselines", "command_receipts", "provider_backoff"]
+                for table in tables {
+                    switch vehicles {
+                    case .vehicle(let vin):
+                        try database.db.query(sql: "DELETE FROM \(table) WHERE vin = ?;") { stmt in
+                            try stmt.bindText(vin, at: 1)
+                            try stmt.executeUpdate()
+                        } process: { _ in }
+                    case .all:
+                        let predicate = table == "provider_backoff" ? " WHERE vin IS NOT NULL" : ""
+                        try database.db.execute(sql: "DELETE FROM \(table)\(predicate);")
+                    }
+                }
+            }
         case .locations(.vehicle(let vin)):
             try database.clearStoredLocationsOrThrow(for: vin)
         case .locations(.all):
@@ -183,9 +199,9 @@ final class LocalDataEraser {
     private func dropImageTier(_ vehicles: VehicleScope) {
         switch vehicles {
         case .vehicle(let vin):
-            imageCache.dropMemoryCache(for: vin)
+            imageCache.forget(vin: vin)
         case .all:
-            imageCache.dropAllMemoryCaches()
+            imageCache.forgetAll()
         }
     }
 }

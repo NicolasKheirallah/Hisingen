@@ -46,9 +46,7 @@ extension PolestarGRPC {
         // resolves the command token (and reports "not authorized" vs "try again") before calling
         // in; this stays as a defensive backstop.
         if command.requiresCommandClientAuthorization && commandToken == nil {
-            throw RemoteCommandError.rejected(
-                L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
-            )
+            throw RemoteCommandError.authorizationRequired
         }
         // Thread the resolved token through as a local, not actor state: `executeRemoteCommand`
         // suspends at every `await` below, so a concurrent command for another VIN would
@@ -58,7 +56,9 @@ extension PolestarGRPC {
         case .startClimate(let temperature, let frontLeft, let frontRight,
                            let rearLeft, let rearRight, let steeringWheel):
             guard temperature == 0 || ((16...30).contains(temperature) && (temperature * 2).rounded() == temperature * 2) else {
-                throw RemoteCommandError.rejected(nil)
+                throw RemoteCommandError.rejected(
+                    L10n.text("Choose a climate temperature between 16 and 30 degrees, in half-degree steps.")
+                )
             }
             return try await invocation(
                 method: "ClimatizationStart",
@@ -158,7 +158,7 @@ extension PolestarGRPC {
             let body = try await lastMessage(path: Self.chargeNowService + "/\(method)",
                                              message: Self.chronosRequest(vin), vin: vin,
                                              accessToken: accessToken, host: .pccs)
-            if let status = Protobuf.fields(body).first(where: { $0.number == 1 && $0.wire == 0 })?.varint, status > 0 {
+            if let status = try Self.commandMessage(body).uint(1), status > 0 {
                 return RemoteCommandResult(outcome: .accepted, message: nil)
             }
             return try Self.chronosResult(body, statusField: 3)
@@ -184,8 +184,8 @@ extension PolestarGRPC {
                                              message: Self.chronosRequest(vin,
                                                  payload: Protobuf.stringField(2, id)),
                                              vin: vin, accessToken: accessToken, host: .pccs)
-            guard let status = Self.varint(body, field: 1), status > 0 else {
-                throw RemoteCommandError.rejected(nil)
+            guard let status = try Self.commandMessage(body).uint(1), status > 0 else {
+                throw PolestarError.commandOutcomeUnknown(operation: "DeleteTimer")
             }
             return RemoteCommandResult(outcome: .completed, message: nil)
         case .scheduleOTA(let minutes):
@@ -286,11 +286,10 @@ extension PolestarGRPC {
     /// fail with "missing context", so fetch it on demand instead of giving up.
     private func softwareID(vin: String, accessToken: String,
                             requiringInstallable: Bool = false) async throws -> String {
-        // Always re-read before a write. A cached id can name a version the car has since
-        // finished installing, and `InstallNow` on that is refused by the backend in HTTP/2
-        // trailers URLSession cannot surface – which reaches the user as an unexplained
-        // "unexpected response" rather than anything actionable.
-        _ = try? await fetchSoftware(vin: vin, accessToken: accessToken, locale: "en")
+        // A cached id can name a version the car has already installed. Re-read it before
+        // sending `InstallNow` so stale context is caught before the command is sent.
+        _ = try await fetchSoftware(vin: vin, accessToken: accessToken, locale: "en", requireComplete: true,
+                                    requireSoftwareIdentity: requiringInstallable)
         guard let resolved = otaSoftwareIDs[vin], !resolved.isEmpty else {
             throw RemoteCommandError.missingContext
         }
@@ -374,26 +373,38 @@ extension PolestarGRPC {
     /// `status` is 0 UNKNOWN, 1 IDLE, 2 SCHEDULED, 3 INSTALL.
     private func ota(method: String, request: Data, vin: String,
                      token: String) async throws -> RemoteCommandResult {
+        let generation = sessionGeneration
         let body = try await lastMessage(path: Self.otaSchedulerService + "/\(method)",
                                          message: request, vin: vin, accessToken: token, host: .c3)
-        guard let scheduler = Self.message(body, field: 1),
-              let status = Self.varint(scheduler, field: 1), status > 0 else {
-            throw RemoteCommandError.rejected(nil)
+        guard generation == sessionGeneration else { throw CancellationError() }
+        guard let scheduler = try Self.commandMessage(body).bytes(1).map(Self.commandMessage),
+              let status = scheduler.uint(1), status > 0 else {
+            throw PolestarError.commandOutcomeUnknown(operation: method)
         }
-        let returnedID = Self.string(scheduler, field: 4)
+        let returnedID = scheduler.bytes(4).flatMap { String(data: $0, encoding: .utf8) } ?? ""
         if !returnedID.isEmpty { otaSoftwareIDs[vin] = returnedID }
         switch status {
         case 3: return RemoteCommandResult(outcome: .delivered, message: nil)   // INSTALL
         case 2: return RemoteCommandResult(outcome: .completed, message: nil)   // SCHEDULED
-        default: return RemoteCommandResult(outcome: .completed, message: nil)  // IDLE (cancelled)
+        case 1: return RemoteCommandResult(outcome: .completed, message: nil)   // IDLE (cancelled)
+        default: throw PolestarError.commandOutcomeUnknown(operation: method)
         }
     }
 
     static func parseInvocationResult(_ data: Data) throws -> RemoteCommandResult {
-        let nested = message(data, field: 1)
-        let response = nested.flatMap { varint($0, field: 3) == nil ? nil : $0 } ?? data
-        let status = varint(response, field: 3) ?? 0
-        let messageText = string(response, field: 4)
+        let outer = try commandMessage(data)
+        let response: ProtoMessage
+        if outer.uint(3) != nil {
+            response = outer
+        } else if let data = outer.bytes(1) {
+            response = try commandMessage(data)
+        } else {
+            response = outer
+        }
+        guard let status = response.uint(3) else {
+            throw PolestarError.commandOutcomeUnknown(operation: "command result")
+        }
+        let messageText = response.bytes(4).flatMap { String(data: $0, encoding: .utf8) } ?? ""
         switch status {
         case 1:
             return RemoteCommandResult(outcome: .accepted, message: messageText.nilIfEmpty)
@@ -408,7 +419,7 @@ extension PolestarGRPC {
         case 12:
             throw RemoteCommandError.rejected(L10n.text("Another vehicle command conflicts with this request."))
         default:
-            throw RemoteCommandError.rejected(messageText.nilIfEmpty)
+            throw PolestarError.commandOutcomeUnknown(operation: "command result")
         }
     }
 
@@ -522,26 +533,22 @@ extension PolestarGRPC {
         return request
     }
     static func chronosResult(_ data: Data, statusField: Int) throws -> RemoteCommandResult {
-        let status = varint(data, field: statusField) ?? 0
+        guard let status = try commandMessage(data).uint(statusField) else {
+            throw PolestarError.commandOutcomeUnknown(operation: "command result")
+        }
         switch status {
         case 1: return RemoteCommandResult(outcome: .accepted, message: nil)
         case 2: return RemoteCommandResult(outcome: .delivered, message: nil)
         case 3, 4, 8: return RemoteCommandResult(outcome: .completed, message: nil)
-        case 0: throw RemoteCommandError.rejected(L10n.text("The vehicle service reported an unknown error."))
+        case 0: throw PolestarError.commandOutcomeUnknown(operation: "command result")
         case 5: throw RemoteCommandError.rejected(L10n.text("The vehicle is offline. Try again when it wakes up."))
         case 6: throw RemoteCommandError.rejected(L10n.text("The vehicle reported an error processing this command."))
         case 7: throw RemoteCommandError.rejected(L10n.text("The command failed. Please try again."))
-        default: throw RemoteCommandError.rejected(nil)
+        default: throw PolestarError.commandOutcomeUnknown(operation: "command result")
         }
     }
-    private static func message(_ data: Data, field: Int) -> Data? {
-        Protobuf.fields(data).first(where: { $0.number == field && $0.wire == 2 })?.data
-    }
-    private static func varint(_ data: Data, field: Int) -> UInt64? {
-        Protobuf.fields(data).first(where: { $0.number == field && $0.wire == 0 })?.varint
-    }
-    private static func string(_ data: Data, field: Int) -> String {
-        guard let value = message(data, field: field) else { return "" }
-        return String(data: value, encoding: .utf8) ?? ""
+    private static func commandMessage(_ data: Data) throws -> ProtoMessage {
+        do { return try ProtoMessage(data) }
+        catch { throw PolestarError.commandOutcomeUnknown(operation: "malformed command result") }
     }
 }

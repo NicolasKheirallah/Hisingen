@@ -133,14 +133,14 @@ let raw = try SQLiteDatabase.inMemory()
     @Test("Schema migration version and lifecycle columns are installed idempotently")
     func currentSchemaVersion() throws {
 let raw = try SQLiteDatabase.inMemory()
-        let database = VehicleDatabase(database: raw)
+        _ = VehicleDatabase(database: raw)
         let version = try raw.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
-            statement.step() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
+            (try statement.stepOrThrow()) ? Int(statement.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
         let columns = try raw.query(sql: "PRAGMA table_info(charging_sessions);") { _ in } process: { statement in
             var names = Set<String>()
-            while statement.step() {
+            while (try statement.stepOrThrow()) {
                 if let name = statement.columnText(at: 1) { names.insert(name) }
             }
             return names
@@ -176,7 +176,7 @@ let raw = try SQLiteDatabase.inMemory()
         #expect(migrated.energySource == .legacyEstimate)
         #expect(migrated.summaryVersion == 1)
         let version = try sqlite.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
-            statement.step() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
+            (try statement.stepOrThrow()) ? Int(statement.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
     }
@@ -195,7 +195,7 @@ let raw = try SQLiteDatabase.inMemory()
         let abandonedAt = try raw.query(
             sql: "SELECT ended_at FROM charging_sessions WHERE vin = ?;",
             bindings: { statement in try statement.bindText(vin, at: 1) },
-            process: { statement in statement.step() ? statement.columnDate(at: 0) : nil }
+            process: { statement in (try statement.stepOrThrow()) ? statement.columnDate(at: 0) : nil }
         )
         #expect(abandonedAt == start)
     }

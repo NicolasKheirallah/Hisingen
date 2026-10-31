@@ -121,6 +121,7 @@ struct VehicleHeroCard: View {
                                                 style: .topLeftOverlay,
                                                 showsSwedishFlag: showsSwedishPlateFlag
                                             )
+                                            .privacySensitive(preferences.privacyRedactionEnabled)
                                         }
                                     }
 
@@ -133,6 +134,7 @@ struct VehicleHeroCard: View {
                                                 style: .topRightOverlay,
                                                 showsSwedishFlag: showsSwedishPlateFlag
                                             )
+                                            .privacySensitive(preferences.privacyRedactionEnabled)
                                         }
                                         if showModelTopRight {
                                             modelOverlayBadge(modelIdentity)
@@ -200,6 +202,7 @@ struct VehicleHeroCard: View {
                                     style: registrationPosition,
                                     showsSwedishFlag: showsSwedishPlateFlag
                                 )
+                                .privacySensitive(preferences.privacyRedactionEnabled)
                             }
                             if greeting != nil, !nickname.isEmpty {
                                 Text(nickname)

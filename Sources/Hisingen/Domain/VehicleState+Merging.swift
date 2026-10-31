@@ -11,9 +11,11 @@ extension VehicleState {
             if shouldApplyLiveReading(.battery, reportedAt: reportedAt) {
                 if let value = battery.batteryPercentage {
                     energy.batteryPercentage = value
+                    freshness.readingObservations?[.battery] = .init(fetchedAt: receivedAt, source: .liveStream)
                     if let reportedAt { freshness.readingDates[.battery] = reportedAt }
                 }
                 energy.diagnostics = battery.diagnostics
+                energy.diagnostics?.unknownWireFields = battery.unknownFields
                 energy.reportedBatteryCapacityKwh = battery.reportedBatteryCapacityKwh
                     ?? energy.reportedBatteryCapacityKwh
                 appliedReading = true
@@ -21,6 +23,7 @@ extension VehicleState {
             if let value = battery.rangeKm,
                shouldApplyLiveReading(.range, reportedAt: reportedAt) {
                 energy.rangeKm = value
+                freshness.readingObservations?[.range] = .init(fetchedAt: receivedAt, source: .liveStream)
                 if let reportedAt { freshness.readingDates[.range] = reportedAt }
                 appliedReading = true
             }
@@ -36,6 +39,9 @@ extension VehicleState {
                 energy.estimatedTimeToFullMinutes = battery.estimatedChargingTimeToFullMinutes
                     ?? energy.estimatedTimeToFullMinutes
                 energy.chargingState = battery.chargingState ?? energy.chargingState
+                if battery.chargingState != nil {
+                    freshness.readingObservations?[.charging] = .init(fetchedAt: receivedAt, source: .liveStream)
+                }
                 if battery.chargerConnection != .unknown {
                     energy.connection = battery.chargerConnection
                 }
@@ -56,6 +62,9 @@ extension VehicleState {
             var appliedReading = false
             if shouldApplyLiveReading(.openings, reportedAt: date) {
                 next.openings = merged.openings
+                if !exterior.openings.isEmpty {
+                    freshness.readingObservations?[.openings] = .init(fetchedAt: receivedAt, source: .liveStream)
+                }
                 next.isTailgateLocked = merged.isTailgateLocked
                 if let date { freshness.readingDates[.openings] = date }
                 appliedReading = true
@@ -63,6 +72,9 @@ extension VehicleState {
             if (exterior.isLocked != nil || exterior.alarmTriggered != nil),
                shouldApplyLiveReading(.locks, reportedAt: date) {
                 next.isLocked = merged.isLocked
+                if exterior.isLocked != nil {
+                    freshness.readingObservations?[.locks] = .init(fetchedAt: receivedAt, source: .liveStream)
+                }
                 next.alarmTriggered = merged.alarmTriggered
                 if let date { freshness.readingDates[.locks] = date }
                 appliedReading = true
@@ -81,11 +93,16 @@ extension VehicleState {
 
     func shouldApplyLiveReading(_ reading: VehicleReading, reportedAt: Date?) -> Bool {
         guard let reportedAt, let current = readingDates[reading] else { return true }
-        return reportedAt >= current
+        // Strictly newer wins; equal timestamps re-applying would let out-of-order
+        // same-second delivery overwrite newer with older. Future-dated clock skew
+        // more than 5 minutes ahead is ignored to avoid pinning the horizon.
+        if reportedAt.timeIntervalSinceNow > 5 * 60 { return false }
+        return reportedAt > current
     }
 
     private mutating func advanceVehicleReportedAt(to reportedAt: Date?) {
         guard let reportedAt else { return }
+        guard reportedAt.timeIntervalSinceNow <= 5 * 60 else { return }
         freshness.vehicleReportedAt = max(freshness.vehicleReportedAt ?? .distantPast, reportedAt)
     }
 
@@ -109,7 +126,12 @@ extension VehicleState {
         refreshedFeatures: Set<AppFeature>? = nil,
         imageBackfill: VehicleImageBackfill = .empty
     ) -> VehicleState {
-        guard let previous, previous.vin == vin else { return self }
+        guard let previous, previous.vin == vin else {
+            var unmerged = self
+            unmerged.chargeLocationPresence = ChargeLocationPresence.resolve(
+                location: location, locations: energy.locations, previous: nil)
+            return unmerged
+        }
         let isCommandLocked = (previous.optimisticCommandLockUntil ?? .distantPast) > Date()
         let policy = SnapshotMergePolicy(
             features: features,
@@ -167,8 +189,15 @@ extension VehicleState {
             location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             probedCapabilities: mergedProbes,
             powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
-            fuelSystem: fuelSystem.merging(previous: previous.fuelSystem)
+            fuelSystem: fuelSystem.merging(previous: previous.fuelSystem, policy: policy),
+            // Capability data is static for a VIN and is not re-read on every refresh. Without
+            // this carry-forward it survives exactly one merge, so OTA gates and control
+            // settings quietly disappear a minute after launch.
+            otaCapabilities: otaCapabilities ?? previous.otaCapabilities
         )
+        merged.chargeLocationPresence = ChargeLocationPresence.resolve(
+            location: merged.location, locations: merged.energy.locations,
+            previous: previous.chargeLocationPresence)
         merged.freshness.readingDates = readingDates
         merged.freshness.metaReceivedDates = freshness.metaReceivedDates ?? previous.freshness.metaReceivedDates
         if energy.batteryPercentage == nil { merged.freshness.readingDates[.battery] = previous.reportedDate(for: .battery) }

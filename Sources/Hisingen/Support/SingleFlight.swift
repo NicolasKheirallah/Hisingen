@@ -1,5 +1,10 @@
 import Foundation
 
+struct InFlightRequest<Value: Sendable>: Sendable {
+    let id: UUID
+    let task: Task<Value, Error>
+}
+
 /// Shares one in-flight `Task` per key.
 ///
 /// The table stays in the owning actor. Only the synchronous `join` and `finish` touch it, and
@@ -9,11 +14,11 @@ enum SingleFlight {
     /// Returns the request already running for `key`, or starts one with `start`.
     static func join<Key: Hashable & Sendable, Value: Sendable>(
         _ key: Key,
-        in table: inout [Key: PolestarInFlightRequest<Value>],
+        in table: inout [Key: InFlightRequest<Value>],
         start: () -> Task<Value, Error>
-    ) -> PolestarInFlightRequest<Value> {
+    ) -> InFlightRequest<Value> {
         if let existing = table[key] { return existing }
-        let request = PolestarInFlightRequest(id: UUID(), task: start())
+        let request = InFlightRequest(id: UUID(), task: start())
         table[key] = request
         return request
     }
@@ -21,8 +26,8 @@ enum SingleFlight {
     /// Clears `key` once `request` has completed. A newer flight under the same key stays put.
     static func finish<Key: Hashable & Sendable, Value: Sendable>(
         _ key: Key,
-        _ request: PolestarInFlightRequest<Value>,
-        in table: inout [Key: PolestarInFlightRequest<Value>]
+        _ request: InFlightRequest<Value>,
+        in table: inout [Key: InFlightRequest<Value>]
     ) {
         if table[key]?.id == request.id { table[key] = nil }
     }

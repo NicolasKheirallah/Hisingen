@@ -12,6 +12,7 @@ private let livePolestarCredentialsConfigured: Bool = {
 /// Credential-gated smoke test for the supported Polestar read path. This suite must remain
 /// read-only: it runs automatically in CI against a dedicated account, so probe experiments
 /// and remote commands belong in an explicitly opted-in local tool, never here.
+@Suite(.serialized, .timeLimit(.minutes(15)))
 @MainActor
 struct LivePolestarReadOnlyIntegrationTests {
     @Test(.disabled(if: !livePolestarCredentialsConfigured || ProcessInfo.processInfo.environment["HISINGEN_RAW_CAPTURE_DIR"] == nil,
@@ -49,7 +50,7 @@ struct LivePolestarReadOnlyIntegrationTests {
         let email = try #require(environment["HISINGEN_TEST_EMAIL"])
         let password = try #require(environment["HISINGEN_TEST_PASSWORD"])
         let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
-        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-tests")
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-tests.\(UUID())")
         try? keychain.deleteSessionToken()
         try? keychain.deletePassword()
         defer {

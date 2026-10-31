@@ -26,7 +26,7 @@ extension VolvoAPI {
         let needsStatistics = features.contains(.tripMeters)
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
-        let needsFuel = powertrain.hasFuelRange || (details.fuelType != nil && details.fuelType != "ELECTRIC")
+        let needsFuel = Self.needsFuelRead(powertrain: powertrain, fuelType: details.fuelType)
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
             try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel")
         }
@@ -67,8 +67,11 @@ extension VolvoAPI {
         // engine-status only feeds `fuelSystem.isEngineRunning`, so fetch it when the
         // fuel/powertrain information is actually part of the requested features instead of
         // paying two round trips on every narrow fetch (garage scans, trip-meters-only).
+        // A battery car has no engine to report, so the charging and battery features do not
+        // pull engine-status in for it.
         let needsEngineStatus = needsFuel
-            || features.contains(.chargingDetails) || features.contains(.batteryDiagnostics)
+            || ((features.contains(.chargingDetails) || features.contains(.batteryDiagnostics))
+                && powertrain != .bev)
         async let engineStatusTask: VolvoEngineStatusDTO? = optional(
             enabled: needsEngineStatus, key: "engine-status", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status") }
@@ -111,7 +114,7 @@ extension VolvoAPI {
                 latitude: coords[1],
                 longitude: coords[0],
                 heading: loc.properties?.heading.flatMap(Double.init),
-                speed: nil,
+                speed: loc.speedKmH,
                 timestamp: loc.properties?.timestamp,
                 altitudeMeters: loc.altitudeMeters,
                 parkingBrakeEngaged: Self.volvoParkingBrake(brakes?.parkingBrakeStatus?.value)
@@ -240,8 +243,7 @@ extension VolvoAPI {
         for warning in engineDiagnostics?.fluidWarnings ?? [] where !fluidWarns.contains(warning) {
             fluidWarns.append(warning)
         }
-        if let brakeWarning = brakes?.brakeFluidLevelWarning?.value?.uppercased(),
-           !brakeWarning.contains("NO_WARNING"), !brakeWarning.isEmpty,
+        if volvoWarningIsPresent(brakes?.brakeFluidLevelWarning?.value),
            !fluidWarns.contains(L10n.text("Brake fluid")) {
             fluidWarns.append(L10n.text("Brake fluid"))
         }
@@ -413,6 +415,12 @@ extension VolvoAPI {
         state.freshness.readingDates[.odometer] = odometer?.odometer?.updatedAt
         state.freshness.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
         return state
+    }
+
+    /// Fuel is read for combustion-capable powertrains, and for a fuel string this classifier
+    /// does not recognise. `NONE` and the electric strings classify as `.bev`, so they skip it.
+    static func needsFuelRead(powertrain: PowertrainType, fuelType: String?) -> Bool {
+        powertrain.hasFuelRange || (powertrain == .unknown && fuelType != nil)
     }
 
     private static func volvoParkingBrake(_ raw: String?) -> Bool? {

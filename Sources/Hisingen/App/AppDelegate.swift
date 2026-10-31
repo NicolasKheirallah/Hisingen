@@ -3,19 +3,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatching {
     /// The process-wide store: intents and other non-view call sites read the same
     /// `.shared` instance, so per-instance caches cannot drift between the shell and them.
-    private let preferences = PreferencesStore.shared
+    let preferences = PreferencesStore.shared
     /// The one process-wide storage handle: intents, image caching, and Settings default to
     /// `VehicleDatabase.shared`, so every consumer must share this same instance (and its
     /// SQLite handle) rather than opening parallel connections to the same file.
-    private let vehicleDatabase = VehicleDatabase.shared
-    private lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
-    private lazy var fleetStore = FleetStore(stateStore: stateStore, preferences: preferences)
-    private let reverseGeocoder = ReverseGeocoder()
-    private lazy var miniPanel = ChargingMiniPanelController(preferences: preferences)
-    private let imageCache = CarImageCache()
+    let vehicleDatabase = VehicleDatabase.shared
+    lazy var stateStore = VehicleStateStore(database: vehicleDatabase, preferences: preferences)
+    lazy var fleetStore = FleetStore(stateStore: stateStore, preferences: preferences)
+    let reverseGeocoder = ReverseGeocoder()
+    lazy var miniPanel = ChargingMiniPanelController(preferences: preferences)
+    /// The same instance `VehicleArtworkStore` reads and `LocalDataEraser` clears. A second
+    /// instance meant sign-out erased a cache the renderer never used.
+    let imageCache = CarImageCache.shared
     private lazy var polestarAPI = PolestarAPI(imageCache: imageCache, preferences: preferences)
     private lazy var polestarDataPortalAPI = PolestarDataPortalAPI(imageCache: imageCache, preferences: preferences)
     private lazy var volvoAPI = VolvoAPI(imageCache: imageCache, preferences: preferences)
@@ -24,26 +26,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var providerRegistry = ProviderRegistry(
         polestar: polestarAPI, polestarDataPortal: polestarDataPortalAPI, volvo: volvoAPI, preferences: preferences)
     private let sessionManager = SessionManager()
-    private let resultPresenter = RemoteResultPresenter()
-    private lazy var dockWarningBadge = DockWarningBadge(preferences: preferences)
-    private lazy var connectionTester = ConnectionTester(
+    let resultPresenter = RemoteResultPresenter()
+    lazy var dockWarningBadge = DockWarningBadge(preferences: preferences)
+    lazy var connectionTester = ConnectionTester(
         sessionManager: sessionManager, providers: providerRegistry, preferences: preferences)
-    private lazy var launchAtLoginController = LaunchAtLoginController(preferences: preferences)
+    lazy var launchAtLoginController = LaunchAtLoginController(preferences: preferences)
     private lazy var remoteAuthorizer = RemoteActionAuthorizer(preferences: preferences)
-    private lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
-    private var vehicleSession: VehicleSessionController!
-    private var signInCoordinator: SignInCoordinator!
-    private var garageScanner: GarageScanner!
+    lazy var notifier = Notifier(stateStore: stateStore, preferences: preferences)
+    var vehicleSession: VehicleSessionController!
+    var signInCoordinator: SignInCoordinator!
+    var garageScanner: GarageScanner!
     private var urlRouter: URLCommandRouter!
-    private var updateController: UpdateController!
+    var updateController: UpdateController!
     private var mainMenuController: MainMenuController!
-    private var statusController: StatusItemController!
+    var statusController: StatusItemController!
     /// Most recent remote-command outcome, mirrored into the Controls tab for an inline banner.
-    private var lastRemoteCommandFeedback: RemoteCommandFeedback?
-    private var commandCoordinator: CommandCoordinator!
-    private var calendarPreconditioning: CalendarPreconditioningController!
-    private var chargingPlannerController: ChargingPlannerController!
-    private var settingsWindow: NSWindow?
+    var lastRemoteCommandFeedback: RemoteCommandFeedback?
+    var commandCoordinator: CommandCoordinator!
+    var calendarPreconditioning: CalendarPreconditioningController!
+    var chargingPlannerController: ChargingPlannerController!
+    var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One maintenance pass, before anything can read: legacy plist snapshots move into SQLite,
@@ -141,11 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 [preferences.vin, preferences.vin(for: .polestar), preferences.vin(for: .volvo)]
                     .filter { !$0.isEmpty }
             },
-            startCharging: { [weak self] in
+            startCharging: { [weak self] vin in
                 guard let self else {
                     return .deferred(reason: L10n.text("Hisingen is no longer running."))
                 }
-                return await self.startPlannerCharging()
+                return await self.startPlannerCharging(targetVIN: vin)
             }
         )
         vehicleSession = VehicleSessionController(
@@ -221,14 +223,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = flushed.wait(timeout: .now() + 2)
     }
 
-    private func signOut() {
-        signInCoordinator.cancelPolestarSignIn()
-        SpotlightIndexer.removeAll()
-        vehicleSession.signOut()
-        // Cached addresses are derived from the signed-out account's locations.
-        Task { [reverseGeocoder] in await reverseGeocoder.clear() }
-    }
-
     /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen.
     func application(_ application: NSApplication, continue userActivity: NSUserActivity,
                      restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
@@ -243,228 +237,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if vehicleSession.sessionValid { vehicleSession.refreshIfStale() }
     }
 
-    private func render() {
+    func render() {
         let isAuth = vehicleSession.sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
         statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback
         statusController.render(data: vehicleSession.latest, error: vehicleSession.lastError,
                                authenticated: isAuth, diagnostics: vehicleSession.lastDiagnostics)
-    }
-
-    private func toggleSettingsInPopover() {
-        showSettingsWindow()
-    }
-
-    private func showSettingsWindow() {
-        if let settingsWindow, settingsWindow.isVisible {
-            settingsWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        let settings = SettingsView(
-            notificationPermission: statusController.notificationPermission,
-            state: vehicleSession.latest,
-            fleet: fleetStore.snapshot(activeState: vehicleSession.latest),
-            database: vehicleDatabase,
-            imageCache: imageCache,
-            showsHeaderBar: false,
-            onSettingsChanged: { [weak self] change in
-                guard let self else { return }
-                if case .closeSettings = change {
-                    self.closeSettingsWindow()
-                } else {
-                    self.settingsChanged(change)
-                }
-            },
-            onSignOut: { [weak self] in self?.signOut() },
-            accountConnection: statusController.accountConnection,
-            onTestConnection: { [weak self] brand in
-                guard let self else {
-                    return ConnectionCheck(success: false, message: L10n.text("Hisingen is no longer running."), failureKind: nil)
-                }
-                return await self.connectionTester.test(brand: brand)
-            }
-        )
-        .environment(\.preferencesStore, preferences)
-
-        let host = NSHostingController(rootView: settings)
-        let isNewWindow = settingsWindow == nil
-        let window = settingsWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1_080, height: 760),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = L10n.text("Hisingen Settings")
-        window.contentMinSize = NSSize(width: 820, height: 600)
-        window.contentViewController = host
-        window.isReleasedWhenClosed = false
-        if isNewWindow {
-            window.setContentSize(NSSize(width: 1_080, height: 760))
-            window.center()
-        }
-        window.setFrameAutosaveName("HisingenSettingsWindowV2")
-        settingsWindow = window
-        statusController.dismissSettings()
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    private func closeSettingsWindow() {
-        settingsWindow?.orderOut(nil)
-    }
-
-    func performRemoteCommand(_ command: RemoteCommand) {
-        // Interactive surfaces stay fire-and-forget: the banner/notification presentation
-        // happens inside the coordinator; nothing here needs the outcome.
-        Task { _ = await commandCoordinator.perform(command) }
-    }
-
-    func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?) {
-        Task { _ = await perform(command, targetVIN: targetVIN, origin: .userInitiated) }
-    }
-
-    private func settingsChanged(_ change: SettingsChange) {
-        switch change {
-        case .credentials:
-            vehicleSession.credentialsDidChange(for: .polestar)
-        case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
-            signInCoordinator.beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
-        case .polestarCommandAuthorization:
-            signInCoordinator.beginPolestarCommandAuthorization()
-        case .polestarCommandAuthorizationForceLogin:
-            signInCoordinator.beginPolestarCommandAuthorization(forceLogin: true)
-        case .polestarWebSignIn:
-            signInCoordinator.beginPolestarWebSignIn()
-        case .reauthenticate(let brand):
-            switch brand {
-            case .polestar:
-                if preferences.polestarConnectionMode == .dataPortal {
-                    vehicleSession.credentialsDidChange(for: .polestar)
-                } else {
-                    // Interactive browser window – no Polestar ID password re-entry.
-                    signInCoordinator.beginPolestarWebSignIn()
-                }
-            case .volvo:
-                // Re-run the browser OAuth with the developer keys already on file.
-                let volvoVIN = preferences.vin(for: .volvo)
-                signInCoordinator.beginVolvoSignIn(
-                    clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "",
-                    nickname: volvoVIN.isEmpty ? "" : preferences.vehicleNickname(for: volvoVIN),
-                    forceInteractive: true
-                )
-            }
-        case .switchToBrand(let brand):
-            switch brand {
-            case .polestar:
-                vehicleSession.switchToBrandAndResume(.polestar)
-                closeSettingsWindow()
-            case .volvo:
-                if preferences.hasResumableSession(for: .volvo) {
-                    vehicleSession.switchToBrandAndResume(.volvo)
-                    closeSettingsWindow()
-                } else {
-                    signInCoordinator.beginVolvoSignIn(clientID: preferences.volvoClientID, clientSecret: "", vccApiKey: "", nickname: "")
-                }
-            }
-        case .selectVehicle(let vin):
-            selectVehicle(vin: vin)
-            closeSettingsWindow()
-        case .closeSettings:
-            closeSettingsWindow()
-        case .exportDiagnosticLogs:
-            exportDiagnosticLogs()
-        case .features:
-            notifier.featureSelectionDidChange()
-            notifier.requestAuthorizationIfAnyAlertEnabled()
-            updateController.applyConfiguration()
-            vehicleSession.reloadVehicleMetadata()
-            dockWarningBadge.refresh()
-            chargingPlannerController.reload()
-        case .notifications:
-            notifier.requestAuthorizationIfAnyAlertEnabled()
-            dockWarningBadge.refresh()
-        case .presentation:
-            preferences.applyAppearance()
-            vehicleSession.reloadVehicleMetadata()
-        case .launchAtLogin:
-            launchAtLoginController.reconcile(userInitiated: true)
-        case .updater:
-            updateController.applyConfiguration()
-        case .checkForUpdates:
-            updateController.checkNow()
-        case .automation:
-            calendarPreconditioning.reload()
-        }
-        render()
-    }
-
-    /// Builds the redacted diagnostic bundle off the main thread and offers a save panel.
-    /// Reached from Settings → Privacy & Data and from the sign-in failure card, where
-    /// attaching the failed exchanges to a bug report is the whole point.
-    private func exportDiagnosticLogs() {
-        let database = vehicleDatabase
-        Task { @MainActor in
-            do {
-                let data = try await Task.detached(priority: .userInitiated) {
-                    try await DiagnosticLogExporter.buildReport(database: database)
-                }.value
-                let panel = NSSavePanel()
-                panel.allowedContentTypes = [.json]
-                panel.nameFieldStringValue = "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json"
-                guard panel.runModal() == .OK, let url = panel.url else { return }
-                do {
-                    try data.write(to: url, options: .atomic)
-                } catch {
-                    presentExportFailure(error)
-                }
-            } catch {
-                presentExportFailure(error)
-            }
-        }
-    }
-
-    /// A silently missing export file reads as lost data; surface the underlying cause
-    /// (permissions, disk full) instead of swallowing it after the user picked a target.
-    private func presentExportFailure(_ error: Error) {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.messageText = L10n.text("Export failed")
-        alert.informativeText = "\(L10n.text("The diagnostic report could not be created."))\n\n\(error.localizedDescription)"
-        alert.addButton(withTitle: L10n.text("OK"))
-        alert.runModal()
-    }
-
-    private func startCalendarClimate() async -> RemoteCommandDispatchOutcome {
-        // Don't attempt (and don't spend a "Command not sent" banner) when the user has
-        // turned the remote-climate feature off. Capability/session gating still happens
-        // inside `CommandCoordinator`.
-        guard preferences.features.contains(.remoteClimate) else {
-            return .refused(reason: RemoteCommandError.disabled.localizedDescription)
-        }
-        return await commandCoordinator.perform(
-            .startClimate(
-                temperatureCelsius: Float(preferences.remoteClimateTemperature),
-                frontLeftSeat: preferences.remoteDriverSeatHeating,
-                frontRightSeat: preferences.remoteFrontRightSeatHeating,
-                rearLeftSeat: preferences.remoteRearLeftSeatHeating,
-                rearRightSeat: preferences.remoteRearRightSeatHeating,
-                steeringWheel: preferences.remoteSteeringWheelHeating
-            ),
-            origin: .automation)
-    }
-
-    /// The planner's unattended start-charging path. Guarded on the remote-charging
-    /// feature so turning that off also disarms auto-start; `.automation` origin means
-    /// the coordinator runs the routine-risk `startChargingOverride` silently (no sheet,
-    /// no biometrics) – auto-start is its own explicit consent in the planner settings.
-    private func startPlannerCharging() async -> RemoteCommandDispatchOutcome {
-        guard preferences.features.contains(.remoteCharging) else {
-            return .refused(reason: RemoteCommandError.disabled.localizedDescription)
-        }
-        return await commandCoordinator.perform(.startChargingOverride, origin: .automation)
     }
 
     @objc private func systemAppearanceDidChange() {
@@ -480,228 +259,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls {
             urlRouter.route(url)
         }
-    }
-}
-
-// MARK: - RemoteCommandDispatching
-
-extension AppDelegate: RemoteCommandDispatching {
-    // `selectVehicle(vin:)` is declared on the class above; the dispatch protocol shares it
-    // so entry points select then send through one seam.
-    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin) async -> RemoteCommandDispatchOutcome {
-        await commandCoordinator.perform(command, origin: origin)
-    }
-
-    func perform(
-        _ command: RemoteCommand,
-        targetVIN: String?,
-        origin: RemoteCommandOrigin
-    ) async -> RemoteCommandDispatchOutcome {
-        if let targetVIN, !targetVIN.isEmpty {
-            guard await vehicleSession.prepareVehicle(vin: targetVIN) else {
-                return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
-            }
-        }
-        return await commandCoordinator.perform(command, origin: origin)
-    }
-}
-
-// MARK: - CommandExecutionContext
-
-extension AppDelegate: CommandExecutionContext {
-    var vehicleState: VehicleState? { vehicleSession.latest }
-    var sessionIsValid: Bool { vehicleSession.sessionValid }
-
-    func currentCommandExecutor() -> any RemoteCommandExecuting { vehicleSession.currentProvider() }
-    func commandInProgressDidChange() {
-        render()
-    }
-    func presentResult(
-        title: String,
-        message: String,
-        success: Bool,
-        target: RemoteCommandTarget?
-    ) {
-        let subtitle = target?.displayName ?? vehicleSession.latest.map { state -> String in
-            let nick = preferences.vehicleNickname(for: state.identity.vin)
-            return nick.isEmpty ? state.model.brand.displayName : nick
-        }
-        // Inline banner in the Controls tab first – it is visible regardless of the system
-        // notification permission – then the notification for when the panel is closed.
-        lastRemoteCommandFeedback = RemoteCommandFeedback(
-            title: title, message: message, success: success)
-        render()
-        resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
-    }
-    func beginCommandConfirmation(
-        _ receipt: CommandReceipt,
-        optimisticState: VehicleState?
-    ) {
-        // The refresh module's receipt ledger decides where the receipt is filed: the selected
-        // vehicle's live collection, or the Remote Command target's VIN when that target is not
-        // the visible vehicle. The shell holds no part of that rule.
-        vehicleSession.beginCommandConfirmation(receipt, optimisticState: optimisticState)
-    }
-    func requestExpeditedRefresh() {
-        vehicleSession.refreshNow()
-    }
-}
-
-// MARK: - SignInCoordinatorContext
-
-extension AppDelegate: SignInCoordinatorContext {
-    func activateBrandAfterSignIn(_ brand: VehicleBrand) {
-        // The browser flow has just written a new refresh token. Discard any earlier negative
-        // presence result before the brand switch derives `sessionValid` from preferences.
-        preferences.invalidateSessionCache()
-        vehicleSession.adoptBrandAfterSignIn(brand)
-    }
-
-    func dismissSettingsAfterSignIn() {
-        // A first successful sign-in hands off to the one-time setup pass instead of the
-        // dashboard. The pass itself sets hasCompletedSetupPass on completion or skip.
-        if !preferences.hasCompletedSetupPass {
-            closeSettingsWindow()
-            statusController.showSetupPass()
-            return
-        }
-        closeSettingsWindow()
-    }
-
-    func refreshSettingsSurface() {
-        guard settingsWindow?.isVisible == true else { return }
-        closeSettingsWindow()
-        showSettingsWindow()
-    }
-
-    func presentSignInNotice(title: String, body: String, subtitle: String?) {
-        notifier.notifyCommandNotice(title: title, body: body, subtitle: subtitle)
-    }
-}
-
-// MARK: - GarageScanContext
-
-extension AppDelegate: GarageScanContext {
-    var commandPipelineIsBusy: Bool { commandCoordinator.isInProgress }
-    var refreshPipelineIsBusy: Bool { vehicleSession.isRefreshBusy }
-    var refreshPipelineIsRateLimited: Bool { vehicleSession.isRefreshRateLimited }
-
-    func garageScanDidCaptureState(_ state: VehicleState) {
-        stateStore.save(state)
-        fleetStore.retain(state)
-        notifier.vehicleStateDidUpdate(state)
-    }
-
-    func garageScanDidCompletePass() {
-        render()
-    }
-}
-
-// MARK: - URLCommandRouterContext
-
-extension AppDelegate: URLCommandRouterContext {
-    var activeBrand: VehicleBrand { preferences.activeBrand }
-    var defaultRemoteClimateTemperatureCelsius: Double { preferences.remoteClimateTemperature }
-
-    func handleOAuthCallback(_ url: URL) {
-        signInCoordinator.handleCallbackURL(url)
-    }
-
-    func selectVehicleByIndex(_ index: Int) {
-        statusController.selectVehicleByIndex(index)
-    }
-
-    func showSettings() {
-        showSettingsWindow()
-    }
-
-    func toggleSettings() {
-        if settingsWindow?.isVisible == true {
-            closeSettingsWindow()
-        } else {
-            showSettingsWindow()
-        }
-    }
-
-    func togglePopover() {
-        statusController.togglePopover()
-    }
-
-    func refreshNow() {
-        vehicleSession.refreshNow()
-    }
-
-    func notifyCommandNotice(title: String, body: String) {
-        notifier.notifyCommandNotice(title: title, body: body)
-    }
-}
-
-// MARK: - UpdateControllerContext
-
-extension AppDelegate: UpdateControllerContext {
-    func setAvailableUpdateVersion(_ version: String?) {
-        statusController.updateVersion = version
-    }
-
-    func setCheckingForUpdates(_ checking: Bool) {
-        statusController.checkingForUpdates = checking
-    }
-
-    func updateStateDidChange() {
-        render()
-    }
-}
-
-// MARK: - VehicleSessionControllerContext
-
-extension AppDelegate: VehicleSessionControllerContext {
-    func sessionStateDidChange() {
-        render()
-    }
-
-    func showLoading() {
-        statusController.showLoading()
-    }
-
-    func setActiveVIN(_ vin: String?) {
-        statusController.activeVin = vin
-    }
-
-    func didReceiveVehicleState(_ state: VehicleState) {
-        miniPanel.update(state: state)
-        notifier.notifyChargingAnomalyIfNeeded(for: state)
-        notifier.vehicleStateDidUpdate(state)
-        chargingPlannerController.vehicleStateDidUpdate(state)
-        if !state.commandState.receipts.contains(where: {
-            $0.status.isAwaiting && $0.supportsTelemetryConfirmation
-        }) {
-            fleetStore.retain(state)
-        }
-    }
-
-    func authenticationRequired() {
-        notifier.authenticationRequired()
-    }
-
-    func authenticationSucceeded() {
-        notifier.authenticationSucceeded()
-    }
-
-    func vehicleSwitchDidPause() {
-        guard !statusController.isPopoverVisible else { return }
-        notifier.notifyCommandNotice(
-            title: L10n.text("Vehicle Switch Paused"),
-            body: L10n.text("The vehicle service asked Hisingen to slow down. Switching vehicles will resume automatically."))
-    }
-
-    func sessionDidEstablish() {
-        garageScanner.schedulePass(after: 8)
-    }
-
-    func sessionCredentialsDidChange() {
-        launchAtLoginController.reconcile(userInitiated: true)
-        notifier.featureSelectionDidChange()
-        notifier.requestAuthorizationIfAnyAlertEnabled()
-        updateController.applyConfiguration()
     }
 }

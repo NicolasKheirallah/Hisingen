@@ -14,6 +14,8 @@ struct APILogEntry: Codable, Equatable, Sendable {
     let method: String
     let endpoint: String
     let operation: String
+    let logicalOperationID: String?
+    let attempt: Int?
     let statusCode: Int?
     let responseBytes: Int?
     let responsePayloadJSON: String?
@@ -46,12 +48,15 @@ struct APILogEntry: Codable, Equatable, Sendable {
          durationMilliseconds: Int, errorType: String?, semanticErrorType: String? = nil,
          grpcStatus: String? = nil, grpcMessage: String? = nil, transportError: Bool? = nil,
          appVersion: String? = nil, appBuild: String? = nil,
-         processIdentifier: Int32? = nil, launchIdentifier: String? = nil) {
+         processIdentifier: Int32? = nil, launchIdentifier: String? = nil,
+         logicalOperationID: String? = nil, attempt: Int? = nil) {
         self.timestamp = timestamp
         self.provider = provider
         self.method = method
         self.endpoint = endpoint
         self.operation = operation
+        self.logicalOperationID = logicalOperationID
+        self.attempt = attempt
         self.statusCode = statusCode
         self.responseBytes = responseBytes
         self.responsePayloadJSON = responsePayloadJSON
@@ -81,7 +86,8 @@ struct APILogEntry: Codable, Equatable, Sendable {
             semanticErrorType: semanticErrorType, grpcStatus: grpcStatus,
             grpcMessage: grpcMessage, transportError: transportError,
             appVersion: appVersion, appBuild: appBuild,
-            processIdentifier: processIdentifier, launchIdentifier: launchIdentifier)
+            processIdentifier: processIdentifier, launchIdentifier: launchIdentifier,
+            logicalOperationID: logicalOperationID, attempt: attempt)
     }
 }
 
@@ -124,7 +130,7 @@ actor APIDiagnosticLogStore {
                 grpcStatus: String? = nil, grpcMessage: String? = nil,
                 statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
                 startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil,
-                semanticErrorType: String? = nil) {
+                semanticErrorType: String? = nil, logicalOperationID: String? = nil, attempt: Int? = nil) {
         // A cancelled request (`URLError.cancelled`, NSURLErrorDomain -999) is normal teardown
         // – a superseded sign-in, a brand switch, app quit. Recording it as an error just adds
         // noise a support bundle then has to explain away. The providers wrap it in their own
@@ -163,11 +169,13 @@ actor APIDiagnosticLogStore {
             semanticErrorType: semanticErrorType ?? derivedSemanticError,
             grpcStatus: normalizedGRPCStatus,
             grpcMessage: normalizedGRPCMessage,
-            transportError: (error != nil && statusCode == nil) ? true : nil,
+            transportError: (error != nil && statusCode == nil && normalizedGRPCStatus == nil) ? true : nil,
             appVersion: Self.appVersion,
             appBuild: Self.appBuild,
             processIdentifier: ProcessInfo.processInfo.processIdentifier,
-            launchIdentifier: Self.launchIdentifier
+            launchIdentifier: Self.launchIdentifier,
+            logicalOperationID: logicalOperationID,
+            attempt: attempt
         )
         entries.append(entry)
         trimIfNeeded()

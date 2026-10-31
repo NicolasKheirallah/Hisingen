@@ -95,6 +95,15 @@ final class HistoryWorkspace {
         }.value
     }
 
+    /// Trips derived from recorded telemetry, for the handover pack. Entries carry coordinates;
+    /// the caller decides what leaves the Mac.
+    func tripHistory(vin: String) async -> [TripHistoryEntry] {
+        let database = database
+        return await Task.detached(priority: .userInitiated) {
+            database.history.derivedTrips(for: vin, limit: 5_000)
+        }.value
+    }
+
     struct SessionCurves: Sendable {
         var samples: [HistoricalChargingSample]
         var current: [HistoryInsights.ChargingCurvePoint]

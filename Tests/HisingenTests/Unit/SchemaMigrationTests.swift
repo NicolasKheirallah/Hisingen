@@ -17,9 +17,9 @@ struct SchemaMigrationTests {
 
     private func userVersion(_ raw: SQLiteDatabase) throws -> Int {
         try raw.query(sql: "PRAGMA user_version;") { _ in } process: { stmt -> Int in
-            _ = stmt.step()
+            guard try stmt.stepOrThrow() else { return -1 }
             return Int(stmt.columnInt64(at: 0) ?? 0)
-        } ?? -1
+        }
     }
 
     @Test func freshStoreMigratesToTheLatestKnownSchemaVersion() throws {
@@ -51,7 +51,7 @@ struct SchemaMigrationTests {
         let raw = try SQLiteDatabase(path: url.path)
         let database = VehicleDatabase(database: raw)
         let before = try userVersion(raw)
-        try database.runMigrations(from: before)
+        database.runMigrations(from: before)
         #expect(try userVersion(raw) == VehicleDatabase.latestSchemaVersion)
         // The store still works after the no-op migration: a snapshot round-trips.
         let vin = "MIGRATION_NOOP_02"

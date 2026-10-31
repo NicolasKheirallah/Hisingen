@@ -184,6 +184,14 @@ extension InfoTabView {
                 info: L10n.text("Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating.")
             ))
         }
+        if let weight = state.otaCapabilities?.equipment?.grossVehicleWeightRatingKg, weight > 0 {
+            rows.append(KVRow(
+                L10n.text("Gross Vehicle Weight"),
+                String(format: "%.0f kg", locale: L10n.displayLocale, weight),
+                symbol: "scalemass",
+                info: L10n.text("Maximum permissible weight reported by the vehicle's backend, not the car's current weight.")
+            ))
+        }
         if let gearbox = state.identity.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2.fill"))
         }
@@ -201,7 +209,37 @@ extension InfoTabView {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "bolt.fill", title: L10n.text("Powertrain & Specs"), color: HisingenTheme.semanticGood)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                factoryContentCodes
             }
+        }
+    }
+
+    /// The visual-identity groups behind the "Factory Content Codes" row. Named where the code
+    /// meaning is verified; everything else keeps its position so a new code stays visible without
+    /// a guess. Same disclosure idea as the raw backend lists, but readable.
+    @ViewBuilder
+    private var factoryContentCodes: some View {
+        if let entries = state.otaCapabilities?.equipment?.contentCodeEntries, !entries.isEmpty {
+            DisclosureGroup(L10n.text("Factory Content Codes")) {
+                VStack(spacing: 6) {
+                    ForEach(entries) { entry in
+                        KVRow(entry.label ?? L10n.format("Group %d", entry.index),
+                              entry.code,
+                              symbol: "barcode",
+                              info: entry.index == 12 && entry.label != nil
+                                  ? L10n.text("Body-coloured trim; this group selects the front grille variant.")
+                                  : nil)
+                    }
+                    Text(L10n.text("Only groups with a verified meaning are named; the rest keep their position."))
+                        .hisType(.micro)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.top, 6)
+            }
+            .disclosureGroupStyle(WholeRowDisclosureStyle())
+            .padding(.top, 4)
         }
     }
 
@@ -215,6 +253,11 @@ extension InfoTabView {
             if let km = state.maintenance.service.distanceToServiceKm { val += " / \(Format.distance(km: km, unit: preferences.distanceUnit))" }
             if let trigger = state.formattedServiceTrigger { val += " (\(trigger))" }
             rows.append(KVRow(L10n.text("Service Due"), val, symbol: "wrench.and.screwdriver", valueWarning: days < 30))
+        }
+        if let forecast = serviceForecast {
+            rows.append(KVRow(L10n.text("Estimated Service Date"),
+                              L10n.format("Due around %@ at your current driving rate", serviceForecastDayText(forecast.dueDate)),
+                              symbol: "chart.line.uptrend.xyaxis"))
         }
         if let hours = state.maintenance.service.engineHoursToService, hours > 0 {
             rows.append(KVRow(L10n.text("Engine Hours to Service"), L10n.format("%d hrs", hours), symbol: "timer"))

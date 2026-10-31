@@ -4,6 +4,9 @@ enum LiveStreamFailureAction: Equatable, Sendable {
     case retry(after: TimeInterval)
     case refreshAuthorization(after: TimeInterval)
     case openCircuit(until: Date)
+    /// No reconnect can succeed until the user signs in again. The engine parks the stream and
+    /// asks the app to surface a sign-in request instead of sleeping through another backoff.
+    case requireReauthentication
 }
 
 struct LiveStreamPolicy: Sendable {
@@ -12,6 +15,10 @@ struct LiveStreamPolicy: Sendable {
     let unsupportedCircuitInterval: TimeInterval
     let repeatedFailureCircuitInterval: TimeInterval
     let maximumFailuresBeforeCircuit: Int
+    /// How many circuits an authorization failure may open before the stream stops trying.
+    /// A circuit buys a server-side propagation race a second chance; a second refused token
+    /// exchange means the session is gone and only a sign-in can restore it.
+    let maximumAuthorizationCircuits: Int
     private let retrySteps: [TimeInterval]
     private let customGate: (@Sendable (VehicleState) -> Bool)?
 
@@ -21,6 +28,7 @@ struct LiveStreamPolicy: Sendable {
         unsupportedCircuitInterval: TimeInterval = 6 * 60 * 60,
         repeatedFailureCircuitInterval: TimeInterval = 30 * 60,
         maximumFailuresBeforeCircuit: Int = 6,
+        maximumAuthorizationCircuits: Int = 1,
         retrySteps: [TimeInterval] = [5, 15, 30, 60, 120, 300],
         shouldStream: (@Sendable (VehicleState) -> Bool)? = nil
     ) {
@@ -29,6 +37,7 @@ struct LiveStreamPolicy: Sendable {
         self.unsupportedCircuitInterval = unsupportedCircuitInterval
         self.repeatedFailureCircuitInterval = repeatedFailureCircuitInterval
         self.maximumFailuresBeforeCircuit = maximumFailuresBeforeCircuit
+        self.maximumAuthorizationCircuits = maximumAuthorizationCircuits
         self.retrySteps = retrySteps
         self.customGate = shouldStream
     }
@@ -49,6 +58,7 @@ struct LiveStreamPolicy: Sendable {
         for error: VehicleServiceError,
         consecutiveFailures: Int,
         authorizationRecoveryUsed: Bool,
+        authorizationCircuits: Int = 0,
         now: Date,
         jitterUnit: Double
     ) -> LiveStreamFailureAction {
@@ -59,6 +69,8 @@ struct LiveStreamPolicy: Sendable {
             return .refreshAuthorization(after: retryDelay(
                 consecutiveFailures: consecutiveFailures, retryAfter: nil, jitterUnit: jitterUnit
             ))
+        case .authenticationRequired where authorizationCircuits >= maximumAuthorizationCircuits:
+            return .requireReauthentication
         case .authenticationRequired:
             return .openCircuit(until: now.addingTimeInterval(repeatedFailureCircuitInterval))
         case .rateLimited(let retryAfter):
@@ -95,6 +107,8 @@ struct LiveStreamMetrics: Sendable {
     var disconnects = 0
     var messagesReceived = 0
     var authorizationRefreshes = 0
+    /// Times the stream gave up reconnecting because the session needed a sign-in.
+    var authorizationFailures = 0
     var fallbackPolls = 0
     var activeTransportStreams = 0
     var connectedAt: Date?

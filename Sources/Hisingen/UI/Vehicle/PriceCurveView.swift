@@ -10,6 +10,8 @@ struct PriceCurveView: View {
     let points: [ElectricityPricePoint]
     let plan: ChargingPlan?
     var now: Date = Date()
+    @State private var scrubDate: Date?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var futurePoints: [ElectricityPricePoint] {
         points.filter { $0.endDate > now }.sorted { $0.startDate < $1.startDate }
@@ -23,50 +25,81 @@ struct PriceCurveView: View {
             return AnyView(EmptyView())
         }
         let span = maximum - minimum
+        let selected = scrubDate.flatMap { HistoryInsights.nearest(to: $0, in: series, timestamp: \.startDate) }
         return AnyView(
-            Chart {
-                ForEach(series, id: \.startDate) { point in
-                    BarMark(
-                        x: .value("Time", point.startDate),
-                        y: .value("Price", point.sekPerKwh),
-                        width: .fixed(2)
-                    )
-                    .foregroundStyle(barColor(for: point, minimum: minimum, span: span))
+            VStack(alignment: .leading, spacing: 4) {
+                // The readout has its own line, so the chart does not move when a bar is picked
+                // and the readout never clips against the card above a 56 point plot.
+                HStack(spacing: 0) {
+                    if let selected {
+                        let text = readout(for: selected)
+                        Text(text)
+                            .hisTelemetryValue(text, reduceMotion: reduceMotion)
+                            .historyScrubCallout()
+                    }
+                    Spacer(minLength: 0)
                 }
-            }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .hour, count: 6)) { (value: AxisValue) in
-                    AxisValueLabel {
-                        if let date = value.as(Date.self) {
-                            Text(date, format: Date.FormatStyle.dateTime.hour().locale(L10n.displayLocale))
-                                .hisType(.micro, weight: .medium)
-                                .monospacedDigit()
+                .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                Chart {
+                    ForEach(series, id: \.startDate) { point in
+                        BarMark(
+                            x: .value("Time", point.startDate),
+                            y: .value("Price", point.sekPerKwh),
+                            width: .fixed(2)
+                        )
+                        .foregroundStyle(barColor(for: point, minimum: minimum, span: span))
+                    }
+                    if let selected {
+                        RuleMark(x: .value("Time", selected.startDate))
+                            .foregroundStyle(Color.primary.opacity(0.25))
+                    }
+                }
+                .chartXSelection(value: $scrubDate)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .hour, count: 6)) { (value: AxisValue) in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(date, format: Date.FormatStyle.dateTime.hour().locale(L10n.displayLocale))
+                                    .hisType(.micro, weight: .medium)
+                                    .monospacedDigit()
+                            }
                         }
                     }
                 }
-            }
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { (value: AxisValue) in
-                    AxisValueLabel {
-                        if let price = value.as(Double.self) {
-                            // The y axis carries the only measurable information on the chart, so
-                            // it is no longer the smallest type on it, and it names its unit.
-                            Text(L10n.format("%@ kr", String(format: "%.1f", locale: L10n.displayLocale, price)))
-                                .hisType(.micro, weight: .medium)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { (value: AxisValue) in
+                        AxisValueLabel {
+                            if let price = value.as(Double.self) {
+                                // The y axis carries the only measurable information on the chart, so
+                                // it is no longer the smallest type on it, and it names its unit.
+                                Text(L10n.format("%@ kr", String(format: "%.1f", locale: L10n.displayLocale, price)))
+                                    .hisType(.micro, weight: .medium)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        AxisGridLine()
                     }
-                    AxisGridLine()
                 }
+                .frame(height: 56)
+                // The chart had no unit and no way to read an individual hour: the bars carried the
+                // information and nothing could be asked of them.
+                .chartYAxisLabel(L10n.text("kr per kWh"))
+                .accessibilityLabel(L10n.text("Electricity price outlook"))
+                .accessibilityValue(accessibilitySummary(minimum: minimum, maximum: maximum))
             }
-            .frame(height: 56)
-            // The chart had no unit and no way to read an individual hour: the bars carried the
-            // information and nothing could be asked of them.
-            .chartYAxisLabel(L10n.text("kr per kWh"))
-            .accessibilityLabel(L10n.text("Electricity price outlook"))
-            .accessibilityValue(accessibilitySummary(minimum: minimum, maximum: maximum))
         )
+    }
+
+    /// The hour and price of one bar, in the unit the axis already names. Says so when the bar
+    /// falls inside the planned window, the same test that colours it.
+    private func readout(for point: ElectricityPricePoint) -> String {
+        let time = Format.shortTime(date: point.startDate)
+        let price = Format.number(point.sekPerKwh, decimals: 2)
+        guard let plan, point.startDate >= plan.start, point.endDate <= plan.end else {
+            return L10n.format("%@ · %@ kr per kWh", time, price)
+        }
+        return L10n.format("%@ · %@ kr per kWh · planned charging", time, price)
     }
 
     /// Hue stays absolute: the Swedish spot-price bands are what a reader plans around, so

@@ -1,183 +1,130 @@
-# CI
+# Continuous integration
 
-Seven GitHub Actions workflows live in `.github/workflows/`: `ci.yml`,
-`security.yml`, `dependency-review.yml`, `pages.yml`, `live-integration.yml`,
-`tag-release.yml`, and `release.yml`. All actions used
-across them are pinned to commit SHAs with a version comment (e.g.
-`actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`);
-preserve that pinning style when bumping any of them. This document covers
-`ci.yml` and `security.yml`; see [releases.md](./releases.md) for
-`release.yml` and `live-integration.yml`.
+Eight workflows live in `.github/workflows/`: CI, Security, Dependency Review,
+Deploy site, Live Account Integration, Auto Release, Prepare Release, and Release.
 
-```mermaid
-flowchart LR
-    subgraph Push["push to main / PR targeting main"]
-        Lint["ci.yml: lint-workflows-and-scripts<br/>actionlint + shellcheck"]
-        L10n["ci.yml: check-localization<br/>duplicate-key detection + coverage report"]
-        Docs["ci.yml: check-docs<br/>broken links + unbalanced fences"]
-        CI["ci.yml: build-and-test<br/>macos-15 (deployment target)<br/>build, test, bundle validation"]
-        Sec["security.yml<br/>CodeQL (Swift)"]
-        Dep["dependency-review.yml<br/>PR dependency diff"]
-        Pages["pages.yml<br/>website typecheck + build + Pages deploy"]
-    end
-    subgraph Manual["workflow_dispatch"]
-        Live["live-integration.yml<br/>real Polestar/Volvo calls, read-only"]
-    end
-    subgraph Tag["push tag v*"]
-        Release["release.yml<br/>test → sign → notarize → DMG → GH Release"]
-    end
-    subgraph Prepare["manual release preparation"]
-        TagPR["tag-release.yml<br/>version validation + release PR"]
-    end
+## Required validation
+
+`ci.yml` runs on main pushes, main pull requests, merge groups, and manual dispatch.
+It cancels superseded runs for the same branch or pull request. Its jobs are:
+
+| Job | Contract |
+| --- | --- |
+| `portable-checks` | Shared lint, source hygiene, localization, documentation, notices, VIN scoping, contrast, source invariants, updater checks, and release/test-runner regressions. |
+| `build-and-test (macos-15)` | Native arm64 build/tests and universal app/DMG packaging on the deployment baseline. |
+| `build-and-test (macos-26-intel)` | Native x86_64 build/tests on the newer supported runtime. |
+| `ci-required` | Runs even after failure/cancellation and accepts only success from every required validation job. |
+
+Temporary compatibility jobs emit the previous required-check names during the
+protection migration. They depend on the complete portable phase. After the new
+workflow succeeds on main, switch the main ruleset to `ci-required` with:
+
+```sh
+python3 Scripts/configure-ci-protection.py --apply --aggregate --enable-immutable
 ```
 
-## `ci.yml`
+The command refuses the aggregate migration until that check has succeeded on
+main. Its default migration mode requires the existing check names and removes
+the obsolete macOS 14 requirement. Inspect settings without changing them by
+omitting `--apply`. See [releases.md](releases.md) for production restrictions.
 
-**Trigger:** `push` to `main`, and pull requests targeting `main`.
-**Permissions:** `contents: read`.
-**Concurrency:** `ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}`, cancels in-progress runs on a new push to the same PR/branch.
-**Secrets:** none.
+## Shared local and hosted phases
 
-### Job `lint-workflows-and-scripts` (ubuntu-latest, ~2 min)
+`Scripts/ci-checks.sh portable` and `Scripts/ci-checks.sh macos` are the executable
+phase definitions. Workflows and local CI call these scripts rather than copying
+the validation commands into multiple places.
 
-Validates the automation itself before spending macOS runner time: `actionlint`
-(installed via `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`;
-the Go module proxy checksum-verifies this against sum.golang.org, so it
-doesn't need its own pinned third-party Action) against every workflow file,
-and `shellcheck` against `Scripts/*.sh`.
+```sh
+make ci
+sh Scripts/ci-local.sh --committed
+```
 
-### Job `check-localization` (ubuntu-latest, ~1 min)
+The first command checks the working tree and rejects untracked build inputs.
+The second checks an isolated archive of HEAD, so uncommitted changes cannot make
+a broken commit appear healthy. Neither command proves the other hosted OS and
+architecture lane passes. Local packaging uses a temporary output directory and
+prints its location so failures retain diagnostics without deleting existing apps.
 
-Runs `Scripts/check-localization.py` against every `*.lproj/Localizable.strings`
-file. **Fails on duplicate keys** within a single locale file (whichever line
-wins is unspecified, which is a real bug). **Reports, but does not fail on**,
-translation coverage relative to the base `en` locale; `L10n.swift` falls
-back to English for any key missing from the active locale, so an
-incomplete/stub locale is expected, not a defect.
+The toolchain contract is `.github/ci-toolchain.json`. Blocking hosted jobs pin
+Xcode 26.3; they do not silently select a newer installed Xcode. Local compatibility
+runs can set `XCODE_VERSION` explicitly. Node, Python, Go and ShellCheck versions
+are pinned in the workflows; ShellCheck's downloaded archive has a checked digest.
+GitHub supports `queue: max`, which actionlint 1.7.12 does not yet parse. The
+shared lint command validates that exact extension and its cancellation contract,
+then normalizes only the validated queue field before invoking actionlint. Invalid
+values, duplicates, nesting and conflicting cancellation fail behavioral checks;
+other workflow diagnostics remain fatal.
 
-### Job `check-docs` (ubuntu-latest, ~1 min)
+SwiftPM repository and binary-artifact caches are keyed by dependency/toolchain
+inputs. Compiled products and generated credentials are not shared caches.
 
-`TERMS.md`, and everything under `docs/`. Fails on a relative Markdown link
-that doesn't resolve to a real file, or an unterminated code fence
-(``` ``` ```): the two cheapest, highest-signal documentation defects to
-catch automatically. Does not check external `http(s)` links (no network
-access in this job) or Mermaid diagram *syntax* (only that fences are
-balanced); Mermaid syntax errors are still visible whenever the page
-actually renders on GitHub.
+## Credential-free tests and packaging
 
-### Job `build-and-test` (matrix: `macos-15`, `fail-fast: false`, 25-minute timeout)
+Normal CI sets `HISINGEN_BUILD_CONFIGURATION=fixture`. Secret injection then
+ignores local environment files and supplied production API variables, and makes
+the same fixture configuration on every regeneration. CodeQL also builds without
+production credentials.
 
-Checkout → cache SwiftPM checkout data (keyed on
-`${{ matrix.os }}-spm-${{ hashFiles('Package.resolved','Package.swift') }}`)
-→ select the runner's active full Xcode with `Scripts/select-xcode.sh` →
-`swift --version` + `make doctor` → `swift build` → `swift test --disable-xctest
---enable-swift-testing --skip Live --no-parallel`
-→ `make app` → bundle validation: binary executable bit
-set, `plutil -lint` on `Info.plist`, `codesign --verify --deep --strict`, and
-an explicit assertion that `LSUIElement == true`. The `macos-15` leg also
-builds and verifies an ad-hoc DMG and uploads it as a validation artifact.
+The test wrapper discovers tests, applies the execution filters, rejects empty
+selection and integration suites leaking into the deterministic set, then records
+execution results. `HISINGEN_TEST_OUTPUT_DIR` selects the report directory. xUnit
+results, selected-test metadata and execution summaries distinguish discovery from
+actual execution; a zero-test or all-disabled run fails.
 
-`--skip Live` is defense-in-depth, not the only safeguard: the live
-integration suites already gate themselves on credential env vars via Swift
-Testing's `.disabled(if:)` trait, and CI never sets those secrets; but one
-of those suites (`LivePolestarRemoteCommandIntegrationTests`) dispatches a
-real `startClimate` command, so a second, independent guard (skip anything
-named `Live` outright) means that stays true even if those credentials were
-ever accidentally added as repository-level rather than
-environment-scoped secrets.
+Tests still use global serialization while shared-resource tests require it.
+Timing-sensitive suites use injected clocks and explicit events with cancellation
+and bounded failure deadlines. A timeout is a diagnostic bound, not an assertion
+that a scheduler must run within a tiny real-time window.
 
-**No Swift linting step exists**: no SwiftLint/SwiftFormat configuration
-anywhere in the repo (workflow/shell-script linting now does exist, via
-`lint-workflows-and-scripts` above). The Swift 6 language mode and complete
-concurrency checking (declared in `Package.swift`) are the closest thing to
-automated Swift style/correctness enforcement beyond the test suite itself.
+Universal packaging preserves the built app and uses `package-dmg` rather than
+rebuilding it. Mandatory artifact validation mounts the DMG, checks the packaged
+app's signatures, plist and architectures, compares it with the input app, and
+runs `--ci-smoke-test`. That entry path checks resources and Sparkle loading before
+creating AppDelegate, opening persistence, or starting account/network activity.
 
-**No production signing/notarization**: CI uses ad-hoc signing (`IDENTITY=-`).
+## Diagnostics and security
 
-**Artifacts:** the `macos-15` leg uploads `Hisingen.dmg` and its SHA-256 file.
+Build/test jobs upload results and diagnostic files even after failure, with
+bounded retention. Their summaries record commit, runner and selected toolchain.
+Build failures remain failures when output is piped into a log. Test discovery
+compiles the app and test targets once, with coverage and warnings-as-errors;
+execution reuses that build. Discovery compiler diagnostics are retained even
+when the build fails before tests start.
 
-**Fails on:** a bad toolchain (`make doctor`), a build or test failure, an
-actionlint/shellcheck finding, a duplicate localization key, a broken docs
-link/unterminated fence, or any bundle-validation assertion failing
-(including the `LSUIElement` check; a regression there would silently turn
-Hisingen into a Dock-visible app, which this check exists specifically to
-catch).
+`security.yml` runs Swift CodeQL on main changes, on its weekly schedule, and by
+manual dispatch. Its fixture build uses the same pinned Xcode. CodeQL is advisory
+to publication unless its result is explicitly added to the repository policy;
+compilation success alone is not a claim that no security alerts exist.
 
-## `security.yml`
+Dependency Review runs for pull requests and rejects high/critical dependency
+findings. Dependabot tracks pinned Actions and Swift dependencies. The package
+now includes Sparkle and gRPC/NIO dependencies; see Package.resolved and the
+third-party notices for the resolved set.
 
-**Trigger:** `push` to `main`, a weekly schedule (Mondays 04:17 UTC), and manual
-dispatch. Pull requests use the separate `dependency-review.yml`; the normal CI
-matrix still compiles and tests every pull request before merge.
-**Secrets:** none.
+Source hygiene checks selected committed changes as well as local edits. Its
+filename/content patterns are narrow guardrails. GitHub secret scanning and push
+protection provide separate token detection; neither is a guarantee that source
+contains no credentials.
 
-### Job `codeql` (macos-15, `security-events: write`, 60-minute timeout)
+## Pages and live tests
 
-CodeQL Swift analysis using `build-mode: manual`, the shared Xcode-selection
-script, and the same plain `swift build` command as CI rather than
-the `autobuild` heuristic. Whole-module optimization must not be added here: it
-previously caused index-output mismatches and compiler type-check timeouts under
-CodeQL tracing. Results land under the
-repo's **Security → Code scanning alerts**.
+Pages serves the Volvo OAuth callback and the signed Sparkle appcast. Release
+calls the reusable Pages workflow with its verified release artifact and waits
+for deployment. The deployment verifier checks byte equality over HTTPS and
+availability/length of referenced release assets. A callback-only main deployment
+preserves the latest published release feed instead of restoring a stale source
+copy.
 
-The instrumented Swift build has taken 26–28 minutes on hosted runners, followed
-by roughly 2–3 minutes of analysis and cleanup. The 60-minute timeout leaves
-headroom for runner variance; the former 30-minute timeout could cancel a valid
-analysis immediately after a successful build.
+Live integration remains manual and separate from deterministic CI. Hosted soak
+duration must be 60 through 1800 seconds; longer soaks run locally. Polestar
+read-only tests and its soak run sequentially to avoid competing account sessions.
+The test wrapper rejects a filter that matches no tests. No ordinary CI job sends
+vehicle commands. See [releases.md](releases.md) for account credentials.
 
-## `dependency-review.yml`
+## Manual research validators
 
-**Trigger:** pull requests targeting `main` only. Keeping this in a dedicated
-workflow means push, scheduled, and manually dispatched Security runs do not
-create a permanently skipped job.
-
-### Job `dependency-review` (ubuntu-latest, ~1 min)
-
-Diffs the dependency graph between base and head (GitHub Actions used in
-workflows are part of that graph; Hisingen has zero external SwiftPM
-dependencies today). Fails on `high`/`critical` severity findings only.
-
-Neither security workflow is currently wired into required branch checks
-(see the branch protection recommendation in [releases.md](./releases.md));
-treat them as advisory signal to triage unless you decide otherwise.
-
-The repository currently allows all GitHub Actions and does not enforce SHA
-pinning at the repository-settings layer. The workflows nevertheless pin every
-action to an immutable commit. Enabling repository-level SHA enforcement is a
-useful additional control once all future workflows are expected to follow the
-same convention.
-
-## `live-integration.yml` and `release.yml`
-
-Covered in full in [releases.md](./releases.md), including the secrets
-checklist for both.
-
-## `pages.yml`
-
-**Trigger:** changes under `site/` on `main`, changes to the workflow itself, or
-manual dispatch. There is no build step: `site/` is the Pages artifact directly,
-and it holds exactly two static files, both of which are live dependencies of the
-shipped app — `oauth-callback.html` (Volvo's registered HTTPS OAuth redirect) and
-`updates/appcast.xml` (the signed Sparkle feed). The workflow asserts both are
-present and well-formed, uploads the artifact, and deploys it with job-scoped
-`pages: write` and `id-token: write` permissions. Every third-party action is
-commit-pinned and checkout credentials are not persisted.
-
-The previous marketing site and its npm/Vite toolchain were removed. `site/` is
-deliberately not a website: deleting or renaming either file breaks shipped
-functionality (Volvo sign-in, or the updater), which is why the presence check
-runs before every deploy.
-
-## Running ci.yml locally
-
-`make ci` runs `Scripts/ci-local.sh`: every job of this workflow, in the same order, on your Mac: the ubuntu lint job (`actionlint` + `shellcheck` + the localization, docs-link and theme-contrast checks), then the macos build job (doctor, secret injection, debug build, deterministic tests, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI does, including the `hdiutil verify` retry). It also runs `Scripts/check-sync.py`, which fails when an untracked file exists under the watched source paths; CI checks out the committed tree only, so a file that exists locally but was never committed is a failure CI will produce and a local build cannot. If `make ci` passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`.
-
-## Troubleshooting
-
-- **Bundle validation fails**: re-run locally with `make app` then run the
-  same `plutil`/`lipo`/`codesign` commands from `ci.yml` directly.
-- **`lint-workflows-and-scripts` fails**: `actionlint` output includes the
-  exact file/line; most failures are invalid `${{ }}` expressions or
-  step-output typos.
-- **CodeQL fails to build**: check the "Build (same command as CI)" step
-  logs first; if `swift build` fails there, it's a real build break, not a
-  CodeQL-specific issue.
+`audit-polestar-coverage-doc.mjs`, `verify-page-coverage.mjs` and historical design
+checks require local research documents or render assets that are intentionally
+absent from the committed source tree. Run them manually when working on those
+artifacts. Required portable checks operate only on versioned inputs; they do not
+turn missing private research files into a hosted CI dependency.

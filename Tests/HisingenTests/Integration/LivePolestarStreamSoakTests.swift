@@ -11,12 +11,10 @@ private let soakCredentialsConfigured: Bool = {
 
 /// Soak duration in seconds. Defaults to ten minutes (fits the CI job budget); multi-hour
 /// runs set `HISINGEN_SOAK_SECONDS` (for example 14400) on a manual dispatch or locally.
-private let soakSeconds: TimeInterval = {
-    if let raw = ProcessInfo.processInfo.environment["HISINGEN_SOAK_SECONDS"],
-       let value = TimeInterval(raw), value > 0 {
-        return value
-    }
-    return 600
+private let configuredSoakSeconds: TimeInterval? = {
+    guard let raw = ProcessInfo.processInfo.environment["HISINGEN_SOAK_SECONDS"] else { return 600 }
+    guard let value = TimeInterval(raw), value.isFinite, value > 0 else { return nil }
+    return value
 }()
 
 /// Credential-backed soak of the live-stream lifecycle against the real Polestar backend.
@@ -38,6 +36,8 @@ struct LivePolestarStreamSoakTests {
     @Test(.disabled(if: !soakCredentialsConfigured, "Live Polestar credentials are not configured"))
     func sustainedSoakHoldsOneStreamWithoutTokenOrPollingAmplification() async throws {
         let environment = ProcessInfo.processInfo.environment
+        let soakSeconds = try #require(configuredSoakSeconds,
+                                      "HISINGEN_SOAK_SECONDS must be a finite positive number")
         let email = try #require(environment["HISINGEN_TEST_EMAIL"])
         let password = try #require(environment["HISINGEN_TEST_PASSWORD"])
         let preferredVIN = environment["HISINGEN_TEST_VIN"].flatMap { $0.isEmpty ? nil : $0 }
@@ -49,7 +49,7 @@ struct LivePolestarStreamSoakTests {
             try await api.authenticate(email: email, password: password,
                                        preferredVIN: preferredVIN, features: .default)
             let vin = try #require(await api.resolvedVIN(preferred: preferredVIN))
-            let storedToken = try #require(try keychain.readSessionToken())
+            _ = try #require(try keychain.readSessionToken())
 
             let counters = SoakStreamCounters()
             let provider = SoakCountingProvider(api: api, counters: counters)
@@ -75,7 +75,7 @@ struct LivePolestarStreamSoakTests {
             coordinator?.onEvent = { events.record($0) }
             coordinator?.start(preferredVIN: vin)
 
-            let connected = await Self.waitForConnect(events, timeout: 180)
+            let connected = try await Self.waitForConnect(events, timeout: 180)
             let connectedAt = try #require(connected, "The stream never connected during the soak")
             _ = connectedAt
 
@@ -135,13 +135,13 @@ struct LivePolestarStreamSoakTests {
     }
 
     private static func waitForConnect(_ events: SoakDiagnosticsRecorder,
-                                       timeout: TimeInterval) async -> Date? {
+                                       timeout: TimeInterval) async throws -> Date? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let snapshot = events.snapshots.last(where: { $0.liveStreamConnected }) {
                 return snapshot.liveStreamMetrics.lastFrameAt ?? Date()
             }
-            try? await Task.sleep(for: .milliseconds(250))
+            try await Task.sleep(for: .milliseconds(250))
         }
         return nil
     }

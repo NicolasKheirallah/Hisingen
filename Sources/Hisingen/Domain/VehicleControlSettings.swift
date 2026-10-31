@@ -5,6 +5,16 @@ struct VehicleControlSettings: Codable, Equatable, Sendable {
     var repeatedClimateTimers: Bool?
     var singleClimateTimers: Bool?
     var chargeLocationMaximum: Int?
+    /// Charging timers allowed per saved location (`Charging.max_number_of_timers_per_location`,
+    /// wire field 13). Per-location timers are read from the backend but cannot be written yet,
+    /// so the limit is recorded and shown, not enforced.
+    var timersPerLocationMaximum: Int?
+    /// Departure times allowed per saved location
+    /// (`Charging.charging_max_number_of_departure_times_per_location`, wire field 18).
+    var departureTimesPerLocationMaximum: Int?
+    /// Whether a saved location can carry departure times
+    /// (`Charging.supports_charge_locations_departure_time`, wire field 17).
+    var locationDepartureTimes: Bool?
     var locationAmperage: Bool?
     var locationOptimization: Bool?
     var temperatureMinimum: Int?

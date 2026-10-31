@@ -59,6 +59,12 @@ struct ExceptionsCard: View {
             let joined = errors.map { $0.replacingOccurrences(of: "_", with: " ").capitalized }.joined(separator: ", ")
             rows.append(KVRow(L10n.text("Climate System"), joined, symbol: "fan.badge.angled.exclamationmark", warning: true))
         }
+        if features.contains(.climateStatus), let warnings = state.climateStatus?.climateWarnings {
+            let names = warnings.compactMap(VehicleClimateStatus.climateWarningName)
+            if !names.isEmpty {
+                rows.append(KVRow(L10n.text("Climate Warning"), names.joined(separator: ", "), symbol: "thermometer.medium", warning: true))
+            }
+        }
         // A timer the vehicle has not acknowledged may not fire; SYNCED and UNSPECIFIED
         // need no row.
         let unacknowledged = (state.energy.schedules + state.climateTimers)

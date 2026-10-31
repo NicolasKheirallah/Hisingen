@@ -49,8 +49,9 @@ struct LiveVolvoReadOnlyIntegrationTests {
         let preferredVIN = environment["HISINGEN_TEST_VOLVO_VIN"].flatMap { $0.isEmpty ? nil : $0 }
 
 
-        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-tests")
-        try? keychain.deleteVolvoSessionToken()
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-tests.\(UUID())")
+        defer { try? keychain.deleteVolvoSessionToken() }
+        try keychain.deleteVolvoSessionToken()
         let api = VolvoAPI(keychain: keychain)
 
         var features = FeatureSelection.default
@@ -77,13 +78,15 @@ struct LiveVolvoReadOnlyIntegrationTests {
 
         await api.resetSession()
         let persistedToken = try #require(try keychain.readVolvoSessionToken())
+        if persistedToken != refreshToken {
+            print("::warning::Volvo rotated the test refresh token. Renew the live-integration credential before its next run; token values are never written to logs or artifacts.")
+        }
         let resumed = VolvoAPI(keychain: keychain)
         await resumed.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
         try await resumed.restoreSession(token: persistedToken, preferredVIN: vin, features: features)
         let resumedState = try await resumed.fetchVehicleState(vin: vin, features: features)
         #expect(resumedState.identity.vin == vin)
 
-        try? keychain.deleteVolvoSessionToken()
     }
 
     /// Comprehensive live probe of all Volvo Developer APIs, OIDC discovery, and Connected Vehicle endpoints.

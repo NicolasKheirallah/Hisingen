@@ -407,12 +407,10 @@ actor VolvoAPI {
         try await refreshAccessToken(force: false)
     }
 
-    func refreshAccessToken(force: Bool) async throws {
+    func refreshAccessToken(force: Bool, replacing rejectedToken: String? = nil) async throws {
         let requestEpoch = sessionEpoch
-        // Volvo's request path does not carry the refused token back, so a forced call cannot be
-        // matched against the session's; the lifecycle's grant cooldown is what bounds a burst.
         let reason: TokenLifecycle.Reason = force
-            ? .serverRefused(rejectedToken: nil)
+            ? .serverRefused(rejectedToken: rejectedToken)
             : .renewalWindow
         // Captured before the closure runs so the grant does not read state the lifecycle owns;
         // the configuration guard lives inside it, where a grant already in flight is awaited
@@ -478,7 +476,7 @@ actor VolvoAPI {
                 switch err {
                 case "invalid_client", "unauthorized_client":
                     throw VolvoError.appNotConfigured
-                case "invalid_grant", "expired_token":
+                case let code where OAuthErrorBody.deadGrantCodes.contains(code):
                     if isRefreshGrant { throw TokenRequestFailure.deadRefreshToken }
                     throw VolvoError.authenticationRequired(.invalidCredentials)
                 default:
@@ -518,7 +516,7 @@ actor VolvoAPI {
                     throw VolvoError.appNotConfigured
                 }
                 if attempt == 0 {
-                    try await refreshAccessToken(force: true)
+                    try await refreshAccessToken(force: true, replacing: token)
                     guard let refreshed = accessToken else {
                         throw VolvoError.authenticationRequired(.expiredSession)
                     }

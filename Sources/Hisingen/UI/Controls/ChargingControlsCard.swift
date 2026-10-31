@@ -103,6 +103,9 @@ struct ChargingControlsCard: View {
                         .frame(maxWidth: .infinity, minHeight: 28)
                     }
                     .buttonStyle(.bordered)
+                    if state.energy.pendingGlobalChargeTimer == true {
+                        pendingSyncLine(L10n.text("Timer update queued · applies when the car wakes"))
+                    }
                 }
             }
         }
@@ -411,8 +414,14 @@ struct ChargingControlsCard: View {
                 .buttonStyle(.bordered)
                 .disabled(gate.isDisabled(.stopChargingOverride))
             }
+            if let queuedOverride = state.energy.unappliedChargeNowOverride(current: state.energy.chargeNowActive) {
+                pendingSyncLine(queuedOverride
+                    ? L10n.text("Charge now queued · applies when the car wakes")
+                    : L10n.text("Resume schedule queued · applies when the car wakes"))
+            }
         }
         .hisAnimation(Motion.stateChange, value: state.energy.chargeNowActive)
+        .hisAnimation(Motion.layout, value: state.energy.pendingChargeNowOverride)
     }
 
     @ViewBuilder
@@ -443,6 +452,21 @@ struct ChargingControlsCard: View {
                     .help(L10n.text("Saves the vehicle's current position as a charge location."))
                 }
 
+                if let presence = state.chargeLocationPresence {
+                    Label {
+                        Text(chargeLocationPresenceText(presence))
+                    } icon: {
+                        Image(systemName: "mappin.and.ellipse")
+                    }
+                    .hisType(.caption, weight: .medium)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+                }
+
+                if state.energy.hasPendingLocationChanges {
+                    pendingSyncLine(pendingLocationText(state.energy))
+                }
+
                 if locations.isEmpty {
                     Text(L10n.text("No saved locations. Use “Add here” while parked where you charge."))
                         .hisType(.micro)
@@ -461,6 +485,42 @@ struct ChargingControlsCard: View {
         }
     }
 
+    private func chargeLocationPresenceText(_ presence: ChargeLocationPresence) -> String {
+        guard let since = presence.since else {
+            return L10n.format("At %@", presence.alias)
+        }
+        return L10n.format("At %@ since %@", presence.alias, Format.shortTime(date: since))
+    }
+
+    private func pendingLocationText(_ energy: EnergyAndChargingSnapshot) -> String {
+        let additions = energy.pendingChargeLocationCount ?? 0
+        let deletions = energy.pendingChargeLocationDeletionCount ?? 0
+        if additions > 0 && deletions > 0 {
+            return L10n.format("%d location changes queued · applies when the car wakes", additions + deletions)
+        }
+        if additions > 0 {
+            return L10n.format("%d location additions queued · applies when the car wakes", additions)
+        }
+        return L10n.format("%d location deletions queued · applies when the car wakes", deletions)
+    }
+
+    private func locationScheduleText(_ schedule: VehicleSchedule) -> String {
+        let timeStr = String(format: "%02d:%02d", locale: L10n.displayLocale, schedule.startHour ?? 0, schedule.startMinute ?? 0)
+        let endStr = schedule.endHour.map {
+            String(format: " - %02d:%02d", locale: L10n.displayLocale, $0, schedule.endMinute ?? 0)
+        } ?? ""
+        var parts = "\(schedule.kind.title): \(timeStr)\(endStr)"
+        if !schedule.weekdays.isEmpty {
+            parts += " · \(schedule.weekdays.map(\.shortName).joined(separator: ", "))"
+        } else if schedule.oneShotDate != nil {
+            parts += " · \(L10n.text("Once"))"
+        }
+        if !schedule.isActive {
+            parts += " · \(L10n.text("Off"))"
+        }
+        return parts
+    }
+
     private func chargeLocationRow(_ location: ChargeLocationSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -471,10 +531,6 @@ struct ChargingControlsCard: View {
                     .hisType(.label, weight: .semibold)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
-                if state.energy.isAtChargeLocation == true && (state.energy.currentChargeLocationName == location.alias || state.energy.currentChargeLocationName == location.id) {
-                    Pill(text: L10n.text("Here"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
-                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
-                }
                 Spacer()
                 Button {
                     renameDraft = location.alias
@@ -596,6 +652,23 @@ struct ChargingControlsCard: View {
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 4)
                     .transition(.opacity)
+            }
+
+            if !location.chargeTimers.isEmpty || !location.departureTimes.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
+                        Label(locationScheduleText(schedule), systemImage: "bolt.fill")
+                            .hisType(.micro)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(location.departureTimes, id: \.rowIdentity) { schedule in
+                        Label(locationScheduleText(schedule), systemImage: "calendar.badge.clock")
+                            .hisType(.micro)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 2)
+                .transition(.opacity)
             }
 
             Button(role: .destructive) {

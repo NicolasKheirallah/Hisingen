@@ -43,12 +43,16 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             try await telemetryProvider.prepareSession()
             telemetryOk = true
         } catch {
-            logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .private)")
         }
         do {
             try await commandProvider.prepareSession()
         } catch {
-            logger.warning("Command provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            logger.warning("Command provider prepareSession non-fatal: \(String(describing: error), privacy: .private)")
             if !telemetryOk { throw error }
         }
     }
@@ -58,13 +62,17 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await commandProvider.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
         } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
             commandAuthError = error
-            logger.warning("Command provider authenticate non-fatal: \(String(describing: error), privacy: .public)")
+            logger.warning("Command provider authenticate non-fatal: \(String(describing: error), privacy: .private)")
         }
         do {
             try await telemetryProvider.prepareSession()
         } catch {
-            logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .public)")
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            logger.warning("Telemetry provider prepareSession non-fatal: \(String(describing: error), privacy: .private)")
         }
         guard await hasWarmSession else {
             if let commandAuthError { throw commandAuthError }
@@ -80,15 +88,19 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await commandProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
             commandError = error
-            logger.warning("Command provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
+            logger.warning("Command provider restoreSession non-fatal: \(String(describing: error), privacy: .private)")
         }
         var telemetryError: Error?
         do {
             try await telemetryProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
             telemetryError = error
-            logger.warning("Telemetry provider restoreSession non-fatal: \(String(describing: error), privacy: .public)")
+            logger.warning("Telemetry provider restoreSession non-fatal: \(String(describing: error), privacy: .private)")
         }
         guard await hasWarmSession else {
             if let commandError { throw commandError }
@@ -103,8 +115,22 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
     }
 
     func signOut() async throws {
-        try? await telemetryProvider.signOut()
-        try? await commandProvider.signOut()
+        var firstError: Error?
+        do {
+            try await telemetryProvider.signOut()
+        } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            firstError = firstError ?? error
+        }
+        do {
+            try await commandProvider.signOut()
+        } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            firstError = firstError ?? error
+        }
+        if let firstError { throw firstError }
     }
 
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {
@@ -113,12 +139,16 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             try await telemetryProvider.reloadVehicleMetadata(vin: vin, features: features)
             telemetryOk = true
         } catch {
-            logger.warning("Telemetry reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .public)")
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            logger.warning("Telemetry reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .private)")
         }
         do {
             try await commandProvider.reloadVehicleMetadata(vin: vin, features: features)
         } catch {
-            logger.warning("Command reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .public)")
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            logger.warning("Command reloadVehicleMetadata non-fatal: \(String(describing: error), privacy: .private)")
             if !telemetryOk { throw error }
         }
     }
@@ -144,24 +174,41 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
                 state.softwareInfo = state.softwareInfo ?? overlay.softwareInfo
                 state.connectivity = state.connectivity ?? overlay.connectivity
             }
-            if state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
-                if var fallback = try? await commandProvider.fetchVehicleState(vin: vin, features: features) {
-                    // The reader configured the portal; the consumer account served this
-                    // reading, and the snapshot says so next to its freshness.
-                    fallback.freshness.servedByFallback = true
-                    return fallback
+            try Task.checkCancellation()
+            if (features.contains(.chargingDetails) || features.contains(.batteryDiagnostics)),
+               state.energy.batteryPercentage == nil, await commandProvider.hasWarmSession {
+                do {
+                    let fallback = try await commandProvider.fetchVehicleState(vin: vin, features: features)
+                    let portalFreshness = state.freshness
+                    let fallbackBattery = fallback.energy.batteryPercentage
+                    state = state.mergingLastKnown(from: fallback, features: features)
+                    if state.energy.batteryPercentage == nil { state.energy.batteryPercentage = fallbackBattery }
+                    state.freshness = portalFreshness
+                    if fallbackBattery != nil {
+                        state.freshness.readingDates[.battery] = fallback.freshness.readingDates[.battery]
+                        state.freshness.readingObservations?[.battery] = fallback.freshness.readingObservations?[.battery]
+                        state.freshness.servedByFallback = true
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    if error is CancellationError { throw error }
                 }
             }
+            try Task.checkCancellation()
             return state
         } catch let primaryError {
-            logger.warning("Primary Data Portal telemetry failed: \(String(describing: primaryError), privacy: .public). Trying Polestar ID fallback.")
+            try Task.checkCancellation()
+            if primaryError is CancellationError { throw primaryError }
+            logger.warning("Primary Data Portal telemetry failed: \(String(describing: primaryError), privacy: .private). Trying Polestar ID fallback.")
             guard await commandProvider.hasWarmSession else { throw primaryError }
             do {
                 var fallbackState = try await commandProvider.fetchVehicleState(vin: vin, features: features)
                 fallbackState.freshness.servedByFallback = true
                 return fallbackState
             } catch {
-                logger.error("Fallback Polestar ID telemetry also failed: \(String(describing: error), privacy: .public)")
+                try Task.checkCancellation()
+                if error is CancellationError { throw error }
+                logger.error("Fallback Polestar ID telemetry also failed: \(String(describing: error), privacy: .private)")
                 throw primaryError
             }
         }

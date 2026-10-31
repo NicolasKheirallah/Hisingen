@@ -52,13 +52,17 @@ const backendRpcNames = [
   "DeleteLocation", "GetLatestBattery", "GetLatestExterior", "GetLatestAvailability",
   "GetSoftwareInfo", "GetSchedule", "GetMyCars", "GetChargeLocations"
 ];
-function grepAll(needle) {
+const sourceStems = new Set();
+function grepAll() {
   const out = [];
   const walk = dir => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
-      else if (entry.name.endsWith(".swift")) out.push(fs.readFileSync(p, "utf8"));
+      else if (entry.name.endsWith(".swift")) {
+        sourceStems.add(path.basename(entry.name, ".swift"));
+        out.push(fs.readFileSync(p, "utf8"));
+      }
     }
   };
   walk(path.join(root, "Sources", "Hisingen"));
@@ -66,6 +70,7 @@ function grepAll(needle) {
 }
 const codebase = grepAll();
 for (const sym of new Set(symbols)) {
+  if (sourceStems.has(sym)) continue;
   if (knownSymbols.includes(sym)) continue;
   if (backendRpcNames.includes(sym)) continue;
   if (codebase.includes(sym)) continue;

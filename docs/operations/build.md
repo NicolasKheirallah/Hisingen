@@ -1,86 +1,91 @@
-# Build
+# Building and validating Hisingen
 
-## Makefile targets
+The app targets macOS 15 or later. CI pins Xcode through
+`.github/ci-toolchain.json`; `Scripts/select-xcode.sh` verifies the selected version.
+An explicitly different local `XCODE_VERSION` is a compatibility run, not proof of
+the pinned hosted configuration.
 
-| Target | What it does |
-|---|---|
-| `make doctor` | Runs `Scripts/doctor.sh`, which verifies the selected Xcode/CLT toolchain is internally consistent (compiler, SDK, SwiftPM all compatible) before attempting a build. |
-| `make ci` | Runs `Scripts/ci-local.sh`: the full `ci.yml` job set locally, in workflow order: `actionlint` + `shellcheck`, localization and docs-link checks, an uncommitted-build-input check (`Scripts/check-sync.py`), `doctor` + secret injection + debug build + the deterministic test suite, repository validation, and an ad-hoc app bundle and DMG built and validated exactly as CI builds them (including the `hdiutil verify` retry). If all of it passes, a sync of the committed tree cannot fail on these checks. Requires `brew install actionlint shellcheck`. |
-| `make build` | (depends on `doctor`) `swift build -c release $(SWIFT_FLAGS)`. |
-| `make universal` | (depends on `doctor`) Builds arm64 and x86_64 release binaries into **separate scratch build directories** (`.build-arm64`, `.build-x86_64`, avoiding SwiftPM artifact reuse across architectures), then `lipo -create`s them into one universal binary and verifies both architectures are present. |
-| `make app` | (depends on `build`, skippable via `SKIP_BUILD=1`) Lints `Info.plist`, assembles `releases/Hisingen.app`, injects updater configuration, embeds and signs `Sparkle.framework`, adds the framework runtime path, then signs the app. Prefers a valid Developer ID certificate, then Apple Development, then Hisingen Development; hardened-runtime signing (`--options runtime --timestamp`) when `IDENTITY` contains "Developer ID". Ad-hoc signing requires explicit `IDENTITY=-`. Developer ID-signed builds are then notarized and stapled by `Scripts/notarize.sh` (skipped automatically when no notarization credentials are configured; `NOTARIZE=never` forces a skip). |
-| `make app-universal` | (depends on `universal`) Equivalent to `make app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"` using the universal binary. |
-| `make notarize` | Notarizes and staples an already-built `releases/Hisingen.app` and, when present, `releases/Hisingen.dmg` via `Scripts/notarize.sh`, for stapling a build that was made with credentials unavailable at the time. Fails if the app bundle does not exist. |
-| `make dmg` | Requires `$(APP)` to already exist (fails with a clear message otherwise). Stages the app plus an `Applications` symlink and builds a UDZO disk image via `hdiutil create`. When `IDENTITY` contains "Developer ID", the DMG itself is then signed and notarized/stapled by `Scripts/notarize.sh` (skipped automatically without credentials), matching the release workflow. Deliberately **not** a dependency of `app`: re-running `app` after notarization would re-sign the bundle and void the notarization staple, so `dmg` must be invoked as a separate, later step. |
-| `make run` | `swift run`: unbundled dev run, no launch-at-login, no stable signing identity. |
-| `make test` | (depends on `doctor`) Runs `Scripts/test.sh`. |
-| `make clean` | Removes `.build`, `.build-arm64`, `.build-x86_64`, local app/DMG/zip outputs in `releases/`, staging files, `SHA256SUMS`, and `notarize-app.zip`. |
-| `make release VERSION=x.y.z` | Requires a matching `CHANGELOG.md` entry, validates the version format and a clean working tree, bumps `CFBundleShortVersionString` (via `PlistBuddy`) and increments `CFBundleVersion`, commits, tags `vX.Y.Z`, and pushes both, which triggers `.github/workflows/release.yml`. See [releases.md](releases.md). |
+| Command | Behavior |
+| --- | --- |
+| `make doctor` | Checks compiler, SDK, SwiftPM and SwiftUI macro compatibility. |
+| `make ci` | Runs shared portable/macOS phases against the working tree, with isolated artifact output. |
+| `sh Scripts/ci-local.sh --committed` | Validates an isolated archive of HEAD. |
+| `make build` | Generates configuration and builds a native release binary. |
+| `make universal` | Builds arm64 and x86_64 in separate scratch directories and combines them with lipo. |
+| `make app` | Builds a native binary, assembles resources/frameworks, configures Sparkle and signs the app. |
+| `make app-universal` | Assembles and signs the universal binary without replacing it with a native build. |
+| `make dmg` | Builds the native app and packages it. Use `package-dmg` to preserve an existing universal app. |
+| `make package-dmg` | Packages an existing signed app without rebuilding it. |
+| `make notarize` | Submits/staples an existing app and optional DMG using retained request state. |
+| `make run` | Runs the development application through the signing wrapper. |
+| `make test` | Runs the test wrapper; pass explicit deterministic filters when credentials exist locally. |
+| `make release VERSION=patch` | Prepares the release pull request through the shared release versioning logic. |
+| `make clean` | Removes build and configured package outputs. |
 
-Default `IDENTITY` is selected by `Scripts/signing-identity.sh`, preferring a valid Developer ID Application certificate. If none is available, a development identity is used. `make build` only compiles a binary; use `make app` to create the signed application bundle. CI's release job passes a real `"Developer ID Application: ..."` identity resolved dynamically from an imported certificate.
+The default output directory is `releases`. Override `OUTPUT_DIR` when testing
+packaging. To preserve a universal app through packaging:
 
-## Scripts
-
-**`Scripts/doctor.sh`** (POSIX `sh`, `set -eu`): resolves the active developer directory (`$DEVELOPER_DIR` env override, else `xcode-select -p`), fails clearly if none is selected. Prints `swiftc --version` and the SDK path, then runs `swift package dump-package` in an isolated module-cache directory purely as a smoke test that the compiler/SDK/SwiftPM combination is mutually compatible, a common failure mode after an Xcode upgrade or a CLT/Xcode toolchain mismatch.
-
-**`Scripts/ci-local.sh`** (POSIX `sh`, `set -eu`): runs every `ci.yml` job locally in workflow order (see the `make ci` row above) and cleans up the root-level validation artifacts afterwards. Exists because two classes of failure only surface on GitHub: the lint job's `actionlint`/`shellcheck`, and files that exist locally but were never committed; CI checks out the committed tree only.
-
-**`Scripts/check-sync.py`**: fails when an untracked, non-ignored file exists under `Sources/`, `Tests/`, `Scripts/`, `Resources/`, or `.github/`: such a file will never sync to GitHub, so a build or test that depends on it breaks (or silently shrinks) in CI. The gitignored `docs/` tree has the same failure class for links, which `Scripts/check-docs-links.py` catches by resolving link targets against `git ls-files` instead of the filesystem.
-
-**`Scripts/test.sh`** (POSIX `sh`, `set -eu`): detects whether the selected developer tools are the *standalone* Command Line Tools (as opposed to full Xcode). If so, it adds an extra `-F` framework search path (`$CLT/Library/Developer/Frameworks`) before invoking `swift test`, because standalone CLT ships the Swift Testing framework outside the SDK's normal search path; this mirrors equivalent logic duplicated in `Package.swift`'s `usesStandaloneCommandLineTools`/`testSwiftSettings`/`testLinkerSettings`. Forwards any extra arguments transparently (`--filter`, etc.).
-
-**`Scripts/select-xcode.sh`** (POSIX `sh`, `set -eu`): selects a valid full
-Xcode developer directory from an explicit override, the active `xcode-select`
-path, or an installed `/Applications/Xcode*.app`. In GitHub Actions it persists
-the selection through `GITHUB_ENV`; CI, CodeQL, live integration, and release
-jobs all use this one implementation.
-
-**`Scripts/configure-updater.sh`**: injects the HTTPS Sparkle feed URL and
-Ed25519 public key into the bundle plist. Distributable builds require the key,
-and it must decode to exactly 32 bytes.
-
-**`Scripts/notarize.sh`** (POSIX `sh`, `set -eu`): notarizes and staples one
-artifact per invocation (a `.app` bundle or a `.dmg` image): compresses it with
-`ditto`, submits it to Apple's notary service with `xcrun notarytool submit --wait`
-(retrying transient failures up to `NOTARY_RETRIES`, default 3), then
-`stapler staple`/`stapler validate`, then a `spctl --assess` Gatekeeper check
-(`--type execute` for apps, `--type open` for images). Credentials come from
-`NOTARY_APPLE_ID`/`NOTARY_TEAM_ID`/`NOTARY_APP_PASSWORD` environment variables
-(the same names the release workflow's secrets use) or from a notarytool
-keychain profile (`NOTARYTOOL_PROFILE`, default `hisingen-notary`, created once
-with `xcrun notarytool store-credentials`). With `NOTARIZE=auto` (default) the
-script skips with a notice and exits 0 when no credentials are found, so
-development builds without Apple Developer Program access keep working;
-`NOTARIZE=require` fails instead, and `NOTARIZE=never` always skips.
-
-**`Scripts/verify-updater.mjs`**: checks updater configuration, framework
-packaging and load paths, release-pipeline controls, release-note extraction,
-and generated appcast signature structure. Its self-tests include negative
-cases for malformed keys, missing notes, and incomplete signatures.
-
-**`Scripts/check-localization.py`**: a standalone Python QA script (not wired into `make`/CI as of this writing) that scans `Sources/Hisingen/Resources/*.lproj/Localizable.strings` for duplicate keys within a file and reports translation coverage gaps relative to the English base locale. It reports missing keys rather than failing on them, since `Support/L10n.swift` already falls back to English for anything missing from the active locale; an incomplete translation degrades gracefully, it isn't a build-breaking bug.
-
-## Requirements
-
-macOS 15 Sequoia or later; Xcode 16+ or compatible Command Line Tools with Swift 6.0+. `Package.swift` declares `swift-tools-version:6.0`, `platforms: [.macOS(.v15)]`, and an exact Sparkle `2.9.6` package dependency.
-
-## Strict concurrency
-
-The package builds in the Swift 6 language mode with complete concurrency checking, declared in `Package.swift` (`.enableUpcomingFeature("StrictConcurrency")` on every target). No `SWIFT_FLAGS` or `-Xswiftc` flags are needed: `swift build`, `make build`, Xcode, and IDE indexing are all checked identically. See [architecture/concurrency.md](../architecture/concurrency.md).
-
-## Remote-command dispatch
-
-There is no build flag for this any more. `HISINGEN_EXPERIMENTAL_REMOTE` was removed in [ADR-0009](../adr/0009-remote-commands-compiled-into-all-builds.md); Polestar's remote-command path is compiled into every build, including releases. It stays inert until the matching capability is enabled in Settings, and non-routine commands still require Touch ID; see [security/threat-model.md](../security/threat-model.md#remote-control-surface).
-
-## Verifying a local build
-
-```bash
-codesign --verify --deep --strict releases/Hisingen.app   # signature integrity
-lipo -info releases/Hisingen.app/Contents/MacOS/Hisingen   # architecture(s) present
-plutil -lint releases/Hisingen.app/Contents/Info.plist
-test -d releases/Hisingen.app/Contents/Frameworks/Sparkle.framework
-otool -L releases/Hisingen.app/Contents/MacOS/Hisingen
-otool -l releases/Hisingen.app/Contents/MacOS/Hisingen
+```sh
+make app-universal OUTPUT_DIR=releases IDENTITY=- NOTARIZE=never
+make package-dmg OUTPUT_DIR=releases IDENTITY=- NOTARIZE=never
+REQUIRE_UNIVERSAL=true sh Scripts/validate-release.sh --artifacts releases/Hisingen.app releases/Hisingen.dmg
 ```
 
-CI's bundle-validation step (see [ci.md](ci.md)) runs equivalent checks automatically, including the Sparkle load path and metadata, plus asserting `LSUIElement == true` (the app must remain a background/accessory app with no Dock icon).
+The Makefile accepts `SWIFT_FLAGS` and enforces Swift 6 concurrency through the
+package settings. Debug CI additionally treats compiler warnings as errors.
+Package.swift and Package.resolved define the dependency versions; avoid resolving
+new versions as an incidental part of a validation run.
+
+## Configuration and signing
+
+Local secret injection reads environment variables or local environment files.
+Values embedded in the executable are recoverable and must be treated as public;
+XOR masking is not encryption. `HISINGEN_BUILD_CONFIGURATION=fixture` ignores both
+local files and production API variables for reproducible credential-free checks.
+
+Identity selection prefers an available Developer ID identity, then a development
+identity. Set `IDENTITY=-` explicitly for ad-hoc validation. The production workflow
+requires an imported Developer ID identity and never falls back to ad-hoc signing.
+
+`NOTARIZE=never` disables automatic notarization. `NOTARIZE=auto` allows local
+builds without credentials to skip it; `NOTARIZE=require` fails instead. Supply the
+Apple ID/team/app-password variables or a `NOTARYTOOL_PROFILE`, default
+`hisingen-notary`. See [releases.md](releases.md) for production handling.
+
+## Validation interfaces
+
+```sh
+sh Scripts/validate-release.sh --source
+sh Scripts/validate-release.sh --artifacts releases/Hisingen.app releases/Hisingen.dmg
+```
+
+Source validation checks tracked secret-like paths/patterns and whitespace in the
+selected commit range and local diff. `CI_BASE_SHA` selects a full base commit SHA.
+Artifact validation requires both inputs to exist, mounts the image, verifies
+signatures, compares the packaged binary/plist with the input app, and exercises the
+safe bundled launch check. `REQUIRE_UNIVERSAL=true` verifies both architectures.
+Developer ID artifacts also require notarization staples and Gatekeeper assessment.
+
+The smoke entry point `Hisingen.app/Contents/MacOS/Hisingen --ci-smoke-test` exits
+before normal application initialization. It checks bundle identity, localization,
+notices and framework loading. It does not prove every interactive app flow works.
+
+The test wrapper preserves normal Swift filter/skip arguments and adds discovery,
+selection validation, xUnit execution evidence and failure logs. Set
+`HISINGEN_TEST_OUTPUT_DIR` to retain reports. The deterministic invocation is:
+
+```sh
+sh Scripts/test.sh --skip Live --no-parallel
+```
+
+For updater validation, `verify-updater.mjs configuration` tests key injection;
+`appcast-self-test` exercises real Ed25519 signatures and tampering controls. The
+`appcast` command requires the generated feed, archive, notes and final bundle plist:
+
+```sh
+node Scripts/verify-updater.mjs appcast updates/appcast.xml Hisingen.app.zip updates/Hisingen.app.md Hisingen.app/Contents/Info.plist v1.2.3
+```
+
+The verifier parses XML, verifies feed/archive/notes signatures, checks byte lengths
+and version/URL metadata, and compares the archive's embedded plist with the final
+bundle. It verifies the complete notes file, including Sparkle's signing warning.

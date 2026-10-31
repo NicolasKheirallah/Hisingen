@@ -414,7 +414,7 @@ struct HisingenContentView: View {
                 case .horizontal:
                     gesture.swipeTranslation = dx
                 case .vertical:
-                    guard gesture.scrollOffsetFromTop <= 0.5, dy > 0 else { return }
+                    guard gesture.acceptsPull(translation: dy) else { return }
                     let pulled = InstrumentMath.rubberBandDisplacement(overshoot: dy, dimension: 300)
                     if pulled >= Self.pullThreshold, !gesture.pullArmed {
                         gesture.pullArmed = true
@@ -456,9 +456,10 @@ struct HisingenContentView: View {
                     NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                     withAnimation(reduceMotion ? nil : Motion.flick) { select(tabs[target]) }
                 }
-                if gesture.dragAxis == .vertical, gesture.pullDistance > 0,
+                let releasePullDistance = gesture.pullDistanceAtRelease(translation: value.translation.height)
+                if gesture.dragAxis == .vertical, releasePullDistance > 0,
                    InstrumentMath.pullRefreshShouldCommit(
-                       dragDistance: gesture.pullDistance,
+                       dragDistance: releasePullDistance,
                        releaseVelocity: value.velocity.height,
                        threshold: Self.pullThreshold
                    ) {
@@ -542,6 +543,7 @@ struct HisingenContentView: View {
                             onRemoteCommand: onRemoteCommand,
                             onRefresh: onRefresh,
                             onDismissCommandReceipt: onDismissCommandReceipt,
+                            onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
                             layout: TabLayout.resolve(tabComposition, for: tab))
                 .transition(.opacity)
 
@@ -998,6 +1000,14 @@ struct HisingenContentView: View {
                 .foregroundStyle(HisingenTheme.semanticGood)
                 .help(L10n.text("Connected to the Polestar server stream. Battery and exterior changes are applied as the provider sends them; scheduled polling remains as a reliability fallback."))
                 .accessibilityLabel(L10n.text("Live vehicle stream connected"))
+            } else if diagnostics?.liveStreamNeedsAuthorization == true {
+                // Parked, not backing off: no reconnect can succeed until the user signs in, so
+                // this must not read as the "reconnecting" state beside it.
+                Image(systemName: "person.badge.key")
+                    .hisType(.micro)
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .help(L10n.text("Sign in to Polestar first"))
+                    .accessibilityLabel(L10n.text("Sign in to Polestar first"))
             } else if let retryAt = diagnostics?.liveStreamRetryAt {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .hisType(.micro)

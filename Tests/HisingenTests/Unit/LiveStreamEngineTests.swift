@@ -23,6 +23,8 @@ struct LiveStreamEngineTests {
         var idleCount = 0
         var desired = true
         var frameVerdict = true
+        var reauthCount = 0
+        var lastReauthError: VehicleServiceError?
     }
 
     private func makeEngine(
@@ -45,6 +47,10 @@ struct LiveStreamEngineTests {
                     return probe.frameVerdict
                 },
                 onDisconnected: { probe.disconnectCount += 1 },
+                onReauthorizationRequired: { error in
+                    probe.reauthCount += 1
+                    probe.lastReauthError = error
+                },
                 onIdle: { probe.idleCount += 1 }
             )
         )
@@ -199,6 +205,33 @@ struct LiveStreamEngineTests {
         engine.stop()
     }
 
+    /// The reported all-day loop: the token exchange itself is refused, so reconnecting can
+    /// never heal the stream. The engine must park it and hand the failure to the app instead
+    /// of scheduling another blind retry, and it must never reach the 30-minute circuit.
+    @Test
+    func aDeadSessionParksTheStreamInsteadOfRetryingBlindly() async throws {
+        let auth = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
+        let streaming = FakeLiveStreaming(
+            failures: [auth, auth, auth],
+            refreshFailure: auth
+        )
+        let probe = Probe()
+        let engine = makeEngine(streaming: streaming, probe: probe, policy: LiveStreamPolicy(retrySteps: [0]))
+
+        engine.setPurpose(.charging, vin: vin)
+
+        #expect(await settle { !engine.isRunning }, "The engine kept looping after the session died")
+        #expect(streaming.refreshCount == 1, "One recovery attempt is all a dead session gets")
+        #expect(streaming.attemptCount == 1, "No second connect attempt after the failed recovery")
+        #expect(engine.retryAt == nil, "A dead session must not schedule a retry")
+        #expect(engine.metrics.circuitOpenUntil == nil)
+        #expect(probe.reauthCount == 1)
+        #expect(probe.lastReauthError?.requiresAuthentication == true)
+        #expect(probe.idleCount == 1, "The task must end so the coordinator owns what happens next")
+
+        engine.stop()
+    }
+
     @Test
     func anUnsupportedStreamOpensTheCircuitForTheUnsupportedInterval() async throws {
         let streaming = FakeLiveStreaming(failures: [
@@ -249,18 +282,28 @@ struct LiveStreamEngineTests {
 private final class FakeLiveStreaming: VehicleLiveStreaming, @unchecked Sendable {
     private let lock = NSLock()
     private var failures: [Error]
+    private let refreshFailure: Error?
     private var opens = 0
+    private var attempts = 0
     private var refreshes = 0
     private var continuation: AsyncThrowingStream<VehicleLiveUpdate, Error>.Continuation?
 
-    init(failures: [Error] = []) {
+    init(failures: [Error] = [], refreshFailure: Error? = nil) {
         self.failures = failures
+        self.refreshFailure = refreshFailure
     }
 
     var openCount: Int {
         lock.lock()
         defer { lock.unlock() }
         return opens
+    }
+
+    /// Every connect call, whether it threw a scripted failure or opened a stream.
+    var attemptCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return attempts
     }
 
     var refreshCount: Int {
@@ -272,6 +315,7 @@ private final class FakeLiveStreaming: VehicleLiveStreaming, @unchecked Sendable
     func liveVehicleUpdates(
         vin: String, purpose: VehicleLiveStreamPurpose
     ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        countAttempt()
         if let failure = nextFailure() {
             throw failure
         }
@@ -282,6 +326,7 @@ private final class FakeLiveStreaming: VehicleLiveStreaming, @unchecked Sendable
 
     func refreshLiveStreamAuthorization() async throws {
         countRefresh()
+        if let refreshFailure { throw refreshFailure }
     }
 
     /// Delivers one update on the most recently opened stream.
@@ -307,6 +352,12 @@ private final class FakeLiveStreaming: VehicleLiveStreaming, @unchecked Sendable
         lock.lock()
         defer { lock.unlock() }
         return continuation
+    }
+
+    private func countAttempt() {
+        lock.lock()
+        attempts += 1
+        lock.unlock()
     }
 
     private func countRefresh() {

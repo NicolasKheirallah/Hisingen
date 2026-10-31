@@ -21,6 +21,9 @@ final class LiveStreamEngine {
         let onFrame: @MainActor (VehicleLiveUpdate) async -> Bool
         /// Disconnected transition – the coordinator schedules its fallback poll.
         let onDisconnected: @MainActor () -> Void
+        /// The stream cannot be re-authorized without the user. The engine has already stopped
+        /// its loop; the coordinator surfaces a sign-in request and keeps the stream parked.
+        let onReauthorizationRequired: @MainActor (VehicleServiceError) -> Void
         /// The task ended and the engine reset itself; the coordinator may restart it.
         let onIdle: @MainActor () -> Void
     }
@@ -77,6 +80,7 @@ final class LiveStreamEngine {
             }
             var failure = 0
             var authorizationRecoveryUsed = false
+            var authorizationCircuits = 0
             while !Task.isCancelled {
                 guard let self, self.context.isDesired(newPurpose, vin) else { return }
                 let streamStartedAt = now()
@@ -122,13 +126,16 @@ final class LiveStreamEngine {
                     let mapped = ServiceErrorPolicy.decision(error, provider: providerBrand).error
                     metrics.lastDisconnectReason = DiagnosticRedaction.redact(String(describing: mapped))
                     if duration >= policy.stabilityInterval {
+                        // Only a stream that stayed up proves the authorization works again.
                         failure = 0
                         authorizationRecoveryUsed = false
+                        authorizationCircuits = 0
                     }
                     failure += 1
                     let action = policy.action(
                         for: mapped, consecutiveFailures: failure,
                         authorizationRecoveryUsed: authorizationRecoveryUsed,
+                        authorizationCircuits: authorizationCircuits,
                         now: failedAt, jitterUnit: jitter()
                     )
                     let delay: TimeInterval
@@ -141,12 +148,25 @@ final class LiveStreamEngine {
                             try await streaming.refreshLiveStreamAuthorization()
                             metrics.authorizationRefreshes += 1
                         } catch {
-                            logger.warning("Live stream token recovery failed: \(String(describing: error), privacy: .public)")
+                            let refreshError = ServiceErrorPolicy.decision(
+                                error, provider: providerBrand
+                            ).error
+                            logger.warning("Live stream token recovery failed: \(String(describing: refreshError), privacy: .public)")
+                            // The exchange itself was refused. Retrying reconnects with the same
+                            // dead session, which is the loop this park exists to end.
+                            if refreshError.requiresAuthentication {
+                                parkForReauthorization(refreshError)
+                                return
+                            }
                         }
                         delay = retryDelay
                     case .openCircuit(let until):
+                        if mapped.requiresAuthentication { authorizationCircuits += 1 }
                         metrics.circuitOpenUntil = until
                         delay = max(0, until.timeIntervalSince(failedAt))
+                    case .requireReauthentication:
+                        parkForReauthorization(mapped)
+                        return
                     }
                     retryAt = failedAt.addingTimeInterval(delay)
                     context.onDisconnected()
@@ -155,12 +175,23 @@ final class LiveStreamEngine {
                     catch { return }
                     if case .openCircuit = action {
                         failure = 0
-                        authorizationRecoveryUsed = false
                         metrics.circuitOpenUntil = nil
                     }
                 }
             }
         }
+    }
+
+    /// Ends the run for good instead of scheduling another attempt: the token exchange was
+    /// refused, so every reconnect would fail the same way until the user signs in. The task
+    /// returns, its `defer` publishes `onIdle`, and the coordinator keeps the stream parked.
+    private func parkForReauthorization(_ error: VehicleServiceError) {
+        metrics.authorizationFailures += 1
+        metrics.lastDisconnectReason = DiagnosticRedaction.redact(String(describing: error))
+        isConnected = false
+        retryAt = nil
+        logger.error("Live stream needs sign-in; parked: \(String(describing: error), privacy: .public)")
+        context.onReauthorizationRequired(error)
     }
 
     func stop() {

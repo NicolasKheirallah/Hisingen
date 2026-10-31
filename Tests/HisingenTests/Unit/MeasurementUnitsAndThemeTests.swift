@@ -22,7 +22,7 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testFuelVolumeUnitConversions() {
-        try withPinnedInterfaceLanguage {
+        withPinnedInterfaceLanguage {
             let liters = 50.0
 
         let litersConverted = FuelVolumeUnit.liters.convert(liters: liters)
@@ -44,7 +44,7 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testFuelEconomyUnitFormatting() {
-        try withPinnedInterfaceLanguage {
+        withPinnedInterfaceLanguage {
             let lPer100Km = 6.5
             #expect(FuelEconomyUnit.litersPer100Km.format(lPer100Km: lPer100Km) == "6.5 L/100km")
             #expect(FuelEconomyUnit.milesPerGallonUS.format(lPer100Km: lPer100Km) == "36.2 mpg")
@@ -58,7 +58,7 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testUSUnitFormatting() {
-        try withPinnedInterfaceLanguage {
+        withPinnedInterfaceLanguage {
             #expect(Format.temperature(celsius: 20, unit: .fahrenheit) == "68.0 °F")
             #expect(Format.pressure(kilopascals: 241.3, unit: .psi) == "35.0 psi")
             #expect(Format.distance(km: 13.1, unit: .miles) == "8.1 mi")
@@ -67,7 +67,7 @@ struct MeasurementUnitsAndThemeTests {
 
     @Test
     func testElectricConsumptionFormatting() {
-        try withPinnedInterfaceLanguage {
+        withPinnedInterfaceLanguage {
             #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Km) == "20.0 kWh/100 km")
             #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .kwhPer100Miles) == "32.2 kWh/100 mi")
             #expect(Format.energyConsumption(kwhPer100Km: 20, unit: .milesPerKwh) == "3.11 mi/kWh")

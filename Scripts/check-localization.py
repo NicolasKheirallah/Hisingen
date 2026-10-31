@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Enforce exact Localizable.strings key parity, reject duplicate keys, and ratchet untranslated values.
+"""Check key parity, duplicates, format arguments, blank values and translation regressions.
 
 Parity: every locale must carry exactly the base locale's keys.
 
 Untranslated ratchet: a value identical to its English base value is counted as untranslated,
 unless every word in it is exempt (format specifiers, units, acronyms, short codes, brand names,
 or an exact allowlisted value). Per-locale counts are compared with
-Scripts/l10n-untranslated-baseline.json. The check fails only when a locale's count rises above
-its baseline, so the existing backlog is visible without blocking unrelated work.
+Scripts/l10n-untranslated-baseline.json. Key identities are also recorded in
+Scripts/l10n-untranslated-keys.json, so translating one key cannot conceal a new regression.
 
 Flags:
   --sync                   Insert English placeholders for missing keys and drop obsolete keys.
                            Placeholders ship untranslated until a translator replaces them.
   --report LOCALE          List the untranslated keys for one locale and exit.
-  --update-baseline        Rewrite the untranslated baseline from the current tree. Use only
+  --update-baseline        Rewrite untranslated counts and key identities. Use only
                            after review: lowering a count locks in a fix, raising one accepts
                            new English-only strings.
 """
@@ -25,11 +25,15 @@ import sys
 RESOURCES_DIR = pathlib.Path("Sources/Hisingen/Resources")
 BASE_LOCALE = "en"
 BASELINE_PATH = pathlib.Path("Scripts/l10n-untranslated-baseline.json")
+KEY_BASELINE_PATH = pathlib.Path("Scripts/l10n-untranslated-keys.json")
 
 KEY_RE = re.compile(r'^"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;\s*$')
 
 # Printf-style specifiers, escaped unicode/newline sequences, and percent literals carry no words.
 FORMAT_RE = re.compile(r"%(?:\d+\$)?[-+ 0#]*\d*(?:\.\d+)?(?:@|d|f|s|x|ld|lu|%)|%%|\\u\{[0-9A-Fa-f]+\}|\\[nt]")
+ARGUMENT_RE = re.compile(
+    r"%(?:(\d+)\$)?[-+0#]*\d*(?:\.\d+)?(hh|ll|h|l|L|z|t|j)?([@diuoxXfFeEgGaAcCsSpn%])"
+)
 WORD_RE = re.compile(r"[^\W\d_]+")
 
 # Units and abbreviations that read the same in every language.
@@ -41,6 +45,9 @@ UNIT_WORDS = {
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}
 # Exact values that are intentionally identical to English.
 ALLOWED_VALUES = {"Hisingen Glass"}
+# A value left as this literal means the translation was never filled in, which made Siri
+# phrases read "undefined" in every locale but de and sv.
+PLACEHOLDER_VALUE = "undefined"
 
 
 def is_exempt(value):
@@ -81,6 +88,37 @@ def untranslated_keys(base_values, locale_values):
         for key, value in base_values.items()
         if key in locale_values and locale_values[key] == value and not is_exempt(value)
     ]
+
+
+def format_signature(value):
+    arguments = {}
+    implicit_index = 0
+    for match in ARGUMENT_RE.finditer(value):
+        position, length, conversion = match.groups()
+        if conversion == "%":
+            continue
+        implicit_index += 1
+        index = int(position) if position else implicit_index
+        kind = (length or "") + conversion
+        if index in arguments and arguments[index] != kind:
+            raise ValueError(f"argument {index} has conflicting types")
+        arguments[index] = kind
+    return arguments
+
+
+def validate_values(base_values, entries):
+    failures = []
+    for key, value, lineno in entries:
+        if key not in base_values:
+            continue
+        if base_values[key].strip() and not value.strip():
+            failures.append(f"line {lineno}: empty translation for {key!r}")
+        try:
+            if format_signature(base_values[key]) != format_signature(value):
+                failures.append(f"line {lineno}: format arguments differ for {key!r}")
+        except ValueError as error:
+            failures.append(f"line {lineno}: {key!r}: {error}")
+    return failures
 
 
 def sync_locale(path, base_lines, base_order, base_keys):
@@ -167,6 +205,15 @@ def main():
             status = 1
             print(f"FAIL {path}: duplicate keys: {sorted(dupes)}")
 
+    # Every .strings file, including AppShortcuts.strings, which the Localizable scan above skips.
+    print()
+    print("== Checking for placeholder values in every .strings file ==")
+    for path in sorted(RESOURCES_DIR.glob("*.lproj/*.strings")):
+        for key, value, lineno in extract_entries(path):
+            if value.strip() == PLACEHOLDER_VALUE:
+                status = 1
+                print(f"FAIL {path}:{lineno}: placeholder value {PLACEHOLDER_VALUE!r} for {key!r}")
+
     print()
     print(f"== Coverage relative to base locale ({BASE_LOCALE}, {len(base_keys)} keys) ==")
     for path in locale_files:
@@ -188,7 +235,11 @@ def main():
         locale = path.parent.name[: -len(".lproj")]
         if locale == BASE_LOCALE:
             continue
-        values = {key: value for key, value, _ in extract_entries(path)}
+        entries = extract_entries(path)
+        for failure in validate_values(base_values, entries):
+            status = 1
+            print(f"FAIL {locale}: {failure}")
+        values = {key: value for key, value, _ in entries}
         locale_untranslated[locale] = untranslated_keys(base_values, values)
 
     if report_locale is not None:
@@ -209,6 +260,7 @@ def main():
             print("Not writing the untranslated baseline while parity or duplicate checks fail.")
             return status
         BASELINE_PATH.write_text(json.dumps(counts, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        KEY_BASELINE_PATH.write_text(json.dumps(locale_untranslated, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print()
         print(f"Wrote {BASELINE_PATH} with {len(counts)} locale count(s).")
         return 0
@@ -216,11 +268,20 @@ def main():
     print()
     print("== Untranslated values (identical to English, excluding exempt tokens) ==")
     baseline = load_baseline()
+    key_baseline = json.loads(KEY_BASELINE_PATH.read_text(encoding="utf-8")) if KEY_BASELINE_PATH.is_file() else None
+    if key_baseline is None:
+        status = 1
+        print(f"FAIL {KEY_BASELINE_PATH} is missing. Create it with --update-baseline after review.")
     if baseline is None:
         status = 1
         print(f"FAIL {BASELINE_PATH} is missing. Create it with --update-baseline.")
     else:
         for locale, count in counts.items():
+            if key_baseline is not None:
+                new_keys = set(locale_untranslated[locale]) - set(key_baseline.get(locale, []))
+                if new_keys:
+                    status = 1
+                    print(f"FAIL {locale}: newly untranslated keys: {sorted(new_keys)}")
             allowed = baseline.get(locale)
             if allowed is None:
                 status = 1

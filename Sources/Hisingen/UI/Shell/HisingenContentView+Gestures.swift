@@ -26,6 +26,20 @@ final class PanelGestureState {
     /// The axis the active drag committed to, latched on the first dominant movement so a
     /// wobbly diagonal cannot flip between pull and swipe mid-gesture.
     var dragAxis: Axis?
+
+    func pullDistanceAtRelease(translation: CGFloat) -> CGFloat {
+        guard scrollOffsetFromTop <= 0.5, translation > 0 else { return 0 }
+        return InstrumentMath.rubberBandDisplacement(overshoot: translation, dimension: 300)
+    }
+
+    func acceptsPull(translation: CGFloat) -> Bool {
+        guard scrollOffsetFromTop <= 0.5, translation > 0 else {
+            pullDistance = 0
+            pullArmed = false
+            return false
+        }
+        return true
+    }
 }
 
 /// Carries the tab-swipe drag offset for the shared scroller. Reads only `swipeTranslation`,

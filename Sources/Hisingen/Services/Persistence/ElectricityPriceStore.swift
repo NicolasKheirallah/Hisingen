@@ -27,7 +27,7 @@ final class ElectricityPriceStore: @unchecked Sendable {
             try stmt.bindText(zone.rawValue, at: 1)
         } process: { stmt -> [ElectricityPricePoint] in
             var points: [ElectricityPricePoint] = []
-            while stmt.step() {
+            while try stmt.stepOrThrow() {
                 guard let start = stmt.columnDate(at: 0),
                       let end = stmt.columnDate(at: 1),
                       let price = stmt.columnDouble(at: 2) else { continue }
@@ -44,7 +44,7 @@ final class ElectricityPriceStore: @unchecked Sendable {
         return try? db.query(sql: sql) { stmt in
             try stmt.bindText(zone.rawValue, at: 1)
         } process: { stmt -> Date? in
-            stmt.step() ? stmt.columnDate(at: 0) : nil
+            try stmt.stepOrThrow() ? stmt.columnDate(at: 0) : nil
         } ?? nil
     }
 

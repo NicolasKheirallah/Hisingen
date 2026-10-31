@@ -19,6 +19,14 @@ struct PolestarAuthenticationTests {
         return (api, keychain)
     }
 
+    /// The same discovered endpoints with no consumer grant: an augmented account that only
+    /// holds Developer Portal credentials.
+    private func makeSignedOutAPI() async -> (PolestarAPI, KeychainStore) {
+        let (api, keychain) = await makeAPI()
+        await api.installSignedOutTestSession()
+        return (api, keychain)
+    }
+
     private func commandCallback(_ api: PolestarAPI) async throws -> URL {
         let url = try await api.beginCommandAuthorization()
         let state = try #require(PolestarAPI.queryValue("state", from: url))
@@ -38,8 +46,10 @@ struct PolestarAuthenticationTests {
         await gate.release()
         do { try await exchange.value; Issue.record("Superseded grant was accepted") }
         catch { #expect(error is CancellationError) }
-        #expect(await api.accessToken == nil)
-        #expect(try keychain.readSessionToken() == nil)
+        // Opening a new authorization keeps the warm session usable; what must not happen is the
+        // superseded exchange replacing it.
+        #expect(await api.accessToken == "base-access")
+        #expect(try keychain.readSessionToken() != "old-refresh")
     }
 
     @Test func supersededCommandGrantCannotWriteTokens() async throws {
@@ -252,6 +262,54 @@ struct PolestarAuthenticationTests {
         #expect(await requests.value == 1)
         #expect(await api.accessToken == "new-access")
     }
+
+    // MARK: - Command authorization needs a consumer Polestar ID session
+
+    /// The browser step mints a command grant that `verifyCommandAccount` checks against the
+    /// consumer session, and every invocation is dispatched with that same session. With no
+    /// session the round-trip used to complete in the browser and then throw the grant away,
+    /// so the step has to be refused before a browser opens at all.
+    @Test func commandAuthorizationNeedsAConsumerSessionBeforeItOpensTheBrowser() async throws {
+        let (api, _) = await makeSignedOutAPI()
+        let requests = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            await requests.increment()
+            return Data()
+        }
+        do {
+            _ = try await api.beginCommandAuthorization()
+            Issue.record("The browser step was offered without a Polestar ID session")
+        } catch let error as PolestarError {
+            guard case .authenticationRequired(.noStoredSession) = error else {
+                Issue.record("Expected noStoredSession before the browser, got \(error)")
+                return
+            }
+        }
+        #expect(await requests.value == 0)
+    }
+
+    /// A missing consumer session is the session's problem, not the command grant's: it must
+    /// report "no session" instead of a stale-session error, and must not clear a healthy grant.
+    @Test func commandTokenRefreshKeepsTheGrantWhenTheConsumerSessionIsGone() async throws {
+        let (api, keychain) = await makeSignedOutAPI()
+        try keychain.saveCommandSessionToken("command-refresh")
+        #expect(await api.commandClientAuthorization() == .unavailable)
+        #expect(await api.commandRefreshToken == "rotated-refresh")
+        #expect(try keychain.readCommandSessionToken() == "rotated-refresh")
+    }
+
+    @Test func commandVerificationWithoutAConsumerSessionReportsNoStoredSession() async throws {
+        let (api, _) = await makeSignedOutAPI()
+        do {
+            try await api.verifyCommandAccount(accessToken: "command-access")
+            Issue.record("Verification passed without a consumer session")
+        } catch let error as PolestarError {
+            guard case .authenticationRequired(.noStoredSession) = error else {
+                Issue.record("Expected noStoredSession, got \(error)")
+                return
+            }
+        }
+    }
 }
 
 private extension PolestarAPI {
@@ -264,6 +322,13 @@ private extension PolestarAPI {
         accessToken = "base-access"
         refreshToken = "base-refresh"
         tokenExpiry = Date().addingTimeInterval(3600)
+    }
+    /// Endpoints are discovered, but no consumer Polestar ID grant exists: the state a
+    /// Developer-Portal-only augmented account sits in.
+    func installSignedOutTestSession() {
+        accessToken = nil
+        refreshToken = nil
+        tokenExpiry = nil
     }
     func failCommandPersistence() { saveCommandToken = { _ in throw KeychainError.status(errSecAuthFailed) } }
     func restoreCommandPersistence() { saveCommandToken = { [keychain] in try keychain.saveCommandSessionToken($0) } }

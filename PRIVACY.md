@@ -239,7 +239,7 @@ When suitable coordinates are available, Hisingen may send:
 - latitude; and
 - longitude
 
-to Open-Meteo to obtain current weather at the vehicle's location.
+to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location.
 
 The Open-Meteo request does not need to contain:
 
