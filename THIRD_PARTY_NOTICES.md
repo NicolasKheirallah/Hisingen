@@ -118,7 +118,7 @@ under the Apache License 2.0 (checked against each package's `LICENSE` file on 2
 |---|---|
 | [grpc/grpc-swift-2](https://github.com/grpc/grpc-swift-2) | 2.3.0 |
 | [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.6.0 |
-| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.97.1 |
+| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.100.0 |
 | [apple/swift-nio-extras](https://github.com/apple/swift-nio-extras) | 1.33.0 |
 | [apple/swift-nio-http2](https://github.com/apple/swift-nio-http2) | 1.42.0 |
 | [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.36.1 |
