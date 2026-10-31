@@ -120,6 +120,32 @@ struct StreamPolicyTests {
         #expect(until.timeIntervalSince(now) >= 1_800 - 1)
     }
 
+    /// The reported all-day loop: a token that the server keeps refusing must not buy circuit
+    /// after circuit. Once the authorization-circuit budget is spent, the stream stops asking
+    /// the server and asks the user instead.
+    @Test
+    func authenticationFailureStopsRetryingAfterTheCircuitBudget() {
+        let policy = LiveStreamPolicy(repeatedFailureCircuitInterval: 1_800,
+                                      maximumAuthorizationCircuits: 1)
+        let now = Date()
+        let auth = VehicleServiceError.authenticationRequired(provider: .polestar, reason: .expiredSession)
+        // First refusal after a spent recovery: one circuit buys a propagation race.
+        guard case .openCircuit = policy.action(
+            for: auth, consecutiveFailures: 2, authorizationRecoveryUsed: true,
+            authorizationCircuits: 0, now: now, jitterUnit: 0
+        ) else {
+            Issue.record("Expected the first refused token exchange to open one circuit")
+            return
+        }
+        // Second refusal, after that circuit: no more blind retries.
+        #expect(policy.action(for: auth, consecutiveFailures: 1,
+                              authorizationRecoveryUsed: true, authorizationCircuits: 1,
+                              now: now, jitterUnit: 0) == .requireReauthentication)
+        #expect(policy.action(for: auth, consecutiveFailures: 9,
+                              authorizationRecoveryUsed: true, authorizationCircuits: 4,
+                              now: now, jitterUnit: 0) == .requireReauthentication)
+    }
+
     /// A rate limit is a plain retry on the server's own schedule, never a circuit.
     @Test
     func rateLimitRetriesOnServerSchedule() {

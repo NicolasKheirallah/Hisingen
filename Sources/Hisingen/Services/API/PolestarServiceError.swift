@@ -33,6 +33,7 @@ enum PolestarError: Error, LocalizedError {
     case responseTooLarge(operation: String)
     case grpcUnimplemented(service: String)
     case grpcUnavailable(service: String)
+    case commandOutcomeUnknown(operation: String)
     case secureStorage
     case notConfigured
 
@@ -67,6 +68,8 @@ enum PolestarError: Error, LocalizedError {
             return L10n.text("This vehicle service is not available for your vehicle.")
         case .grpcUnavailable:
             return L10n.text("A vehicle service is temporarily unavailable. Retrying automatically.")
+        case .commandOutcomeUnknown:
+            return L10n.text("The command may have reached the vehicle. Check its status before trying again.")
         case .graphQL, .decoding, .incompatibleAPI, .invalidResponse, .responseTooLarge:
             return L10n.text("Polestar's vehicle service returned an unexpected response.")
         case .secureStorage:
@@ -117,6 +120,7 @@ enum PolestarError: Error, LocalizedError {
         case .responseTooLarge(let operation): return .responseTooLarge(operation: operation)
         case .grpcUnimplemented(let service): return .unsupported(provider: .polestar, service: service)
         case .grpcUnavailable(let service): return .temporarilyUnavailable(provider: .polestar, service: service)
+        case .commandOutcomeUnknown(let operation): return .commandOutcomeUnknown(operation: operation)
         case .secureStorage: return .secureStorage
         case .notConfigured: return .notConfigured
         }

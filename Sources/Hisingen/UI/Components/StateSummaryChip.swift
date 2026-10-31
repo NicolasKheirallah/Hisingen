@@ -31,8 +31,6 @@ struct StateSummaryChip: View {
         }
     }
 
-    private var chipRadius: CGFloat { HisingenTheme.statusChipRadius }
-
     /// The chip's whole job is to encode severity in a colour and a symbol, and neither reached
     /// the accessibility tree, so a critical state and an informational one were announced
     /// identically. Only the two states that carry a warning are prefixed: "Good" on a calm
@@ -56,11 +54,11 @@ struct StateSummaryChip: View {
                          weight: prominence == .quiet ? .semibold : HisingenTheme.valueWeight)
         }
         .foregroundStyle(color)
-        .padding(.horizontal, prominence == .quiet ? 0 : 10)
-        .padding(.vertical, prominence == .quiet ? 0 : 7)
-        .background(
-            color.opacity(prominence == .quiet ? 0 : 0.12),
-            in: RoundedRectangle(cornerRadius: chipRadius, style: .continuous)
+        .statusChipSurface(
+            tint: color,
+            wash: prominence == .quiet ? 0 : 0.12,
+            horizontal: prominence == .quiet ? 0 : 10,
+            vertical: prominence == .quiet ? 0 : 7
         )
         .hisAnimation(Motion.stateChange, value: severity)
         .hisAnimation(Motion.stateChange, value: message)

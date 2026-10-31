@@ -7,37 +7,38 @@ import Testing
 struct PolestarRawDecodeTests {
     // MARK: - C3 battery
 
-    @Test func batteryDecodesReportedCapacityAndKnownFields() throws {
+    @Test func batteryQuarantinesCapacityAndDecodesKnownFields() throws {
         var payload = Data()
         payload += Protobuf.messageField(1, Protobuf.intField(1, 1_700_000_000))
         payload += Protobuf.doubleField(2, 75.0)
         payload += Protobuf.intField(4, 270)
         payload += Protobuf.intField(5, 42)
-        payload += Protobuf.doubleField(12, 78.0)
-        let extras = PolestarGRPC.parseBattery(payload)
+        payload += Protobuf.doubleField(12, 23.8)
+        let extras = try PolestarGRPC.parseBattery(payload)
         #expect(extras.batteryPercentage == 75.0)
         #expect(extras.rangeKm == 270)
         #expect(extras.estimatedChargingTimeToFullMinutes == 42)
-        #expect(extras.reportedBatteryCapacityKwh == 78.0)
+        #expect(extras.reportedBatteryCapacityKwh == nil)
+        #expect(extras.diagnostics.averageConsumptionAutomatic == 23.8)
         #expect(extras.unknownFields.isEmpty)
     }
 
     @Test func batteryCapturesUnknownFieldsRaw() throws {
         var payload = Data()
-        payload += Protobuf.intField(8, 7)
+        payload += Protobuf.intField(12, 7)
         payload += Protobuf.stringField(14, "abc")
         payload += Protobuf.doubleField(21, 3.5)
-        let extras = PolestarGRPC.parseBattery(payload)
+        let extras = try PolestarGRPC.parseBattery(payload)
         #expect(extras.batteryPercentage == nil)
         let unknown = extras.unknownFields.sorted { $0.field < $1.field }
         #expect(unknown.count == 3)
-        #expect(unknown[0].field == 8 && unknown[0].wire == 0 && unknown[0].value == "7" && !unknown[0].isBinary)
+        #expect(unknown[0].field == 12 && unknown[0].wire == 0 && unknown[0].value == "7" && !unknown[0].isBinary)
         #expect(unknown[1].field == 14 && unknown[1].isBinary && unknown[1].value == "616263")
         #expect(unknown[2].field == 21 && unknown[2].value == "3.5" && !unknown[2].isBinary)
     }
 
     @Test func batteryCapacityAbsentStaysNil() throws {
-        let extras = PolestarGRPC.parseBattery(Protobuf.intField(4, 100))
+        let extras = try PolestarGRPC.parseBattery(Protobuf.intField(4, 100))
         #expect(extras.reportedBatteryCapacityKwh == nil)
         #expect(extras.rangeKm == 100)
     }
@@ -163,12 +164,13 @@ struct PolestarRawDecodeTests {
         charging += Protobuf.intField(5, 1)   // unknown charging subfield
         var locks = Data()
         locks += Protobuf.intField(5, 1)      // known windows flag – must not be retained
-        locks += Protobuf.intField(1, 3)      // unknown locks subfield
+        locks += Protobuf.intField(1, 3)      // lock_type, decoded
+        locks += Protobuf.intField(4, 1)      // unknown locks subfield
         var car = Data()
         car += Protobuf.stringField(1, "VIN-RETAIN")
         car += Protobuf.stringField(6, "Polestar 2")
         car += Protobuf.intField(20, 1)       // unknown top-level flag
-        car += Protobuf.floatField(44, 2600)  // unknown top-level float
+        car += Protobuf.floatField(44, 2600)  // gross vehicle weight, decoded
         car += Protobuf.messageField(35, charging)
         car += Protobuf.messageField(36, locks)
         car += Protobuf.stringField(47, "534-110U-GR04-2023")
@@ -176,19 +178,57 @@ struct PolestarRawDecodeTests {
         let caps = try #require(PolestarGRPC.parseMyCars(myCar, vin: "VIN-RETAIN"))
 
         #expect(caps.equipment?.contentCodes == ["534", "110U", "GR04", "2023"])
+        #expect(caps.equipment?.grossVehicleWeightRatingKg == 2600)
+        #expect(caps.advertisedCapabilities?[.locks] == true)
+        #expect(caps.advertisedCapabilities?[.reducedGuardLock] == true)
+        // Car 20 and Charging 35.5 were retained raw before the 2026-10-31 wiring named them;
+        // they now decode into the reporting model.
+        #expect(caps.equipment?.reportsAvgElectricConsumption == true)
+        #expect(caps.equipment?.reportsChargeLevelWhileCharging == true)
         let unknown = try #require(caps.unknownWireFields)
-        #expect(unknown.map { "\($0.subfield ?? 0)|\($0.field)" } ==
-                ["0|20", "0|44", "35|5", "36|1"])
+        #expect(unknown.map { "\($0.subfield ?? 0)|\($0.field)" } == ["36|4"])
         #expect(unknown[0].value == "1" && !unknown[0].isBinary)
-        #expect(unknown[1].value == "2600.0" && !unknown[1].isBinary)
-        // Known fields (6, 35.1, 36.5, 47) never appear in the raw capture.
+        // Known fields (6, 20, 35.1, 35.5, 36.1, 36.5, 44, 47) never appear in the raw capture.
         #expect(!unknown.contains { $0.subfield == nil && $0.field == 47 })
+        #expect(!unknown.contains { $0.subfield == nil && $0.field == 44 })
+        #expect(!unknown.contains { $0.subfield == nil && $0.field == 20 })
         #expect(!unknown.contains { $0.subfield == 35 && $0.field == 1 })
+        #expect(!unknown.contains { $0.subfield == 35 && $0.field == 5 })
+        #expect(!unknown.contains { $0.subfield == 36 && $0.field == 1 })
         #expect(!unknown.contains { $0.subfield == 36 && $0.field == 5 })
     }
 
-    @Test func myCarsWithOnlyKnownFieldsRetainsNothing() throws {
+    /// Live observation 2026-10-31: the production frame grew Car 92 and Charging 44/45 one
+    /// day after the retained capture, and no client schema or public source names any of them.
+    /// The retention net must keep them visible, with binary fields rendered as their decoded
+    /// wire structure rather than a hex dump.
+    @Test func unnamedLiveGrowthStaysRetainedAndReadable() throws {
+        var charging = Data()
+        charging += Protobuf.intField(43, 3)
+        charging += Protobuf.intField(44, 1)
+        charging += Protobuf.intField(45, 1)
         var car = Data()
+        car += Protobuf.stringField(1, "VIN-GROWTH")
+        car += Protobuf.stringField(6, "Polestar 2")
+        car += Protobuf.messageField(92, Protobuf.intField(1, 1_787_835_643))
+        car += Protobuf.messageField(35, charging)
+        // A packed repeated scalar is not a message: it must keep its hex dump.
+        car += Protobuf.messageField(93, Data([0x01, 0x03, 0x02, 0x06]))
+        let caps = try #require(PolestarGRPC.parseMyCars(
+            Protobuf.messageField(1, Protobuf.messageField(1, car)), vin: "VIN-GROWTH"))
+        let raw = try #require(caps.unknownWireFields)
+        func row(_ subfield: Int?, _ field: Int) throws -> VehicleRawWireField {
+            try #require(raw.first { $0.subfield == subfield && $0.field == field })
+        }
+        let car92 = try row(nil, 92)
+        #expect(car92.isBinary && car92.value == "1: 1787835643")
+        #expect(try row(35, 43).value == "3" && !row(35, 43).isBinary)
+        #expect(try row(35, 44).value == "1" && !row(35, 44).isBinary)
+        #expect(try row(35, 45).value == "1" && !row(35, 45).isBinary)
+        #expect(try row(nil, 93).value == "01030206" && row(nil, 93).isBinary)
+    }
+
+    @Test func myCarsWithOnlyKnownFieldsRetainsNothing() throws {        var car = Data()
         car += Protobuf.stringField(1, "VIN-CLEAN")
         car += Protobuf.stringField(6, "Polestar 2")
         car += Protobuf.stringField(47, "534-GR04")
@@ -318,9 +358,7 @@ struct PolestarRawDecodeTests {
     // MARK: - Live-verified climate + air-quality classifications (2026-09-11 sessions)
 
     @Test func climateActiveSessionDecodesTimestampsAndStaysActive() throws {
-        // Shape of the live heating-session frames: running=1, remaining=30, field 6=2
-        // (unknown activity enum – must NOT classify as ventilating), requested 22.0,
-        // session start/end timestamp messages.
+        // The matched portal report identifies field 6 value 2 as heating.
         let report: UInt64 = 1_789_161_062
         var payload = Data()
         payload += Protobuf.messageField(1, Protobuf.intField(1, Int(report)))
@@ -332,7 +370,7 @@ struct PolestarRawDecodeTests {
         payload += Protobuf.messageField(16, Protobuf.intField(1, Int(report + 1_800)))
         payload += Protobuf.intField(15, 2)
         let climate = PolestarGRPC.parseClimate(payload)
-        #expect(climate.activity == .active)
+        #expect(climate.activity == .heating)
         #expect(climate.activity != .ventilating)
         #expect(climate.timeRemainingMinutes == 30)
         #expect(climate.requestedTemperatureCelsius == 22.0)
@@ -374,21 +412,62 @@ struct PolestarRawDecodeTests {
     }
 
     @Test func climateRetainsUndecodedFieldsForClassification() throws {
-        // Live idle-frame shape: fields 6, 9, 13 are observed but unresolved – they must be
-        // retained raw while decoded fields (2, 3) never enter the capture.
+        // Future enum values remain raw after known ventilation and intensity values decode.
         var payload = Data()
         payload += Protobuf.messageField(1, Protobuf.intField(1, 1_789_130_617))
         payload += Protobuf.intField(2, 2)
         payload += Protobuf.intField(3, 0)
-        payload += Protobuf.intField(6, 3)
-        payload += Protobuf.intField(9, 0)
-        payload += Protobuf.intField(13, 0)
+        payload += Protobuf.intField(6, 99)
+        payload += Protobuf.intField(9, 99)
+        payload += Protobuf.intField(13, 99)
         payload += Protobuf.intField(10, 0)
         let climate = PolestarGRPC.parseClimate(payload)
         let retained = climate.unknownWireFields?.map(\.field) ?? []
         #expect(Set(retained) == [6, 9, 13])
         #expect(retained.contains(6) && retained.contains(9) && retained.contains(13))
         #expect(!retained.contains(2) && !retained.contains(3) && !retained.contains(10))
+    }
+
+    @Test func odometerDecodesPreciseAndSinceChargeReadings() throws {
+        var payload = Data()
+        payload += Protobuf.intField(2, 12_345)
+        payload += Protobuf.doubleField(3, 10.5)
+        payload += Protobuf.doubleField(7, 42.5)
+        payload += Protobuf.intField(8, 37)
+        let report = PolestarGRPC.parseOdometer(payload)
+        #expect(report.odometerKm == 12)
+        #expect(report.odometerKmPrecise == 12.345)
+        #expect(report.manualTripKm == 10.5)
+        #expect(report.sinceChargeTripKm == 42.5)
+        #expect(report.sinceChargeAverageSpeedKmH == 37)
+    }
+
+    @Test func healthDecodesReferencePressuresWithoutBecomingWheelReadings() throws {
+        var payload = Data()
+        payload += Protobuf.doubleField(39, 240)
+        payload += Protobuf.doubleField(40, 242)
+        payload += Protobuf.doubleField(41, 260)
+        payload += Protobuf.doubleField(42, 262)
+        payload += Protobuf.doubleField(43, 250)
+        payload += Protobuf.doubleField(44, 270)
+        let report = PolestarGRPC.parseHealth(payload)
+        let tyres = report.details.tyres
+        #expect(tyres.count == 4)
+        #expect(tyres[0].kilopascals == 240)
+        #expect(tyres[0].referenceKilopascals == 250)
+        #expect(tyres[3].kilopascals == 262)
+        #expect(tyres[3].referenceKilopascals == 270)
+    }
+
+    @Test func climateDecodesStartReasonAndErrors() throws {
+        var payload = Data()
+        payload += Protobuf.messageField(1, Protobuf.intField(1, 1_789_130_617))
+        payload += Protobuf.intField(2, 1)
+        payload += Protobuf.intField(15, 2)
+        payload += Protobuf.intField(4, 2)
+        let climate = PolestarGRPC.parseClimate(payload)
+        #expect(climate.startReason == .remote)
+        #expect(climate.errors == [L10n.text("Battery level low")])
     }
 
     @Test func availabilityReportRetainsTimestampAndUnknownFields() throws {

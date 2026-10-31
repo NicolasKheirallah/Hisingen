@@ -69,10 +69,13 @@ struct ChargeLocationTests {
         delivered.append(Protobuf.intField(1, 2))
         #expect(try PolestarGRPC.chronosResult(delivered, statusField: 1).outcome == .delivered)
 
-        var rejected = Data()
-        rejected.append(Protobuf.intField(1, 0))
-        #expect(throws: RemoteCommandError.self) {
-            _ = try PolestarGRPC.chronosResult(rejected, statusField: 1)
+        let unknown = Protobuf.intField(1, 0)
+        do {
+            _ = try PolestarGRPC.chronosResult(unknown, statusField: 1)
+            Issue.record("Unknown status must not establish an outcome")
+        } catch PolestarError.commandOutcomeUnknown {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 

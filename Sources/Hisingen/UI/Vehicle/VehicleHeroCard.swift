@@ -9,8 +9,6 @@ struct VehicleHeroCard: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var chargingJustStarted = false
-    @ScaledMetric(relativeTo: .largeTitle) private var heroValueSize: CGFloat = 44
-    @ScaledMetric(relativeTo: .title) private var compactHeroValueSize: CGFloat = 34
     @Namespace private var heroRotorNamespace
 
     private var features: FeatureSelection { preferences.features }
@@ -123,6 +121,7 @@ struct VehicleHeroCard: View {
                                                 style: .topLeftOverlay,
                                                 showsSwedishFlag: showsSwedishPlateFlag
                                             )
+                                            .privacySensitive(preferences.privacyRedactionEnabled)
                                         }
                                     }
 
@@ -135,6 +134,7 @@ struct VehicleHeroCard: View {
                                                 style: .topRightOverlay,
                                                 showsSwedishFlag: showsSwedishPlateFlag
                                             )
+                                            .privacySensitive(preferences.privacyRedactionEnabled)
                                         }
                                         if showModelTopRight {
                                             modelOverlayBadge(modelIdentity)
@@ -202,6 +202,7 @@ struct VehicleHeroCard: View {
                                     style: registrationPosition,
                                     showsSwedishFlag: showsSwedishPlateFlag
                                 )
+                                .privacySensitive(preferences.privacyRedactionEnabled)
                             }
                             if greeting != nil, !nickname.isEmpty {
                                 Text(nickname)
@@ -392,10 +393,7 @@ struct VehicleHeroCard: View {
                     Text(state.fuelSystem.levelPercent.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) }
                          ?? state.fuelSystem.amountLiters.map { String(format: "%.0f L", locale: L10n.displayLocale, $0) }
                          ?? "–")
-                        // ScaledMetric owns text-size scaling here; the density multiplier and
-                        // display tracking come from the same tokens the tier modifier uses.
-                        .font(.system(size: heroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
-                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize * preferences.contentDensity.typeScale))
+                        .hisType(size: 44, relativeTo: .largeTitle, weight: HisingenTheme.displayWeight)
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.fuelSystem.levelPercent, reduceMotion: reduceMotion)
@@ -426,8 +424,7 @@ struct VehicleHeroCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) } ?? "–")
-                            .font(.system(size: compactHeroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
-                            .tracking(HisingenTheme.displayTracking(forSize: compactHeroValueSize * preferences.contentDensity.typeScale))
+                            .hisType(size: 34, relativeTo: .title, weight: HisingenTheme.displayWeight)
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.ink)
                             .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)
@@ -461,10 +458,7 @@ struct VehicleHeroCard: View {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(state.energy.batteryPercentage.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) } ?? "–")
-                        // ScaledMetric owns text-size scaling here; the density multiplier and
-                        // display tracking come from the same tokens the tier modifier uses.
-                        .font(.system(size: heroValueSize * preferences.contentDensity.typeScale, weight: HisingenTheme.displayWeight))
-                        .tracking(HisingenTheme.displayTracking(forSize: heroValueSize * preferences.contentDensity.typeScale))
+                        .hisType(size: 44, relativeTo: .largeTitle, weight: HisingenTheme.displayWeight)
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.ink)
                         .hisTelemetryValue(state.energy.batteryPercentage, reduceMotion: reduceMotion)

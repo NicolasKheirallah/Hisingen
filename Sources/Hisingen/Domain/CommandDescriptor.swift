@@ -3,7 +3,7 @@ import Foundation
 /// Which display-only field of `VehicleState` a command's result owns. One column serves
 /// two purposes: the optimistic patch writes the field, and presentation keeps the
 /// optimistic value for any field whose command is still awaiting telemetry.
-enum CommandDisplayField: Hashable, Sendable {
+enum CommandDisplayField: String, Codable, Hashable, Sendable {
     case climateStatus
     case airQuality
     case exterior
@@ -109,7 +109,8 @@ extension RemoteCommand {
                         endingAt: air.endingAt,
                         startReason: air.startReason,
                         lastCycleValid: air.lastCycleValid,
-                        errorKind: air.errorKind
+                        errorKind: air.errorKind,
+                        unknownWireFields: air.unknownWireFields
                     )
                     state.airQuality = air
                 }
@@ -136,7 +137,8 @@ extension RemoteCommand {
                         endingAt: air.endingAt,
                         startReason: air.startReason,
                         lastCycleValid: air.lastCycleValid,
-                        errorKind: air.errorKind
+                        errorKind: air.errorKind,
+                        unknownWireFields: air.unknownWireFields
                     )
                 }
             )

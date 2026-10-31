@@ -35,9 +35,10 @@ struct SnapshotMergePolicy {
 
     /// During the command grace window a disagreeing reading is a stale cache, not a flip:
     /// the previous value wins until the lock expires or telemetry confirms the same state.
-    func commandLockedValue<T>(new: T?, previous: T?) -> T? {
+    func commandLockedValue<T>(new: T?, previous: T?, keepPrevious: Bool = true) -> T? {
         if isCommandLocked, let previous { return previous }
-        return new ?? previous
+        if let new { return new }
+        return keepPrevious ? previous : nil
     }
 }
 
@@ -47,35 +48,35 @@ extension EnergyAndChargingSnapshot {
             if case .unknown = chargingState { return previous.chargingState }
             return nil
         }()
-        let resolvedIsAt = isAtChargeLocation ?? previous.isAtChargeLocation
+        let keepCharging = policy.features.contains(.chargingDetails)
         var merged = EnergyAndChargingSnapshot(
-            batteryPercentage: batteryPercentage ?? previous.batteryPercentage,
-            rangeKm: rangeKm ?? previous.rangeKm,
+            batteryPercentage: batteryPercentage ?? (keepCharging ? previous.batteryPercentage : nil),
+            rangeKm: rangeKm ?? (keepCharging ? previous.rangeKm : nil),
             chargingState: previousChargingState ?? chargingState,
-            estimatedTimeToFullMinutes: estimatedTimeToFullMinutes ?? previous.estimatedTimeToFullMinutes,
-            estimatedTimeToTargetMinutes: estimatedTimeToTargetMinutes ?? previous.estimatedTimeToTargetMinutes,
-            targetPercentage: policy.commandLockedValue(new: targetPercentage, previous: previous.targetPercentage),
-            powerWatts: powerWatts ?? previous.powerWatts,
-            currentAmps: policy.commandLockedValue(new: currentAmps, previous: previous.currentAmps),
-            voltageVolts: voltageVolts ?? previous.voltageVolts,
+            scheduleOutcome: scheduleOutcome ?? (keepCharging ? previous.scheduleOutcome : nil),
+            estimatedTimeToFullMinutes: estimatedTimeToFullMinutes ?? (keepCharging ? previous.estimatedTimeToFullMinutes : nil),
+            estimatedTimeToTargetMinutes: estimatedTimeToTargetMinutes ?? (keepCharging ? previous.estimatedTimeToTargetMinutes : nil),
+            targetPercentage: policy.commandLockedValue(new: targetPercentage, previous: previous.targetPercentage, keepPrevious: keepCharging),
+            powerWatts: powerWatts ?? (keepCharging ? previous.powerWatts : nil),
+            currentAmps: policy.commandLockedValue(new: currentAmps, previous: previous.currentAmps, keepPrevious: keepCharging),
+            voltageVolts: voltageVolts ?? (keepCharging ? previous.voltageVolts : nil),
             type: type == .unknown ? previous.type : type,
             connection: connection == .unknown ? previous.connection : connection,
-            currentLimitAmps: currentLimitAmps ?? previous.currentLimitAmps,
-            reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? previous.reportedBatteryCapacityKwh,
+            currentLimitAmps: currentLimitAmps ?? (keepCharging ? previous.currentLimitAmps : nil),
+            reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? (keepCharging ? previous.reportedBatteryCapacityKwh : nil),
             diagnostics: diagnostics ?? (policy.features.contains(.batteryDiagnostics) ? previous.diagnostics : nil),
             schedules: !schedules.isEmpty ? schedules
                 : (policy.features.contains(.chargingSchedule) ? previous.schedules : []),
-            // Locations are only re-shown when this fetch actually returned them; an empty
-            // result after a backend hiccup should not wipe the list the controls tab renders.
-            locations: locations.isEmpty ? previous.locations : locations,
-            isAtChargeLocation: resolvedIsAt,
-            currentChargeLocationName: (resolvedIsAt == false) ? nil : (currentChargeLocationName ?? previous.currentChargeLocationName),
+            // Locations are only re-shown when this fetch actually returned them or when the
+            // feature was not refreshed; an empty result after a successful refresh clears
+            // rather than holding stale locations.
+            locations: !locations.isEmpty ? locations
+                : (policy.keep(.chargingDetails) ? previous.locations : []),
             // A failed charge-now read must not keep a stale override pill alive: nil the
             // flag for this cycle rather than carrying the last success forward.
             chargeNowActive: policy.failedFeatures.contains(.remoteCharging)
                 ? nil
-                : (chargeNowActive ?? previous.chargeNowActive),
-            arrivedAtLocationDate: (resolvedIsAt == false) ? nil : (arrivedAtLocationDate ?? previous.arrivedAtLocationDate),
+                : (chargeNowActive ?? (keepCharging ? previous.chargeNowActive : nil)),
             // Providers never produce samples; the buffer carries forward from the previous
             // snapshot and the live reading below appends to it.
             samples: previous.samples
@@ -158,10 +159,10 @@ extension ServiceSnapshot {
                 ?? (policy.features.contains(.vehicleHealth) ? previous.distanceToServiceKm : nil),
             serviceWarning: !serviceWarning && policy.keep(.vehicleHealth) ? previous.serviceWarning : serviceWarning,
             fluidWarnings: fluidWarnings.isEmpty && policy.keep(.vehicleHealth) ? previous.fluidWarnings : fluidWarnings,
-            engineHoursToService: engineHoursToService ?? previous.engineHoursToService,
-            trigger: trigger ?? previous.trigger,
-            preferredWorkshopID: preferredWorkshopID ?? previous.preferredWorkshopID,
-            preferredWorkshopName: preferredWorkshopName ?? previous.preferredWorkshopName
+            engineHoursToService: engineHoursToService ?? (policy.features.contains(.vehicleHealth) ? previous.engineHoursToService : nil),
+            trigger: trigger ?? (policy.features.contains(.vehicleHealth) ? previous.trigger : nil),
+            preferredWorkshopID: preferredWorkshopID ?? (policy.features.contains(.vehicleHealth) ? previous.preferredWorkshopID : nil),
+            preferredWorkshopName: preferredWorkshopName ?? (policy.features.contains(.vehicleHealth) ? previous.preferredWorkshopName : nil)
         )
     }
 }
@@ -182,16 +183,18 @@ extension MaintenanceAndHealthSnapshot {
 
 extension TripComputerSnapshot {
     func merging(previous: Self, policy: SnapshotMergePolicy) -> Self {
-        TripComputerSnapshot(
+        let keepTrip = policy.features.contains(.tripMeters)
+        let keepCharging = policy.features.contains(.chargingDetails)
+        return TripComputerSnapshot(
             manualTripKm: manualTripKm ?? (policy.features.contains(.tripMeters) ? previous.manualTripKm : nil),
             automaticTripKm: automaticTripKm ?? (policy.features.contains(.tripMeters) ? previous.automaticTripKm : nil),
-            averageSpeedKmH: averageSpeedKmH ?? previous.averageSpeedKmH,
-            manualAverageSpeedKmH: manualAverageSpeedKmH ?? previous.manualAverageSpeedKmH,
-            automaticAverageSpeedKmH: automaticAverageSpeedKmH ?? previous.automaticAverageSpeedKmH,
-            electricRangeKm: electricRangeKm ?? previous.electricRangeKm,
-            electricDistanceKm: electricDistanceKm ?? previous.electricDistanceKm,
-            fuelDistanceKm: fuelDistanceKm ?? previous.fuelDistanceKm,
-            regeneratedEnergyKwh: regeneratedEnergyKwh ?? previous.regeneratedEnergyKwh,
+            averageSpeedKmH: averageSpeedKmH ?? (keepTrip ? previous.averageSpeedKmH : nil),
+            manualAverageSpeedKmH: manualAverageSpeedKmH ?? (keepTrip ? previous.manualAverageSpeedKmH : nil),
+            automaticAverageSpeedKmH: automaticAverageSpeedKmH ?? (keepTrip ? previous.automaticAverageSpeedKmH : nil),
+            electricRangeKm: electricRangeKm ?? (keepCharging ? previous.electricRangeKm : nil),
+            electricDistanceKm: electricDistanceKm ?? (keepTrip ? previous.electricDistanceKm : nil),
+            fuelDistanceKm: fuelDistanceKm ?? (keepTrip ? previous.fuelDistanceKm : nil),
+            regeneratedEnergyKwh: regeneratedEnergyKwh ?? (keepTrip ? previous.regeneratedEnergyKwh : nil),
             sinceChargeTripKm: sinceChargeTripKm ?? (policy.features.contains(.tripMeters) ? previous.sinceChargeTripKm : nil),
             // Same reading, same feature gate: an average speed without its trip distance
             // would render a never-refreshing half-row when .tripMeters is disabled.
@@ -201,14 +204,15 @@ extension TripComputerSnapshot {
 }
 
 extension FuelSystemSnapshot {
-    func merging(previous: Self) -> Self {
-        FuelSystemSnapshot(
-            levelPercent: levelPercent ?? previous.levelPercent,
-            rangeKm: rangeKm ?? previous.rangeKm,
-            amountLiters: amountLiters ?? previous.amountLiters,
-            averageConsumptionLPer100Km: averageConsumptionLPer100Km ?? previous.averageConsumptionLPer100Km,
-            isEngineRunning: isEngineRunning ?? previous.isEngineRunning,
-            type: type ?? previous.type
+    func merging(previous: Self, policy: SnapshotMergePolicy) -> Self {
+        let keep = policy.features.contains(.vehicleHealth)
+        return FuelSystemSnapshot(
+            levelPercent: levelPercent ?? (keep ? previous.levelPercent : nil),
+            rangeKm: rangeKm ?? (keep ? previous.rangeKm : nil),
+            amountLiters: amountLiters ?? (keep ? previous.amountLiters : nil),
+            averageConsumptionLPer100Km: averageConsumptionLPer100Km ?? (keep ? previous.averageConsumptionLPer100Km : nil),
+            isEngineRunning: isEngineRunning ?? (keep ? previous.isEngineRunning : nil),
+            type: type ?? (keep ? previous.type : nil)
         )
     }
 }
@@ -224,7 +228,9 @@ extension SnapshotFreshness {
             unavailableFeatures: unavailableFeatures,
             retainedDataCategories: [],
             retainedDataAt: nil,
-            servedByFallback: servedByFallback
+            servedByFallback: servedByFallback,
+            readingObservations: readingObservations,
+            commandObservations: commandObservations
         )
     }
 }
@@ -235,23 +241,17 @@ extension VehicleClimateStatus {
         previous: VehicleClimateStatus?,
         policy: SnapshotMergePolicy
     ) -> VehicleClimateStatus? {
-        guard let previous else {
-            return incoming ?? (policy.features.contains(.climateStatus) ? previous : nil)
-        }
         if policy.isCommandLocked {
-            if previous.activity.isActiveSession {
-                if let incoming, incoming.activity.isActiveSession {
-                    return incoming
-                }
-                return previous
-            } else if previous.activity == .idle {
-                if let incoming, incoming.activity == .idle {
-                    return incoming
-                }
-                return previous
-            }
+            // Confirmation wins over optimism: any live-session reading (including the
+            // backend's STARTING state, which outlasts the optimistic overlay) replaces
+            // the synthesized state. A stale idle frame or a missing reading must not
+            // revert the lock – the previous (optimistic) state stands.
+            if let incoming, incoming.activity.isActiveSession { return incoming }
+            if let previous { return previous }
         }
-        return incoming ?? (policy.features.contains(.climateStatus) ? previous : nil)
+        if let incoming { return incoming }
+        guard let previous else { return nil }
+        return policy.features.contains(.climateStatus) ? previous : nil
     }
 }
 
@@ -261,12 +261,17 @@ extension VehicleAirQuality {
         previous: VehicleAirQuality?,
         policy: SnapshotMergePolicy
     ) -> VehicleAirQuality? {
-        if policy.isCommandLocked, let previous {
-            if let incoming, incoming.cleaningState == previous.cleaningState {
+        if policy.isCommandLocked {
+            // Same confirmation-wins rule as climate: a live cleaning reading (running
+            // or pending) replaces the optimistic state; stale off/unknown frames and
+            // missing readings hold the lock.
+            if let incoming, incoming.cleaningState == .on || incoming.cleaningState == .pending {
                 return incoming
             }
-            return previous
+            if let previous { return previous }
         }
-        return incoming ?? previous
+        if let incoming { return incoming }
+        guard let previous else { return nil }
+        return policy.features.contains(.airQuality) ? previous : nil
     }
 }

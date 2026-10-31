@@ -30,6 +30,20 @@ extension CommandReceipt {
     ) -> CommandReceipt {
         guard status.isAwaiting, let command, let proofReading = command.descriptor.proofReading else { return self }
         guard command.descriptor.isProvenBy(state) else { return self }
+        if state.freshness.readingObservations != nil || state.freshness.commandObservations != nil {
+            guard !state.freshness.isCached else { return self }
+            let observation: VehicleReadingObservation?
+            if let observations = state.freshness.commandObservations,
+               let field = command.descriptor.displayField,
+               field == .chargeTarget || field == .chargingCurrentLimit {
+                observation = observations[field]
+            } else {
+                observation = state.freshness.readingObservations?[proofReading]
+            }
+            guard let observation,
+                  !observation.isCached,
+                  observation.fetchedAt >= issuedAt else { return self }
+        }
         let earliestConfirmationDate = issuedAt.addingTimeInterval(-max(0, timestampTolerance))
         let readingDate = state.reportedDate(for: proofReading)
         // Vehicle-stamped proof: the reading's own timestamp postdates the command, so the

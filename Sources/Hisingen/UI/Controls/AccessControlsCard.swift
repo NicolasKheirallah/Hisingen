@@ -34,15 +34,17 @@ struct AccessControlsCard: View {
                         )
                     }
                 }
-                gate.dimReason(gate.liveAvailability([.lock, .unlock]))
-
                 // Three states, not two. `nil` used to collapse to `false`, which chose the action,
                 // the label, the icon and the tint from a reading the vehicle had not sent. The
                 // button still offers Lock, because locking is the safe direction and refusing to
                 // act on an unknown state would strand the user; what changes is that the control
                 // no longer claims to know, and Reduced Guard waits for a reported state.
                 let isLocked = state.exteriorStatus?.isLocked
+                // Lock and unlock are separate capabilities: `Locks.unlock_type` can be `none` or
+                // `trunkOnly` on a car that still locks remotely, so the reason names this action.
                 let lockCommand: RemoteCommand = isLocked == true ? .unlock : .lock
+                let lockAvailability = gate.liveAvailability([lockCommand])
+                gate.dimReason(lockAvailability)
                 HStack(spacing: 8) {
                     if profile.permits(.locks) && features.contains(.remoteLocks) {
                         Button {
@@ -60,11 +62,12 @@ struct AccessControlsCard: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(isLocked == true ? HisingenTheme.semanticActive : HisingenTheme.semanticGood)
-                        .help(isLocked == nil
-                              ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
-                              : (isLocked == true
-                                 ? L10n.text("Unlocks the vehicle.")
-                                 : L10n.text("Locks the vehicle.")))
+                        .help(lockAvailability.shortReason
+                              ?? (isLocked == nil
+                                  ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
+                                  : (isLocked == true
+                                     ? L10n.text("Unlocks the vehicle.")
+                                     : L10n.text("Locks the vehicle."))))
                         .disabled(gate.isDisabled(lockCommand))
                         .hisAnimation(Motion.stateChange, value: isLocked)
                     }

@@ -39,6 +39,32 @@ enum ScheduleKind: String, Codable, Sendable {
     }
 }
 
+/// Vehicle acknowledgement of a timer or schedule setting (`syncStatus`).
+enum ScheduleSyncStatus: Equatable, Sendable {
+    case synced
+    case pending
+    /// The backend sent no acknowledgement info. This is not a sync failure.
+    case unspecified
+
+    /// Wire token to status. A token containing `UNSPECIFIED` is `.unspecified`, and an
+    /// unrecognised token gives nil.
+    init?(wireToken: String?) {
+        guard let token = wireToken?.uppercased(), !token.isEmpty else { return nil }
+        if token.contains("UNSPECIFIED") {
+            self = .unspecified
+            return
+        }
+        switch token {
+        case "SYNCED": self = .synced
+        case "PENDING": self = .pending
+        default: return nil
+        }
+    }
+
+    /// Only a real pending acknowledgement deserves the user's attention.
+    var needsAttention: Bool { self == .pending }
+}
+
 struct VehicleSchedule: Codable, Equatable, Sendable {
     /// Stable identity for a list row.
     ///
@@ -67,13 +93,19 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
     /// Vehicle-acknowledged sync state of a timer setting (`SYNCED`, `PENDING`, …), nil when
     /// the backend sent no acknowledgement.
     var syncStatus: String?
+    /// The per-timer repeats-weekly flag (wire field 5) read back from GetTimers, nil when the
+    /// backend sent no field. Hisingen itself writes this field on SetTimers
+    /// (`weekdays.isEmpty ? 0 : 1`), so the readback is round-trip data, but the flag's meaning
+    /// is inferred from the app's own write behavior, not yet backend-verified. Display still
+    /// infers repetition from `weekdays`; a nil never means "does not repeat".
+    var repeatsWeekly: Bool?
 
-    /// UNSPECIFIED means "no acknowledgement info", not "the car is behind"; only a real
-    /// pending or failed acknowledgement deserves user attention.
+    var syncStatusKind: ScheduleSyncStatus? { ScheduleSyncStatus(wireToken: syncStatus) }
+
+    /// An unrecognised token counts as needing attention, so a new backend state is never hidden.
     var syncNeedsAttention: Bool {
         guard let syncStatus, !syncStatus.isEmpty else { return false }
-        let normalized = syncStatus.uppercased()
-        return normalized != "SYNCED" && normalized != "UNSPECIFIED" && !normalized.contains("UNSPECIFIED")
+        return syncStatusKind?.needsAttention ?? true
     }
 
     init(
@@ -88,7 +120,8 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         isActive: Bool,
         locationName: String? = nil,
         oneShotDate: Date? = nil,
-        syncStatus: String? = nil
+        syncStatus: String? = nil,
+        repeatsWeekly: Bool? = nil
     ) {
         self.backendID = backendID
         self.index = index
@@ -102,11 +135,13 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         self.locationName = locationName
         self.oneShotDate = oneShotDate
         self.syncStatus = syncStatus
+        self.repeatsWeekly = repeatsWeekly
     }
 
     private enum CodingKeys: String, CodingKey {
         case backendID, index, kind, startHour, startMinute, endHour, endMinute
         case weekdays, isActive, locationName, oneShotDate, syncStatus
+        case repeatsWeekly
     }
 
     init(from decoder: Decoder) throws {
@@ -123,6 +158,7 @@ struct VehicleSchedule: Codable, Equatable, Sendable {
         locationName = try c.decodeIfPresent(String.self, forKey: .locationName)
         oneShotDate = try c.decodeIfPresent(Date.self, forKey: .oneShotDate)
         syncStatus = try c.decodeIfPresent(String.self, forKey: .syncStatus)
+        repeatsWeekly = try c.decodeIfPresent(Bool.self, forKey: .repeatsWeekly)
     }
 }
 
@@ -503,6 +539,10 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     var latestAvailableVersion: String?
     /// True only after a successful OTA read reports no pending update.
     var noUpdateAvailable: Bool?
+    /// True when the vehicle does not advertise update status at all
+    /// (`supports_update_status` false). Distinguishes "nothing to install" from "this car
+    /// never reports", so the card cannot claim an all-clear it did not receive.
+    var statusNotReported: Bool? = nil
     /// Backend build-identification code (`CarSoftwareInfo` field 3). Observed empty or
     /// redundant; captured so its presence stays visible.
     var qbCode: String? = nil
@@ -519,7 +559,8 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
     var scheduleRelativeMinutes: Int? = nil
 
     var statusDisplayName: String {
-        noUpdateAvailable == true ? L10n.text("No update available") : (rawState?.displayName ?? state.displayName)
+        if statusNotReported == true { return L10n.text("Update status not reported") }
+        return noUpdateAvailable == true ? L10n.text("No update available") : (rawState?.displayName ?? state.displayName)
     }
 
     init(
@@ -534,6 +575,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         installedVersion: String? = nil,
         latestAvailableVersion: String? = nil,
         noUpdateAvailable: Bool? = nil,
+        statusNotReported: Bool? = nil,
         qbCode: String? = nil,
         originator: String? = nil,
         shortDescription: String? = nil,
@@ -551,6 +593,7 @@ struct VehicleSoftwareInfo: Codable, Equatable, Sendable {
         self.installedVersion = installedVersion
         self.latestAvailableVersion = latestAvailableVersion
         self.noUpdateAvailable = noUpdateAvailable
+        self.statusNotReported = statusNotReported
         self.qbCode = qbCode
         self.originator = originator
         self.shortDescription = shortDescription
@@ -612,6 +655,34 @@ enum ClimateActivity: String, Codable, Sendable {
     }
 }
 
+/// `Ventilation` mode of a climate session (`VENTILATION_*` wire tokens).
+enum ClimateVentilation: Equatable, Sendable {
+    case cooling
+    case heating
+    case neutral
+    case unspecified
+
+    init?(wireToken: String?) {
+        switch wireToken {
+        case "VENTILATION_COOLING": self = .cooling
+        case "VENTILATION_HEATING": self = .heating
+        case "VENTILATION_NEUTRAL": self = .neutral
+        case "VENTILATION_UNSPECIFIED": self = .unspecified
+        default: return nil
+        }
+    }
+
+    /// nil for `unspecified`, which hides the row.
+    var displayName: String? {
+        switch self {
+        case .cooling: return L10n.text("Cooling")
+        case .heating: return L10n.text("Heating")
+        case .neutral: return L10n.text("Neutral")
+        case .unspecified: return nil
+        }
+    }
+}
+
 struct VehicleClimateStatus: Codable, Equatable, Sendable {
     let activity: ClimateActivity
     let timeRemainingMinutes: Int?
@@ -639,26 +710,25 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
     /// session, kept verbatim for display and support exports. `nil` in snapshots persisted
     /// before capture existed, and when the backend sent neither list.
     var errors: [String]? = nil
+    /// Warning tokens from the digital-twin `WarningType` list (wire field 5): `BATTERY_LOW`
+    /// and `RUN_TIME_NEARING_LIMIT`. `nil` when none were sent and in older snapshots.
+    var climateWarnings: [String]? = nil
     /// Who started the session (portal `ParkingClimatizationState.startReason`). `nil`
     /// when absent, unspecified, or in snapshots persisted before this field existed; the
     /// gRPC surface keeps reporting through `timerTriggered`.
     var startReason: VehicleStartReason? = nil
 
+    var ventilationMode: ClimateVentilation? { ClimateVentilation(wireToken: ventilation) }
+
     /// `Ventilation` mode for the running session from the spec vocabulary. Unspecified and
     /// absent hide; a token outside the known set renders cleaned-up rather than guessed.
     var ventilationName: String? {
         guard let ventilation, !ventilation.isEmpty else { return nil }
-        switch ventilation {
-        case "VENTILATION_COOLING": return L10n.text("Cooling")
-        case "VENTILATION_HEATING": return L10n.text("Heating")
-        case "VENTILATION_NEUTRAL": return L10n.text("Neutral")
-        case "VENTILATION_UNSPECIFIED": return nil
-        default:
-            return ventilation
-                .replacingOccurrences(of: "VENTILATION_", with: "")
-                .replacingOccurrences(of: "_", with: " ")
-                .capitalized
-        }
+        if let mode = ventilationMode { return mode.displayName }
+        return ventilation
+            .replacingOccurrences(of: "VENTILATION_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 
     init(
@@ -678,6 +748,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         sessionEndsAt: Date? = nil,
         unknownWireFields: [VehicleRawWireField]? = nil,
         errors: [String]? = nil,
+        climateWarnings: [String]? = nil,
         startReason: VehicleStartReason? = nil
     ) {
         self.activity = activity
@@ -696,6 +767,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         self.sessionEndsAt = sessionEndsAt
         self.unknownWireFields = unknownWireFields
         self.errors = errors
+        self.climateWarnings = climateWarnings
         self.startReason = startReason
     }
 
@@ -704,7 +776,7 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         case interiorTemperatureCelsius, requestedTemperatureCelsius
         case driverSeatHeatingLevel, passengerSeatHeatingLevel, steeringWheelHeatingLevel
         case rearLeftSeatHeatingLevel, rearRightSeatHeatingLevel, ventilation, mainClimateRunningStatus
-        case sessionStartedAt, sessionEndsAt, unknownWireFields, errors, startReason
+        case sessionStartedAt, sessionEndsAt, unknownWireFields, errors, climateWarnings, startReason
     }
 
     init(from decoder: Decoder) throws {
@@ -725,7 +797,18 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
         sessionEndsAt = try c.decodeIfPresent(Date.self, forKey: .sessionEndsAt)
         unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields)
         errors = try c.decodeIfPresent([String].self, forKey: .errors)
+        climateWarnings = try c.decodeIfPresent([String].self, forKey: .climateWarnings)
         startReason = try c.decodeIfPresent(VehicleStartReason.self, forKey: .startReason)
+    }
+
+    /// Reader label for a `WarningType` token. A token outside the decoded set returns nil so
+    /// it stays out of the card rather than being shown as a guessed name.
+    static func climateWarningName(_ token: String) -> String? {
+        switch token {
+        case "BATTERY_LOW": return L10n.text("Battery level low")
+        case "RUN_TIME_NEARING_LIMIT": return L10n.text("Maximum run time nearly reached")
+        default: return nil
+        }
     }
 }
 
@@ -870,6 +953,10 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     var measuredAt: Date? = nil
     /// When the previous cleaning cycle finished (`PreCleaningState.lastCycleCompleted`).
     var lastCycleCompleted: Date? = nil
+    /// Air-quality payload fields this build does not decode, kept raw so a new backend
+    /// field is visible in diagnostics instead of dropped. `nil` in snapshots persisted
+    /// before retention existed and when the backend sent nothing unparsed.
+    var unknownWireFields: [VehicleRawWireField]? = nil
 
     init(
         cleaningState: AirCleaningState,
@@ -887,7 +974,8 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         lastCycleValid: Bool? = nil,
         errorKind: AirCleaningError? = nil,
         measuredAt: Date? = nil,
-        lastCycleCompleted: Date? = nil
+        lastCycleCompleted: Date? = nil,
+        unknownWireFields: [VehicleRawWireField]? = nil
     ) {
         self.cleaningState = cleaningState
         self.airQualityIndex = airQualityIndex
@@ -905,6 +993,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         self.errorKind = errorKind
         self.measuredAt = measuredAt
         self.lastCycleCompleted = lastCycleCompleted
+        self.unknownWireFields = unknownWireFields
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -912,6 +1001,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         case externalParticulateMatter25, filterRemainingPercent, runtimeRemainingMinutes
         case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
         case measuredAt, lastCycleCompleted
+        case unknownWireFields
     }
 
     /// Whether a one-tap pre-clean toggle may be shown for this reading: the backend reported
@@ -937,6 +1027,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         errorKind = try c.decodeIfPresent(AirCleaningError.self, forKey: .errorKind)
         measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
         lastCycleCompleted = try c.decodeIfPresent(Date.self, forKey: .lastCycleCompleted)
+        unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields)
     }
 }
 
@@ -946,6 +1037,7 @@ enum ChargerPowerState: String, Codable, Sendable {
     case noPower
     case initializing
     case available
+    case powerAvailableNotActivated
     case providingPower
     case fault
 
@@ -955,6 +1047,7 @@ enum ChargerPowerState: String, Codable, Sendable {
         case .noPower: return L10n.text("No power")
         case .initializing: return L10n.text("Initializing")
         case .available: return L10n.text("Available")
+        case .powerAvailableNotActivated: return L10n.text("Power available, not charging")
         case .providingPower: return L10n.text("Providing power")
         case .fault: return L10n.text("Fault")
         }
@@ -995,6 +1088,59 @@ struct EnergyBreakdownSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// Energy use per trip period from the C3 battery service: the Wh and percentage breakdowns
+/// of the manual trip meter, the automatic trip and the period since the last charge.
+struct EnergyBreakdownByPeriod: Codable, Equatable, Sendable {
+    var manualTrip: EnergyBreakdownSnapshot? = nil
+    var automaticTrip: EnergyBreakdownSnapshot? = nil
+    var sinceCharge: EnergyBreakdownSnapshot? = nil
+
+    var hasData: Bool {
+        [manualTrip, automaticTrip, sinceCharge].contains { $0?.hasData == true }
+    }
+}
+
+/// Cold-battery state from battery field 30 (`ColdBatteryStatus`). Unspecified is not a case:
+/// it means the car did not report a state, so it is stored as nil.
+enum ColdBatteryStatus: String, Codable, Equatable, Sendable {
+    case normal = "NORMAL"
+    case coldPredicted = "COLD_PREDICTED"
+    case coldAndLowSOCPredicted = "COLD_AND_LOW_SOC_PREDICTED"
+    case cold = "COLD"
+    case coldAndLowSOC = "COLD_AND_LOW_SOC"
+
+    var displayName: String {
+        switch self {
+        case .normal: return L10n.text("Normal")
+        case .coldPredicted: return L10n.text("Cold predicted")
+        case .coldAndLowSOCPredicted: return L10n.text("Cold and low charge predicted")
+        case .cold: return L10n.text("Cold")
+        case .coldAndLowSOC: return L10n.text("Cold and low charge")
+        }
+    }
+
+    /// Cold states that can slow charging. The predicted states are a forecast, not a current
+    /// reading, so they do not raise the warning.
+    var limitsCharging: Bool { self == .cold || self == .coldAndLowSOC }
+}
+
+/// Who last set a charge target or amperage limit (`source` on the wire, kept raw in
+/// `BatteryDiagnostics.targetSource` / `limitSource`).
+enum ChargeSettingSource: Equatable, Sendable {
+    /// Set remotely through the backend (`RCS`).
+    case remote
+    /// Set from the Polestar app (`APP`).
+    case app
+
+    init?(wireToken: String?) {
+        switch wireToken?.uppercased() {
+        case "RCS": self = .remote
+        case "APP": self = .app
+        default: return nil
+        }
+    }
+}
+
 struct BatteryDiagnostics: Codable, Equatable, Sendable {
     let timeToTargetMinutes: Int?
     let timeToMinimumSOCMinutes: Int?
@@ -1009,16 +1155,22 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// persisted snapshots without the key still decode.
     var averageConsumptionAutomatic: Double? = nil
     let energyUsedSinceChargeWh: Double?
+    var energyUsedManualTripWh: Double? = nil
+    var energyUsedAutomaticTripWh: Double? = nil
     /// Undecoded wire fields the battery service sent, captured raw by the provider layer
     /// and surfaced in the battery-diagnostics card. Empty for Volvo and for snapshots
     /// persisted before capture existed.
     var unknownWireFields: [VehicleRawWireField] = []
     var energyBreakdown: EnergyBreakdownSnapshot? = nil
+    /// Per-period energy use from C3 battery fields 20–25. `nil` when the car sent none.
+    var energyBreakdownByPeriod: EnergyBreakdownByPeriod? = nil
     var powerLimitKw: Double? = nil
     var energyAvailableKwh: Double? = nil
     var energyAvailableIncreaseKwh: Double? = nil
     var batteryPreconditioningStatus: String? = nil
     var batteryPreconditioningEndsAt: Date? = nil
+    /// Cold-battery state (C3 battery field 30). `nil` when the car does not report one.
+    var coldBatteryStatus: ColdBatteryStatus? = nil
     var isBidirectionalChargingEnabled: Bool? = nil
     var isOptimizedChargingEnabled: Bool? = nil
     var availableOptimizedCharging: String? = nil
@@ -1032,6 +1184,9 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// Who last set the amperage limit (`AmpLimitValue.source`), raw wire token.
     var limitSource: String? = nil
 
+    var targetSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: targetSource) }
+    var limitSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: limitSource) }
+
     init(
         timeToTargetMinutes: Int?,
         timeToMinimumSOCMinutes: Int?,
@@ -1041,13 +1196,17 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         averageConsumptionSinceCharge: Double?,
         averageConsumptionAutomatic: Double? = nil,
         energyUsedSinceChargeWh: Double?,
+        energyUsedManualTripWh: Double? = nil,
+        energyUsedAutomaticTripWh: Double? = nil,
         unknownWireFields: [VehicleRawWireField] = [],
         energyBreakdown: EnergyBreakdownSnapshot? = nil,
+        energyBreakdownByPeriod: EnergyBreakdownByPeriod? = nil,
         powerLimitKw: Double? = nil,
         energyAvailableKwh: Double? = nil,
         energyAvailableIncreaseKwh: Double? = nil,
         batteryPreconditioningStatus: String? = nil,
         batteryPreconditioningEndsAt: Date? = nil,
+        coldBatteryStatus: ColdBatteryStatus? = nil,
         isBidirectionalChargingEnabled: Bool? = nil,
         isOptimizedChargingEnabled: Bool? = nil,
         availableOptimizedCharging: String? = nil,
@@ -1064,13 +1223,17 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         self.averageConsumptionSinceCharge = averageConsumptionSinceCharge
         self.averageConsumptionAutomatic = averageConsumptionAutomatic
         self.energyUsedSinceChargeWh = energyUsedSinceChargeWh
+        self.energyUsedManualTripWh = energyUsedManualTripWh
+        self.energyUsedAutomaticTripWh = energyUsedAutomaticTripWh
         self.unknownWireFields = unknownWireFields
         self.energyBreakdown = energyBreakdown
+        self.energyBreakdownByPeriod = energyBreakdownByPeriod
         self.powerLimitKw = powerLimitKw
         self.energyAvailableKwh = energyAvailableKwh
         self.energyAvailableIncreaseKwh = energyAvailableIncreaseKwh
         self.batteryPreconditioningStatus = batteryPreconditioningStatus
         self.batteryPreconditioningEndsAt = batteryPreconditioningEndsAt
+        self.coldBatteryStatus = coldBatteryStatus
         self.isBidirectionalChargingEnabled = isBidirectionalChargingEnabled
         self.isOptimizedChargingEnabled = isOptimizedChargingEnabled
         self.availableOptimizedCharging = availableOptimizedCharging
@@ -1084,8 +1247,10 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         case timeToTargetMinutes, timeToMinimumSOCMinutes, timeToTargetDistanceMinutes, chargerPowerState
         case averageConsumption, averageConsumptionSinceCharge, averageConsumptionAutomatic
         case energyUsedSinceChargeWh, unknownWireFields
-        case energyBreakdown, powerLimitKw, energyAvailableKwh
+        case energyUsedManualTripWh, energyUsedAutomaticTripWh
+        case energyBreakdown, energyBreakdownByPeriod, powerLimitKw, energyAvailableKwh
         case energyAvailableIncreaseKwh, batteryPreconditioningStatus, batteryPreconditioningEndsAt
+        case coldBatteryStatus
         case isBidirectionalChargingEnabled, isOptimizedChargingEnabled, availableOptimizedCharging
         case pendingTargetPercentage, pendingLimitAmps, targetSource, limitSource
     }
@@ -1100,8 +1265,12 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
         averageConsumptionSinceCharge = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionSinceCharge)
         averageConsumptionAutomatic = try c.decodeIfPresent(Double.self, forKey: .averageConsumptionAutomatic)
         energyUsedSinceChargeWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedSinceChargeWh)
+        energyUsedManualTripWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedManualTripWh)
+        energyUsedAutomaticTripWh = try c.decodeIfPresent(Double.self, forKey: .energyUsedAutomaticTripWh)
         unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields) ?? []
         energyBreakdown = try c.decodeIfPresent(EnergyBreakdownSnapshot.self, forKey: .energyBreakdown)
+        energyBreakdownByPeriod = try c.decodeIfPresent(EnergyBreakdownByPeriod.self, forKey: .energyBreakdownByPeriod)
+        coldBatteryStatus = try c.decodeIfPresent(ColdBatteryStatus.self, forKey: .coldBatteryStatus)
         powerLimitKw = try c.decodeIfPresent(Double.self, forKey: .powerLimitKw)
         energyAvailableKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableKwh)
         energyAvailableIncreaseKwh = try c.decodeIfPresent(Double.self, forKey: .energyAvailableIncreaseKwh)
@@ -1186,20 +1355,29 @@ struct VehicleWeather: Codable, Equatable, Sendable {
     let apparentTemperatureCelsius: Double?
     let relativeHumidity: Int?
     let timestamp: Date?
+    /// Forecast air temperature by hour, nil when the hourly request was not made or failed.
+    var hourlyTemperatures: [HourlyTemperature]?
 
     init(
         temperatureCelsius: Double?,
         condition: String? = nil,
         apparentTemperatureCelsius: Double? = nil,
         relativeHumidity: Int? = nil,
-        timestamp: Date? = nil
+        timestamp: Date? = nil,
+        hourlyTemperatures: [HourlyTemperature]? = nil
     ) {
         self.temperatureCelsius = temperatureCelsius
         self.condition = condition
         self.apparentTemperatureCelsius = apparentTemperatureCelsius
         self.relativeHumidity = relativeHumidity
         self.timestamp = timestamp
+        self.hourlyTemperatures = hourlyTemperatures
     }
+}
+
+struct HourlyTemperature: Codable, Equatable, Sendable {
+    let time: Date
+    let temperatureCelsius: Double
 }
 
 
@@ -1380,6 +1558,31 @@ struct ChargingSample: Codable, Equatable, Sendable {
 /// A saved charging location from Polestar's Chronos `ChargeLocationService`.
 /// Wire shape cross-checked against the independently built
 /// `kildahldev/unofficial-polestar-api` proto schema (`GetChargeLocations`).
+/// Backend mode for optimised charging at a location (`optimisedChargingMode`).
+enum OptimisedChargingMode: Int, Equatable, Sendable {
+    case unavailable = 0
+    case intelligentTimer = 1
+    case priceOptimised = 2
+
+    /// nil when unavailable, which hides the mode row.
+    var displayName: String? {
+        switch self {
+        case .unavailable: return nil
+        case .intelligentTimer: return L10n.text("Intelligent timer")
+        case .priceOptimised: return L10n.text("Price-optimised")
+        }
+    }
+}
+
+/// Where a charge location came from (`kind`).
+enum ChargeLocationKind: Int, Equatable, Sendable {
+    case recent = 1
+    case saved = 2
+    case savedThirdParty = 3
+
+    var isSaved: Bool { self == .saved || self == .savedThirdParty }
+}
+
 struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     /// Backend identifier used by every per-location write RPC.
     let id: String
@@ -1401,141 +1604,18 @@ struct ChargeLocationSnapshot: Codable, Equatable, Identifiable, Sendable {
     var departureTimes: [VehicleSchedule] = []
     var chargeTimers: [VehicleSchedule] = []
 
-    var isSavedLocation: Bool { kind == 2 || kind == 3 }
+    var optimisedChargingKind: OptimisedChargingMode? { OptimisedChargingMode(rawValue: optimisedChargingMode) }
+    var locationKind: ChargeLocationKind? { ChargeLocationKind(rawValue: kind) }
 
-    var optimisedChargingModeName: String? {
-        switch optimisedChargingMode {
-        case 1: return L10n.text("Intelligent timer")
-        case 2: return L10n.text("Price-optimised")
-        default: return nil
-        }
-    }
+    var isSavedLocation: Bool { locationKind?.isSaved == true }
+
+    var optimisedChargingModeName: String? { optimisedChargingKind?.displayName }
 }
 
 struct VehicleBackendIdentity: Codable, Equatable, Sendable {
     let modelName: String?
     let modelYear: String?
     let market: String?
-}
-
-struct VehicleOTACapabilities: Codable, Equatable, Sendable {
-    var honkFlashMode: VehicleHonkFlashMode? = nil
-    var equipment: VehicleEquipment? = nil
-    var advertisedCapabilities: [VehicleCapability: Bool]? = nil
-    var controlSettings: VehicleControlSettings? = nil
-    let identity: VehicleBackendIdentity?
-    /// The currently installed software version (e.g. "4.2.13"). This is the *authoritative*
-    /// installed version from the `Car.consumerSoftwareVersion` field – `GetSoftwareInfo`
-    /// does not report the installed version during a rollout, only the target.
-    let installedSoftwareVersion: String?
-    /// Whether the vehicle supports full OTA updates (not just minor patches).
-    let supportsFullOtaUpdates: Bool
-    /// Whether remote OTA install scheduling is supported (`Schedule`/`InstallNow`).
-    let supportsRemoteOtaInstallSchedule: Bool
-    /// Whether the vehicle supports cloud-based OTA download consent. When `false`, the
-    /// download authorization cannot be triggered by a cloud API – the TCU must check in
-    /// autonomously and the backend must have the VIN in the rollout cohort.
-    let supportsCloudBasedOtaDownloadConsent: Bool
-    /// Whether the vehicle reports update status via the `supportsUpdateStatus` flag.
-    let supportsUpdateStatus: Bool
-    /// Whether a performance software upgrade is available.
-    let hasPerformanceSoftwareUpgrade: Bool
-    /// Whether the vehicle supports trunk/tailgate open AND close (motorized tailgate).
-    let supportsTrunkControl: Bool
-    /// Whether the vehicle supports trunk unlock (unlock only, not open/close).
-    let supportsTrunkUnlock: Bool
-    /// Whether the vehicle supports honk and flash.
-    let supportsHonkAndFlash: Bool
-    /// Whether the vehicle supports flash only (without honk).
-    let supportsFlash: Bool
-    /// Whether the vehicle supports charging functions (target SOC, amp limit, timers).
-    let supportsChargingFunctions: Bool
-    /// Whether the vehicle supports global charge amperage limit setting.
-    let supportsGlobalChargeAmperageLimit: Bool
-    /// Whether the vehicle supports target charge level setting.
-    let supportsTargetChargeLevel: Bool
-    /// Whether the vehicle supports charge now timer override.
-    let supportsChargeNowTimerOverride: Bool
-    /// Minimum charge amperage limit.
-    let chargeAmperageMinLimit: Int
-    /// Maximum charge amperage limit.
-    let chargeAmperageMaxLimit: Int
-    /// Minimum target charge level percentage.
-    let targetChargeLevelPercentageMinLimit: Int
-    /// Whether the vehicle supports windows control.
-    let supportsWindowsControl: Bool
-    /// Whether the vehicle supports pre-cleaning.
-    let supportsAirPurificationRemoteStart: Bool
-    /// Whether the vehicle supports plug & charge.
-    let supportsPlugAndCharge: Bool
-    /// Whether the vehicle accepts remote sunroof open/close (`Locks.supportsSunroofControl`,
-    /// wire field 36→6). Optional so persisted snapshots from before this field decode.
-    let supportsSunroofControl: Bool?
-    /// Whether this account is linked to the vehicle (`MyCar.userIsLinked`, wire field 2).
-    let userIsLinked: Bool?
-    /// Whether this account owns the vehicle (`MyCar.userIsOwner`, wire field 3).
-    let userIsOwner: Bool?
-    /// Registration plate as reported by the backend (`MyCar.registrationPlate`, wire
-    /// field 4). Distinct source from the GraphQL `registrationNo`.
-    let registrationPlate: String?
-    /// Undecoded wire fields the `GetMyCars` response carried (top-level and inside known
-    /// sub-messages), captured raw like the battery parser does. `nil` in snapshots persisted
-    /// before capture existed.
-    var unknownWireFields: [VehicleRawWireField]?
-
-    init(installedSoftwareVersion: String? = nil,
-         identity: VehicleBackendIdentity? = nil,
-         supportsFullOtaUpdates: Bool = false,
-         supportsRemoteOtaInstallSchedule: Bool = false,
-         supportsCloudBasedOtaDownloadConsent: Bool = false,
-         supportsUpdateStatus: Bool = false,
-         hasPerformanceSoftwareUpgrade: Bool = false,
-         supportsTrunkControl: Bool = false,
-         supportsTrunkUnlock: Bool = false,
-         supportsHonkAndFlash: Bool = false,
-         supportsFlash: Bool = false,
-         supportsChargingFunctions: Bool = false,
-         supportsGlobalChargeAmperageLimit: Bool = false,
-         supportsTargetChargeLevel: Bool = false,
-         supportsChargeNowTimerOverride: Bool = false,
-         chargeAmperageMinLimit: Int = 0,
-         chargeAmperageMaxLimit: Int = 0,
-         targetChargeLevelPercentageMinLimit: Int = 0,
-         supportsWindowsControl: Bool = false,
-         supportsAirPurificationRemoteStart: Bool = false,
-         supportsPlugAndCharge: Bool = false,
-          supportsSunroofControl: Bool? = nil,
-          userIsLinked: Bool? = nil,
-          userIsOwner: Bool? = nil,
-          registrationPlate: String? = nil,
-          unknownWireFields: [VehicleRawWireField]? = nil) {
-        self.installedSoftwareVersion = installedSoftwareVersion
-        self.identity = identity
-        self.supportsFullOtaUpdates = supportsFullOtaUpdates
-        self.supportsRemoteOtaInstallSchedule = supportsRemoteOtaInstallSchedule
-        self.supportsCloudBasedOtaDownloadConsent = supportsCloudBasedOtaDownloadConsent
-        self.supportsUpdateStatus = supportsUpdateStatus
-        self.hasPerformanceSoftwareUpgrade = hasPerformanceSoftwareUpgrade
-        self.supportsTrunkControl = supportsTrunkControl
-        self.supportsTrunkUnlock = supportsTrunkUnlock
-        self.supportsHonkAndFlash = supportsHonkAndFlash
-        self.supportsFlash = supportsFlash
-        self.supportsChargingFunctions = supportsChargingFunctions
-        self.supportsGlobalChargeAmperageLimit = supportsGlobalChargeAmperageLimit
-        self.supportsTargetChargeLevel = supportsTargetChargeLevel
-        self.supportsChargeNowTimerOverride = supportsChargeNowTimerOverride
-        self.chargeAmperageMinLimit = chargeAmperageMinLimit
-        self.chargeAmperageMaxLimit = chargeAmperageMaxLimit
-        self.targetChargeLevelPercentageMinLimit = targetChargeLevelPercentageMinLimit
-        self.supportsWindowsControl = supportsWindowsControl
-        self.supportsAirPurificationRemoteStart = supportsAirPurificationRemoteStart
-        self.supportsPlugAndCharge = supportsPlugAndCharge
-        self.supportsSunroofControl = supportsSunroofControl
-        self.userIsLinked = userIsLinked
-        self.userIsOwner = userIsOwner
-        self.registrationPlate = registrationPlate
-        self.unknownWireFields = unknownWireFields
-    }
 }
 
 enum VehicleHonkFlashMode: Int, Codable, Sendable {

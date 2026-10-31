@@ -344,7 +344,7 @@ struct FormattingTests {
     }
 
     @Test
-    func testGrpcBatteryParseIncludesVerifiedFields() {
+    func testGrpcBatteryParseIncludesVerifiedFields() throws {
         var battery = Data()
         let percentageBits = 54.5.bitPattern.littleEndian
         battery.append(Protobuf.varint(UInt64(2 << 3 | 1)))
@@ -358,7 +358,7 @@ struct FormattingTests {
         battery.append(Protobuf.intField(17, 2))
         battery.append(Protobuf.intField(18, 230))
 
-        let result = PolestarGRPC.parseBattery(battery)
+        let result = try PolestarGRPC.parseBattery(battery)
         #expect(result.batteryPercentage == 54.5)
         #expect(result.rangeKm == 321)
         #expect(result.estimatedChargingTimeToFullMinutes == 95)

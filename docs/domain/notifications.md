@@ -57,6 +57,26 @@ Rain-with-windows and evening-unlocked notifications are edge-triggered (only fi
 
 `Preferences.privateNotificationDetails` (default **true**). When enabled, charging/battery notification **bodies** are replaced with generic text ("Open Hisingen for details," "Your Polestar started/finished charging"); titles are never masked. **This does not apply to rain-with-windows or evening-unlocked notifications**, which always show full detail regardless of the private-mode toggle, a real inconsistency worth knowing about if a user asks why private mode "isn't working" for those two.
 
+## Convenience mode (opt-in)
+
+`Notifier+UsageMode.swift`. Fires when `identity.usageMode` is `CONVENIENCE` (or `USAGE_MODE_CONVENIENCE`)
+for 30 minutes, via `trackSustained` (key `<vin>.usage-convenience`). The availability frame must be
+fresh within an hour. Volvo reports no usage mode, so it never fires there. Default off. Location is not read.
+
+## Daily summary (opt-in)
+
+`Notifier+Digest.swift`. One notification a day across all cars, at the chosen hour (default 08:00).
+It is driven by the existing one-minute recheck timer, not a calendar trigger, because the content is built
+from live state at send time and the timer already runs while the app is up. The latch is
+`notifier_daily_summary_last_sent_v1`. The first tick on or after the hour sends it, so a sleeping Mac
+gets it later that morning. Quiet hours hold it until they end. Switching the summary on after its hour
+waits until tomorrow. Muted cars are skipped.
+
+Each car gets battery, range, charging completed since the last summary (from `ChargingSessionLedger`,
+marked as an estimate unless every session was observed), warning count, alarm, service due, and failed
+commands in the last 24 h (`remote_commands_log`, status `failed`). Readings that are not fresh show as
+"not reported". Private body mode replaces the whole body.
+
 ## Additional edge-triggered checks (2026-08-22)
 
 Beyond the pipeline above, `vehicleStateDidUpdate` also runs these independently-gated checks:
@@ -73,12 +93,20 @@ condition has held for the full duration, resets when it clears.
 
 ## Quick actions (interactive banners)
 
-Two categories carry buttons: **vehicle-unlocked-actionable** (evening-unlocked banner →
-*Lock*) and **charging-interrupted-actionable** (interrupted banner → *Resume Schedule*).
-Actions are foreground-only by design: tapping opens Hisingen so the same capability gates,
-brand checks, and command audit apply as the in-app controls. They act **only on the
-currently selected vehicle**; switching accounts from a banner deliberately isn't possible.
-Routing lives in `AppDelegate.notifier.onQuickAction`.
+Categories carry buttons: **vehicle-unlocked-actionable** (evening-unlocked → *Lock*, *Mute This
+Vehicle*), **vehicle-openings-actionable** (openings left open → *Lock*, *Mute This Vehicle*),
+**vehicle-alert-actionable** (warnings, alarm, service, software, stale data, rain, convenience
+mode → *Mute This Vehicle*) and **charging-interrupted-actionable** (interrupted banner →
+*Resume Schedule*).
+
+*Lock* and *Resume Schedule* are vehicle commands. They route through `AppDelegate.notifier.onQuickAction`
+into the same `CommandCoordinator` gates and carry `.authenticationRequired`, so the device owner must
+confirm them. The lock action is not foreground-only, but it still requires that authentication. They act
+**only on the currently selected vehicle**; switching accounts from a banner deliberately isn't possible.
+
+*Mute This Vehicle* is a local preference, not a command. `Notifier.muteVehicle(vin:)` sets the same
+per-VIN mute the Settings toggle sets, with no authentication, and it never reaches the car. Unmute in
+Settings.
 
 ## Charging anomaly notice
 

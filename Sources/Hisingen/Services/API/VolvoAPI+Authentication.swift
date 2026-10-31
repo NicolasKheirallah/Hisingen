@@ -76,12 +76,18 @@ extension VolvoAPI {
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else { throw VolvoError.authenticationRequired(.noStoredSession) }
         guard isConfigured else { throw VolvoError.appNotConfigured }
+        // Live-grant shortcut (mirrors Polestar): re-restoring the active session
+        // must not rotate the refresh token on every retry. Only a cold restore
+        // or a session whose access token is gone pays for a grant.
+        let isLiveGrant = accessToken != nil && refreshToken == token
         refreshToken = token
-        do {
-            try await refreshAccessToken(force: true)
-        } catch let error as VolvoError where error.requiresAuthentication {
-            refreshToken = nil
-            throw error
+        if !isLiveGrant {
+            do {
+                try await refreshAccessToken(force: true)
+            } catch let error as VolvoError where error.requiresAuthentication {
+                refreshToken = nil
+                throw error
+            }
         }
         try await discoverVehicles(preferredVIN: preferredVIN)
         logger.info("Stored Volvo session restored")
@@ -107,15 +113,15 @@ extension VolvoAPI {
 
     func signOut() async throws {
         await resetSession()
-        do {
-            try keychain.deleteVolvoSessionToken()
-        } catch {
-            try? keychain.deleteVolvoClientSecret()
-            try? keychain.deleteVolvoApiKey()
-            throw error
-        }
-        try keychain.deleteVolvoClientSecret()
-        try keychain.deleteVolvoApiKey()
+        // Best-effort atomic deletes: attempt all three, report the first failure
+        // without cascading destruction. Previously a session-token delete failure
+        // still deleted secrets + API key, permanently discarding developer secrets
+        // on a transient ACL denial.
+        var firstError: Error?
+        do { try keychain.deleteVolvoSessionToken() } catch { firstError = firstError ?? error }
+        do { try keychain.deleteVolvoClientSecret() } catch { firstError = firstError ?? error }
+        do { try keychain.deleteVolvoApiKey() } catch { firstError = firstError ?? error }
+        if let firstError { throw firstError }
     }
 
     func resolvedVIN(preferred: String?) -> String? {

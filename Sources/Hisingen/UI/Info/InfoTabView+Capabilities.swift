@@ -39,7 +39,17 @@ extension InfoTabView {
                 VStack(spacing: 6) {
                     ForEach(positive.indices, id: \.self) { row(positive[$0]) }
                     if caps.supportsPlugAndCharge {
-                        KVRow(L10n.text("Plug & Charge"), L10n.text("Supported"), symbol: "plug")
+                        // The 35.29 flag alone is a contract claim: on this backend it reads true
+                        // while the REST projection says false and no PCID comes back. The ID the
+                        // car would present (`Charging` 35.20) is what makes the pair believable.
+                        KVRow(L10n.text("Plug & Charge"),
+                              caps.plugAndChargeIdentifier == nil
+                                  ? L10n.text("Reported supported")
+                                  : L10n.text("Supported"),
+                              symbol: "plug",
+                              info: caps.plugAndChargeIdentifier == nil
+                                  ? L10n.text("The vehicle reports plug and charge, but the backend returned no plug-and-charge ID for it.")
+                                  : nil)
                     }
                     if let sunroof = caps.supportsSunroofControl {
                         KVRow(L10n.text("Sunroof Remote Control"),
@@ -106,10 +116,64 @@ extension InfoTabView {
                 }
                 .disclosureGroupStyle(WholeRowDisclosureStyle())
 
+                if let settings = caps.controlSettings {
+                    let limits: [(title: String, value: Int?, symbol: String)] = [
+                        (L10n.text("Charging Locations"), settings.chargeLocationMaximum, "mappin.and.ellipse"),
+                        (L10n.text("Timers per Location"), settings.timersPerLocationMaximum, "timer"),
+                        (L10n.text("Departure Times per Location"),
+                         settings.departureTimesPerLocationMaximum, "calendar.badge.clock"),
+                        (L10n.text("Climate timers"), settings.climateTimerMaximum, "clock")
+                    ]
+                    let reportedLimits = limits.compactMap { item in
+                        item.value.map { (item.title, String($0), item.symbol) }
+                    }
+                    let locationFlags: [(title: String, value: Bool?, symbol: String)] = [
+                        (L10n.text("Location Departure Times"), settings.locationDepartureTimes, "calendar.badge.clock"),
+                        (L10n.text("Location Current Limits"), settings.locationAmperage, "gauge.with.dots.needle.bottom.50percent"),
+                        (L10n.text("Location Optimised Charging"), settings.locationOptimization, "leaf.fill")
+                    ]
+                    let reportedFlags = locationFlags.compactMap { item -> (String, String, String)? in
+                        guard let value = item.value else { return nil }
+                        return (item.title, value ? L10n.text("Supported") : L10n.text("Not reported"), item.symbol)
+                    }
+                    let reported = reportedLimits + reportedFlags
+                    if !reported.isEmpty {
+                        DisclosureGroup(L10n.text("Backend Control Settings")) {
+                            VStack(spacing: 6) {
+                                ForEach(reported.indices, id: \.self) { index in
+                                    KVRow(reported[index].0, reported[index].1,
+                                          symbol: reported[index].2)
+                                }
+                            }
+                            .padding(.top, 6)
+                        }
+                        .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    }
+                }
+
+                if let equipment = caps.equipment, !equipment.reportingDetails.isEmpty {
+                    DisclosureGroup(L10n.text("Backend Reporting")) {
+                        VStack(spacing: 6) {
+                            ForEach(equipment.reportingDetails.indices, id: \.self) { index in
+                                KVRow(L10n.text(equipment.reportingDetails[index].title),
+                                      equipment.reportingDetails[index].value,
+                                      symbol: "doc.text")
+                            }
+                            Text(L10n.text("Rows appear only when the backend sent the field. They are backend statements, not controls."))
+                                .hisType(.micro)
+                                .foregroundStyle(.tertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.top, 6)
+                    }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
+                }
+
                 if let rawFields = caps.unknownWireFields, !rawFields.isEmpty {
-                    DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
+                    DisclosureGroup(L10n.format("Unwired Backend Fields (%d)", rawFields.count)) {
                         ForEach(rawFields.indices, id: \.self) { index in
-                            rawCapabilityFieldRow(rawFields[index])
+                            rawCapabilityFieldRow(rawFields[index], info: L10n.text("The backend sends this and Hisingen decodes it, but no control uses it yet. Shown raw so new data stays visible; support exports report it unchanged."))
                         }
                     }
                     .disclosureGroupStyle(WholeRowDisclosureStyle())
@@ -124,11 +188,13 @@ extension InfoTabView {
 
     /// One raw `GetMyCars` wire field. The label carries the parent message number when the
     /// field lives inside a known sub-message, e.g. "Field 35.5".
-    func rawCapabilityFieldRow(_ field: VehicleRawWireField) -> KVRow {
+    /// `info` defaults to the climate parser's wording because that list still holds a truly
+    /// undecoded tag; the `GetMyCars` list passes its own, since those tags are decoded.
+    func rawCapabilityFieldRow(_ field: VehicleRawWireField,
+                               info: String = L10n.text("Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.")) -> KVRow {
         let path = field.subfield.map { "\($0).\(field.field)" } ?? String(field.field)
         let label = field.isBinary ? L10n.format("Field %@ (raw)", path) : L10n.format("Field %@", path)
-        return KVRow(label, field.value, symbol: "curlybraces",
-                     info: L10n.text("Wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
+        return KVRow(label, field.value, symbol: "curlybraces", info: info)
     }
 
     // MARK: - Capability profile (brand-agnostic, from VehicleCapabilityProfile)

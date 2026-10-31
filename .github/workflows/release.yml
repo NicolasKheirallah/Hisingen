@@ -1,4 +1,5 @@
 name: Release
+run-name: Release ${{ inputs.tag || github.ref_name }}
 
 on:
   push:
@@ -6,370 +7,360 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (vMAJOR.MINOR.PATCH)"
+        description: "Existing vMAJOR.MINOR.PATCH tag (run this workflow on the same tag ref)"
         required: true
         type: string
-      checkout_ref:
-        description: "Git ref to build from (defaults to the tag). Set when the tag is immutable and the fix commit lives on main."
-        required: false
-        type: string
-        default: ""
 
 permissions:
   contents: read
-  actions: write
 
+# The stable feed, latest release and cask form one publication transaction.
 concurrency:
-  group: release-${{ inputs.tag || github.ref }}
+  group: release-stable
   cancel-in-progress: false
+  queue: max
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  build-and-release:
-    runs-on: macos-15
-    timeout-minutes: 45
-    permissions:
-      contents: write
-      actions: write
-      attestations: write
-      id-token: write
-    environment: production-release
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+      version: ${{ steps.identity.outputs.version }}
     steps:
-      - name: Check out source
+      - name: Require the requested tag ref
+        env:
+          REQUEST_REF: ${{ github.ref }}
+        run: |
+          test "$REQUEST_REF" = "refs/tags/$TAG" || { echo 'Dispatch Release on the requested tag ref'; exit 1; }
+      - name: Check out release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ inputs.checkout_ref || inputs.tag || github.ref_name }}
-
-      - name: Validate build configuration
+          ref: ${{ env.TAG }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.7'
+          cache: false
+      - name: Verify exact tag, source and version identity
+        id: identity
         env:
-          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
-          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
-          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
-          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
-          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
-          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          test -n "$VOLVO_CLIENT_ID" || { echo "VOLVO_CLIENT_ID is required"; exit 1; }
-          test -n "$VOLVO_CLIENT_SECRET" || { echo "VOLVO_CLIENT_SECRET is required"; exit 1; }
-          test -n "$VOLVO_VCC_API_KEY" || { echo "VOLVO_VCC_API_KEY is required"; exit 1; }
-          for secret in MACOS_CERT_P12 MACOS_CERT_PASSWORD NOTARY_APPLE_ID NOTARY_TEAM_ID NOTARY_APP_PASSWORD SPARKLE_PUBLIC_ED_KEY SPARKLE_PRIVATE_ED_KEY SPARKLE_TOOLS_SHA256; do
-            test -n "${!secret}" || { echo "$secret is required for a secure release"; exit 1; }
-          done
+          SHA=$(python3 Scripts/release-support.py validate "$TAG")
+          python3 Scripts/release-support.py monotonic "$TAG"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Install workflow linter
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+            -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+      - name: Validate all portable source checks
+        run: sh Scripts/ci-checks.sh portable
 
-      - name: Select available Xcode toolchain
+  test:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            package: true
+          - os: macos-26-intel
+            arch: x86_64
+            package: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      HISINGEN_CI_PACKAGE: ${{ matrix.package }}
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Select pinned Xcode
         run: sh Scripts/select-xcode.sh
-
-      - name: Generate production build configuration
+      - name: Restore dependency data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/org.swift.swiftpm
+            ~/Library/Caches/org.swift.swiftpm
+            .build/repositories
+            .build/artifacts
+          key: release-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Package.resolved') }}
+      - name: Run credential-free deterministic and packaging checks
         env:
-          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
-          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
-          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
-          POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
-        run: sh Scripts/inject-secrets.sh
+          HISINGEN_CI_OUTPUT_DIR: ci-results
+        run: sh Scripts/ci-checks.sh macos
+      - name: Save test diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-test-diagnostics-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ci-results
+          retention-days: 14
+          if-no-files-found: warn
 
-      - name: Verify version and toolchain
-        run: |
-          set -euo pipefail
-          test -d "$DEVELOPER_DIR" || { echo "Missing Xcode at $DEVELOPER_DIR"; exit 1; }
-          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
-          TAG_VERSION="${TAG#v}"
-          [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag must be vMAJOR.MINOR.PATCH"; exit 1; }
-          test "$PLIST_VERSION" = "$TAG_VERSION" || { echo "Info.plist has $PLIST_VERSION but tag is $TAG_VERSION"; exit 1; }
-          grep -Fq "## [$TAG_VERSION]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $TAG_VERSION"; exit 1; }
-          git merge-base --is-ancestor HEAD origin/main || { echo "Release tag must point to a commit on main"; exit 1; }
-          plutil -lint Resources/Info.plist
-          xcodebuild -version
-          swift --version
-
-      - name: Test (deterministic suite only — live/remote-command tests excluded)
-        # Serialized for the same reason ci.yml is: the suite drives real timers and asserts on
-        # schedules that have to land within seconds, and 132 suites sharing a small runner starve
-        # the main actor badly enough to miss them. Keep this in step with ci.yml,
-        # Scripts/ci-local.sh, Scripts/release.sh and the Makefile's `test` target.
-        run: >-
-          swift test --disable-xctest --enable-swift-testing
-          --skip Live
-          --no-parallel
-
-      - name: Configure code signing identity
+  build:
+    needs: [validate, test]
+    runs-on: macos-15
+    timeout-minutes: 75
+    environment: production-release
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Select pinned Xcode
+        run: sh Scripts/select-xcode.sh
+      - name: Check required production configuration before building
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
+          VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
+          VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          set -euo pipefail
-          echo "🔒 Importing Apple Developer ID certificate..."
-          CERTIFICATE_PATH="$RUNNER_TEMP/hisingen-signing.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/hisingen-signing.keychain-db"
-          KEYCHAIN_PASSWORD=$(uuidgen)
-          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$CERTIFICATE_PATH"
-          chmod 600 "$CERTIFICATE_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
-          test -n "$IDENTITY" || { echo "No Developer ID Application identity found in certificate"; exit 1; }
-          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          rm -f "$CERTIFICATE_PATH"
-
-      - name: Build universal app (Developer ID signed)
+          python3 - <<'PY'
+          import os
+          required = ('MACOS_CERT_P12', 'MACOS_CERT_PASSWORD', 'VOLVO_CLIENT_ID', 'VOLVO_CLIENT_SECRET', 'VOLVO_VCC_API_KEY', 'NOTARY_APPLE_ID', 'NOTARY_TEAM_ID', 'NOTARY_APP_PASSWORD', 'SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'HOMEBREW_TAP_TOKEN')
+          missing = [name for name in required if not os.environ.get(name)]
+          if missing: raise SystemExit('Missing production configuration: ' + ', '.join(missing))
+          PY
+      - name: Import signing identity
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: sh Scripts/release-build.sh signing-setup
+      - name: Build and checkpoint signed universal app
         env:
           VOLVO_CLIENT_ID: ${{ secrets.VOLVO_CLIENT_ID }}
           VOLVO_CLIENT_SECRET: ${{ secrets.VOLVO_CLIENT_SECRET }}
           VOLVO_VCC_API_KEY: ${{ secrets.VOLVO_VCC_API_KEY }}
           POLESTAR_IMAGE_API_KEY: ${{ secrets.POLESTAR_IMAGE_API_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
-          # notarization happens in the dedicated step below, not at build time
-          NOTARIZE: never
-        run: |
-          # Signs Hisingen.app with the Developer ID Application certificate
-          # imported above, enabling Gatekeeper trust and notarization.
-          REQUIRE_SPARKLE_UPDATER=true make app-universal OUTPUT_DIR=. IDENTITY="$IDENTITY"
+        run: sh Scripts/release-build.sh build
+      - name: Save signed build checkpoint
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-signed-${{ env.TAG }}
+          path: |
+            signed-app.zip
+            signed-checkpoint.json
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+      - name: Remove signing credentials
+        if: always()
+        run: sh Scripts/release-build.sh signing-cleanup
 
-      - name: Verify signature and architectures
+  notarize:
+    needs: [validate, build]
+    permissions:
+      contents: read
+      actions: read
+    runs-on: macos-15
+    timeout-minutes: 55
+    environment: production-release
+    outputs:
+      artifact: release-ready-${{ env.TAG }}
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Select pinned Xcode
+        run: sh Scripts/select-xcode.sh
+      - name: Restore signed build checkpoint
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-signed-${{ env.TAG }}
+      - name: Restore prior notarization state when retrying this run
+        if: github.run_attempt > 1
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          lipo Hisingen.app/Contents/MacOS/Hisingen -verify_arch arm64 x86_64
-          codesign --verify --deep --strict --verbose=2 Hisingen.app
-          codesign -dvv Hisingen.app
-
-      - name: Notarize and staple app
+          gh run download "$GITHUB_RUN_ID" --name "notary-recovery-$TAG" || echo 'No earlier notarization checkpoint available'
+      - name: Import signing identity for the disk image
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: sh Scripts/release-build.sh signing-setup
+      - name: Notarize once, package and verify signed updater
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
-        run: |
-          set -euo pipefail
-          ditto -c -k --keepParent Hisingen.app notarize-app.zip
-          xcrun notarytool submit notarize-app.zip --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-          sh Scripts/stapler-staple.sh Hisingen.app
-          spctl --assess --type execute --verbose=2 Hisingen.app
-
-      - name: Package disk image and archives (Developer ID signed DMG)
-        env:
-          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
-          NOTARY_APP_PASSWORD: ${{ secrets.NOTARY_APP_PASSWORD }}
-        run: |
-          set -euo pipefail
-          make dmg OUTPUT_DIR=. IDENTITY="$IDENTITY"
-          # Sign the DMG itself with the same Developer ID identity so both
-          # the app bundle and the disk image are identified to Gatekeeper.
-          codesign --force --timestamp --sign "$IDENTITY" Hisingen.dmg
-          codesign --verify --verbose=2 Hisingen.dmg
-          xcrun notarytool submit Hisingen.dmg --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --wait
-          sh Scripts/stapler-staple.sh Hisingen.dmg
-          spctl --assess --type open --context context:primary-signature --verbose=2 Hisingen.dmg
-          ditto -c -k --keepParent Hisingen.app Hisingen.zip
-          ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
-
-          DMG_MOUNT=$(mktemp -d "$RUNNER_TEMP/hisingen-dmg.XXXXXX")
-          ZIP_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-zip.XXXXXX")
-          DMG_ATTACHED=false
-          cleanup_packages() {
-            if $DMG_ATTACHED; then hdiutil detach "$DMG_MOUNT" || true; fi
-            rm -rf "$DMG_MOUNT" "$ZIP_DIR"
-          }
-          trap cleanup_packages EXIT
-          # Hosted macOS runners occasionally return "Resource temporarily
-          # unavailable" from hdiutil while diskarbitrationd settles; retry.
-          for attempt in 1 2 3 4 5 6; do
-            if hdiutil attach Hisingen.dmg -nobrowse -readonly -mountpoint "$DMG_MOUNT"; then
-              DMG_ATTACHED=true
-              break
-            fi
-            if [ "$attempt" -eq 6 ]; then
-              echo "hdiutil attach still failing after $attempt attempts" >&2
-              exit 1
-            fi
-            echo "hdiutil attach attempt $attempt failed; retrying in 5s" >&2
-            sleep 5
-          done
-          codesign --verify --deep --strict --verbose=2 "$DMG_MOUNT/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$DMG_MOUNT/Hisingen.app"
-          hdiutil detach "$DMG_MOUNT"
-          DMG_ATTACHED=false
-
-          ditto -x -k Hisingen.zip "$ZIP_DIR"
-          codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$ZIP_DIR/Hisingen.app"
-          ditto -x -k Hisingen.app.zip "$ZIP_DIR/app-asset"
-          codesign --verify --deep --strict --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
-          spctl --assess --type execute --verbose=2 "$ZIP_DIR/app-asset/Hisingen.app"
-          cleanup_packages
-          trap - EXIT
-          shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
-
-      - name: Verify release artifacts exist before publishing
-        run: |
-          set -euo pipefail
-          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS; do
-            test -s "$artifact" || { echo "Missing or empty release artifact: $artifact"; exit 1; }
-          done
-          shasum -a 256 -c SHA256SUMS
-
-      - name: Download and verify pinned Sparkle release tools
-        env:
-          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
-        run: |
-          set -euo pipefail
-          TOOLS_ARCHIVE="$RUNNER_TEMP/Sparkle-2.9.6.tar.xz"
-          curl --fail --silent --show-error --location --retry 3 \
-            -o "$TOOLS_ARCHIVE" \
-            https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
-          echo "$SPARKLE_TOOLS_SHA256  $TOOLS_ARCHIVE" | shasum -a 256 -c -
-          mkdir -p "$RUNNER_TEMP/sparkle-tools"
-          tar -xJf "$TOOLS_ARCHIVE" -C "$RUNNER_TEMP/sparkle-tools"
-          SPARKLE_TOOLS_DIR=$(find "$RUNNER_TEMP/sparkle-tools" -type f -path '*/bin/generate_appcast' -print | head -n 1 | xargs dirname | xargs dirname)
-          test -n "$SPARKLE_TOOLS_DIR" && test -x "$SPARKLE_TOOLS_DIR/bin/generate_appcast"
-          echo "SPARKLE_TOOLS_DIR=$SPARKLE_TOOLS_DIR" >> "$GITHUB_ENV"
-
-      - name: Generate signed Sparkle appcast and release notes
-        env:
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
           SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
-        run: |
-          set -euo pipefail
-          PRIVATE_KEY="$RUNNER_TEMP/hisingen-sparkle-private.key"
-          # The key file must stay in Sparkle's native format: the base64 seed
-          # text, exactly as generate_appcast and verify-sparkle-keypair read it.
-          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > "$PRIVATE_KEY"
-          chmod 600 "$PRIVATE_KEY"
-          node Scripts/verify-sparkle-keypair.mjs "$PRIVATE_KEY"
-          sh Scripts/publish-appcast.sh "$SPARKLE_TOOLS_DIR" "${TAG#v}" "$TAG" Hisingen.app.zip updates "$PRIVATE_KEY"
-          node Scripts/verify-updater.mjs appcast updates/appcast.xml
-          test -s updates/Hisingen.app.md
-          rm -f "$PRIVATE_KEY"
-          # The key-pair check and appcast structure check fail the release before publication
-          # if the feed, enclosure, or release notes are not signed by the embedded key.
+          SPARKLE_TOOLS_SHA256: ${{ vars.SPARKLE_TOOLS_SHA256 }}
+        run: sh Scripts/release-notarize.sh
+      - name: Save final immutable publication input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-ready-${{ env.TAG }}
+          path: |
+            Hisingen.dmg
+            Hisingen.zip
+            Hisingen.app.zip
+            SHA256SUMS
+            release-manifest.json
+            updates
+            site
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+      - name: Save notarization recovery state
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: notary-recovery-${{ env.TAG }}
+          path: |
+            notary-state
+            recovery-manifest.json
+            Hisingen.dmg
+          retention-days: 14
+          if-no-files-found: warn
+          overwrite: true
+      - name: Remove signing credentials
+        if: always()
+        run: sh Scripts/release-build.sh signing-cleanup
 
-      - name: Attest build provenance
+  publish:
+    needs: [validate, notarize]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production-release
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Restore final publication checkpoint
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.notarize.outputs.artifact }}
+      - name: Attest artifact provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v2.4.4
         with:
           subject-path: |
             Hisingen.dmg
             Hisingen.zip
             Hisingen.app.zip
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v2.2.3
-        with:
-          # Workflow-dispatch runs check out a branch ref, so the tag must be
-          # explicit; on tag pushes TAG is the pushed tag either way.
-          tag_name: ${{ env.TAG }}
-          files: |
-            Hisingen.dmg
-            Hisingen.zip
-            Hisingen.app.zip
-            SHA256SUMS
-            updates/appcast.xml
-            updates/Hisingen.app.md
-          fail_on_unmatched_files: true
-          generate_release_notes: true
-
-      - name: Verify assets were actually attached to the GitHub release
+            release-manifest.json
+      - name: Draft, upload, download-verify and publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          ASSET_NAMES=$(gh release view "$TAG" --json assets --jq '.assets[].name')
-          for artifact in Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS appcast.xml Hisingen.app.md; do
-            echo "$ASSET_NAMES" | grep -qx "$artifact" || { echo "Release $TAG is missing uploaded asset: $artifact"; exit 1; }
-          done
+        run: sh Scripts/release-publish.sh publish
 
-      - name: Publish signed appcast to GitHub Pages source
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          TARGET_PATH="site/updates/appcast.xml"
-          CONTENT=$(base64 < updates/appcast.xml | tr -d '\n')
-          EXISTING_SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH?ref=main" --jq .sha 2>/dev/null || true)
-          if [ -n "$EXISTING_SHA" ]; then
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
-              -f message="chore(updates): publish ${TAG} appcast" \
-              -f content="$CONTENT" -f branch=main -f sha="$EXISTING_SHA"
-          else
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$TARGET_PATH" \
-              -f message="chore(updates): publish ${TAG} appcast" \
-              -f content="$CONTENT" -f branch=main
-          fi
-          gh workflow run pages.yml --ref main
-
-      - name: Clean temporary signing material
-        if: always()
-        run: |
-          rm -f "$RUNNER_TEMP/hisingen-signing.p12" "$RUNNER_TEMP/hisingen-sparkle-private.key" "$RUNNER_TEMP/Sparkle-2.9.6.tar.xz" notarize-app.zip
-          security delete-keychain "$RUNNER_TEMP/hisingen-signing.keychain-db" 2>/dev/null || true
+  deploy-pages:
+    needs: [validate, notarize, publish]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      release_artifact: ${{ needs.notarize.outputs.artifact }}
+      expected_version: ${{ needs.validate.outputs.version }}
 
   homebrew-tap:
-    name: Update Homebrew tap
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: build-and-release
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+    needs: [validate, notarize, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production-release
     steps:
-      - name: Check out source
+      - name: Check out exact validated commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Bump hisingen cask in NicolasKheirallah/homebrew-tap
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Restore final publication checkpoint
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.notarize.outputs.artifact }}
+      - name: Verify published bytes and update Homebrew monotonically
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "$TAP_TOKEN" ]; then
-            echo "::warning::HOMEBREW_TAP_TOKEN secret is not configured — skipping Homebrew tap update."
-            echo "Create a fine-grained personal access token with Contents read/write access to"
-            echo "NicolasKheirallah/homebrew-tap and add it as the HOMEBREW_TAP_TOKEN repository"
-            echo "secret to enable automatic cask bumps."
-            exit 0
-          fi
-
-          VERSION="${TAG#v}"
-          DMG_URL="https://github.com/NicolasKheirallah/Hisingen/releases/download/v${VERSION}/Hisingen.dmg"
-          WORK_DIR=$(mktemp -d "$RUNNER_TEMP/hisingen-tap.XXXXXX")
-          trap 'rm -rf "$WORK_DIR"' EXIT
-
-          echo "==> Downloading published artifact to hash exactly what users will install"
-          curl --fail --silent --location --retry 3 -o "$WORK_DIR/Hisingen.dmg" "$DMG_URL"
-          SHA256=$(sha256sum "$WORK_DIR/Hisingen.dmg" | cut -d' ' -f1)
-          echo "sha256(Hisingen.dmg @ v${VERSION}) = $SHA256"
-
-          echo "==> Cross-checking against published SHA256SUMS"
-          SUMS_URL="https://github.com/NicolasKheirallah/Hisingen/releases/download/v${VERSION}/SHA256SUMS"
-          curl --fail --silent --location --retry 3 -o "$WORK_DIR/SHA256SUMS" "$SUMS_URL"
-          grep -Fq "$SHA256  Hisingen.dmg" "$WORK_DIR/SHA256SUMS" || {
-            echo "Published Hisingen.dmg does not match SHA256SUMS — aborting tap update"; exit 1;
-          }
-
-          echo "==> Updating tap"
-          git clone --depth 1 \
-            "https://x-access-token:${TAP_TOKEN}@github.com/NicolasKheirallah/homebrew-tap.git" \
-            "$WORK_DIR/homebrew-tap"
-
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          sh Scripts/update-homebrew-cask.sh "$VERSION" "$SHA256" "$WORK_DIR/homebrew-tap"
-
-          cd "$WORK_DIR/homebrew-tap"
-          if git diff --quiet; then
-            echo "Cask already at ${VERSION} with this sha256 — nothing to commit."
-            exit 0
-          fi
-          git add Casks/hisingen.rb
-          git commit -m "hisingen ${VERSION}"
-          git push
+          GH_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: sh Scripts/release-publish.sh tap

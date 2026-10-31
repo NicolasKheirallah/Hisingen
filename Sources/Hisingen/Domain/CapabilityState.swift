@@ -18,6 +18,8 @@ enum CapabilityState<Value: Sendable>: Sendable {
     /// and still have nothing for this reading — which is deliberately *not* the same as never
     /// having asked.
     case available(Value?)
+    case observed(Value?, fetchedAt: Date)
+    case cached(Value?, fetchedAt: Date)
     /// The vehicle or backend does not implement this reading.
     case unsupported
     /// The reading failed in a way that may clear on its own.
@@ -27,8 +29,18 @@ enum CapabilityState<Value: Sendable>: Sendable {
 
     /// The payload, when a reading was taken.
     var value: Value? {
-        if case .available(let value) = self { return value }
-        return nil
+        switch self {
+        case .available(let value), .observed(let value, _), .cached(let value, _): return value
+        default: return nil
+        }
+    }
+
+    var observation: VehicleReadingObservation? {
+        switch self {
+        case .observed(_, let date): return .init(fetchedAt: date, source: .polestarGRPC)
+        case .cached(_, let date): return .init(fetchedAt: date, source: .polestarGRPC, isCached: true)
+        default: return nil
+        }
     }
 
     /// Whether the reading failed in a recoverable way.
@@ -46,7 +58,7 @@ enum CapabilityState<Value: Sendable>: Sendable {
     /// The same state with its payload erased — all a badge needs in order to name and draw it.
     var summary: CapabilitySummary {
         switch self {
-        case .available: return .available
+        case .available, .observed, .cached: return .available
         case .unsupported: return .unsupported
         case .unavailable: return .unavailable
         case .unknown: return .unknown

@@ -104,7 +104,7 @@ struct ChargingPlannerTests {
 
     @Test
     func returnsNilWithoutEnergyOrPrices() {
-        #expect(ChargingPlanner.cheapestWindow(prices: [], now: Date(), energyKwh: 10, chargerPowerKw: 7) == nil)
+        #expect(ChargingPlanner.cheapestWindow(prices: [], now: fixtureDate(2026, 2, 10, 0), energyKwh: 10, chargerPowerKw: 7) == nil)
         let points = fixtureSeries(startingAt: fixtureDate(2026, 2, 10, 0), count: 5, slotHours: 1, prices: [1.0, 1.0, 1.0, 1.0, 1.0])
         #expect(ChargingPlanner.cheapestWindow(prices: points, now: fixtureDate(2026, 2, 10, 0), energyKwh: 0, chargerPowerKw: 7) == nil)
         #expect(ChargingPlanner.cheapestWindow(prices: points, now: fixtureDate(2026, 2, 10, 0), energyKwh: 10, chargerPowerKw: 0) == nil)

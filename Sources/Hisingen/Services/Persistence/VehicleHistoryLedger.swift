@@ -37,6 +37,8 @@ final class VehicleHistoryLedger: Sendable {
         var commands: [RemoteCommandAuditRecord] = []
         var activities: [VehicleActivity] = []
         var airQualityRecords: [AirQualityRecord] = []
+        var tyrePressureRecords: [VehicleDatabase.TyrePressureRecord] = []
+        var warningEvents: [VehicleDatabase.WarningEventRecord] = []
         var telemetryRecords: [HistoricalTelemetryRecord] = []
         var anomalousSessionIDs: Set<String> = []
         var thisMonth = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
@@ -75,6 +77,9 @@ final class VehicleHistoryLedger: Sendable {
     /// detached task so no card touches the database from inside `body`.
     struct RecentRecords: Sendable {
         var recentTelemetry: [HistoricalTelemetryRecord] = []
+        /// Odometer samples from the service-forecast window only, so the Info tab never loads
+        /// the whole telemetry table to estimate a service date.
+        var serviceOdometerPoints: [HistoryInsights.OdometerPoint] = []
         var recentCommands: [RemoteCommandAuditRecord] = []
         var recentActivities: [VehicleActivity] = []
         var airQualityHistory: [AirQualityRecord] = []
@@ -127,6 +132,16 @@ final class VehicleHistoryLedger: Sendable {
         let rawAir = recentAirQuality(for: vin, limit: min(rowCap, 5_000), since: queryStart)
         snap.airQualityRecords = rawAir.filter { inRange($0.timestamp) }
 
+        // Four tyres sampled about hourly is the densest stream here, so the cap scales with it.
+        let rawTyres = recentTyrePressure(for: vin, limit: min(rowCap * 4, 20_000), since: queryStart)
+        snap.tyrePressureRecords = rawTyres.filter { inRange($0.timestamp) }
+        // An event that is still open belongs to every period it overlaps, however long ago it began.
+        let rawWarnings = recentWarningEvents(for: vin, limit: min(rowCap, 2_000), since: queryStart)
+        snap.warningEvents = rawWarnings.filter { event in
+            guard let range else { return true }
+            return event.firstSeen <= range.upperBound && (event.clearedAt ?? .distantFuture) >= range.lowerBound
+        }
+
         let telemetryLimit = min(rowCap, 10_000)
         let rawTelemetry = recentTelemetry(for: vin, limit: telemetryLimit, since: range?.lowerBound)
         snap.telemetryRecords = rawTelemetry.filter { inRange($0.timestamp) }
@@ -138,6 +153,8 @@ final class VehicleHistoryLedger: Sendable {
             || rawSessions.count > snap.chargingSessions.count
             || rawCommands.count > snap.commands.count
             || rawAir.count > snap.airQualityRecords.count
+            || rawTyres.count > snap.tyrePressureRecords.count
+            || rawWarnings.count > snap.warningEvents.count
             || rawActivities.count > snap.activities.count
 
         let calendar = Calendar.current
@@ -185,6 +202,9 @@ final class VehicleHistoryLedger: Sendable {
         var records = RecentRecords()
         records.storeUnreadable = !storeIsReadable()
         records.recentTelemetry = recentTelemetry(for: vin, limit: 40)
+        let forecastSince = Date().addingTimeInterval(-ServiceForecast.window)
+        records.serviceOdometerPoints = HistoryInsights.odometerTrend(
+            from: recentTelemetry(for: vin, limit: 10_000, since: forecastSince))
         records.recentCommands = recentCommandAudits(for: vin, limit: 5)
         records.recentActivities = recentActivities(for: vin, limit: 10)
         records.airQualityHistory = recentAirQuality(for: vin, limit: 500)
@@ -235,7 +255,7 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
         } process: { stmt -> [String: TripPurpose] in
             var result: [String: TripPurpose] = [:]
-            while stmt.step() {
+            while try stmt.stepOrThrow() {
                 guard let id = stmt.columnText(at: 0),
                       let raw = stmt.columnText(at: 1),
                       let purpose = TripPurpose(rawValue: raw) else { continue }
@@ -258,7 +278,38 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
+        }) ?? []
+    }
+
+    func recentTyrePressure(for vin: String, limit: Int = 500, since: Date? = nil) -> [VehicleDatabase.TyrePressureRecord] {
+        let dateClause = since == nil ? "" : " AND timestamp >= ?"
+        let query = """
+        SELECT \(HistoryRowDecoder.Columns.tyrePressure)
+        FROM tyre_pressure_history WHERE vin = ?\(dateClause) ORDER BY timestamp DESC LIMIT ?;
+        """
+        return (try? self.sql.readQuery(sql: query) { stmt in
+            try stmt.bindText(vin, at: 1)
+            if let since { try stmt.bindDate(since, at: 2) }
+            try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
+        } process: { stmt in
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.tyrePressure)
+        }) ?? []
+    }
+
+    /// Open warnings plus any episode that closed inside the window, newest first.
+    func recentWarningEvents(for vin: String, limit: Int = 500, since: Date? = nil) -> [VehicleDatabase.WarningEventRecord] {
+        let dateClause = since == nil ? "" : " AND (cleared_at IS NULL OR cleared_at >= ?)"
+        let query = """
+        SELECT \(HistoryRowDecoder.Columns.warningEvent)
+        FROM vehicle_warning_events WHERE vin = ?\(dateClause) ORDER BY first_seen DESC LIMIT ?;
+        """
+        return (try? self.sql.readQuery(sql: query) { stmt in
+            try stmt.bindText(vin, at: 1)
+            if let since { try stmt.bindDate(since, at: 2) }
+            try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
+        } process: { stmt in
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.warningEvent)
         }) ?? []
     }
 
@@ -273,7 +324,7 @@ final class VehicleHistoryLedger: Sendable {
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality)
         }) ?? []
     }
 
@@ -289,7 +340,7 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindInt64(Int64(max(1, limit)), at: since != nil ? 3 : 2)
         } process: { stmt in
             // The largest table on the interactive path: a cancelled scan is discarded anyway.
-            HistoryRowDecoder.rowsUnlessCancelled(stmt, decode: HistoryRowDecoder.telemetry)
+            try HistoryRowDecoder.rowsUnlessCancelled(stmt, decode: HistoryRowDecoder.telemetry)
         }) ?? []
     }
 
@@ -306,7 +357,7 @@ final class VehicleHistoryLedger: Sendable {
             if let since { try stmt.bindDate(since, at: bindIndex); bindIndex += 1 }
             try stmt.bindInt64(Int64(max(1, limit)), at: bindIndex)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit)
         }) ?? []
     }
 
@@ -318,7 +369,7 @@ final class VehicleHistoryLedger: Sendable {
             try statement.bindInt64(Int64(min(max(limit, 1), 1000)), at: since == nil ? 2 : 3)
         } process: { statement in
             var result: [Data] = []
-            while !Task.isCancelled, statement.step() {
+            while !Task.isCancelled, try statement.stepOrThrow() {
                 if let data = statement.columnBlob(at: 0) { result.append(data) }
             }
             return result
@@ -337,7 +388,7 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.connectivity)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.connectivity)
         }) ?? []
     }
 
@@ -350,7 +401,7 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.cabinClimate)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.cabinClimate)
         }) ?? []
     }
 
@@ -363,7 +414,7 @@ final class VehicleHistoryLedger: Sendable {
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
         }) ?? []
     }
 
@@ -373,7 +424,7 @@ final class VehicleHistoryLedger: Sendable {
         try? self.sql.readQuery(sql: "SELECT COALESCE(SUM(liters * price_per_liter),0) FROM fuel_entries WHERE vin = ?;", bindings: { stmt in
             try stmt.bindText(vin, at: 1)
         }, process: { stmt in
-            if stmt.step() { total = stmt.columnDouble(at: 0) ?? 0 }
+            if try stmt.stepOrThrow() { total = stmt.columnDouble(at: 0) ?? 0 }
         })
         return total
     }
@@ -410,7 +461,7 @@ final class VehicleHistoryLedger: Sendable {
         let records = (try? self.sql.query(sql: query) { stmt in
             if let vin { try stmt.bindText(vin, at: 1) }
         } process: { stmt in
-            HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
+            try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.batteryHealth)
         }) ?? []
 
         var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"
@@ -500,6 +551,8 @@ extension VehicleHistoryLedger {
     /// the odometer or a trip meter changes; a parked car re-reported the same figures every
     /// refresh, which is what filled this table.
     static let telemetryHeartbeat: TimeInterval = 24 * 60 * 60
+    /// Longest gap between two identical tyre-pressure samples for the same tyre.
+    static let tyrePressureHeartbeat: TimeInterval = 60 * 60
 
     /// Whether these readings differ enough from the last stored row to be worth keeping.
     /// `nil` previous row means this VIN has no history yet, which always qualifies.
@@ -546,7 +599,7 @@ extension VehicleHistoryLedger {
         return try? self.sql.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> (Date, Double?, Double?)? in
-            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let ts = stmt.columnDate(at: 0) else { return nil }
             return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2))
         } ?? nil
     }
@@ -576,6 +629,96 @@ extension VehicleHistoryLedger {
         }
     }
 
+    /// Appends a tyre-pressure sample for each tyre that reported kilopascals. A tyre is skipped
+    /// while its value and reference are unchanged from its last sample and that sample is under
+    /// an hour old, so a parked car does not write the same four numbers on every refresh.
+    @discardableResult
+    func recordTyrePressure(vin: String, readings: [VehicleDatabase.TyrePressureReading],
+                            timestamp: Date = Date()) -> Int {
+        var written = 0
+        for reading in readings {
+            let last = try? self.sql.query(sql: """
+                SELECT timestamp, kilopascals, reference_kpa FROM tyre_pressure_history
+                WHERE vin = ? AND position = ? ORDER BY timestamp DESC LIMIT 1;
+                """) { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.bindText(reading.position.rawValue, at: 2)
+            } process: { stmt -> (Date, Double?, Double?)? in
+                guard try stmt.stepOrThrow(), let ts = stmt.columnDate(at: 0) else { return nil }
+                return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2))
+            } ?? nil
+            if let last,
+               timestamp.timeIntervalSince(last.0) < Self.tyrePressureHeartbeat,
+               last.1 == reading.kilopascals, last.2 == reading.referenceKilopascals {
+                continue
+            }
+            let inserted = executeInsert("""
+                INSERT INTO tyre_pressure_history (vin, timestamp, position, kilopascals, reference_kpa)
+                VALUES (?, ?, ?, ?, ?);
+                """) { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.bindDate(timestamp, at: 2)
+                try stmt.bindText(reading.position.rawValue, at: 3)
+                try stmt.bindDouble(reading.kilopascals, at: 4)
+                try stmt.bindDouble(reading.referenceKilopascals, at: 5)
+            }
+            if inserted { written += 1 }
+        }
+        return written
+    }
+
+    /// Reconciles the open warning episodes with one report. A warning opens when it is active
+    /// and no episode is open for it. An open episode closes only when this report covers that
+    /// warning and no longer lists it as active: a category the report omits says nothing, so it
+    /// stays open.
+    func syncWarningEvents(vin: String, active: Set<VehicleWarning>, reported: Set<VehicleWarning>,
+                           timestamp: Date) {
+        let openNames = (try? self.sql.readQuery(sql: """
+            SELECT warning FROM vehicle_warning_events WHERE vin = ? AND cleared_at IS NULL;
+            """, bindings: { stmt in
+                try stmt.bindText(vin, at: 1)
+            }, process: { stmt -> [String] in
+                var names: [String] = []
+                while try stmt.stepOrThrow() {
+                    if let name = stmt.columnText(at: 0) { names.append(name) }
+                }
+                return names
+            })) ?? []
+        let open = Set(openNames.compactMap { VehicleWarning(rawValue: $0) })
+
+        let opening = active.subtracting(open)
+        let closing = open.intersection(reported).subtracting(active)
+        guard !opening.isEmpty || !closing.isEmpty else { return }
+        do {
+            try sql.withTransaction {
+                for warning in opening.sorted(by: { $0.rawValue < $1.rawValue }) {
+                    try self.sql.query(sql: """
+                        INSERT INTO vehicle_warning_events (vin, warning, first_seen, cleared_at)
+                        VALUES (?, ?, ?, NULL);
+                        """) { stmt in
+                        try stmt.bindText(vin, at: 1)
+                        try stmt.bindText(warning.rawValue, at: 2)
+                        try stmt.bindDate(timestamp, at: 3)
+                        try stmt.executeUpdate()
+                    } process: { _ in }
+                }
+                for warning in closing.sorted(by: { $0.rawValue < $1.rawValue }) {
+                    try self.sql.query(sql: """
+                        UPDATE vehicle_warning_events SET cleared_at = ?
+                        WHERE vin = ? AND warning = ? AND cleared_at IS NULL;
+                        """) { stmt in
+                        try stmt.bindDate(timestamp, at: 1)
+                        try stmt.bindText(vin, at: 2)
+                        try stmt.bindText(warning.rawValue, at: 3)
+                        try stmt.executeUpdate()
+                    } process: { _ in }
+                }
+            }
+        } catch {
+            logger.error("Could not update warning timeline: \(error, privacy: .public)")
+        }
+    }
+
     /// The odometer/trip readings of the most recent row, used to detect movement.
     private func lastTelemetryReadings(
         for vin: String
@@ -587,7 +730,7 @@ extension VehicleHistoryLedger {
         return try? self.sql.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> (Date, Double?, Double?, Double?)? in
-            guard stmt.step(), let ts = stmt.columnDate(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let ts = stmt.columnDate(at: 0) else { return nil }
             return (ts, stmt.columnDouble(at: 1), stmt.columnDouble(at: 2), stmt.columnDouble(at: 3))
         } ?? nil
     }
@@ -697,7 +840,7 @@ extension VehicleHistoryLedger {
         """
         var last: (Date, String?, Int?, String?)?
         try? self.sql.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
-            if stmt.step(), let ts = stmt.columnDate(at: 0) {
+            if try stmt.stepOrThrow(), let ts = stmt.columnDate(at: 0) {
                 last = (ts, stmt.columnText(at: 1), stmt.columnInt64(at: 2).map(Int.init),
                         stmt.columnText(at: 3))
             }
@@ -724,7 +867,7 @@ extension VehicleHistoryLedger {
         let sql = "SELECT timestamp FROM cabin_climate_history WHERE vin = ? ORDER BY timestamp DESC LIMIT 1;"
         var last: Date?
         try? self.sql.query(sql: sql) { stmt in try stmt.bindText(vin, at: 1) } process: { stmt in
-            if stmt.step() { last = stmt.columnDate(at: 0) }
+            if try stmt.stepOrThrow() { last = stmt.columnDate(at: 0) }
         }
         // One row per hour is plenty for a temperature trend.
         if let last, timestamp.timeIntervalSince(last) < 60 * 60 { return false }

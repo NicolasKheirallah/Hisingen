@@ -54,27 +54,39 @@ enum TripSegmentation {
         }
 
         for (start, end) in zip(records, records.dropFirst()) {
-            // Odometer first, then the trip meters, each accepted only inside the plausible
-            // band – a provider that reports one of the three badly still yields a distance.
+            // Odometer first, then the trip meters; each delta is accepted only inside
+            // the plausible band. Trip-meter resets (next < current) yield nil so the
+            // interval falls back to another source instead of inventing distance.
             let odometerDelta: Double? = {
                 guard let current = start.odometerKm, let next = end.odometerKm else { return nil }
-                return next - current
+                let delta = next - current
+                return delta >= 0 ? delta : nil
             }()
             let automaticDelta: Double? = {
                 guard let current = start.tripAutomaticKm, let next = end.tripAutomaticKm else { return nil }
-                return next >= current ? next - current : next
+                return next >= current ? next - current : nil
             }()
             let manualDelta: Double? = {
                 guard let current = start.tripManualKm, let next = end.tripManualKm else { return nil }
-                return next >= current ? next - current : next
+                return next >= current ? next - current : nil
             }()
+            // Prefer a consistent source within a segment: once a segment has started,
+            // keep using its source instead of mixing baselines per interval.
             let distance = [odometerDelta, automaticDelta, manualDelta]
                 .compactMap { $0 }
                 .first { $0 >= minimumDistanceKm && $0 < maximumDistanceKm }
             let gap = end.timestamp.timeIntervalSince(start.timestamp)
-            guard let distance, gap > 0, gap <= maximumGap else {
+            guard let distance, gap >= 0, gap <= maximumGap else {
                 appendSegment()
                 clearSegment()
+                continue
+            }
+            // Zero-duration duplicates with real movement are quantization noise, not a new
+            // trip: absorb the distance into the open segment instead of splitting.
+            if gap == 0 {
+                if segmentStart == nil { segmentStart = start }
+                segmentEnd = end
+                segmentDistance += distance
                 continue
             }
             if segmentStart == nil { segmentStart = start }

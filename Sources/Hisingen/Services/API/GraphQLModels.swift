@@ -314,3 +314,120 @@ struct TokenResponseDTO: Decodable, Sendable {
         idToken = try container.decodeIfPresent(String.self, forKey: .idToken)
     }
 }
+
+/// The JSON body of a GraphQL POST. `variables` is left out entirely when nil.
+struct GraphQLRequestBody<Variables: Encodable>: Encodable {
+    let query: String
+    var variables: Variables?
+}
+
+/// Stands in for "no variables" where a generic `Variables` type has to be named.
+struct NoVariables: Encodable {}
+
+/// Variables for the telematics query: the VINs to read.
+struct VINListVariables: Encodable {
+    let vins: [String]
+}
+
+/// The VDMS lookup against the app backend, shaped like the Polestar app's own Apollo request.
+struct AppBackendRequest: Encodable {
+    let operationName: String
+    let query: String
+    var variables = NoVariables()
+    let extensions: Extensions
+
+    struct Extensions: Encodable {
+        let clientLibrary: ClientLibrary
+    }
+
+    struct ClientLibrary: Encodable {
+        let name: String
+        let version: String
+    }
+}
+
+struct CarImagesPayloadDTO: Decodable {
+    let getCarImages: CarImagesDTO?
+}
+
+/// The render lookup sent to Polestar's public image API. The field and argument names come from
+/// the server's schema; the operation name, variable names and layout are ours.
+struct CarImagesRequest: Encodable {
+    static let document = """
+    query GetCarImages($pno: String!, $week: String!, $year: String!, $locale: String) {
+      getCarImages(pno34: $pno, structureWeek: $week, modelYear: $year, locale: $locale) {
+        transparent { url angle }
+        opaque { url angle }
+      }
+    }
+    """
+
+    struct Variables: Encodable {
+        let pno: String
+        let week: String
+        let year: String
+        let locale: String
+    }
+
+    let query = CarImagesRequest.document
+    let variables: Variables
+
+    init(pno34: String, structureWeek: String, modelYear: String, locale: String = "en-GB") {
+        variables = Variables(pno: pno34, week: structureWeek, year: modelYear, locale: locale)
+    }
+
+    /// A POST to `endpoint` that carries this lookup as JSON and the public API key.
+    func urlRequest(endpoint: URL, apiKey: String) throws -> URLRequest {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.allHTTPHeaderFields = ["Content-Type": "application/json", "x-api-key": apiKey]
+        request.httpBody = try JSONEncoder().encode(self)
+        return request
+    }
+}
+
+/// Studio renders for one car. The selection rule (transparent first, then the user's angle)
+/// is the part worth testing, so it lives here rather than inline in the fetch.
+struct CarImagesDTO: Decodable {
+    let transparent: [CarImageDTO]?
+    let opaque: [CarImageDTO]?
+
+    /// Transparent renders when there are any, otherwise opaque ones.
+    var pool: [CarImageDTO] {
+        let transparent = transparent ?? []
+        return transparent.isEmpty ? (opaque ?? []) : transparent
+    }
+
+    /// The requested angle, then front three-quarter (1), then side (0), then anything.
+    static func preferred(in pool: [CarImageDTO], angle: Int) -> CarImageDTO? {
+        pool.first { $0.angle == angle }
+            ?? pool.first { $0.angle == 1 }
+            ?? pool.first { $0.angle == 0 }
+            ?? pool.first
+    }
+}
+
+struct CarImageDTO: Decodable {
+    let url: String?
+    let angle: Int?
+
+    /// Only HTTPS render URLs are fetched.
+    var httpsURL: URL? {
+        guard let url = url.flatMap(URL.init(string:)), url.scheme == "https" else { return nil }
+        return url
+    }
+
+    private enum CodingKeys: String, CodingKey { case url, angle }
+
+    // One render with an odd field must not drop the whole list.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        url = try? container.decode(String.self, forKey: .url)
+        angle = try? container.decode(Int.self, forKey: .angle)
+    }
+
+    init(url: String?, angle: Int?) {
+        self.url = url
+        self.angle = angle
+    }
+}

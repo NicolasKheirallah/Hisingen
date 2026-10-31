@@ -369,6 +369,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case chargingScheduleOverride
     case chargeLocations
     case locks
+    case remoteUnlock
     case reducedGuardLock
     case trunk
     case windows
@@ -396,6 +397,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .chargingSchedule: return L10n.text("Charging schedule")
         case .chargingScheduleOverride: return L10n.text("Charge-schedule override")
         case .locks: return L10n.text("Lock and unlock")
+        case .remoteUnlock: return L10n.text("Remote unlock")
         case .reducedGuardLock: return L10n.text("Lock with reduced guard")
         case .trunk: return L10n.text("Trunk unlock")
         case .windows: return L10n.text("Window control")
@@ -415,7 +417,7 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         .climateStartStop, .climateTemperature, .seatHeating, .steeringWheelHeating,
         .climateTimers, .preCleaning, .chargeTarget, .chargingCurrentLimit,
         .chargingSchedule, .chargingScheduleOverride, .chargeLocations,
-        .locks, .reducedGuardLock, .trunk, .windows,
+        .locks, .remoteUnlock, .reducedGuardLock, .trunk, .windows,
         .honkAndFlash, .exteriorStatus, .tyrePressureValues, .serviceWarnings,
         .tripMeters, .connectivity, .softwareStatus, .softwareInstallControl, .engineStart
     ]
@@ -571,8 +573,16 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .locks, .honkAndFlash, .exteriorStatus, .climateStartStop, .serviceWarnings:
                 return .supported
+            // The public `climatization-start` endpoint accepts no temperature or seat
+            // heating body on any Volvo. Claiming these made the card show a setpoint the
+            // car never received; the command still ran, so the miss was invisible.
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
-                return .supported
+                return .unavailable
+            // No public write endpoint exists for these on this platform. Leaving them at
+            // `.backendDependent` rendered controls that could only fail after the tap.
+            case .windows, .trunk, .chargeTarget, .chargingCurrentLimit,
+                 .chargingScheduleOverride, .chargeLocations, .preCleaning:
+                return .unavailable
             case .softwareInstallControl, .softwareStatus:
                 return .unavailable
             // See the comment on the same case above – applies to every Volvo model.

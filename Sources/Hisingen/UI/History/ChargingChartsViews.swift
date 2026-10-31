@@ -556,7 +556,7 @@ struct ChargingCurveView: View {
                     }
                     Circle()
                         .fill(HisingenTheme.accent)
-                        .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                        .overlay(Circle().stroke(HisingenTheme.highlightWhite.opacity(0.85), lineWidth: 1.2))
                         .frame(width: 7.5, height: 7.5)
                         .shadow(color: HisingenTheme.accent.opacity(isLive ? (pulse ? 0.75 : 0.35) : 0.25), radius: isLive ? (pulse ? 5 : 2) : 2)
                 }
@@ -566,7 +566,7 @@ struct ChargingCurveView: View {
         } else {
             Circle()
                 .fill(HisingenTheme.chartPositive)
-                .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                .overlay(Circle().stroke(HisingenTheme.highlightWhite.opacity(0.85), lineWidth: 1.2))
                 .frame(width: 7.5, height: 7.5)
                 .position(lastPowerPoint)
                 .transition(.opacity)
@@ -673,7 +673,7 @@ struct ChargingCurveView: View {
 
         Circle()
             .fill(curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent)
-            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+            .overlay(Circle().stroke(HisingenTheme.highlightWhite, lineWidth: 1.5))
             .frame(width: 9, height: 9)
             .shadow(color: (curveMode == .power ? HisingenTheme.chartPositive : HisingenTheme.accent).opacity(0.6), radius: 4)
             .position(info.point)

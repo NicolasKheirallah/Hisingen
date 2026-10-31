@@ -112,12 +112,6 @@ struct PolestarPortalCoverageSurfacingTests {
                               "isOptimizedChargingEnabled": true}]}
         """))
 
-        payload["/charging/is-at-charge-location"] = (200, json("""
-        {"vin": "\(vin)", "locationId": "loc-home-01",
-         "arrivedAtTimestamp": \(timestamp(1_716_299_100)),
-         "metaReceivedAt": "2024-05-21T14:01:35Z"}
-        """))
-
         payload["/charging/global-charge-timer"] = (200, json("""
         {"vin": "\(vin)", "utc0": false}
         """))
@@ -148,8 +142,8 @@ struct PolestarPortalCoverageSurfacingTests {
 
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         CoverageSurfacingTransport.requestHandler = { request in
             let path = request.url?.path ?? ""
@@ -305,15 +299,77 @@ struct PolestarPortalCoverageSurfacingTests {
         #expect(equipment.details.first { $0.title == "Digital Key Type" }?.value == "Polestar 2")
     }
 
-    // MARK: - G8 charge-location arrival
+    // MARK: - G8 queued backend changes + per-location schedules
 
     @Test
-    func chargeLocationArrivalReachesTheChargingCard() async throws {
+    func queuedLocationAndTimerChangesSurfaceAsPending() async throws {
+        var payloads = endpointPayloads()
+        payloads["/charging/charge-locations"] = (200, json("""
+        {"vin": "\(vin)", "utc0": false,
+         "chargeLocations": [{"locationId": "loc-home-01", "locationAlias": "Home Garage",
+                              "ampLimit": 16, "minimumSoc": 40,
+                              "isOptimizedChargingEnabled": true,
+                              "chargeTimers": [{"id": "t1", "activated": true,
+                                                "start": {"hour": 1, "minute": 0},
+                                                "stop": {"hour": 5, "minute": 30},
+                                                "activeDays": ["MONDAY"]}],
+                              "departureTimes": [{"id": "d1", "activated": true,
+                                                  "departureTime": {"hour": 7, "minute": 45},
+                                                  "activeDays": ["MONDAY"]}]}],
+         "pendingChargeLocations": [{"locationId": "loc-new", "locationAlias": "Work"}],
+         "pendingDeleteChargeLocations": [{"locationId": "loc-old", "locationAlias": "Old"}]}
+        """))
+        payloads["/charging/global-charge-timer"] = (200, json("""
+        {"vin": "\(vin)", "utc0": false,
+         "globalChargeTimer": {"start": {"hour": 23, "minute": 0},
+                               "stop": {"hour": 6, "minute": 0}, "activated": true},
+         "pendingGlobalChargeTimer": {"start": {"hour": 22, "minute": 0},
+                                      "stop": {"hour": 6, "minute": 0}, "activated": true}}
+        """))
+        payloads["/charging/charge-now"] = (200, json("""
+        {"vin": "\(vin)", "syncedOverrideChargeTimer": {"override": false},
+         "pendingOverrideChargeTimer": {"override": true}}
+        """))
+        payloads["/charging/parking-climate-timer"] = (200, json("""
+        {"vin": "\(vin)", "utc0": false, "parkingClimateTimers": [],
+         "pendingParkingClimateTimers": [{"timerId": "c1", "readyAt": {"hour": 7, "minute": 30},
+                                           "activated": true, "repeat": false}],
+         "pendingDeleteParkingClimateTimers": [],
+         "pendingTimerSettings": {"requestedCompartmentTemperatureCelsius": 21}}
+        """))
+        let state = try await fetchState(payloads: payloads)
+        #expect(state.energy.pendingChargeLocationCount == 1)
+        #expect(state.energy.pendingChargeLocationDeletionCount == 1)
+        #expect(state.energy.hasPendingLocationChanges)
+        #expect(state.energy.pendingGlobalChargeTimer == true)
+        #expect(state.energy.pendingChargeNowOverride == true)
+        #expect(state.energy.unappliedChargeNowOverride(current: false) == true)
+        #expect(state.energy.unappliedChargeNowOverride(current: true) == nil)
+        #expect(state.energy.pendingClimateTimerCount == 1)
+        #expect(state.energy.pendingTimerSettings == true)
+        #expect(state.energy.hasPendingScheduleChanges)
+        let location = try #require(state.energy.locations.first)
+        #expect(location.chargeTimers.count == 1)
+        #expect(location.departureTimes.count == 1)
+        #expect(location.chargeTimers.first?.kind == .locationCharging)
+    }
+
+    @Test
+    func appliedPendingValuesReadAsAppliedNotQueued() async throws {
         let state = try await fetchState()
-        #expect(state.energy.isAtChargeLocation == true)
-        // The is-at read's bare locationId joins against the charge-locations list.
-        #expect(state.energy.currentChargeLocationName == "Home Garage")
-        #expect(state.energy.arrivedAtLocationDate == Date(timeIntervalSince1970: 1_716_299_100))
+        #expect(state.energy.pendingChargeLocationCount == nil)
+        #expect(state.energy.pendingGlobalChargeTimer == nil)
+        #expect(state.energy.pendingClimateTimerCount == nil)
+        #expect(!state.energy.hasPendingLocationChanges)
+        #expect(state.energy.unappliedChargeNowOverride(current: nil) == nil)
+    }
+
+    @Test
+    func locationDepartureTimesCapabilityIsRetained() {
+        let settings = VehicleControlSettings(locationDepartureTimes: true)
+        #expect(settings.locationDepartureTimes == true)
+        let absent = VehicleControlSettings()
+        #expect(absent.locationDepartureTimes == nil)
     }
 }
 

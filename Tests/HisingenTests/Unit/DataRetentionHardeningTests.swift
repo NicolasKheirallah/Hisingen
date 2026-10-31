@@ -203,7 +203,7 @@ struct DataRetentionHardeningTests {
         #expect(database.recordCounts().chargingSessions == 1)
         #expect(handle.passesQuickCheck())
         let version = try handle.query(sql: "PRAGMA user_version;") { stmt -> Int in
-            stmt.step() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
+            (try stmt.stepOrThrow()) ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
     }

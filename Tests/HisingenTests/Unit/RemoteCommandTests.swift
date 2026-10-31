@@ -285,8 +285,9 @@ struct RemoteCommandTests {
                 .lock, vin: "YSMTEST", accessToken: "web-token", commandToken: nil
             )
             Issue.record("An invocation command must be rejected before dispatch without a command-client token")
-        } catch RemoteCommandError.rejected(let message) {
-            #expect(message != nil)
+        } catch RemoteCommandError.authorizationRequired {
+            // A typed refusal, so the banner can offer the authorization step instead of only
+            // printing directions to another screen.
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
@@ -812,7 +813,8 @@ private final class CommandContextMock: CommandExecutionContext {
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func commandInProgressDidChange() {}
     func presentResult(
-        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?,
+        remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
     ) {}
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,

@@ -44,6 +44,9 @@ struct NotificationToggleRow: View {
         // switch was clickable: everything left of it was a dead zone that looked live.
         .contentShape(Rectangle())
         .onTapGesture { isOn.wrappedValue.toggle() } // row hosts a nested switch, so no Button
+        // The switch stays the focusable control (it keeps keyboard focus and its own label);
+        // this gives the row's pointer target the same activation VoiceOver users get on the switch.
+        .accessibilityAction { isOn.wrappedValue.toggle() }
         .onHover { hovered = $0 }
         .onChange(of: isOn.wrappedValue) { _, _ in
             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)

@@ -18,6 +18,8 @@ struct ControlsTabView: View {
     /// green "Command sent" banner that auto-dismisses after six seconds, which is a statement
     /// about the request, not about the car.
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
+    /// Runs the remote-command authorization step when a refused command's banner offers it.
+    var onAuthorizeRemoteCommands: (() -> Void)? = nil
 
     /// The reader's layout for this tab: what to draw, and in what order. The default draws
     /// everything exactly as designed.
@@ -144,7 +146,9 @@ struct ControlsTabView: View {
                 feedback: feedback,
                 features: features,
                 isBrandVolvo: isBrandVolvo,
-                showRestrictedNotice: !visibleCards.isEmpty
+                showRestrictedNotice: !visibleCards.isEmpty,
+                onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                onFollowUp: onRemoteCommand
                 )
             }
 
@@ -160,6 +164,7 @@ struct ControlsTabView: View {
                 if anyCardDimmed || state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
+                RoutinesCard(state: state, gate: commandGate, isBusy: remoteCommandInProgress)
             } else {
                 noControlsEnabledCard
             }

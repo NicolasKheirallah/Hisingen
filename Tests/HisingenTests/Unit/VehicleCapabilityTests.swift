@@ -137,17 +137,20 @@ struct VehicleCapabilityTests {
     }
 
     @Test
-    func volvoEX30AndEX90ShowSelectableTemperatureAndSeatHeating() {
+    func volvoEX30AndEX90StartClimateWithoutSelectableSetpoints() {
+        // Volvo's public climatization command accepts no temperature or seat-heating body.
+        // The profile previously claimed these were selectable, so the UI showed a setpoint
+        // that was silently dropped at dispatch.
         let ex30Profile = VehicleCapabilityProfile(modelName: "EX30 Ultra")
-        #expect(ex30Profile.hasSelectableClimateTemperature)
-        #expect(ex30Profile.hasSelectableSeatHeating)
-        #expect(ex30Profile.hasSelectableSteeringWheelHeating)
+        #expect(!ex30Profile.hasSelectableClimateTemperature)
+        #expect(!ex30Profile.hasSelectableSeatHeating)
+        #expect(!ex30Profile.hasSelectableSteeringWheelHeating)
         #expect(ex30Profile.permits(.climateStartStop))
 
         let ex90Profile = VehicleCapabilityProfile(modelName: "EX90 Twin Motor")
-        #expect(ex90Profile.hasSelectableClimateTemperature)
-        #expect(ex90Profile.hasSelectableSeatHeating)
-        #expect(ex90Profile.hasSelectableSteeringWheelHeating)
+        #expect(!ex90Profile.hasSelectableClimateTemperature)
+        #expect(!ex90Profile.hasSelectableSeatHeating)
+        #expect(!ex90Profile.hasSelectableSteeringWheelHeating)
         #expect(ex90Profile.permits(.climateStartStop))
     }
 }

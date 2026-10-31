@@ -1,8 +1,15 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
-# Script to inject obfuscated Volvo API credentials at build time without committing secrets to git.
-# Reads credentials from environment variables or .env.secrets / .env.local
+# Injects Volvo and Polestar API configuration into generated Swift at build time, so real values
+# stay out of git. Reads values from environment variables or .env.secrets / .env.local.
+#
+# The generated Swift XOR-masks each value with 0x5C. That is light masking against casual string
+# scraping only. It is not encryption and not secret protection: anything compiled into the app can
+# be recovered. Treat every injected value as public.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SECRETS_FILE="$ROOT_DIR/.env.secrets"
@@ -11,7 +18,10 @@ OUTPUT_SWIFT="$ROOT_DIR/Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swif
 POLESTAR_OUTPUT_SWIFT="$ROOT_DIR/Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift"
 
 # Load from file if env vars not already set
-if [ -f "$SECRETS_FILE" ]; then
+if [ "${HISINGEN_BUILD_CONFIGURATION:-local}" = fixture ]; then
+    unset VOLVO_CLIENT_ID VOLVO_CLIENT_SECRET VOLVO_VCC_API_KEY
+    unset POLESTAR_IMAGE_API_KEY POLESTAR_ACCOUNT_ID POLESTAR_CLIENT_ID POLESTAR_CLIENT_SECRET
+elif [ -f "$SECRETS_FILE" ]; then
     # shellcheck disable=SC1090
     . "$SECRETS_FILE"
 elif [ -f "$LOCAL_ENV_FILE" ]; then
@@ -24,7 +34,7 @@ CLIENT_SECRET="${VOLVO_CLIENT_SECRET:-}"
 VCC_API_KEY="${VOLVO_VCC_API_KEY:-}"
 
 if [ -n "$CLIENT_ID" ] && [ -n "$CLIENT_SECRET" ] && [ -n "$VCC_API_KEY" ]; then
-    echo "🔒 Injecting obfuscated Volvo Developer credentials..."
+    echo "🔒 Injecting Volvo Developer values (XOR-masked against casual scraping, not secret; treat as public)..."
 
     HISINGEN_GENERATED_CLIENT_ID="$CLIENT_ID" \
     HISINGEN_GENERATED_CLIENT_SECRET="$CLIENT_SECRET" \
@@ -38,6 +48,7 @@ client_secret = os.environ["HISINGEN_GENERATED_CLIENT_SECRET"].strip()
 vcc_api_key = os.environ["HISINGEN_GENERATED_VCC_API_KEY"].strip()
 output_path = os.environ["HISINGEN_GENERATED_OUTPUT"]
 
+# Light XOR masking against casual string scraping only. Not encryption; values are public.
 mask_key = 0x5C
 
 def obfuscate(s):
@@ -74,7 +85,7 @@ enum GeneratedVolvoSecrets {{
 with open(output_path, "w", encoding="utf-8") as f:
     f.write(output)
 
-print("✅ Obfuscated credentials generated into Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift")
+print("✅ Volvo values (XOR-masked, not secret) generated into Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift")
 PYTHON
 else
     # Generate clean placeholder struct if no secrets provided
@@ -98,7 +109,7 @@ POLESTAR_ACCOUNT_ID="${POLESTAR_ACCOUNT_ID:-}"
 POLESTAR_CLIENT_ID="${POLESTAR_CLIENT_ID:-}"
 POLESTAR_CLIENT_SECRET="${POLESTAR_CLIENT_SECRET:-}"
 
-echo "🔒 Injecting obfuscated Polestar Developer Portal & render-CDN configuration..."
+echo "🔒 Injecting Polestar Developer Portal & render-CDN values (XOR-masked against casual scraping, not secret; treat as public)..."
 
 HISINGEN_GENERATED_POLESTAR_IMAGE_API_KEY="$POLESTAR_IMAGE_API_KEY" \
 HISINGEN_GENERATED_POLESTAR_ACCOUNT_ID="$POLESTAR_ACCOUNT_ID" \
@@ -114,6 +125,7 @@ client_id = os.environ.get("HISINGEN_GENERATED_POLESTAR_CLIENT_ID", "").strip()
 client_secret = os.environ.get("HISINGEN_GENERATED_POLESTAR_CLIENT_SECRET", "").strip()
 output_path = os.environ["HISINGEN_GENERATED_POLESTAR_OUTPUT"]
 
+# Light XOR masking against casual string scraping only. Not encryption; values are public.
 mask_key = 0x5C
 
 def obfuscate(s):

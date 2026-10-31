@@ -51,10 +51,11 @@ struct PolestarCapabilityTests {
         for state in states {
             let conditions = [state.unavailable, state.unsupported]
             #expect(conditions.filter { $0 }.count <= 1)
-            // A payload is only ever reachable through `.available`.
             if state.value != nil || state.summary == .available {
-                if case .available = state {} else {
-                    Issue.record("\(state.summary) carried a payload outside .available")
+                switch state {
+                case .available, .observed, .cached: break
+                default:
+                    Issue.record("\(state.summary) carried a payload outside an available reading")
                 }
             }
         }

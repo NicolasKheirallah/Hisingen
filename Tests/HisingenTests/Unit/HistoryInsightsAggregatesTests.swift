@@ -365,6 +365,26 @@ struct HistoryInsightsAggregatesTests {
         #expect(HistoryInsights.projectedStateOfHealth(from: records, atOdometerKm: 100_000) == nil)
     }
 
+    @Test
+    func testRobustTrendIgnoresSingleBadMilestone() {
+        // Four milestones on a -1 per 10k line plus one bad GOM reading at 60.
+        // OLS follows the outlier; Theil-Sen holds the line.
+        let records = (0..<4).map { batteryHealth(Int64($0), odometerKm: Double($0) * 10_000, sohPct: 100 - Double($0)) }
+            + [batteryHealth(9, odometerKm: 45_000, sohPct: 60)]
+        let ols = HistoryInsights.batteryHealthTrend(from: records).stateOfHealthPctPer10kKm ?? 0
+        let robust = HistoryInsights.batteryHealthTrendRobust(from: records).stateOfHealthPctPer10kKm ?? 0
+        #expect(abs(robust - -1) <= 0.2)
+        #expect(abs(ols - -1) > abs(robust - -1))
+    }
+
+    @Test
+    func testStableStateOfHealthIsMedianOfRecent() {
+        let records = [batteryHealth(1, odometerKm: 50_000, sohPct: 92),
+                       batteryHealth(2, odometerKm: 51_000, sohPct: 60),
+                       batteryHealth(3, odometerKm: 52_000, sohPct: 91)]
+        #expect(HistoryInsights.stableStateOfHealth(from: records) == 91)
+    }
+
     // MARK: - Command statistics
 
     @Test

@@ -1,6 +1,21 @@
 import Foundation
 import OSLog
 
+/// The notifier calls the planner makes. `Notifier` conforms in its own file; tests supply a fake.
+@MainActor
+protocol ChargingPlannerNotifying {
+    func notifyCommandNotice(title: String, body: String, subtitle: String?)
+}
+
+/// The price series the planner reads. `ElectricityPriceService` is the app's source; tests
+/// supply a fixed series so no evaluation touches the network or the wall clock.
+protocol ChargingPlannerPriceSource: Sendable {
+    func prices(for zone: ElspotZone) async -> [ElectricityPricePoint]
+    func fetchedAt(for zone: ElspotZone) async -> Date?
+}
+
+extension ElectricityPriceService: ChargingPlannerPriceSource {}
+
 /// Background driver for the opt-in Smart Charging Planner. Runs a minute-cadence tick
 /// that keeps the spot-price cache fresh (this is what performs the once-a-day fetch
 /// after publication even when no panel is open), posts the window-start and
@@ -15,15 +30,17 @@ import OSLog
 @MainActor
 final class ChargingPlannerController {
     private let preferences: PreferencesStore
-    private let notifier: Notifier
-    private let priceService: ElectricityPriceService
+    private let notifier: any ChargingPlannerNotifying
+    private let priceSource: any ChargingPlannerPriceSource
     private let chargingLedger: ChargingSessionLedger
     private let latestState: () -> VehicleState?
     private let activeVINs: () -> [String]
-    private let startCharging: () async -> RemoteCommandDispatchOutcome
+    private let startCharging: (String) async -> RemoteCommandDispatchOutcome
+    private let now: @Sendable () -> Date
 
-    private let scheduler = AsyncTimerLoop()
+    private let scheduler: AsyncTimerLoop
     private var evaluationInProgress = false
+    private var generation = 0
     /// Auto-start fires at most once per planned window start, in memory. A relaunch
     /// mid-window may re-send one start command; the vehicle ignores a start while it is
     /// already charging, and the coordinator's single-flight guard covers bursts.
@@ -33,23 +50,33 @@ final class ChargingPlannerController {
     /// actor hop onto a warm price cache.
     static let tickInterval: TimeInterval = 60
 
+    /// `priceSource` overrides `priceService` when given; the composition root passes only
+    /// `priceService`. `now` and `wait` default to the wall clock and `Task.sleep`.
     init(
         preferences: PreferencesStore,
-        notifier: Notifier,
-        priceService: ElectricityPriceService,
+        notifier: any ChargingPlannerNotifying,
+        priceService: ElectricityPriceService = .shared,
+        priceSource: (any ChargingPlannerPriceSource)? = nil,
         database: VehicleDatabase,
         latestState: @escaping () -> VehicleState?,
         activeVINs: @escaping () -> [String],
-        startCharging: @escaping () async -> RemoteCommandDispatchOutcome
+        startCharging: @escaping (String) async -> RemoteCommandDispatchOutcome,
+        now: @escaping @Sendable () -> Date = { Date() },
+        wait: @escaping AsyncTimerLoop.Wait = AsyncTimerLoop.realWait
     ) {
         self.preferences = preferences
         self.notifier = notifier
-        self.priceService = priceService
+        self.priceSource = priceSource ?? priceService
         self.chargingLedger = database.charging
         self.latestState = latestState
         self.activeVINs = activeVINs
         self.startCharging = startCharging
+        self.now = now
+        self.scheduler = AsyncTimerLoop(wait: wait)
     }
+
+    /// Whether the minute tick is armed. Read by tests checking start, stop and reload.
+    var isArmed: Bool { scheduler.isArmed }
 
     func start() {
         guard !scheduler.isArmed else { return }
@@ -62,6 +89,7 @@ final class ChargingPlannerController {
     }
 
     func stop() {
+        generation &+= 1
         scheduler.cancel()
     }
 
@@ -83,22 +111,28 @@ final class ChargingPlannerController {
 
     // MARK: - Evaluation
 
-    private func evaluate() async {
+    /// One planning pass. Internal rather than private so tests can drive a pass without
+    /// waiting for the tick.
+    func evaluate() async {
         guard !evaluationInProgress else { return }
         guard preferences.smartChargingPlannerAvailable else { return }
         evaluationInProgress = true
         defer { evaluationInProgress = false }
 
         let zone = preferences.electricityPriceZone
+        let evaluationGeneration = generation
+        let initialVIN = latestState()?.identity.vin
         // This call performs the once-a-day fetch when the cache is stale, and returns
         // from the persisted series otherwise.
-        let prices = await priceService.prices(for: zone)
-        guard !prices.isEmpty else { return }
+        let prices = await priceSource.prices(for: zone)
+        guard !prices.isEmpty, isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
         await notifyPricesPublishedIfDue(
             zone: zone,
             prices: prices,
-            plannerPowerKw: preferences.electricityChargerPowerKw
+            plannerPowerKw: preferences.electricityChargerPowerKw,
+            generation: evaluationGeneration, vin: initialVIN
         )
+        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
         backfillSpotCosts(prices: prices)
 
         guard let state = latestState() else { return }
@@ -116,11 +150,11 @@ final class ChargingPlannerController {
             configuredKw: preferences.electricityChargerPowerKw
         )
         guard let plan = ChargingPlanner.cheapestWindow(
-            prices: prices, now: Date(), energyKwh: energyKwh, chargerPowerKw: powerKw
+            prices: prices, now: now(), energyKwh: energyKwh, chargerPowerKw: powerKw
         ) else { return }
 
         notifyWindowStartIfDue(plan: plan, state: state)
-        autoStartIfDue(plan: plan, state: state)
+        autoStartIfDue(plan: plan, state: state, generation: evaluationGeneration, zone: zone)
     }
 
     // MARK: - Window-start banner
@@ -131,7 +165,7 @@ final class ChargingPlannerController {
         let vin = state.identity.vin
         guard ChargingPlannerDecisions.shouldNotifyWindowStart(
             plan: plan,
-            now: Date(),
+            now: now(),
             leadMinutes: preferences.plannerWindowLeadMinutes,
             announcedWindowEnd: preferences.plannerNotifiedWindowEnd(for: vin)
         ) else { return }
@@ -149,23 +183,27 @@ final class ChargingPlannerController {
         }
         notifier.notifyCommandNotice(
             title: L10n.text("Charging Planner"),
-            body: body
+            body: body,
+            subtitle: nil
         )
     }
 
     // MARK: - Prices-published banner
 
-    private func notifyPricesPublishedIfDue(zone: ElspotZone, prices: [ElectricityPricePoint], plannerPowerKw: Double) async {
+    private func notifyPricesPublishedIfDue(zone: ElspotZone, prices: [ElectricityPricePoint], plannerPowerKw: Double, generation: Int, vin: String?) async {
         guard preferences.features.contains(.notifications),
               preferences.notifyPlannerPricesPublished else { return }
+        let currentDate = now()
         guard let horizon = ChargingPlanner.dataHorizonEnd(prices: prices),
-              horizon >= ElectricityPriceService.requiredCoverageEnd(after: Date()) else { return }
+              horizon >= ElectricityPriceService.requiredCoverageEnd(after: currentDate) else { return }
         // Only announce on the day the fetch actually brought tomorrow's file in; the
         // persisted day marker keeps it to one banner per zone per day across relaunches.
         let calendar = ElectricityPriceService.stockholmCalendar
-        let today = calendar.startOfDay(for: Date())
-        guard let fetchedAt = await priceService.fetchedAt(for: zone),
-              calendar.startOfDay(for: fetchedAt) == today else { return }
+        let today = calendar.startOfDay(for: currentDate)
+        guard let fetchedAt = await priceSource.fetchedAt(for: zone),
+              calendar.startOfDay(for: fetchedAt) == today,
+              isCurrent(generation, zone: zone, vin: vin),
+              preferences.features.contains(.notifications), preferences.notifyPlannerPricesPublished else { return }
         let day = Int(today.timeIntervalSince1970 / 86_400)
         guard preferences.plannerPricesNotifiedDay(for: zone) != day else { return }
         preferences.setPlannerPricesNotifiedDay(day, for: zone)
@@ -192,13 +230,14 @@ final class ChargingPlannerController {
         }
         notifier.notifyCommandNotice(
             title: L10n.text("Tomorrow's electricity prices are in"),
-            body: body
+            body: body,
+            subtitle: nil
         )
     }
 
     // MARK: - Auto-start
 
-    private func autoStartIfDue(plan: ChargingPlan, state: VehicleState) {
+    private func autoStartIfDue(plan: ChargingPlan, state: VehicleState, generation: Int, zone: ElspotZone) {
         guard preferences.plannerAutoStartEnabled,
               let battery = state.energy.batteryPercentage,
               let target = state.energy.targetPercentage,
@@ -206,7 +245,7 @@ final class ChargingPlannerController {
         let vin = state.identity.vin
         guard ChargingPlannerDecisions.shouldAutoStartCharging(
             plan: plan,
-            now: Date(),
+            now: now(),
             connection: state.energy.connection,
             chargingState: state.energy.chargingState
         ) else { return }
@@ -216,7 +255,11 @@ final class ChargingPlannerController {
         autoStartedWindowStarts[vin] = plan.start
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let outcome = await self.dispatchStartCharging()
+            guard self.isCurrent(generation, zone: zone, vin: vin), self.preferences.plannerAutoStartEnabled else {
+                self.autoStartedWindowStarts[vin] = nil
+                return
+            }
+            let outcome = await self.startCharging(vin)
             AppLog.logger("elpriser").notice("Planner auto-start outcome: \(String(describing: outcome), privacy: .public)")
             // Mirror CalendarPreconditioningDispatchDecision.consumesOccurrence: only an
             // acknowledged send or a terminal refusal consumes the window. .deferred (command
@@ -228,8 +271,9 @@ final class ChargingPlannerController {
         }
     }
 
-    private func dispatchStartCharging() async -> RemoteCommandDispatchOutcome {
-        await startCharging()
+    private func isCurrent(_ generation: Int, zone: ElspotZone, vin: String?) -> Bool {
+        !Task.isCancelled && self.generation == generation && preferences.smartChargingPlannerAvailable
+            && preferences.electricityPriceZone == zone && latestState()?.identity.vin == vin
     }
 
     // MARK: - Market-price backfill

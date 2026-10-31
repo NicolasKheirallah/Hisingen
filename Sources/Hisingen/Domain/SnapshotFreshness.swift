@@ -1,5 +1,15 @@
 import Foundation
 
+enum VehicleReadingSource: String, Codable, Sendable {
+    case polestarGraphQL, polestarGRPC, polestarPortal, liveStream, weather
+}
+
+struct VehicleReadingObservation: Codable, Equatable, Sendable {
+    let fetchedAt: Date
+    let source: VehicleReadingSource
+    var isCached: Bool = false
+}
+
 struct SnapshotFreshness: Codable, Equatable, Sendable {
     var isCached: Bool
     var fetchedAt: Date
@@ -19,6 +29,8 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
     /// primary served it or the snapshot predates the marker, so old persisted snapshots
     /// decode without migration.
     var servedByFallback: Bool? = nil
+    var readingObservations: [VehicleReading: VehicleReadingObservation]? = nil
+    var commandObservations: [CommandDisplayField: VehicleReadingObservation]? = nil
 
     init(
         isCached: Bool = false,
@@ -30,7 +42,9 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
         unavailableFeatures: [AppFeature] = [],
         retainedDataCategories: [AppFeature] = [],
         retainedDataAt: Date? = nil,
-        servedByFallback: Bool? = nil
+        servedByFallback: Bool? = nil,
+        readingObservations: [VehicleReading: VehicleReadingObservation]? = nil,
+        commandObservations: [CommandDisplayField: VehicleReadingObservation]? = nil
     ) {
         self.isCached = isCached
         self.fetchedAt = fetchedAt
@@ -42,5 +56,7 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
         self.retainedDataCategories = retainedDataCategories
         self.retainedDataAt = retainedDataAt
         self.servedByFallback = servedByFallback
+        self.readingObservations = readingObservations
+        self.commandObservations = commandObservations
     }
 }

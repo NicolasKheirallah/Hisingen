@@ -1,6 +1,6 @@
 # Native macOS updater
 
-Hisingen uses Sparkle 2.9.6 for direct macOS distribution. `UpdateService` is the isolated
+Hisingen uses Sparkle 2.10.1 for direct macOS distribution. `UpdateService` is the isolated
 application boundary: Sparkle parses the feed, verifies signatures, drives the native window,
 installs safely, and relaunches. Vehicle/API services have no updater dependencies.
 
@@ -32,14 +32,13 @@ build. This correctly orders `1.3.9 → 1.4.0`, `1.4.0 (5) → 1.4.0 (6)`, `1.4.
 
 ## Bundle packaging
 
-Sparkle is pinned to version `2.9.6`. `make app` resolves the framework from the completed
+Sparkle is pinned to version `2.10.1`. `make app` resolves the framework from the completed
 Swift build, copies it into `Hisingen.app/Contents/Frameworks`, and links the executable with
 the `@executable_path/../Frameworks` runtime search path before signing the bundle.
 
-`Scripts/verify-updater.mjs configuration` assembles a temporary app from a clean release
-build and verifies the embedded framework, executable load commands, updater metadata, and
-code signature. This catches a framework that built successfully but would not be found when
-the installed application launches.
+`Scripts/verify-updater.mjs configuration` validates public-key injection and rejects malformed
+keys. Artifact validation mounts the DMG and runs the bundled `--ci-smoke-test` path to check
+framework loading and required resources without starting normal account or persistence work.
 
 ## Security model
 
@@ -55,8 +54,10 @@ notarizes/staples and validates app and DMG with `codesign`, `spctl`, and `stapl
 
 The public key must decode to exactly 32 bytes. CI passes the temporary private-key export
 directly to Sparkle's `generate_appcast --ed-key-file`; it is never bundled with the application
-or imported into a keychain. Before publication, an independent verifier requires a signed-feed
-block, an Ed25519 archive signature, and a release-notes signature in the generated appcast.
+or imported into a keychain. Before publication, the independent verifier parses the XML and
+cryptographically verifies the feed, archive and complete notes bytes against the final embedded
+key. It checks signed lengths, expected version/build, HTTPS asset URLs, and agreement between
+the archive plist and final bundle. Self-tests reject tampered inputs.
 
 ## Release operation
 
@@ -64,19 +65,21 @@ One-time maintainer setup:
 
 1. Run Sparkle `bin/generate_keys` on a secure Mac. Retain the private-key export securely.
 2. Add the `SUPublicEDKey` value as Actions secret `SPARKLE_PUBLIC_ED_KEY`. Export the
-   private key with `generate_keys -x sparkle-private.key`, then store the base64 encoding
-   of that exported file as `SPARKLE_PRIVATE_ED_KEY` (for example,
-   `base64 < sparkle-private.key | tr -d '\n'`). CI derives the corresponding public key
+   private key with `generate_keys -x sparkle-private.key`, then store that exported file
+   verbatim as `SPARKLE_PRIVATE_ED_KEY`. The export already contains Sparkle's base64 text;
+   do not base64-encode it a second time. CI derives the corresponding public key
    and fails before publication unless it exactly matches `SPARKLE_PUBLIC_ED_KEY`.
-   Set repository variable `SPARKLE_TOOLS_SHA256` to the SHA-256 of `Sparkle-2.9.6.tar.xz`.
+   Set repository variable `SPARKLE_TOOLS_SHA256` to the SHA-256 of `Sparkle-2.10.1.tar.xz`.
 3. Enable GitHub Pages. The Pages build serves `site/updates/appcast.xml` at the
    `SUFeedURL` embedded in the application. Pages also serves `site/oauth-callback.html`,
    which is Volvo's registered HTTPS OAuth redirect. Both files are live dependencies of the
    shipped app, so `pages.yml` verifies each one is present before deploying.
 
 For every version tag CI tests, builds, signs/notarizes/staples, packages the app zip and DMG,
-generates a signed appcast and signed Markdown notes, publishes the release assets, updates the
-Pages feed source, and dispatches the Pages deploy. No per-release manifest editing is needed.
+generates a signed appcast and signed Markdown notes, verifies a complete draft release, and
+publishes immutable assets. It passes the verified feed artifact to the reusable Pages workflow
+and waits for the deployed bytes to match. Checkpoints preserve artifact identity for retries;
+release preparation uses a pull request rather than directly updating main.
 
 The changelog entry may use the dated form `## [1.2.4] - 2026-08-28`. Extraction selects only
 the exact tagged version and stops at the next release heading; a missing or empty section fails

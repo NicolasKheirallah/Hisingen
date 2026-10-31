@@ -9,6 +9,12 @@ struct ControlsBanners: View {
     let features: Set<AppFeature>
     let isBrandVolvo: Bool
     let showRestrictedNotice: Bool
+    /// Runs the authorization step a refused command asked for. The banner is where the refusal is
+    /// read, so the fix belongs beside it instead of in a sentence about another screen.
+    var onAuthorizeRemoteCommands: (() -> Void)? = nil
+    /// Sends the retry or undo a result offered. The caller dispatches it through the normal path, so
+    /// the gate and authorization run again.
+    var onFollowUp: ((RemoteCommand) -> Void)? = nil
 
     @State private var dismissedFeedbackID: UUID?
     /// Drives the 45-second expiry. It was a wall-clock comparison evaluated only when the view
@@ -71,6 +77,33 @@ struct ControlsBanners: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
+            if feedback.remedy == .authorizeRemoteCommands, let onAuthorizeRemoteCommands {
+                Button {
+                    withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
+                    onAuthorizeRemoteCommands()
+                } label: {
+                    Text(L10n.text("Authorize…"))
+                        .hisType(.caption, weight: .semibold)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .fixedSize()
+            }
+            // Only for the vehicle the banner describes. After the reader switches cars, a retry or
+            // undo for the previous one would act on the wrong vehicle.
+            if let followUp = feedback.followUp, followUp.targetVIN == state.identity.vin,
+               let onFollowUp {
+                Button {
+                    withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
+                    onFollowUp(followUp.command)
+                } label: {
+                    Text(followUp.kind == .retry ? L10n.text("Retry") : L10n.text("Undo"))
+                        .hisType(.caption, weight: .semibold)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .fixedSize()
+            }
             Button {
                 withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
             } label: {
@@ -90,7 +123,9 @@ struct ControlsBanners: View {
         .accessibilityElement(children: .combine)
         .task(id: feedback.id) {
             guard feedback.success else { return }
-            try? await Task.sleep(for: .seconds(6))
+            // An undo is only useful while the reader can still act on the result they just saw.
+            let window: Double = feedback.followUp?.kind == .undo ? 30 : 6
+            try? await Task.sleep(for: .seconds(window))
             withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
         }
     }

@@ -11,7 +11,7 @@ struct LocalDataEraserTests {
 
     @Test
     func theSessionScopeClearsTheSnapshotAndKeepsDurableHistory() throws {
-        let (eraser, database, preferences, raw, cleanup) = try makeEraser()
+        let (eraser, database, preferences, _, cleanup) = try makeEraser()
         defer { cleanup() }
         let vin = "ERASER-SESSION"
         database.snapshots.saveSnapshot(vehicle(vin: vin))
@@ -92,7 +92,7 @@ struct LocalDataEraserTests {
         ) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> Double? in
-            guard stmt.step() else { return nil }
+            guard try stmt.stepOrThrow() else { return nil }
             return stmt.columnDouble(at: 0)
         }
         #expect(remaining == nil)

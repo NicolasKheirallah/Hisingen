@@ -14,13 +14,12 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
     init(sql: SQLiteDatabase) { self.db = sql }
 
     func saveSnapshot(_ state: VehicleState) {
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(state.cacheableCopy)
-        } catch {
-            logger.error("Could not encode vehicle snapshot for persistence: \(error, privacy: .public)")
-            return
-        }
+        do { try saveSnapshotOrThrow(state) }
+        catch { logger.error("Could not persist vehicle snapshot: \(error, privacy: .public)") }
+    }
+
+    func saveSnapshotOrThrow(_ state: VehicleState, preserveExisting: Bool = false) throws {
+        let data = try JSONEncoder().encode(state.cacheableCopy)
         let brandName = state.isVolvo ? "volvo" : "polestar"
         let sql = """
         INSERT INTO vehicle_snapshots (vin, brand, model_name, fetched_at, vehicle_reported_at, is_cached_snapshot, payload)
@@ -31,9 +30,10 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             fetched_at=excluded.fetched_at,
             vehicle_reported_at=excluded.vehicle_reported_at,
             is_cached_snapshot=1,
-            payload=excluded.payload;
+            payload=excluded.payload
+        WHERE \(preserveExisting ? "0" : "1");
         """
-        try? db.query(sql: sql) { stmt in
+        try db.query(sql: sql) { stmt in
             try stmt.bindText(state.identity.vin, at: 1)
             try stmt.bindText(brandName, at: 2)
             try stmt.bindText(state.identity.modelName, at: 3)
@@ -53,7 +53,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
         let state = try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> VehicleState? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             guard var state = try? JSONDecoder().decode(VehicleState.self, from: blob) else { return nil }
             if let fetchedAt = stmt.columnDate(at: 1) {
                 // Drop expired snapshots older than 7 days
@@ -66,10 +66,18 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             return state
         }
         if snapshotExpired {
-            deleteSnapshot(for: vin)
+            deleteExpiredSnapshot(for: vin, cutoff: Date().addingTimeInterval(-7 * 24 * 60 * 60))
             return nil
         }
         return state
+    }
+
+    func deleteExpiredSnapshot(for vin: String, cutoff: Date) {
+        try? db.query(sql: "DELETE FROM vehicle_snapshots WHERE vin = ? AND fetched_at < ?;") { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindDate(cutoff, at: 2)
+            try stmt.executeUpdate()
+        } process: { _ in }
     }
 
     func deleteSnapshot(for vin: String) {
@@ -99,22 +107,22 @@ final class ChargingBaselineLedger: @unchecked Sendable {
     /// One vehicle's baseline, replaced in place. The plist this replaced re-encoded every
     /// vehicle's baseline on every save; the row is also why the erase regimes can name it.
     func saveBaseline(_ baseline: ChargingBaseline) {
-        let payload: Data
-        do {
-            payload = try JSONEncoder().encode(baseline)
-        } catch {
-            logger.error("Could not encode charging baseline for persistence: \(error, privacy: .public)")
-            return
-        }
+        do { try saveBaselineOrThrow(baseline) }
+        catch { logger.error("Could not persist charging baseline: \(error, privacy: .public)") }
+    }
+
+    func saveBaselineOrThrow(_ baseline: ChargingBaseline, preserveExisting: Bool = false) throws {
+        let payload = try JSONEncoder().encode(baseline)
         let sql = """
         INSERT INTO charging_baselines (vin, sampled_at, vehicle_reported_at, payload)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(vin) DO UPDATE SET
             sampled_at=excluded.sampled_at,
             vehicle_reported_at=excluded.vehicle_reported_at,
-            payload=excluded.payload;
+            payload=excluded.payload
+        WHERE \(preserveExisting ? "0" : "1");
         """
-        try? db.query(sql: sql) { stmt in
+        try db.query(sql: sql) { stmt in
             try stmt.bindText(baseline.vin, at: 1)
             try stmt.bindDate(baseline.sampledAt, at: 2)
             try stmt.bindDate(baseline.vehicleReportedAt, at: 3)
@@ -128,7 +136,7 @@ final class ChargingBaselineLedger: @unchecked Sendable {
         return try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> ChargingBaseline? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             return try? JSONDecoder().decode(ChargingBaseline.self, from: blob)
         }
     }
@@ -197,10 +205,29 @@ final class VehicleImageLedger: @unchecked Sendable {
             try stmt.bindText(cleanVIN, at: 1)
             try stmt.bindInt64(Int64(angle), at: 2)
         } process: { stmt -> (data: Data, thumbnailData: Data?)? in
-            guard stmt.step(), let data = stmt.columnBlob(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let data = stmt.columnBlob(at: 0) else { return nil }
             let thumb = stmt.columnBlob(at: 1)
             return (data: data, thumbnailData: thumb)
         }
+    }
+
+    /// Drops every cached angle for one VIN. Returns false when the write failed, so the
+    /// erase path can report that the image tier may still contain data.
+    func deleteVehicleImages(for vin: String) -> Bool {
+        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanVIN.isEmpty else { return true }
+        let deleted: Void? = try? db.query(sql: "DELETE FROM vehicle_images WHERE vin = ?;") { stmt in
+            try stmt.bindText(cleanVIN, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        return deleted != nil
+    }
+
+    func deleteAllVehicleImages() -> Bool {
+        let deleted: Void? = try? db.query(sql: "DELETE FROM vehicle_images;") { stmt in
+            try stmt.executeUpdate()
+        } process: { _ in }
+        return deleted != nil
     }
 
     func hasVehicleImage(for vin: String, angle: Int) -> Bool {
@@ -212,7 +239,7 @@ final class VehicleImageLedger: @unchecked Sendable {
                 try stmt.bindText(cleanVIN, at: 1)
                 try stmt.bindInt64(Int64(angle), at: 2)
             },
-            process: { $0.step() }
+            process: { try $0.stepOrThrow() }
         )) ?? false
     }
 }
@@ -228,23 +255,26 @@ final class CommandReceiptStore: @unchecked Sendable {
     /// replaces re-encoded every vehicle's receipts on every command, and a receipt that
     /// outlived a sign-out could reappear in the Controls tab.
     func saveCommandReceipts(_ receipts: StoredCommandReceipts, for vin: String) {
+        do { try saveCommandReceiptsOrThrow(receipts, for: vin) }
+        catch { logger.error("Could not persist command receipts: \(error, privacy: .public)") }
+    }
+
+    func saveCommandReceiptsOrThrow(_ receipts: StoredCommandReceipts, for vin: String, preserveExisting: Bool = false) throws {
         guard !receipts.records.isEmpty else {
-            deleteCommandReceipts(for: vin)
+            if preserveExisting { return }
+            try db.query(sql: "DELETE FROM command_receipts WHERE vin = ?;") { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
             return
         }
-        let payload: Data
-        do {
-            payload = try JSONEncoder().encode(receipts)
-        } catch {
-            logger.error("Could not encode command receipts for persistence: \(error, privacy: .public)")
-            return
-        }
+        let payload = try JSONEncoder().encode(receipts)
         let sql = """
         INSERT INTO command_receipts (vin, payload)
         VALUES (?, ?)
-        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload;
+        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload WHERE \(preserveExisting ? "0" : "1");
         """
-        try? db.query(sql: sql) { stmt in
+        try db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindBlob(payload, at: 2)
             try stmt.executeUpdate()
@@ -256,7 +286,7 @@ final class CommandReceiptStore: @unchecked Sendable {
         return try? db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)
         } process: { stmt -> StoredCommandReceipts? in
-            guard stmt.step(), let blob = stmt.columnBlob(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             return try? JSONDecoder().decode(StoredCommandReceipts.self, from: blob)
         }
     }
@@ -288,7 +318,7 @@ final class ProviderBackoffLedger: @unchecked Sendable {
         return try? db.query(sql: query) { stmt in
             try stmt.bindText(subject, at: 1)
         } process: { stmt -> (blockedUntil: Date, reason: String?)? in
-            guard stmt.step(), let epoch = stmt.columnDouble(at: 0) else { return nil }
+            guard try stmt.stepOrThrow(), let epoch = stmt.columnDouble(at: 0) else { return nil }
             return (Date(timeIntervalSince1970: epoch), stmt.columnText(at: 1))
         }
     }

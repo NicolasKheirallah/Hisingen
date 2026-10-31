@@ -120,18 +120,15 @@ struct PolestarMyCarsTests {
         #expect(car.registrationPlate == "ABC 123")
     }
 
-    /// Battery fields 8 and 28 were present in the 2026-09-08 capture but are not decoded:
-    /// upstream names field 8 (`estimated_distance_to_empty_miles`), and 28 has no name anywhere. They must stay
-    /// unnamed and unparsed rather than guessed into the diagnostics model.
-    @Test func batteryUnverifiedFieldsStayUnnamedAndUnparsed() {
+    @Test func batteryMilesFallbackPreservesUnknownV2Status() throws {
         var payload = Data()
         payload.append(Protobuf.doubleField(2, 75.0))
         payload.append(Protobuf.intField(8, 300))
-        payload.append(Protobuf.intField(28, 7))
-        let battery = PolestarGRPC.parseBattery(payload)
-        // The parser surfaces nothing for 8/28 – no percent/range/current mutation.
+        payload.append(Protobuf.intField(28, 99))
+        let battery = try PolestarGRPC.parseBattery(payload)
         #expect(battery.batteryPercentage == 75.0)
-        #expect(battery.rangeKm == nil)
+        #expect(battery.rangeKm == 483)
+        #expect(battery.unknownFields.map(\.field) == [28])
         #expect(battery.chargingCurrentAmps == nil)
         #expect(battery.chargingVoltageVolts == nil)
     }
@@ -163,7 +160,12 @@ private final class MyCarsOTATransport: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let discovery = request.url?.host == "cnepmob.volvocars.com"
         let failure = request.value(forHTTPHeaderField: "Authorization") == "Bearer fail" && !discovery
-        let body = discovery ? Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8) : Protobuf.grpcFrame(Data())
+        // An empty gRPC body is a transport failure under the hardened transport, so "the
+        // car reports no update status" is expressed as an envelope with an empty Software
+        // message instead of a zero-length frame.
+        let body = discovery
+            ? Data(#"{"c3":{"grpcHost":"grpc.example","grpcPort":443}}"#.utf8)
+            : Protobuf.grpcFrame(Protobuf.messageField(1, Data()))
         let response = HTTPURLResponse(url: request.url!, statusCode: failure ? 503 : 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)

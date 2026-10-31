@@ -34,6 +34,9 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
     var batteryPercentage: Double?
     var rangeKm: Int?
     var chargingState: ChargingState
+    /// Whether the car's own schedule predicts completion. `nil` when the token did not
+    /// carry a verdict, not when the verdict is good.
+    var scheduleOutcome: ChargingScheduleOutcome? = nil
     var estimatedTimeToFullMinutes: Int?
     var estimatedTimeToTargetMinutes: Int?
     var targetPercentage: Int?
@@ -47,17 +50,38 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
     var diagnostics: BatteryDiagnostics?
     var schedules: [VehicleSchedule]
     var locations: [ChargeLocationSnapshot]
-    var isAtChargeLocation: Bool?
-    var currentChargeLocationName: String?
     var chargeNowActive: Bool?
-    var arrivedAtLocationDate: Date?
     var samples: [ChargingSample]
     var sessions: [ChargingSession]
+    /// Portal-queued location additions not yet confirmed by the vehicle.
+    /// `nil` when none are queued; older snapshots decode as nil.
+    var pendingChargeLocationCount: Int? = nil
+    /// Portal-queued location deletions awaiting vehicle pickup.
+    var pendingChargeLocationDeletionCount: Int? = nil
+    /// True when a global charge-timer update is queued behind the car's next wake.
+    var pendingGlobalChargeTimer: Bool? = nil
+    /// Queued charge-now override value. Nil when nothing is queued; compared
+    /// against `chargeNowActive` so an applied value reads as applied, not queued.
+    var pendingChargeNowOverride: Bool? = nil
+    /// Portal-queued climate-timer additions.
+    var pendingClimateTimerCount: Int? = nil
+    /// Portal-queued climate-timer deletions.
+    var pendingClimateTimerDeletionCount: Int? = nil
+    /// True when timer comfort settings are queued but not yet applied.
+    var pendingTimerSettings: Bool? = nil
+    /// Payload fields the PCCS charge-target read (GetTargetSoc) returned beyond the decoded
+    /// field 1, kept raw for diagnostics. `nil` when none were sent; older snapshots decode
+    /// as nil.
+    var targetSocUnknownFields: [VehicleRawWireField]? = nil
+    /// Payload fields the PCCS current-limit read (GetAmpLimit) returned beyond the decoded
+    /// field 1. `nil` when none were sent; older snapshots decode as nil.
+    var ampLimitUnknownFields: [VehicleRawWireField]? = nil
 
     init(
         batteryPercentage: Double? = nil,
         rangeKm: Int? = nil,
         chargingState: ChargingState = .idle,
+        scheduleOutcome: ChargingScheduleOutcome? = nil,
         estimatedTimeToFullMinutes: Int? = nil,
         estimatedTimeToTargetMinutes: Int? = nil,
         targetPercentage: Int? = nil,
@@ -71,16 +95,21 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         diagnostics: BatteryDiagnostics? = nil,
         schedules: [VehicleSchedule] = [],
         locations: [ChargeLocationSnapshot] = [],
-        isAtChargeLocation: Bool? = nil,
-        currentChargeLocationName: String? = nil,
         chargeNowActive: Bool? = nil,
-        arrivedAtLocationDate: Date? = nil,
         samples: [ChargingSample] = [],
-        sessions: [ChargingSession] = []
+        sessions: [ChargingSession] = [],
+        pendingChargeLocationCount: Int? = nil,
+        pendingChargeLocationDeletionCount: Int? = nil,
+        pendingGlobalChargeTimer: Bool? = nil,
+        pendingChargeNowOverride: Bool? = nil,
+        pendingClimateTimerCount: Int? = nil,
+        pendingClimateTimerDeletionCount: Int? = nil,
+        pendingTimerSettings: Bool? = nil
     ) {
         self.batteryPercentage = batteryPercentage
         self.rangeKm = rangeKm
         self.chargingState = chargingState
+        self.scheduleOutcome = scheduleOutcome
         self.estimatedTimeToFullMinutes = estimatedTimeToFullMinutes
         self.estimatedTimeToTargetMinutes = estimatedTimeToTargetMinutes
         self.targetPercentage = targetPercentage
@@ -94,11 +123,31 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         self.diagnostics = diagnostics
         self.schedules = schedules
         self.locations = locations
-        self.isAtChargeLocation = isAtChargeLocation
-        self.currentChargeLocationName = currentChargeLocationName
         self.chargeNowActive = chargeNowActive
-        self.arrivedAtLocationDate = arrivedAtLocationDate
         self.samples = samples
         self.sessions = sessions
+        self.pendingChargeLocationCount = pendingChargeLocationCount
+        self.pendingChargeLocationDeletionCount = pendingChargeLocationDeletionCount
+        self.pendingGlobalChargeTimer = pendingGlobalChargeTimer
+        self.pendingChargeNowOverride = pendingChargeNowOverride
+        self.pendingClimateTimerCount = pendingClimateTimerCount
+        self.pendingClimateTimerDeletionCount = pendingClimateTimerDeletionCount
+        self.pendingTimerSettings = pendingTimerSettings
+    }
+
+    var hasPendingLocationChanges: Bool {
+        (pendingChargeLocationCount ?? 0) > 0 || (pendingChargeLocationDeletionCount ?? 0) > 0
+    }
+
+    var hasPendingScheduleChanges: Bool {
+        pendingGlobalChargeTimer == true
+            || (pendingClimateTimerCount ?? 0) > 0
+            || (pendingClimateTimerDeletionCount ?? 0) > 0
+            || pendingTimerSettings == true
+    }
+
+    func unappliedChargeNowOverride(current: Bool?) -> Bool? {
+        guard let pendingChargeNowOverride else { return nil }
+        return pendingChargeNowOverride == current ? nil : pendingChargeNowOverride
     }
 }

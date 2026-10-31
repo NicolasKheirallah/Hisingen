@@ -236,6 +236,7 @@ struct HistoryDashboardView: View {
     var hasAnyDataInRange: Bool {
         !trips.isEmpty || !chargingSessions.isEmpty || !commands.isEmpty || !snapshot.activities.isEmpty
             || airQualityRecords.count >= 2 || odometerPoints.count >= 3
+            || !tyreRecords.isEmpty || !warningEvents.isEmpty
             || efficiencyPoints.count >= 3 || combustionConsumptionPoints.count >= 3
     }
 
@@ -285,6 +286,7 @@ struct HistoryDashboardView: View {
         [
             HistorySection(id: "overview", title: L10n.text("Overview"), isVisible: true),
             HistorySection(id: "activity", title: L10n.text("Activity"), isVisible: !snapshot.activities.isEmpty),
+            HistorySection(id: "warnings", title: L10n.text("Warning Timeline"), isVisible: !warningEvents.isEmpty),
             HistorySection(id: "month", title: L10n.text("Month Comparison"), isVisible: true),
             HistorySection(id: "air-cleaning", title: L10n.text("Air Cleaning"),
                            isVisible: snapshot.activities.contains(where: { $0.kind == .airCleaning })),
@@ -313,6 +315,8 @@ struct HistoryDashboardView: View {
                            isVisible: odometerPoints.count >= 3),
             HistorySection(id: "battery-health", title: L10n.text("Battery Health"),
                            isVisible: !batteryHealthRecords.isEmpty),
+            HistorySection(id: "tyre-pressure", title: L10n.text("Tyre Pressure"),
+                           isVisible: tyreRecords.count >= 2),
             HistorySection(id: "air-quality", title: L10n.text("Air Quality"),
                            isVisible: airQualityRecords.count >= 2),
             HistorySection(id: "cabin-climate", title: L10n.text("Cabin Climate"),
@@ -381,6 +385,8 @@ struct HistoryDashboardView: View {
         case "consumption": combustionConsumptionCard
         case "odometer": odometerChartCard
         case "battery-health": batteryHealthCard
+        case "tyre-pressure": tyrePressureCard
+        case "warnings": warningTimelineCard
         case "air-quality": airQualityCard
         case "cabin-climate": cabinClimateCard
         case "automations": automationHistoryCard
@@ -519,7 +525,9 @@ struct HistoryDashboardView: View {
         return "t\(snapshot.trips.count).\(snapshot.trips.first?.endedAt.timeIntervalSince1970 ?? 0)" +
             "_s\(snapshot.chargingSessions.count).\(snapshot.chargingSessions.first?.startedAt.timeIntervalSince1970 ?? 0)" +
             "_r\(snapshot.telemetryRecords.count).\(snapshot.telemetryRecords.first?.timestamp.timeIntervalSince1970 ?? 0)" +
-            "_a\(air.count).\(air.last?.timestamp.timeIntervalSince1970 ?? 0)"
+            "_a\(air.count).\(air.last?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_y\(tyreRecords.count).\(tyreRecords.first?.timestamp.timeIntervalSince1970 ?? 0)" +
+            "_w\(warningEvents.count).\(warningEvents.first?.clearedAt?.timeIntervalSince1970 ?? 0)"
     }
 
     /// Identity of the lifetime series (battery health, all-time odometer, fuel, cabin

@@ -2,38 +2,28 @@
 
 import Foundation
 
-
-/// Availability plus the wire context Hisingen retains but does not yet decode: the frame
-/// timestamp (field 1) and any field outside the decoded set (currently 5). Retained so a
-/// future classification pass can name them from accumulated observations.
+/// Availability, usage mode and the remaining raw wire context.
 struct GrpcAvailabilityReport: Equatable, Sendable {
     let availability: VehicleAvailability
     let reportedAt: Date?
     let unknownFields: [VehicleRawWireField]
+    var usageMode: String? = nil
 }
 
-struct GrpcBatteryExtras: Codable, Equatable, Sendable {
-    let reportedAt: Date?
-    let batteryPercentage: Double?
-    let rangeKm: Int?
-    let estimatedChargingTimeToFullMinutes: Int?
-    let chargingState: ChargingState?
-    let chargerConnection: ChargerConnection
-    let chargingType: ChargingType
-    let chargingPowerWatts: Int?
-    let chargingCurrentAmps: Int?
-    let chargingVoltageVolts: Int?
-    let diagnostics: BatteryDiagnostics
-    /// Backend-reported usable pack capacity in kWh (field 12 in live captures).
-    let reportedBatteryCapacityKwh: Double?
-    /// Every wire field this parser does not decode semantically, captured raw.
+typealias GrpcBatteryExtras = VehicleBatteryReading
+typealias PolestarInFlightRequest<Value: Sendable> = InFlightRequest<Value>
+
+/// One PCCS scalar read (charge target, current limit) with the payload fields the parser
+/// did not consume kept raw. The write probes proved these services carry a payload status
+/// enum (SetTargetSoc answered `{3: 3}`), so a Get payload can hold fields this build does
+/// not decode; retaining them keeps a new backend field visible in diagnostics.
+struct PCCSScalarRead: Equatable, Sendable {
+    /// The decoded setting, nil for a missing, out-of-range or malformed reply.
+    let value: Int?
+    /// Payload fields other than the decoded field 1, empty when none were sent.
     let unknownFields: [VehicleRawWireField]
 }
 
-struct PolestarInFlightRequest<Value: Sendable>: Sendable {
-    let id: UUID
-    let task: Task<Value, Error>
-}
 
 actor PolestarGRPC {
 
@@ -48,6 +38,13 @@ actor PolestarGRPC {
     private let pccsURL = URL(string: "https://api.pccs-prod.plstr.io:443")!
 
     private var c3BaseURL: URL?
+    /// When the discovered host is looked up again. The app can run for weeks, and a host
+    /// Volvo moves should be picked up without a relaunch.
+    private var c3HostExpiry: Date?
+    static let discoveredHostLifetime: TimeInterval = 12 * 60 * 60
+    /// After a failed re-discovery the previous host keeps serving, and discovery is retried
+    /// after this delay instead of on every call.
+    static let discoveryRetryDelay: TimeInterval = 60 * 60
     private var c3DiscoveryTask: PolestarInFlightRequest<URL>?
     /// Supplies the app/command grant so discovery can retry a 406 with the other audience.
     /// `PolestarAPI` owns both grants and installs this before the first telemetry sweep.
@@ -58,13 +55,14 @@ actor PolestarGRPC {
         alternateAccessTokenProvider = provider
     }
     var exteriorCache: [String: ExteriorSnapshot] = [:]
+    var sessionGeneration: UInt64 = 0
+    private var liveWorkers: [UUID: Task<Void, Never>] = [:]
+    var softwareReadGeneration: [String: UInt64] = [:]
     var otaSoftwareIDs: [String: String] = [:]
     /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
     /// charge-target and amp-limit writes against what the vehicle actually supports.
     var capabilityLimits: [String: VehicleOTACapabilities] = [:]
-    /// Last observed OTA state per VIN. `InstallNow` is only meaningful for some of these, and
-    /// the backend reports the rest in HTTP/2 trailers we cannot read – so the precondition is
-    /// checked here instead of being discovered as an unexplained refusal.
+    /// Last observed OTA state per VIN, used to check `InstallNow` preconditions before sending it.
     var otaSoftwareStates: [String: SoftwareUpdateState] = [:]
     /// Last observed raw OTA state per VIN, preserving the 15 vs 1 distinction.
     var otaRawSoftwareStates: [String: SoftwareStateRaw] = [:]
@@ -130,7 +128,7 @@ actor PolestarGRPC {
         let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
         if case .grpcUnimplemented = error,
            unimplementedReadPaths.insert(key).inserted {
-            unimplementedReadPathExpirations[key] = Date().addingTimeInterval(Self.unimplementedReadPathTTL)
+            unimplementedReadPathExpirations[key] = now().addingTimeInterval(Self.unimplementedReadPathTTL)
             persistUnimplementedReadPaths()
         }
         return error
@@ -143,7 +141,7 @@ actor PolestarGRPC {
     func isReadPathUnimplemented(_ path: String, vin: String, base: URL) -> Bool {
         let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
         guard unimplementedReadPaths.contains(key) else { return false }
-        if let expiry = unimplementedReadPathExpirations[key], expiry > Date() { return true }
+        if let expiry = unimplementedReadPathExpirations[key], expiry > now() { return true }
         unimplementedReadPaths.remove(key)
         unimplementedReadPathExpirations[key] = nil
         persistUnimplementedReadPaths()
@@ -181,20 +179,22 @@ actor PolestarGRPC {
     func liveUpdates(
         vin: String, accessToken: String, purpose: VehicleLiveStreamPurpose
     ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        let generation = sessionGeneration
         let base = try await resolvedHost(.c3, accessToken: accessToken)
-        let requestBody = Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+        guard generation == sessionGeneration else { throw CancellationError() }
+        let requestBody = Self.stateRequest(vin: vin)
         let stream: (path: String, parse: @Sendable (Data) -> VehicleLiveUpdate?)
         switch purpose {
         case .charging:
+            // A malformed frame is skipped; the next full snapshot replaces it.
             stream = (batteryStreamPath, { body in
-                guard let payload = Protobuf.fields(body)
-                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data else { return nil }
-                return .battery(Self.parseBattery(payload))
+                guard let payload = try? Self.responsePayload(body, expectedVIN: vin),
+                      let battery = try? Self.parseBattery(payload) else { return nil }
+                return .battery(battery)
             })
         case .exteriorConfirmation:
             stream = ("/services.vehiclestates.exterior.ExteriorService/GetExterior", { body in
-                guard let payload = Protobuf.fields(body)
-                    .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
+                guard let payload = try? Self.responsePayload(body, expectedVIN: vin),
                       let exterior = Self.parseExterior(payload) else { return nil }
                 return .exterior(exterior, reportedAt: nil)
             })
@@ -203,12 +203,14 @@ actor PolestarGRPC {
         // `bufferingNewest` bounds memory if the UI consumer stalls while the push stream
         // stays chatty; dropping stale frames is correct because each frame is a full
         // snapshot, not a delta.
+        let workerID = UUID()
         return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(16)) { continuation in
             let worker = Task {
+                defer { self.liveWorkers[workerID] = nil }
                 do {
                     try await self.consumeLiveFrames(
                         base: base, path: stream.path,
-                        message: requestBody, vin: vin, accessToken: accessToken,
+                        message: requestBody, vin: vin, accessToken: accessToken, generation: generation,
                         onConnected: { continuation.yield(.connected(activeTransportStreams: 1)) }
                     ) { body in
                         if let update = stream.parse(body) { continuation.yield(update) }
@@ -220,130 +222,102 @@ actor PolestarGRPC {
                     continuation.finish(throwing: error)
                 }
             }
+            liveWorkers[workerID] = worker
             continuation.onTermination = { _ in worker.cancel() }
         }
     }
 
     private func consumeLiveFrames(
-        base: URL, path: String, message: Data, vin: String, accessToken: String,
+        base: URL, path: String, message: Data, vin: String, accessToken: String, generation: UInt64,
         onConnected: @escaping @Sendable () -> Void,
         onFrame: @escaping @Sendable (Data) -> Void
     ) async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        // `timeoutIntervalForRequest` is the maximum gap between received bytes. A parked,
-        // sleeping vehicle legitimately pushes no battery/exterior frames for many minutes, so
-        // a short value here turned "quiet" into a `-1001` drop and a reconnect every ~95 s.
-        // 20 minutes still recovers a silently-dead connection promptly without churning on an
-        // idle car.
-        configuration.timeoutIntervalForRequest = 20 * 60
-        configuration.timeoutIntervalForResource = 24 * 60 * 60
-        let liveSession = URLSession(configuration: configuration)
-        defer { liveSession.invalidateAndCancel() }
-
-        var request = URLRequest(url: base.appendingPathComponent(path))
-        request.httpMethod = "POST"
-        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
-        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(vin, forHTTPHeaderField: "vin")
-        request.setValue("trailers", forHTTPHeaderField: "TE")
-        request.httpBody = Protobuf.grpcFrame(message)
-
-        let startedAt = Date()
-        let bytes: URLSession.AsyncBytes
-        let response: URLResponse
+        let request = Self.grpcRequest(base: base, path: path, message: message,
+                                       vin: vin, accessToken: accessToken)
+        let state = PolestarGRPCExchangeState(maximumMessages: nil)
+        let startedAt = now()
         do {
-            (bytes, response) = try await liveSession.bytes(for: request)
+            try await transport.execute(for: request, live: true) { part in
+                try Task.checkCancellation()
+                try await self.requireGeneration(generation)
+                try await state.record(part)
+                switch part {
+                case .headers(let head):
+                    try Self.validateHead(head, operation: path)
+                    onConnected()
+                case .message(let body):
+                    onFrame(body)
+                case .status(let status):
+                    if status.code != 0 {
+                        throw Self.readStatusError(status: String(status.code), message: status.message, path: path)
+                    }
+                }
+                return true
+            }
+            try requireGeneration(generation)
+            let result = await state.snapshot()
+            if transport.supportsTrailers, result.status == nil {
+                throw PolestarError.invalidResponse(operation: "live gRPC missing final status")
+            }
+            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
         } catch {
-            await diagnosticLog.record(
-                provider: .polestar, request: request, operation: "live gRPC \(path)",
-                startedAt: startedAt, error: error)
+            await recordExchange(state: await state.snapshot(), request: request, path: path,
+                                 startedAt: startedAt, error: error)
             throw error
         }
-        guard let http = response as? HTTPURLResponse else {
-            let error = PolestarError.invalidResponse(operation: "live gRPC stream")
-            await diagnosticLog.record(
-                provider: .polestar, request: request, operation: "live gRPC \(path)",
-                startedAt: startedAt, error: error)
-            throw error
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            let error = PolestarError.authenticationRequired(.expiredSession)
-            await diagnosticLog.record(
-                provider: .polestar, request: request, operation: "live gRPC \(path)",
-                statusCode: http.statusCode, startedAt: startedAt, error: error)
-            throw error
-        }
-        guard http.statusCode == 200 else {
-            let error = PolestarError.server(statusCode: http.statusCode)
-            await diagnosticLog.record(
-                provider: .polestar, request: request, operation: "live gRPC \(path)",
-                statusCode: http.statusCode, startedAt: startedAt, error: error)
-            throw error
-        }
-        if let status = http.value(forHTTPHeaderField: "grpc-status"), status != "0" {
-            let error = Self.readStatusError(status: status,
-                                             message: http.value(forHTTPHeaderField: "grpc-message"),
-                                             path: path)
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: "live gRPC \(path)",
-                grpcStatus: status,
-                grpcMessage: http.value(forHTTPHeaderField: "grpc-message"),
-                statusCode: http.statusCode, startedAt: startedAt, error: error)
-            throw error
-        }
-        await diagnosticLog.record(
-            provider: .polestar, request: request, operation: "live gRPC \(path) connected",
-            statusCode: http.statusCode, startedAt: startedAt)
-        onConnected()
-
-        var header: [UInt8] = []
-        var body = Data()
-        var expected: Int?
-        for try await byte in bytes {
-            try Task.checkCancellation()
-            if header.count < 5 {
-                header.append(byte)
-                guard header.count == 5 else { continue }
-                guard header[0] == 0 else {
-                    throw PolestarError.incompatibleAPI(operation: "compressed live gRPC frame")
-                }
-                let size = Int(header[1]) << 24 | Int(header[2]) << 16 | Int(header[3]) << 8 | Int(header[4])
-                guard size >= 0, size <= 2_000_000 else {
-                    throw PolestarError.invalidResponse(operation: "oversized live gRPC frame")
-                }
-                expected = size
-                if size == 0 {
-                    onFrame(Data())
-                    header.removeAll(keepingCapacity: true)
-                    expected = nil
-                }
-                continue
-            }
-            body.append(byte)
-            if let frameSize = expected, body.count == frameSize {
-                onFrame(body)
-                header.removeAll(keepingCapacity: true)
-                body.removeAll(keepingCapacity: true)
-                expected = nil
-            }
-        }
-        try Task.checkCancellation()
-        throw PolestarError.grpcUnavailable(service: path)
     }
+
+    private func requireGeneration(_ generation: UInt64) throws {
+        try Task.checkCancellation()
+        guard generation == sessionGeneration else { throw CancellationError() }
+    }
+
+    private static func validateHead(_ head: PolestarGRPCResponseHead, operation: String) throws {
+        guard let code = head.httpStatus else { return }
+        if code == 401 || code == 403 {
+            throw PolestarError.authenticationRequired(.expiredSession)
+        }
+        if let error = PolestarError.httpFailure(statusCode: code,
+                retryAfter: head.metadata["retry-after"].flatMap(TimeInterval.init), operation: operation) {
+            throw error
+        }
+    }
+
+    private func recordExchange(
+        state: PolestarGRPCExchangeState.Snapshot, request: URLRequest, path: String,
+        startedAt: Date, error: (any Error)? = nil
+    ) async {
+        await diagnosticLog.record(provider: .polestar, request: request, operation: "gRPC \(path)",
+            grpcStatus: state.grpcCode, grpcMessage: state.grpcMessage,
+            statusCode: state.head?.httpStatus, responseBytes: state.lastMessage?.count,
+            responseData: state.lastMessage, startedAt: startedAt, error: error)
+    }
+
     let session: URLSession
+    private let transport: any PolestarGRPCTransport
+    private let now: @Sendable () -> Date
 
     init(defaultsSuiteName: String? = nil, session: URLSession? = nil,
-         diagnosticLog: APIDiagnosticLogStore = .shared) {
+         diagnosticLog: APIDiagnosticLogStore = .shared,
+         transport: (any PolestarGRPCTransport)? = nil,
+         now: @escaping @Sendable () -> Date = Date.init) {
         self.defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
         self.diagnosticLog = diagnosticLog
+        self.now = now
         let defaults = self.defaults
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
-        self.session = session ?? URLSession(configuration: config)
-        let now = Date()
+        let requestSession = session ?? URLSession(configuration: config)
+        self.session = requestSession
+        if let transport {
+            self.transport = transport
+        } else if session != nil {
+            self.transport = URLSessionPolestarGRPCTransport(requestSession: requestSession)
+        } else {
+            self.transport = PolestarHTTP2Transport()
+        }
+        let now = now()
         let persisted = (defaults.dictionary(forKey: Self.unimplementedReadPathsKey)
             as? [String: Double] ?? [:]).compactMapValues { epoch -> Date? in
                 let expiry = Date(timeIntervalSince1970: epoch)
@@ -360,54 +334,86 @@ actor PolestarGRPC {
     }
 
 
+    /// Request envelope shared by the vehicle-state services: a fresh request id in field 1, the
+    /// VIN in field 2.
+    static func stateRequest(vin: String) -> Data {
+        Protobuf.stringField(1, UUID().uuidString) + Protobuf.stringField(2, vin)
+    }
+
     func fetchBattery(vin: String, accessToken: String) async throws -> GrpcBatteryExtras {
 
-        var message = Data()
-        message.append(Protobuf.stringField(1, UUID().uuidString))
-        message.append(Protobuf.stringField(2, vin))
-        let body = try await firstMessage(path: batteryPath, message: message,
+        let body = try await firstMessage(path: batteryPath, message: Self.stateRequest(vin: vin),
                                           vin: vin, accessToken: accessToken)
+        do {
+            guard let batteryBytes = try Self.responsePayload(body, expectedVIN: vin) else {
+                throw PolestarError.invalidResponse(operation: "gRPC battery")
+            }
+            return try Self.parseBattery(batteryBytes)
+        } catch is Protobuf.DecodeError {
+            throw PolestarError.invalidResponse(operation: "malformed gRPC battery")
+        }
+    }
 
-
-        guard let batteryBytes = Protobuf.fields(body).first(where: { $0.number == 3 && $0.wire == 2 })?.data
-        else { throw PolestarError.invalidResponse(operation: "gRPC battery") }
-        return Self.parseBattery(batteryBytes)
+    /// The `GetLatest*` / Chronos response envelope `{1: id, 2: vin, 3: payload}`: returns the
+    /// payload, or nil when the envelope is valid but carries none.
+    static func responsePayload(_ body: Data, expectedVIN: String? = nil) throws -> Data? {
+        let envelope = try ProtoMessage(body)
+        if let expectedVIN, envelope.fields.contains(where: { $0.number == 2 }) {
+            guard let bytes = envelope.bytes(2),
+                  let actualVIN = String(data: bytes, encoding: .utf8),
+                  actualVIN.caseInsensitiveCompare(expectedVIN) == .orderedSame else {
+                throw PolestarError.invalidResponse(operation: "gRPC vehicle identity")
+            }
+        }
+        return envelope.bytes(3)
     }
 
     /// Wire fields of the availability payload whose meaning is decoded. Everything else is
     /// captured raw by `fetchAvailabilityReport`.
     static let decodedAvailabilityFields: Set<Int> = [1, 3, 4]
 
+    static let usageModeByWire: [UInt64: String] = [
+        1: "ABANDONED", 2: "INACTIVE", 3: "CONVENIENCE", 4: "ACTIVE",
+        5: "DRIVING", 6: "ENGINE_ON", 7: "ENGINE_OFF"
+    ]
+
     func fetchAvailabilityReport(vin: String, accessToken: String) async throws -> GrpcAvailabilityReport {
-        var message = Data()
-        message.append(Protobuf.stringField(1, UUID().uuidString))
-        message.append(Protobuf.stringField(2, vin))
-        let body = try await firstMessage(path: availabilityPath, message: message,
+        let body = try await firstMessage(path: availabilityPath, message: Self.stateRequest(vin: vin),
                                           vin: vin, accessToken: accessToken)
-        guard let availability = Protobuf.fields(body)
-            .first(where: { $0.number == 3 && $0.wire == 2 })?.data else {
-            return GrpcAvailabilityReport(availability: .unknown, reportedAt: nil, unknownFields: [])
-        }
-        let fields = Protobuf.fields(availability)
-        let status = fields.first(where: { $0.number == 3 })?.varint
-        let reason = fields.first(where: { $0.number == 4 })?.varint
-        let value: VehicleAvailability
-        switch status {
-        case 1: value = .available
-        case 2: value = .unavailable(reason: Self.unavailableReason(reason))
-        default: value = .unknown
-        }
-        let reportedAt = fields.first(where: { $0.number == 1 && $0.wire == 2 }).flatMap {
-            Protobuf.fields($0.data).first(where: { $0.number == 1 })?.varint
-        }.flatMap { $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0)) : nil }
-        let unknownFields = fields
-            .filter { !Self.decodedAvailabilityFields.contains($0.number) }
-            .map(Self.rawField)
-        return GrpcAvailabilityReport(availability: value, reportedAt: reportedAt,
-                                      unknownFields: unknownFields)
+        _ = try Self.responsePayload(body, expectedVIN: vin)
+        return Self.parseAvailabilityReport(body)
     }
 
-    func fetchTargetSoc(vin: String, accessToken: String) async throws -> Int? {
+    /// A malformed reply reads as `.unknown`, never as a partial availability.
+    static func parseAvailabilityReport(_ body: Data) -> GrpcAvailabilityReport {
+        let unknown = GrpcAvailabilityReport(availability: .unknown, reportedAt: nil, unknownFields: [])
+        let message: ProtoMessage
+        let reportedAt: Date?
+        do {
+            guard let payload = try responsePayload(body) else { return unknown }
+            message = try ProtoMessage(payload)
+            reportedAt = try message.timestamp(1)
+        } catch {
+            return unknown
+        }
+        let value: VehicleAvailability
+        switch message.uint(3) {
+        case 1: value = .available
+        case 2: value = .unavailable(reason: unavailableReason(message.uint(4)))
+        default: value = .unknown
+        }
+        let usageMode = message.uint(5).flatMap { usageModeByWire[$0] }
+        let unknownFields = message.fields
+            .filter { field in
+                !decodedAvailabilityFields.contains(field.number)
+                    && !(field.number == 5 && field.wire == 0 && usageModeByWire[field.varint] != nil)
+            }
+            .map(rawField)
+        return GrpcAvailabilityReport(availability: value, reportedAt: reportedAt,
+                                      unknownFields: unknownFields, usageMode: usageMode)
+    }
+
+    func fetchTargetSoc(vin: String, accessToken: String) async throws -> PCCSScalarRead {
         var chronos = Data()
         chronos.append(Protobuf.stringField(1, UUID().uuidString))
         chronos.append(Protobuf.stringField(2, vin))
@@ -417,31 +423,84 @@ actor PolestarGRPC {
         let request = Protobuf.messageField(1, chronos)
         let body = try await firstMessage(path: targetSocPath, message: request,
                                           vin: vin, accessToken: accessToken, host: .pccs)
-        guard let target = Protobuf.fields(body)
-            .first(where: { $0.number == 3 && $0.wire == 2 })?.data,
-              let level = Protobuf.fields(target).first(where: { $0.number == 1 })?.varint,
+        _ = try Self.responsePayload(body, expectedVIN: vin)
+        return Self.parseTargetSocRead(body)
+    }
+
+    /// nil (unknown) for a missing, out-of-range or malformed reply.
+    static func parseTargetSoc(_ body: Data) -> Int? {
+        guard let payload = try? responsePayload(body),
+              let level = (try? ProtoMessage(payload))?.uint(1),
               level > 0, level <= 100 else { return nil }
         return Int(level)
     }
 
-    func fetchAmpLimit(vin: String, accessToken: String) async throws -> Int? {
+    /// Decodes the charge target and retains any other payload fields raw. Only field 1 is
+    /// decoded; a payload that fails strict parsing retains nothing so no partial frame is
+    /// shown as data.
+    static func parseTargetSocRead(_ body: Data) -> PCCSScalarRead {
+        PCCSScalarRead(value: parseTargetSoc(body),
+                       unknownFields: retainedPayloadFields(body, decoded: 1))
+    }
+
+    /// Payload fields of a PCCS scalar read other than the decoded field number, in wire
+    /// order. A malformed payload contributes nothing.
+    static func retainedPayloadFields(_ body: Data, decoded number: Int) -> [VehicleRawWireField] {
+        guard let payload = try? responsePayload(body),
+              let message = try? ProtoMessage(payload) else { return [] }
+        return message.fields.filter { $0.number != number }.map(rawField)
+    }
+
+    func fetchAmpLimit(vin: String, accessToken: String) async throws -> PCCSScalarRead {
         let request = Self.chronosRequest(vin)
         let body = try await firstMessage(path: ampLimitReadPath, message: request,
                                           vin: vin, accessToken: accessToken, host: .pccs)
-        return Self.fetchAmpLimitResponse(body)
+        _ = try Self.responsePayload(body, expectedVIN: vin)
+        return Self.parseAmpLimitRead(body)
     }
 
 
+    /// nil (unknown) for a missing, out-of-range or malformed reply.
     static func fetchAmpLimitResponse(_ body: Data) -> Int? {
-        guard let inner = Protobuf.fields(body).first(where: { $0.number == 3 && $0.wire == 2 })?.data,
-              let limit = Protobuf.fields(inner).first(where: { $0.number == 1 && $0.wire == 0 })?.varint,
+        guard let payload = try? responsePayload(body),
+              let limit = (try? ProtoMessage(payload))?.uint(1),
               limit > 0, limit <= 64 else { return nil }
         return Int(limit)
     }
 
+    /// Decodes the current limit and retains any other payload fields raw
+    /// (see `parseTargetSocRead`).
+    static func parseAmpLimitRead(_ body: Data) -> PCCSScalarRead {
+        PCCSScalarRead(value: fetchAmpLimitResponse(body),
+                       unknownFields: retainedPayloadFields(body, decoded: 1))
+    }
+
+
+    /// The C3 host from the discovery document, or nil when the document does not carry a
+    /// usable one. The host is checked as a bare DNS name so a malformed value cannot smuggle
+    /// a path, credentials or another scheme into the request URL.
+    static func c3URL(fromDiscovery data: Data) -> URL? {
+        struct Discovery: Decodable {
+            struct Endpoint: Decodable {
+                let grpcHost: String
+                let grpcPort: Int
+            }
+            let c3: Endpoint
+        }
+        guard let endpoint = (try? JSONDecoder().decode(Discovery.self, from: data))?.c3,
+              (1...65_535).contains(endpoint.grpcPort),
+              !endpoint.grpcHost.isEmpty,
+              endpoint.grpcHost.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") })
+        else { return nil }
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = endpoint.grpcHost
+        components.port = endpoint.grpcPort
+        return components.url
+    }
 
     private func c3Host(accessToken: String) async throws -> URL {
-        if let cached = c3BaseURL { return cached }
+        if let cached = c3BaseURL, let expiry = c3HostExpiry, expiry > now() { return cached }
         if let c3DiscoveryTask { return try await c3DiscoveryTask.task.value }
         let discoveryURL = discoveryURL
         let session = session
@@ -494,11 +553,7 @@ actor PolestarGRPC {
                     if let failure = PolestarError.httpFailure(
                         statusCode: response.statusCode, operation: "C3 discovery"
                     ) { throw failure }
-                    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                          let c3 = json["c3"] as? [String: Any],
-                          let host = c3["grpcHost"] as? String,
-                          let port = c3["grpcPort"] as? Int,
-                          let url = URL(string: "https://\(host):\(port)") else {
+                    guard let url = Self.c3URL(fromDiscovery: data) else {
                         throw PolestarError.incompatibleAPI(operation: "C3 discovery (\(attempt.accept))")
                     }
                     return url
@@ -526,24 +581,41 @@ actor PolestarGRPC {
         defer {
             if c3DiscoveryTask?.id == requestID { c3DiscoveryTask = nil }
         }
-        let url = try await task.value
+        let url: URL
+        do {
+            url = try await task.value
+        } catch {
+            // Sign-out clears `c3BaseURL`, so a stale host is only reused within one session.
+            guard !(error is CancellationError), let stale = c3BaseURL,
+                  c3DiscoveryTask?.id == requestID else { throw error }
+            c3HostExpiry = now().addingTimeInterval(Self.discoveryRetryDelay)
+            return stale
+        }
         guard c3DiscoveryTask?.id == requestID else { throw CancellationError() }
         c3BaseURL = url
+        c3HostExpiry = now().addingTimeInterval(Self.discoveredHostLifetime)
         return url
     }
 
     func invalidateDiscoveredHost() {
+        sessionGeneration &+= 1
+        liveWorkers.values.forEach { $0.cancel() }
+        liveWorkers.removeAll()
         c3BaseURL = nil
+        c3HostExpiry = nil
         c3DiscoveryTask?.task.cancel()
         c3DiscoveryTask = nil
         // Session-scoped caches must not survive a sign-out: a different account signing in
         // on the same app instance must never inherit the previous account's OTA ids, states,
         // or vehicle-advertised charging limits.
+        softwareReadGeneration = [:]
         otaSoftwareIDs = [:]
         otaSoftwareStates = [:]
         otaRawSoftwareStates = [:]
         capabilityLimits = [:]
         exteriorCache = [:]
+        myCarsInFlight.values.forEach { $0.task.cancel() }
+        myCarsInFlight.removeAll()
         locationInFlight.values.forEach { $0.task.cancel() }
         chargeLocationsInFlight.values.forEach { $0.task.cancel() }
         locationInFlight.removeAll()
@@ -552,6 +624,23 @@ actor PolestarGRPC {
         // service that is not deployed should not be probed once per process forever.
     }
 
+
+    /// The one request shape for every C3 and PCCS call: unary reads, commands and live
+    /// streams. The headers match what the official app's grpc-java client sends, with
+    /// `grpc-accept-encoding: identity` so the server answers with uncompressed frames.
+    static func grpcRequest(base: URL, path: String, message: Data,
+                            vin: String, accessToken: String) -> URLRequest {
+        var request = URLRequest(url: base.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
+        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
+        request.setValue("trailers", forHTTPHeaderField: "TE")
+        request.setValue("identity", forHTTPHeaderField: "grpc-accept-encoding")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(vin, forHTTPHeaderField: "vin")
+        request.httpBody = Protobuf.grpcFrame(message)
+        return request
+    }
 
     func resolvedHost(_ host: GRPCHost, accessToken: String) async throws -> URL {
         switch host {
@@ -563,100 +652,53 @@ actor PolestarGRPC {
 
 
     func firstMessage(path: String, message: Data, vin: String,
-                      accessToken: String, host: GRPCHost = .c3) async throws -> Data {
+                      accessToken: String, host: GRPCHost = .c3,
+                      completion: PolestarGRPCReadCompletion = .terminalStatus) async throws -> Data {
         try Task.checkCancellation()
+        let generation = sessionGeneration
         let base = try await resolvedHost(host, accessToken: accessToken)
+        try requireGeneration(generation)
         if isReadPathUnimplemented(path, vin: vin, base: base) {
             throw PolestarError.grpcUnimplemented(service: path.split(separator: "/").first.map(String.init) ?? path)
         }
-        var request = URLRequest(url: base.appendingPathComponent(path))
-        request.httpMethod = "POST"
-        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
-        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(vin, forHTTPHeaderField: "vin")
-        request.httpBody = Protobuf.grpcFrame(message)
-        // PCCS Chronos reads normally answer in well under a second. The 10 s session budget
-        // let one hung optional capability stall the whole telemetry sweep, so cap those reads
-        // tighter: the sweep fails fast and `optionalCapability` backs the service off instead
-        // of everyone waiting on it.
+        var request = Self.grpcRequest(base: base, path: path, message: message, vin: vin, accessToken: accessToken)
         if host == .pccs { request.timeoutInterval = 6 }
-
-        let startedAt = Date()
-        var httpStatus: Int?
-        var grpcStatus: String?
-        var grpcMessage: String?
+        let state = PolestarGRPCExchangeState()
+        let startedAt = now()
         do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw PolestarError.invalidResponse(operation: "gRPC")
-            }
-            httpStatus = http.statusCode
-            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
-            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
-
-            // Status checks come before frame parsing: a Trailers-Only rejection carries
-            // its real status in headers with no body, and reporting it as "truncated
-            // frame" would hide the one piece of information that explains the failure.
-            if http.statusCode == 401 || http.statusCode == 403 {
-                throw PolestarError.authenticationRequired(.expiredSession)
-            }
-            if let failure = PolestarError.httpFailure(
-                statusCode: http.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: http), operation: path
-            ) { throw failure }
-            if let grpcStatus, grpcStatus != "0" {
-                throw readStatusFailure(status: grpcStatus, message: grpcMessage,
-                                        path: path, vin: vin, base: base)
-            }
-
-            var header = [UInt8]()
-            var body = Data()
-            var expected = -1
-            for try await byte in bytes {
-                if header.count < 5 {
-                    header.append(byte)
-                    if header.count == 5 {
-                        guard header[0] == 0 else {
-                            throw PolestarError.incompatibleAPI(operation: "compressed gRPC frame")
-                        }
-                        expected = Int(header[1]) << 24 | Int(header[2]) << 16
-                            | Int(header[3]) << 8 | Int(header[4])
-                        guard expected >= 0, expected <= 2_000_000 else {
-                            throw PolestarError.invalidResponse(operation: "oversized gRPC frame")
-                        }
-                        if expected == 0 { break }
+            try await transport.execute(for: request, live: false) { part in
+                try await self.requireGeneration(generation)
+                try await state.record(part)
+                switch part {
+                case .headers(let head):
+                    try Self.validateHead(head, operation: path)
+                case .message(let body):
+                    try Self.validateResponse(body, path: path)
+                    if completion == .firstSnapshot { return false }
+                case .status(let status):
+                    if status.code != 0 {
+                        throw await self.readStatusFailure(status: String(status.code), message: status.message,
+                                                          path: path, vin: vin, base: base)
                     }
-                    continue
                 }
-                body.append(byte)
-                if body.count == expected { break }
+                return true
             }
-            guard expected >= 0, body.count == expected else {
-                throw PolestarError.invalidResponse(operation: "truncated gRPC frame")
+            try requireGeneration(generation)
+            let result = await state.snapshot()
+            if transport.supportsTrailers, completion == .terminalStatus, result.status == nil {
+                throw PolestarError.invalidResponse(operation: "gRPC missing final status")
             }
-
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: "gRPC \(path)",
-                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
-                statusCode: http.statusCode, responseBytes: body.count,
-                responseData: body, startedAt: startedAt
-            )
+            guard let body = result.firstMessage else {
+                throw PolestarError.invalidResponse(operation: "empty gRPC response")
+            }
+            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
             return body
         } catch {
-            // Exactly one record per attempt: failures carry whatever HTTP/gRPC status
-            // made it back before the failure. The success-path record above returns
-            // immediately, so nothing reaches here twice.
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: "gRPC \(path)",
-                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
-                statusCode: httpStatus, startedAt: startedAt, error: error
-            )
+            await recordExchange(state: await state.snapshot(), request: request, path: path,
+                                 startedAt: startedAt, error: error)
             throw error
         }
     }
-
 
     /// Turns a non-zero gRPC status on a write RPC into something the user can act on.
     /// Previously every status except 12 and 16 collapsed into "returned an unexpected
@@ -683,238 +725,209 @@ actor PolestarGRPC {
         case "16": // UNAUTHENTICATED
             return RemoteCommandError.rejected(detail ?? L10n.text("Polestar cloud backend requires official mobile app pairing for remote commands."))
         default:
-            let base = L10n.format("The vehicle service refused the command (gRPC status %@).", status)
-            return RemoteCommandError.rejected(detail.map { "\(base) \($0)" } ?? base)
+            return PolestarError.commandOutcomeUnknown(operation: path)
         }
     }
+
+    /// gRPC `DEADLINE_EXCEEDED`.
+    static let deadlineExceededStatus = 4
+    /// How long a command waits for the backend to close its stream after replying.
+    static let commandDeadline: TimeInterval = 15
 
     func lastMessage(path: String, message: Data, vin: String,
                      accessToken: String, host: GRPCHost = .c3) async throws -> Data {
+        try Task.checkCancellation()
+        let generation = sessionGeneration
         let base = try await resolvedHost(host, accessToken: accessToken)
-        var request = URLRequest(url: base.appendingPathComponent(path))
-        request.httpMethod = "POST"
-        request.setValue("application/grpc", forHTTPHeaderField: "Content-Type")
-        request.setValue("grpc-java-okhttp/1.68.2", forHTTPHeaderField: "User-Agent")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(vin, forHTTPHeaderField: "vin")
-        request.httpBody = Protobuf.grpcFrame(message)
-
-        let startedAt = Date()
-        var httpStatus: Int?
-        var grpcStatus: String?
-        var grpcMessage: String?
+        try requireGeneration(generation)
+        var request = Self.grpcRequest(base: base, path: path, message: message, vin: vin, accessToken: accessToken)
+        request.timeoutInterval = Self.commandDeadline
+        let state = PolestarGRPCExchangeState()
+        let startedAt = now()
         do {
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw PolestarError.invalidResponse(operation: "gRPC command")
-            }
-            httpStatus = http.statusCode
-            grpcStatus = http.value(forHTTPHeaderField: "grpc-status")
-            grpcMessage = http.value(forHTTPHeaderField: "grpc-message")
-
-            if http.statusCode == 401 || http.statusCode == 403 {
-                throw PolestarError.authenticationRequired(.expiredSession)
-            }
-            guard http.statusCode == 200 else { throw PolestarError.server(statusCode: http.statusCode) }
-            if let grpcStatus, grpcStatus != "0" {
-                throw Self.commandError(status: grpcStatus,
-                                        message: grpcMessage,
-                                        path: path)
-            }
-
-            var header = [UInt8]()
-            var body = Data()
-            var expected: Int?
-            var latest: Data?
-            var frameCount = 0
-            var endedByTimeout = false
-            var cappedByFrameLimit = false
             do {
-                for try await byte in bytes {
-                    if expected == nil {
-                        header.append(byte)
-                        guard header.count == 5 else { continue }
-                        guard header[0] == 0 else {
-                            throw PolestarError.incompatibleAPI(operation: "compressed gRPC command frame")
+                try await transport.execute(for: request, live: false) { part in
+                    try await self.requireGeneration(generation)
+                    try await state.record(part)
+                    switch part {
+                    case .headers(let head): try Self.validateHead(head, operation: path)
+                    case .message(let body): _ = try Protobuf.decode(body)
+                    case .status(let status):
+                        let replied = await state.snapshot().lastMessage != nil
+                        if status.code != 0, !(status.code == Self.deadlineExceededStatus && replied) {
+                            throw Self.commandError(status: String(status.code), message: status.message, path: path)
                         }
-                        let size = Int(header[1]) << 24 | Int(header[2]) << 16
-                            | Int(header[3]) << 8 | Int(header[4])
-                        guard size >= 0, size <= 2_000_000 else {
-                            throw PolestarError.invalidResponse(operation: "oversized gRPC command frame")
-                        }
-                        expected = size
-                        body.removeAll(keepingCapacity: true)
-                        if size == 0 {
-                            latest = Data()
-                            expected = nil
-                            header.removeAll(keepingCapacity: true)
-                        }
-                        continue
                     }
-                    body.append(byte)
-                    if let frameSize = expected, body.count == frameSize {
-                        latest = body
-                        frameCount += 1
-                        guard frameCount < 32 else {
-                            // The frame cap is a runaway-stream safety valve; the frames read
-                            // so far are valid, so return the last one rather than reporting
-                            // the command as refused.
-                            cappedByFrameLimit = true
-                            break
-                        }
-                        expected = nil
-                        header.removeAll(keepingCapacity: true)
-                        body.removeAll(keepingCapacity: true)
-                    }
+                    return true
                 }
-            } catch let error as URLError where error.code == .timedOut && latest != nil {
-                endedByTimeout = true
+            } catch let error as URLError where error.code == .timedOut && !transport.supportsTrailers {
+                guard await state.snapshot().lastMessage != nil else { throw error }
             }
-            guard let latest, expected == nil || endedByTimeout || cappedByFrameLimit else {
-                // 200 OK with no message frame is how a *late* gRPC rejection reaches us: the
-                // server opened the response, then put its real status in HTTP/2 trailers, which
-                // URLSession does not expose. An immediate rejection arrives as Trailers-Only and
-                // is caught above by the `grpc-status` header, so reaching here means the command
-                // was refused for a reason the transport is hiding. Say that, rather than
-                // reporting a generic malformed-response error.
-                throw RemoteCommandError.rejected(
-                    L10n.text("The vehicle service refused the command without giving a reason. This usually means the vehicle is not currently able to run it.")
-                )
+            try requireGeneration(generation)
+            let result = await state.snapshot()
+            // Climate and charge-target commands answer, then keep the stream open until the
+            // client gives up (logged successes ended at 10-15 s). The reply message carries the
+            // command status, so a deadline that fires after it only means no closing status
+            // arrived; with no reply at all the outcome is still unknown.
+            let closedByDeadline = result.status?.code == Self.deadlineExceededStatus && result.lastMessage != nil
+            guard let body = result.lastMessage,
+                  !transport.supportsTrailers || result.status?.code == 0 || closedByDeadline else {
+                throw PolestarError.commandOutcomeUnknown(operation: path)
             }
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: "gRPC \(path)",
-                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
-                statusCode: http.statusCode, responseBytes: latest.count,
-                responseData: latest, startedAt: startedAt
-            )
-            return latest
+            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
+            return body
         } catch {
-            await diagnosticLog.record(
-                provider: .polestar, request: request,
-                operation: "gRPC \(path)",
-                grpcStatus: grpcStatus, grpcMessage: grpcMessage,
-                statusCode: httpStatus, startedAt: startedAt, error: error
-            )
-            throw error
+            let snapshot = await state.snapshot()
+            let finalError: any Error
+            if snapshot.status != nil || error is CancellationError
+                || error is RemoteCommandError || (snapshot.head?.httpStatus.map { $0 != 200 } ?? false) {
+                finalError = error
+            } else {
+                finalError = PolestarError.commandOutcomeUnknown(operation: path)
+            }
+            await recordExchange(state: snapshot, request: request, path: path, startedAt: startedAt, error: finalError)
+            throw finalError
         }
     }
 
+    /// Unlisted tags remain raw.
+    static let decodedBatteryFields: Set<Int> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 26, 28]
 
-    /// Wire fields of the battery message whose meaning is not yet established. Kept in one
-    /// place so the unknown-field capture and the coverage doc stay in agreement.
-    static let unmappedBatteryFields: Set<Int> = [8, 12, 14, 15, 20, 21, 22, 23, 24, 25, 27, 28]
+    /// Accepted field identities; unsupported encodings of the new fields remain raw.
+    enum BatteryField {
+        static let reportedAt = 1             // Timestamp
+        static let percentage = 2             // double
+        static let averageConsumption = 3     // double
+        static let rangeKm = 4
+        static let minutesToFull = 5
+        static let chargerConnection = 6      // enum, chargerConnectionByWire
+        static let chargingState = 7          // enum, chargingStateByWire
+        static let rangeMiles = 8
+        static let minutesToTarget = 9
+        static let powerWatts = 10
+        static let currentAmps = 11
+        static let averageAutomatic = 12
+        static let averageSinceCharge = 13    // double
+        static let energyManualTripWh = 14
+        static let energyAutomaticTripWh = 15
+        static let energySinceChargeWh = 16   // double
+        static let chargingType = 17          // enum, chargingTypeByWire
+        static let voltageVolts = 18
+        static let minutesToMinimumSOC = 19
+        static let chargerPowerState = 26     // enum, chargerPowerStateByWire
+        static let chargingStateV2 = 28
+    }
 
-    static func parseBattery(_ data: Data) -> GrpcBatteryExtras {
-        var reportedAt: Date?
-        var battery: Double?, range: Int?, minutes: Int?
-        var connection: ChargerConnection = .unknown
-        var state: ChargingState?, type: ChargingType = .unknown
-        var watts: Int?, amps: Int?, volts: Int?
-        var timeToTarget: Int?, timeToMinimumSOC: Int?
-        var averageConsumption: Double?, averageSinceCharge: Double?, energySinceCharge: Double?
-        var powerState: ChargerPowerState = .unknown
-        var capacityKwh: Double?
-        var unknownFields: [VehicleRawWireField] = []
-        for field in Protobuf.fields(data) {
-            switch field.number {
-            case 1 where field.wire == 2:
-                if let seconds = Protobuf.fields(field.data).first(where: { $0.number == 1 })?.varint,
-                   seconds > 0 { reportedAt = Date(timeIntervalSince1970: TimeInterval(seconds)) }
-            case 2 where field.wire == 1: battery = Protobuf.double(from: field.data)
-            case 4 where field.wire == 0: range = Int(exactly: field.varint)
-            case 5 where field.wire == 0: minutes = Int(exactly: field.varint)
-            case 6:
-                switch field.varint {
-                case 1: connection = .connected
-                case 2: connection = .disconnected
-                case 3: connection = .fault
-                default: break
-                }
-            case 7:
-                // Each wire value is matched to its name explicitly – not read as an index into
-                // an array – so a future backend change that inserts or reorders a case can only
-                // ever leave an *existing* value's meaning intact or make a new value fall to
-                // `default` (state stays unset), never silently relabel a known value as the
-                // wrong state the way positional-array indexing would. Mirrors the `connection`/
-                // `type`/`powerState` switches in this same function, which never used indexing.
-                let name: String
-                switch field.varint {
-                case 0: name = "UNSPECIFIED"
-                case 1: name = "CHARGING"
-                case 2: name = "IDLE"
-                case 3: name = "SCHEDULED"
-                case 4: name = "DISCHARGING"
-                case 5: name = "ERROR"
-                case 6: name = "SMART_CHARGING"
-                case 7: name = "DONE"
-                case 8: name = "SMART_CHARGING_PAUSED"
-                // A value outside the known range is preserved as its raw number rather than
-                // silently leaving `state` unset – `ChargingState(apiValue:)` maps anything it
-                // doesn't recognize to `.unknown(rawValue)`, so a future backend addition shows
-                // up as a visibly-unrecognized state instead of vanishing.
-                default: name = String(field.varint)
-                }
-                state = ChargingState(apiValue: name)
-            case 10: watts = Int(exactly: field.varint)
-            case 11: amps = Int(exactly: field.varint)
-            case 3 where field.wire == 1: averageConsumption = Protobuf.double(from: field.data)
-            case 9: timeToTarget = Int(exactly: field.varint)
-            case 13 where field.wire == 1: averageSinceCharge = Protobuf.double(from: field.data)
-            case 16 where field.wire == 1: energySinceCharge = Protobuf.double(from: field.data)
-            case 17:
-                switch field.varint {
-                case 1: type = .none
-                case 2: type = .ac
-                case 3: type = .dc
-                case 4: type = .wireless
-                default: break
-                }
-            case 18: volts = Int(exactly: field.varint)
-            case 19: timeToMinimumSOC = Int(exactly: field.varint)
-            case 26:
-                switch field.varint {
-                case 1: powerState = .noPower
-                case 2: powerState = .initializing
-                case 3: powerState = .available
-                case 4: powerState = .providingPower
-                case 5: powerState = .fault
-                default: break
-                }
-            case 12 where field.wire == 1:
-                // Live-observed capacity field; kept raw (not range-filtered) so a future
-                // change of meaning is visible rather than clamped away.
-                capacityKwh = Protobuf.double(from: field.data)
-            default:
-                guard Self.unmappedBatteryFields.contains(field.number) else { break }
-                unknownFields.append(Self.rawField(field))
+    static let chargerConnectionByWire: [UInt64: ChargerConnection] = [
+        1: .connected, 2: .disconnected, 3: .fault
+    ]
+    static let chargingTypeByWire: [UInt64: ChargingType] = [
+        1: ChargingType.none, 2: .ac, 3: .dc, 4: .wireless
+    ]
+    static let chargerPowerStateByWire: [UInt64: ChargerPowerState] = [
+        1: .noPower, 2: .initializing, 3: .available, 4: .providingPower, 5: .fault
+    ]
+    /// Matched by value, never by position, so a value the backend adds or reorders cannot
+    /// relabel a known state. An unlisted value passes through as its number and surfaces as
+    /// `ChargingState.unknown(rawValue)` instead of vanishing.
+    static let chargingStateByWire: [UInt64: String] = [
+        0: "UNSPECIFIED", 1: "CHARGING", 2: "IDLE", 3: "SCHEDULED", 4: "DISCHARGING",
+        5: "ERROR", 6: "SMART_CHARGING", 7: "SMART_CHARGING_PAUSED", 8: "DONE"
+    ]
+
+    static let chargingStateV2ByWire: [UInt64: String] = [
+        1: "CHARGING", 2: "CHARGE_LEVEL_IS_GOOD_TO_GO", 3: "CHARGING_IS_EN_ROUTE",
+        4: "CHARGING_TOWARDS_MIN_SOC", 5: "IDLE", 6: "SCHEDULED",
+        7: "SCHEDULED_CHARGING_CANNOT_COMPLETE", 8: "SCHEDULED_CHARGING_WILL_COMPLETE",
+        9: "DISCHARGING", 10: "DISCHARGING_V2H", 11: "DISCHARGING_V2L",
+        12: "SMART_CHARGING", 13: "SMART_CHARGING_PAUSED", 14: "SMART_CHARGING_WILL_NOT_FINISH",
+        15: "ERROR", 16: "DONE"
+    ]
+
+    /// Throws on a malformed payload rather than returning a partial battery that would read
+    /// as a real charging state.
+    static func parseBattery(_ data: Data) throws -> GrpcBatteryExtras {
+        let message = try ProtoMessage(data)
+        func positive<T: Comparable & Numeric>(_ value: T?) -> T? { value.flatMap { $0 > 0 ? $0 : nil } }
+
+        func energy(_ number: Int) -> Double? {
+            message.double(number).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        }
+        let milesRangeKm = message.int(BatteryField.rangeMiles).flatMap { miles -> Int? in
+            Int(exactly: (Double(miles) * 1.609344).rounded())
+        }
+        let manualEnergy = energy(BatteryField.energyManualTripWh)
+        let automaticEnergy = energy(BatteryField.energyAutomaticTripWh)
+        let automaticConsumption = energy(BatteryField.averageAutomatic)
+        let v2 = message.uint(BatteryField.chargingStateV2)
+        let chargingState: ChargingState? = if let v2, v2 != 0 {
+            ChargingState(apiValue: chargingStateV2ByWire[v2] ?? String(v2))
+        } else {
+            message.uint(BatteryField.chargingState).map {
+                ChargingState(apiValue: chargingStateByWire[$0] ?? String($0))
             }
         }
-        return GrpcBatteryExtras(reportedAt: reportedAt,
-                                 batteryPercentage: battery,
-                                 rangeKm: range,
-                                 estimatedChargingTimeToFullMinutes: minutes,
-                                 chargingState: state,
-                                 chargerConnection: connection,
-                                 chargingType: type,
-                                 chargingPowerWatts: watts,
-                                 chargingCurrentAmps: amps,
-                                 chargingVoltageVolts: volts,
-                                 diagnostics: BatteryDiagnostics(
-                                    timeToTargetMinutes: timeToTarget.flatMap { $0 > 0 ? $0 : nil },
-                                    timeToMinimumSOCMinutes: timeToMinimumSOC.flatMap { $0 > 0 ? $0 : nil },
-                                    chargerPowerState: powerState,
-                                    averageConsumption: averageConsumption.flatMap { $0 > 0 ? $0 : nil },
-                                    averageConsumptionSinceCharge: averageSinceCharge.flatMap { $0 > 0 ? $0 : nil },
-                                    energyUsedSinceChargeWh: energySinceCharge.flatMap { $0 > 0 ? $0 : nil }
-                                 ),
-                                 reportedBatteryCapacityKwh: capacityKwh.flatMap { $0 > 0 ? $0 : nil },
-                                 unknownFields: unknownFields)
+
+        let discharge = dischargeValues(message.fields)
+        let preconditioning = manualPreconditioningReading(message.fields)
+
+        let unknownFields = message.fields
+            .filter { field in
+                if remainingBatteryFields.contains(field.number) {
+                    return !decodesRemainingBatteryField(field)
+                }
+                return !decodedBatteryFields.contains(field.number)
+                    || (field.number == BatteryField.averageAutomatic && (field.wire != 1 || automaticConsumption == nil))
+                    || (field.number == BatteryField.chargingStateV2 && (field.wire != 0 || (field.varint != 0 && chargingStateV2ByWire[field.varint] == nil)))
+                    || (field.number == BatteryField.rangeMiles && (field.wire != 0 || milesRangeKm == nil))
+                    || (field.number == BatteryField.energyManualTripWh && (field.wire != 1 || manualEnergy == nil))
+                    || (field.number == BatteryField.energyAutomaticTripWh && (field.wire != 1 || automaticEnergy == nil))
+            }
+            .map(rawField)
+
+        return GrpcBatteryExtras(
+            reportedAt: try message.timestamp(BatteryField.reportedAt),
+            batteryPercentage: message.double(BatteryField.percentage),
+            rangeKm: message.int(BatteryField.rangeKm) ?? milesRangeKm,
+            estimatedChargingTimeToFullMinutes: message.int(BatteryField.minutesToFull),
+            chargingState: chargingState,
+            chargerConnection: message.uint(BatteryField.chargerConnection)
+                .flatMap { chargerConnectionByWire[$0] } ?? .unknown,
+            chargingType: message.uint(BatteryField.chargingType)
+                .flatMap { chargingTypeByWire[$0] } ?? .unknown,
+            chargingPowerWatts: message.int(BatteryField.powerWatts),
+            chargingCurrentAmps: message.int(BatteryField.currentAmps),
+            chargingVoltageVolts: message.int(BatteryField.voltageVolts),
+            diagnostics: BatteryDiagnostics(
+                timeToTargetMinutes: nil,
+                timeToMinimumSOCMinutes: positive(message.int(BatteryField.minutesToMinimumSOC)),
+                timeToTargetDistanceMinutes: positive(message.int(BatteryField.minutesToTarget)),
+                chargerPowerState: message.uint(BatteryField.chargerPowerState)
+                    .flatMap { chargerPowerStateByWire[$0] } ?? .unknown,
+                averageConsumption: positive(message.double(BatteryField.averageConsumption)),
+                averageConsumptionSinceCharge: positive(message.double(BatteryField.averageSinceCharge)),
+                averageConsumptionAutomatic: automaticConsumption,
+                energyUsedSinceChargeWh: positive(message.double(BatteryField.energySinceChargeWh)),
+                energyUsedManualTripWh: manualEnergy,
+                energyUsedAutomaticTripWh: automaticEnergy,
+                energyBreakdownByPeriod: energyByPeriod(message.fields),
+                powerLimitKw: discharge?[3],
+                energyAvailableKwh: discharge?[1],
+                energyAvailableIncreaseKwh: discharge?[2],
+                batteryPreconditioningStatus: preconditioning?.status,
+                batteryPreconditioningEndsAt: preconditioning?.endsAt,
+                coldBatteryStatus: coldBatteryStatus(message.fields)
+            ),
+            reportedBatteryCapacityKwh: nil,
+            unknownFields: unknownFields
+        )
     }
 
     /// Preserves an undecoded field as inspectable text: scalars as their value, wire-type 2
-    /// as a hex dump. Nothing here is interpreted; this exists so live captures can be
-    /// classified later and so support bundles show what the backend actually sent.
+    /// as a decoded wire summary (`1: 1787835643`) when the bytes parse cleanly as a protobuf
+    /// message, or a hex dump otherwise. Nothing here is interpreted semantically; this exists
+    /// so live captures can be classified later and so support bundles show what the backend
+    /// actually sent.
     static func rawField(_ field: Protobuf.Field) -> VehicleRawWireField {
         switch field.wire {
         case 0:
@@ -929,9 +942,38 @@ actor PolestarGRPC {
                                 value: String(describing: Protobuf.float(from: field.data) ?? 0),
                                 isBinary: false)
         default:
+            if let summary = wireSummary(field.data, depth: 2) {
+                return VehicleRawWireField(field: field.number, wire: field.wire,
+                                           value: summary, isBinary: true)
+            }
             let hex = field.data.map { String(format: "%02x", $0) }.joined()
             return VehicleRawWireField(field: field.number, wire: field.wire, value: hex, isBinary: true)
         }
+    }
+
+    /// One-level-per-call structural rendering of a length-delimited raw field: `number: value`
+    /// for varints, `number: { … }` for nested messages, `number: {}` for empty ones. Returns
+    /// nil for bytes that do not parse completely, that use fixed-width scalars the summary
+    /// cannot represent, or that are a packed repeated scalar rather than a message; those keep
+    /// their hex dump. A summary names the wire layout, never the meaning.
+    static func wireSummary(_ data: Data, depth: Int) -> String? {
+        guard !data.isEmpty, depth > 0, let fields = try? Protobuf.decode(data) else { return nil }
+        var parts: [String] = []
+        for field in fields {
+            guard field.number > 0 else { return nil }
+            switch field.wire {
+            case 0:
+                parts.append("\(field.number): \(field.varint)")
+            case 2 where field.data.isEmpty:
+                parts.append("\(field.number): {}")
+            case 2:
+                guard let nested = wireSummary(field.data, depth: depth - 1) else { return nil }
+                parts.append("\(field.number): { \(nested) }")
+            default:
+                return nil
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     private static func unavailableReason(_ value: UInt64?) -> String? {
@@ -964,160 +1006,6 @@ enum GRPCHost: Sendable {
 
     case pccs
 }
-
-enum Protobuf {
-    static func packedVarints(_ data: Data) -> [UInt64]? {
-        var result: [UInt64] = []
-        var value: UInt64 = 0
-        var shift = 0
-        for byte in data {
-            guard shift < 64, shift != 63 || byte <= 1 else { return nil }
-            value |= UInt64(byte & 0x7f) << shift
-            if byte & 0x80 == 0 {
-                result.append(value)
-                value = 0
-                shift = 0
-            } else {
-                shift += 7
-            }
-        }
-        return shift == 0 ? result : nil
-    }
-
-    struct Field {
-        let number: Int
-        let wire: Int
-
-        let varint: UInt64
-
-        let data: Data
-    }
-
-    static func varint(_ value: UInt64) -> Data {
-        var v = value, out = Data()
-        repeat {
-            var byte = UInt8(v & 0x7F)
-            v >>= 7
-            if v != 0 { byte |= 0x80 }
-            out.append(byte)
-        } while v != 0
-        return out
-    }
-
-
-    static func stringField(_ number: Int, _ value: String) -> Data {
-        let bytes = Data(value.utf8)
-        var out = varint(UInt64(number << 3 | 2))
-        out.append(varint(UInt64(bytes.count)))
-        out.append(bytes)
-        return out
-    }
-
-    static func intField(_ number: Int, _ value: Int) -> Data {
-        var out = varint(UInt64(number << 3))
-        out.append(varint(UInt64(bitPattern: Int64(value))))
-        return out
-    }
-
-    static func floatField(_ number: Int, _ value: Float) -> Data {
-        var out = varint(UInt64(number << 3 | 5))
-        var bits = value.bitPattern.littleEndian
-        withUnsafeBytes(of: &bits) { out.append(contentsOf: $0) }
-        return out
-    }
-
-    static func packedIntField(_ number: Int, _ values: [Int]) -> Data {
-        var payload = Data()
-        for value in values { payload.append(varint(UInt64(value))) }
-        var out = varint(UInt64(number << 3 | 2))
-        out.append(varint(UInt64(payload.count)))
-        out.append(payload)
-        return out
-    }
-
-    static func messageField(_ number: Int, _ value: Data) -> Data {
-        var out = varint(UInt64(number << 3 | 2))
-        out.append(varint(UInt64(value.count)))
-        out.append(value)
-        return out
-    }
-
-
-    static func grpcFrame(_ message: Data) -> Data {
-        var out = Data([0])
-        let n = UInt32(message.count).bigEndian
-        withUnsafeBytes(of: n) { out.append(contentsOf: $0) }
-        out.append(message)
-        return out
-    }
-
-
-    static func fields(_ data: Data) -> [Field] {
-        var fields: [Field] = []
-        let bytes = [UInt8](data)
-        var i = 0
-
-        func readVarint() -> UInt64? {
-            var result: UInt64 = 0, shift: UInt64 = 0
-            while i < bytes.count, shift < 64 {
-                let b = bytes[i]; i += 1
-                result |= UInt64(b & 0x7F) << shift
-                if b & 0x80 == 0 { return result }
-                shift += 7
-            }
-            return nil
-        }
-
-        while i < bytes.count {
-            // Wire values are server-controlled: a tag or length varint beyond Int's range
-            // must truncate the parse, not trap.
-            guard let tag = readVarint(), let number = Int(exactly: tag >> 3) else { break }
-            let wire = Int(tag & 7)
-            switch wire {
-            case 0:
-                guard let v = readVarint() else { return fields }
-                fields.append(Field(number: number, wire: 0, varint: v, data: Data()))
-            case 1, 5:
-                let width = wire == 1 ? 8 : 4
-                guard i + width <= bytes.count else { return fields }
-                let value = Data(bytes[i..<i + width])
-                i += width
-                fields.append(Field(number: number, wire: wire, varint: 0, data: value))
-            case 2:
-                guard let len = readVarint(), let length = Int(exactly: len),
-                      length <= bytes.count - i else { return fields }
-                fields.append(Field(number: number, wire: 2, varint: 0,
-                                    data: Data(bytes[i..<i + length])))
-                i += length
-            default:
-                return fields
-            }
-        }
-        return fields
-    }
-
-    static func double(from data: Data) -> Double? {
-        guard data.count == 8 else { return nil }
-        let bytes = [UInt8](data)
-        var bits: UInt64 = 0
-        for (index, byte) in bytes.enumerated() {
-            bits |= UInt64(byte) << UInt64(index * 8)
-        }
-        return Double(bitPattern: bits)
-    }
-
-    static func float(from data: Data) -> Float? {
-        guard data.count == 4 else { return nil }
-        let bytes = [UInt8](data)
-        var bits: UInt32 = 0
-        for (index, byte) in bytes.enumerated() {
-            bits |= UInt32(byte) << UInt32(index * 8)
-        }
-        return Float(bitPattern: bits)
-    }
-}
-
-
 
 /// The one `String.nilIfEmpty` helper for the gRPC files (previously three divergent copies).
 extension String {

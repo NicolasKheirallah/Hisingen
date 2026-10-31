@@ -8,7 +8,9 @@ import OSLog
 /// relaunching; vehicle services never need to know how Hisingen updates itself.
 @MainActor
 final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
-    private static let updateCheckFailureMessage = "Update check failed. Please try again later."
+    private static var updateCheckFailureMessage: String {
+        L10n.text("Update check failed. Please try again later.")
+    }
 
     struct AvailableUpdate: Equatable {
         let marketingVersion: String
@@ -63,7 +65,11 @@ final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDe
                 didStart = true
                 Self.logger.info("Updater started; current version \(Self.currentVersionDescription(), privacy: .public)")
             } catch {
-                fail("Unable to start the secure updater", error: error)
+                fail(
+                    "Unable to start the secure updater",
+                    message: L10n.text("Unable to start the secure updater. Please try again later."),
+                    error: error
+                )
                 return
             }
         }
@@ -75,7 +81,7 @@ final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDe
 
     func checkForUpdates() {
         guard didStart else {
-            state = .failed("Secure updates are unavailable in this build.")
+            state = .failed(L10n.text("Secure updates are unavailable in this build."))
             return
         }
         guard controller.updater.canCheckForUpdates else {
@@ -117,7 +123,11 @@ final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDe
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: any Error) {
-        fail("Update download failed for \(item.displayVersionString)", error: error)
+        fail(
+            "Update download failed for \(item.displayVersionString)",
+            message: L10n.format("Update download failed for %@. Please try again later.", item.displayVersionString),
+            error: error
+        )
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
@@ -160,10 +170,11 @@ final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDe
         immediateFocus
     }
 
-    private func fail(_ operation: String, error: any Error) {
+    /// `operation` is the English log line; `message` is the localized text shown in the state.
+    private func fail(_ operation: String, message: String, error: any Error) {
         let reason = (error as NSError).localizedDescription
         Self.logger.error("\(operation, privacy: .public): \(reason, privacy: .public)")
-        state = .failed("\(operation). Please try again later.")
+        state = .failed(message)
     }
 
     static func hasConfiguredPublicKey(_ bundle: Bundle) -> Bool {
@@ -185,28 +196,5 @@ final class UpdateService: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDe
     static func stateAfterAbortedCycle(_ current: State) -> State {
         guard current == .checking else { return current }
         return .failed(updateCheckFailureMessage)
-    }
-}
-
-/// Sparkle compares CFBundleVersion during installation. Releases also carry the marketing
-/// version for display; this type keeps release tooling/tests explicit about both values.
-struct HisingenReleaseVersion: Comparable, Equatable {
-    let marketing: [Int]
-    let build: Int
-
-    init?(marketingVersion: String, build: String) {
-        let values = marketingVersion.split(separator: ".", omittingEmptySubsequences: false)
-        guard values.count == 3, let parsedBuild = Int(build), parsedBuild >= 0 else { return nil }
-        let parsedMarketing = values.compactMap { Int($0) }
-        guard parsedMarketing.count == 3, parsedMarketing.allSatisfy({ $0 >= 0 }) else { return nil }
-        marketing = parsedMarketing
-        self.build = parsedBuild
-    }
-
-    static func < (lhs: Self, rhs: Self) -> Bool {
-        for index in 0..<3 where lhs.marketing[index] != rhs.marketing[index] {
-            return lhs.marketing[index] < rhs.marketing[index]
-        }
-        return lhs.build < rhs.build
     }
 }

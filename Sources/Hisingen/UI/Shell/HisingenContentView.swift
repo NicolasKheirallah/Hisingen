@@ -64,28 +64,15 @@ struct HisingenContentView: View {
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
     @State private var firstLaunchCardDismissed = false
-    // MARK: Instrument layer state (gesture physics + material arrival)
+    /// Per-frame gesture physics (scroll offset, pull, swipe). Lives in its own observable so
+    /// drags do not re-run this shell body; see ``PanelGestureState``.
+    @State private var gesture = PanelGestureState()
+    // MARK: Instrument layer state (material arrival)
 
-    /// Distance from the scroll content's top; `<= 0.5` means the reader is at the top and a
-    /// downward drag is a pull-to-refresh rather than a scroll.
-    @State private var scrollOffsetFromTop: CGFloat = 0
-    /// Rubber-banded pull distance feeding ``PullToRefreshOverlay``.
-    @State private var pullDistance: CGFloat = 0
-    /// Whether the current pull has crossed the commit threshold. The arm tick fires on the
-    /// crossing and re-arms only below a hysteresis band, so a pull hovering at the line
-    /// cannot stutter the haptic.
-    @State private var pullArmed = false
-    /// Horizontal translation while a tab swipe is in progress; `nil` when the active gesture
-    /// is not a swipe. Release animates the value back to `nil` rather than clearing it, so
-    /// the page settles from wherever the drag left it.
-    @State private var swipeTranslation: CGFloat?
     /// A card reorder owns the pointer. Reported upward by ``TabCardStack`` through
     /// ``ReorderDragActiveKey``; while it lasts, the panel's own drag coordinator must stand
     /// down instead of reading the same movement as a swipe or a pull.
     @State private var reorderDragActive = false
-    /// The axis the active drag committed to, latched on the first dominant movement so a
-    /// wobbly diagonal cannot flip between pull and swipe mid-gesture.
-    @State private var dragAxis: Axis?
     /// The panel's material arrival: scale + opacity travel the entrance curve once per open.
     @State private var hasMaterialized = false
     /// Drives ``EnvironmentValues/ambientMotionAllowed``. Starts true: the panel is built while the
@@ -267,48 +254,46 @@ struct HisingenContentView: View {
                 } else {
                     ScrollView(.vertical, showsIndicators: false) {
                         ScrollViewReader { proxy in
-                            VStack(spacing: HisingenTheme.sectionSpacing) {
-                                // Zero-height anchor: one scroll container serves every tab, so a
-                                // new tab used to open at the previous tab's offset — its heading,
-                                // primary value and any banner already scrolled off. Resetting to an
-                                // anchor avoids giving each tab its own identity, which would discard
-                                // its internal state (expanded sections, disclosure rows).
-                                Color.clear.frame(height: 0).id(Self.scrollTopAnchor)
-                                if let noticeID = RetainedDataNoticeID(state: state),
-                                   noticeID != dismissedRetainedDataNotice {
-                                    retainedDataNotice(state, id: noticeID)
-                                        .transition(retainedDataTransition)
+                            PanelSwipeOffset(gesture: gesture) {
+                                VStack(spacing: HisingenTheme.sectionSpacing) {
+                                    // Zero-height anchor: one scroll container serves every tab, so a
+                                    // new tab used to open at the previous tab's offset — its heading,
+                                    // primary value and any banner already scrolled off. Resetting to an
+                                    // anchor avoids giving each tab its own identity, which would discard
+                                    // its internal state (expanded sections, disclosure rows).
+                                    Color.clear.frame(height: 0).id(Self.scrollTopAnchor)
+                                    if let noticeID = RetainedDataNoticeID(state: state),
+                                       noticeID != dismissedRetainedDataNotice {
+                                        retainedDataNotice(state, id: noticeID)
+                                            .transition(retainedDataTransition)
+                                    }
+                                    selectedTabContent(state: state, tab: tab)
                                 }
-                                selectedTabContent(state: state, tab: tab)
-                            }
-                            .padding(HisingenTheme.sectionSpacing)
-                            .animation(reduceMotion ? nil : Motion.interaction, value: tab)
-                            .hisAnimation(Motion.cardChange, value: activeVin)
-                            .hisAnimation(Motion.stateChange, value: noticeIdentity)
-                            .environment(\.scrollRevealAction) { target in
-                                withAnimation(Motion.resolve(Motion.layout)) {
-                                    proxy.scrollTo(target, anchor: .bottom)
+                                .padding(HisingenTheme.sectionSpacing)
+                                .animation(reduceMotion ? nil : Motion.interaction, value: tab)
+                                .hisAnimation(Motion.cardChange, value: activeVin)
+                                .hisAnimation(Motion.stateChange, value: noticeIdentity)
+                                .environment(\.scrollRevealAction) { target in
+                                    withAnimation(Motion.resolve(Motion.layout)) {
+                                        proxy.scrollTo(target, anchor: .bottom)
+                                    }
                                 }
-                            }
-                            .onChange(of: tab) { _, _ in
-                                if tab != .history { historyJumpTarget = nil }
-                                proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
-                            }
-                            // A command's outcome renders in the banner at the top of this one
-                            // shared scroller, with indicators hidden. A reader who scrolled to the
-                            // OTA card, tapped Install and got "Command failed" saw nothing at all:
-                            // no result, no scroll-to, not even a scrollbar to hint that content
-                            // existed above. The outcome now comes to them.
-                            .onChange(of: lastRemoteCommandFeedback?.id) { _, feedbackID in
-                                guard feedbackID != nil, tab == .controls else { return }
-                                withAnimation(Motion.resolve(Motion.cardChange)) {
+                                .onChange(of: tab) { _, _ in
+                                    if tab != .history { historyJumpTarget = nil }
                                     proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
                                 }
+                                // A command's outcome renders in the banner at the top of this one
+                                // shared scroller, with indicators hidden. A reader who scrolled to the
+                                // OTA card, tapped Install and got "Command failed" saw nothing at all:
+                                // no result, no scroll-to, not even a scrollbar to hint that content
+                                // existed above. The outcome now comes to them.
+                                .onChange(of: lastRemoteCommandFeedback?.id) { _, feedbackID in
+                                    guard feedbackID != nil, tab == .controls else { return }
+                                    withAnimation(Motion.resolve(Motion.cardChange)) {
+                                        proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
+                                    }
+                                }
                             }
-                            // A swipe drags the page with the pointer (at a dampened ratio so
-                            // it tracks without pretending to be a full page), released into
-                            // the flick spring that carries the real velocity.
-                            .offset(x: swipeTranslation.map { $0 * 0.22 } ?? 0)
                         }
                     }
                     // Scroll geometry is what lets a downward drag mean two things: a pull
@@ -316,7 +301,7 @@ struct HisingenContentView: View {
                     .onScrollGeometryChange(for: CGFloat.self) { geometry in
                         geometry.contentOffset.y + geometry.contentInsets.top
                     } action: { _, offset in
-                        scrollOffsetFromTop = offset
+                        gesture.scrollOffsetFromTop = offset
                     }
                     .simultaneousGesture(panelDragGesture)
                     // The scroll edge effect: content softens as it passes under the floating
@@ -332,7 +317,7 @@ struct HisingenContentView: View {
                         }
                     }
                     .overlay(alignment: .top) {
-                        PullToRefreshOverlay(pullDistance: pullDistance, threshold: Self.pullThreshold)
+                        PanelPullReadout(gesture: gesture, threshold: Self.pullThreshold)
                     }
                 }
             } else {
@@ -422,42 +407,42 @@ struct HisingenContentView: View {
                 guard !reorderDragActive else { return }
                 let dx = value.translation.width
                 let dy = value.translation.height
-                if dragAxis == nil, abs(dx) > 14 || abs(dy) > 14 {
-                    dragAxis = abs(dx) > abs(dy) * 1.3 ? .horizontal : .vertical
+                if gesture.dragAxis == nil, abs(dx) > 14 || abs(dy) > 14 {
+                    gesture.dragAxis = abs(dx) > abs(dy) * 1.3 ? .horizontal : .vertical
                 }
-                switch dragAxis {
+                switch gesture.dragAxis {
                 case .horizontal:
-                    swipeTranslation = dx
+                    gesture.swipeTranslation = dx
                 case .vertical:
-                    guard scrollOffsetFromTop <= 0.5, dy > 0 else { return }
+                    guard gesture.acceptsPull(translation: dy) else { return }
                     let pulled = InstrumentMath.rubberBandDisplacement(overshoot: dy, dimension: 300)
-                    if pulled >= Self.pullThreshold, !pullArmed {
-                        pullArmed = true
+                    if pulled >= Self.pullThreshold, !gesture.pullArmed {
+                        gesture.pullArmed = true
                         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                    } else if pulled < Self.pullThreshold * 0.85, pullArmed {
-                        pullArmed = false
+                    } else if pulled < Self.pullThreshold * 0.85, gesture.pullArmed {
+                        gesture.pullArmed = false
                     }
-                    pullDistance = pulled
+                    gesture.pullDistance = pulled
                 case nil:
                     break
                 }
             }
             .onEnded { value in
                 defer {
-                    dragAxis = nil
-                    pullArmed = false
-                    if pullDistance > 0 {
+                    gesture.dragAxis = nil
+                    gesture.pullArmed = false
+                    if gesture.pullDistance > 0 {
                         // The pull was gesture-carried, so its return takes the flick spring
                         // rather than a fixed fade.
-                        withAnimation(reduceMotion ? nil : Motion.flick) { pullDistance = 0 }
+                        withAnimation(reduceMotion ? nil : Motion.flick) { gesture.pullDistance = 0 }
                     }
                 }
-                if dragAxis == .horizontal {
+                if gesture.dragAxis == .horizontal {
                     // The page leaves the pointer the way it arrived: on the flick spring,
                     // from wherever the drag left it. Clearing the offset without an
                     // animation read as a hard cut back to rest on every swipe that landed
                     // where it started.
-                    withAnimation(reduceMotion ? nil : Motion.flick) { swipeTranslation = nil }
+                    withAnimation(reduceMotion ? nil : Motion.flick) { gesture.swipeTranslation = nil }
                     let tabs = swipeTabs
                     guard let current = tabs.firstIndex(of: currentTab),
                           let target = InstrumentMath.projectedTab(
@@ -471,9 +456,10 @@ struct HisingenContentView: View {
                     NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                     withAnimation(reduceMotion ? nil : Motion.flick) { select(tabs[target]) }
                 }
-                if dragAxis == .vertical, pullDistance > 0,
+                let releasePullDistance = gesture.pullDistanceAtRelease(translation: value.translation.height)
+                if gesture.dragAxis == .vertical, releasePullDistance > 0,
                    InstrumentMath.pullRefreshShouldCommit(
-                       dragDistance: pullDistance,
+                       dragDistance: releasePullDistance,
                        releaseVelocity: value.velocity.height,
                        threshold: Self.pullThreshold
                    ) {
@@ -557,6 +543,7 @@ struct HisingenContentView: View {
                             onRemoteCommand: onRemoteCommand,
                             onRefresh: onRefresh,
                             onDismissCommandReceipt: onDismissCommandReceipt,
+                            onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
                             layout: TabLayout.resolve(tabComposition, for: tab))
                 .transition(.opacity)
 
@@ -1013,6 +1000,14 @@ struct HisingenContentView: View {
                 .foregroundStyle(HisingenTheme.semanticGood)
                 .help(L10n.text("Connected to the Polestar server stream. Battery and exterior changes are applied as the provider sends them; scheduled polling remains as a reliability fallback."))
                 .accessibilityLabel(L10n.text("Live vehicle stream connected"))
+            } else if diagnostics?.liveStreamNeedsAuthorization == true {
+                // Parked, not backing off: no reconnect can succeed until the user signs in, so
+                // this must not read as the "reconnecting" state beside it.
+                Image(systemName: "person.badge.key")
+                    .hisType(.micro)
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .help(L10n.text("Sign in to Polestar first"))
+                    .accessibilityLabel(L10n.text("Sign in to Polestar first"))
             } else if let retryAt = diagnostics?.liveStreamRetryAt {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .hisType(.micro)

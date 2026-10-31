@@ -94,6 +94,7 @@ struct SettingsView: View {
                     if shows(.accounts) {
                         Group {
                             accountCard
+                            remoteControlsCard
                             SettingsFleetCard(
                                 fleet: fleet,
                                 imageCache: imageCache,
@@ -262,6 +263,25 @@ struct SettingsView: View {
                     onTestConnection: onTestConnection,
                     model: accountConnection
                 )
+            }
+        }
+    }
+
+    /// The remote-command grant belongs beside the account it is verified against. Features
+    /// keeps the per-command toggles; this card is the one control a reader hunting for
+    /// "authorize" would never have found there. Same glyph and tint as the Features card,
+    /// because it is the same section in both places.
+    private var remoteControlsCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(
+                    symbol: "slider.horizontal.3",
+                    title: L10n.text("Remote Controls"),
+                    color: HisingenTheme.semanticActive
+                )
+                // The Lead wires the real session value; this instance ships with the account
+                // card directly above it, which carries the sign-in path already.
+                RemoteCommandAuthorizationRow(binder: binder, needsSignIn: false)
             }
         }
     }

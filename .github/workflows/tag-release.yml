@@ -4,125 +4,43 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: 'Semver bump type or exact version (e.g. 1.0.0, patch, minor, major)'
+        description: "patch, minor, major, or an exact stable MAJOR.MINOR.PATCH"
         required: true
-        default: 'patch'
+        default: patch
         type: string
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
-  group: prepare-release
+  group: release-preparation
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  tag-and-push:
-    runs-on: macos-15
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+      pull-requests: write
     steps:
-      - name: Check out source
+      - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Determine next version and create release pull request
-        id: versioning
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Create or resume release pull request
         env:
-          BUMP: ${{ inputs.bump }}
           GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump }}
         run: |
-          set -euo pipefail
-
           gh auth setup-git
-
-          LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1 || true)
-          echo "Latest tag found: $LATEST_TAG"
-
-          if [[ ! "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "$BUMP" != patch && "$BUMP" != minor && "$BUMP" != major ]]; then
-            echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
-            exit 1
-          fi
-
-          if [[ "$BUMP" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            NEW_VERSION="$BUMP"
-          elif [ -z "$LATEST_TAG" ]; then
-            NEW_VERSION="1.0.0"
-          else
-            RAW_VER="${LATEST_TAG#v}"
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$RAW_VER"
-            case "$BUMP" in
-              major)
-                MAJOR=$((MAJOR + 1))
-                MINOR=0
-                PATCH=0
-                ;;
-              minor)
-                MINOR=$((MINOR + 1))
-                PATCH=0
-                ;;
-              patch)
-                PATCH=$((PATCH + 1))
-                ;;
-              *)
-                echo "Bump must be patch, minor, major, or MAJOR.MINOR.PATCH" >&2
-                exit 1
-                ;;
-            esac
-            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          fi
-
-          IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW_VERSION"
-          if [ -n "$LATEST_TAG" ]; then
-            RAW_LATEST="${LATEST_TAG#v}"
-            IFS='.' read -r LATEST_MAJOR LATEST_MINOR LATEST_PATCH <<< "$RAW_LATEST"
-            if [ "$NEW_MAJOR" -lt "$LATEST_MAJOR" ] || \
-               { [ "$NEW_MAJOR" -eq "$LATEST_MAJOR" ] && [ "$NEW_MINOR" -lt "$LATEST_MINOR" ]; } || \
-               { [ "$NEW_MAJOR" -eq "$LATEST_MAJOR" ] && [ "$NEW_MINOR" -eq "$LATEST_MINOR" ] && [ "$NEW_PATCH" -le "$LATEST_PATCH" ]; }; then
-              echo "New version $NEW_VERSION must be greater than $LATEST_TAG" >&2
-              exit 1
-            fi
-          fi
-
-          echo "New Version: $NEW_VERSION"
-          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-
-          grep -Fq "## [$NEW_VERSION]" CHANGELOG.md || {
-            echo "CHANGELOG.md must contain a ## [$NEW_VERSION] release entry before preparing the release." >&2
-            exit 1
-          }
-
-          BRANCH="release/v${NEW_VERSION}"
-          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            echo "Release branch $BRANCH already exists; refusing to overwrite it." >&2
-            exit 1
-          fi
-
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" Resources/Info.plist
-          CURRENT_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist 2>/dev/null || echo "0")
-          NEXT_BUILD=$((CURRENT_BUILD + 1))
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEXT_BUILD" Resources/Info.plist
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add Resources/Info.plist
-          git commit -m "chore(release): bump version to v${NEW_VERSION} (build ${NEXT_BUILD})"
-          git checkout -b "$BRANCH"
-          git push --set-upstream origin "$BRANCH"
-          PR_URL=$(gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore(release): bump version to v${NEW_VERSION}" \
-            --body "This pull request updates the app version to v${NEW_VERSION}. Merge it after required CI checks pass, then create and push tag v${NEW_VERSION} to start the protected release workflow.")
-          echo "Created $PR_URL"
-
-          # Pushes and pull requests created by GITHUB_TOKEN do not recursively
-          # trigger workflows. workflow_dispatch is the documented exception,
-          # so explicitly attach CI and Security runs to the release branch.
-          gh workflow run ci.yml --ref "$BRANCH"
-          gh workflow run security.yml --ref "$BRANCH"
+          python3 Scripts/release-support.py prepare "$BUMP"

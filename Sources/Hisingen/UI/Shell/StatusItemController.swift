@@ -453,6 +453,40 @@ final class StatusItemController: NSObject {
 
                 controlsMenu.addItem(.separator())
 
+                // Windows and charging were reachable only by opening the panel. They use the
+                // same command path as the cards, so capability, authorization and confirmation
+                // behave identically.
+                if state.capabilityProfile.permits(.windows) {
+                    let windowsOpen = state.exteriorStatus?.windowStates.contains { $0 == .open || $0 == .ajar } ?? false
+                    let windowsItem = NSMenuItem(
+                        title: windowsOpen ? L10n.text("Close Windows") : L10n.text("Vent Windows"),
+                        action: #selector(contextToggleWindows),
+                        keyEquivalent: ""
+                    )
+                    windowsItem.target = self
+                    controlsMenu.addItem(windowsItem)
+                }
+
+                let chargeNow = state.energy.chargeNowActive == true
+                let chargeItem = NSMenuItem(
+                    title: chargeNow ? L10n.text("Resume Schedule") : L10n.text("Charge Now"),
+                    action: #selector(contextToggleChargingOverride),
+                    keyEquivalent: ""
+                )
+                chargeItem.target = self
+                controlsMenu.addItem(chargeItem)
+
+                if state.airQuality?.canTogglePreCleaning == true {
+                    let cleaning = state.airQuality?.cleaningState == .on || state.airQuality?.cleaningState == .pending
+                    let cleanItem = NSMenuItem(
+                        title: cleaning ? L10n.text("Stop Pre-cleaning") : L10n.text("Start Pre-cleaning"),
+                        action: #selector(contextTogglePreCleaning),
+                        keyEquivalent: ""
+                    )
+                    cleanItem.target = self
+                    controlsMenu.addItem(cleanItem)
+                }
+
                 let climateActive = state.isClimateActive
                 let climateItem = NSMenuItem(
                     title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
@@ -627,6 +661,24 @@ final class StatusItemController: NSObject {
             for: latestState,
             temperatureCelsius: preferences.remoteClimateTemperature
         ))
+    }
+
+    @objc private func contextToggleWindows() {
+        let windowsOpen = latestState?.exteriorStatus?.windowStates.contains {
+            $0 == .open || $0 == .ajar
+        } ?? false
+        onRemoteCommand(windowsOpen ? .closeWindows : .openWindows)
+    }
+
+    @objc private func contextToggleChargingOverride() {
+        let active = latestState?.energy.chargeNowActive == true
+        onRemoteCommand(active ? .stopChargingOverride : .startChargingOverride)
+    }
+
+    @objc private func contextTogglePreCleaning() {
+        let cleaning = latestState?.airQuality?.cleaningState == .on
+            || latestState?.airQuality?.cleaningState == .pending
+        onRemoteCommand(cleaning ? .stopPreCleaning : .startPreCleaning)
     }
 
     @objc private func contextFlashLights() {
@@ -812,8 +864,41 @@ final class StatusItemController: NSObject {
         applyMenuBarIcon(for: data, stale: isStale)
         setStatusBarTitle(title, for: data)
         statusItem.button?.setAccessibilityLabel(accessibilitySummary(data: data, title: title))
+        updateAccessibilityActions()
         updateFleetToolTip(activeState: data)
         refreshPopoverIfNeeded()
+    }
+
+    /// The Actions rotor reaches the same handlers as the right-click quick controls. A command
+    /// the car does not offer is left out rather than listed and refused.
+    private func updateAccessibilityActions() {
+        var actions = [
+            NSAccessibilityCustomAction(name: L10n.text("Refresh Telemetry")) { [weak self] in
+                self?.contextRefresh()
+                return true
+            }
+        ]
+        if let state = latestState {
+            if state.capabilityProfile.permits(.locks) {
+                let isLocked = state.exteriorStatus?.isLocked == true
+                actions.append(NSAccessibilityCustomAction(
+                    name: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors")
+                ) { [weak self] in
+                    self?.contextToggleLock()
+                    return true
+                })
+            }
+            if state.capabilityProfile.permits(.climateStartStop) {
+                let climateTitle = state.isClimateActive
+                    ? L10n.text("Stop Climate")
+                    : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0))
+                actions.append(NSAccessibilityCustomAction(name: climateTitle) { [weak self] in
+                    self?.contextToggleClimate()
+                    return true
+                })
+            }
+        }
+        statusItem.button?.setAccessibilityCustomActions(actions)
     }
 
     /// Routes the freshly-built menu-bar image through ``MenuBarIconAnimator``,

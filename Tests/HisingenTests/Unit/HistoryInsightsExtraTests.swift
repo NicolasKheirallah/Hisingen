@@ -182,7 +182,10 @@ struct HistoryInsightsExtraTests {
         let split = HistoryInsights.weekdayWeekendDistance(from: trips, calendar: cal)
         #expect(split.weekendKm == 100)
         #expect(split.weekdayKm == 50)
-        #expect(split.weekdayKmPerDay == 10)
+        // The span runs Saturday to Monday: two weekend days (Sat, Sun) and one weekday.
+        #expect(split.weekendDayCount == 2)
+        #expect(split.weekdayDayCount == 1)
+        #expect(split.weekdayKmPerDay == 50)
         #expect(split.weekendKmPerDay == 50)
     }
 

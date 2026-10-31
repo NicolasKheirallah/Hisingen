@@ -2,7 +2,7 @@
 
 ## Requirements
 
-macOS 15 Sequoia or later, and Xcode 16+ or compatible Command Line Tools with Swift 6.0+ (`Package.swift` declares `swift-tools-version:6.0`, `.macOS(.v15)`, and builds in the Swift 6 language mode). The only package dependency is Sparkle (pinned exact `2.9.6`); everything else is a system framework or hand-written.
+macOS 15 Sequoia or later, and Xcode 16+ or compatible Command Line Tools with Swift 6.0+ (`Package.swift` declares `swift-tools-version:6.0`, `.macOS(.v15)`, and builds in the Swift 6 language mode). The only package dependency is Sparkle (pinned exact `2.10.1`); everything else is a system framework or hand-written.
 
 ## Clone, build, test, run
 

@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+# pipefail is not POSIX; the guard keeps the script running on shells that lack it.
+# shellcheck disable=SC3040
+if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi
 
 # Generates one signed stable appcast item for the release being built. The appcast is
 # generated from the signed archive rather than hand-authored, so its Ed25519 signature,

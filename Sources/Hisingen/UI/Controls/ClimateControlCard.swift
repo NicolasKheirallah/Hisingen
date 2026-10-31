@@ -69,6 +69,29 @@ struct ClimateControlCard: View {
                             .hisAnimation(Motion.stateChange, value: state.climateStatus?.timeRemainingMinutes)
                     }
 
+                    if let climatizationNote {
+                        Text(climatizationNote)
+                            .hisType(.micro)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Behavior information, not a control: the car may heat seats and the
+                    // steering wheel on its own during parked climate (`Car` 37.12).
+                    if state.otaCapabilities?.supportsAutomaticSeatAndWheelHeating == true {
+                        Text(L10n.text("May heat seats and steering wheel automatically"))
+                            .hisType(.micro)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let departureWeatherHint {
+                        Text(departureWeatherHint)
+                            .hisType(.micro)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     if profile.hasSelectableSeatHeating || profile.hasSelectableSteeringWheelHeating {
                         seatAndSteeringControls
                     }
@@ -91,6 +114,22 @@ struct ClimateControlCard: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        if (state.energy.pendingClimateTimerCount ?? 0) > 0
+                            || (state.energy.pendingClimateTimerDeletionCount ?? 0) > 0
+                            || state.energy.pendingTimerSettings == true {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock.badge.clock")
+                                    .hisType(.micro)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
+                                Text(L10n.text("Timer update queued · applies when the car wakes"))
+                                    .hisType(.micro, weight: .medium)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(L10n.text("Timer update queued · applies when the car wakes"))
+                            .transition(.opacity)
+                        }
                     }
                 }
 
@@ -317,6 +356,50 @@ struct ClimateControlCard: View {
                 .accessibilityLabel(L10n.text("Increase target temperature"))
             }
         }
+    }
+
+    /// What this car's climatization type, heater and runtime are, from `ParkingClimatization`
+    /// (`Car` 37.1, 37.2 and 37.3). Absent when the backend did not say, so the card adds no
+    /// claim. One line for the next scheduled departure when the hourly forecast there is at or
+    /// below freezing. The frost sentence needs a climate timer the user can set, so it is left
+    /// out where the car does not support timers.
+    private var departureWeatherHint: String? {
+        guard let advice = DepartureWeatherAdvice.advice(
+            schedules: state.energy.schedules,
+            climateTimers: state.climateTimers,
+            forecast: state.weather?.hourlyTemperatures ?? []
+        ) else { return nil }
+        let canSetClimateTimer = features.contains(.remoteSchedules) && profile.permits(.climateTimers)
+        var sentences: [String] = []
+        if advice.needsClimateTimer && canSetClimateTimer {
+            sentences.append(L10n.format(
+                "Frost forecast at %@ (%@). A climate timer would clear the windows.",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
+            ))
+        }
+        if advice.coldBattery {
+            sentences.append(L10n.text("Cold battery charges more slowly on DC."))
+        }
+        return sentences.isEmpty ? nil : sentences.joined(separator: " ")
+    }
+
+    private var climatizationNote: String? {
+        var parts: [String] = []
+        switch state.otaCapabilities?.climatizationType {
+        case .heating: parts.append(L10n.text("Heating only"))
+        case .heatingAndCooling: parts.append(L10n.text("Heating and cooling"))
+        default: break
+        }
+        switch state.otaCapabilities?.climatizationHeatingType {
+        case .electrical: parts.append(L10n.text("Electric heater"))
+        case .fuel: parts.append(L10n.text("Fuel heater"))
+        default: break
+        }
+        if let minutes = state.otaCapabilities?.climatizationMaximumRuntimeMinutes {
+            parts.append(L10n.format("Runs up to %d min", minutes))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     @ViewBuilder

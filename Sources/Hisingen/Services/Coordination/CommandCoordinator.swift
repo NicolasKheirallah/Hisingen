@@ -33,7 +33,17 @@ protocol CommandExecutionContext: AnyObject {
     /// Called when command-busyness changes so the shell can re-render controls.
     func commandInProgressDidChange()
     /// Presents a command outcome to the user.
-    func presentResult(title: String, message: String, success: Bool, target: RemoteCommandTarget?)
+    /// `remedy` carries the action that fixes a refusal, so the banner can offer it instead of
+    /// naming a control the reader has to go looking for. `followUp` carries a retry or undo the
+    /// banner may offer for the command just sent.
+    func presentResult(
+        title: String,
+        message: String,
+        success: Bool,
+        target: RemoteCommandTarget?,
+        remedy: RemoteCommandRemedy?,
+        followUp: RemoteCommandFollowUp?
+    )
     /// Atomically hands the optimistic display state and accepted command to the refresh
     /// module, which exclusively owns the receipt's confirmation lifecycle.
     func beginCommandConfirmation(
@@ -94,6 +104,9 @@ final class CommandCoordinator {
     /// show a "Sending…" state on the specific control that was tapped rather than dimming the
     /// whole page. `nil` whenever `isInProgress` is false.
     private(set) var inProgressCommandIdentifier: String?
+    /// The reversal the last success banner offered. When that exact command comes back it is the
+    /// undo itself, and offering an undo of the undo would let the banner toggle the car forever.
+    private var lastOfferedUndo: RemoteCommandFollowUp?
 
     init(context: any CommandExecutionContext,
          preferences: PreferencesStore,
@@ -117,7 +130,8 @@ final class CommandCoordinator {
         guard !isInProgress && !isAuthorizing else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: RemoteCommandError.busy.localizedDescription, success: false, target: nil)
+                message: RemoteCommandError.busy.localizedDescription, success: false, target: nil, remedy: nil,
+                followUp: nil)
             return .deferred(reason: RemoteCommandError.busy.localizedDescription)
         }
         guard context.sessionIsValid, let state = context.vehicleState,
@@ -133,7 +147,9 @@ final class CommandCoordinator {
                 title: L10n.text("Command not sent"),
                 message: message,
                 success: false,
-                target: nil)
+                target: nil,
+                remedy: nil,
+                followUp: nil)
             return stillLoading ? .deferred(reason: message) : .refused(reason: message)
         }
         let executor = context.currentCommandExecutor()
@@ -167,7 +183,9 @@ final class CommandCoordinator {
                 title: L10n.text("Command not sent"),
                 message: message,
                 success: false,
-                target: nil)
+                target: nil,
+                remedy: nil,
+                followUp: nil)
             return .refused(reason: message)
         }
         let adapted = command.adapted(to: state.capabilityProfile, settings: state.otaCapabilities?.controlSettings)
@@ -185,6 +203,9 @@ final class CommandCoordinator {
                 fallbackBrand: executor.brand)
         )
 
+        // Captured before authorization and the optimistic patch, so an undo can restore the target
+        // the car held when the reader asked for the change.
+        let previousChargeTarget = state.energy.targetPercentage
         let approved: Bool
         isAuthorizing = true
         switch origin {
@@ -210,7 +231,8 @@ final class CommandCoordinator {
         guard isCurrentExecutionContext(target) else {
             return .deferred(reason: L10n.text("The selected vehicle changed while authorization was pending."))
         }
-        return await execute(adapted, target: target, executor: executor)
+        return await execute(adapted, target: target, executor: executor,
+                             origin: origin, previousChargeTarget: previousChargeTarget)
     }
 
     private func isCurrentExecutionContext(_ target: RemoteCommandTarget) -> Bool {
@@ -223,7 +245,9 @@ final class CommandCoordinator {
     private func execute(
         _ command: RemoteCommand,
         target: RemoteCommandTarget,
-        executor: any RemoteCommandExecuting
+        executor: any RemoteCommandExecuting,
+        origin: RemoteCommandOrigin,
+        previousChargeTarget: Int?
     ) async -> RemoteCommandDispatchOutcome {
         guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
         isInProgress = true
@@ -270,11 +294,23 @@ final class CommandCoordinator {
             let commandTitle = targetIsCurrent
                 ? command.title
                 : L10n.format("%@ (%@)", command.title, target.displayName)
+            // Undo is offered only for a command the reader sent from the panel. An automation's
+            // command was not theirs to take back from a banner.
+            let isUndoOfLastCommand = lastOfferedUndo?.command == command
+                && lastOfferedUndo?.targetVIN == target.vin
+            let undo = origin == .userInitiated && !isUndoOfLastCommand
+                ? command.inverse(previousChargeTarget: previousChargeTarget).map {
+                    RemoteCommandFollowUp(kind: .undo, command: $0, targetVIN: target.vin)
+                }
+                : nil
+            lastOfferedUndo = undo
             context.presentResult(
                 title: L10n.text("Command sent"),
                 message: L10n.format("%@ – %@", commandTitle, detail),
                 success: true,
-                target: target
+                target: target,
+                remedy: nil,
+                followUp: undo
             )
             var receipt = CommandReceipt(
                 id: receiptID,
@@ -315,10 +351,21 @@ final class CommandCoordinator {
                         : L10n.format("%@ (%@)", command.title, target.displayName),
                     message),
                 success: false,
-                target: target
+                target: target,
+                remedy: remedy(for: error),
+                followUp: RemoteCommandFollowUp.permitsRetry(after: error)
+                    ? RemoteCommandFollowUp(kind: .retry, command: command, targetVIN: target.vin)
+                    : nil
             )
             return .refused(reason: message)
         }
+    }
+
+    /// The action a failure offers the reader, when one exists. Only the missing command
+    /// authorization is fixable from the refusal banner itself.
+    private func remedy(for error: any Error) -> RemoteCommandRemedy? {
+        guard case RemoteCommandError.authorizationRequired = error else { return nil }
+        return .authorizeRemoteCommands
     }
 
     /// Patches the visible state to what a successful command should have produced, so the

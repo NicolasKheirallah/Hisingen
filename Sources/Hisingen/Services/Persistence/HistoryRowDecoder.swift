@@ -40,6 +40,12 @@ enum HistoryRowDecoder {
             id, vin, timestamp, air_quality_index, particulate_matter_25, particulate_matter_10,
             filter_remaining_percent
             """
+        static let tyrePressure = """
+            id, vin, timestamp, position, kilopascals, reference_kpa
+            """
+        static let warningEvent = """
+            id, vin, warning, first_seen, cleared_at
+            """
         static let telemetry = """
             id, vin, timestamp, odometer_km, trip_manual_km, trip_auto_km, avg_consumption,
             ambient_temp_c, latitude, longitude, avg_consumption_unit
@@ -72,9 +78,9 @@ enum HistoryRowDecoder {
     static func rows<T>(
         _ stmt: SQLiteStatement,
         decode: (SQLiteStatement) -> T?
-    ) -> [T] {
+    ) throws -> [T] {
         var out: [T] = []
-        while stmt.step() {
+        while try stmt.stepOrThrow() {
             if let row = decode(stmt) { out.append(row) }
         }
         return out
@@ -86,9 +92,9 @@ enum HistoryRowDecoder {
     static func rowsUnlessCancelled<T>(
         _ stmt: SQLiteStatement,
         decode: (SQLiteStatement) -> T?
-    ) -> [T] {
+    ) throws -> [T] {
         var out: [T] = []
-        while !Task.isCancelled, stmt.step() {
+        while !Task.isCancelled, try stmt.stepOrThrow() {
             if let row = decode(stmt) { out.append(row) }
         }
         return out
@@ -122,6 +128,31 @@ enum HistoryRowDecoder {
             particulateMatter25: stmt.columnDouble(at: 4),
             particulateMatter10: stmt.columnDouble(at: 5),
             filterRemainingPercent: stmt.columnDouble(at: 6)
+        )
+    }
+
+    static func tyrePressure(_ stmt: SQLiteStatement) -> VehicleDatabase.TyrePressureRecord? {
+        guard let id = stmt.columnInt64(at: 0),
+              let vin = stmt.columnText(at: 1),
+              let timestamp = stmt.columnDate(at: 2),
+              let rawPosition = stmt.columnText(at: 3),
+              let position = TyrePosition(rawValue: rawPosition),
+              let kilopascals = stmt.columnDouble(at: 4) else { return nil }
+        return VehicleDatabase.TyrePressureRecord(
+            id: id, vin: vin, timestamp: timestamp, position: position,
+            kilopascals: kilopascals, referenceKilopascals: stmt.columnDouble(at: 5)
+        )
+    }
+
+    static func warningEvent(_ stmt: SQLiteStatement) -> VehicleDatabase.WarningEventRecord? {
+        guard let id = stmt.columnInt64(at: 0),
+              let vin = stmt.columnText(at: 1),
+              let rawWarning = stmt.columnText(at: 2),
+              let warning = VehicleWarning(rawValue: rawWarning),
+              let firstSeen = stmt.columnDate(at: 3) else { return nil }
+        return VehicleDatabase.WarningEventRecord(
+            id: id, vin: vin, warning: warning, firstSeen: firstSeen,
+            clearedAt: stmt.columnDate(at: 4)
         )
     }
 

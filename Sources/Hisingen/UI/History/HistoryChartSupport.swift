@@ -94,7 +94,7 @@ extension View {
             .padding(.vertical, 3)
             .background(HisingenTheme.chipFill, in: Capsule())
             .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
+            .shadow(color: HisingenTheme.elevationShadow.opacity(0.15), radius: 3, y: 1)
     }
 }
 

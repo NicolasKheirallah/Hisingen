@@ -1,4 +1,5 @@
 import CoreSpotlight
+import CryptoKit
 import Foundation
 import OSLog
 import UniformTypeIdentifiers
@@ -21,7 +22,7 @@ enum SpotlightIndexer {
     static func indexVehicle(_ state: VehicleState, nickname: String) {
         guard !indexingUnavailable, !state.identity.vin.isEmpty, CSSearchableIndex.isIndexingAvailable() else { return }
         let item = CSSearchableItem(
-            uniqueIdentifier: state.identity.vin,
+            uniqueIdentifier: opaqueVehicleIdentifier(state.identity.vin),
             domainIdentifier: domainIdentifier,
             attributeSet: attributeSet(for: state, nickname: nickname)
         )
@@ -48,6 +49,15 @@ enum SpotlightIndexer {
     /// surface the window without duplicating identifier knowledge there.
     static func isHisingenActivity(_ activity: NSUserActivity) -> Bool {
         activity.activityType == CSSearchableItemActionType
+    }
+
+    /// Stable, non-reversible index key. The VIN was the `uniqueIdentifier`, which put the
+    /// full identifier into the system index despite the README promising it stays out.
+    /// A salted-per-install value would break updates, so a plain digest is the right
+    /// trade: stable across launches, useless as a VIN.
+    private static func opaqueVehicleIdentifier(_ vin: String) -> String {
+        let digest = SHA256.hash(data: Data(vin.utf8))
+        return "vehicle-" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func attributeSet(for state: VehicleState,

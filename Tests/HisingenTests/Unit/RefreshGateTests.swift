@@ -40,14 +40,14 @@ struct RefreshGateTests {
     }
 
     @Test
-    func onlyUserInitiatedIntentsRespectTheRateLimitWindow() {
+    func recoveryAndUserInitiatedIntentsRespectTheRateLimitWindow() {
         let limited = situation(rateLimitedUntil: rateLimitedUntil)
 
         // A scheduled tick's own delay already came from this window. Refusing it here would
         // mean re-arming the timer to avoid stopping the poll.
         #expect(RefreshGate.admit(.scheduled, in: limited) == .start)
-        #expect(RefreshGate.admit(.wake, in: limited) == .start)
-        #expect(RefreshGate.admit(.networkRestored, in: limited) == .start)
+        #expect(RefreshGate.admit(.wake, in: limited) == .refused(.rateLimited(until: rateLimitedUntil)))
+        #expect(RefreshGate.admit(.networkRestored, in: limited) == .refused(.rateLimited(until: rateLimitedUntil)))
 
         #expect(RefreshGate.admit(.manual, in: limited) == .refused(.rateLimited(until: rateLimitedUntil)))
         #expect(RefreshGate.admit(.metadata, in: limited) == .refused(.rateLimited(until: rateLimitedUntil)))

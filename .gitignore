@@ -1,7 +1,10 @@
 .build*/
 releases/
 .swiftpm/
-docs/
+docs/*
+!docs/architecture/
+docs/architecture/*
+!docs/architecture/polestar-trailers-2026-10-31.md
 *.app
 *.dmg
 dmg-staging/

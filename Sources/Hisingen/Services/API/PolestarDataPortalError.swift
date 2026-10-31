@@ -120,7 +120,7 @@ extension PolestarDataPortalError {
     /// Per-endpoint misses degrade to a failed reading instead.
     var isRefreshFatal: Bool {
         switch self {
-        case .authenticationRequired, .rateLimited, .server, .permissionDenied:
+        case .authenticationRequired, .rateLimited, .server, .permissionDenied, .network, .responseTooLarge, .invalidResponse:
             return true
         default:
             return false

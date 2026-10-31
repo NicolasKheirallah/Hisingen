@@ -108,11 +108,23 @@ struct CapabilityGate: Sendable {
             }
             return .unimplementedByProvider()
         }
-        // Volvo's lock/unlock/locate writes need the restricted ("Approved") scope tier on
-        // the signed-in token; without it the provider would reject the command after the
-        // fact. One shared precondition keeps every entry point's answer identical.
-        if commandCatalog.brand == .volvo, !volvoRestrictedScopesEnabled,
-           command.feature == .remoteLocks || command.feature == .remoteHonkFlash {
+        // Volvo's lock/unlock/locate, honk/flash and engine writes need the restricted
+        // ("Approved") scope tier on the signed-in token; without it the provider would
+        // reject the command after the fact. Engine start is easy to miss because it shares
+        // `.remoteClimate` with the unrestricted cabin climate command, so this asks the
+        // command itself rather than its feature. One shared precondition keeps every entry
+        // point's answer identical.
+        let requiresVolvoApproval: Bool = {
+            switch command {
+            case .lock, .lockReducedGuard, .unlock,
+                 .honkAndFlash, .flashLights, .honkHorn,
+                 .startEngine, .stopEngine:
+                return true
+            default:
+                return false
+            }
+        }()
+        if commandCatalog.brand == .volvo, !volvoRestrictedScopesEnabled, requiresVolvoApproval {
             return .requiresAccountApproval
         }
         if commandCatalog.brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {

@@ -347,6 +347,20 @@ struct PolestarDataPortalTests {
     // MARK: - Daily Quota Tracking Tests
 
     @Test
+    func refreshBudgetSpreadsRemainingQuotaAcrossTheDay() {
+        // A full tank at the start of the day can afford the full 14-call fan-out.
+        #expect(PolestarDataPortalAPI.refreshCallBudget(
+            remainingCalls: 10_000, secondsUntilMidnight: 86_400) == 13)
+        // Half the quota gone: keep the core reads, thin the settings domains.
+        #expect(PolestarDataPortalAPI.refreshCallBudget(
+            remainingCalls: 5_000, secondsUntilMidnight: 43_200) == 13)
+        // The last hour with 100 calls left must not spend 14 per refresh.
+        #expect(PolestarDataPortalAPI.refreshCallBudget(
+            remainingCalls: 100, secondsUntilMidnight: 3_600) == 3)
+        #expect(PolestarDataPortalAPI.refreshCallBudget(
+            remainingCalls: 0, secondsUntilMidnight: 3_600) == 0)
+    }
+
     func dailyQuotaTracksAndRollsOverAcrossDays() {
         // Own the backing store: the process-global defaults are written by every portal
         // call in every suite, so a concurrent test's recorded call would land inside this
@@ -369,6 +383,35 @@ struct PolestarDataPortalTests {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         PolestarDataPortalAPI.setDailyQuotaForTesting(count: 99, date: yesterday)
         #expect(PolestarDataPortalAPI.dailyCallCount == 0)
+    }
+
+    @Test
+    @MainActor
+    func exhaustedDailyQuotaRefusesBeforeTheTokenGrant() async {
+        let limit = PolestarDataPortalAPI.dailyCallLimit
+        let box = QuotaBox()
+        // The store slot is process-global, so a portal call from a parallel suite records
+        // into it while this test is running. The seed sits exactly on the limit, which makes
+        // any such foreign write illegal by definition: it would mean the guard let a call
+        // through past the quota, and this test is the one place that must never happen.
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { box.value },
+            set: { count, date in
+                guard count <= limit else { return }
+                box.value = (count, date)
+            })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
+        PolestarDataPortalAPI.setDailyQuotaForTesting(count: limit, date: Date())
+
+        let api = PolestarDataPortalAPI()
+        do {
+            _ = try await api.fetchVehicleState(vin: "YSMTESTVIN0000001", features: FeatureSelection(enabled: []))
+            Issue.record("Expected the quota guard to refuse the fetch")
+        } catch PolestarDataPortalError.rateLimited {
+        } catch {
+            Issue.record("Expected rateLimited, got \(error)")
+        }
+        #expect(PolestarDataPortalAPI.dailyCallCount == PolestarDataPortalAPI.dailyCallLimit)
     }
 
     // MARK: - Command Catalog & Read-Only Gating Tests
@@ -471,8 +514,8 @@ struct PolestarDataPortalTests {
 
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         let batteryData = try fixtureData(named: "polestar-portal-battery")
         let exteriorData = try fixtureData(named: "polestar-portal-exterior")
@@ -485,7 +528,6 @@ struct PolestarDataPortalTests {
         let socData = try fixtureData(named: "polestar-portal-charging-target-soc")
         let ampData = try fixtureData(named: "polestar-portal-charging-amp-limit")
         let locsData = try fixtureData(named: "polestar-portal-charging-charge-locations")
-        let isAtData = try fixtureData(named: "polestar-portal-charging-is-at-charge-location")
         let timerData = try fixtureData(named: "polestar-portal-charging-global-charge-timer")
         let chargeNowData = try fixtureData(named: "polestar-portal-charging-charge-now")
         let climTimerData = try fixtureData(named: "polestar-portal-charging-parking-climate-timer")
@@ -503,7 +545,6 @@ struct PolestarDataPortalTests {
             if path.contains("/charging/target-soc") { return (200, socData) }
             if path.contains("/charging/amp-limit") { return (200, ampData) }
             if path.contains("/charging/charge-locations") { return (200, locsData) }
-            if path.contains("/charging/is-at-charge-location") { return (200, isAtData) }
             if path.contains("/charging/global-charge-timer") { return (200, timerData) }
             if path.contains("/charging/charge-now") { return (200, chargeNowData) }
             if path.contains("/charging/parking-climate-timer") { return (200, climTimerData) }
@@ -520,16 +561,7 @@ struct PolestarDataPortalTests {
         #expect(state.energy.targetPercentage == 80)
         #expect(state.energy.currentLimitAmps == 16)
         #expect(state.energy.locations.count == 1)
-        #expect(state.energy.isAtChargeLocation == true)
-        // The is-at state only carries a locationId; assembly joins it against the
-        // charge-locations list to recover the display name.
-        #expect(state.energy.currentChargeLocationName == "Home Garage")
-        #expect(state.energy.arrivedAtLocationDate == Date(timeIntervalSince1970: 1_716_299_100))
         #expect(state.energy.chargeNowActive == true)
-        // The vehicle-level capability flags join from the charge-locations list even when
-        // the is-at read and the battery frame disagree about who fetched first.
-        #expect(state.energy.diagnostics?.isBidirectionalChargingEnabled == false)
-        #expect(state.energy.diagnostics?.isOptimizedChargingEnabled == true)
         #expect(state.energy.schedules.count == 1)
         #expect(state.climateStatus?.activity == .active)
         #expect(state.climateStatus?.timeRemainingMinutes == 18)
@@ -599,8 +631,8 @@ struct PolestarDataPortalTests {
         let session = URLSession(configuration: config)
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
         var openMeteoQueries: [String] = []
@@ -636,8 +668,8 @@ struct PolestarDataPortalTests {
         let session = URLSession(configuration: config)
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
         PortalMockTransport.requestHandler = { req in
@@ -663,8 +695,8 @@ struct PolestarDataPortalTests {
         let session = URLSession(configuration: config)
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
         var openMeteoCalls = 0
@@ -698,8 +730,8 @@ struct PolestarDataPortalTests {
         let session = URLSession(configuration: config)
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         let locationData = try Data(contentsOf: try #require(Bundle.module.url(forResource: "polestar-portal-location", withExtension: "json")))
         var openMeteoCalls = 0
@@ -907,7 +939,7 @@ struct PolestarDataPortalTests {
         {
           "error": {
             "code": "DATA_NOT_AVAILABLE",
-            "message": "No is-at-charge-location data is available for this vehicle.",
+            "message": "No charge-location data is available for this vehicle.",
             "httpStatus": 404
           }
         }
@@ -917,14 +949,12 @@ struct PolestarDataPortalTests {
         let session = URLSession(configuration: config)
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         PortalMockTransport.requestHandler = { req in
             let path = req.url?.path ?? ""
-            // Location presence is served by three endpoints; all report truthfully that
-            // this vehicle sends no such data.
-            if path.contains("/charging/is-at-charge-location") { return (404, Data(dataNotAvailableBody.utf8)) }
+            // Both location endpoints report truthfully that this vehicle sends no such data.
             if path.contains("/charging/charge-locations") { return (404, Data(dataNotAvailableBody.utf8)) }
             if path.contains("/telemetry/location") { return (404, Data(dataNotAvailableBody.utf8)) }
             return (404, Data())
@@ -937,6 +967,33 @@ struct PolestarDataPortalTests {
         // Every truthful 404 marks nothing; the plain 404 next to them still does.
         #expect(!state.freshness.unavailableFeatures.contains(.vehicleLocation))
         #expect(state.freshness.unavailableFeatures.contains(.exteriorStatus))
+    }
+
+    @Test
+    @MainActor
+    func telemetryRefreshNeverAsksForChargeLocationPresence() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PortalMockTransport.self]
+        let session = URLSession(configuration: config)
+        let api = PolestarDataPortalAPI()
+        await api.setSessionForTesting(session)
+        await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
+
+        let recorder = PortalPathRecorder()
+        PortalMockTransport.requestHandler = { req in
+            recorder.record(req.url?.path ?? "")
+            return (404, Data())
+        }
+
+        _ = try? await api.fetchVehicleState(
+            vin: "TESTVIN",
+            features: FeatureSelection(enabled: Set(AppFeature.allCases))
+        )
+        // Presence read `DATA_NOT_AVAILABLE` on every call for this car and was removed; the
+        // charge-locations list it used to join against still ships.
+        #expect(!recorder.paths.contains { $0.contains("is-at-charge-location") })
+        #expect(recorder.paths.contains { $0.contains("/charging/charge-locations") })
     }
 
     @Test
@@ -1027,8 +1084,8 @@ struct PolestarDataPortalTests {
 
         let api = PolestarDataPortalAPI()
         await api.setSessionForTesting(session)
-        await api.setAccessTokenForTesting("test-token")
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
+        await api.setAccessTokenForTesting("test-token")
 
         PortalMockTransport.requestHandler = { req in
             if req.url?.path.contains("/telemetry/exterior") == true { return (200, Data(exteriorJSON.utf8)) }
@@ -1396,6 +1453,43 @@ struct PolestarDataPortalTests {
         #expect(preferences.hasResumableSession(for: .polestar) == true)
     }
 
+    /// The state that made "Authorize Remote Commands" fail: augmented mode with Developer
+    /// Portal credentials and no Polestar ID half. Telemetry resumes, but there is no consumer
+    /// session for the command grant to be verified against, so the browse-to-authorize step has
+    /// to be gated on `hasPolestarIDCredentials` rather than `hasResumableSession`.
+    @Test
+    @MainActor
+    func augmentedPortalOnlyAccountHasNoPolestarIDCredentials() throws {
+        let previousSession = UserDefaults.standard.bool(forKey: "has_polestar_session")
+        let previousPassword = UserDefaults.standard.bool(forKey: "has_polestar_password")
+        defer {
+            UserDefaults.standard.set(previousSession, forKey: "has_polestar_session")
+            UserDefaults.standard.set(previousPassword, forKey: "has_polestar_password")
+        }
+
+        let suite = "io.kheirallah.hisingen.augmented-gate.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.augmented-gate.\(UUID().uuidString)")
+        try? keychain.deletePolestarDataPortalCredentials()
+        try? keychain.deletePolestarDataPortalToken()
+        try? keychain.deleteSessionToken()
+        try? keychain.deletePassword()
+
+        let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
+        preferences.polestarConnectionMode = .augmented
+        preferences.polestarDataPortalClientID = "test-client"
+        try keychain.savePolestarDataPortalCredentials(accountID: "acc-1", clientID: "test-client", clientSecret: "test-sec")
+
+        #expect(preferences.hasResumableSession(for: .polestar) == true)
+        #expect(preferences.hasPolestarIDCredentials == false)
+
+        try keychain.saveSessionToken("polestar-session")
+        #expect(preferences.hasPolestarIDCredentials == true)
+        try? keychain.deleteSessionToken()
+    }
+
     // MARK: - Schedule & Charge-Location REST Writes
 
 
@@ -1572,17 +1666,7 @@ struct PolestarDataPortalTests {
         #expect(locList.first?.departureTimes.first?.startHour == 7)
         #expect(locList.first?.departureTimes.first?.startMinute == 45)
 
-        // 14. Is At Charge Location
-        let isAtData = try fixtureData(named: "polestar-portal-charging-is-at-charge-location")
-        let isAtEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarIsAtChargeLocationDTO>.self, from: isAtData)
-        let isAtDTO = try #require(isAtEnv.data)
-        #expect(isAtDTO.locationId == "loc-home-01")
-        #expect(isAtDTO.isAtChargeLocation == true)
-        #expect(isAtDTO.arrivedAtTimestamp?.date != nil)
-        // The state carries no name; the id → name join happens in snapshot assembly.
-        #expect(isAtDTO.currentLocationName == nil)
-
-        // 15. Global Charge Timer
+        // 14. Global Charge Timer
         let timerData = try fixtureData(named: "polestar-portal-charging-global-charge-timer")
         let timerEnv = try JSONDecoder().decode(PolestarDataPortalEnvelope<PolestarGlobalChargeTimerDTO>.self, from: timerData)
         let timerDTO = try #require(timerEnv.data)
@@ -1628,7 +1712,7 @@ struct PolestarDataPortalTests {
     }
 }
 
-private actor PortalTestProbeProvider: VehicleProviding {
+private actor PortalTestProbeProvider: VehicleProviding, VehicleMetadataProviding {
     nonisolated let brand: VehicleBrand
     let providerName: String
     var stateToReturn: VehicleState?
@@ -1690,6 +1774,23 @@ private actor PortalTestProbeProvider: VehicleProviding {
     }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
         RemoteCommandResult(outcome: .completed, message: nil)
+    }
+}
+
+private final class PortalPathRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    func record(_ path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(path)
+    }
+
+    var paths: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
     }
 }
 

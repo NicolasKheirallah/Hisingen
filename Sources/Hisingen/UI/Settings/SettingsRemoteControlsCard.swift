@@ -72,47 +72,9 @@ struct SettingsRemoteControlsCard: View {
                         .padding(8)
                         .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                     } else {
-                        let authorized = prefs.hasPolestarCommandAuthorization
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: authorized ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                        .hisType(.caption)
-                                        .foregroundStyle(authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
-                                    Text(authorized ? L10n.text("Remote commands authorized")
-                                                    : L10n.text("Authorize Remote Commands"))
-                                        .hisType(.label, weight: .semibold)
-                                }
-                                Text(authorized
-                                     ? L10n.text("Locks, climate, windows, cabin cleaning and locate are authorized. Re-authorize here if these commands start failing.")
-                                     : L10n.text("Opens your browser to sign in for remote commands. Hisingen never sees your Polestar password for this step, and this is separate from the account sign-in above."))
-                                    .hisType(.micro)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Menu {
-                                Button {
-                                    binder.notify(.polestarCommandAuthorization)
-                                } label: {
-                                    Text(authorized ? L10n.text("Re-authorize…") : L10n.text("Authorize…"))
-                                }
-                                Button {
-                                    binder.notify(.polestarCommandAuthorizationForceLogin)
-                                } label: {
-                                    Text(L10n.text("Sign in with a different account…"))
-                                }
-                            } label: {
-                                Text(authorized ? L10n.text("Re-authorize…") : L10n.text("Authorize…"))
-                                    .hisType(.caption, weight: .medium)
-                            }
-                            .menuStyle(.borderlessButton)
-                            .menuIndicator(.visible)
-                            .fixedSize()
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                        .background((authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.08),
-                                    in: RoundedRectangle(cornerRadius: 8))
+                        // One control, two pages: Accounts draws the same row, so the grant is
+                        // found where account sign-in is, not only where the toggles are.
+                        RemoteCommandAuthorizationRow(binder: binder)
                     }
                     row(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop), badgeText: isVolvo ? nil : commandAuthBadge(true))
                     row(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock and unlock", isSupported: supportsCapability(.locks) && (!isVolvo || prefs.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : commandAuthBadge(true))

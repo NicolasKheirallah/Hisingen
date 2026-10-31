@@ -8,6 +8,9 @@ actor ReverseGeocoder {
     // CLGeocoder, not our HTTP transport – there is no request metadata to capture,
     // and coordinates must never enter a diagnostic artifact.
     private var cache: [String: String] = [:]
+    /// Insertion order of `cache` keys, so the oldest entry is evicted first once full.
+    private var cacheOrder: [String] = []
+    private static let maxCachedAddresses = 200
 
     func geocode(latitude: Double, longitude: Double) async -> String? {
         let key = String(format: "%.4f,%.4f", latitude, longitude)
@@ -35,7 +38,7 @@ actor ReverseGeocoder {
 
                 let formatted = parts.joined(separator: ", ")
                 if !formatted.isEmpty {
-                    cache[key] = formatted
+                    remember(formatted, for: key)
                     return formatted
                 }
             }
@@ -45,6 +48,20 @@ actor ReverseGeocoder {
             logger.debug("Reverse geocoding failed: \(error, privacy: .public)")
         }
         return nil
+    }
+
+    /// Drops every cached address. Call on sign-out so one account's locations do not outlive it.
+    func clear() {
+        cache.removeAll()
+        cacheOrder.removeAll()
+    }
+
+    private func remember(_ address: String, for key: String) {
+        guard cache.updateValue(address, forKey: key) == nil else { return }
+        cacheOrder.append(key)
+        if cacheOrder.count > Self.maxCachedAddresses {
+            cache[cacheOrder.removeFirst()] = nil
+        }
     }
 }
 

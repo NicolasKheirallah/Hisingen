@@ -229,7 +229,7 @@ extension InfoTabView {
                 reportError = L10n.text("The image could not be prepared for opening.")
                 return
             }
-            let name = "\(displayName.replacingOccurrences(of: " ", with: "_"))_render.png"
+            let name = "\(Self.sanitizedFileStem(displayName))_render.png"
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
             do {
                 try await Task.detached(priority: .utility) {
@@ -254,12 +254,12 @@ extension InfoTabView {
             }
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.png]
-            panel.nameFieldStringValue = "\(displayName.replacingOccurrences(of: " ", with: "_"))_render.png"
+            panel.nameFieldStringValue = "\(Self.sanitizedFileStem(displayName))_render.png"
             panel.begin { response in
                 guard response == .OK, let url = panel.url else { return }
                 Task { @MainActor in
                     do {
-                        try await Task.detached(priority: .utility) { try png.write(to: url) }.value
+                        try await Task.detached(priority: .utility) { try png.write(to: url, options: .atomic) }.value
                         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                     } catch {
                         reportError = error.localizedDescription
@@ -267,6 +267,14 @@ extension InfoTabView {
                 }
             }
         }
+    }
+
+    private static func sanitizedFileStem(_ displayName: String) -> String {
+        let underscored = displayName.replacingOccurrences(of: " ", with: "_")
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
+        let sanitized = underscored.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
+        let trimmed = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        return trimmed.isEmpty ? "vehicle" : String(trimmed.prefix(64))
     }
 
     private nonisolated static func pngData(from data: Data) -> Data? {

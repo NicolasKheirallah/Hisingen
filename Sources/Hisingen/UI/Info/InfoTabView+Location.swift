@@ -3,6 +3,23 @@ import Charts
 import SwiftUI
 
 extension InfoTabView {
+    static func locationScheduleSummary(_ schedule: VehicleSchedule) -> String {
+        let timeStr = String(format: "%02d:%02d", locale: L10n.displayLocale, schedule.startHour ?? 0, schedule.startMinute ?? 0)
+        let endStr = schedule.endHour.map {
+            String(format: " - %02d:%02d", locale: L10n.displayLocale, $0, schedule.endMinute ?? 0)
+        } ?? ""
+        var parts = "\(timeStr)\(endStr)"
+        if !schedule.weekdays.isEmpty {
+            parts += " · \(schedule.weekdays.map(\.shortName).joined(separator: ", "))"
+        } else if schedule.oneShotDate != nil {
+            parts += " · \(L10n.text("Once"))"
+        }
+        if !schedule.isActive {
+            parts += " · \(L10n.text("Off"))"
+        }
+        return parts
+    }
+
     /// Data identity for the recent-telemetry chart: counts plus boundary timestamps change
     /// exactly when a refresh lands new rows, so the chart animates on the data, not per render.
     var recentTelemetryChartKey: String {
@@ -138,6 +155,12 @@ extension InfoTabView {
                             }
                             if location.minimumSoc > 0 {
                                 KVRow(L10n.text("Minimum Charge"), "\(location.minimumSoc)%", symbol: "battery.25")
+                            }
+                            ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
+                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "bolt.fill")
+                            }
+                            ForEach(location.departureTimes, id: \.rowIdentity) { schedule in
+                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "calendar.badge.clock")
                             }
                             if let lat = location.latitude, let lon = location.longitude {
                                 KVRow(L10n.text("Coordinates"),
@@ -391,6 +414,16 @@ extension InfoTabView {
                               L10n.format("≈ %d days", Int(estimate.daysRemaining.rounded())),
                               symbol: "calendar.badge.exclamationmark",
                               info: L10n.text("A guesstimate extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
+                    }
+
+                    // Hidden until the backend actually sends one: an unparsed air-quality
+                    // wire field stays visible instead of disappearing silently.
+                    ForEach((air.unknownWireFields ?? []).sorted { $0.field < $1.field }, id: \.field) { field in
+                        KVRow(field.isBinary
+                                  ? L10n.format("Field %d (raw)", field.field)
+                                  : L10n.format("Field %d", field.field),
+                              field.value, symbol: "curlybraces",
+                              info: L10n.text("Air-quality wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
                     }
 
                     if air.canTogglePreCleaning {

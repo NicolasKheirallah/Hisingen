@@ -51,7 +51,6 @@ struct RefreshCoordinatorTests {
         let preferences = PreferencesStore(defaults: defaults)
         preferences.vin = "YSMTEST"
         let provider = RecoveryMockProvider()
-        let storedToken: String? = "stored-refresh-token"
         let coordinator = RefreshCoordinator(
             api: provider,
             stateStore: VehicleStateStore(defaults: defaults, database: .inMemory()),

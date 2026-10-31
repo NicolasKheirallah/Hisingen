@@ -270,7 +270,7 @@ struct InfoTabView: View {
         if state.airQuality != nil {
             add(.airQuality, airQualityCleanZoneCard)
         }
-        if state.connectivity != nil {
+        if state.connectivity != nil || state.identity.usageModeDisplayName != nil {
             add(.connectivity, connectivityWakeCard)
         }
         if serviceCardHasContent {
@@ -385,6 +385,11 @@ struct InfoTabView: View {
                 } label: {
                     Label(L10n.text("Export Vehicle Report…"), systemImage: "square.and.arrow.up")
                 }
+                Button {
+                    exportHandoverPack()
+                } label: {
+                    Label(L10n.text("Export Handover Pack…"), systemImage: "shippingbox")
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .hisType(.label, weight: .medium)
@@ -462,6 +467,7 @@ struct InfoTabView: View {
 
     private var serviceCardHasContent: Bool {
         state.maintenance.service.daysToService != nil
+            || serviceForecast != nil
             || (state.maintenance.service.engineHoursToService ?? 0) > 0
             || (state.maintenance.service.preferredWorkshopName?.isEmpty == false)
             || (state.maintenance.service.preferredWorkshopID?.isEmpty == false)
@@ -496,15 +502,40 @@ struct InfoTabView: View {
             state: state,
             specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)
         ) { return current }
-        guard let saved = asyncData.batteryHealthHistory.first(where: {
-            $0.measurementSource == BatteryHealthRecord.fullChargeRangeSource
-        }) else { return nil }
+        let historyRecords = asyncData.batteryHealthHistory
+        let rangeSources: Set<String> = [
+            BatteryHealthRecord.fullChargeRangeSource,
+            BatteryHealthRecord.calculatedSource,
+            BatteryHealthRecord.legacyEstimateSource
+        ]
+        let latestRange = historyRecords.first { rangeSources.contains($0.measurementSource) }
+        let latestSession = historyRecords.first {
+            $0.measurementSource == BatteryHealthRecord.sessionEnergySource
+        }
+        if let range = latestRange, let session = latestSession,
+           let fused = BatteryHealthEstimator.fusedSoH(
+               rangeSoH: range.stateOfHealthPct, sessionSoH: session.stateOfHealthPct
+           ) {
+            let reference = history.usableCapacityKwh(vin: state.identity.vin, state: state)
+            return BatteryHealthEstimator.remembered(
+                stateOfHealthPercent: fused,
+                degradationPercent: ((100 - fused) * 10).rounded() / 10,
+                estimatedUsableCapacityKwh: (reference * fused / 100 * 10).rounded() / 10,
+                recordedAt: max(range.timestamp, session.timestamp),
+                fallbackReferenceCapacityKwh: reference,
+                method: BatteryHealthEstimator.fusedMethod
+            )
+        }
+        guard let saved = [latestRange, latestSession].compactMap({ $0 }).max(by: { $0.timestamp < $1.timestamp }) else { return nil }
         return BatteryHealthEstimator.remembered(
             stateOfHealthPercent: saved.stateOfHealthPct,
             degradationPercent: saved.degradationPct,
             estimatedUsableCapacityKwh: saved.effectiveUsableKwh,
             recordedAt: saved.timestamp,
-            fallbackReferenceCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state)
+            fallbackReferenceCapacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state),
+            method: saved.measurementSource == BatteryHealthRecord.sessionEnergySource
+                ? BatteryHealthEstimator.sessionEnergyMethod
+                : BatteryHealthEstimator.fullChargeRangeMethod
         )
     }
 

@@ -45,7 +45,7 @@ struct LicensePlateBadge: View {
 
     private func plateText(size: CGFloat, tracking: CGFloat) -> some View {
         Text(plate.uppercased())
-            .font(.system(size: size, weight: .bold, design: .monospaced))
+            .font(HisingenTheme.plateFont(size: size))
             .tracking(tracking)
             .foregroundStyle(HisingenTheme.ink)
     }

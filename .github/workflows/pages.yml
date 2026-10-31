@@ -1,17 +1,5 @@
 name: Deploy site
-
-# GitHub Pages hosts exactly two files, both of which are live production dependencies of the
-# shipped app. It is not a marketing site.
-#
-#   1. `oauth-callback.html` — Volvo requires an HTTPS OAuth redirect, and this URL is registered
-#      with the provider. `Sources/Hisingen/Services/API/VolvoAPI.swift` hardcodes it as the
-#      `redirect_uri`, so Volvo sign-in fails for every user if this stops being served. The file
-#      forwards the authorization result to the `hisingen://` scheme.
-#   2. `updates/appcast.xml` — the signed Sparkle feed `SUFeedURL` points at, so the app can
-#      discover updates. `release.yml` writes new revisions here and then dispatches this workflow.
-#
-# The previous marketing site and its Vite toolchain were removed. `site/` is now the Pages
-# artifact directly: two static files, no build step, no npm.
+run-name: Deploy site ${{ inputs.expected_version || github.sha }}
 
 on:
   push:
@@ -19,38 +7,74 @@ on:
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'
+      - 'Scripts/ci-summary.py'
   pull_request:
     branches: [main]
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'
+      - 'Scripts/ci-summary.py'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_artifact:
+        description: Same-run release artifact containing site/oauth-callback.html and site/updates/appcast.xml
+        required: true
+        type: string
+      expected_version:
+        required: true
+        type: string
+    outputs:
+      page_url:
+        value: ${{ jobs.deploy.outputs.page_url }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.pull_request.number) || 'pages-production' }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: Check out repository
+      - name: Check out validators and callback
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           persist-credentials: false
-      # Both files are live dependencies of the shipped app, so a deploy that silently dropped one
-      # would break Volvo sign-in or the updater without failing anything else.
-      - name: Verify the live entry points are present
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13.15'
+      - name: Download verified release site
+        if: inputs.release_artifact != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.release_artifact }}
+          path: release-input
+      - name: Select release site
+        if: inputs.release_artifact != ''
         run: |
-          set -eu
-          test -f site/oauth-callback.html
-          test -f site/updates/appcast.xml
-          grep -q 'hisingen://oauth/volvo/callback' site/oauth-callback.html
-          grep -q '<rss' site/updates/appcast.xml
+          set -euo pipefail
+          test -f release-input/site/oauth-callback.html
+          test -f release-input/site/updates/appcast.xml
+          rm -rf site
+          cp -R release-input/site site
+      - name: Preserve the latest published feed for callback deployments
+        if: inputs.release_artifact == '' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern appcast.xml --dir site/updates --clobber
+      - name: Validate deployment entry points
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: python3 Scripts/ci-summary.py site site --expected-version "$EXPECTED_VERSION"
       - name: Configure Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -59,19 +83,45 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
+      - name: Save exact production expectations
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pages-expectations
+          overwrite: true
+          path: site
+          if-no-files-found: error
+          retention-days: 1
 
   deploy:
     if: github.event_name != 'pull_request'
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
+      contents: read
       pages: write
       id-token: write
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check out deployment verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Download exact production expectations
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: pages-expectations
+          path: expected-site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: Verify served OAuth callback, feed and release assets
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: python3 Scripts/ci-summary.py deployed "$PAGE_URL" expected-site --expected-version "$EXPECTED_VERSION"

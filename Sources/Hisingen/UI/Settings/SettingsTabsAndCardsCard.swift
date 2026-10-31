@@ -370,6 +370,36 @@ struct SettingsTabsAndCardsCard: View {
         }
     }
 
+    private func symbolLabel(_ symbol: String) -> String {
+        switch symbol {
+        case "square.grid.2x2": return L10n.text("Tab icon: Grid")
+        case "bolt.car": return L10n.text("Tab icon: Electric car")
+        case "car.side": return L10n.text("Tab icon: Car")
+        case "bolt.fill": return L10n.text("Tab icon: Lightning bolt")
+        case "batteryblock": return L10n.text("Tab icon: Battery")
+        case "thermometer.medium": return L10n.text("Tab icon: Thermometer")
+        case "location.fill": return L10n.text("Tab icon: Location arrow")
+        case "chart.xyaxis.line": return L10n.text("Tab icon: Line chart")
+        case "chart.pie.fill": return L10n.text("Tab icon: Pie chart")
+        case "powerplug.fill": return L10n.text("Tab icon: Power plug")
+        case "lock.fill": return L10n.text("Tab icon: Lock")
+        case "fan": return L10n.text("Tab icon: Fan")
+        case "wind": return L10n.text("Tab icon: Wind")
+        case "road.lanes": return L10n.text("Tab icon: Road")
+        case "gauge.with.needle": return L10n.text("Tab icon: Gauge")
+        case "wrench.and.screwdriver": return L10n.text("Tab icon: Tools")
+        case "sparkles": return L10n.text("Tab icon: Sparkles")
+        case "shield.lefthalf.filled": return L10n.text("Tab icon: Shield")
+        case "star.fill": return L10n.text("Tab icon: Star")
+        case "leaf.fill": return L10n.text("Tab icon: Leaf")
+        case "speedometer": return L10n.text("Tab icon: Speedometer")
+        case "calendar": return L10n.text("Tab icon: Calendar")
+        case "clock": return L10n.text("Tab icon: Clock")
+        case "mappin.and.ellipse": return L10n.text("Tab icon: Map pin")
+        default: return L10n.text("Tab icon")
+        }
+    }
+
     private func symbolPicker(for tab: CustomTab) -> some View {
         Menu {
             ForEach(CustomTab.symbolChoices, id: \.self) { symbol in
@@ -378,7 +408,7 @@ struct SettingsTabsAndCardsCard: View {
                     updated.setSymbol(symbol, for: tab.id)
                     save(updated)
                 } label: {
-                    Label(symbol, systemImage: symbol)
+                    Label(symbolLabel(symbol), systemImage: symbol)
                 }
             }
         } label: {
@@ -650,7 +680,7 @@ struct SettingsTabsAndCardsCard: View {
                             newTabSymbol == symbol ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
                             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                         )
-                        .accessibilityLabel(symbol)
+                        .accessibilityLabel(symbolLabel(symbol))
                         .accessibilityAddTraits(newTabSymbol == symbol ? .isSelected : [])
                     }
                 }

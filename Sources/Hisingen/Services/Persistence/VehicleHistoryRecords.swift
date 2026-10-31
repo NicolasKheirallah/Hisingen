@@ -152,6 +152,7 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     static let fullChargeRangeSource = "full-charge-range-v1"
     static let calculatedSource = "calculated-v2"
     static let legacyEstimateSource = "legacy-estimate"
+    static let sessionEnergySource = "session-energy-v1"
 
     /// Which `measurement_source` values count as a real state-of-health measurement.
     ///
@@ -160,7 +161,7 @@ struct BatteryHealthRecord: Codable, Equatable, Identifiable, Sendable {
     /// was written inline in all four, a row counted in one screen could be absent from the
     /// export that was supposed to contain it.
     static let measurementSourceFilter =
-        "measurement_source IN ('\(fullChargeRangeSource)', '\(calculatedSource)', '\(legacyEstimateSource)')"
+        "measurement_source IN ('\(fullChargeRangeSource)', '\(calculatedSource)', '\(legacyEstimateSource)', '\(sessionEnergySource)')"
 
     let id: Int64
     let vin: String

@@ -93,6 +93,7 @@ struct RemoteCommandDispatchTests {
         let scoped = ScopedPreferences(label: "remote-command-dispatch-send")
         let preferences = scoped.store
         preferences.vin = vin
+        preferences.setVin(vin, for: .volvo)
         preferences.setVehicleNickname("My Volvo", for: vin)
 
         let context = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
@@ -332,6 +333,32 @@ struct RemoteCommandDispatchTests {
         #expect(context.vehicleState?.commandState.optimisticLockUntil != nil)
     }
 
+    /// A command blocked on missing authorization must offer that step where the refusal is read.
+    /// Printing directions to a control on another screen is what made the block look dead.
+    @Test
+    @MainActor
+    func unauthorizedCommandOffersTheAuthorizationRemedy() async {
+        let context = makeContext(features: [.remoteLocks])
+        context.provider.failure = RemoteCommandError.authorizationRequired
+
+        let outcome = await context.perform(.lock, origin: .userInitiated)
+
+        guard case .refused = outcome else { Issue.record("Expected refusal"); return }
+        #expect(context.presentations.last?.remedy == .authorizeRemoteCommands)
+        #expect(context.presentations.last?.success == false)
+    }
+
+    @Test
+    @MainActor
+    func anOrdinaryFailureOffersNoRemedy() async {
+        let context = makeContext(features: [.remoteLocks])
+        context.provider.failure = RemoteCommandError.rejected(nil)
+
+        _ = await context.perform(.lock, origin: .userInitiated)
+
+        #expect(context.presentations.last?.remedy == nil)
+    }
+
     @Test
     @MainActor
     func failedCommandDoesNotPatchState() async {
@@ -353,7 +380,6 @@ struct RemoteCommandDispatchTests {
 @MainActor
 private final class RouterContextMock: URLCommandRouterContext {
     let activeBrand: VehicleBrand
-    var selectedVehicleVIN: String? { nil }
     var defaultRemoteClimateTemperatureCelsius: Double { 21 }
     private(set) var selectedVINs: [String] = []
     private(set) var commands: [RemoteCommand] = []
@@ -426,7 +452,8 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     private(set) var selectedVINs: [String] = []
     private(set) var confirmationCount = 0
     private(set) var presentations: [(
-        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?,
+        remedy: RemoteCommandRemedy?
     )] = []
     private let now: () -> Date
     /// The production receipt ledger, so filing (including the Remote Command target
@@ -493,9 +520,10 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     func currentCommandExecutor() -> any RemoteCommandExecuting { provider }
     func commandInProgressDidChange() {}
     func presentResult(
-        title: String, message: String, success: Bool, target: RemoteCommandTarget?
+        title: String, message: String, success: Bool, target: RemoteCommandTarget?,
+        remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
     ) {
-        presentations.append((title, message, success, target))
+        presentations.append((title, message, success, target, remedy))
     }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,

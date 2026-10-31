@@ -124,7 +124,7 @@ final class SQLiteDatabase: @unchecked Sendable {
     func passesQuickCheck() -> Bool {
         guard isOpen else { return false }
         let firstRow = try? query(sql: "PRAGMA quick_check;") { stmt -> String? in
-            stmt.step() ? stmt.columnText(at: 0) : nil
+            try stmt.stepOrThrow() ? stmt.columnText(at: 0) : nil
         }
         return (firstRow ?? nil) == "ok"
     }
@@ -191,18 +191,26 @@ final class SQLiteDatabase: @unchecked Sendable {
             return try query(sql: sql, bindings: bindings, process: process)
         }
         defer { readLock.unlock() }
-        var stmtHandle: OpaquePointer?
-        let status = sqlite3_prepare_v2(readDB, sql, -1, &stmtHandle, nil)
-        guard status == SQLITE_OK, let stmt = stmtHandle else {
-            throw SQLiteError.prepareStatement(String(cString: sqlite3_errmsg(readDB)))
+        do {
+            var stmtHandle: OpaquePointer?
+            let status = sqlite3_prepare_v2(readDB, sql, -1, &stmtHandle, nil)
+            guard status == SQLITE_OK, let stmt = stmtHandle else {
+                throw SQLiteError.prepareStatement(String(cString: sqlite3_errmsg(readDB)))
+            }
+            let statement = SQLiteStatement(stmt: stmt, db: readDB)
+            defer { sqlite3_finalize(stmt) }
+            try bindings(statement)
+            return try process(statement)
+        } catch {
+            logger.error("SQLite read failed: \(error, privacy: .public)")
+            throw error
         }
-        let statement = SQLiteStatement(stmt: stmt, db: readDB)
-        defer { sqlite3_finalize(stmt) }
-        try bindings(statement)
-        return try process(statement)
     }
 
     /// Runs multiple statements inside an ACID transaction.
+    ///
+    /// Holds `lock` (NSRecursiveLock) across BEGIN…COMMIT. `execute` re-enters the same
+    /// lock by design; do not replace with a non-recursive lock without restructuring.
     func withTransaction<T>(_ block: () throws -> T) throws -> T {
         lock.lock()
         defer { lock.unlock() }
@@ -306,8 +314,14 @@ final class SQLiteStatement: @unchecked Sendable {
 
     // MARK: - Stepping & Reading Columns (0-indexed)
 
-    func step() -> Bool {
-        sqlite3_step(stmt) == SQLITE_ROW
+    func stepOrThrow() throws -> Bool {
+        let status = sqlite3_step(stmt)
+        switch status {
+        case SQLITE_ROW: return true
+        case SQLITE_DONE: return false
+        case SQLITE_BUSY, SQLITE_LOCKED: throw SQLiteError.busy
+        default: throw SQLiteError.stepExecution(errorMessage)
+        }
     }
 
     func executeUpdate() throws {

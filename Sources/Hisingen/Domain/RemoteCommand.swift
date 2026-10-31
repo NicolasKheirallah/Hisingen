@@ -78,7 +78,10 @@ enum RemoteCommand: Codable, Equatable, Sendable {
         case .startClimate, .stopClimate: return .climateStartStop
         case .startEngine, .stopEngine: return .engineStart
         case .startPreCleaning, .stopPreCleaning: return .preCleaning
-        case .lock, .unlock: return .locks
+        case .lock: return .locks
+        // Unlocking is its own capability: a car can allow locking while its unlock type is
+        // `trunkOnly` or `none` (`Locks.unlock_type`, wire field 36.2).
+        case .unlock: return .remoteUnlock
         case .lockReducedGuard: return .reducedGuardLock
         case .unlockTrunk, .openTailgate, .closeTailgate: return .trunk
         case .openWindows, .closeWindows: return .windows
@@ -328,19 +331,33 @@ enum RemoteCommandOutcome: String, Codable, Sendable {
 /// The last remote-command result, surfaced inline in the Controls tab so a success or (more
 /// importantly) a failure is visible even when system notifications are muted or denied.
 /// `id` changes on every new result so the view can re-trigger its auto-dismiss timer.
+/// What a failed remote command offers the reader besides the reason. The banner is where the
+/// refusal is read, so an actionable remedy belongs there rather than in the sentence.
+enum RemoteCommandRemedy: Equatable, Sendable {
+    /// The provider needs the separate command authorization that Settings performs.
+    case authorizeRemoteCommands
+}
+
 struct RemoteCommandFeedback: Equatable, Sendable, Identifiable {
     let id: UUID
     let title: String
     let message: String
     let success: Bool
     let issuedAt: Date
+    let remedy: RemoteCommandRemedy?
+    /// The retry or undo the banner offers, when this result allows one.
+    let followUp: RemoteCommandFollowUp?
 
-    init(id: UUID = UUID(), title: String, message: String, success: Bool, issuedAt: Date = Date()) {
+    init(id: UUID = UUID(), title: String, message: String, success: Bool,
+         issuedAt: Date = Date(), remedy: RemoteCommandRemedy? = nil,
+         followUp: RemoteCommandFollowUp? = nil) {
         self.id = id
         self.title = title
         self.message = message
         self.success = success
         self.issuedAt = issuedAt
+        self.remedy = remedy
+        self.followUp = followUp
     }
 }
 
@@ -354,6 +371,9 @@ enum RemoteCommandError: Error, LocalizedError, Equatable, Sendable {
     case disabled
     case unsupported
     case missingContext
+    /// Typed separately from `.rejected` so the presentation can offer the authorization step
+    /// itself instead of printing directions to a control the reader has to go find.
+    case authorizationRequired
     case rejected(String?)
 
     var errorDescription: String? {
@@ -362,6 +382,8 @@ enum RemoteCommandError: Error, LocalizedError, Equatable, Sendable {
         case .disabled: return L10n.text("This remote-control feature is disabled in Settings.")
         case .unsupported: return L10n.text("This command is not supported by this vehicle or backend.")
         case .missingContext: return L10n.text("Refresh vehicle data before using this command.")
+        case .authorizationRequired:
+            return L10n.text("Remote commands aren't authorized yet. Open Settings → Remote Controls and choose \"Authorize Remote Commands.\"")
         case .rejected(let message): return message ?? L10n.text("The vehicle rejected the remote command.")
         }
     }

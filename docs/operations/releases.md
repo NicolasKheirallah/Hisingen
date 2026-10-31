@@ -1,274 +1,134 @@
 # Releases
 
-The real, current release process, traced from `make release` through to a published GitHub Release.
+Release preparation creates a pull request. Production builds use an existing tag
+whose resolved commit must equal the checked-out source and belong to main's
+history. Changing code requires a new version/tag; there is no checkout override.
 
-## Repository configuration (live)
+## Preparation and tagging
 
-- **Branch ruleset `protect-main`** (Settings → Rules → Rulesets): the ruleset
-  exists but is currently **disabled**. Until it is re-enabled, PRs and CI
-  status checks are not enforced before updates to `main`. Review its required
-  checks against the current workflow job names before enabling it.
-- **Tag ruleset `protect-release-tags`** (pattern `refs/tags/v*`): blocks
-  deletion and re-pointing of existing release tags. Creating new `v*` tags
-  (what `make release` does) is unaffected.
-- **`dependabot_security_updates`**: enabled (auto-PRs if a dependency gets a
-  published vulnerability advisory).
-- **`secret_scanning_validity_checks`**: attempted, but the API left it
-  `disabled`: this feature may not be available for this account/repo tier.
-  Check **Settings → Code security** if you want it and it's offered there;
-  secret scanning and push protection themselves are already enabled and
-  unaffected either way.
-- **`production-release` environment**: exists without protection rules or a
-  deployment branch policy. **`live-integration` does not yet exist** and will
-  be created by GitHub when the workflow first references it. Configure scoped
-  secrets and protection rules before relying on either environment as a gate.
+`Scripts/release-support.py` owns versioning and release state. Local
+`make release VERSION=patch`, the Prepare Release workflow, and Auto Release use
+that same implementation. Supported bumps are `patch`, `minor`, `major`, or an
+exact stable `MAJOR.MINOR.PATCH` without leading zeroes. Version and build numbers
+must increase. Stable version baselines exclude malformed and unrelated tags.
 
-```mermaid
-flowchart TD
-    A["make release VERSION=x.y.z"] --> B["Validate: VERSION matches x.y.z,<br/>matching CHANGELOG entry exists,<br/>working tree clean (incl. untracked)"]
-    B --> C["Bump CFBundleShortVersionString (PlistBuddy),<br/>increment CFBundleVersion by 1"]
-    C --> D["git commit 'Release vX.Y.Z'"]
-    D --> E["git tag vX.Y.Z"]
-    E --> F["git push origin HEAD vX.Y.Z"]
-    F -->|triggers| G["release.yml (tag push v*)"]
-    G --> H["Validate required secrets, pinned tools checksum,<br/>tag, Info.plist, CHANGELOG, and main ancestry"]
-    H --> I["swift test --skip Live: full deterministic<br/>suite gates the release"]
-    I --> J["Import Developer ID cert into ephemeral<br/>runner Keychain"]
-    J --> K["Build universal signed app with embedded Sparkle"]
-    K --> L["Verify architectures, updater configuration,<br/>framework load path, launch, and signatures"]
-    L --> M["Notarize and staple the app"]
-    M --> N["Build, sign, notarize, and staple the DMG"]
-    N --> O["Create and verify Hisingen.zip and Hisingen.app.zip"]
-    O --> P["Generate and verify SHA256SUMS"]
-    P --> Q["Download pinned Sparkle tools; verify SHA-256"]
-    Q --> R["Decode updater private key; derive public key;<br/>require exact match"]
-    R --> S["Extract exact dated changelog section;<br/>generate signed appcast"]
-    S --> T["Verify feed, archive, and release-note signatures"]
-    T --> U["Attest provenance for DMG and both ZIPs"]
-    U --> V["Publish six release assets"]
-    V --> W["Verify release and all six attached assets"]
-    W --> X["Publish appcast to Pages source;<br/>dispatch Pages deploy"]
-    X --> Y["Always-run cleanup: certificate, keychain,<br/>updater private key, and Sparkle tools"]
-```
+After successful CI for an upstream main push, Auto Release compares the tested
+SHA with current main and ignores stale runs. `[skip release]` on the triggering
+commit skips automation. If main already contains a new release version, it tags
+that tested commit and dispatches Release on that tag. Otherwise it prepares the
+version/changelog pull request. After that PR passes checks and merges, the next
+successful main run tags the tested version.
 
-`release.yml`'s job runs under `environment: production-release` and has
-`--skip Live` on its test step (same defense-in-depth as `ci.yml`; see
-[ci.md](./ci.md)), a release run never executes the live/remote-command
-test suites even though it runs the rest of the deterministic suite in full.
+Preparation never directly updates main. Bot-created branches/PRs explicitly
+dispatch CI and Security because GitHub suppresses ordinary recursive events from
+GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit
+with no completed release can resume dispatch rather than disappearing as a no-op.
+Only the intended release tag is pushed; unrelated local tags are not published.
 
-## Starting a release
+## Production stages
 
-### Automatic (default)
+Release jobs run under the shared `release-stable` concurrency group. A numerical
+version guard also rejects distribution rollback, including reversed completion
+order. `queue: max` retains up to 100 pending runs rather than replacing the
+previous pending release. The monotonic guard remains necessary because queue
+arrival order can differ from dispatch order. An existing tag can be dispatched
+again on its own ref.
 
-After every green CI run on `main`, the **Auto Release** workflow
-(`auto-release.yml`) runs `Scripts/auto-release.sh`, which:
+1. **Validate:** require workflow ref, tag, checkout, plist version, changelog,
+   increasing build number and main ancestry to agree. Run portable checks.
+2. **Test:** run credential-free deterministic tests and package validation before
+   production signing credentials become available.
+3. **Build:** import a Developer ID certificate, build/sign a universal app and
+   upload `signed-app.zip` plus its digest/identity checkpoint.
+4. **Notarize:** restore that checkpoint, submit/resume Apple's app request,
+   staple and assess the app, package/sign the DMG, submit/resume its request,
+   then staple/assess it. Each artifact has one notarization owner.
+5. **Verify:** validate the packaged app and architectures, produce checksums,
+   download checksum-pinned Sparkle tools, generate notes/appcast, and verify
+   signatures against the final embedded key. Save the complete publication input.
+6. **Publish:** attest provenance, create/reuse a draft release, upload assets,
+   download and compare their hashes, then publish the complete release.
+   Existing published releases are verified rather than overwritten.
+7. **Distribute:** call the reusable Pages workflow and update Homebrew under
+   monotonic version guards. A release run remains incomplete if either fails.
 
-1. Skips (no-op) when HEAD is already tagged, a newer commit landed on `main`
-   while CI ran, only release-bump commits exist since the last tag, or any new
-   commit message contains `[skip release]`.
-2. Otherwise bumps the patch version in `Info.plist`, appends a generated
-   `## [x.y.z] - YYYY-MM-DD` entry to `CHANGELOG.md` (commit subjects grouped
-   into `### Added`/`### Fixed`/`### Changed` by conventional prefix),
-   commits, tags `vX.Y.Z`, pushes both, and dispatches the release workflow
-   with the tag. Pushing the tag with `GITHUB_TOKEN` cannot trigger a workflow,
-   so the dispatch step is explicit and is why `release.yml` also accepts
-   `workflow_dispatch` with a `tag` input.
+The publication input includes the DMG, both ZIP names, SHA256SUMS, signed feed,
+signed notes and an identity/digest manifest. Pages consumes the same-run verified
+site artifact; it no longer needs the release bot to commit an appcast onto main.
+The Pages deployment verifies served callback/feed bytes and referenced release
+assets over HTTPS. Homebrew hashes the published DMG and refuses a cask downgrade.
+Missing Homebrew credentials fail preflight instead of silently skipping a channel.
 
-The result: pushing to `main` and passing CI is a release, with no manual step.
-Escape hatches: `[skip release]` in a commit message skips the automation, and
-the manual paths below remain for minor/major bumps or curated release notes.
+## Retrying failures
 
-### Manual paths
+Use **Re-run failed jobs** to preserve successful build checkpoints. A publication
+or distribution retry should consume the saved artifact rather than recompile
+source under the same version. Checkpoint manifests bind hashes to tag, source SHA,
+version and build. They reject modified inputs before reuse.
 
-Add the release notes under `## [x.y.z] - YYYY-MM-DD` in the root
-[`CHANGELOG.md`](../../CHANGELOG.md) first. Then use either of the supported paths:
+Notarization saves request IDs and artifact hashes under `notary-state`. A retry
+resumes the known request instead of creating another submission. Submission,
+status polling, stapling and assessment have bounded operations. Permanent
+rejection is fatal and retains Apple's diagnostic JSON; transient transport errors
+receive bounded retries. Always-run recovery uploads preserve request state and an
+already-built DMG. Signing keychains and private-key files are removed on job exit.
 
-1. Run the **Prepare Release** workflow with an exact version or semantic bump.
-   It validates monotonic versioning and the changelog entry, creates a
-   `release/vX.Y.Z` branch, updates `Info.plist`, and opens a pull request. After
-   opening the PR it explicitly dispatches CI and Security on the release branch
-   because GitHub suppresses ordinary workflow triggers from `GITHUB_TOKEN`.
-   After those checks pass and the PR is merged, create the protected
-   `vX.Y.Z` tag on the merge commit.
-2. From a clean local `main`, run:
+A full rebuild may produce different signed/archive bytes. It must not replace an
+already published immutable release. Publish a new version if source or final
+artifact identity changes. Verify provenance independently with:
 
-```bash
-make release VERSION=2.6.0
-```
-
-Both paths enforce version format and a matching changelog entry. The local path
-also requires a clean worktree, bumps both version fields, commits, and pushes
-the exact tag `release.yml` listens for. Manually tagging without first updating
-`Info.plist` and `CHANGELOG.md` will fail the release workflow before signing.
-`release.yml` also runs on `workflow_dispatch` with an explicit tag, which the
-auto-release flow uses; dispatching it by hand re-runs the release for an
-existing tag.
-
-## Gating checks (in order, all must pass)
-
-1. **Secure configuration**: every required backend, Developer ID, notarization, and Sparkle secret must be non-empty, and the pinned Sparkle tools checksum must be configured.
-2. **Tag format**: must match `vMAJOR.MINOR.PATCH` exactly.
-3. **Version match**: `Info.plist`'s `CFBundleShortVersionString` (stripped of the `v` prefix) must equal the tag.
-4. **Changelog match**: `CHANGELOG.md` must contain `## [MAJOR.MINOR.PATCH]`, optionally followed by a date.
-5. **Tag is on `main`**: `git merge-base --is-ancestor HEAD origin/main`; a release can't be cut from a branch that hasn't been merged.
-6. **`Info.plist` validity**: `plutil -lint`.
-7. **Full deterministic test suite**: `swift test --skip Live --no-parallel`. A release does not proceed on a failing test, regardless of what a prior `ci.yml` run on the same commit showed.
-
-If any of these fail, nothing is signed, notarized, or published.
-
-## Signing and notarization
-
-See [signing-and-notarization details below](#signing-and-notarization-detail). Both the `.app` and the `.dmg` are independently signed, notarized, and stapled, not just the app inside the DMG. The workflow's final verification step is deliberately paranoid: it mounts the *published* DMG and unzips the *published* zip and re-runs `codesign --verify`/`spctl --assess` on those extracted copies, not just on the build artifacts still sitting in the runner's working directory, catching a class of bug where packaging (zipping/DMG creation) subtly corrupts an otherwise-valid signature.
-
-The same bar applies to local pre-release builds: `Scripts/validate-release.sh` (run by `Scripts/release.sh` before anything is committed or tagged) now fails when a Developer ID-signed app or DMG has no notarization ticket stapled to it, so an unnotarized "signed but not trusted" build cannot reach a tag push unnoticed. Ad-hoc and development-identity artifacts are exempt; they are local-only by definition.
-
-## Checksums
-
-`SHA256SUMS`, generated via `shasum -a 256` over the final DMG and zip, published alongside them as a release asset. Users can verify a download with:
-
-```bash
-shasum -a 256 -c SHA256SUMS
-```
-
-## Sparkle appcast publication
-
-The workflow downloads the pinned Sparkle `2.9.6` tools archive and rejects it unless its
-SHA-256 digest matches the `SPARKLE_TOOLS_SHA256` repository variable. It decodes the temporary
-private-key export, derives its Ed25519 public key, and requires an exact match with the
-32-byte `SPARKLE_PUBLIC_ED_KEY` before calling `generate_appcast --ed-key-file`.
-
-The matching dated changelog section is extracted into `Hisingen.app.md`; extraction stops at
-the next release heading. Appcast generation adds two release assets:
-
-- `appcast.xml`
-- `Hisingen.app.md`
-
-Before publication, an independent verifier requires the signed-feed block, archive Ed25519
-signature, and release-notes signature. Missing notes, malformed keys, mismatched key pairs,
-or incomplete signatures fail the release.
-
-## Release artifact verification
-
-Two independent checks exist specifically to prevent a run showing green in
-Actions while leaving an unusable or incomplete release behind:
-
-1. **Pre-publish**: before `softprops/action-gh-release` runs at all, a step
-   asserts `Hisingen.dmg`, `Hisingen.zip`, `Hisingen.app.zip`, and
-   `SHA256SUMS` exist, are non-empty, and verifies every checksum. The appcast
-   step separately requires non-empty, fully signed `appcast.xml` and
-   `Hisingen.app.md`.
-2. **Post-publish**: after publishing, `gh release view "$GITHUB_REF_NAME"
-   --json assets` is queried and the job fails unless exactly the six expected
-   assets are attached, the specific gap that matters, since it's
-   possible for an upload step to report success while silently attaching
-   zero files (e.g. a glob matching nothing).
-
-## Build provenance
-
-`actions/attest-build-provenance` generates a signed attestation for
-`Hisingen.dmg`, `Hisingen.zip`, and `Hisingen.app.zip`, linking the published binaries back to
-this exact workflow run, commit, and repository via Sigstore/GitHub's
-attestation API (`attestations: write` + `id-token: write` permissions on the
-release job). Anyone can verify a downloaded release asset was actually built
-by this repository's `release.yml`, not just re-signed or repackaged
-elsewhere, with:
-
-```bash
+```sh
 gh attestation verify Hisingen.dmg --owner NicolasKheirallah
-gh attestation verify Hisingen.zip --owner NicolasKheirallah
 ```
 
-This is a supply-chain integrity check layered on top of, not a replacement
-for, Apple code signing and notarization; it proves *provenance* (which
-workflow run produced this file), while codesign/notarization prove the
-binary is trusted to run on macOS.
+## Repository policy and rollout
 
-## `live-integration.yml`
+`Scripts/configure-ci-protection.py` inspects/applies main protection, production
+ref policies and immutable-release configuration. It saves the previous settings
+in ignored local task state before applying them. Its transitional check set
+matches existing main CI and omits the retired macOS 14 context. Once the new
+workflow succeeds on main, `--aggregate` switches to `ci-required`.
 
-**Trigger:** `workflow_dispatch` only (manual, from the Actions tab), with a
-`provider` choice (`all` / `polestar` / `volvo`). Never runs automatically.
-**Permissions:** `contents: read`; this workflow only ever runs tests, never
-publishes anything.
-**Environment:** `live-integration` (both jobs).
-**Concurrency:** group `live-account-test`, shared across *both* jobs, so a
-Polestar and a Volvo run can never overlap the same test account(s) even if
-triggered close together.
+The production environment permits main dispatches and `v*` tag refs; Release
+itself requires dispatch on the requested tag. Pages permits main, gh-pages and
+`v*` tag refs so it can serve the reusable release job. Release tags cannot be
+updated or deleted. New immutable releases protect uploaded assets as well.
 
-Only suites whose names make the read-only contract explicit are ever
-invoked: `--filter LivePolestarReadOnlyIntegrationTests` and `--filter
-LiveVolvoReadOnlyIntegrationTests`. `LivePolestarIntegrationTests.swift` also
-defines `LivePolestarRemoteCommandIntegrationTests`, which dispatches a real
-`startClimate` command against the configured vehicle; this workflow does
-not filter it in, and it must stay that way; it's reachable only by running
-that Swift Testing suite directly and locally with a developer's own
-consciously-supplied credentials, never from CI.
+Keep signing, Apple notarization, Sparkle private keys and tap-write credentials
+in `production-release`; keep vehicle test credentials in `live-integration`.
+Normal CI and CodeQL use fixture configuration. GitHub does not expose saved
+secret values through its API, so changing secret scope requires the original
+credential material; the protection script does not retrieve or print it.
 
-- **`live-polestar`**: requires `HISINGEN_TEST_EMAIL`, `HISINGEN_TEST_PASSWORD`
-  (checked for non-emptiness before any test runs); `HISINGEN_TEST_VIN` is
-  optional.
-- **`live-volvo`**: requires `HISINGEN_TEST_VOLVO_CLIENT_ID`,
-  `HISINGEN_TEST_VOLVO_CLIENT_SECRET`, `HISINGEN_TEST_VOLVO_VCC_API_KEY`, and
-  `HISINGEN_TEST_VOLVO_REFRESH_TOKEN` (all four checked); `HISINGEN_TEST_VOLVO_VIN`
-  is optional.
+## Secrets and variables
 
-**Running it:** Actions tab → **Live Account Integration** → **Run
-workflow** → choose `all`/`polestar`/`volvo`.
+| Name | Purpose |
+| --- | --- |
+| `MACOS_CERT_P12` | Base64 Developer ID Application certificate export. |
+| `MACOS_CERT_PASSWORD` | Certificate export password. |
+| `NOTARY_APPLE_ID`, `NOTARY_TEAM_ID`, `NOTARY_APP_PASSWORD` | Apple notarization authentication. |
+| `VOLVO_CLIENT_ID`, `VOLVO_CLIENT_SECRET`, `VOLVO_VCC_API_KEY` | Production backend build configuration; values embedded in the app are recoverable. |
+| `POLESTAR_IMAGE_API_KEY` | Optional production image API configuration. |
+| `SPARKLE_PUBLIC_ED_KEY` | Base64 32-byte public key embedded in the app. |
+| `SPARKLE_PRIVATE_ED_KEY` | Native Sparkle private-key export, used only for signing. |
+| `SPARKLE_TOOLS_SHA256` | Repository variable holding the pinned Sparkle tools archive digest. |
+| `HOMEBREW_TAP_TOKEN` | Token with write access to the Homebrew tap. |
 
-## Secrets checklist
+The workflow checks required configuration before its production build. Do not
+change the signing key pair casually: installed clients trust their embedded
+public key, so rotation needs a compatible updater migration.
 
-Configure under **Settings → Secrets and variables → Actions**, scoped to
-the environment noted (not the repository as a whole), so a same-repo PR
-branch can never read them.
+## Live integration
 
-| Secret | Workflow | Environment | Purpose |
-|---|---|---|---|
-| `MACOS_CERT_P12` | release.yml | `production-release` | Base64-encoded Developer ID Application `.p12` certificate. |
-| `MACOS_CERT_PASSWORD` | release.yml | `production-release` | Password protecting the `.p12` above. |
-| `NOTARY_APPLE_ID` | release.yml | `production-release` | Apple ID used for `notarytool submit`. |
-| `NOTARY_TEAM_ID` | release.yml | `production-release` | Apple Developer Team ID. |
-| `NOTARY_APP_PASSWORD` | release.yml | `production-release` | App-specific password for the Apple ID above (not the account password). |
-| `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` | release.yml | `production-release` | Volvo Developer API credentials embedded in the production build configuration. |
-| `SPARKLE_PUBLIC_ED_KEY` | release.yml | `production-release` | Base64-encoded 32-byte Ed25519 public key embedded in the app. |
-| `SPARKLE_PRIVATE_ED_KEY` | release.yml | `production-release` | Base64 encoding of the Sparkle private-key export, used only to sign the appcast. |
-| `HISINGEN_TEST_EMAIL` / `HISINGEN_TEST_PASSWORD` / `HISINGEN_TEST_VIN` | live-integration.yml (`live-polestar`) | `live-integration` | Dedicated Polestar test account, never a personal account. VIN is optional. |
-| `HISINGEN_TEST_VOLVO_CLIENT_ID` / `_CLIENT_SECRET` / `_VCC_API_KEY` / `_REFRESH_TOKEN` / `_VIN` | live-integration.yml (`live-volvo`) | `live-integration` | Dedicated Volvo Developer Portal test app registration + test account refresh token. VIN is optional. |
+Live Account Integration is manual and uses a dedicated test account. It never
+selects remote-command suites. Polestar read-only checks complete before the
+stream soak begins. Hosted soak duration is an integer from 60 to 1800 seconds;
+run longer investigations locally. Discovery and execution counts must be nonzero.
 
-Rotate `NOTARY_APP_PASSWORD` and the Volvo refresh token if you suspect
-exposure; both are revocable without needing a new certificate or client
-registration. Check the Developer ID certificate's expiry with `security
-find-identity -v -p codesigning` against a local copy before it lapses, since
-an expired cert fails `release.yml` at the "Import Developer ID certificate"
-step with no advance warning otherwise.
-
-Set repository variable `SPARKLE_TOOLS_SHA256` to the expected SHA-256 digest of
-`Sparkle-2.9.6.tar.xz`. This is a variable rather than a secret, but a release
-still fails before signing if it is empty.
-
-## Release notes
-
-Every release must have a hand-maintained entry in the root
-[`CHANGELOG.md`](../../CHANGELOG.md). GitHub also generates release-page notes
-from merged PRs and commits through `generate_release_notes: true`; those notes
-supplement the changelog rather than replacing it.
-
-The signed Sparkle note asset contains only the exact tagged changelog section.
-A dated heading such as `## [1.2.4] - 2026-08-28` is supported and preferred.
-
-## Signing and notarization detail
-
-**Certificate handling:** the Developer ID certificate (`.p12`, base64-encoded in the `MACOS_CERT_P12` secret) is imported into a fresh, ephemeral Keychain created just for the CI run (`security create-keychain`), never the runner's default login keychain. `security find-identity -v -p codesigning` resolves the exact identity string dynamically rather than hardcoding it; the workflow fails clearly if no matching identity is found after import, rather than silently falling back to ad-hoc signing.
-
-**Hardened runtime:** `make app`/`make app-universal` sign with `--options runtime --timestamp` whenever `IDENTITY` contains "Developer ID", which is required for notarization to succeed.
-
-**Notarization:** `ditto` zips the app, `xcrun notarytool submit --wait` submits it to Apple and blocks until a result, then `stapler staple` attaches the notarization ticket so the app can be verified offline afterward, and `stapler validate` confirms the staple took. The DMG goes through the same submit/staple/validate sequence separately. Local builds perform the same sequence through `Scripts/notarize.sh` whenever notarization credentials are configured (see [build.md](build.md)); without credentials the step skips, leaving the build Developer ID-signed but unstapled.
-
-**Gatekeeper assessment:** `spctl --assess` is run against both the app and the DMG as a final "would Gatekeeper actually let a user open this" check, not just a signature check.
-
-**Cleanup:** an `if: always()` step deletes the temporary `.p12`, any intermediate zip, the decoded Sparkle private key and downloaded tools archive, and the ephemeral signing keychain, even if an earlier step in the job failed, so a failed release run never leaves signing material sitting on a shared runner.
-
-## What's real vs. what's aspirational
-
-Everything in this document describes the workflow as it exists in
-`.github/workflows/release.yml`, `.github/workflows/tag-release.yml`, and the
-local release scripts today. Production signing and notarization still require
-an actual protected release run with the configured environment secrets.
+Polestar requires `HISINGEN_TEST_EMAIL` and `HISINGEN_TEST_PASSWORD`; its VIN is
+optional. Volvo requires `HISINGEN_TEST_VOLVO_CLIENT_ID`,
+`HISINGEN_TEST_VOLVO_CLIENT_SECRET`, `HISINGEN_TEST_VOLVO_VCC_API_KEY` and
+`HISINGEN_TEST_VOLVO_REFRESH_TOKEN`; its VIN is optional. If the identity provider
+rotates a refresh token, refresh the environment secret through the account's
+approved credential process. Disposable runner persistence does not update a saved
+GitHub secret. Tests clean their local account state even after failure.

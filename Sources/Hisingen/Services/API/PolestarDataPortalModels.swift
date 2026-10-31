@@ -1,5 +1,15 @@
 import Foundation
 
+func portalValue(_ value: Double?, range: ClosedRange<Double>) -> Double? {
+    guard let value, value.isFinite, range.contains(value) else { return nil }
+    return value
+}
+
+func portalRoundedInt(_ value: Double, range: ClosedRange<Double> = -1_000_000_000...1_000_000_000) -> Int? {
+    guard value.isFinite, range.contains(value) else { return nil }
+    return Int(exactly: value.rounded())
+}
+
 // MARK: - Envelopes and Common Types
 
 struct PolestarDataPortalTimestamp: Codable, Sendable, Equatable {
@@ -7,7 +17,7 @@ struct PolestarDataPortalTimestamp: Codable, Sendable, Equatable {
     let nanos: Int?
 
     var date: Date? {
-        guard let seconds, let sec = Double(seconds) else { return nil }
+        guard let seconds, let sec = Double(seconds), sec.isFinite, (-62_135_596_800...253_402_300_799).contains(sec), (0...999_999_999).contains(nanos ?? 0) else { return nil }
         let nanoOffset = Double(nanos ?? 0) / 1_000_000_000.0
         return Date(timeIntervalSince1970: sec + nanoOffset)
     }
@@ -78,9 +88,16 @@ struct PolestarDataPortalVehiclesDTO: Codable, Sendable {
                     self.vins = objList.map(\.vin)
                     return
                 }
+                // An explicit `"data": null` is an account with no linked vehicles, not a new shape.
+                if (try? keyed.decodeNil(forKey: dataKey)) == true {
+                    self.vins = []
+                    return
+                }
             }
         }
-        self.vins = []
+        throw DecodingError.dataCorrupted(DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription: "Expected a VIN array, or an envelope whose data is a VIN array or VIN objects"))
     }
 
     private struct VINObject: Decodable {
@@ -256,29 +273,32 @@ extension PolestarBatteryDTO {
 
         let diag = BatteryDiagnostics(
             timeToTargetMinutes: nil,
-            timeToMinimumSOCMinutes: estimatedChargingTimeMinutesToMinimumSoc.map { Int($0.rounded()) },
+            timeToMinimumSOCMinutes: estimatedChargingTimeMinutesToMinimumSoc.flatMap { portalRoundedInt($0, range: 0...525_600) },
             // `estimatedChargingTimeMinutesToTargetDistance` is time to the distance goal
             // configured in the car, not to the charge target, so it must not feed the
             // SoC-target fields above.
-            timeToTargetDistanceMinutes: estimatedChargingTimeMinutesToTargetDistance.map { Int($0.rounded()) },
+            timeToTargetDistanceMinutes: estimatedChargingTimeMinutesToTargetDistance.flatMap { portalRoundedInt($0, range: 0...525_600) },
             chargerPowerState: powerState,
             averageConsumption: averageEnergyConsumptionKwhPer100Km,
             averageConsumptionSinceCharge: averageEnergyConsumptionKwhPer100KmSinceCharge,
             averageConsumptionAutomatic: averageEnergyConsumptionKwhPer100KmAutomatic,
-            energyUsedSinceChargeWh: totalEnergyConsumptionWhSinceCharge ?? totalEnergyConsumptionWhAutomatic ?? totalEnergyConsumptionWh,
+            energyUsedSinceChargeWh: totalEnergyConsumptionWhSinceCharge,
+            energyUsedManualTripWh: totalEnergyConsumptionWh,
+            energyUsedAutomaticTripWh: totalEnergyConsumptionWhAutomatic,
             energyBreakdown: breakdown,
             powerLimitKw: dischargeInfo?.powerLimit,
             energyAvailableKwh: dischargeInfo?.energyAvailable
         )
 
         return EnergyAndChargingSnapshot(
-            batteryPercentage: batteryChargeLevelPercentage,
-            rangeKm: estimatedDistanceToEmptyKm.map { Int($0.rounded()) },
+            batteryPercentage: batteryChargeLevelPercentage.flatMap { (0...100).contains($0) ? $0 : nil },
+            rangeKm: estimatedDistanceToEmptyKm.flatMap { portalRoundedInt($0, range: 0...100_000) },
             chargingState: chargeState,
-            estimatedTimeToFullMinutes: estimatedChargingTimeToFullMinutes.map { Int($0.rounded()) },
-            powerWatts: chargingPowerWatts.map { Int($0.rounded()) },
-            currentAmps: chargingCurrentAmps.map { Int($0.rounded()) },
-            voltageVolts: chargingVoltageVolts.map { Int($0.rounded()) },
+            scheduleOutcome: ChargingScheduleOutcome(apiValue: chargingStatusV2 ?? chargingStatus),
+            estimatedTimeToFullMinutes: estimatedChargingTimeToFullMinutes.flatMap { portalRoundedInt($0, range: 0...525_600) },
+            powerWatts: chargingPowerWatts.flatMap { portalRoundedInt($0, range: 0...10_000_000) },
+            currentAmps: chargingCurrentAmps.flatMap { portalRoundedInt($0, range: 0...10_000) },
+            voltageVolts: chargingVoltageVolts.flatMap { portalRoundedInt($0, range: 0...10_000) },
             type: chgType,
             connection: conn,
             diagnostics: diag
@@ -407,7 +427,15 @@ extension PolestarHealthDTO {
         if tyres.contains(where: { $0.warning.needsAttention }) {
             warnings.append(.tyrePressure)
         }
-        reported.append(.tyrePressure)
+        // A health payload without any tyre field says nothing about the tyres; marking them
+        // reported would read as an all-clear and close an open tyre-pressure episode.
+        let hasTyreWarning = [frontLeftTyrePressureWarning, frontRightTyrePressureWarning,
+                              rearLeftTyrePressureWarning, rearRightTyrePressureWarning].contains { $0 != nil }
+        let hasTyrePressure = [frontLeftTyrePressureKpa, frontRightTyrePressureKpa,
+                               rearLeftTyrePressureKpa, rearRightTyrePressureKpa].contains { $0 != nil }
+        if hasTyreWarning || hasTyrePressure {
+            reported.append(.tyrePressure)
+        }
 
         var lightFaults: [String] = []
         if let lightWarnings {
@@ -440,11 +468,11 @@ extension PolestarHealthDTO {
         if washerFluidLevelWarning.map({ isActiveWarningToken($0.uppercased()) }) == true { fluidWarningNames.append("Washer Fluid") }
 
         let service = ServiceSnapshot(
-            daysToService: daysToService.map { Int($0.rounded()) },
-            distanceToServiceKm: distanceToServiceKm.map { Int($0.rounded()) },
+            daysToService: daysToService.flatMap { portalRoundedInt($0) },
+            distanceToServiceKm: distanceToServiceKm.flatMap { portalRoundedInt($0) },
             serviceWarning: isServiceWarn,
             fluidWarnings: fluidWarningNames,
-            engineHoursToService: engineHoursToService.map { Int($0.rounded()) }
+            engineHoursToService: engineHoursToService.flatMap { portalRoundedInt($0) }
         )
 
         return MaintenanceAndHealthSnapshot(
@@ -472,7 +500,7 @@ struct PolestarOdometerDTO: Codable, Sendable, Equatable {
     let metaEventId: String?
 
     var calculatedOdometerKm: Int? {
-        odometerMeters.map { Int(($0 / 1000.0).rounded()) }
+        odometerMeters.flatMap { portalRoundedInt($0 / 1000.0, range: 0...10_000_000) }
     }
 
     func toTripComputerSnapshot() -> TripComputerSnapshot {
@@ -480,10 +508,10 @@ struct PolestarOdometerDTO: Codable, Sendable, Equatable {
             manualTripKm: tripMeterManualKm,
             automaticTripKm: tripMeterAutomaticKm,
             averageSpeedKmH: averageSpeedKmPerHour,
-            manualAverageSpeedKmH: averageSpeedKmPerHour.map { Int($0.rounded()) },
-            automaticAverageSpeedKmH: averageSpeedKmPerHourAutomatic.map { Int($0.rounded()) },
+            manualAverageSpeedKmH: averageSpeedKmPerHour.flatMap { portalRoundedInt($0, range: 0...1_000) },
+            automaticAverageSpeedKmH: averageSpeedKmPerHourAutomatic.flatMap { portalRoundedInt($0, range: 0...1_000) },
             sinceChargeTripKm: tripMeterSinceChargeKm,
-            sinceChargeAverageSpeedKmH: averageSpeedKmPerHourSinceCharge.map { Int($0.rounded()) }
+            sinceChargeAverageSpeedKmH: averageSpeedKmPerHourSinceCharge.flatMap { portalRoundedInt($0, range: 0...1_000) }
         )
     }
 }
@@ -511,17 +539,17 @@ struct PolestarLocationDTO: Codable, Sendable, Equatable {
     let metaReceivedAt: String?
     let metaEventId: String?
 
-    var latitude: Double? { coordinate?.latitude }
-    var longitude: Double? { coordinate?.longitude }
+    var latitude: Double? { portalValue(coordinate?.latitude, range: -90...90) }
+    var longitude: Double? { portalValue(coordinate?.longitude, range: -180...180) }
 
     func toVehicleLocation() -> VehicleLocation {
         VehicleLocation(
-            latitude: coordinate?.latitude,
-            longitude: coordinate?.longitude,
-            heading: heading,
-            speed: speed.flatMap { Double($0) },
+            latitude: latitude,
+            longitude: longitude,
+            heading: portalValue(heading, range: 0...360),
+            speed: portalValue(speed.flatMap { Double($0) }, range: 0...1_000),
             timestamp: timestamp?.date,
-            altitudeMeters: altitude.flatMap { Double($0) }
+            altitudeMeters: portalValue(altitude.flatMap { Double($0) }, range: -1_000...20_000)
         )
     }
 }
@@ -601,7 +629,7 @@ struct PolestarTargetSocDTO: Codable, Sendable, Equatable {
 
     /// Current charge target percentage, from `targetSoc.batteryChargeTargetLevel`.
     var targetSocPercentage: Int? {
-        targetSoc?.batteryChargeTargetLevel.map { Int($0.rounded()) }
+        targetSoc?.batteryChargeTargetLevel.flatMap { portalRoundedInt($0, range: 0...100) }
     }
 }
 
@@ -629,7 +657,7 @@ struct PolestarAmpLimitDTO: Codable, Sendable, Equatable {
 
     /// Current amperage limit, from the nested `ampLimit.ampLimit` value.
     var ampLimit: Int? {
-        syncedAmpLimit?.ampLimit.map { Int($0.rounded()) }
+        syncedAmpLimit?.ampLimit.flatMap { portalRoundedInt($0, range: 0...1000) }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -667,17 +695,17 @@ struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
     let minute: Double?
     let timeZone: PolestarTimeZoneDTO?
 
-    var hourComponent: Int? { hour.map { Int($0.rounded()) } }
-    var minuteComponent: Int? { minute.map { Int($0.rounded()) } }
+    var hourComponent: Int? { hour.flatMap { portalRoundedInt($0, range: 0...23) } }
+    var minuteComponent: Int? { minute.flatMap { portalRoundedInt($0, range: 0...59) } }
 
     /// Minutes to add to the wire wall-clock to read it in `timeZone`. Three wire forms
     /// exist: UTC (`utc0`), the car's own offset (`timeZone.offsetMinutes`, which can differ
     /// from the device's), and no offset at all, meaning "already local" on the car — the
     /// historic no-conversion reading.
-    func deviceShiftMinutes(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
-        let deviceOffset = timeZone.secondsFromGMT() / 60
+    func deviceShiftMinutes(isUtc0: Bool, timeZone: TimeZone = .current, now: Date = Date()) -> Int? {
+        let deviceOffset = timeZone.secondsFromGMT(for: now) / 60
         if isUtc0 { return deviceOffset }
-        guard let wireOffset = self.timeZone?.offsetMinutes.map({ Int($0.rounded()) }) else { return nil }
+        guard let wireOffset = self.timeZone?.offsetMinutes.flatMap({ portalRoundedInt($0, range: -840...840) }) else { return nil }
         return deviceOffset - wireOffset
     }
 
@@ -687,15 +715,15 @@ struct PolestarDailyTimeDTO: Codable, Sendable, Equatable {
         return total
     }
 
-    func localHour(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
+    func localHour(isUtc0: Bool, timeZone: TimeZone = .current, now: Date = Date()) -> Int? {
         guard let h = hourComponent else { return nil }
-        guard let m = minuteComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone) else { return h }
+        guard let m = minuteComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone, now: now) else { return h }
         return normalizedWallMinutes(h * 60 + m + shift) / 60
     }
 
-    func localMinute(isUtc0: Bool, timeZone: TimeZone = .current) -> Int? {
+    func localMinute(isUtc0: Bool, timeZone: TimeZone = .current, now: Date = Date()) -> Int? {
         guard let m = minuteComponent else { return nil }
-        guard let h = hourComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone) else { return m }
+        guard let h = hourComponent, let shift = deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone, now: now) else { return m }
         return normalizedWallMinutes(h * 60 + m + shift) % 60
     }
 }
@@ -708,15 +736,15 @@ struct PolestarChargeLocationTimerDTO: Codable, Sendable, Equatable {
     let stop: PolestarDailyTimeDTO?
     let activeDays: [String]?
 
-    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
+    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false, timeZone: TimeZone = .current, now: Date = Date()) -> VehicleSchedule {
         VehicleSchedule(
             backendID: id,
             index: index,
             kind: .locationCharging,
-            startHour: start?.localHour(isUtc0: isUtc0),
-            startMinute: start?.localMinute(isUtc0: isUtc0),
-            endHour: stop?.localHour(isUtc0: isUtc0),
-            endMinute: stop?.localMinute(isUtc0: isUtc0),
+            startHour: start?.localHour(isUtc0: isUtc0, timeZone: timeZone, now: now),
+            startMinute: start?.localMinute(isUtc0: isUtc0, timeZone: timeZone, now: now),
+            endHour: stop?.localHour(isUtc0: isUtc0, timeZone: timeZone, now: now),
+            endMinute: stop?.localMinute(isUtc0: isUtc0, timeZone: timeZone, now: now),
             weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
             isActive: activated ?? false
         )
@@ -730,13 +758,13 @@ struct PolestarChargeLocationDepartureDTO: Codable, Sendable, Equatable {
     let departureTime: PolestarDailyTimeDTO?
     let activeDays: [String]?
 
-    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
+    func toVehicleSchedule(index: Int = 0, isUtc0: Bool = false, timeZone: TimeZone = .current, now: Date = Date()) -> VehicleSchedule {
         VehicleSchedule(
             backendID: id,
             index: index,
             kind: .climate,
-            startHour: departureTime?.localHour(isUtc0: isUtc0),
-            startMinute: departureTime?.localMinute(isUtc0: isUtc0),
+            startHour: departureTime?.localHour(isUtc0: isUtc0, timeZone: timeZone, now: now),
+            startMinute: departureTime?.localMinute(isUtc0: isUtc0, timeZone: timeZone, now: now),
             endHour: nil,
             endMinute: nil,
             weekdays: activeDays?.compactMap { parsePortalWeekday($0) } ?? [],
@@ -773,28 +801,10 @@ struct PolestarChargeLocationsDTO: Codable, Sendable, Equatable {
     let metaReceivedAt: String?
     let metaEventId: String?
 
-    func toChargeLocations() -> [ChargeLocationSnapshot] {
+    func toChargeLocations(timeZone: TimeZone = .current, now: Date = Date()) -> [ChargeLocationSnapshot] {
         let isUtc = utc0 ?? false
-        return chargeLocations?.map { $0.toChargeLocationSnapshot(isUtc0: isUtc) } ?? []
+        return chargeLocations?.enumerated().map { index, item in item.toChargeLocationSnapshot(isUtc0: isUtc, timeZone: timeZone, now: now, fallbackID: "portal-location-\(index)") } ?? []
     }
-}
-
-/// `IsAtChargeLocationState`. The portal signals presence purely through `locationId` —
-/// there is no boolean on the wire.
-struct PolestarIsAtChargeLocationDTO: Codable, Sendable, Equatable {
-    let vin: String?
-    let id: String?
-    /// The charge location the vehicle is currently at.
-    let locationId: String?
-    let arrivedAt: String?
-    let arrivedAtTimestamp: PolestarDataPortalTimestamp?
-    let metaReceivedAt: String?
-    let metaEventId: String?
-
-    var isAtChargeLocation: Bool { locationId != nil }
-    /// Kept for snapshot assembly until it joins `locationId` against the
-    /// charge-locations list; the state itself carries no name.
-    var currentLocationName: String? { nil }
 }
 
 /// `GlobalChargeTimerValue` — one daily charging window; the spec has no weekday list here.
@@ -816,17 +826,17 @@ struct PolestarGlobalChargeTimerDTO: Codable, Sendable, Equatable {
     let metaReceivedAt: String?
     let metaEventId: String?
 
-    func toSchedules() -> [VehicleSchedule] {
+    func toSchedules(timeZone: TimeZone = .current, now: Date = Date()) -> [VehicleSchedule] {
         guard let timer = globalChargeTimer else { return [] }
         let isUtc = utc0 ?? false
         return [VehicleSchedule(
             backendID: id,
             index: 0,
             kind: .globalCharging,
-            startHour: timer.start?.localHour(isUtc0: isUtc),
-            startMinute: timer.start?.localMinute(isUtc0: isUtc),
-            endHour: timer.stop?.localHour(isUtc0: isUtc),
-            endMinute: timer.stop?.localMinute(isUtc0: isUtc),
+            startHour: timer.start?.localHour(isUtc0: isUtc, timeZone: timeZone, now: now),
+            startMinute: timer.start?.localMinute(isUtc0: isUtc, timeZone: timeZone, now: now),
+            endHour: timer.stop?.localHour(isUtc0: isUtc, timeZone: timeZone, now: now),
+            endMinute: timer.stop?.localMinute(isUtc0: isUtc, timeZone: timeZone, now: now),
             weekdays: [],
             isActive: timer.activated ?? false,
             syncStatus: timer.metadata?.syncStatus?.value
@@ -881,11 +891,11 @@ struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
     /// Combines the one-shot `startDate` with the ready-at time into a concrete instant.
     /// UTC timer forms get the same hour shift `localHour(isUtc0:)` applies, including the
     /// day wrap when that shift crosses midnight.
-    func oneShotDate(isUtc0: Bool) -> Date? {
+    func oneShotDate(isUtc0: Bool, timeZone: TimeZone = .current, now: Date = Date()) -> Date? {
         guard let start = startDate,
-              let year = start.year.map({ Int($0.rounded()) }),
-              let month = start.month.map({ Int($0.rounded()) }),
-              let day = start.day.map({ Int($0.rounded()) }) else { return nil }
+              let year = start.year.flatMap({ portalRoundedInt($0, range: 1...9999) }),
+              let month = start.month.flatMap({ portalRoundedInt($0, range: 1...12) }),
+              let day = start.day.flatMap({ portalRoundedInt($0, range: 1...31) }) else { return nil }
 
         var components = DateComponents()
         components.year = year
@@ -895,31 +905,31 @@ struct PolestarParkingClimateTimerItemDTO: Codable, Sendable, Equatable {
         // The ready-at time decides the calendar date, so the same offset shift the hour
         // display applies decides the day here too — including a wrap across midnight.
         if let h = readyAt?.hourComponent, let m = readyAt?.minuteComponent,
-           let shift = readyAt?.deviceShiftMinutes(isUtc0: isUtc0) {
+           let shift = readyAt?.deviceShiftMinutes(isUtc0: isUtc0, timeZone: timeZone, now: now) {
             let total = h * 60 + m + shift
             let dayShift = total >= 0 ? total / 1440 : -((-total + 1439) / 1440)
             components.day = day + dayShift
         }
 
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
+        calendar.timeZone = timeZone
         return calendar.date(from: components)
     }
 
-    func toVehicleSchedule(index fallbackIndex: Int = 0, isUtc0: Bool = false) -> VehicleSchedule {
+    func toVehicleSchedule(index fallbackIndex: Int = 0, isUtc0: Bool = false, timeZone: TimeZone = .current, now: Date = Date()) -> VehicleSchedule {
         VehicleSchedule(
             backendID: timerId,
-            index: index.map { Int($0.rounded()) } ?? fallbackIndex,
+            index: index.flatMap { portalRoundedInt($0) } ?? fallbackIndex,
             kind: .climate,
-            startHour: readyAt?.localHour(isUtc0: isUtc0),
-            startMinute: readyAt?.localMinute(isUtc0: isUtc0),
+            startHour: readyAt?.localHour(isUtc0: isUtc0, timeZone: timeZone, now: now),
+            startMinute: readyAt?.localMinute(isUtc0: isUtc0, timeZone: timeZone, now: now),
             endHour: nil,
             endMinute: nil,
             weekdays: weekdays?.compactMap { parsePortalWeekday($0) } ?? [],
             isActive: activated ?? false,
             // `startDate` only rides along on non-repeating timers; without it the date
             // was silently dropped and a one-shot read as a weekly repeat.
-            oneShotDate: repeats != true ? oneShotDate(isUtc0: isUtc0) : nil,
+            oneShotDate: repeats != true ? oneShotDate(isUtc0: isUtc0, timeZone: timeZone, now: now) : nil,
             syncStatus: metadata?.syncStatus?.value
         )
     }
@@ -958,10 +968,10 @@ struct PolestarParkingClimateTimerDTO: Codable, Sendable, Equatable {
     let metaReceivedAt: String?
     let metaEventId: String?
 
-    func toClimateSchedules() -> [VehicleSchedule] {
+    func toClimateSchedules(timeZone: TimeZone = .current, now: Date = Date()) -> [VehicleSchedule] {
         let isUtc = utc0 ?? false
         return parkingClimateTimers?.enumerated().map { idx, timer in
-            timer.toVehicleSchedule(index: idx, isUtc0: isUtc)
+            timer.toVehicleSchedule(index: idx, isUtc0: isUtc, timeZone: timeZone, now: now)
         } ?? []
     }
 }
@@ -981,15 +991,15 @@ extension PolestarParkingClimatizationDTO {
         }
     }
 
-    func toVehicleClimateStatus(batteryPreconditioning: PolestarPreconditioningDTO? = nil) -> VehicleClimateStatus {
+    func toVehicleClimateStatus(batteryPreconditioning: PolestarPreconditioningDTO? = nil, now: Date = Date()) -> VehicleClimateStatus {
         let running = runningStatus == "RUNNING_STATUS_ON"
         // runtimeLeftMinutes is deprecated upstream; when absent, derive the remainder
         // from the session window instead.
         let remaining: Int? = {
-            if let minutes = runtimeLeftMinutes { return Int(minutes.rounded()) }
+            if let minutes = runtimeLeftMinutes { return portalRoundedInt(minutes, range: 0...525_600) }
             guard let ends = endingAt?.date else { return nil }
-            let diff = ends.timeIntervalSinceNow
-            return diff > 0 ? max(1, Int(diff / 60)) : 0
+            let diff = ends.timeIntervalSince(now)
+            return diff > 0 ? max(1, portalRoundedInt(diff / 60, range: 0...525_600) ?? 1) : 0
         }()
         // `errors` and `warnings` are two severity lists over the same token vocabulary;
         // both belong on screen, so they merge into one deduped list.
@@ -1001,8 +1011,8 @@ extension PolestarParkingClimatizationDTO {
             activity: running ? .active : .idle,
             timeRemainingMinutes: remaining,
             timerTriggered: startReason == "START_REASON_TIMER",
-            interiorTemperatureCelsius: currentCompartmentTemperatureCelsius,
-            requestedTemperatureCelsius: requestedCompartmentTemperatureCelsius,
+            interiorTemperatureCelsius: portalValue(currentCompartmentTemperatureCelsius, range: -80...100),
+            requestedTemperatureCelsius: portalValue(requestedCompartmentTemperatureCelsius, range: -40...60),
             driverSeatHeatingLevel: seatHeatLevel(requestedFrontLeftSeat),
             passengerSeatHeatingLevel: seatHeatLevel(requestedFrontRightSeat),
             steeringWheelHeatingLevel: seatHeatLevel(requestedSteeringWheelHeating),
@@ -1030,9 +1040,9 @@ extension PolestarPreCleaningDTO {
         }()
         return VehicleAirQuality(
             cleaningState: state,
-            airQualityIndex: measuredAirQualityIndex.map { Int($0.rounded()) },
-            particulateMatter25: measuredParticulateMatter25.map { Int($0.rounded()) },
-            runtimeRemainingMinutes: runtimeLeftMinutes.map { Int($0.rounded()) },
+            airQualityIndex: measuredAirQualityIndex.flatMap { portalRoundedInt($0) },
+            particulateMatter25: measuredParticulateMatter25.flatMap { portalRoundedInt($0) },
+            runtimeRemainingMinutes: runtimeLeftMinutes.flatMap { portalRoundedInt($0, range: 0...525_600) },
             reportedAt: timestamp?.date,
             startedAt: startedAt?.date,
             endingAt: endingAt?.date,
@@ -1083,21 +1093,21 @@ extension PolestarChargeLocationItemDTO {
         }
     }
 
-    func toChargeLocationSnapshot(isUtc0: Bool = false) -> ChargeLocationSnapshot {
+    func toChargeLocationSnapshot(isUtc0: Bool = false, timeZone: TimeZone = .current, now: Date = Date(), fallbackID: String = "portal-location") -> ChargeLocationSnapshot {
         ChargeLocationSnapshot(
-            id: locationId ?? UUID().uuidString,
+            id: locationId ?? fallbackID,
             alias: locationAlias ?? "Charge Location",
             latitude: coordinate?.latitude,
             longitude: coordinate?.longitude,
-            ampLimit: ampLimit.map { Int($0.rounded()) } ?? 0,
-            minimumSoc: minimumSoc.map { Int($0.rounded()) } ?? 0,
+            ampLimit: ampLimit.flatMap { portalRoundedInt($0) } ?? 0,
+            minimumSoc: minimumSoc.flatMap { portalRoundedInt($0) } ?? 0,
             optimisedChargingEnabled: isOptimizedChargingEnabled ?? false,
             optimisedChargingMode: optimisedChargingMode,
             kind: locationKind,
             isBidirectionalChargingEnabled: isBidirectionalChargingEnabled,
             availableOptimizedCharging: availableOptimizedCharging,
-            departureTimes: departureTimes?.enumerated().map { idx, d in d.toVehicleSchedule(index: idx, isUtc0: isUtc0) } ?? [],
-            chargeTimers: chargeTimers?.enumerated().map { idx, t in t.toVehicleSchedule(index: idx, isUtc0: isUtc0) } ?? []
+            departureTimes: departureTimes?.enumerated().map { idx, d in d.toVehicleSchedule(index: idx, isUtc0: isUtc0, timeZone: timeZone, now: now) } ?? [],
+            chargeTimers: chargeTimers?.enumerated().map { idx, t in t.toVehicleSchedule(index: idx, isUtc0: isUtc0, timeZone: timeZone, now: now) } ?? []
         )
     }
 }

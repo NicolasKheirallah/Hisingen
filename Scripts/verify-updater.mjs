@@ -1,3 +1,4 @@
+import { verifyAppcastFiles, appcastSelfTest } from './verify-appcast.mjs';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,12 +13,7 @@ const requireFile = (path) => {
   if (!existsSync(path)) throw new Error(`Missing required file: ${path}`);
   return read(path);
 };
-const verifyAppcast = (appcast) => {
-  if (!/<!-- sparkle-signatures:\s*edSignature:\s*\S+/m.test(appcast)) throw new Error('Appcast feed signature is missing');
-  if (!/<enclosure\b[^>]*\bsparkle:edSignature="[^"]+"/s.test(appcast)) throw new Error('Update enclosure signature is missing');
-  if (!/<sparkle:releaseNotesLink\b[^>]*\bsparkle:edSignature="[^"]+"/s.test(appcast)) throw new Error('Release-notes signature is missing');
-  requireText(appcast, 'Hisingen.app.zip', 'update enclosure');
-};
+
 
 try {
   const packageFile = requireFile('Package.swift');
@@ -27,7 +23,7 @@ try {
   const docs = requireFile('docs/updater-architecture.md');
 
   if (mode === 'configuration') {
-    requireText(packageFile, 'sparkle-project/Sparkle.git", exact: "2.9.6"', 'pinned Sparkle dependency');
+    requireText(packageFile, 'sparkle-project/Sparkle.git", exact: "2.10.1"', 'pinned Sparkle dependency');
     for (const key of ['SUFeedURL', 'SUPublicEDKey', 'SUVerifyUpdateBeforeExtraction', 'SURequireSignedFeed']) requireText(plist, key, 'Sparkle security key');
     requireText(plist, 'https://nicolaskheirallah.github.io/Hisingen/updates/appcast.xml', 'HTTPS appcast');
     for (const symbol of ['SPUStandardUpdaterController', 'SUAppcastItem', 'allowedChannels', 'willExtractUpdate']) requireText(service, symbol, 'Sparkle service integration');
@@ -55,13 +51,16 @@ try {
       rmSync(staging, { recursive: true, force: true });
     }
   } else if (mode === 'release-pipeline') {
-    const stapleScript = requireFile('Scripts/stapler-staple.sh');
-    const releasePipeline = `${workflow}\n${requireFile('Scripts/publish-appcast.sh')}\n${stapleScript}`;
-    for (const value of ['SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'generate_appcast', '--ed-key-file', 'verify-sparkle-keypair.mjs', 'verify-updater.mjs appcast', 'publish-appcast.sh', 'xcrun notarytool submit', 'Scripts/stapler-staple.sh', 'xcrun stapler staple']) requireText(releasePipeline, value, 'release security control');
-    if (!/- name: Generate signed Sparkle appcast and release notes[\s\S]*?env:[\s\S]*?SPARKLE_PUBLIC_ED_KEY:[\s\S]*?SPARKLE_PRIVATE_ED_KEY:/.test(workflow)) {
+    const notarize = requireFile('Scripts/release-notarize.sh');
+    const support = requireFile('Scripts/release-support.py');
+    const releasePipeline = [workflow, notarize, support, requireFile('Scripts/publish-appcast.sh'), requireFile('Scripts/stapler-staple.sh')].join('\n');
+    for (const value of ['SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'generate_appcast', '--ed-key-file', 'verify-sparkle-keypair.mjs', 'verify-updater.mjs appcast', 'publish-appcast.sh', 'request("submit"', 'Scripts/stapler-staple.sh', 'xcrun stapler staple', 'Hisingen.app.md']) requireText(releasePipeline, value, 'release security control');
+    requireText(workflow, 'needs: [validate, test]', 'validation before signing');
+    requireText(workflow, 'ref: ${{ needs.validate.outputs.sha }}', 'validated source checkout');
+    requireText(notarize, 'Hisingen.app/Contents/Info.plist "$TAG"', 'verification against final embedded key and release tag');
+    if (!/- name: Notarize once, package and verify signed updater[\s\S]*?env:[\s\S]*?SPARKLE_PUBLIC_ED_KEY:[\s\S]*?SPARKLE_PRIVATE_ED_KEY:/.test(workflow)) {
       throw new Error('Appcast generation step does not receive both Sparkle keys');
     }
-    requireText(workflow, 'Hisingen.app.md', 'signed release notes asset');
     console.log('updater-release-pipeline-passed');
   } else if (mode === 'documentation') {
     for (const heading of ['# Native macOS updater', '## Audit of the retired updater', '## Security model', '## Release operation', '## Failure behavior']) requireText(docs, heading, 'required updater documentation');
@@ -85,35 +84,10 @@ try {
       rmSync(staging, { recursive: true, force: true });
     }
   } else if (mode === 'appcast') {
-    const appcastPath = process.argv[3];
-    if (!appcastPath) throw new Error('Usage: node Scripts/verify-updater.mjs appcast PATH/TO/appcast.xml');
-    verifyAppcast(requireFile(appcastPath));
+    verifyAppcastFiles(...process.argv.slice(3));
     console.log('updater-appcast-passed');
   } else if (mode === 'appcast-self-test') {
-    const validAppcast = `<?xml version="1.0"?>
-      <item xmlns:sparkle="https://www.andymatuschak.org/xml-namespaces/sparkle">
-        <sparkle:releaseNotesLink sparkle:edSignature="notes-signature">Hisingen.app.md</sparkle:releaseNotesLink>
-        <enclosure url="Hisingen.app.zip" sparkle:edSignature="archive-signature" />
-      </item>
-      <!-- sparkle-signatures:
-      edSignature: feed-signature
-      length: 123
-      -->`;
-    verifyAppcast(validAppcast);
-    const negativeControls = [
-      validAppcast.replace(/<!-- sparkle-signatures:[\s\S]*?-->/, ''),
-      validAppcast.replace(' sparkle:edSignature="archive-signature"', ''),
-      validAppcast.replace(' sparkle:edSignature="notes-signature"', ''),
-    ];
-    for (const invalidAppcast of negativeControls) {
-      try {
-        verifyAppcast(invalidAppcast);
-        throw new Error('Unsigned appcast negative control unexpectedly passed');
-      } catch (error) {
-        if (!String(error.message).includes('signature is missing')) throw error;
-      }
-    }
-    console.log('updater-appcast-self-test-passed');
+    appcastSelfTest();
   } else {
     throw new Error('Usage: node Scripts/verify-updater.mjs configuration|release-pipeline|documentation|release-notes|appcast|appcast-self-test');
   }

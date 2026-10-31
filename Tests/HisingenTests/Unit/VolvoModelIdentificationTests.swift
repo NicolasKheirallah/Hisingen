@@ -91,11 +91,13 @@ struct VolvoModelIdentificationTests {
     }
 
     @Test
-    func testVolvoNextGenEX30AndEX90SupportRemoteClimateSettings() {
+    func testVolvoNextGenEX30AndEX90StartClimateWithoutInventingSetpoints() {
+        // The public `climatization-start` body carries no temperature or seat heating, so
+        // the card must not offer a setpoint the car will never receive.
         let ex30Profile = VehicleCapabilityProfile(modelName: "EX30")
-        #expect(ex30Profile.hasSelectableClimateTemperature)
-        #expect(ex30Profile.hasSelectableSeatHeating)
-        #expect(ex30Profile.hasSelectableSteeringWheelHeating)
+        #expect(!ex30Profile.hasSelectableClimateTemperature)
+        #expect(!ex30Profile.hasSelectableSeatHeating)
+        #expect(!ex30Profile.hasSelectableSteeringWheelHeating)
         #expect(ex30Profile.support(for: .climateStartStop) == .supported)
     }
 

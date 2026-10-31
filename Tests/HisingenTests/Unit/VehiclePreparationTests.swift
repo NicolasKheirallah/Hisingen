@@ -11,7 +11,7 @@ struct VehiclePreparationTests {
     private func makeAPI() async throws -> PolestarAPI {
         PreparationTransport.counts.reset()
         let grpcConfiguration = URLSessionConfiguration.ephemeral
-        grpcConfiguration.protocolClasses = [UnreachableGRPCTransport.self]
+        grpcConfiguration.protocolClasses = [PreparationGRPCTransport.self]
         let api = PolestarAPI(
             keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.VehiclePreparation.\(UUID())"),
             grpcSession: URLSession(configuration: grpcConfiguration))
@@ -68,17 +68,22 @@ private extension PolestarAPI {
     }
 }
 
-/// Fails every gRPC probe locally. The gRPC client owns a hardcoded production base URL and
-/// builds its own session unless one is injected, so without this the capability probes in a
-/// `.vehicleIdentity` fetch (GetMyCars) would leave the process and a live 401 would escape the
-/// suite as `authenticationRequired` — a global failure the probe ladder deliberately rethrows.
-private final class UnreachableGRPCTransport: URLProtocol {
+/// Provides a discovery host and returns local 404s for optional gRPC services.
+private final class PreparationGRPCTransport: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
 
     override func startLoading() {
-        client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+        let discovery = request.url?.host == "cnepmob.volvocars.com"
+        let headers = discovery ? ["Content-Type": "application/json"] : nil
+        let response = HTTPURLResponse(url: request.url!, statusCode: discovery ? 200 : 404,
+                                       httpVersion: nil, headerFields: headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if discovery {
+            client?.urlProtocol(self, didLoad: Data(#"{"c3":{"grpcHost":"fixture.example","grpcPort":443}}"#.utf8))
+        }
+        client?.urlProtocolDidFinishLoading(self)
     }
 }
 

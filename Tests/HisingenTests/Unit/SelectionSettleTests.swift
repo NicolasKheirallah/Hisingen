@@ -11,7 +11,7 @@ struct SelectionSettleTests {
 
     @Test func returnsImmediatelyWhenTheSelectionIsAlreadySettled() async throws {
         let provider = SettleMockProvider()
-        let coordinator = await makeCoordinator(provider: provider)
+        let coordinator = makeCoordinator(provider: provider)
         // No selection has ever run: the VIN is unknown, so not settled.
         let settled = await coordinator.selectionSettled(vin: "YSMTEST", timeout: 0.2)
         #expect(!settled)
@@ -19,7 +19,7 @@ struct SelectionSettleTests {
 
     @Test func wakesTrueWhenTheSelectionApplies() async throws {
         let provider = SettleMockProvider()
-        let coordinator = await makeCoordinator(provider: provider)
+        let coordinator = makeCoordinator(provider: provider)
         coordinator.selectCar(vin: "YSMTEST")
         let settled = await coordinator.selectionSettled(vin: "YSMTEST", timeout: 30)
         #expect(settled)
@@ -31,7 +31,7 @@ struct SelectionSettleTests {
     @Test func wakesFalseWhenTheSelectionFails() async throws {
         let provider = SettleMockProvider()
         await provider.failFetch()
-        let coordinator = await makeCoordinator(provider: provider)
+        let coordinator = makeCoordinator(provider: provider)
         coordinator.selectCar(vin: "YSMTEST")
         let settled = await coordinator.selectionSettled(vin: "YSMTEST", timeout: 30)
         #expect(!settled)
@@ -41,7 +41,7 @@ struct SelectionSettleTests {
     @Test func aSupersedingSelectionReleasesTheEarlierWaiter() async throws {
         let provider = SettleMockProvider()
         await provider.holdFetch()
-        let coordinator = await makeCoordinator(provider: provider)
+        let coordinator = makeCoordinator(provider: provider)
         coordinator.selectCar(vin: "YSMTEST")
 
         let firstTask = Task { await coordinator.selectionSettled(vin: "YSMTEST", timeout: 30) }

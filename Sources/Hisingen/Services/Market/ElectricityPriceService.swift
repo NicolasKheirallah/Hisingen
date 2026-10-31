@@ -34,7 +34,9 @@ actor ElectricityPriceService {
 
     private var cache: [ElspotZone: CachedPrices] = [:]
     private var cacheLoaded = false
-    private var dailyTask: Task<Void, Never>?
+    private var dailyTasks: [ElspotZone: Task<Void, Never>] = [:]
+    private let fetchOverride: (@Sendable (URL) async throws -> [ElectricityPricePoint])?
+    private let wait: @Sendable (TimeInterval) async throws -> Void
     private var inFlight: [ElspotZone: Task<[ElectricityPricePoint], Error>] = [:]
     /// Publication can lag its nominal time; a fresh-less fetch is retried on this
     /// cadence for the rest of the evening instead of waiting a full day. The happy
@@ -43,7 +45,13 @@ actor ElectricityPriceService {
     private static let maxPublicationRetries = 4
     private var retryCount: [ElspotZone: Int] = [:]
 
-    init(database: VehicleDatabase = .shared) {
+    init(database: VehicleDatabase = .shared,
+         fetch: (@Sendable (URL) async throws -> [ElectricityPricePoint])? = nil,
+         wait: @escaping @Sendable (TimeInterval) async throws -> Void = {
+             try await Task.sleep(for: .seconds($0))
+         }) {
+        self.fetchOverride = fetch
+        self.wait = wait
         self.store = database.electricityPrices
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
@@ -106,6 +114,23 @@ actor ElectricityPriceService {
         return horizon >= requiredCoverageEnd(after: date, calendar: calendar)
     }
 
+    static func tomorrow(after date: Date) -> Date {
+        stockholmCalendar.date(byAdding: .day, value: 1, to: date) ?? date.addingTimeInterval(86_400)
+    }
+
+    static func coversDay(_ points: [ElectricityPricePoint], day: Date) -> Bool {
+        let start = stockholmCalendar.startOfDay(for: day)
+        guard let end = stockholmCalendar.date(byAdding: .day, value: 1, to: start) else { return false }
+        var coveredThrough = start
+        for point in points.sorted(by: { $0.startDate < $1.startDate }) {
+            guard point.endDate > coveredThrough else { continue }
+            guard point.startDate <= coveredThrough else { return false }
+            coveredThrough = point.endDate
+            if coveredThrough >= end { return true }
+        }
+        return false
+    }
+
     // MARK: - Public surface
 
     /// Cached prices, refreshed only when stale. Safe to call on every render pass of a
@@ -114,7 +139,7 @@ actor ElectricityPriceService {
         loadCacheIfNeeded()
         if let entry = cache[zone], Self.isCacheFresh(entry, after: Date()) {
             // Keep the once-a-day timer armed while the app is open, without fetching.
-            if dailyTask == nil {
+            if dailyTasks[zone] == nil {
                 armRefresh(zone: zone, tomorrowComplete: true)
             }
             return entry.points
@@ -164,13 +189,14 @@ actor ElectricityPriceService {
         loadCacheIfNeeded()
         let existing = cache[zone]?.points ?? []
         let dayStart = Self.stockholmCalendar.startOfDay(for: day)
-        if let last = existing.map(\.endDate).max(), last >= dayStart.addingTimeInterval(86_400) {
+        if Self.coversDay(existing, day: dayStart) {
             return existing // already covered
         }
         guard let fetched = try? await fetchPoints(from: Self.priceURL(zone: zone, date: day)),
               !fetched.isEmpty else { return existing }
-        var seen = Set(existing.map(\.startDate))
-        let merged = (existing + fetched.filter { seen.insert($0.startDate).inserted })
+        let current = cache[zone]?.points ?? []
+        var seen = Set(current.map(\.startDate))
+        let merged = (current + fetched.filter { seen.insert($0.startDate).inserted })
             .sorted { $0.startDate < $1.startDate }
         cache[zone] = CachedPrices(zone: zone, points: merged, fetchedAt: Date())
         store.save(zone: zone, points: merged, fetchedAt: Date())
@@ -183,14 +209,24 @@ actor ElectricityPriceService {
         let now = Date()
         var points = try await fetchPoints(from: Self.priceURL(zone: zone, date: now))
         do {
-            points += try await fetchPoints(from: Self.priceURL(zone: zone, date: now.addingTimeInterval(86_400)))
+            points += try await fetchPoints(from: Self.priceURL(zone: zone, date: Self.tomorrow(after: now)))
+        } catch is CancellationError {
+            throw CancellationError()
         } catch PriceFetchError.notPublished {
             logger.notice("Tomorrow's prices not published yet for \(zone.rawValue, privacy: .public)")
+        } catch {
+            // Today's points are already fetched; a broken tomorrow file must not discard them.
+            logger.error("Tomorrow's prices failed for \(zone.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
         }
-        var seen = Set<Date>()
-        let merged = points
-            .filter { seen.insert($0.startDate).inserted }
-            .sorted { $0.startDate < $1.startDate }
+        guard !points.isEmpty else { throw PriceFetchError.badResponse }
+        // Preserve recently fetched historical days for backfill while letting fresh daily
+        // responses replace any matching intervals. Bound the cache to the backfill horizon.
+        let today = Self.stockholmCalendar.startOfDay(for: now)
+        let oldest = Self.stockholmCalendar.date(byAdding: .day, value: -8, to: today) ?? today
+        var byStart = Dictionary((cache[zone]?.points ?? []).filter { $0.endDate > oldest }
+            .map { ($0.startDate, $0) }, uniquingKeysWith: { _, newer in newer })
+        for point in points { byStart[point.startDate] = point }
+        let merged = byStart.values.sorted { $0.startDate < $1.startDate }
         guard !merged.isEmpty else { throw PriceFetchError.badResponse }
         let entry = CachedPrices(zone: zone, points: merged, fetchedAt: now)
         cache[zone] = entry
@@ -199,6 +235,7 @@ actor ElectricityPriceService {
     }
 
     private func fetchPoints(from url: URL) async throws -> [ElectricityPricePoint] {
+        if let fetchOverride { return try await fetchOverride(url) }
         let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse else { throw PriceFetchError.badResponse }
         switch http.statusCode {
@@ -238,10 +275,11 @@ actor ElectricityPriceService {
             }
         }
         guard delay > 0 else { return }
-        dailyTask?.cancel()
-        dailyTask = Task { [weak self] in
+        dailyTasks[zone]?.cancel()
+        let wait = wait
+        dailyTasks[zone] = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: UInt64((delay + 1) * 1_000_000_000))
+                try await wait(delay + 1)
             } catch {
                 return
             }

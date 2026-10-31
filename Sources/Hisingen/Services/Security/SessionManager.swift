@@ -1,5 +1,7 @@
 import Foundation
 
+private let sessionLogger = AppLog.logger("session")
+
 /// Credential precedence and provider configuration for every session restoration path.
 /// Which stored credential resumes which adapter, and whether a stored password is a valid
 /// fallback, are answered by the adapter through `VehicleProviding`; this module owns the
@@ -12,11 +14,16 @@ final class SessionManager {
     /// behind the same Keychain ACL consent as every secret, and that read must not run on
     /// the main thread during launch (a pending prompt there cannot be answered).
     private let readPassword: @Sendable () throws -> String?
-    private let clearPassword: () -> Void
+    /// Deletes the stored password. Throws when the Keychain refuses, so the caller can suppress
+    /// auto-restore instead of replaying a password that could not be removed.
+    private let clearPassword: () throws -> Void
     private let configure: (any VehicleProviding, PreferencesStore) async throws -> Void
 
     init(readPassword: @escaping @Sendable () throws -> String? = { try Keychain.readPassword() },
-         clearPassword: @escaping () -> Void = { try? Keychain.deletePassword() },
+         clearPassword: @escaping () throws -> Void = {
+             try Keychain.deletePassword()
+             KeychainStore.app.invalidateMemoryCache()
+         },
          configure: @escaping (any VehicleProviding, PreferencesStore) async throws -> Void = { api, _ in
              try await api.prepareSession()
          }) {
@@ -29,6 +36,12 @@ final class SessionManager {
     func restore(api: any VehicleProviding, preferences: PreferencesStore,
                  preferredVIN: String? = nil, intent: Intent = .resume) async throws -> [CarSummary] {
         let brand = api.brand
+        // An explicit sign-out must survive relaunch: built-in developer credentials
+        // plus a lingering server-side grant would otherwise re-discover the vehicle
+        // and look like "auto login". Only an explicit save / sign-in clears it.
+        if intent == .resume, preferences.hasExplicitSignOut(for: brand) {
+            throw VehicleServiceError.authenticationRequired(provider: brand, reason: .noStoredSession)
+        }
         let storedVIN = preferences.vin(for: brand)
         let vin = preferredVIN ?? (storedVIN.isEmpty ? nil : storedVIN)
         let features = preferences.features
@@ -57,11 +70,23 @@ final class SessionManager {
                                            preferredVIN: vin, features: features)
             } catch {
                 if ServiceErrorPolicy.decision(error, provider: brand).error.isRejectedCredential {
-                    clearPassword()
+                    do {
+                        try clearPassword()
+                    } catch {
+                        // Deletion failed (e.g. interactionRequired): suppress auto-restore
+                        // until the user explicitly reconnects, otherwise the rejected
+                        // password replays every launch.
+                        preferences.setExplicitSignOut(for: brand)
+                        sessionLogger.error("Rejected password could not be deleted; suppressing auto-restore: \(String(describing: error), privacy: .public)")
+                    }
                 }
                 throw error
             }
-            clearPassword()
+            do {
+                try clearPassword()
+            } catch {
+                sessionLogger.error("Could not clear the stored Polestar password after success: \(String(describing: error), privacy: .public)")
+            }
         }
 
         if intent == .credentialsChanged, let credentials = try await passwordCredentials() {

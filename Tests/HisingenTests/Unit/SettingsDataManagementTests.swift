@@ -9,7 +9,7 @@ struct SettingsDataManagementTests {
         let vin = "SETTINGS_DATA_TEST"
         database.history.recordCommandAudit(vin: vin, command: "lock", status: "success")
         #expect(database.history.addFuelEntry(vin: vin, date: Date(), liters: 20, pricePerLiter: 2, odometerKm: 1_000))
-        database.images.saveVehicleImage(vin: vin, angle: 0, data: Data([1, 2, 3]))
+        #expect(database.images.saveVehicleImage(vin: vin, angle: 0, data: Data([1, 2, 3])))
         #expect(database.recordCounts().commands == 1)
         #expect(database.history.recentFuelEntries(for: vin).count == 1)
         #expect(database.images.loadVehicleImage(for: vin, angle: 0) != nil)

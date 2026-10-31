@@ -1,5 +1,13 @@
 import Foundation
 
+/// Volvo reports two "nothing to report" values depending on the endpoint: `NO_WARNING`
+/// and `UNSPECIFIED`. Both mean the car did not report a fault; only a real enum value is
+/// a warning. Keeping this in one place stops the fluid, service and lamp paths drifting.
+func volvoWarningIsPresent(_ raw: String?) -> Bool {
+    guard let raw = raw?.uppercased(), !raw.isEmpty else { return false }
+    return !raw.contains("NO_WARNING") && raw != "UNSPECIFIED"
+}
+
 
 struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
@@ -52,7 +60,7 @@ private enum VolvoUnits {
     static func kilometers(_ value: Double?, unit: String?) -> Double? {
         guard let value else { return nil }
         switch unit?.lowercased() {
-        case "mi", "mile", "miles": return value / 0.621371
+        case "mi", "mile", "miles": return value / UnitConversion.kilometersPerMile
         case "m", "meter", "meters", "metre", "metres": return value / 1_000
         default: return value
         }
@@ -70,13 +78,23 @@ private struct VolvoEnvelopeWrapper<Payload: Decodable & Sendable>: Decodable, S
 
 struct VolvoEnvelope<Payload: Decodable & Sendable>: Decodable, Sendable {
     let data: Payload?
+    /// Why `data` stayed nil when the payload failed to decode. Lenient decoding is unchanged;
+    /// this only keeps the error for the caller's private log.
+    let payloadError: Error?
 
     init(from decoder: Decoder) throws {
         if let wrapped = try? VolvoEnvelopeWrapper<Payload>(from: decoder) {
             data = wrapped.data
+            payloadError = nil
             return
         }
-        data = try? Payload(from: decoder)
+        do {
+            data = try Payload(from: decoder)
+            payloadError = nil
+        } catch {
+            data = nil
+            payloadError = error
+        }
     }
 }
 
@@ -170,7 +188,12 @@ enum VolvoPowertrain {
         let hasFuel = raw.contains("PETROL") || raw.contains("DIESEL") || raw.contains("GASOLINE") || raw.contains("BENZIN")
         let isPlugIn = raw.contains("PLUG") || raw.contains("PHEV") || (raw.contains("RECHARGE") && hasFuel)
         let isMildHybrid = raw.contains("MHEV") || raw.contains("MILD") || (raw.contains("HYBRID") && !isPlugIn)
-        if raw == "NONE" && hasElectric { return .bev }
+        // Volvo reports `NONE` when it has no fuel-type string. Which vehicles return it is
+        // undocumented; the independent Home Assistant Volvo integration treats it as a
+        // battery car, and the energy read is the only way to learn otherwise. Because of that,
+        // `NONE` skips the fuel and engine-status reads; an ICE car reporting `NONE` would lose
+        // those reads until Volvo's meaning is confirmed.
+        if raw == "NONE" { return .bev }
         if hasElectric && hasFuel { return isMildHybrid ? .mildHybrid : .phev }
         if isPlugIn { return .phev }
         if isMildHybrid { return .mildHybrid }
@@ -201,7 +224,7 @@ struct VolvoEnergyStateDTO: Decodable, Sendable {
     var rangeKm: Int? {
         guard let value = electricRange?.value else { return nil }
         switch electricRange?.unit?.lowercased() {
-        case "mi", "mile", "miles": return Int((value / 0.621371).rounded())
+        case "mi", "mile", "miles": return Int((value / UnitConversion.kilometersPerMile).rounded())
         default: return Int(value.rounded())
         }
     }
@@ -350,8 +373,10 @@ extension ChargerPowerState {
         // `NO_POWER_AVAILABLE` is what `/energy/v2/state` actually returns for an unplugged
         // car (verified live); the shorter spellings are kept for older/other shapes.
         case "NO_POWER", "NO_POWER_AVAILABLE", "UNAVAILABLE": self = .noPower
-        case "INITIALIZING", "PREPARING": self = .initializing
+        case "INITIALIZING", "INITIALIZATION", "PREPARING": self = .initializing
         case "AVAILABLE", "READY": self = .available
+        // A schedule-paused car has power at the plug but the charger is not activated yet.
+        case "POWER_AVAILABLE_BUT_NOT_ACTIVATED": self = .powerAvailableNotActivated
         case "PROVIDING_POWER", "POWER_AVAILABLE", "CHARGING": self = .providingPower
         case "FAULT", "ERROR": self = .fault
         default: self = .unknown
@@ -470,8 +495,7 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
     }
 
     var hasServiceWarning: Bool {
-        guard let raw = serviceWarning?.value?.uppercased() else { return false }
-        return !raw.contains("NO_WARNING") && !raw.isEmpty
+        volvoWarningIsPresent(serviceWarning?.value)
     }
 
 
@@ -496,8 +520,7 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
             (washerFluidLevelWarning?.value, L10n.text("Washer fluid"))
         ]
         return named.compactMap { raw, label in
-            guard let raw = raw?.uppercased(), !raw.contains("NO_WARNING"), !raw.isEmpty else { return nil }
-            return label
+            volvoWarningIsPresent(raw) ? label : nil
         }
     }
 
@@ -508,8 +531,7 @@ struct VolvoDiagnosticsDTO: Decodable, Sendable {
             (batteryChargeLevelWarning?.value, .lowVoltageBattery)
         ]
         var result = candidates.compactMap { raw, warning -> VehicleWarning? in
-            guard let raw = raw?.uppercased(), !raw.contains("NO_WARNING"), !raw.isEmpty else { return nil }
-            return warning
+            volvoWarningIsPresent(raw) ? warning : nil
         }
         if hasServiceWarning { result.append(.service) }
         return result
@@ -574,7 +596,7 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
     var averageSpeedKmH: Double? {
         let field = averageSpeedAutomatic ?? averageSpeed
         guard let value = field?.value else { return nil }
-        return field?.unit?.lowercased() == "mph" ? value / 0.621371 : value
+        return field?.unit?.lowercased() == "mph" ? value / UnitConversion.kilometersPerMile : value
     }
 
     var regeneratedEnergyKwh: Double? {
@@ -640,10 +662,18 @@ struct VolvoLocationDTO: Decodable, Sendable {
     }
     let properties: Properties?
     let geometry: Geometry?
+    /// Sits beside `data` in the captured payload (`"speed": {"value": 0}`), not under
+    /// `geometry`. Same unit convention as `VolvoStatisticsDTO.averageSpeedKmH`.
+    let speed: VolvoField<Double>?
 
     var altitudeMeters: Double? {
         guard let coordinates = geometry?.coordinates, coordinates.count >= 3 else { return nil }
         return coordinates[2]
+    }
+
+    var speedKmH: Double? {
+        guard let value = speed?.value else { return nil }
+        return speed?.unit?.lowercased() == "mph" ? value / UnitConversion.kilometersPerMile : value
     }
 }
 
@@ -679,6 +709,7 @@ struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
         case "NO_INTERNET": return L10n.text("Vehicle has no internet connection")
         case "POWER_SAVING_MODE": return L10n.text("Vehicle is in power-saving mode")
         case "CAR_IN_USE": return L10n.text("Vehicle is currently in use")
+        case "OTA_INSTALLATION_IN_PROGRESS": return L10n.text("Software update in progress")
         case "UNSPECIFIED": return nil
         default: return raw.replacingOccurrences(of: "_", with: " ").capitalized
         }
@@ -737,7 +768,7 @@ struct VolvoWarningsDTO: Decodable, Sendable {
             (reverseLightsWarning, L10n.text("Reverse light"))
         ]
         return list.compactMap { field, name in
-            guard let val = field?.value?.uppercased(), !val.contains("NO_WARNING"), val != "UNSPECIFIED", !val.isEmpty else { return nil }
+            guard let val = field?.value?.uppercased(), volvoWarningIsPresent(val) else { return nil }
             return "\(name): \(val)"
         }
     }

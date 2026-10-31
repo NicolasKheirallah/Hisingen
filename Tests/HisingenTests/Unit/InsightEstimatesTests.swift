@@ -6,6 +6,8 @@ import Testing
 /// cost-per-km. Both are explicitly estimates – the tests pin their honest-failure
 /// behaviour (nil until enough data exists) as much as their arithmetic.
 struct InsightEstimatesTests {
+    /// Fixed mid-day UTC anchor (2025-06-15T15:06:40Z) so the fixtures never depend on the wall clock.
+    private let referenceNow = Date(timeIntervalSince1970: 1_750_000_000)
 
     private func airRecord(_ id: Int64, daysAgo: Double, filterPercent: Double,
                            now: Date) -> AirQualityRecord {
@@ -16,7 +18,7 @@ struct InsightEstimatesTests {
 
     @Test("Filter estimate returns nil before 7 days of history")
     func filterEstimateNeedsAtLeastAWeek() {
-        let now = Date()
+        let now = referenceNow
         let records = [
             airRecord(1, daysAgo: 2, filterPercent: 80, now: now),
             airRecord(2, daysAgo: 0, filterPercent: 79, now: now),
@@ -26,7 +28,7 @@ struct InsightEstimatesTests {
 
     @Test("Filter estimate returns nil until measurable decline")
     func filterEstimateNeedsMeasurableDecline() {
-        let now = Date()
+        let now = referenceNow
         // A week apart but only 0.1 points of wear: noise, not signal.
         let records = [
             airRecord(1, daysAgo: 8, filterPercent: 80.0, now: now),
@@ -37,7 +39,7 @@ struct InsightEstimatesTests {
 
     @Test("Filter estimate extrapolates linearly from observed rate")
     func filterEstimateExtrapolates() throws {
-        let now = Date()
+        let now = referenceNow
         // 4 points lost over 40 days → 0.1/day → 600 days from 60%.
         let records = [
             airRecord(1, daysAgo: 40, filterPercent: 64, now: now),
@@ -50,7 +52,7 @@ struct InsightEstimatesTests {
 
     @Test("Cost per km requires energy, price, and at least 100 km of odometer span")
     func costPerKmGuards() {
-        let now = Date()
+        let now = referenceNow
         #expect(HistoryInsights.costPerKm(totalEnergyKwh: 10, pricePerKwh: 0.30,
                                           odometerPoints: []) == nil)
         #expect(HistoryInsights.costPerKm(totalEnergyKwh: 0, pricePerKwh: 0.30,
@@ -62,7 +64,7 @@ struct InsightEstimatesTests {
 
     @Test("Cost per km divides tariffed energy by driven distance")
     func costPerKmComputes() throws {
-        let now = Date()
+        let now = referenceNow
         let points = [
             HistoryInsights.OdometerPoint(id: 1, timestamp: now.addingTimeInterval(-86_400 * 30), odometerKm: 1000),
             HistoryInsights.OdometerPoint(id: 2, timestamp: now, odometerKm: 1500),

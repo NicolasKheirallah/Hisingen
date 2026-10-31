@@ -44,26 +44,47 @@ final class SignInCoordinator {
     private let polestarCommandPresenter = PolestarCommandSignInPresenter()
     private let polestarWebPresenter = PolestarWebSignInPresenter()
     private var polestarSignInTask: Task<Void, Never>?
+    private var polestarSignInStartedAt: Date?
+    private var volvoSignInTask: Task<Void, Never>?
+    private var volvoSignInStartedAt: Date?
+    private var volvoTaskToken = UUID()
 
     func cancelPolestarSignIn() {
         polestarSignInTask?.cancel()
         polestarSignInTask = nil
+        polestarSignInStartedAt = nil
+        resumesCommandAuthorizationAfterSignIn = false
         polestarWebPresenter.cancel(with: CancellationError())
         polestarCommandPresenter.cancel(with: CancellationError())
     }
+
+    func cancelVolvoSignIn() {
+        volvoSignInTask?.cancel()
+        volvoSignInTask = nil
+        volvoPresenter.cancel()
+    }
     private let resultPresenter: RemoteResultPresenter
+    private let commandAuthorizationAlerts: any CommandAuthorizationAlertPresenting
+    /// Identifies the running sign-in flow so the sign-in → authorize hand-over cannot unregister
+    /// a task it no longer owns.
+    private var signInTaskToken = UUID()
+    /// Set when the user asked for a sign-in from the authorize step; the web flow then hands
+    /// straight back to it instead of leaving them to click Authorize a second time.
+    private var resumesCommandAuthorizationAfterSignIn = false
     private weak var context: (any SignInCoordinatorContext)?
 
     init(context: any SignInCoordinatorContext,
          preferences: PreferencesStore,
          polestarAPI: PolestarAPI,
          volvoAPI: VolvoAPI,
-         resultPresenter: RemoteResultPresenter = RemoteResultPresenter()) {
+         resultPresenter: RemoteResultPresenter = RemoteResultPresenter(),
+         commandAuthorizationAlerts: any CommandAuthorizationAlertPresenting = CommandAuthorizationAlertPresenter()) {
         self.context = context
         self.preferences = preferences
         self.polestarAPI = polestarAPI
         self.volvoAPI = volvoAPI
         self.resultPresenter = resultPresenter
+        self.commandAuthorizationAlerts = commandAuthorizationAlerts
     }
 
     // MARK: - Callback routing
@@ -76,6 +97,7 @@ final class SignInCoordinator {
         if url.scheme?.lowercased() == "polestar-explore" {
             polestarCommandPresenter.handleCallbackURL(url)
         } else {
+            // Volvo presenter validates scheme/host/path itself and ignores strays.
             volvoPresenter.handleCallbackURL(url)
         }
     }
@@ -97,17 +119,29 @@ final class SignInCoordinator {
             return
         }
 
-        var effectiveSecret = !clientSecret.isEmpty ? clientSecret : ((try? Keychain.readVolvoClientSecret()) ?? "")
-        if effectiveSecret.isEmpty && BuiltinVolvoSecrets.isConfigured {
-            effectiveSecret = BuiltinVolvoSecrets.clientSecret
+        let effectiveSecret: String
+        let effectiveApiKey: String
+        do {
+            effectiveSecret = try Self.effectiveVolvoValue(
+                typed: clientSecret, read: Keychain.readVolvoClientSecret,
+                builtin: { BuiltinVolvoSecrets.clientSecret })
+            effectiveApiKey = try Self.effectiveVolvoValue(
+                typed: vccApiKey, read: Keychain.readVolvoApiKey,
+                builtin: { BuiltinVolvoSecrets.vccApiKey })
+        } catch {
+            presentVolvoSignInFailure(error)
+            return
         }
 
-        var effectiveApiKey = !vccApiKey.isEmpty ? vccApiKey : ((try? Keychain.readVolvoApiKey()) ?? "")
-        if effectiveApiKey.isEmpty && BuiltinVolvoSecrets.isConfigured {
-            effectiveApiKey = BuiltinVolvoSecrets.vccApiKey
+        let sessionToken: String?
+        do {
+            sessionToken = try Keychain.readVolvoSessionToken()
+        } catch {
+            // Not a credential fallback: without a readable token the fast path is skipped and the
+            // full browser sign-in runs, which writes a fresh token anyway.
+            logger.error("Could not read stored Volvo session token; signing in again: \(String(describing: error), privacy: .public)")
+            sessionToken = nil
         }
-
-        let sessionToken = (try? Keychain.readVolvoSessionToken()) ?? nil
 
         // Already fully configured and the form came back blank: there is nothing to
         // re-authorize – just re-adopt the Volvo brand and resume from the stored token.
@@ -127,8 +161,36 @@ final class SignInCoordinator {
             return
         }
 
-        Task { [weak self] in
+        // Re-entrancy: double-clicking runs two browser OAuth round trips that each
+        // exchange and discover. Duplicate fires within 1s (SwiftUI double-delivery)
+        // are ignored silently; an explicit retry after that cancels the stuck flow
+        // and restarts, so the button never looks dead.
+        if let running = volvoSignInTask, !running.isCancelled {
+            if let started = volvoSignInStartedAt, Date().timeIntervalSince(started) < 1.0 {
+                logger.notice("Volvo sign-in ignored: duplicate fire within 1s")
+                return
+            }
+            logger.notice("Volvo sign-in restarted: cancelling stuck flow and starting fresh")
+            resultPresenter.present(
+                title: L10n.text("Volvo sign-in restarted"),
+                message: L10n.text("The previous sign-in was still waiting in the browser, so it was cancelled and a fresh window was opened."),
+                success: true
+            )
+        }
+        cancelVolvoSignIn()
+        let token = UUID()
+        volvoTaskToken = token
+        volvoSignInStartedAt = Date()
+        volvoSignInTask = Task { [weak self] in
             guard let self else { return }
+            defer { self.finishVolvoTask(token) }
+            // Snapshot prefs: beginVolvoSignIn in AccountConnectionModel already wrote
+            // volvoClientID/VIN/nickname optimistically. Roll back if the browser
+            // handshake is abandoned so a cancelled sign-in doesn't leave mutated
+            // identity with no new token (and doesn't lift suppression).
+            let prevClientID = self.preferences.volvoClientID
+            let prevVIN = self.preferences.vin(for: .volvo)
+            let hadSuppression = self.preferences.hasExplicitSignOut(for: .volvo)
             await volvoAPI.configure(clientID: trimmedClientID, clientSecret: effectiveSecret, vccApiKey: effectiveApiKey)
             // Volvo rejects the *whole* authorization with `invalid_scope` if any single
             // requested scope is not approved for the application. Cascade widest → narrowest:
@@ -153,15 +215,32 @@ final class SignInCoordinator {
                         )
                     }
                     return
+                } catch is CancellationError {
+                    // User closed the browser or a newer flow superseded this one:
+                    // roll back optimistic prefs, stay silent.
+                    preferences.volvoClientID = prevClientID
+                    preferences.setVin(prevVIN, for: .volvo)
+                    if hadSuppression { preferences.setExplicitSignOut(for: .volvo) }
+                    return
                 } catch let error as VolvoError where Self.isInvalidScope(error) && tier != .core {
                     logger.warning("Volvo rejected scope tier \(tier.rawValue, privacy: .public); retrying narrower")
                     continue
                 } catch {
+                    // Abandoned handshake must not leave mutated identity prefs.
+                    preferences.volvoClientID = prevClientID
+                    preferences.setVin(prevVIN, for: .volvo)
+                    if hadSuppression { preferences.setExplicitSignOut(for: .volvo) }
                     presentVolvoSignInFailure(error)
                     return
                 }
             }
         }
+    }
+
+    private func finishVolvoTask(_ token: UUID) {
+        guard volvoTaskToken == token else { return }
+        volvoSignInTask = nil
+        volvoSignInStartedAt = nil
     }
 
     /// One full browser OAuth round trip: authorize → callback → token exchange → discovery,
@@ -173,9 +252,12 @@ final class SignInCoordinator {
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
         try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil)
-        preferences.volvoClientID = clientID
+        // Keychain first: a denied save must not leave a client ID on file that points at
+        // secrets which were never stored.
         try Keychain.saveVolvoClientSecret(clientSecret)
         try Keychain.saveVolvoApiKey(vccApiKey)
+        preferences.volvoClientID = clientID
+        preferences.clearExplicitSignOut(for: .volvo)
         // Awaited inline, before the brand switch, so the first `CarSummary` the switch builds
         // already carries the user's nickname.
         await assignVolvoNickname(nickname)
@@ -192,17 +274,37 @@ final class SignInCoordinator {
         }
     }
 
+    /// Typed value, then the Keychain, then the compiled-in builtin. Keychain "not found" comes
+    /// back as nil, so a throw is a real failure (access denied, pending ACL consent). That is
+    /// surfaced rather than read as "no secret", which used to slide silently onto the builtin
+    /// credentials.
+    private static func effectiveVolvoValue(typed: String, read: () throws -> String?,
+                                            builtin: () -> String) throws -> String {
+        if !typed.isEmpty { return typed }
+        let stored = try read() ?? ""
+        if !stored.isEmpty { return stored }
+        return BuiltinVolvoSecrets.isConfigured ? builtin() : ""
+    }
+
     private static func isInvalidScope(_ error: VolvoError) -> Bool {
         if case .permissionDenied(let operation) = error { return operation == "invalid_scope" }
         return false
     }
 
     private func presentVolvoSignInFailure(_ error: Error) {
-        let mapped = error as? LocalizedError
+        let mapped = VehicleServiceError.map(error, provider: .volvo)
+        let message: String
+        if let desc = mapped.errorDescription {
+            message = desc
+        } else if let localized = error as? LocalizedError, let desc = localized.errorDescription {
+            message = desc
+        } else {
+            message = error.localizedDescription
+        }
         logger.error("Volvo sign-in failed: \(String(describing: error), privacy: .public)")
         resultPresenter.present(
             title: L10n.text("Volvo sign-in failed"),
-            message: mapped?.errorDescription ?? error.localizedDescription, success: false
+            message: message, success: false
         )
     }
 
@@ -229,27 +331,53 @@ final class SignInCoordinator {
     /// unavailable until the user completes it (and again whenever the resulting session
     /// eventually expires).
     func beginPolestarCommandAuthorization(forceLogin: Bool = false) {
-        guard preferences.activeBrand == .polestar, preferences.hasResumableSession(for: .polestar) else {
-            resultPresenter.present(
+        logger.notice("Polestar command authorization requested (forceLogin: \(forceLogin, privacy: .public))")
+        // `hasResumableSession` is also true for an augmented account that only holds Developer
+        // Portal credentials. Those carry telemetry, not the consumer session the command grant
+        // is verified against and dispatched with, so the browser round-trip would complete and
+        // its grant be thrown away. Require the Polestar ID half before opening anything.
+        guard preferences.activeBrand == .polestar,
+              preferences.hasResumableSession(for: .polestar),
+              preferences.hasPolestarIDCredentials else {
+            logger.error("Polestar command authorization skipped: brand \(self.preferences.activeBrand.rawValue, privacy: .public), resumable \(self.preferences.hasResumableSession(for: .polestar), privacy: .public), Polestar ID credentials \(self.preferences.hasPolestarIDCredentials, privacy: .public)")
+            if commandAuthorizationAlerts.present(CommandAuthorizationFailure(
                 title: L10n.text("Sign in to Polestar first"),
                 message: L10n.text("Connect your Polestar account before authorizing remote commands."),
-                success: false
-            )
+                offersSignIn: true
+            )) {
+                beginPolestarWebSignIn(resumingCommandAuthorization: true)
+            }
             return
         }
-        // A second start must not cancel the first: two Authorize surfaces (Settings card,
-        // setup pass) and SwiftUI re-fires made the flow cancel its own freshly presented
-        // sheet, which read as "the browser opens and immediately closes".
+        // Duplicate SwiftUI fires within 1s are ignored silently; an explicit retry
+        // after that cancels the stuck sheet and restarts, so Authorize never looks dead.
+        // The 5-min browser-fallback timeout in the presenter bounds the stuck window.
         if let running = polestarSignInTask, !running.isCancelled {
-            return
+            if let started = polestarSignInStartedAt, Date().timeIntervalSince(started) < 1.0 {
+                logger.notice("Polestar command authorization ignored: duplicate fire within 1s")
+                return
+            }
+            logger.notice("Polestar command authorization restarted: cancelling stuck flow")
+            resultPresenter.present(
+                title: L10n.text("Authorization restarted"),
+                message: L10n.text("The previous authorization was still waiting, so it was cancelled and a fresh window was opened."),
+                success: true
+            )
         }
         cancelPolestarSignIn()
+        let token = UUID()
+        signInTaskToken = token
+        polestarSignInStartedAt = Date()
         polestarSignInTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.polestarSignInTask = nil }
+            defer { self.finishSignInTask(token) }
             var authorizationState: String?
             let startedAt = Date()
             do {
+                // The account session behind this grant is verified *after* the browser trip, so a
+                // session that cannot be refreshed is only discovered once the user has already
+                // signed in. Prove it here first, where the failure can still say "sign in again".
+                try await polestarAPI.refreshTokenIfNeeded()
                 let authorizeURL = try await polestarAPI.beginCommandAuthorization()
                 authorizationState = PolestarAPI.queryValue("state", from: authorizeURL)
                 let callbackURL = try await polestarCommandPresenter.signIn(authorizeURL: authorizeURL, forceLogin: forceLogin)
@@ -285,15 +413,26 @@ final class SignInCoordinator {
                     startedAt: startedAt, error: error,
                     semanticErrorType: "command-authorization"
                 )
-                let mapped = error as? LocalizedError
                 logger.error("Polestar command authorization failed: \(String(describing: error), privacy: .public)")
-                resultPresenter.present(
-                    title: L10n.text("Authorization failed"),
-                    message: mapped?.errorDescription ?? error.localizedDescription, success: false
-                )
+                // In-window, not a notification: with notifications off or Focus on, the
+                // notification never appeared and the click read as a no-op.
+                let failure = CommandAuthorizationFailure.make(for: error)
                 context?.refreshSettingsSurface()
+                if commandAuthorizationAlerts.present(failure) {
+                    // The user just asked for the sign-in that makes this step possible, so run it
+                    // and hand back here afterwards instead of making them find Authorize again.
+                    beginPolestarWebSignIn(resumingCommandAuthorization: true)
+                }
             }
         }
+    }
+
+    /// Unregisters the running-flow handle only when it still belongs to the caller: the web
+    /// sign-in hands over to the command step while its own task is still unwinding.
+    private func finishSignInTask(_ token: UUID) {
+        guard signInTaskToken == token else { return }
+        polestarSignInTask = nil
+        polestarSignInStartedAt = nil
     }
 
     // MARK: - Polestar interactive web sign-in
@@ -301,10 +440,17 @@ final class SignInCoordinator {
     /// Authorizes the Polestar web client (vehicle discovery & telemetry) through an in-app
     /// `WKWebView` window when headless PingFederate login is rejected with an interactive
     /// challenge (such as 2FA, CAPTCHA, or a Terms of Service update).
-    func beginPolestarWebSignIn() {
+    func beginPolestarWebSignIn(resumingCommandAuthorization: Bool = false) {
+        // Web flow always cancels the previous and restarts (unlike command, which
+        // debounces): the WKWebView window is fully owned, so a retry cleanly replaces it.
         cancelPolestarSignIn()
+        resumesCommandAuthorizationAfterSignIn = resumingCommandAuthorization
+        let token = UUID()
+        signInTaskToken = token
+        polestarSignInStartedAt = Date()
         polestarSignInTask = Task { [weak self] in
             guard let self else { return }
+            defer { self.finishSignInTask(token) }
             var authorizationState: String?
             do {
                 let (authorizeURL, redirectURI) = try await polestarAPI.beginWebAuthorization()
@@ -320,6 +466,7 @@ final class SignInCoordinator {
                     features: preferences.features
                 )
                 try Task.checkCancellation()
+                preferences.clearExplicitSignOut(for: .polestar)
                 context?.activateBrandAfterSignIn(.polestar)
                 context?.dismissSettingsAfterSignIn()
                 resultPresenter.present(
@@ -327,8 +474,19 @@ final class SignInCoordinator {
                     message: L10n.text("Successfully connected to your Polestar account! Fetching telemetry…"),
                     success: true
                 )
+                if resumesCommandAuthorizationAfterSignIn {
+                    resumesCommandAuthorizationAfterSignIn = false
+                    // Hand back to the step that failed: the grant it could not verify is exactly
+                    // what this sign-in just made possible. Clear the handle first, or the command
+                    // flow's own dedupe guard would treat this finished flow as still running.
+                    polestarSignInTask = nil
+                    beginPolestarCommandAuthorization()
+                }
             } catch {
+                resumesCommandAuthorizationAfterSignIn = false
                 await polestarAPI.cancelAuthorization(state: authorizationState)
+                // User closed the window (now CancellationError) is a decline, not a failure.
+                if error is CancellationError { return }
                 guard !Task.isCancelled else { return }
                 let mapped = error as? LocalizedError
                 logger.error("Polestar interactive web sign-in failed: \(String(describing: error), privacy: .public)")

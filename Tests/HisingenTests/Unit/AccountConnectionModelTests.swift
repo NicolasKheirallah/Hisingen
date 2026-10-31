@@ -67,6 +67,7 @@ private final class ScriptedKeychainSecurity: KeychainSecurity, @unchecked Senda
     }
 }
 
+@Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct AccountConnectionModelTests {
     private let passwordAccount = "polestar-password"
@@ -81,7 +82,7 @@ struct AccountConnectionModelTests {
         let security = ScriptedKeychainSecurity(failingAccounts: failingAccounts)
         let keychain = KeychainStore(service: "io.kheirallah.hisingen.scripted.\(UUID().uuidString)", security: security)
         let store = PreferencesStore(defaults: defaults, keychain: keychain)
-        return (AccountConnectionModel(preferences: store, keychain: keychain), store, security, suite)
+        return (AccountConnectionModel(preferences: store, keychain: keychain, builtinCredentials: .init()), store, security, suite)
     }
 
     /// Presence bits read and write `UserDefaults.standard` even for throwaway keychain
@@ -89,7 +90,7 @@ struct AccountConnectionModelTests {
     /// suite runs serially, which is what makes the snapshot itself race-free.
     private func withPresenceFlags<T>(_ body: () throws -> T) rethrows -> T {
         let keys = ["has_polestar_email", "has_polestar_password", "has_polestar_session",
-                    "has_polestar_cmd_session", "has_volvo_session", "has_volvo_client_secret",
+                    "has_polestar_cmd_session", "has_volvo_session", "has_volvo_client_secret", "has_volvo_api_key",
                     "has_polestar_dataportal_credentials"]
         let saved = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
         defer {
@@ -105,11 +106,13 @@ struct AccountConnectionModelTests {
     // MARK: - Health
 
     @Test
-    func connectedBrandWithAuthFamilyFailureReadsSessionExpired() {
-        withPresenceFlags {
+    func connectedBrandWithAuthFamilyFailureReadsSessionExpired() throws {
+        try withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-health-auth")
-            UserDefaults.standard.set(true, forKey: "has_polestar_session")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            // Presence for a throwaway keychain service is read from that service's own store,
+            // so the session is saved there rather than flagged in the shared defaults.
+            try scoped.keychain.saveSessionToken("session-token")
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
 
             let authFailure = ConnectionCheck(success: false, message: "anything", failureKind: .sessionExpired)
             #expect(model.health(for: .polestar, isActiveBrand: true, lastCheck: authFailure) == .sessionExpired)
@@ -120,16 +123,16 @@ struct AccountConnectionModelTests {
     }
 
     @Test
-    func expiredRenewableBeatsNeverConnected() {
-        withPresenceFlags {
+    func expiredRenewableBeatsNeverConnected() throws {
+        try withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-health-renewable")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
 
             // Nothing on file: never set up.
             #expect(model.health(for: .polestar, isActiveBrand: false, lastCheck: nil) == .notConnected)
 
             // Email present plus a known VIN: the browser handshake can renew alone.
-            UserDefaults.standard.set(true, forKey: "has_polestar_email")
+            try scoped.keychain.saveEmail("driver@example.invalid")
             scoped.store.setVin("YSMTESTVNN0000001", for: .polestar)
             #expect(model.health(for: .polestar, isActiveBrand: false, lastCheck: nil) == .sessionExpired)
             #expect(model.isRenewable(.polestar))
@@ -137,23 +140,29 @@ struct AccountConnectionModelTests {
     }
 
     @Test
-    func volvoRenewabilityNeedsClientIDAndAppCredentials() {
-        withPresenceFlags {
+    func volvoRenewabilityNeedsClientIDAndAppCredentials() throws {
+        try withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-health-volvo")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             scoped.store.volvoClientID = "client-id"
             scoped.store.setVin("YV1TESTVNN0000001", for: .volvo)
 
-            // The app-credentials presence bit is derived from the test service's store.
-            // Built-in developer keys may or may not be compiled into this build; when they
-            // are, the brand is renewable before anything is stored.
-            if !BuiltinVolvoSecrets.isConfigured {
-                #expect(model.isRenewable(.volvo) == false)
-            }
-            try? scoped.keychain.saveVolvoClientSecret("s")
-            try? scoped.keychain.saveVolvoApiKey("k")
+            #expect(model.isRenewable(.volvo) == false)
+            try scoped.keychain.saveVolvoClientSecret("s")
+            #expect(model.isRenewable(.volvo) == false)
+            try scoped.keychain.saveVolvoApiKey("k")
             #expect(model.isRenewable(.volvo) == true)
         }
+    }
+
+    @Test
+    func builtInVolvoCredentialsAreAnExplicitConfiguration() {
+        let scoped = ScopedPreferences(label: "acm-builtins")
+        scoped.store.setVin("YV1TESTVNN0000001", for: .volvo)
+        let model = AccountConnectionModel(
+            preferences: scoped.store, keychain: scoped.keychain,
+            builtinCredentials: .init(volvoClientID: "id", volvoClientSecret: "secret", volvoAPIKey: "key"))
+        #expect(model.isRenewable(.volvo))
     }
 
     // MARK: - Draft seeding
@@ -164,7 +173,7 @@ struct AccountConnectionModelTests {
             let scoped = ScopedPreferences(label: "acm-seed")
             scoped.store.setVin("YSMTESTVNN0000002", for: .polestar)
             scoped.store.setVehicleNickname("Midnight", for: "YSMTESTVNN0000002")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
 
             model.seedDraftFromStore()
             #expect(model.draft.polestarVIN == "YSMTESTVNN0000002")
@@ -271,7 +280,7 @@ struct AccountConnectionModelTests {
     func dataPortalOnlySaveSkipsWhenClientIDEmpty() {
         withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-portal-empty")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             model.draft.polestarDataPortalClientSecret = "secret-only"
 
             #expect(model.savePolestar(mode: .dataPortal) == nil)
@@ -282,7 +291,7 @@ struct AccountConnectionModelTests {
     func invalidPolestarEmailShortCircuitsIDSave() {
         withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-invalid")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             model.draft.polestarEmail = "not-an-email"
 
             #expect(model.savePolestar(mode: .polestarID) == nil)
@@ -296,7 +305,7 @@ struct AccountConnectionModelTests {
     func volvoSignInRecordsIdentityAndDropsSecrets() {
         withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-volvo")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             model.draft.volvoClientID = " client-id "
             model.draft.volvoClientSecret = "client-secret"
             model.draft.volvoApiKey = "api-key"
@@ -325,7 +334,7 @@ struct AccountConnectionModelTests {
     func volvoSignInWithInvalidVINWritesNothing() {
         withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-volvo-invalid")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             model.draft.volvoClientID = "client-id"
             model.draft.volvoVIN = "TOOSHORT"
 
@@ -338,22 +347,21 @@ struct AccountConnectionModelTests {
     // MARK: - Derived facts
 
     @Test
-    func portalFactsFoldTheDraftAndStoredPresence() {
-        withPresenceFlags {
+    func portalFactsFoldTheDraftAndStoredPresence() throws {
+        try withPresenceFlags {
             let scoped = ScopedPreferences(label: "acm-portal-facts")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
             model.draft.polestarDataPortalClientID = "client"
             model.draft.polestarVIN = "BAD"
 
             #expect(model.canConnectDataPortal == false)
             model.draft.polestarVIN = "YSMTESTVNN0000006"
             #expect(model.canConnectDataPortal == true)
-            // Portal presence comes from the test service's keychain, not the draft.
-            if BuiltinPolestarSecrets.dataPortalClientSecret.isEmpty {
-                #expect(model.isDataPortalConfigured == false)
-            }
-
-            try? scoped.keychain.savePolestarDataPortalCredentials(accountID: "acct", clientID: "client", clientSecret: "secret")
+            #expect(model.isDataPortalConfigured == false)
+            // A real save stores the ID in preferences and the secret in the Keychain.
+            scoped.store.polestarDataPortalClientID = "client"
+            #expect(model.isDataPortalConfigured == false)
+            try scoped.keychain.savePolestarDataPortalCredentials(accountID: "acct", clientID: "client", clientSecret: "secret")
             #expect(model.isDataPortalConfigured == true)
         }
     }
@@ -364,7 +372,7 @@ struct AccountConnectionModelTests {
             let scoped = ScopedPreferences(label: "acm-volvo-resume")
             scoped.store.volvoClientID = "stored-client"
             UserDefaults.standard.set(true, forKey: "has_volvo_session")
-            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain)
+            let model = AccountConnectionModel(preferences: scoped.store, keychain: scoped.keychain, builtinCredentials: .init())
 
             model.draft.volvoClientID = "other-client"
             #expect(model.hasResumableVolvoSession == false)

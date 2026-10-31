@@ -291,7 +291,10 @@ final class VehicleSessionController {
 
     private func handleFailure(_ error: VehicleServiceError) {
         lastError = error.localizedDescription
-        if error.requiresAuthentication && preferences.features.contains(.notifications) {
+        // An expired session is a signed-out state and a request for the user, not a
+        // notification preference. The notifier gates its own delivery; the shell must still
+        // hear about it whether notifications are on or off.
+        if error.requiresAuthentication {
             sessionValid = false
             context?.authenticationRequired()
         }
@@ -306,7 +309,11 @@ final class VehicleSessionController {
         // diagnostics display default (see primeDisplayState).
         sessionValid = diagnostics.sessionValid
         lastDiagnostics = diagnostics
-        if diagnostics.sessionValid, preferences.features.contains(.notifications) {
+        // A parked stream is still waiting for the user, even when the fallback poll keeps
+        // succeeding: withdrawing the sign-in request here would hide the one thing the park
+        // exists to say out loud.
+        if diagnostics.sessionValid, !diagnostics.liveStreamNeedsAuthorization,
+           preferences.features.contains(.notifications) {
             context?.authenticationSucceeded()
         }
         context?.sessionStateDidChange()

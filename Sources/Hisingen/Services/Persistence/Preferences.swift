@@ -455,11 +455,11 @@ enum DistanceUnit: String, CaseIterable, Codable, Sendable {
     var suffix: String { self == .kilometers ? "km" : "mi" }
 
     func convert(km: Int) -> Int {
-        self == .kilometers ? km : Int((Double(km) * 0.621371).rounded())
+        self == .kilometers ? km : Int((Double(km) * UnitConversion.kilometersPerMile).rounded())
     }
 
     func convert(km: Double) -> Double {
-        self == .kilometers ? km : km * 0.621371
+        self == .kilometers ? km : km * UnitConversion.kilometersPerMile
     }
 }
 

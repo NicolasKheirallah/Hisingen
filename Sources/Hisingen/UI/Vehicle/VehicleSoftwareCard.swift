@@ -11,10 +11,18 @@ struct VehicleSoftwareCard: View {
         guard features.contains(.softwareUpdates) else { return nil }
         guard let software = state.softwareInfo else {
             guard !state.isVolvo else { return nil }
+            // A car that says it never reports update status is not a failed read, so it
+            // should not look like one.
+            let statusNotReported = state.otaCapabilities?.supportsUpdateStatus == false
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
                     CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
-                    CapabilityBadge(title: L10n.text("Software status"), state: .unavailable)
+                    if statusNotReported {
+                        KVRow(L10n.text("Update Status"), L10n.text("Not reported by this vehicle"),
+                              symbol: "arrow.triangle.2.circlepath")
+                    } else {
+                        CapabilityBadge(title: L10n.text("Software status"), state: .unavailable)
+                    }
                 }
             })
         }

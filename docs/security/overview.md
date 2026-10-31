@@ -44,6 +44,8 @@ The boundary that matters most in practice: **credentials and tokens never cross
 - **Polestar password**: entered once, sent directly to Polestar ID during login, then persisted to Keychain (so a relaunch can re-authenticate without prompting). Never logged, never sent anywhere except Polestar's own login endpoint.
 - **Polestar refresh token**: the only Polestar credential kept long-term; the access token lives in memory only and is re-derived from the refresh token on every launch.
 - **Volvo Client ID / Client Secret / VCC API Key**: the user's own Developer Portal application credentials, entered in Settings, persisted to Keychain (secret + API key) or `UserDefaults` (Client ID, not secret).
+
+Build-injected Polestar Data Portal credentials are distributed with the application and can be recovered by someone who receives the binary. Build-time injection prevents accidental source publication; it does not make a client secret confidential after distribution. Custom credential pairs remain in Keychain and never mix with a bundled secret when incomplete or unreadable. The public vehicle-image key is separate from account and Data Portal credentials.
 - **Volvo refresh token**: same role as Polestar's.
 
 See [keychain.md](keychain.md) for exactly how and where these are stored.

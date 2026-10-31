@@ -332,7 +332,7 @@ struct SettingsElectricityRateSection: View {
                             .hisType(.label)
                             .foregroundStyle(.secondary)
                     }
-                    Text("/kWh")
+                    Text(L10n.text("/kWh"))
                         .hisType(.label)
                         .foregroundStyle(.secondary)
                 }

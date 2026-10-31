@@ -338,7 +338,7 @@ extension HistoryDashboardView {
                     KVRow(L10n.text("Estimated Usable Capacity"), Format.energyKwh(latest.effectiveUsableKwh), symbol: "battery.100")
                     KVRow(L10n.text("Recorded At Odometer"),
                           Format.distance(km: latest.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true), symbol: "road.lanes")
-                    if let slope = HistoryInsights.batteryHealthTrend(from: batteryHealthRecords).stateOfHealthPctPer10kKm,
+                    if let slope = HistoryInsights.batteryHealthTrendRobust(from: batteryHealthRecords).stateOfHealthPctPer10kKm,
                        batteryHealthRecords.count >= 3 {
                         KVRow(L10n.text("Trend"), L10n.format("%@%% / 10,000 km", Format.signedNumber(slope, decimals: 2)), symbol: "chart.line.downtrend.xyaxis",
                               info: L10n.text("Slope of a straight-line fit through the recorded milestones. A small sample or a recent measurement-method change can swing this significantly."))
@@ -391,7 +391,7 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let latestAqi = latest?.airQualityIndex {
-                        Text("\(Int(latestAqi)) AQI")
+                        Text(L10n.format("%d AQI", Int(latestAqi)))
                             .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
