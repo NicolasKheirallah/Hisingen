@@ -266,7 +266,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- 
+^-
 
 ### Fixed
 
@@ -274,13 +274,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
-- 
+^-
 
 ## [2.0.9] - 2026-10-19
 
 ### Added
 
-- 
+^-
 
 ### Fixed
 
@@ -288,7 +288,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
-- 
+^-
 
 ## [2.0.8] - 2026-10-19
 
@@ -298,21 +298,21 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
-- 
+^-
 
 ### Changed
 
-- 
+^-
 
 ## [2.0.7] - 2026-10-19
 
 ### Added
 
-- 
+^-
 
 ### Fixed
 
-- 
+^-
 
 ### Changed
 
@@ -323,7 +323,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- 
+^-
 
 ### Fixed
 
@@ -979,7 +979,7 @@ practice are gone.
 
 ### Added
 
-- 
+^-
 
 ### Fixed
 
