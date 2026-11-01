@@ -20,12 +20,12 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL (Swift)
-    runs-on: macos-15
-    # Dependencies are compiled before CodeQL starts tracing, so the instrumented
-    # build only extracts this repository's own module. Tracing the whole graph
-    # (gRPC, NIO, Crypto) spent about 30 minutes on dependencies before the app
-    # module started compiling, which left too little of the job timeout for it.
-    timeout-minutes: 60
+    runs-on: macos-26-intel
+    # Runs on the Intel runner because CodeQL's Swift extractor is an x86_64 binary: on an
+    # arm64 runner the compiler and extractor both run under Rosetta, which extracted the app
+    # module at about 15 seconds per file (386 files). Dependencies are compiled before CodeQL
+    # starts tracing, so the instrumented build only extracts this repository's own module.
+    timeout-minutes: 90
     permissions:
       contents: read
       security-events: write
@@ -60,10 +60,7 @@ jobs:
 
       - name: Build dependencies outside the tracer
         timeout-minutes: 30
-        # CodeQL's Swift extractor is an Intel binary, so the traced build runs under
-        # Rosetta and writes to .build/x86_64-apple-macosx. Build for that same
-        # architecture here or the traced build recompiles every dependency.
-        run: arch -x86_64 swift build --force-resolved-versions
+        run: swift build --force-resolved-versions
 
       - name: Save dependency build
         if: steps.deps-cache.outputs.cache-hit != 'true'
@@ -82,18 +79,10 @@ jobs:
           build-mode: manual
 
       - name: Build instrumented source
-        timeout-minutes: 25
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codeql-diagnostics"
-          # The app module compiles in about a minute without the extractor. If it is
-          # still running after 10 minutes, record where the extractor is stuck.
-          (
-            sleep 600
-            for pid in $(pgrep -f 'extractor.real' | head -4); do
-              sample "$pid" 5 -file "$RUNNER_TEMP/codeql-diagnostics/sample-$pid.txt" || true
-            done
-          ) &
           # Touching the sources makes SwiftPM recompile only the app module.
           find Sources/Hisingen -name '*.swift' -exec touch {} +
           swift build --force-resolved-versions 2>&1 | tee "$RUNNER_TEMP/codeql-diagnostics/build.log"
