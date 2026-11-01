@@ -63,7 +63,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-system.git", exact: "1.6.6"),
         .package(url: "https://github.com/apple/swift-http-structured-headers.git", exact: "1.6.0"),
         .package(url: "https://github.com/apple/swift-async-algorithms.git", exact: "1.0.4"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", exact: "1.33.0"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", exact: "1.34.1"),
         .package(url: "https://github.com/apple/swift-http-types.git", exact: "1.5.1"),
         .package(url: "https://github.com/apple/swift-atomics.git", exact: "1.3.1"),
         .package(url: "https://github.com/apple/swift-nio.git", exact: "2.100.0"),
