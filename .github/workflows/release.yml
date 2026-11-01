@@ -97,6 +97,9 @@ jobs:
       - name: Check out exact validated commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
+          # The source hygiene gate diffs HEAD against its parent. A depth-1 clone
+          # has no parent, so it reports the whole tree as newly added.
+          fetch-depth: 0
           persist-credentials: false
           ref: ${{ needs.validate.outputs.sha }}
       - name: Set up Node
