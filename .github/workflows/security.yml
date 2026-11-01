@@ -23,8 +23,8 @@ jobs:
     runs-on: macos-15
     # Dependencies are compiled before CodeQL starts tracing, so the instrumented
     # build only extracts this repository's own module. Tracing the whole graph
-    # (gRPC, NIO, Crypto) spent 31 minutes on dependencies and then produced no
-    # output from the app module until the job timed out.
+    # (gRPC, NIO, Crypto) spent about 30 minutes on dependencies before the app
+    # module started compiling, which left too little of the job timeout for it.
     timeout-minutes: 60
     permissions:
       contents: read
@@ -60,7 +60,10 @@ jobs:
 
       - name: Build dependencies outside the tracer
         timeout-minutes: 30
-        run: swift build --force-resolved-versions
+        # CodeQL's Swift extractor is an Intel binary, so the traced build runs under
+        # Rosetta and writes to .build/x86_64-apple-macosx. Build for that same
+        # architecture here or the traced build recompiles every dependency.
+        run: arch -x86_64 swift build --force-resolved-versions
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
@@ -69,7 +72,7 @@ jobs:
           build-mode: manual
 
       - name: Build instrumented source
-        timeout-minutes: 30
+        timeout-minutes: 40
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codeql-diagnostics"
