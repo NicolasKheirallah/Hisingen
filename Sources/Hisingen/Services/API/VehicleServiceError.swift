@@ -138,5 +138,3 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         }
     }
 }
-
-

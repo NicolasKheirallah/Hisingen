@@ -3,7 +3,7 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.11] - 2026-10-31
+## [2.0.12] - 2026-11-01
 
 ### Added
 
@@ -1076,7 +1076,7 @@ practice are gone.
 - Live-account testing gains a configurable stream soak (`HISINGEN_SOAK_SECONDS`) that
   verifies the single-stream, no-reconnect, and no-amplification invariants over
   sustained time against the real backend.
-  
+
 ### Changed
 
 - Remote commands from deep links and Shortcuts now go through the same single dispatch as the Controls tab, so all three surfaces answer identically about what a vehicle accepts. Deep links like `hisingen://lock` work on Polestar vehicles (they previously showed a "paired mobile devices only" notice while the Controls tab dispatched the same command), and Shortcuts return the vehicle's actual result immediately instead of waiting up to 60 seconds for a database poll.

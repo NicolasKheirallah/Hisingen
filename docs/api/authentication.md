@@ -672,5 +672,3 @@ The Volvo integration uses the documented Volvo Developer Platform but still dep
 The Polestar integration relies on undocumented first-party behaviour and may require changes when Polestar modifies its authentication systems.
 
 Hisingen should fail conservatively when an authentication assumption is no longer valid rather than attempting to bypass provider security controls.
-
-

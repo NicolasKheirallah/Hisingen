@@ -126,4 +126,3 @@ enum PolestarError: Error, LocalizedError {
         }
     }
 }
-

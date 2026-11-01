@@ -26,4 +26,3 @@ enum BuiltinPolestarSecrets {
         GeneratedPolestarSecrets.clientSecret
     }
 }
-

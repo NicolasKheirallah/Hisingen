@@ -67,5 +67,3 @@ struct VehicleServiceErrorTests {
         #expect(!(VehicleServiceError.notConfigured.isTransient))
     }
 }
-
-
