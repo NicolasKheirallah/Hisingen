@@ -872,4 +872,3 @@ extension ChargingCurveView {
         return "\(Format.shortTime(date: sample.timestamp)): \(Format.percent(sample.batteryPercentage))\(watts)"
     }
 }
-

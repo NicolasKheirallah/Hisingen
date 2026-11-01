@@ -42,5 +42,3 @@ struct VolvoKeychainIsolationTests {
         try #expect(store.readVolvoApiKey() == "api-key-value")
     }
 }
-
-

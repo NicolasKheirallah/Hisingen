@@ -101,19 +101,19 @@ Likewise, support observed on one vehicle model, model year, account, or market 
 
 Documentation and code should distinguish at least the following states:
 
-1. **Known provider capability**  
+1. **Known provider capability**
    The underlying provider or vehicle is known to support the operation.
 
-2. **Implemented in Hisingen**  
+2. **Implemented in Hisingen**
    Hisingen contains an implementation for the operation.
 
-3. **Validated**  
+3. **Validated**
    The implementation has sufficient test or real-world validation for the supported configuration.
 
-4. **Exposed to the user**  
+4. **Exposed to the user**
    The command is intentionally available through the current Hisingen UI.
 
-5. **Available now**  
+5. **Available now**
    Current authentication, capability, and vehicle-state checks allow execution.
 
 These states must not be treated as interchangeable.
