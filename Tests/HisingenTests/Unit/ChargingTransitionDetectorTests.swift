@@ -87,4 +87,3 @@ struct ChargingTransitionDetectorTests {
                 fetchedAt: now.addingTimeInterval(offset), reportedAt: now.addingTimeInterval(offset))
     }
 }
-

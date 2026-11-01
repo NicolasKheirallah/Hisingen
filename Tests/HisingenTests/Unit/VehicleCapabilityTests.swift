@@ -154,5 +154,3 @@ struct VehicleCapabilityTests {
         #expect(ex90Profile.permits(.climateStartStop))
     }
 }
-
-

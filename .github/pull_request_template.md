@@ -20,4 +20,3 @@
 <!-- Credentials, tokens, VINs, location data, persisted state? -->
 
 ## Screenshots (for UI changes)
-

@@ -38,5 +38,3 @@ enum PowertrainType: String, Codable, Sendable {
     var isCombustionOnly: Bool { self == .ice }
     var isElectricOnly: Bool { self == .bev }
 }
-
-

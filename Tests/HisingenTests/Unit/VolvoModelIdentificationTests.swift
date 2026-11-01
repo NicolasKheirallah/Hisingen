@@ -110,4 +110,3 @@ struct VolvoModelIdentificationTests {
         #expect(profile.support(for: .locks) == .supported)
     }
 }
-

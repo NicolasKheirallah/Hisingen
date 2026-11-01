@@ -23,5 +23,3 @@ enum PKCE {
             .replacingOccurrences(of: "=", with: "")
     }
 }
-
-

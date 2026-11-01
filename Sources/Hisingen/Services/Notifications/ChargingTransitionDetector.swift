@@ -198,4 +198,3 @@ struct ChargingTransitionDetector {
         return "\(state.identity.vin)|\(event.identifierComponent)|\(timestamp)"
     }
 }
-
