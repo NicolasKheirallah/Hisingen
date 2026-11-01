@@ -73,7 +73,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-collections.git", exact: "1.2.1"),
         .package(url: "https://github.com/apple/swift-numerics.git", exact: "1.1.1"),
         .package(url: "https://github.com/apple/swift-algorithms.git", exact: "1.2.1"),
-        .package(url: "https://github.com/apple/swift-nio-http2.git", exact: "1.42.0"),
+        .package(url: "https://github.com/apple/swift-nio-http2.git", exact: "1.44.0"),
         .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.36.1"),
         .package(url: "https://github.com/apple/swift-certificates.git", exact: "1.18.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", exact: "2.10.1")
