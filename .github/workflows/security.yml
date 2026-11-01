@@ -20,10 +20,12 @@ concurrency:
 jobs:
   codeql:
     name: CodeQL (Swift)
-    runs-on: macos-15
-    # Instrumented Swift builds regularly need 26–28 minutes on hosted runners,
-    # followed by analysis and cleanup. Keep enough headroom for runner variance.
-    timeout-minutes: 60
+    runs-on: macos-26-intel
+    # Runs on the Intel runner because CodeQL's Swift extractor is an x86_64 binary: on an
+    # arm64 runner the compiler and extractor both run under Rosetta, which extracted the app
+    # module at about 15 seconds per file (386 files). Dependencies are compiled before CodeQL
+    # starts tracing, so the instrumented build only extracts this repository's own module.
+    timeout-minutes: 90
     permissions:
       contents: read
       security-events: write
@@ -41,32 +43,58 @@ jobs:
       - name: Select pinned Xcode toolchain
         run: sh Scripts/select-xcode.sh
 
+      - name: Generate fixture build configuration
+        env:
+          HISINGEN_BUILD_CONFIGURATION: fixture
+        run: sh Scripts/inject-secrets.sh
+
+      - name: Restore dependency build
+        id: deps-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/.cache/org.swift.swiftpm
+            .build
+          key: codeql-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
+
+      - name: Build dependencies outside the tracer
+        timeout-minutes: 30
+        run: swift build --force-resolved-versions
+
+      - name: Save dependency build
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/.cache/org.swift.swiftpm
+            .build
+          key: codeql-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           languages: swift
           build-mode: manual
 
-      - name: Generate fixture build configuration
-        env:
-          HISINGEN_BUILD_CONFIGURATION: fixture
-        run: sh Scripts/inject-secrets.sh
-
-      - name: Cache dependency repositories and binary artifacts
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/Library/Caches/org.swift.swiftpm
-            ~/.cache/org.swift.swiftpm
-            .build/repositories
-            .build/artifacts
-          key: codeql-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
-
       - name: Build instrumented source
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/codeql-diagnostics"
+          # Touching the sources makes SwiftPM recompile only the app module.
+          find Sources/Hisingen -name '*.swift' -exec touch {} +
           swift build --force-resolved-versions 2>&1 | tee "$RUNNER_TEMP/codeql-diagnostics/build.log"
+
+      - name: Capture process tree after a failed build
+        if: failure() || cancelled()
+        run: |
+          mkdir -p "$RUNNER_TEMP/codeql-diagnostics"
+          ps -axo pid,ppid,etime,command > "$RUNNER_TEMP/codeql-diagnostics/processes.log" || true
+          # One TRAP file is written per extracted file; the newest entries show where it stopped.
+          find "$RUNNER_TEMP/codeql_databases" -name '*.trap*' -exec stat -f '%m %z %N' {} + 2>/dev/null \
+            | sort -n > "$RUNNER_TEMP/codeql-diagnostics/traps.log" || true
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
