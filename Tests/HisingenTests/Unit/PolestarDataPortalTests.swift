@@ -512,10 +512,29 @@ struct PolestarDataPortalTests {
         config.protocolClasses = [PortalMockTransport.self]
         let session = URLSession(configuration: config)
 
-        let api = PolestarDataPortalAPI()
+        // The fetch plan divides the day's remaining calls by 120-second refresh slots, so in
+        // the first half hour after midnight UTC its budget drops one endpoint and this
+        // assembly assertion would flake on the clock. Pin the clock to noon UTC and own the
+        // quota store so the plan always covers every endpoint.
+        let noon = Calendar(identifier: .gregorian)
+            .date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+        let box = QuotaBox()
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { box.value },
+            set: { count, day in box.value = (count, day) })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
+
+        // Isolated preferences too: a session another test stored with real-clock timestamps
+        // would look expired to the pinned clock and push the fetch into a token refresh the
+        // mock cannot answer.
+        let scoped = ScopedPreferences(label: "portal-assembly")
+        let api = PolestarDataPortalAPI(keychain: scoped.keychain, preferences: scoped.store,
+                                        now: { noon }, timeZone: TimeZone(identifier: "UTC")!)
         await api.setSessionForTesting(session)
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
-        await api.setAccessTokenForTesting("test-token")
+        // The setter's default expiry reads the real clock, which is already behind the
+        // pinned noon, so hand it an expiry inside the pinned clock's future.
+        await api.setAccessTokenForTesting("test-token", expiry: noon.addingTimeInterval(3600))
 
         let batteryData = try fixtureData(named: "polestar-portal-battery")
         let exteriorData = try fixtureData(named: "polestar-portal-exterior")
