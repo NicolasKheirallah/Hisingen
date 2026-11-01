@@ -112,29 +112,30 @@ Built apps also carry a copy as `Sparkle-LICENSE.txt` in `Contents/Resources`.
 Hisingen's Polestar gRPC calls run on [grpc-swift-2](https://github.com/grpc/grpc-swift-2) and its
 [NIO transport](https://github.com/grpc/grpc-swift-nio-transport), which build on SwiftNIO and
 the Swift packages below. All are pinned in [Package.resolved](Package.resolved) and licensed
-under the Apache License 2.0 (checked against each package's `LICENSE` file on 2026-10-31).
+under the Apache License 2.0 (checked against each package's `LICENSE` file on 2026-10-31; the `LICENSE.txt` and
+`NOTICE.txt` files were confirmed unchanged at the versions bumped on 2026-11-01).
 
 | Package | Pinned version |
 |---|---|
-| [grpc/grpc-swift-2](https://github.com/grpc/grpc-swift-2) | 2.3.0 |
-| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.6.0 |
-| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.100.0 |
-| [apple/swift-nio-extras](https://github.com/apple/swift-nio-extras) | 1.33.0 |
-| [apple/swift-nio-http2](https://github.com/apple/swift-nio-http2) | 1.42.0 |
-| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.36.1 |
-| [apple/swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services) | 1.26.0 |
-| [apple/swift-certificates](https://github.com/apple/swift-certificates) | 1.18.0 |
-| [apple/swift-crypto](https://github.com/apple/swift-crypto) | 4.3.1 |
-| [apple/swift-asn1](https://github.com/apple/swift-asn1) | 1.6.0 |
-| [apple/swift-http-types](https://github.com/apple/swift-http-types) | 1.5.1 |
-| [apple/swift-http-structured-headers](https://github.com/apple/swift-http-structured-headers) | 1.6.0 |
-| [apple/swift-log](https://github.com/apple/swift-log) | 1.8.0 |
+| [grpc/grpc-swift-2](https://github.com/grpc/grpc-swift-2) | 2.4.4 |
+| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.10.0 |
+| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.104.0 |
+| [apple/swift-nio-extras](https://github.com/apple/swift-nio-extras) | 1.35.2 |
+| [apple/swift-nio-http2](https://github.com/apple/swift-nio-http2) | 1.46.0 |
+| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.37.5 |
+| [apple/swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services) | 1.28.0 |
+| [apple/swift-certificates](https://github.com/apple/swift-certificates) | 1.21.1 |
+| [apple/swift-crypto](https://github.com/apple/swift-crypto) | 5.0.3 |
+| [apple/swift-asn1](https://github.com/apple/swift-asn1) | 1.7.3 |
+| [apple/swift-http-types](https://github.com/apple/swift-http-types) | 1.8.0 |
+| [apple/swift-http-structured-headers](https://github.com/apple/swift-http-structured-headers) | 1.7.0 |
+| [apple/swift-log](https://github.com/apple/swift-log) | 1.16.2 |
 | [apple/swift-algorithms](https://github.com/apple/swift-algorithms) | 1.2.1 |
-| [apple/swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | 1.0.4 |
+| [apple/swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | 1.1.7 |
 | [apple/swift-atomics](https://github.com/apple/swift-atomics) | 1.3.1 |
-| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.2.1 |
+| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.7.5 |
 | [apple/swift-numerics](https://github.com/apple/swift-numerics) | 1.1.1 |
-| [apple/swift-system](https://github.com/apple/swift-system) | 1.6.6 |
+| [apple/swift-system](https://github.com/apple/swift-system) | 1.8.1 |
 | [swift-server/swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | 2.10.1 |
 
 Terms beyond the plain Apache License 2.0:
