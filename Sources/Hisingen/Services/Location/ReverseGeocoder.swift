@@ -64,4 +64,3 @@ actor ReverseGeocoder {
         }
     }
 }
-

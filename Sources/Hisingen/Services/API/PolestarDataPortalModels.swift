@@ -1124,4 +1124,3 @@ private func parsePortalWeekday(_ raw: String) -> VehicleWeekday? {
     default: return nil
     }
 }
-

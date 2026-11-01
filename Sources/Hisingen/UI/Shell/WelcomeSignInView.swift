@@ -66,4 +66,3 @@ struct WelcomeSignInView: View {
         .accessibilityElement(children: .combine)
     }
 }
-

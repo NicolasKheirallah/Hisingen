@@ -182,4 +182,3 @@ enum BatteryLevel: Equatable, Sendable {
     static let lowPercentage = 35.0
     static let chargingCompletePercentage = 80.0
 }
-
