@@ -237,6 +237,14 @@ extension PolestarAPI {
         try Task.checkCancellation()
         guard !webAuthorization.isInProgress else { throw CancellationError() }
         guard !token.isEmpty else { throw PolestarError.authenticationRequired(.noStoredSession) }
+        // Connection tests share this actor with refreshes and streams. Reusing the same
+        // discovered session must not invalidate their generation or pending reads.
+        if refreshToken == token, hasWarmSession {
+            let epoch = sessionEpoch
+            try await refreshTokenIfNeeded()
+            try requireSession(epoch)
+            return
+        }
         // A restore that finds the grant this process is already using is the refresh-retry path,
         // not a launch: the stored credential has not changed and the access token it produced is
         // still the right one. Proving the grant again would rotate the refresh credential on
