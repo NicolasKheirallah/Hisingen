@@ -1,6 +1,14 @@
 import Foundation
 
 extension RefreshCoordinator {
+    func retryAfterProviderCancellation() {
+        // A provider can supersede a read during sign-in without cancelling our task.
+        // Keep polling alive without presenting that session transition as a network error.
+        logger.debug("Provider superseded refresh; retrying in five seconds")
+        schedule(after: 5, retrySession: !sessionReady, addsJitter: false)
+        publishDiagnostics()
+    }
+
     func schedule(after interval: TimeInterval, retrySession: Bool, addsJitter: Bool = true) {
         scheduler.cancel()
         guard !sleeping, networkAvailable else { nextRefresh = nil; return }

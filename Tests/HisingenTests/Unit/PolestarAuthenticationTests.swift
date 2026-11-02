@@ -152,6 +152,68 @@ struct PolestarAuthenticationTests {
         #expect(await api.webAuthorization.isInProgress == false)
     }
 
+    @Test func restoringLiveGrantDoesNotCancelAnInFlightReading() async throws {
+        let (api, _) = await makeAPI()
+        await api.restoreDiscovery(cars: [.init(vin: "VIN-A", title: "Polestar")], identities: [:])
+        let gate = AuthenticationGate()
+        let reading = Task {
+            try await api.optionalCapability(PolestarReading<Int>.targetSOC, enabled: true, vin: "VIN-A") {
+                await gate.arriveAndWait()
+                return 80
+            }
+        }
+        await gate.waitForArrival()
+        let epoch = await api.sessionEpoch
+        do {
+            try await api.restoreSession(token: "base-refresh", preferredVIN: "VIN-A",
+                                         features: FeatureSelection(enabled: []))
+        } catch {
+            Issue.record("Restoring a live grant failed: \(error)")
+        }
+        await gate.release()
+        #expect(await api.sessionEpoch == epoch)
+        do {
+            #expect(try await reading.value.value == 80)
+        } catch {
+            Issue.record("Session restoration interrupted the active refresh: \(error)")
+        }
+    }
+
+    @Test func restoringLiveGrantRenewsExpiredTokenWithoutResettingDiscovery() async throws {
+        let (api, _) = await makeAPI()
+        await api.restoreDiscovery(cars: [.init(vin: "VIN-A", title: "Polestar")], identities: [:])
+        await api.installAccessTokenForTesting("expired-access", lifetime: 3600, remaining: -1)
+        let epoch = await api.sessionEpoch
+        let requests = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            #expect(request.url?.path == "/token")
+            await requests.increment()
+            return Data(#"{"access_token":"renewed-access","refresh_token":"rotated-refresh","expires_in":3600}"#.utf8)
+        }
+        try await api.restoreSession(token: "base-refresh", preferredVIN: "VIN-A",
+                                     features: FeatureSelection(enabled: []))
+        #expect(await api.accessToken == "renewed-access")
+        #expect(await api.refreshToken == "rotated-refresh")
+        #expect(await api.sessionEpoch == epoch)
+        #expect(await api.cars.map(\.vin) == ["VIN-A"])
+        #expect(await requests.value == 1)
+    }
+
+    @Test func restoringDifferentGrantStillInvalidatesThePreviousSession() async throws {
+        let (api, _) = await makeAPI()
+        await api.restoreDiscovery(cars: [.init(vin: "VIN-A", title: "Polestar")], identities: [:])
+        let epoch = await api.sessionEpoch
+        do {
+            try await api.restoreSession(token: "different-refresh", preferredVIN: nil,
+                                         features: FeatureSelection(enabled: []))
+            Issue.record("The fixture must reject cold discovery")
+        } catch {
+            #expect(error is PolestarError)
+        }
+        #expect(await api.sessionEpoch != epoch)
+        #expect(await api.cars.isEmpty)
+    }
+
     @Test func signOutClearsLocallyBeforeRevocationAndCannotClearANewerSession() async throws {
         let (api, keychain) = await makeAPI()
         try keychain.saveSessionToken("base-refresh")
