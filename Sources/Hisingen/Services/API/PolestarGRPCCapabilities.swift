@@ -123,6 +123,9 @@ extension PolestarGRPC {
     }
 
     func fetchSoftware(vin: String, accessToken: String, locale: String, requireComplete: Bool = false, requireSoftwareIdentity: Bool = false) async throws -> VehicleSoftwareInfo? {
+        // Optional OTA status must not hold core telemetry behind the default minute-long
+        // deadline. Command verification keeps its existing deadline and completeness rules.
+        let timeoutInterval: TimeInterval? = requireComplete || requireSoftwareIdentity ? nil : 6
         let generation = sessionGeneration
         let readGeneration = (softwareReadGeneration[vin] ?? 0) &+ 1
         softwareReadGeneration[vin] = readGeneration
@@ -136,7 +139,8 @@ extension PolestarGRPC {
         var firstError: Error?
         do {
             let body = try await firstMessage(path: Self.softwarePath, message: request,
-                                              vin: vin, accessToken: accessToken)
+                                              vin: vin, accessToken: accessToken,
+                                              timeoutInterval: timeoutInterval)
             guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
             _ = try Protobuf.decode(body)
             if let payload = Self.message(body, field: 1), !payload.isEmpty {
@@ -170,7 +174,8 @@ extension PolestarGRPC {
         do {
             let body = try await firstMessage(path: Self.softwareSchedulePath,
                                               message: Protobuf.stringField(1, vin),
-                                              vin: vin, accessToken: accessToken)
+                                              vin: vin, accessToken: accessToken,
+                                              timeoutInterval: timeoutInterval)
             guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
             _ = try Protobuf.decode(body)
             if let scheduler = Self.message(body, field: 1) {

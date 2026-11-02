@@ -3,6 +3,15 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.13] - 2026-11-02
+
+### Fixed
+
+- Keep active telemetry reads running when a connection test restores the current Polestar session.
+- Retry provider-cancelled refreshes instead of reporting a network error.
+- Limit optional software-status reads so an unresponsive service does not delay vehicle refreshes for a minute.
+- Include redacted Data Portal failure details in diagnostic logs.
+
 ## [2.0.12] - 2026-11-01
 
 ### Added

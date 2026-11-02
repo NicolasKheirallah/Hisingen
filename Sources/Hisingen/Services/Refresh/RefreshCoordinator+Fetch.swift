@@ -113,6 +113,10 @@ extension RefreshCoordinator {
                 Self.signposter.endInterval("fetchVehicleState", intervalState)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
+                if error is CancellationError {
+                    retryAfterProviderCancellation()
+                    return
+                }
                 let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: false)

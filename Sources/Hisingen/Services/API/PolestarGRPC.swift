@@ -653,7 +653,8 @@ actor PolestarGRPC {
 
     func firstMessage(path: String, message: Data, vin: String,
                       accessToken: String, host: GRPCHost = .c3,
-                      completion: PolestarGRPCReadCompletion = .terminalStatus) async throws -> Data {
+                      completion: PolestarGRPCReadCompletion = .terminalStatus,
+                      timeoutInterval: TimeInterval? = nil) async throws -> Data {
         try Task.checkCancellation()
         let generation = sessionGeneration
         let base = try await resolvedHost(host, accessToken: accessToken)
@@ -662,7 +663,11 @@ actor PolestarGRPC {
             throw PolestarError.grpcUnimplemented(service: path.split(separator: "/").first.map(String.init) ?? path)
         }
         var request = Self.grpcRequest(base: base, path: path, message: message, vin: vin, accessToken: accessToken)
-        if host == .pccs { request.timeoutInterval = 6 }
+        if let timeoutInterval {
+            request.timeoutInterval = timeoutInterval
+        } else if host == .pccs {
+            request.timeoutInterval = 6
+        }
         let state = PolestarGRPCExchangeState()
         let startedAt = now()
         do {
