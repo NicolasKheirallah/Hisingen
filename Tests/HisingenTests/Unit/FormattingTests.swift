@@ -498,6 +498,25 @@ struct FormattingTests {
     }
 
     @Test
+    func testSleepingCarFreshnessShowsTheCheckTime() {
+        let now = Date()
+        let asleep = VehicleState(
+            batteryPercentage: 78, rangeKm: 250, chargingState: .idle,
+            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: nil,
+            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
+            chargingType: .none, chargerConnection: .disconnected, availability: .unavailable(reason: nil),
+            modelName: "Polestar 2", modelYear: "2024", registrationNo: nil, vin: "LPSVSEDEKML000001",
+            ownerFirstName: nil, odometerKm: nil, daysToService: nil, distanceToServiceKm: nil,
+            serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: now,
+            vehicleReportedAt: now.addingTimeInterval(-8 * 3_600), dataWarnings: []
+        )
+        // A refresh against a sleeping car returns the same reading, so the check time is the only
+        // thing on the line that moves after a successful refresh.
+        #expect(asleep.freshnessDescription.contains("Vehicle asleep"))
+        #expect(asleep.freshnessDescription.contains("Checked just now"))
+    }
+
+    @Test
     func testChargingSessionSamplesAndSparklineBuffering() {
         var state1 = vehicle(battery: 50, state: .charging, connection: .connected)
         let sample1 = ChargingSample(timestamp: Date(timeIntervalSince1970: 1000), batteryPercentage: 50, powerWatts: 7200)

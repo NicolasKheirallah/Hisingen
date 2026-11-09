@@ -1145,6 +1145,7 @@
 "Vehicle Weather" = "Väder vid fordonet";
 "Vehicle alarm triggered" = "Fordonslarm utlöst";
 "Vehicle asleep · Updated %@" = "Fordonet sover · Uppdaterat %@";
+"%@ · Checked %@" = "%@ · Kontrollerat %@";
 "Vehicle default" = "Fordonets standardinställning";
 "Vehicle details" = "Fordonsdetaljer";
 "Vehicle display name" = "Visningsnamn för fordon";

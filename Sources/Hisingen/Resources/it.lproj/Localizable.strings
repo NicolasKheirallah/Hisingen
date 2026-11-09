@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "Meteo veicolo";
 "Vehicle alarm triggered" = "Allarme del veicolo attivato";
 "Vehicle asleep · Updated %@" = "Veicolo in sospensione · Aggiornato %@";
+"%@ · Checked %@" = "%@ · Verificato %@";
 "Vehicle default" = "Predefinito del veicolo";
 "Vehicle details" = "Dettagli del veicolo";
 "Vehicle display name" = "Nome visualizzato del veicolo";

@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "Kjøretøyvær";
 "Vehicle alarm triggered" = "Bilalarm utløst";
 "Vehicle asleep · Updated %@" = "Kjøretøy i dvale · Oppdatert %@";
+"%@ · Checked %@" = "%@ · Sjekket %@";
 "Vehicle default" = "Kjøretøystandard";
 "Vehicle details" = "Kjøretøydetaljer";
 "Vehicle display name" = "Visningsnavn for kjøretøy";

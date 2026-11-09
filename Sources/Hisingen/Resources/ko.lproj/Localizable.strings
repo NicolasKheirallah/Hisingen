@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "차량 주변 날씨";
 "Vehicle alarm triggered" = "차량 경보 작동";
 "Vehicle asleep · Updated %@" = "차량 절전 모드 · 업데이트됨 %@";
+"%@ · Checked %@" = "%@ · 확인됨 %@";
 "Vehicle default" = "차량 기본값";
 "Vehicle details" = "차량 상세 정보";
 "Vehicle display name" = "차량 표시 이름";
