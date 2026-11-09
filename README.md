@@ -1140,6 +1140,13 @@ and the pane names them rather than leaving them out silently.
 Any of Vehicle, Info, History and Controls can also be hidden from the tab bar.
 Settings is always there: it is where the list is managed.
 
+**Tab order.** The tab bar draws your tabs in your order, not the order they were
+built in. Drag a tab along the strip in **Settings → Tabs & Cards**, or use Move to
+First, Move Left and Move Right from its context menu or from the arrows beside the
+selected tab's name, so a tab you just created can sit first. Hidden tabs keep their
+place, so showing one again puts it back where it was, and *Restore Tab Order* returns
+the shipped order without touching the cards on each tab.
+
 ### Panel size & content density
 
 The menu bar dropdown adapts to how you use it. In

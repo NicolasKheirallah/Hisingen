@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "Månedlig sammenligning av lading krever mer data";
 "More" = "Mer";
 "Move Down" = "Flytt ned";
+"Move Left" = "Flytt til venstre";
+"Move Right" = "Flytt til høyre";
 "Move Up" = "Flytt opp";
 "Move to %@" = "Flytt til %@";
+"Move to First" = "Flytt til første plass";
 "Move to Top" = "Flytt til toppen";
 "My Tab" = "Min fane";
 "Network errors" = "Nettverksfeil";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "Fjern fra denne fanen";
 "Rename this tab" = "Gi denne fanen nytt navn";
 "Reset Tab" = "Tilbakestill fane";
+"Restore Tab Order" = "Gjenopprett fanerekkefølgen";
 "Restores this tab's original cards and order." = "Gjenoppretter fanens opprinnelige kort og rekkefølge.";
 "Save & Connect" = "Lagre og koble til";
 "Save Both & Connect" = "Lagre begge og koble til";

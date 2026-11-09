@@ -155,29 +155,7 @@ struct SettingsTabsAndCardsCard: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(tabList, id: \.self) { tab in
-                    let selected = selectedTab == tab
-                    Button {
-                        withAnimation(Motion.resolve(Motion.selection)) { selectedTab = tab }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: composition.symbol(for: tab)).hisType(.micro)
-                            Text(composition.title(for: tab))
-                                .hisType(.caption, weight: selected ? .semibold : .regular)
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.pressable)
-                    .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
-                    .background(
-                        selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    )
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                    .contextMenu { tabContextMenu(tab) }
+                    tabChip(tab)
                 }
 
                 Button {
@@ -195,18 +173,102 @@ struct SettingsTabsAndCardsCard: View {
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .help(L10n.text("New tab"))
                 .accessibilityLabel(L10n.text("New tab"))
+
+                if !composition.tabOrder.isEmpty {
+                    Button {
+                        var updated = composition
+                        updated.resetTabOrder()
+                        save(updated)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .hisType(.micro, weight: .semibold)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.pressable)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .help(L10n.text("Restore Tab Order"))
+                    .accessibilityLabel(L10n.text("Restore Tab Order"))
+                }
             }
             .padding(.horizontal, 1)
         }
         .hisAnimation(Motion.selection, value: selectedTab)
+        .hisAnimation(Motion.cardChange, value: composition.tabOrder)
     }
 
+    /// Every tab, in the reader's order, with Settings last. Hidden tabs stay in this list so
+    /// they can be shown again from here.
     private var tabList: [TabRef] {
-        BuiltInTab.allCases.map { TabRef.builtIn($0) } + composition.customTabs.map(\.reference)
+        composition.orderedTabs() + [.settings]
+    }
+
+    /// One chip in the strip. Settings gets no reorder affordances at all: it never takes part
+    /// in the order, so offering a drag, a move action or a drop target would be a control that
+    /// silently does nothing.
+    @ViewBuilder
+    private func tabChip(_ tab: TabRef) -> some View {
+        let selected = selectedTab == tab
+        let chip = Button {
+            withAnimation(Motion.resolve(Motion.selection)) { selectedTab = tab }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: composition.symbol(for: tab)).hisType(.micro)
+                Text(composition.title(for: tab))
+                    .hisType(.caption, weight: selected ? .semibold : .regular)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
+        .background(
+            selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+        )
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .contextMenu { tabContextMenu(tab) }
+
+        if tab == .settings {
+            chip
+        } else {
+            chip
+                .accessibilityAction(named: L10n.text("Move Left")) { moveTab(tab, -1) }
+                .accessibilityAction(named: L10n.text("Move Right")) { moveTab(tab, 1) }
+                .draggable(TabDragPayload(tab: tab)) {
+                    Label(composition.title(for: tab), systemImage: composition.symbol(for: tab))
+                        .hisType(.caption)
+                        .padding(4)
+                }
+                .dropDestination(for: TabDragPayload.self) { payload, _ in
+                    // Settings is never a drag source, so it cannot be a target either: it takes
+                    // no part in the order.
+                    guard let first = payload.first, first.tab != tab, first.tab != .settings else {
+                        return false
+                    }
+                    var updated = composition
+                    updated.moveTab(first.tab, onto: tab)
+                    save(updated)
+                    return true
+                }
+        }
     }
 
     @ViewBuilder
     private func tabContextMenu(_ tab: TabRef) -> some View {
+        if tab != .settings {
+            Button(L10n.text("Move to First")) { moveTabToFirst(tab) }
+                .disabled(!composition.canMoveTab(tab, by: -1))
+            Button(L10n.text("Move Left")) { moveTab(tab, -1) }
+                .disabled(!composition.canMoveTab(tab, by: -1))
+            Button(L10n.text("Move Right")) { moveTab(tab, 1) }
+                .disabled(!composition.canMoveTab(tab, by: 1))
+            Divider()
+        }
         if let builtIn = tab.builtIn, builtIn.isHideable {
             Button(composition.isVisible(tab) ? L10n.text("Hide Tab") : L10n.text("Show Tab")) {
                 var updated = composition
@@ -251,6 +313,7 @@ struct SettingsTabsAndCardsCard: View {
                     .foregroundStyle(.secondary)
                 Text(composition.title(for: selectedTab))
                     .hisType(.label, weight: .semibold)
+                if selectedTab != .settings { tabOrderControls(selectedTab) }
                 Spacer()
                 Text(L10n.format("%d of %d cards", visibleCount, totalCount))
                     .hisType(.micro)
@@ -642,6 +705,49 @@ struct SettingsTabsAndCardsCard: View {
         save(updated)
     }
 
+    /// The selected tab's own reorder controls. Without these, moving a tab needed a drag or a
+    /// right-click, and a keyboard-only reader had no route to it at all.
+    private func tabOrderControls(_ tab: TabRef) -> some View {
+        HStack(spacing: 1) {
+            Button { moveTabToFirst(tab) } label: {
+                Image(systemName: "arrow.left.to.line").hisType(.nano, weight: .bold)
+            }
+            .buttonStyle(.pressable)
+            .disabled(!composition.canMoveTab(tab, by: -1))
+            .help(L10n.text("Move to First"))
+            .accessibilityLabel(L10n.text("Move to First"))
+
+            Button { moveTab(tab, -1) } label: {
+                Image(systemName: "chevron.left").hisType(.nano, weight: .bold)
+            }
+            .buttonStyle(.pressable)
+            .disabled(!composition.canMoveTab(tab, by: -1))
+            .help(L10n.text("Move Left"))
+            .accessibilityLabel(L10n.text("Move Left"))
+
+            Button { moveTab(tab, 1) } label: {
+                Image(systemName: "chevron.right").hisType(.nano, weight: .bold)
+            }
+            .buttonStyle(.pressable)
+            .disabled(!composition.canMoveTab(tab, by: 1))
+            .help(L10n.text("Move Right"))
+            .accessibilityLabel(L10n.text("Move Right"))
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    private func moveTab(_ tab: TabRef, _ offset: Int) {
+        var updated = composition
+        updated.moveTab(tab, by: offset)
+        save(updated)
+    }
+
+    private func moveTabToFirst(_ tab: TabRef) {
+        var updated = composition
+        updated.moveTabToFirst(tab)
+        save(updated)
+    }
+
     // MARK: - Counts
 
     private var visibleCount: Int {
@@ -707,6 +813,21 @@ struct SettingsTabsAndCardsCard: View {
         selectedTab = tab
         showNewTabSheet = false
     }
+}
+
+/// A dragged tab. Carries the reference rather than a position, for the same reason the dragged
+/// card carries its id: the order can change under the drag, and hidden tabs still hold places
+/// in it, so a position would point at the wrong tab.
+struct TabDragPayload: Codable, Transferable, Hashable {
+    let tab: TabRef
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .hisingenTab)
+    }
+}
+
+extension UTType {
+    static let hisingenTab = UTType(exportedAs: "io.kheirallah.hisingen.tab", conformingTo: .data)
 }
 
 /// A dragged card. Carries the catalog id rather than an index, because the visible order can

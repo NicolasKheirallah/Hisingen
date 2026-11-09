@@ -2836,8 +2836,11 @@
 "Monthly charging comparison needs more data" = "Monthly charging comparison needs more data";
 "More" = "More";
 "Move Down" = "Move Down";
+"Move Left" = "Move Left";
+"Move Right" = "Move Right";
 "Move Up" = "Move Up";
 "Move to %@" = "Move to %@";
+"Move to First" = "Move to First";
 "Move to Top" = "Move to Top";
 "My Tab" = "My Tab";
 "Network errors" = "Network errors";
@@ -2902,6 +2905,7 @@
 "Remove from This Tab" = "Remove from This Tab";
 "Rename this tab" = "Rename this tab";
 "Reset Tab" = "Reset Tab";
+"Restore Tab Order" = "Restore Tab Order";
 "Restores this tab's original cards and order." = "Restores this tab's original cards and order.";
 "Save & Connect" = "Save & Connect";
 "Save Both & Connect" = "Save Both & Connect";
