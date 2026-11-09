@@ -76,12 +76,39 @@ struct BatteryHealthEstimatorTests {
         #expect(estimate.degradationPercent == 0)
     }
 
-    @Test("A plug-in hybrid never produces a range SoH value")
-    func phevIsRejected() {
+    @Test("A plug-in hybrid without its own electric WLTP never borrows a battery-electric figure")
+    func phevWithoutElectricWltpIsRejected() {
         let state = vehicle(battery: 100, modelName: "V60 Recharge", modelYear: "2021", powertrain: .phev)
+        #expect(BatteryHealthEstimator.estimate(state: state) == nil)
+        let estimate = BatteryHealthEstimator.estimate(state: state, specification: specification)
+        #expect(estimate?.stateOfHealthPercent == 50)
+        #expect(estimate?.wltpReferenceRangeKm == 400)
+    }
+
+    @Test("An XC40 Twin Engine uses its electric WLTP and pack, including after the 2022 model year")
+    func xc40TwinEngineUsesElectricWltp() throws {
+        let state = vehicle(battery: 100, rangeKm: 36, modelName: "XC40", modelYear: "2021", powertrain: .phev)
+        let estimate = try #require(BatteryHealthEstimator.estimate(state: state))
+
+        #expect(estimate.stateOfHealthPercent == 80)
+        #expect(estimate.wltpReferenceRangeKm == 45)
+        #expect(estimate.referenceUsableCapacityKwh == 8.5)
+        #expect(estimate.estimatedUsableCapacityKwh == 6.8)
+        #expect(estimate.fullChargeRangeKm == 36)
+        #expect(state.factoryNominalBatteryCapacityKwh == 10.7)
+        #expect(state.referenceElectricWltpRangeKm == 45)
+        #expect(state.batteryPackDescription.contains("10.7 kWh"))
+        #expect(!state.batteryPackDescription.contains("69.0"))
+
+        let later = vehicle(battery: 100, rangeKm: 45, modelName: "XC40 Recharge Twin", modelYear: "2022", powertrain: .phev)
+        let full = try #require(BatteryHealthEstimator.estimate(state: later))
+        #expect(full.stateOfHealthPercent == 100)
+        #expect(full.wltpReferenceRangeKm == 45)
+        #expect(later.factoryNominalBatteryCapacityKwh == 10.7)
+        #expect(later.factoryUsableBatteryCapacityKwh == 8.5)
+
         #expect(BatteryHealthEstimator.estimate(
-            state: state,
-            specification: specification
+            state: vehicle(battery: 99.9, rangeKm: 45, modelName: "XC40", modelYear: "2021", powertrain: .phev)
         ) == nil)
     }
 

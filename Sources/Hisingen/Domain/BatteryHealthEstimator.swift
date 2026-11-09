@@ -41,23 +41,23 @@ enum BatteryHealthEstimator {
     static let sessionEnergyMethod = "session-energy"
     static let fusedMethod = "fused"
 
-    /// WLTP reference with provenance. User override wins. Otherwise only a
-    /// known model with a real table entry qualifies. Unknown models and PHEV
-    /// families with no BEV table entry return nil instead of inventing one.
+    /// WLTP reference with provenance. User override wins. Otherwise a
+    /// battery-electric car uses its model-family table, and a plug-in hybrid
+    /// uses only its own electric figure. A hybrid never inherits the
+    /// battery-electric range that shares its model name.
     static func wltpReference(
         state: VehicleState,
         specification: VehicleSpecificationOverride? = nil
     ) -> Double? {
         if let override = specification?.wltpRangeKm, override > 0 { return override }
-        guard state.model.isKnown, state.model.hasModelReferenceSpecs else { return nil }
-        return positive(state.model.nominalWltpRangeKm)
+        return state.referenceElectricWltpRangeKm.flatMap(positive)
     }
 
     static func estimate(
         state: VehicleState,
         specification: VehicleSpecificationOverride? = nil
     ) -> BatteryHealthEstimate? {
-        guard state.powertrain.isElectricOnly,
+        guard state.powertrain.isElectricOnly || state.powertrain == .phev,
               let charge = state.energy.batteryPercentage,
               charge >= fullChargeThreshold,
               let fullChargeRange = state.energy.rangeKm.map(Double.init),
