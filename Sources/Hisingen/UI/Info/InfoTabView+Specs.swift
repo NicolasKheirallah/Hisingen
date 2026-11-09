@@ -166,7 +166,7 @@ extension InfoTabView {
                 info: info
             ))
         }
-        let wltp = specification?.wltpRangeKm ?? state.model.nominalWltpRangeKm
+        let wltp = specification?.wltpRangeKm ?? state.referenceElectricWltpRangeKm ?? 0
         if state.powertrain.hasElectricRange && wltp > 0 {
             rows.append(KVRow(
                 specification?.wltpRangeKm != nil ? L10n.text("User-Entered WLTP Range") : L10n.text("Model-Reference WLTP Range"),
