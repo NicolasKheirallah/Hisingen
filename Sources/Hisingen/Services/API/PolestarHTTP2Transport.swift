@@ -96,6 +96,11 @@ struct PolestarHTTP2Transport: PolestarGRPCTransport {
             // tell "the stream never closed" from "the user cancelled".
             try Task.checkCancellation()
             _ = try await onPart(.status(.init(code: PolestarGRPC.deadlineExceededStatus, message: "deadline exceeded", metadata: [:])))
+        } catch let error as RPCError where error.code == .deadlineExceeded {
+            // grpc-swift-nio-transport 2.10 throws the expired deadline as an RPCError from the
+            // client instead of a CancellationError. Report it as the same status.
+            try Task.checkCancellation()
+            _ = try await onPart(.status(.init(code: PolestarGRPC.deadlineExceededStatus, message: "deadline exceeded", metadata: [:])))
         }
     }
 

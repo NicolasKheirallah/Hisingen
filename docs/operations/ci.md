@@ -56,7 +56,10 @@ values, duplicates, nesting and conflicting cancellation fail behavioral checks;
 other workflow diagnostics remain fatal.
 
 SwiftPM repository and binary-artifact caches are keyed by dependency/toolchain
-inputs. Compiled products and generated credentials are not shared caches.
+inputs. Compiled products and generated credentials are not shared caches. The
+CodeQL job builds the dependencies before the tracer starts, then touches the app
+sources so the instrumented build compiles and extracts only this repository's
+module.
 
 ## Credential-free tests and packaging
 

@@ -421,8 +421,11 @@ actor PolestarGRPC {
         let offset = TimeZone.current.secondsFromGMT() / 60
         chronos.append(Protobuf.messageField(4, Protobuf.intField(1, offset)))
         let request = Protobuf.messageField(1, chronos)
+        // Chronos scalar reads answer and then hold the stream open until the deadline, the
+        // same shape as their commands, so the first message is the reading.
         let body = try await firstMessage(path: targetSocPath, message: request,
-                                          vin: vin, accessToken: accessToken, host: .pccs)
+                                          vin: vin, accessToken: accessToken, host: .pccs,
+                                          completion: .firstSnapshot)
         _ = try Self.responsePayload(body, expectedVIN: vin)
         return Self.parseTargetSocRead(body)
     }
@@ -454,7 +457,8 @@ actor PolestarGRPC {
     func fetchAmpLimit(vin: String, accessToken: String) async throws -> PCCSScalarRead {
         let request = Self.chronosRequest(vin)
         let body = try await firstMessage(path: ampLimitReadPath, message: request,
-                                          vin: vin, accessToken: accessToken, host: .pccs)
+                                          vin: vin, accessToken: accessToken, host: .pccs,
+                                          completion: .firstSnapshot)
         _ = try Self.responsePayload(body, expectedVIN: vin)
         return Self.parseAmpLimitRead(body)
     }

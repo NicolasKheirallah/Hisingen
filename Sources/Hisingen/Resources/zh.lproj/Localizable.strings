@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "车辆周边天气";
 "Vehicle alarm triggered" = "车辆警报已触发";
 "Vehicle asleep · Updated %@" = "车辆休眠中 · 更新于 %@";
+"%@ · Checked %@" = "%@ · 检查于 %@";
 "Vehicle default" = "车辆默认";
 "Vehicle details" = "车辆详情";
 "Vehicle display name" = "车辆显示名称";

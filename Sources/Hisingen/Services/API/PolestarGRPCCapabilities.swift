@@ -70,7 +70,9 @@ extension PolestarGRPC {
             paths = [[3], [3, 4], [3, 10], [3, 10, 3], [3, 10, 4], [3, 10, 5],
                      [3, 11], [3, 11, 3], [3, 11, 4]]
         } else if path == climateTimersPath {
-            paths = [[3], [3, 3], [3, 6], [4], [4, 3], [4, 6], [5]]
+            // Timer field 6 is the packed weekday list, not a message: a weekday byte such as
+            // 0x01 reads as field number 0 and rejected every GetTimers reply.
+            paths = [[3], [3, 3], [4], [4, 3], [5]]
         } else {
             paths = []
         }
@@ -138,8 +140,11 @@ extension PolestarGRPC {
         var info: VehicleSoftwareInfo?
         var firstError: Error?
         do {
+            // GetSoftwareInfo answers and then holds the stream open, so waiting for a closing
+            // status discarded every reply at the deadline. Command verification still waits.
             let body = try await firstMessage(path: Self.softwarePath, message: request,
                                               vin: vin, accessToken: accessToken,
+                                              completion: timeoutInterval == nil ? .terminalStatus : .firstSnapshot,
                                               timeoutInterval: timeoutInterval)
             guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
             _ = try Protobuf.decode(body)
@@ -361,9 +366,11 @@ extension PolestarGRPC {
     }
 
     func fetchClimateTimers(vin: String, accessToken: String) async throws -> [VehicleSchedule] {
+        // The whole timer list rides in one message; Chronos reads may hold the stream open after it.
         let body = try await firstMessage(path: Self.climateTimersPath,
                                           message: Self.chronosRequest(vin),
-                                          vin: vin, accessToken: accessToken, host: .pccs)
+                                          vin: vin, accessToken: accessToken, host: .pccs,
+                                          completion: .firstSnapshot)
         return Self.parseClimateTimers(body)
     }
 
