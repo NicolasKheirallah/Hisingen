@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "Kuukausittainen latausvertailu tarvitsee lisää tietoa";
 "More" = "Lisää";
 "Move Down" = "Siirrä alas";
+"Move Left" = "Siirrä vasemmalle";
+"Move Right" = "Siirrä oikealle";
 "Move Up" = "Siirrä ylös";
 "Move to %@" = "Siirrä: %@";
+"Move to First" = "Siirrä ensimmäiseksi";
 "Move to Top" = "Siirrä ylimmäksi";
 "My Tab" = "Oma välilehti";
 "Network errors" = "Verkkovirheet";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "Poista tästä välilehdestä";
 "Rename this tab" = "Nimeä tämä välilehti uudelleen";
 "Reset Tab" = "Palauta välilehti";
+"Restore Tab Order" = "Palauta välilehtien järjestys";
 "Restores this tab's original cards and order." = "Palauttaa tämän välilehden alkuperäiset kortit ja järjestyksen.";
 "Save & Connect" = "Tallenna ja yhdistä";
 "Save Both & Connect" = "Tallenna molemmat ja yhdistä";

@@ -2825,8 +2825,11 @@
 "Monthly charging comparison needs more data" = "Maandelijkse vergelijking van het laden heeft meer gegevens nodig";
 "More" = "Meer";
 "Move Down" = "Omlaag verplaatsen";
+"Move Left" = "Naar links verplaatsen";
+"Move Right" = "Naar rechts verplaatsen";
 "Move Up" = "Omhoog verplaatsen";
 "Move to %@" = "Verplaatsen naar %@";
+"Move to First" = "Naar de eerste plaats verplaatsen";
 "Move to Top" = "Bovenaan zetten";
 "My Tab" = "Mijn tabblad";
 "Network errors" = "Netwerkfouten";
@@ -2891,6 +2894,7 @@
 "Remove from This Tab" = "Verwijderen van dit tabblad";
 "Rename this tab" = "Dit tabblad hernoemen";
 "Reset Tab" = "Tabblad terugzetten";
+"Restore Tab Order" = "Tabbladvolgorde herstellen";
 "Restores this tab's original cards and order." = "Zet de oorspronkelijke kaarten en volgorde van dit tabblad terug.";
 "Save & Connect" = "Opslaan en verbinden";
 "Save Both & Connect" = "Beide opslaan en verbinden";

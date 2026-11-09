@@ -2834,8 +2834,11 @@
 "Monthly charging comparison needs more data" = "Månadsjämförelsen av laddning kräver mer data";
 "More" = "Mer";
 "Move Down" = "Flytta nedåt";
+"Move Left" = "Flytta åt vänster";
+"Move Right" = "Flytta åt höger";
 "Move Up" = "Flytta uppåt";
 "Move to %@" = "Flytta till %@";
+"Move to First" = "Flytta först";
 "Move to Top" = "Flytta överst";
 "My Tab" = "Min flik";
 "Network errors" = "Nätverksfel";
@@ -2900,6 +2903,7 @@
 "Remove from This Tab" = "Ta bort från den här fliken";
 "Rename this tab" = "Byt namn på den här fliken";
 "Reset Tab" = "Återställ flik";
+"Restore Tab Order" = "Återställ flikordningen";
 "Restores this tab's original cards and order." = "Återställer fliken till de ursprungliga korten och ordningen.";
 "Save & Connect" = "Spara och anslut";
 "Save Both & Connect" = "Spara båda och anslut";

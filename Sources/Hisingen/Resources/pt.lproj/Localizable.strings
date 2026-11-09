@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "A comparação mensal de carregamento precisa de mais dados";
 "More" = "Mais";
 "Move Down" = "Mover para baixo";
+"Move Left" = "Mover para a esquerda";
+"Move Right" = "Mover para a direita";
 "Move Up" = "Mover para cima";
 "Move to %@" = "Mover para %@";
+"Move to First" = "Mover para primeiro";
 "Move to Top" = "Mover para o topo";
 "My Tab" = "O meu separador";
 "Network errors" = "Erros de rede";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "Remover deste separador";
 "Rename this tab" = "Renomear este separador";
 "Reset Tab" = "Repor separador";
+"Restore Tab Order" = "Restaurar a ordem dos separadores";
 "Restores this tab's original cards and order." = "Repõe os cartões e a ordem originais deste separador.";
 "Save & Connect" = "Guardar e ligar";
 "Save Both & Connect" = "Guardar ambos e ligar";

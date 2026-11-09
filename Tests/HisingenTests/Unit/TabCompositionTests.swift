@@ -289,6 +289,174 @@ struct TabCompositionTests {
         #expect(composition.visibleItems(for: copy) == [.controlsCharging])
     }
 
+    // MARK: - Tab order
+
+    @Test
+    func tabsShipInTheirDeclaredOrderWithTheReadersOwnTabsLast() {
+        var composition = TabComposition.default
+        let mine = composition.addCustomTab(name: "Charging")
+        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls, mine])
+        // Settings is never part of the reader's order: it is where the order is managed.
+        #expect(!composition.orderedTabs().contains(.settings))
+        #expect(composition.tabOrder.isEmpty)
+    }
+
+    @Test
+    func aTabTheReaderJustBuiltCanBeMovedToTheFront() {
+        var composition = TabComposition.default
+        let mine = composition.addCustomTab(name: "Charging")
+        composition.moveTabToFirst(mine)
+        #expect(composition.visibleTabs().first == mine)
+        #expect(composition.visibleTabs(includingSettings: true).last == .settings)
+        #expect(composition.tabOrder.first == mine.storageKey)
+    }
+
+    @Test
+    func movingATabByOneSwapsItWithItsNeighbourAndMovingBackDropsTheOverride() {
+        var composition = TabComposition.default
+        #expect(composition.canMoveTab(.info, by: -1))
+        #expect(!composition.canMoveTab(.vehicle, by: -1))
+        #expect(!composition.canMoveTab(.controls, by: 1))
+
+        composition.moveTab(.info, by: -1)
+        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
+
+        // Back to the shipped order, so the override is dropped rather than frozen.
+        composition.moveTab(.info, by: 1)
+        #expect(composition.tabOrder.isEmpty)
+        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+    }
+
+    @Test
+    func draggingATabOntoAnotherPutsItInThatPosition() {
+        var composition = TabComposition.default
+        composition.moveTab(.controls, onto: .vehicle)
+        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
+        // Onto itself is a no-op, not a write.
+        composition.moveTab(.controls, onto: .controls)
+        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
+    }
+
+    @Test
+    func movingATabDownLandsItAfterTheNeighbourAndADownwardDropAfterTheTarget() {
+        var composition = TabComposition.default
+        composition.moveTab(.vehicle, by: 1)
+        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
+        // A downward drop lands after the target, the same rule the card move uses.
+        composition.moveTab(.info, onto: .history)
+        #expect(composition.visibleTabs().prefix(3) == [.vehicle, .history, .info])
+    }
+
+    @Test
+    func settingsIsNeverAMoveSourceOrTarget() {
+        var composition = TabComposition.default
+        composition.moveTab(.vehicle, onto: .settings)
+        composition.moveTab(.settings, onto: .vehicle)
+        composition.moveTabToFirst(.settings)
+        composition.moveTab(.settings, by: -1)
+        #expect(composition.tabOrder.isEmpty)
+        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+    }
+
+    @Test
+    func deletingAMovedTabLeavesNoOrderOverrideBehind() {
+        var composition = TabComposition.default
+        let mine = composition.addCustomTab(name: "Charging")
+        composition.moveTabToFirst(mine)
+        #expect(!composition.tabOrder.isEmpty)
+
+        composition.removeCustomTab(mine.customID ?? "")
+        // The shipped tabs are back in the shipped order, so nothing is stored and Restore is
+        // not offered for an override that no longer differs from the default.
+        #expect(composition.tabOrder.isEmpty)
+        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+    }
+
+    @Test
+    func aHiddenTabKeepsItsPlaceSoShowingItAgainPutsItBack() {
+        var composition = TabComposition.default
+        composition.moveTab(.history, onto: .vehicle)
+        #expect(composition.visibleTabs() == [.history, .vehicle, .info, .controls])
+
+        composition.setTab(.history, shown: false)
+        #expect(!composition.visibleTabs().contains(.history))
+
+        composition.setTab(.history, shown: true)
+        #expect(composition.visibleTabs() == [.history, .vehicle, .info, .controls])
+    }
+
+    @Test
+    func aTabTheStoredOrderHasNeverHeardOfKeepsAPlaceAtTheEnd() {
+        var composition = TabComposition.default
+        composition.tabOrder = [TabRef.info.storageKey, TabRef.vehicle.storageKey]
+        // A tab shipped, or created, after the order was written is not dropped by it.
+        #expect(composition.orderedTabs() == [.info, .vehicle, .history, .controls])
+
+        let mine = composition.addCustomTab(name: "Charging")
+        #expect(composition.visibleTabs().last == mine)
+    }
+
+    @Test
+    func resettingTheTabOrderBringsBackTheShippedOrderAndLeavesCardsAlone() {
+        var composition = TabComposition.default
+        composition.moveTab(.controls, onto: .vehicle)
+        composition.move(.vehicleDiagnostics, onto: .vehicleHero, in: .vehicle)
+
+        let arrangedCards = composition.items(for: .vehicle)
+        // The card move is what makes the arrangement non-default, so the reset has something
+        // to leave alone.
+        #expect(arrangedCards != TabItemCatalog.defaultItems(for: .vehicle))
+
+        composition.resetTabOrder()
+        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.items(for: .vehicle) == arrangedCards)
+    }
+
+    @Test
+    func repairDropsOrderEntriesThatNameNoTabOrNameOneTwice() {
+        var composition = TabComposition.default
+        composition.tabOrder = [
+            TabRef.info.storageKey,
+            "custom:gone",
+            TabRef.info.storageKey,
+            TabRef.vehicle.storageKey
+        ]
+        #expect(composition.normalized().tabOrder == [TabRef.info.storageKey, TabRef.vehicle.storageKey])
+    }
+
+    @Test
+    func theTabOrderSurvivesAJSONRoundTrip() throws {
+        var composition = TabComposition.default
+        let mine = composition.addCustomTab(name: "Charging")
+        composition.moveTabToFirst(mine)
+        let decoded = try JSONDecoder().decode(TabComposition.self, from: JSONEncoder().encode(composition))
+        #expect(decoded.tabOrder == composition.tabOrder)
+        #expect(decoded.visibleTabs().first == mine)
+    }
+
+    @Test
+    func aLayoutWrittenBeforeTabOrderingExistedStillDecodesIntact() throws {
+        var composition = TabComposition.default
+        let tab = composition.addCustomTab(name: "Charging", symbol: "bolt.fill")
+        composition.addItem(.vehicleCharging, to: tab)
+        composition.setItem(.vehicleTyres, shown: false)
+
+        // What an installation stored before this key existed: the same JSON without it.
+        var object = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(composition)) as? [String: Any]
+        )
+        object.removeValue(forKey: "tabOrder")
+        let legacy = try JSONSerialization.data(withJSONObject: object)
+
+        // A synthesized decoder would throw on the missing key, and the store would answer with
+        // the shipped layout: the reader's tabs, cards and hidden cards all silently gone.
+        let decoded = try JSONDecoder().decode(TabComposition.self, from: legacy)
+        #expect(decoded.tabOrder.isEmpty)
+        #expect(decoded.customTabs.count == 1)
+        #expect(!decoded.shows(.vehicleTyres))
+        #expect(decoded.visibleItems(for: tab) == [.vehicleCharging])
+    }
+
     // MARK: - Repair
 
     @Test

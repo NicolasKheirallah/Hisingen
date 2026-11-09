@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "La comparativa mensual de carga necesita más datos";
 "More" = "Más";
 "Move Down" = "Bajar";
+"Move Left" = "Mover a la izquierda";
+"Move Right" = "Mover a la derecha";
 "Move Up" = "Subir";
 "Move to %@" = "Mover a %@";
+"Move to First" = "Mover al principio";
 "Move to Top" = "Mover al principio";
 "My Tab" = "Mi pestaña";
 "Network errors" = "Errores de red";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "Quitar de esta pestaña";
 "Rename this tab" = "Renombrar esta pestaña";
 "Reset Tab" = "Restablecer pestaña";
+"Restore Tab Order" = "Restaurar el orden de las pestañas";
 "Restores this tab's original cards and order." = "Restaura las tarjetas originales y el orden de esta pestaña.";
 "Save & Connect" = "Guardar y conectar";
 "Save Both & Connect" = "Guardar ambos y conectar";

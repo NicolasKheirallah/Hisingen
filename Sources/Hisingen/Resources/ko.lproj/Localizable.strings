@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "월간 충전 비교에는 데이터가 더 필요합니다";
 "More" = "더 보기";
 "Move Down" = "아래로 이동";
+"Move Left" = "왼쪽으로 이동";
+"Move Right" = "오른쪽으로 이동";
 "Move Up" = "위로 이동";
 "Move to %@" = "%@(으)로 이동";
+"Move to First" = "첫 번째로 이동";
 "Move to Top" = "맨 위로 이동";
 "My Tab" = "내 탭";
 "Network errors" = "네트워크 오류";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "이 탭에서 제거";
 "Rename this tab" = "이 탭 이름 변경";
 "Reset Tab" = "탭 초기화";
+"Restore Tab Order" = "탭 순서 복원";
 "Restores this tab's original cards and order." = "이 탭의 기본 카드와 순서를 복원합니다.";
 "Save & Connect" = "저장 후 연결";
 "Save Both & Connect" = "둘 다 저장 후 연결";

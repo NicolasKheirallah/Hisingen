@@ -5,6 +5,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- Reorder the tabs themselves. Drag a tab in Settings → Tabs & Cards, or use Move to First, Move
+  Left and Move Right from its context menu or the arrows beside the selected tab's name, so a
+  tab you just built can sit first instead of always landing last. Restore Tab Order puts the
+  shipped order back and leaves each tab's cards where you put them.
+
 ### Fixed
 
 - Read Polestar target state of charge, amp limit, software status and climate timers from the

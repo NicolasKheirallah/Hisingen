@@ -98,7 +98,7 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
 /// This is a layout record only. It never decides what data Hisingen fetches; the
 /// `AppFeature` selection does that, and the Settings pane keeps the two in step so hiding
 /// the last card that needs a reading also stops the request that fetched it.
-struct TabComposition: Equatable, Codable, Sendable {
+struct TabComposition: Equatable, Sendable {
     /// Layout version, so a future shape change can migrate rather than silently reset a
     /// reader's tabs.
     var version: Int = 1
@@ -117,6 +117,14 @@ struct TabComposition: Equatable, Codable, Sendable {
 
     /// Tabs the reader built, in the order they were created.
     var customTabs: [CustomTab] = []
+
+    /// The reader's tab order, as `TabRef.storageKey` values.
+    ///
+    /// Empty means the shipped order: the built-in tabs as declared, then the reader's own
+    /// tabs as they were created. A tab this list has never heard of, whether it shipped in a
+    /// later version or was created just now, keeps a place at the end rather than going
+    /// missing, so an arrangement made before that tab existed still shows it.
+    var tabOrder: [String] = []
 
     static let `default` = TabComposition()
 
@@ -151,13 +159,93 @@ struct TabComposition: Equatable, Codable, Sendable {
     /// Tabs the tab bar draws, in order. Included even when `includeSettings` is false is the
     /// Settings tab itself, which is never composable.
     func visibleTabs(includingSettings includeSettings: Bool = false) -> [TabRef] {
-        var out: [TabRef] = []
-        for tab in BuiltInTab.allCases where tab != .settings {
-            if !hiddenTabs.contains(tab) { out.append(.builtIn(tab)) }
-        }
-        out.append(contentsOf: customTabs.map(\.reference))
+        var out = orderedTabs().filter { isVisible($0) }
         if includeSettings { out.append(.settings) }
         return out
+    }
+
+    /// Every tab the reader has, hidden or not, in the reader's order.
+    ///
+    /// Hiding a tab removes it from the bar without removing it from this list, so showing it
+    /// again puts it back where it was. Settings is excluded: it is the surface that manages
+    /// this list, and it always draws last.
+    func orderedTabs() -> [TabRef] {
+        let existing = BuiltInTab.allCases.filter { $0 != .settings }.map { TabRef.builtIn($0) }
+            + customTabs.map(\.reference)
+        guard !tabOrder.isEmpty else { return existing }
+        var remaining = existing
+        var ordered: [TabRef] = []
+        ordered.reserveCapacity(existing.count)
+        for key in tabOrder {
+            guard let index = remaining.firstIndex(where: { $0.storageKey == key }) else { continue }
+            ordered.append(remaining.remove(at: index))
+        }
+        ordered.append(contentsOf: remaining)
+        return ordered
+    }
+
+    /// Writes an explicit tab order.
+    ///
+    /// Storing the shipped order is the same as storing nothing: it drops the override so the
+    /// reader's tabs keep following the shipped order when a later version adds one.
+    mutating func setTabOrder(_ tabs: [TabRef]) {
+        var seen: Set<String> = []
+        let keys = tabs.map(\.storageKey).filter { seen.insert($0).inserted }
+        var shipped = self
+        shipped.tabOrder = []
+        if keys == shipped.orderedTabs().map(\.storageKey) {
+            tabOrder = []
+        } else {
+            tabOrder = keys
+        }
+    }
+
+    /// Moves a tab one place in the reader's order.
+    mutating func moveTab(_ tab: TabRef, by offset: Int) {
+        var order = orderedTabs()
+        guard let index = order.firstIndex(of: tab) else { return }
+        let destination = index + offset
+        guard order.indices.contains(destination) else { return }
+        order.swapAt(index, destination)
+        setTabOrder(order)
+    }
+
+    /// Moves a tab to another tab's position, which is what a drag reports.
+    ///
+    /// Expressed as "put this where that is" rather than as two indexes, because the chips a
+    /// drag sees include Settings and this order does not. A target outside the order is a
+    /// no-op rather than a move to a guessed position.
+    mutating func moveTab(_ tab: TabRef, onto target: TabRef) {
+        guard tab != target else { return }
+        var order = orderedTabs()
+        guard let from = order.firstIndex(of: tab),
+              let to = order.firstIndex(of: target) else { return }
+        order.remove(at: from)
+        order.insert(tab, at: to)
+        setTabOrder(order)
+    }
+
+    /// Puts a tab at the front of the bar. The case the reader asked for most often: a tab
+    /// they just built and want first.
+    mutating func moveTabToFirst(_ tab: TabRef) {
+        var order = orderedTabs()
+        guard let from = order.firstIndex(of: tab), from > 0 else { return }
+        order.remove(at: from)
+        order.insert(tab, at: 0)
+        setTabOrder(order)
+    }
+
+    /// Restores the shipped tab order, leaving each tab's cards where the reader put them.
+    mutating func resetTabOrder() {
+        tabOrder = []
+    }
+
+    /// Whether a tab can move any further in the given direction, so a reorder control can be
+    /// disabled instead of silently doing nothing at the ends of the list.
+    func canMoveTab(_ tab: TabRef, by offset: Int) -> Bool {
+        let order = orderedTabs()
+        guard let index = order.firstIndex(of: tab) else { return false }
+        return order.indices.contains(index + offset)
     }
 
     /// Whether this tab still renders its shipped layout rather than a stored arrangement.
@@ -295,6 +383,11 @@ struct TabComposition: Equatable, Codable, Sendable {
         let reference = TabRef.custom(id)
         customTabs.removeAll { $0.id == id }
         tabContents.removeValue(forKey: reference.storageKey)
+        tabOrder.removeAll { $0 == reference.storageKey }
+        // Removing the tab can leave the stored order equal to the shipped one. Re-canonicalise
+        // so that state is stored as "no override": otherwise Restore stays offered with nothing
+        // to restore, and a later tab appends at the end instead of following the shipped order.
+        setTabOrder(orderedTabs())
     }
 
     /// Copies a tab's arrangement onto a new tab. "Duplicate" is the shortest path to a second
@@ -342,7 +435,47 @@ struct TabComposition: Equatable, Codable, Sendable {
             }
             return true
         }
+        // The stored order is a preference, not a roster: a key that no longer names a tab and
+        // a key named twice would both make `orderedTabs` skip or repeat a place. Dropping them
+        // here leaves the unlisted tabs to the appended tail, which is the shipped order.
+        var seenKeys: Set<String> = []
+        result.tabOrder = result.tabOrder.filter { key in
+            guard seenKeys.insert(key).inserted else { return false }
+            if key.hasPrefix("custom:") {
+                return customIDs.contains(String(key.dropFirst("custom:".count)))
+            }
+            return BuiltInTab.allCases
+                .filter { $0 != .settings }
+                .contains { TabRef.builtIn($0).storageKey == key }
+        }
         return result
+    }
+}
+
+/// Decoded by hand rather than synthesized.
+///
+/// The synthesized decoder rejects a key that is missing even when the property has a default
+/// value, so a layout written before tab ordering existed would fail to decode and the reader
+/// would silently lose every tab and card arrangement they had made. Reading each key with
+/// `decodeIfPresent` keeps that upgrade a no-op.
+extension TabComposition: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case tabContents
+        case hiddenItems
+        case hiddenTabs
+        case customTabs
+        case tabOrder
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        tabContents = try container.decodeIfPresent([String: [TabItemID]].self, forKey: .tabContents) ?? [:]
+        hiddenItems = try container.decodeIfPresent(Set<TabItemID>.self, forKey: .hiddenItems) ?? []
+        hiddenTabs = try container.decodeIfPresent(Set<BuiltInTab>.self, forKey: .hiddenTabs) ?? []
+        customTabs = try container.decodeIfPresent([CustomTab].self, forKey: .customTabs) ?? []
+        tabOrder = try container.decodeIfPresent([String].self, forKey: .tabOrder) ?? []
     }
 }
 

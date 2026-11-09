@@ -2817,8 +2817,11 @@
 "Monthly charging comparison needs more data" = "月度充电对比需要更多数据";
 "More" = "更多";
 "Move Down" = "下移";
+"Move Left" = "左移";
+"Move Right" = "右移";
 "Move Up" = "上移";
 "Move to %@" = "移至 %@";
+"Move to First" = "移至首位";
 "Move to Top" = "移至顶部";
 "My Tab" = "我的标签页";
 "Network errors" = "网络错误";
@@ -2883,6 +2886,7 @@
 "Remove from This Tab" = "从此标签页移除";
 "Rename this tab" = "重命名此标签页";
 "Reset Tab" = "重置标签页";
+"Restore Tab Order" = "恢复标签页顺序";
 "Restores this tab's original cards and order." = "恢复此标签页原有的卡片及其顺序。";
 "Save & Connect" = "保存并连接";
 "Save Both & Connect" = "全部保存并连接";
