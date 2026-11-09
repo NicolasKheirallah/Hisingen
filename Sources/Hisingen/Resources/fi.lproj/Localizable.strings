@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "Sää ajoneuvon luona";
 "Vehicle alarm triggered" = "Ajoneuvon hälytin laukesi";
 "Vehicle asleep · Updated %@" = "Ajoneuvo lepotilassa · Päivitetty %@";
+"%@ · Checked %@" = "%@ · Tarkistettu %@";
 "Vehicle default" = "Ajoneuvon oletus";
 "Vehicle details" = "Ajoneuvon tiedot";
 "Vehicle display name" = "Ajoneuvon näyttönimi";

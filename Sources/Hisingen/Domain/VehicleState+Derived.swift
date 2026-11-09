@@ -401,9 +401,14 @@ extension VehicleState {
     }
 
     var freshnessDescription: String {
-        let base: String
+        var base: String
         if hasOldData() {
             base = L10n.format("Vehicle asleep · Updated %@", Format.relativeAge(since: dataTimestamp))
+            // A refresh against a sleeping car returns the same reading, so without the check
+            // time a successful refresh changed nothing on screen and read as broken.
+            if vehicleReportedAt != nil {
+                base = L10n.format("%@ · Checked %@", base, Format.relativeAge(since: fetchedAt))
+            }
         } else {
             base = L10n.format("Updated %@", Format.relativeAge(since: dataTimestamp))
         }

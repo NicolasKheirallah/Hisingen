@@ -1200,6 +1200,7 @@
 "Vehicle Weather" = "Vehicle Weather";
 "Vehicle alarm triggered" = "Vehicle alarm triggered";
 "Vehicle asleep · Updated %@" = "Vehicle asleep · Updated %@";
+"%@ · Checked %@" = "%@ · Checked %@";
 "Vehicle default" = "Vehicle default";
 "Vehicle details" = "Vehicle details";
 "Vehicle display name" = "Vehicle display name";
