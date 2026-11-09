@@ -198,8 +198,14 @@ sessions. When both agree within tolerance Hisingen shows a fused value, and whe
 it shows the conflict instead of hiding it behind one number. The uncapped range-based figure is
 kept next to the displayed value, which is capped at 100%, so an understated WLTP reference stays
 visible. The trend is fitted with a median-based slope that ignores a single bad range reading.
-The range-based method applies only to battery-electric cars with a known model reference or a
-reference you set for that VIN, never to plug-in hybrids scored against a borrowed WLTP figure.
+The range-based method applies to battery-electric cars with a known model reference, and to a
+plug-in hybrid that has its own electric WLTP figure. An XC40 Twin Engine uses 45 km, the top of
+its published 41–45 km electric range, never the battery-electric XC40's 570 km. That car starts
+in Hybrid mode, and the uploaded full-charge figure is the lower Hybrid start value rather than
+the Pure-mode figure this rating describes. The percentage therefore runs low, and Hisingen does
+not correct it with a guessed offset. A reference you set for that VIN replaces the table. A
+plug-in hybrid with no electric figure stays uncalculated. The charging-session method still
+applies only to battery-electric cars.
 
 ### Fuel & hybrid information
 

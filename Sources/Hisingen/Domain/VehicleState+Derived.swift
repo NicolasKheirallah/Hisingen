@@ -92,26 +92,67 @@ extension VehicleState {
     }
 
     /// Year/powertrain-aware refinement on top of `VehicleModelFamily.nominalBatteryCapacityKwh`
-    /// (the base per-model table) – not an independent capacity table. Falls through to the base
-    /// table for anything without a known year-specific pack revision or a PHEV-specific figure.
+    /// (the base per-model table) – not an independent capacity table. A plug-in hybrid is
+    /// resolved before the shared 2024 pack, so an XC40 Twin Engine never inherits the
+    /// battery-electric 82 kWh revision. Falls through to the base table when this vehicle
+    /// has no year-specific pack and no plug-in figure of its own.
     var factoryNominalBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
+        if let phev = phevBatteryReference { return phev.nominalKwh }
         if hasSharedPack2024 { return 82.0 }
-        if powertrain == .phev {
-            guard let yearInt = modelYear.flatMap(Int.init) else { return model.nominalBatteryCapacityKwh }
-            return yearInt >= 2022 ? 18.8 : 11.6
-        }
         return model.nominalBatteryCapacityKwh
     }
 
     var factoryUsableBatteryCapacityKwh: Double {
         guard model.isKnown else { return 0.0 }
+        if let phev = phevBatteryReference { return phev.usableKwh }
         if hasSharedPack2024 { return 79.0 }
-        if powertrain == .phev {
-            guard let yearInt = modelYear.flatMap(Int.init) else { return model.nominalUsableCapacityKwh }
-            return yearInt >= 2022 ? 14.9 : 9.1
-        }
         return model.nominalUsableCapacityKwh
+    }
+
+    /// Electric WLTP used as a range denominator. Battery-electric cars use the model-family
+    /// table. A plug-in hybrid uses only its own electric figure, never the battery-electric
+    /// range that shares the model name. `nil` when that electric figure is unknown.
+    var referenceElectricWltpRangeKm: Double? {
+        if powertrain == .phev {
+            guard let kilometers = phevBatteryReference?.electricWltpKm, kilometers > 0 else { return nil }
+            return kilometers
+        }
+        guard model.hasModelReferenceSpecs, model.nominalWltpRangeKm > 0 else { return nil }
+        return model.nominalWltpRangeKm
+    }
+
+    /// Plug-in pack figures. SPA cars keep the year split (11.6 kWh, then 18.8 kWh from 2022)
+    /// and have no single electric WLTP here, so range health stays unavailable for them.
+    /// The XC40 Twin Engine pack did not take that 2022 enlargement.
+    private struct PhevBatteryReference {
+        var nominalKwh: Double
+        var usableKwh: Double
+        var electricWltpKm: Double?
+    }
+
+    private var phevBatteryReference: PhevBatteryReference? {
+        guard powertrain == .phev, model.isKnown else { return nil }
+        switch model {
+        case .volvoXC40:
+            // CMA T4/T5 Twin Engine and T5 Recharge: 10.7 kWh gross, 8.5 kWh usable.
+            // Published electric WLTP is 41–45 km depending on wheels. 45 km is the
+            // headline figure, the same single-number convention as the battery-electric
+            // table. The car starts in Hybrid, whose full-charge start value is lower
+            // than the Pure figure this rating describes. Volvo does not publish that
+            // Hybrid value, so it is not stored as a second denominator.
+            return PhevBatteryReference(nominalKwh: 10.7, usableKwh: 8.5, electricWltpKm: 45)
+        case .volvoXC60, .volvoXC90, .volvoS60, .volvoS90, .volvoV60, .volvoV90:
+            guard let yearInt = modelYear.flatMap(Int.init) else {
+                return PhevBatteryReference(nominalKwh: 0, usableKwh: 0, electricWltpKm: nil)
+            }
+            if yearInt >= 2022 {
+                return PhevBatteryReference(nominalKwh: 18.8, usableKwh: 14.9, electricWltpKm: nil)
+            }
+            return PhevBatteryReference(nominalKwh: 11.6, usableKwh: 9.1, electricWltpKm: nil)
+        default:
+            return nil
+        }
     }
 
     /// Where a reference capacity came from. Returning the source alongside the number lets a
@@ -210,6 +251,9 @@ extension VehicleState {
         case .volvoEX90, .volvoES90:
             return L10n.format("%@ kWh Extended Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
         case .volvoXC40, .volvoEX40, .volvoC40, .volvoEC40:
+            if powertrain == .phev, model == .volvoXC40 {
+                return L10n.format("%@ kWh Lithium-ion Pack", nominalText)
+            }
             if nominal >= 80.0 {
                 return L10n.format("%@ kWh Long Range (CATL · %@ kWh Usable · 400V)", nominalText, usableText)
             } else if nominal >= 75.0 {
@@ -333,8 +377,7 @@ extension VehicleState {
     func currentRangeVsModelWltpPercent(specification: VehicleSpecificationOverride? = nil) -> Double? {
         guard let battery = batteryPercentage, battery >= 20,
               let range = rangeKm, range > 0 else { return nil }
-        let referenceRange = specification?.wltpRangeKm
-            ?? (model.hasModelReferenceSpecs ? model.nominalWltpRangeKm : nil)
+        let referenceRange = specification?.wltpRangeKm ?? referenceElectricWltpRangeKm
         guard let referenceRange, referenceRange > 0 else { return nil }
         let expectedRangeAtCurrentSoC = referenceRange * (battery / 100.0)
         guard expectedRangeAtCurrentSoC > 0 else { return nil }
