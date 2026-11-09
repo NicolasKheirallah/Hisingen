@@ -13,6 +13,8 @@ All notable changes to Hisingen are documented in this file. The project follows
   their packed weekday list.
 - Note an unconfigured Developer Portal once instead of warning on every refresh.
 - Show when the app last checked a sleeping car's reading.
+- Estimate a range-based state of health for the XC40 Twin Engine from its own electric WLTP
+  figure and pack (45 km, 10.7 kWh) instead of the battery-electric XC40's 570 km and 75 kWh.
 
 ## [2.0.13] - 2026-11-02
 

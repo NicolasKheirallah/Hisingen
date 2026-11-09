@@ -10,7 +10,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
     private let commandProvider: any VehicleProviding
     private let logger = AppLog.logger("polestar-augmented")
     /// An unconfigured Developer Portal is a setup state, not a failure. Logged once, because
-    /// every refresh otherwise wrote it to the log at error level.
+    /// every refresh otherwise wrote that warning on every attempt.
     private var notedPortalNotConfigured = false
 
     init(telemetryProvider: any VehicleProviding, commandProvider: any VehicleProviding) {

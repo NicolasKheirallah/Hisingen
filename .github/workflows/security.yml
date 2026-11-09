@@ -48,28 +48,30 @@ jobs:
           HISINGEN_BUILD_CONFIGURATION: fixture
         run: sh Scripts/inject-secrets.sh
 
-      - name: Restore dependency build
+      - name: Restore downloaded dependency sources
         id: deps-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             ~/.cache/org.swift.swiftpm
-            .build
+            .build/repositories
+            .build/artifacts
           key: codeql-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
 
       - name: Build dependencies outside the tracer
         timeout-minutes: 30
         run: swift build --force-resolved-versions
 
-      - name: Save dependency build
+      - name: Save downloaded dependency sources
         if: steps.deps-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             ~/.cache/org.swift.swiftpm
-            .build
+            .build/repositories
+            .build/artifacts
           key: codeql-dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
 
       - name: Initialize CodeQL

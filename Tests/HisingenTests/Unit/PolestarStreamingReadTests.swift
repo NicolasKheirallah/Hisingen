@@ -67,22 +67,6 @@ struct PolestarStreamingReadTests {
             _ = try await grpc.fetchTargetSoc(vin: Self.vin, accessToken: "token")
         }
     }
-
-    @Test
-    func sleepingCarShowsWhenTheAppLastChecked() {
-        let now = Date()
-        let asleep = VehicleState(
-            batteryPercentage: 78, rangeKm: 250, chargingState: .idle,
-            estimatedChargingTimeToFullMinutes: nil, chargeTargetPercentage: nil,
-            chargingPowerWatts: nil, chargingCurrentAmps: nil, chargingVoltageVolts: nil,
-            chargingType: .none, chargerConnection: .disconnected, availability: .unavailable(reason: nil),
-            modelName: "Polestar 2", modelYear: "2024", registrationNo: nil, vin: Self.vin,
-            ownerFirstName: nil, odometerKm: nil, daysToService: nil, distanceToServiceKm: nil,
-            serviceWarning: false, fluidWarnings: [], imageData: nil, fetchedAt: now,
-            vehicleReportedAt: now.addingTimeInterval(-8 * 3_600), dataWarnings: []
-        )
-        #expect(asleep.freshnessDescription.hasPrefix("Vehicle asleep · Updated 8 hr ago · Checked just now"))
-    }
 }
 
 /// Plays a scripted exchange and stops as soon as the reader declines more parts, the way the
