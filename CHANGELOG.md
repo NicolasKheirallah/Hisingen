@@ -3,6 +3,17 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Read Polestar target state of charge, amp limit, software status and climate timers from the
+  first streamed reply instead of waiting for the closing status, which the chronos and OTA
+  services hold back until the deadline. Climate timers no longer fail reply validation over
+  their packed weekday list.
+- Note an unconfigured Developer Portal once instead of warning on every refresh.
+- Show when the app last checked a sleeping car's reading.
+
 ## [2.0.13] - 2026-11-02
 
 ### Fixed

@@ -9,6 +9,9 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
     private let telemetryProvider: any VehicleProviding
     private let commandProvider: any VehicleProviding
     private let logger = AppLog.logger("polestar-augmented")
+    /// An unconfigured Developer Portal is a setup state, not a failure. Logged once, because
+    /// every refresh otherwise wrote it to the log at error level.
+    private var notedPortalNotConfigured = false
 
     init(telemetryProvider: any VehicleProviding, commandProvider: any VehicleProviding) {
         self.telemetryProvider = telemetryProvider
@@ -37,6 +40,16 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         return await commandProvider.resolvedVIN(preferred: preferred)
     }
 
+    private func logTelemetryFailure(_ context: String, _ error: Error) {
+        if case PolestarDataPortalError.appNotConfigured = error {
+            guard !notedPortalNotConfigured else { return }
+            notedPortalNotConfigured = true
+            logger.notice("Developer Portal app not configured; telemetry is served by Polestar ID")
+            return
+        }
+        logger.warning("\(context, privacy: .public): \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+    }
+
     func prepareSession() async throws {
         var telemetryOk = false
         do {
@@ -45,7 +58,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         } catch {
             try Task.checkCancellation()
             if error is CancellationError { throw error }
-            logger.warning("Telemetry provider prepareSession non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            logTelemetryFailure("Telemetry provider prepareSession non-fatal", error)
         }
         do {
             try await commandProvider.prepareSession()
@@ -72,7 +85,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         } catch {
             try Task.checkCancellation()
             if error is CancellationError { throw error }
-            logger.warning("Telemetry provider prepareSession non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            logTelemetryFailure("Telemetry provider prepareSession non-fatal", error)
         }
         guard await hasWarmSession else {
             if let commandAuthError { throw commandAuthError }
@@ -100,7 +113,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             try Task.checkCancellation()
             if error is CancellationError { throw error }
             telemetryError = error
-            logger.warning("Telemetry provider restoreSession non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            logTelemetryFailure("Telemetry provider restoreSession non-fatal", error)
         }
         guard await hasWarmSession else {
             if let commandError { throw commandError }
@@ -141,7 +154,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         } catch {
             try Task.checkCancellation()
             if error is CancellationError { throw error }
-            logger.warning("Telemetry reloadVehicleMetadata non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+            logTelemetryFailure("Telemetry reloadVehicleMetadata non-fatal", error)
         }
         do {
             try await commandProvider.reloadVehicleMetadata(vin: vin, features: features)
@@ -199,7 +212,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         } catch let primaryError {
             try Task.checkCancellation()
             if primaryError is CancellationError { throw primaryError }
-            logger.warning("Primary Data Portal telemetry failed: \(DiagnosticRedaction.redact(String(describing: primaryError)), privacy: .public). Trying Polestar ID fallback.")
+            logTelemetryFailure("Primary Data Portal telemetry failed, trying Polestar ID fallback", primaryError)
             guard await commandProvider.hasWarmSession else { throw primaryError }
             do {
                 var fallbackState = try await commandProvider.fetchVehicleState(vin: vin, features: features)

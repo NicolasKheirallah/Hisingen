@@ -1142,6 +1142,7 @@
 "Vehicle Weather" = "Voertuigweer";
 "Vehicle alarm triggered" = "Voertuigalarm geactiveerd";
 "Vehicle asleep · Updated %@" = "Voertuig in slaapstand · Bijgewerkt %@";
+"%@ · Checked %@" = "%@ · Gecontroleerd %@";
 "Vehicle default" = "Voertuigstandaard";
 "Vehicle details" = "Voertuigdetails";
 "Vehicle display name" = "Weergavenaam voertuig";
