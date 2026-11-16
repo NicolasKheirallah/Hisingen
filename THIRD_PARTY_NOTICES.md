@@ -17,6 +17,7 @@ app. This file lists what that covers, where each part came from, and under whic
 | 20 gRPC Swift, SwiftNIO and Swift packages | Linked libraries | Apache 2.0; BoringSSL inside swift-nio-ssl and swift-crypto is ISC and OpenSSL | Polestar gRPC connections |
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
+| Home Assistant | Charger status and plans at runtime, through the reader's own instance | Apache 2.0 | Optional Home Charging |
 | Volvo Cars APIs | Vehicle data at runtime | Volvo Cars developer terms | Volvo support |
 | Polestar interfaces | Vehicle data at runtime | Polestar's terms | Polestar support |
 
@@ -86,6 +87,17 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Runtime services
+
+### Home Assistant
+
+Hisingen's optional Home Charging integration talks to a Home Assistant instance the reader
+runs, over its REST and WebSocket APIs at the address the reader enters, for example
+`http://homeassistant.local:8123`. Home Assistant is Apache License 2.0. The component in
+[home-assistant/custom_components/hisingen_home_charging](home-assistant/custom_components/hisingen_home_charging)
+is Hisingen's own code, installed by the reader into Home Assistant; no Home Assistant source is
+copied into the app. The integration is optional and off until a charger is paired.
 
 ## Software bundled with the app
 
