@@ -230,7 +230,6 @@ const WASH_FILES = [
   'Shell/DismissibleNoticeBanner.swift',
   'Controls/ControlsBanners.swift',
   'Components/CommandReceiptChip.swift',
-  'Controls/ChargingControlsCard.swift',
   'Settings/SettingsNavigation.swift',
   'Settings/TabItemPickerSheet.swift',
   'History/HistoryDashboardView.swift',
