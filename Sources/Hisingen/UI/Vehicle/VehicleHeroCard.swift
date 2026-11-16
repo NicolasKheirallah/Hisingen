@@ -235,7 +235,7 @@ struct VehicleHeroCard: View {
                     .transition(cardTransition)
 
                 HStack {
-                    Image(systemName: state.hasOldData() ? "moon.stars.fill" : "clock.arrow.circlepath")
+                    Image(systemName: state.hasOldData() ? "moon.stars" : "clock.arrow.circlepath")
                         .hisType(.caption)
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         // Weight and hue carry staleness, not transparency. Lowering opacity made
@@ -308,7 +308,7 @@ struct VehicleHeroCard: View {
                 Pill(
                     text: locked ? L10n.text("Locked") : L10n.text("Unlocked"),
                     color: locked ? HisingenTheme.inkMuted : HisingenTheme.semanticWarning,
-                    symbol: locked ? "lock.fill" : "lock.open.fill"
+                    symbol: locked ? "lock" : "lock.open"
                 )
                 .transition(.scale.combined(with: .opacity))
             }
@@ -322,7 +322,7 @@ struct VehicleHeroCard: View {
                     color: isRecognised
                         ? HisingenTheme.statusColor(state: state.energy.chargingState)
                         : HisingenTheme.inkMuted,
-                    symbol: isRecognised ? (state.isCharging ? "bolt.fill" : nil) : "questionmark.circle"
+                    symbol: isRecognised ? (state.isCharging ? "bolt" : nil) : "questionmark.circle"
                 )
                 // The pill persists across Charging → Complete; only its
                 // contents swap, so the morph rides a content transition.
@@ -334,7 +334,7 @@ struct VehicleHeroCard: View {
                 Pill(
                     text: state.fuelSystem.type ?? L10n.text("Combustion"),
                     color: HisingenTheme.semanticWarning,
-                    symbol: "fuelpump.fill"
+                    symbol: "fuelpump"
                 )
                 .transition(.scale.combined(with: .opacity))
             }
@@ -350,7 +350,7 @@ struct VehicleHeroCard: View {
                 Pill(
                     text: L10n.text("Engine Running"),
                     color: HisingenTheme.semanticWarning,
-                    symbol: "engine.combustion.fill"
+                    symbol: "engine.combustion"
                 )
                 .transition(.scale.combined(with: .opacity))
             }
@@ -360,7 +360,7 @@ struct VehicleHeroCard: View {
                 Pill(
                     text: climate.activity.displayName,
                     color: HisingenTheme.semanticActive,
-                    symbol: "fan.fill"
+                    symbol: "fan"
                 )
                 .transition(.scale.combined(with: .opacity))
             }
@@ -407,7 +407,7 @@ struct VehicleHeroCard: View {
                 rangeSummary(
                     value: state.fuelSystem.rangeKm,
                     title: L10n.text("Fuel Range"),
-                    symbol: "fuelpump.fill"
+                    symbol: "fuelpump"
                 )
             }
 

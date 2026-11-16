@@ -57,8 +57,17 @@ extension PreferencesStore {
     var vehicleModelBadgePosition: VehicleModelBadgePosition { get { VehicleModelBadgePosition(rawValue: d.string(forKey: "vehicle_model_badge_position") ?? "") ?? .inlineHeader } set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") } }
     var registrationBadgePosition: RegistrationNumberBadgePosition { get { RegistrationNumberBadgePosition(rawValue: d.string(forKey: "registration_badge_position") ?? "") ?? .belowGreeting } set { d.set(newValue.rawValue, forKey: "registration_badge_position") } }
     var nowReadingsPosition: NowReadingsPosition {
-        get { d.string(forKey: "now_readings_position").flatMap(NowReadingsPosition.init(rawValue:)) ?? .left }
+        get { d.string(forKey: "now_readings_position").flatMap(NowReadingsPosition.init(rawValue:)) ?? .below }
         set { d.set(newValue.rawValue, forKey: "now_readings_position") }
+    }
+    /// The control cards under the car on Now, in the order they draw. Unknown names from a later
+    /// version are dropped rather than failing the whole list.
+    var nowQuickControls: [NowQuickControl] {
+        get {
+            guard let raw = d.string(forKey: "now_quick_controls") else { return NowQuickControl.defaults }
+            return raw.split(separator: ",").compactMap { NowQuickControl(rawValue: String($0)) }
+        }
+        set { d.set(newValue.map(\.rawValue).joined(separator: ","), forKey: "now_quick_controls") }
     }
     var nowFirstReading: NowFirstReading {
         get { d.string(forKey: "now_first_reading").flatMap(NowFirstReading.init(rawValue:)) ?? .battery }

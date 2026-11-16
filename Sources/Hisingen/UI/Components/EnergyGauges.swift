@@ -131,7 +131,7 @@ struct BatteryGauge: View {
 
                 // Diffuse glow at the charge edge – a soft halo, not a
                 // visible indicator, breathing slowly while energy flows.
-                Capsule()
+                RoundedRectangle(cornerRadius: 0)
                     .fill(LinearGradient(
                         colors: [color.opacity(0), color.opacity(0.85)],
                         startPoint: .leading,
@@ -149,7 +149,7 @@ struct BatteryGauge: View {
 
                 if let targetFraction {
                     let targetX = width * CGFloat(min(max(targetFraction, 0), 1)) - 1.5
-                    RoundedRectangle(cornerRadius: 1.5)
+                    RoundedRectangle(cornerRadius: 0)
                         .fill(HisingenTheme.ink.opacity(0.75))
                         .frame(width: 3, height: 13)
                         .offset(x: targetX, y: -2)
@@ -270,7 +270,7 @@ struct DualEnergyGauge: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 3) {
-                    Image(systemName: isCharging ? "bolt.fill" : "battery.100percent")
+                    Image(systemName: isCharging ? "bolt" : "battery.100percent")
                         .hisType(.micro)
                         .foregroundStyle(batteryColor)
                     Text(L10n.text("Battery"))
@@ -297,7 +297,7 @@ struct DualEnergyGauge: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 3) {
-                    Image(systemName: "fuelpump.fill")
+                    Image(systemName: "fuelpump")
                         .hisType(.micro)
                         .foregroundStyle(fuelColor)
                     Text(L10n.text("Fuel"))

@@ -3,9 +3,14 @@ import SwiftUI
 @MainActor
 struct PlanTimeline: View {
     let state: VehicleState
+    var canEdit: (VehicleSchedule) -> Bool = { _ in false }
+    var onEdit: (VehicleSchedule) -> Void = { _ in }
+    /// Opens the schedule editor for a new timer. Nil when the reader cannot create one.
+    var onAdd: (() -> Void)? = nil
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.preferencesStore) private var preferences
+    @State private var inspectedEntry: Entry?
 
     struct Entry: Identifiable {
         let id: String
@@ -51,13 +56,13 @@ struct PlanTimeline: View {
             $0 == .chargingSchedule || $0 == .climateStatus
         }
         VStack(alignment: .leading, spacing: 0) {
-            Text(L10n.text(stale && !entries.isEmpty ? "Last reported schedules" : "Upcoming"))
-                .hisType(.displaySmall, weight: .semibold)
+            Text(L10n.text(stale && !entries.isEmpty ? "Last reported schedules" : "Schedules"))
+                .hisType(.displaySmall)
                 .foregroundStyle(HisingenTheme.ink)
                 .accessibilityAddTraits(.isHeader)
-                .padding(.bottom, 10)
+            .padding(.bottom, 12)
             if entries.isEmpty {
-                rule
+                PanelRule()
                 Text(L10n.text("No upcoming schedules reported"))
                     .hisType(.body)
                     .foregroundStyle(HisingenTheme.inkMuted)
@@ -65,38 +70,94 @@ struct PlanTimeline: View {
                     .padding(.vertical, 10)
             } else {
                 ForEach(entries) { entry in
-                    rule
-                    row(entry, leads: entry.id == entries.first?.id && entry.next != nil)
+                    PanelRule()
+                    timelineRow(entry, leads: false)
                 }
+            }
+            if let onAdd {
+                PanelRule()
+                Button(action: onAdd) {
+                    HStack(spacing: 6) {
+                        Text(L10n.text("Add Schedule"))
+                            .hisType(.subhead)
+                        Image(systemName: "arrow.right")
+                            .hisSymbolSize(11)
+                            .accessibilityHidden(true)
+                        Spacer()
+                    }
+                    .foregroundStyle(HisingenTheme.ink)
+                    .frame(minHeight: 40)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, HisingenTheme.cardPadding)
-        .padding(.top, 10)
         .accessibilityElement(children: .contain)
+        .sheet(item: $inspectedEntry) { entry in
+            VStack(alignment: .leading, spacing: 10) {
+                row(entry, leads: entry.next != nil)
+                Label(L10n.text("View only"), systemImage: "lock")
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                HStack {
+                    Spacer()
+                    Button(L10n.text("Done")) { inspectedEntry = nil }
+                        .buttonStyle(.hisSecondary)
+                        .keyboardShortcut(.cancelAction)
+                }
+            }
+            .padding(16)
+            .frame(width: 340)
+            .background(HisingenTheme.canvas)
+        }
     }
 
-    private var rule: some View {
-        Rectangle().fill(HisingenTheme.hairline).frame(height: 1)
-            .accessibilityHidden(true)
+    private func timelineRow(_ entry: Entry, leads: Bool) -> some View {
+        let editable = canEdit(entry.schedule)
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+        return layout {
+            row(entry, leads: leads)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                if editable { onEdit(entry.schedule) }
+                else { inspectedEntry = entry }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(L10n.text(editable ? "Edit" : "Details"))
+                        .hisType(.body)
+                    Image(systemName: "arrow.right")
+                        .hisSymbolSize(10)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(HisingenTheme.ink)
+                .frame(minHeight: 32)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel(L10n.format(editable ? "Edit %@" : "Details for %@", entry.schedule.kind.title))
+            .padding(.bottom, typeSize.isAccessibilitySize ? 10 : 0)
+        }
     }
 
     private func row(_ entry: Entry, leads: Bool) -> some View {
         let schedule = entry.schedule
-        let layout = typeSize.isAccessibilitySize
+        let layout = typeSize.isAccessibilitySize || HisingenTheme.layoutWidth < 510
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 14))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 20))
         let detail = detailText(entry)
         return layout {
             Text(timeText(entry))
-                .hisType(leads ? .display : .displaySmall, weight: leads ? .light : .regular)
+                .hisType(size: leads ? 37 : 22, relativeTo: .title)
                 .monospacedDigit()
                 .foregroundStyle(HisingenTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minWidth: typeSize.isAccessibilitySize ? nil : 140, alignment: .leading)
+                .frame(minWidth: typeSize.isAccessibilitySize ? nil : 132, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
                 Text(schedule.kind.title)
-                    .hisType(.body, weight: .semibold)
+                    .hisType(.subhead)
                     .foregroundStyle(HisingenTheme.ink)
                 if !detail.isEmpty {
                     Text(detail)
@@ -111,7 +172,7 @@ struct PlanTimeline: View {
             }
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, leads ? 12 : 8)
+        .padding(.vertical, leads ? 15 : 10)
         .accessibilityElement(children: .combine)
     }
 

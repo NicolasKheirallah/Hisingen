@@ -8,6 +8,7 @@ import SwiftUI
 /// are declared without `private`.
 @MainActor
 struct InfoTabView: View {
+    @Environment(\.dynamicTypeSize) var passportTypeSize
 
     /// The reader's layout for this tab: what to draw, and in what order. The default draws
     /// everything exactly as designed.
@@ -25,6 +26,12 @@ struct InfoTabView: View {
     let reverseGeocoder: ReverseGeocoder
     var onNavigateToHistory: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
+    /// The command context for the controls that live on Car: locks, windows and locate, and
+    /// software install.
+    var brand: VehicleBrand = .polestar
+    var remoteCommandInProgress = false
+    var inFlightCommandID: String? = nil
+    var onRefresh: () -> Void = {}
 
     @State var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
     @State var addressText: String?
@@ -64,11 +71,11 @@ struct InfoTabView: View {
             case .all:
                 return true
             case .specs:
-                return section == .overview || section == .factoryBuild || section == .exterior || section == .interior || section == .software || section == .connectivity
+                return section == .overview || section == .factoryBuild || section == .exterior || section == .interior || section == .software || section == .softwareControls || section == .connectivity
             case .battery:
                 return section == .powertrain || section == .batteryHealth || section == .batteryDiagnostics || section == .chargeLocations
             case .status:
-                return section == .doors || section == .tyres || section == .fluids || section == .location || section == .weather || section == .trip || section == .airQuality || section == .service || section == .warranty || section == .capabilities || section == .activity || section == .freshness
+                return section == .doors || section == .tyres || section == .fluids || section == .location || section == .weather || section == .trip || section == .airQuality || section == .service || section == .warranty || section == .capabilities || section == .activity || section == .freshness || section == .lockControls || section == .windowControls
             }
         }
     }
@@ -83,8 +90,16 @@ struct InfoTabView: View {
         reverseGeocoder: ReverseGeocoder,
         onNavigateToHistory: @escaping () -> Void = {},
         onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
+        brand: VehicleBrand = .polestar,
+        remoteCommandInProgress: Bool = false,
+        inFlightCommandID: String? = nil,
+        onRefresh: @escaping () -> Void = {},
         layout: TabLayout = .everything
     ) {
+        self.brand = brand
+        self.remoteCommandInProgress = remoteCommandInProgress
+        self.inFlightCommandID = inFlightCommandID
+        self.onRefresh = onRefresh
         self.state = state
         self.history = history
         self.imageCache = imageCache
@@ -105,6 +120,7 @@ struct InfoTabView: View {
         case trip, powertrain, batteryHealth, batteryDiagnostics, airQuality
         case connectivity, service, warranty, exterior, interior, chargeLocations
         case factoryBuild, capabilities, activity, freshness
+        case lockControls, windowControls, softwareControls
 
         var title: String {
             switch self {
@@ -130,6 +146,9 @@ struct InfoTabView: View {
             case .capabilities: return L10n.text("Vehicle Capabilities")
             case .activity: return L10n.text("Activity History")
             case .freshness: return L10n.text("Reading Freshness")
+            case .lockControls: return L10n.text("Lock controls")
+            case .windowControls: return L10n.text("Windows, honk & flash")
+            case .softwareControls: return L10n.text("Vehicle software controls")
             }
         }
     }
@@ -161,7 +180,21 @@ struct InfoTabView: View {
         case .capabilities: return .infoCapabilities
         case .activity: return .infoActivity
         case .freshness: return .infoFreshness
+        case .lockControls: return .controlsAccess
+        case .windowControls: return .controlsWindowsLocate
+        case .softwareControls: return .controlsOTA
         }
+    }
+
+    var commandGate: ControlsCommandGate {
+        ControlsCommandGate(
+            state: state,
+            brand: brand,
+            preferences: preferences,
+            remoteCommandInProgress: remoteCommandInProgress,
+            inFlightCommandID: inFlightCommandID,
+            onRemoteCommand: onRemoteCommand
+        )
     }
 
     struct InfoSectionEntry: Identifiable {
@@ -183,14 +216,6 @@ struct InfoTabView: View {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                 if draws(.infoNavBar) {
                     infoNavBar(proxy: proxy, entries: allEntries)
-                    Picker("", selection: $selectedCategory) {
-                        ForEach(InfoCategory.allCases) { category in
-                            Text(category.title).tag(category)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .accessibilityLabel(L10n.text("Info section category"))
                 }
                 ForEach(entries) { entry in
                     entry.view
@@ -236,7 +261,6 @@ struct InfoTabView: View {
         } else {
             add(.overview, awardVehiclePassport)
         }
-        add(.freshness, readingFreshnessCard)
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {
             add(.doors, DoorsAndOpeningsCardView(ext: ext, isLocked: ext.isLocked,
@@ -250,8 +274,19 @@ struct InfoTabView: View {
         if softwareCardHasContent {
             add(.software, softwareUpdateCard)
         }
+        let features = preferences.features.enabled
+        let profile = state.capabilityProfile
+        if features.contains(.remoteOTA) && profile.permits(.softwareInstallControl) {
+            add(.softwareControls, OTAControlsCard(state: state, gate: commandGate, onRefresh: onRefresh))
+        }
         if state.location?.latitude != nil {
             add(.location, parkingLocationCard)
+        }
+        if features.contains(.remoteLocks) {
+            add(.lockControls, AccessControlsCard(state: state, gate: commandGate))
+        }
+        if (features.contains(.remoteWindows) && profile.permits(.windows)) || features.contains(.remoteHonkFlash) {
+            add(.windowControls, WindowsLocateCard(state: state, gate: commandGate))
         }
         if weatherCardHasContent {
             add(.weather, ambientWeatherCard)
@@ -306,6 +341,11 @@ struct InfoTabView: View {
         } else {
             add(.activity, activityHistoryCard)
         }
+        // Timestamps per reading are reference material: after the specifications, and only when
+        // the car reported any.
+        if VehicleReading.allCases.contains(where: { state.reportedDate(for: $0) != nil }) {
+            add(.freshness, readingFreshnessCard)
+        }
         // The reader's order, when they have one. Sections the layout does not name — none by
         // default — keep the position they were added in, after the ones it does.
         return ordered(out, by: { Self.item(for: $0.id) })
@@ -343,12 +383,19 @@ struct InfoTabView: View {
         state.freshness.isCached || state.isStale()
     }
 
+    /// The footer already says when the panel last updated, so the Car tab names freshness only
+    /// when it qualifies what follows: an offline copy, a stale check, or a sleeping car's old
+    /// reading.
+    private var showsFreshnessLine: Bool { freshnessNeedsAttention || state.hasOldData() }
+
     private func infoNavBar(proxy: ScrollViewProxy, entries: [InfoSectionEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+        if showsFreshnessLine {
         HStack(spacing: 8) {
             // A sleeping car's hour-old reading is the normal resting state, so it stays muted.
             // Warning colour is kept for when Hisingen itself could not reach the car (`isStale`),
             // which keeps it meaningful next to a real fault such as a service warning.
-            Image(systemName: state.hasOldData() ? "moon.stars.fill" : "clock.arrow.circlepath")
+            Image(systemName: state.hasOldData() ? "moon.stars" : "clock.arrow.circlepath")
                 .hisType(.label)
                 .foregroundStyle(freshnessNeedsAttention ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
                 .hisAnimation(Motion.theme, value: freshnessNeedsAttention)
@@ -360,8 +407,14 @@ struct InfoTabView: View {
                 .minimumScaleFactor(0.9)
                 .truncationMode(.middle)
                 .hisAnimation(Motion.theme, value: freshnessNeedsAttention)
-
-            Spacer(minLength: 6)
+        }
+        }
+        HStack(alignment: .bottom, spacing: 12) {
+            UnderlineSegments(
+                options: InfoCategory.allCases.map { ($0, $0.title) },
+                selection: $selectedCategory,
+                accessibilityLabel: L10n.text("Info section category")
+            )
 
             Menu {
                 ForEach(entries) { entry in
@@ -411,6 +464,7 @@ struct InfoTabView: View {
 
             // No refresh button here: the panel footer's Refresh Telemetry (⌘R) is the same
             // action, and two identical glyphs on one screen read as two different things.
+        }
         }
         .padding(.horizontal, 4)
         .accessibilityElement(children: .contain)

@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "Nåværende kjøretøy: %@. Bytt kjøretøy.";
 "Custom App" = "Tilpassa app";
 "Cut" = "Klipp ut";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing meistarskapsblå, skarp baneprofil";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Meistarskapsblå, skarp baneprofil";
 "Daily" = "Dagleg";
 "Danish" = "Dansk";
 "Dark" = "Mørkt";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "Ladbar hybrid";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar Veihjelp";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, mørk kolsort luksus";
+"Dark charcoal surfaces with a gold accent" = "Mørke kolsvarte flater med gullaksent";
 "Polestar ID (Email)" = "Polestar ID (e-post)";
 "Polestar ID Password Required" = "Passord for Polestar ID krevst";
 "Polestar ID Required" = "Polestar ID kreves";
@@ -994,7 +994,7 @@
 "Sunroof" = "Soltak";
 "Supported" = "Støttet";
 "Swedish" = "Svensk";
-"Swedish Gold" = "Swedish Gold";
+"Charcoal Gold" = "Charcoal Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Svensk furu og eukalyptus, jordfargar, organisk mjuk kjensle";
 "Switch Vehicle" = "Bytt kjøretøy";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Bytt kjøretøy (⌃⌥[ / ⌃⌥])";
@@ -1694,16 +1694,14 @@
 "Everything looks good" = "Alt ser bra ut";
 
 /* Text size & density options */
-"Compact (85%)" = "Kompakt (85 %)";
-"Standard (100%)" = "Standard (100 %)";
-"Relaxed (115%)" = "Avslappa (115 %)";
+"Relaxed" = "Avslappa";
 "Smallest text, most content per screen" = "Minst tekst, mest innhald per skjerm";
 "Default sizing" = "Standardstorleik";
 "Larger text and controls" = "Større tekst og kontrollar";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Innhaldstettleik";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Zoom innhald uavhengig av panelstorleiken – kompakt viser meir før rulling";
+"Type size and spacing, independently of the panel size" = "Tekststorleik og avstand, uavhengig av panelstorleiken";
 "Custom Size" = "Sjølvvald storleik";
 "Independent width and height overrides" = "Uavhengig breidd og høgd";
 "Width" = "Breidd";
@@ -2802,6 +2800,7 @@
 "History" = "Historikk";
 "Info" = "Info";
 "Info section category" = "Kategori i Info-delen";
+"History section category" = "Kategori i historikken";
 "Instantaneous drivetrain output power ceiling." = "Øvre grense for drivlinjens effekt i augeblikket.";
 "Interactive Verification Required" = "Interaktiv verifisering krevst";
 "Interior view of the vehicle" = "Interiør av køyretøyet";
@@ -3283,3 +3282,13 @@
 "Battery at the start and end of each charge." = "Batterinivå ved starten og slutten av kvar lading.";
 "No complete charge readings in this period." = "Ingen fullstendige lademålingar i denne perioden.";
 "Enable remote controls in Settings → Features." = "Slå på fjernstyring i Innstillingar → Funksjonar.";
+"Windows" = "Vindauge";
+"Controls on Now" = "Kontrollar på No";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Vel kontrollkorta som blir viste under bilen. Kvart kort krev framleis at fjernfunksjonen er slått på.";
+"Create Theme" = "Lag tema";
+"Edit Theme" = "Rediger tema";
+"Accent" = "Aksent";
+"Light Background" = "Lys bakgrunn";
+"Dark Background" = "Mørk bakgrunn";
+"My Theme" = "Mitt tema";
+"Your colours, adjusted to stay readable in light and dark." = "Fargane dine, justerte så dei er lesbare i lyst og mørkt.";

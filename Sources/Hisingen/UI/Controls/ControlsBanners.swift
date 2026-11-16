@@ -9,6 +9,7 @@ struct ControlsBanners: View {
     let features: Set<AppFeature>
     let isBrandVolvo: Bool
     let showRestrictedNotice: Bool
+    var showsVehicleOffline = true
     /// Runs the authorization step a refused command asked for. The banner is where the refusal is
     /// read, so the fix belongs beside it instead of in a sentence about another screen.
     var onAuthorizeRemoteCommands: (() -> Void)? = nil
@@ -24,7 +25,7 @@ struct ControlsBanners: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var vehicleOffline: Bool {
-        if case .unavailable = state.identity.availability { return true }
+        if showsVehicleOffline, case .unavailable = state.identity.availability { return true }
         return false
     }
 
@@ -37,6 +38,7 @@ struct ControlsBanners: View {
 
     private var liveFeedback: RemoteCommandFeedback? {
         guard let feedback,
+              feedback.targetVIN.map({ $0.caseInsensitiveCompare(state.identity.vin) == .orderedSame }) ?? true,
               feedback.id != dismissedFeedbackID,
               now.timeIntervalSince(feedback.issuedAt) < 45 else {
             return nil
@@ -52,15 +54,11 @@ struct ControlsBanners: View {
             if vehicleOffline {
                 offlineBanner
             }
-            if showRestrictedNotice, !allRemoteControlsEnabled {
-                restrictedNoticeBanner
-            }
         }
         // Keyed on each banner's driving identity so an insertion carries the
         // entrance while the removal rides the dismissing transaction.
         .hisAnimation(Motion.entrance, value: liveFeedback?.id)
         .hisAnimation(Motion.entrance, value: vehicleOffline)
-        .hisAnimation(Motion.entrance, value: showRestrictedNotice && !allRemoteControlsEnabled)
         // The expiry needs a clock, not a render.
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { tick in
             now = tick
@@ -122,10 +120,8 @@ struct ControlsBanners: View {
             .accessibilityLabel(L10n.text("Dismiss"))
         }
         .padding(10)
-        .background(
-            (feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)),
-            in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous)
-        )
+        .padding(.leading, 2)
+        .hisNotice(feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .task(id: feedback.id) {
@@ -152,39 +148,47 @@ struct ControlsBanners: View {
             Spacer()
         }
         .padding(10)
-        .background(HisingenTheme.semanticWarning.opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
+        .padding(.leading, 2)
+        .hisNotice(HisingenTheme.semanticWarning)
         .transition(.move(edge: .top).combined(with: .opacity))
         .accessibilityElement(children: .combine)
     }
+}
 
-    private var restrictedNoticeBanner: some View {
-        let activeNames = AppFeature.allCases
-            .filter { $0.isRemoteControl && features.contains($0) }
-            .map(\.title)
+/// Which remote-control groups are switched on, as a footnote under Plan's controls. It explains a
+/// missing control, so it speaks only when a group is off, and it sits after the controls rather
+/// than above the schedule the reader opened the tab for.
+@MainActor
+struct RemoteControlsFootnote: View {
+    let features: Set<AppFeature>
+    let isBrandVolvo: Bool
 
-        return HStack(spacing: 10) {
-            Image(systemName: "checkmark.shield.fill")
-                .hisType(.title)
-                .foregroundStyle(HisingenTheme.accent)
+    private var allEnabled: Bool {
+        AppFeature.allCases.filter(\.isRemoteControl).allSatisfy { features.contains($0) }
+    }
 
+    var body: some View {
+        if !allEnabled {
+            let activeNames = AppFeature.allCases
+                .filter { $0.isRemoteControl && features.contains($0) }
+                .map(\.title)
             VStack(alignment: .leading, spacing: 2) {
                 Text(isBrandVolvo ? L10n.text("Volvo Connected Vehicle API") : L10n.text("Polestar Remote Commands"))
-                    .hisType(.label, weight: .semibold)
-                    .foregroundStyle(.primary)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.ink)
                 Text(activeNames.isEmpty
                      ? L10n.text("No remote-control features are enabled.")
                      : L10n.format("Enabled: %@.", activeNames.joined(separator: ", ")))
                     .hisType(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 12)
+            .overlay(alignment: .top) { PanelRule() }
+            .accessibilityElement(children: .combine)
         }
-        .padding(10)
-        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: HisingenTheme.bannerRadius, style: .continuous))
-        .transition(.move(edge: .top).combined(with: .opacity))
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -238,7 +242,7 @@ extension ControlsCommandGate {
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(HisingenTheme.chipFill, in: Capsule())
+                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                 .transition(Motion.prefersReducedMotion
                     ? .opacity
                     : .opacity.combined(with: .scale(scale: 0.95)))

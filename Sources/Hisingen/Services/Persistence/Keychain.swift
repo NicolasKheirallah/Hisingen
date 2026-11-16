@@ -103,6 +103,7 @@ struct KeychainStore: Sendable {
     private static let commandSessionAccount = "polestar-command-refresh-token"
     private static let polestarDataPortalBundleAccount = "polestar-dataportal-credentials"
     private static let polestarDataPortalTokenAccount = "polestar-dataportal-token"
+    private static let homeAssistantTokenAccount = "home-assistant-long-lived-token"
 
     /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
     /// Authentication still reads and validates the real Keychain values.
@@ -292,6 +293,33 @@ struct KeychainStore: Sendable {
     func deletePolestarDataPortalToken() throws {
         try delete(account: Self.polestarDataPortalTokenAccount)
         UserDefaults.standard.set(false, forKey: "has_polestar_dataportal_token")
+    }
+
+    /// Home Assistant long-lived access token for the optional Home Charging integration.
+    /// Stored alone in its own item: it never joins a settings archive, an export or a log,
+    /// and the presence mirror below lets views ask "is a token saved" without a Keychain read.
+    var hasStoredHomeAssistantToken: Bool {
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.homeAssistantTokenAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_home_assistant_token")
+    }
+    func saveHomeAssistantToken(_ token: String) throws {
+        try save(token, account: Self.homeAssistantTokenAccount)
+        guard !isTestService else { return }
+        UserDefaults.standard.set(!token.isEmpty, forKey: "has_home_assistant_token")
+    }
+    func readHomeAssistantToken() throws -> String? {
+        let value = try read(account: Self.homeAssistantTokenAccount)
+        if !isTestService {
+            UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_home_assistant_token")
+        }
+        return value
+    }
+    func deleteHomeAssistantToken() throws {
+        try delete(account: Self.homeAssistantTokenAccount)
+        guard !isTestService else { return }
+        UserDefaults.standard.set(false, forKey: "has_home_assistant_token")
     }
 
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
@@ -550,20 +578,6 @@ struct KeychainStore: Sendable {
                         Self.polestarDataPortalBundleAccount, Self.polestarDataPortalTokenAccount,
                         "volvo-client-secret", "volvo-vcc-api-key", "volvo-refresh-token"] {
             memoryCache.set(cacheKey(account: account), value: nil)
-        }
-    }
-
-    /// Re-derives UserDefaults presence mirrors from a live Keychain read.
-    /// Use after catching a delete/read error that may have left flags stale.
-    func resyncPresenceFlags() {
-        _ = try? readEmail()
-        _ = try? readPassword()
-        _ = try? readSessionToken()
-        _ = try? readCommandSessionToken()
-        _ = try? readVolvoBundle()
-        if let raw = try? read(account: Self.polestarDataPortalBundleAccount), let data = raw.data(using: .utf8),
-           let bundle = try? JSONDecoder().decode(PolestarDataPortalSecretBundle.self, from: data) {
-            Self.updatePolestarDataPortalPresenceFlags(bundle)
         }
     }
 }

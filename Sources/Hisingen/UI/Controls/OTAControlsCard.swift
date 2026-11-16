@@ -14,7 +14,7 @@ struct OTAControlsCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(
-                    symbol: "shippingbox.fill",
+                    symbol: "shippingbox",
                     title: L10n.text("Vehicle Software & OTA"),
                     color: HisingenTheme.semanticActive
                 )
@@ -30,7 +30,7 @@ struct OTAControlsCard: View {
                     .hisAnimation(Motion.stateChange, value: software.state)
                 } else {
                     otaStatusRow(
-                        symbol: "questionmark.circle.fill",
+                        symbol: "questionmark.circle",
                         tint: HisingenTheme.inkMuted,
                         text: L10n.text("Software status is unavailable for this vehicle.")
                     )
@@ -58,7 +58,7 @@ struct OTAControlsCard: View {
             )
         case .downloaded, .deferred:
             otaStatusRow(
-                symbol: "arrow.down.circle.fill",
+                symbol: "arrow.down.circle",
                 tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
                     ?? L10n.text("A software update is ready to install.")
@@ -72,7 +72,7 @@ struct OTAControlsCard: View {
             )
         case .installing:
             otaStatusRow(
-                symbol: "gearshape.2.fill",
+                symbol: "gearshape.2",
                 tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Installing software update %@…", $0) }
                     ?? L10n.text("Installing a software update…")
@@ -152,7 +152,7 @@ struct OTAControlsCard: View {
             VStack(spacing: 6) {
                 otaButton(
                     title: L10n.text("Install Update Now"),
-                    symbol: "arrow.down.circle.fill",
+                    symbol: "arrow.down.circle",
                     command: .installOTANow,
                     prominent: true
                 )
@@ -163,7 +163,7 @@ struct OTAControlsCard: View {
             VStack(spacing: 6) {
                 otaButton(
                     title: L10n.text("Install Update Now"),
-                    symbol: "arrow.down.circle.fill",
+                    symbol: "arrow.down.circle",
                     command: .installOTANow,
                     prominent: true
                 )

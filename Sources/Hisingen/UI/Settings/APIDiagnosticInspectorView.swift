@@ -167,7 +167,7 @@ struct APIDiagnosticInspectorView: View {
                                     .textSelection(.enabled)
                                     .padding(7)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 0))
                             } else if entry.payloadOmitted {
                                 Text(L10n.format("Payload omitted (%@).",
                                                  entry.payloadOmissionReason ?? "unknown"))

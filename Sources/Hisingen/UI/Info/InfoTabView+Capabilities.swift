@@ -18,7 +18,7 @@ extension InfoTabView {
             Flag(title: L10n.text("Trunk Unlock"), reported: caps.supportsTrunkUnlock, symbol: "lock.open"),
             Flag(title: L10n.text("Honk & Flash"), reported: caps.supportsHonkAndFlash, symbol: "light.beacon"),
             Flag(title: L10n.text("Windows Control"), reported: caps.supportsWindowsControl, symbol: "rectangle.arrowtriangle.2.outward"),
-            Flag(title: L10n.text("Charging Functions"), reported: caps.supportsChargingFunctions, symbol: "bolt.fill")
+            Flag(title: L10n.text("Charging Functions"), reported: caps.supportsChargingFunctions, symbol: "bolt")
         ]
         let positive = flags.filter(\.reported)
         let negative = flags.filter { !$0.reported }
@@ -130,7 +130,7 @@ extension InfoTabView {
                     let locationFlags: [(title: String, value: Bool?, symbol: String)] = [
                         (L10n.text("Location Departure Times"), settings.locationDepartureTimes, "calendar.badge.clock"),
                         (L10n.text("Location Current Limits"), settings.locationAmperage, "gauge.with.dots.needle.bottom.50percent"),
-                        (L10n.text("Location Optimised Charging"), settings.locationOptimization, "leaf.fill")
+                        (L10n.text("Location Optimised Charging"), settings.locationOptimization, "leaf")
                     ]
                     let reportedFlags = locationFlags.compactMap { item -> (String, String, String)? in
                         guard let value = item.value else { return nil }

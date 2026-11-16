@@ -332,7 +332,7 @@ On top of the live readings Hisingen keeps some local context:
 * **Service.** The next service date is estimated from the last 30 days of driving.
 * **Usage mode.** The reported vehicle usage mode shows in the connectivity details, including on
   vehicles without separate network diagnostics.
-* **Weight.** The reported gross vehicle weight shows on the Info specs card (Polestar).
+* **Weight.** The reported gross vehicle weight shows on the Car specs card (Polestar).
 
 ### Climate
 
@@ -400,9 +400,9 @@ Polestar currently exposes more software information to Hisingen than Volvo's de
 When a car does not report update status at all, the card says "Not reported by this vehicle"
 instead of claiming that no update is available.
 
-### Info tab and the capabilities inspector
+### Car tab and the capabilities inspector
 
-The Info tab is the car's technical passport: identity and specifications on top, then the
+The Car tab is the car's technical passport: identity and specifications on top, then the
 capabilities the backend reports for this exact vehicle.
 
 * **Specifications.** Model, year, battery capacity, charge port, reported gross vehicle weight
@@ -503,7 +503,7 @@ offered climate setpoints, windows, trunk or charging controls that the public A
 
 * **Retry** is offered on a failed command only when the failure proves it did not run.
 * **Undo** is offered for 30 seconds on a reversible command.
-* **Routines** (Controls tab) are saved sequences of commands. Each step goes through the same
+* **Routines** (Plan tab) are saved sequences of commands. Each step goes through the same
   capability check and authorization as a single command, steps run in order, and a routine stops
   at the first failure.
 
@@ -577,6 +577,11 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 ---
 
 ## Product tour
+
+These captures were taken before the 3.0.0 redesign. That release renamed the four tabs to
+Now, Plan, Log and Car and redrew how each one reads. Current fixture renders of every surface,
+in both appearances and at Compact, Standard and Grand widths, are in
+[docs/design/renders/3.0.0](docs/design/renders/3.0.0/).
 
 The screenshots below show the main views of the app.
 
@@ -844,7 +849,7 @@ inside field 35. Anything Hisingen cannot name is kept as a raw field.
 Legacy charging status values 7 and 8 mean smart charging paused and done, and field 28 is
 preferred when present. Seat intensities use a different scale from the Developer Portal's 0 to 3
 levels, and Hisingen converts between them. Unknown enum values and unsupported wire types stay
-raw instead of becoming a known value. Decoded tags that no control uses appear on the Info tab under
+raw instead of becoming a known value. Decoded tags that no control uses appear on the Car tab under
 "Unwired Backend Fields", and most `GetMyCars` tags now show under "Backend Reporting" instead.
 
 </details>
@@ -1105,18 +1110,36 @@ vehicles and history.
 
 Nine themes are currently included:
 
-* Hisingen Glass
+* Hisingen
 * Monochrome Precision
 * Heritage Blue
 * Nordic Night
 * Aurora Borealis
-* Swedish Gold
-* Cyan Racing
+* Charcoal Gold
+* Circuit Blue
 * Gothenburg Forest
 * Sand Dune
 
 Monochrome Precision and Heritage Blue are independent themes based on publicly documented
 design principles from Polestar and Volvo Cars. They don't imply affiliation or endorsement.
+
+**Your own theme.** *Create Theme* beside the theme grid asks for a name, an accent colour,
+and a light and a dark background. Hisingen keeps the backgrounds as backgrounds and moves the
+picked colours only as far as they need to go for text to clear a 4.5:1 contrast floor, then
+previews the result in both appearances before you save. The theme joins the grid and can be
+chosen per brand and per vehicle like any shipped one. *Delete* on an existing theme returns
+anything that pointed at it to the default palette.
+
+### Controls on Now
+
+The cards under the car on Now are yours to choose. **Settings → Appearance → Controls on
+Now** switches each one on or off: Locks, Climate, Charging, Air Cleaning, Windows, Honk &
+Flash, and Tailgate. Locks, Climate and Charging are on by default. A chosen card draws only
+when its remote feature is switched on and the car reports the capability, except that Locks
+and Climate keep showing their state with remote commands off, and Charging shows its state on
+any car with electric range. The grid closes up around whatever draws: three cards sit across,
+four arrange as two by two, and accessibility text sizes stack them in one column.
+
 
 ### Tabs & Cards
 
@@ -1133,11 +1156,11 @@ starting layout, so a card that was already off does not reappear.
 **Tabs of your own.** *New tab* in the same pane creates a tab, names it and gives it an
 icon; *Add Cards…* places anything you want on it, from any of the shipped tabs. Cards
 are drawn by the same views the shipped tabs use, so the charging card behaves the same
-whether it is on Vehicle or on a tab you built. Cards that own a tab's own state — the
-History charts and the Info section bars — stay on the tab that gives them that state,
+whether it is on Now or on a tab you built. Cards that own a tab's own state — the
+Log charts and the Car section bars — stay on the tab that gives them that state,
 and the pane names them rather than leaving them out silently.
 
-Any of Vehicle, Info, History and Controls can also be hidden from the tab bar.
+Any of Now, Plan, Log and Car can also be hidden from the tab bar.
 Settings is always there: it is where the list is managed.
 
 **Tab order.** The tab bar draws your tabs in your order, not the order they were
@@ -1155,9 +1178,10 @@ Compact, Standard, Large (tall), Wide, and Grand (wide & tall). **Custom Size**
 enables independent width and height sliders. On Wide and Grand panels, mid-size
 cards flow two per row and the vehicle render grows to use the extra room.
 
-**Content Density** zooms everything inside the panel independently of its
-window size: Compact (85%) shows more content before scrolling, Relaxed (115%)
-enlarges text and controls. The right-click menu on the status icon offers both
+**Content Density** changes type size and spacing independently of the window size:
+Compact tightens both so more content fits before scrolling, and Relaxed enlarges
+both. It is a layout setting, not a zoom, so a text size chosen in System Settings
+still applies on top of it. The right-click menu on the status icon offers both
 settings for quick switching, every change applies live to an open panel, and
 the panel never grows taller than the screen it opens on. The floating charging
 panel follows the same density choice.
@@ -1206,9 +1230,9 @@ Everything Hisingen keeps lives on your Mac, in a local SQLite database plus the
 for credentials.
 
 * **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
-  The export menu on the History tab also offers a **Full Backup (JSON)**, and Settings can export
+  The export menu on the Log tab also offers a **Full Backup (JSON)**, and Settings can export
   your settings (see [Make it yours](#make-it-yours)).
-* **Handover pack.** **Info → Export Handover Pack…** writes a folder for a sale or trade: a
+* **Handover pack.** **Car → Export Handover Pack…** writes a folder for a sale or trade: a
   summary, charging and trip CSVs without locations, an optional VIN (a checkbox in the save
   panel) and a checklist of the steps that still happen in the manufacturer app or in the car.
 * **Erase.** **Settings → Privacy & Data → Erase This Vehicle’s Local Data** and **Erase All Local Vehicle Data**
@@ -1494,7 +1518,7 @@ A few things are worth keeping in mind:
 * Charging energy and cost are estimates.
 * Some Polestar fields are decoded from the app's published protobuf schema and captured frames,
   not from documentation. A few are unconfirmed, and anything Hisingen cannot name is kept as a
-  raw field you can inspect on the Info tab under Unwired Backend Fields.
+  raw field you can inspect on the Car tab under Unwired Backend Fields.
 * The Polestar Android app version Hisingen reports to the app-backend endpoint has to stay
   current, or that discovery source answers 426. Hisingen then stands down for a day and falls
   back to the main discovery source.

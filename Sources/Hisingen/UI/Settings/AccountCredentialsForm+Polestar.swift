@@ -105,9 +105,11 @@ extension AccountCredentialsForm {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(
-                option.isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.035),
-                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .background(HisingenTheme.canvas)
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .strokeBorder(option.isSelected ? HisingenTheme.ink : HisingenTheme.hairline,
+                                  lineWidth: option.isSelected ? 2 : 1)
             )
             .contentShape(Rectangle())
         }
@@ -146,7 +148,8 @@ extension AccountCredentialsForm {
             .controlSize(.mini)
         }
         .padding(8)
-        .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.leading, 2)
+        .hisNotice(HisingenTheme.semanticGood)
     }
 
     private var polestarIDUnauthenticatedBanner: some View {
@@ -174,10 +177,10 @@ extension AccountCredentialsForm {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.hisProminent)
-            .controlSize(.small)
+            .controlSize(.regular)
+            .padding(.top, 4)
         }
-        .padding(8)
-        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.vertical, 4)
     }
 
     private var polestarDataPortalStatusBanner: some View {
@@ -190,7 +193,8 @@ extension AccountCredentialsForm {
             Spacer()
         }
         .padding(8)
-        .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.leading, 2)
+        .hisNotice(HisingenTheme.semanticGood)
     }
 
     private var polestarIDSection: some View {
@@ -268,9 +272,9 @@ extension AccountCredentialsForm {
             }
         }
         .padding(8)
-        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .background(HisingenTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 0)
                 .stroke(HisingenTheme.accent.opacity(0.3), lineWidth: 0.5)
         )
         .transition(.opacity)
@@ -458,10 +462,10 @@ extension AccountCredentialsForm {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             (test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical).opacity(0.08),
-            in: RoundedRectangle(cornerRadius: 6)
+            in: RoundedRectangle(cornerRadius: 0)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 0)
                 .stroke(
                     (test.success ? HisingenTheme.semanticGood : HisingenTheme.semanticCritical).opacity(0.25),
                     lineWidth: 0.5

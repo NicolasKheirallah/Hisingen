@@ -71,19 +71,7 @@ extension ChargingSessionLedger {
         return (try? sql.query(sql: query) { stmt in
             try stmt.bindText(vin, at: 1)
             try stmt.bindInt64(Int64(limit), at: 2)
-        } process: { stmt -> [HistoricalChargingSession] in
-            var list: [HistoricalChargingSession] = []
-            while try stmt.stepOrThrow() {
-                guard let session = Self.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
-                                                    endSoc: stmt.columnDouble(at: 5),
-                                                    energy: stmt.columnDouble(at: 6),
-                                                    peak: stmt.columnDouble(at: 7),
-                                                    average: stmt.columnDouble(at: 8),
-                                                    location: stmt.columnText(at: 9)) else { continue }
-                list.append(session)
-            }
-            return list
-        }) ?? []
+        } process: { try Self.sessionRows($0) }) ?? []
     }
 
     func updateSpotEstimatedCost(id: String, cost: Double) {

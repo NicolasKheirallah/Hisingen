@@ -29,6 +29,7 @@ struct VehicleActivityTests {
         let now = Date()
         var current = state(at: now)
         current.energy.chargingState = .charging
+        current.energy.connection = .connected
         current.freshness.readingDates = [.battery: now, .charging: now]
         current.energy.estimatedTimeToTargetMinutes = 20
         current.energy.estimatedTimeToFullMinutes = 90

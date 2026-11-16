@@ -7,9 +7,13 @@ extension InfoTabView {
     var readingFreshnessCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "clock", title: L10n.text("Reading Freshness"), color: .secondary)
-                Text(L10n.text("Vehicle timestamps are separate from when Hisingen refreshed. A missing timestamp cannot confirm a current reading."))
-                    .hisType(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    CardHeader(symbol: "clock", title: L10n.text("Reading Freshness"), color: .secondary)
+                    InformationButton(
+                        message: L10n.text("Vehicle timestamps are separate from when Hisingen refreshed. A missing timestamp cannot confirm a current reading."),
+                        subject: L10n.text("Reading Freshness")
+                    )
+                }
                 ForEach(VehicleReading.allCases, id: \.self) { reading in
                     if let date = state.reportedDate(for: reading) {
                         KVRow(reading.title,
@@ -18,9 +22,6 @@ extension InfoTabView {
                               symbol: "clock",
                               valueWarning: Self.readingLags(reading, in: state))
                     }
-                }
-                if VehicleReading.allCases.allSatisfy({ state.reportedDate(for: $0) == nil }) {
-                    Text(L10n.text("No vehicle timestamps reported.")).hisType(.caption).foregroundStyle(.secondary)
                 }
             }
         }

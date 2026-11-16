@@ -69,6 +69,14 @@ struct Palette: Sendable {
         )
     }
 
+    // The vehicle render sits on a matte field set apart from the readings and commands.
+    var studioFill: Color {
+        Color(
+            light: Self.surface(canvasLightRGB, lift: 0, sink: 0.063),
+            dark: Self.surface(canvasDarkRGB, lift: 0.10, sink: 0)
+        )
+    }
+
     /// A canvas component lifted `lift` of the way to white, then sunk `sink` of the way to black.
     private static func surface(
         _ c: (r: Double, g: Double, b: Double),
@@ -81,6 +89,26 @@ struct Palette: Sendable {
         }
         return NSColor(srgbRed: channel(c.r), green: channel(c.g), blue: channel(c.b), alpha: 1)
     }
+
+    /// The fill of anything live: an active control card and the charge line while charging. It is
+    /// the theme's accent, so a running climate session or a charge reads in the colour the reader
+    /// chose. Monochrome Precision's accent is ink, which would make an active card look like a
+    /// pressed key, so that theme uses a warm amber instead.
+    var activeFill: Color {
+        theme == .polestar ? Self.polestarActive : accent
+    }
+
+    /// Text and symbols on ``activeFill``. Black on the amber measures 5.6:1 (light) and 10:1
+    /// (dark). Every other theme writes in its canvas colour, the pairing the primary button uses:
+    /// the contrast gate holds each accent to 4.5:1 against its canvas, and contrast is symmetric.
+    var activeOn: Color {
+        theme == .polestar ? Color.black : canvas
+    }
+
+    static let polestarActive = Color(
+        light: NSColor(red: 0.7098, green: 0.4667, blue: 0.0588, alpha: 1),
+        dark: NSColor(red: 0.9098, green: 0.6627, blue: 0.2275, alpha: 1)
+    )
 
     /// Fill style for a surface in an interactive state.
     ///
@@ -118,46 +146,48 @@ struct Palette: Sendable {
 // MARK: - Per-Theme Definitions
 
 extension Palette {
-    /// Sodium, the default identity (2026-11-16 redesign): a frosted day surface, a slate night
-    /// surface, and the warm amber of a Swedish winter streetlight as the one signal colour. The
-    /// light accent is deepened to hold 4.5:1 as text on the frost; the dark accent is the lamp
-    /// itself. Surfaces are opaque, so these values are what the reader actually sees.
+    /// The default instrument uses neutral grey in both appearances and a functional orange.
+    /// The lighter appearance needs a deeper signal colour where it also carries small text.
     static let hisingen = Palette(
         theme: .hisingen,
-        name: L10n.text("Sodium"),
-        subtitle: L10n.text("Frosted surfaces, slate nights, streetlight amber"),
+        name: L10n.text("Hisingen"),
+        subtitle: L10n.text("Monochrome panels, high-contrast type, Scandinavian minimalism"),
         category: .brand,
-        accentHex: "#E8B066",
-        swatches: ["#E8B066", "#F0F2F1", "#121519"],
-        canvas: Color(light: NSColor(red: 0.941, green: 0.949, blue: 0.945, alpha: 1), dark: NSColor(red: 0.071, green: 0.082, blue: 0.098, alpha: 1)),
-        ink: Color(light: NSColor(red: 0.15, green: 0.17, blue: 0.19, alpha: 1), dark: NSColor(red: 0.85, green: 0.86, blue: 0.87, alpha: 1)),
-        inkMuted: Color(light: NSColor(red: 0.31, green: 0.34, blue: 0.36, alpha: 1), dark: NSColor(red: 0.66, green: 0.69, blue: 0.72, alpha: 1)),
-        hairline: Color(light: NSColor(white: 0.0, alpha: 0.10), dark: NSColor(white: 1.0, alpha: 0.12)),
-        accent: Color(light: NSColor(red: 0.5200, green: 0.2750, blue: 0.0300, alpha: 1), dark: NSColor(red: 0.9400, green: 0.7200, blue: 0.4300, alpha: 1)),
+        accentHex: "#FFAA7A",
+        swatches: ["#FFAA7A", "#F7F7F7", "#151515"],
+        canvas: Color(light: NSColor(red: 0.969, green: 0.969, blue: 0.969, alpha: 1), dark: NSColor(red: 0.082, green: 0.082, blue: 0.082, alpha: 1)),
+        ink: Color(light: NSColor(red: 0.075, green: 0.075, blue: 0.075, alpha: 1), dark: NSColor(red: 0.93, green: 0.93, blue: 0.93, alpha: 1)),
+        inkMuted: Color(light: NSColor(red: 0.33, green: 0.33, blue: 0.33, alpha: 1), dark: NSColor(red: 0.69, green: 0.69, blue: 0.69, alpha: 1)),
+        hairline: Color(light: NSColor(white: 0.0, alpha: 0.16), dark: NSColor(white: 1.0, alpha: 0.18)),
+        accent: Color(light: NSColor(red: 0.64, green: 0.225, blue: 0.040, alpha: 1), dark: NSColor(red: 1.0, green: 0.667, blue: 0.478, alpha: 1)),
         accentOn: Color(light: .white, dark: .black),
         chartPositive: chartPos, chartInfo: chartInf, chartAttention: chartAtt, chartHealth: chartHlt,
-        canvasLightRGB: (0.941, 0.949, 0.945), canvasDarkRGB: (0.071, 0.082, 0.098),
-        inkLightRGB: (0.15, 0.17, 0.19), inkDarkRGB: (0.85, 0.86, 0.87),
-        inkMutedLightRGB: (0.31, 0.34, 0.36), inkMutedDarkRGB: (0.66, 0.69, 0.72)
+        canvasLightRGB: (0.969, 0.969, 0.969), canvasDarkRGB: (0.082, 0.082, 0.082),
+        inkLightRGB: (0.075, 0.075, 0.075), inkDarkRGB: (0.93, 0.93, 0.93),
+        inkMutedLightRGB: (0.33, 0.33, 0.33), inkMutedDarkRGB: (0.69, 0.69, 0.69)
     )
 
+    /// Polestar's own surfaces, as polestar.com renders them: white and black, a #666 secondary,
+    /// a #E5E5E5 hairline and a #EFEFEF studio stage. Black carries selection, the charge fill and
+    /// the primary action, so the screen stays monochrome. Gold is reserved for live state (see
+    /// ``HisingenTheme/liveSignal``); it is never a decoration.
     static let polestar = Palette(
         theme: .polestar,
         name: L10n.text("Monochrome Precision"),
         subtitle: L10n.text("Monochrome panels, high-contrast type, Scandinavian minimalism"),
         category: .brand,
-        accentHex: "#E56E23",
-        swatches: ["#E56E23", "#FFFFFF", "#141416"],
-        canvas: Color(light: NSColor(red: 0.94, green: 0.95, blue: 0.96, alpha: 1), dark: NSColor(red: 0.04, green: 0.04, blue: 0.05, alpha: 1)),
-        ink: Color(light: NSColor(red: 0.05, green: 0.05, blue: 0.06, alpha: 1), dark: NSColor(red: 0.96, green: 0.96, blue: 0.98, alpha: 1)),
-        inkMuted: Color(light: NSColor(red: 0.31, green: 0.31, blue: 0.34, alpha: 1), dark: NSColor(red: 0.65, green: 0.65, blue: 0.70, alpha: 1)),
-        hairline: Color(light: NSColor(red: 0.85, green: 0.86, blue: 0.88, alpha: 1), dark: NSColor(red: 0.18, green: 0.18, blue: 0.22, alpha: 1)),
-        accent: Color(light: NSColor(red: 0.6066, green: 0.2898, blue: 0.0944, alpha: 1), dark: NSColor(red: 1.0000, green: 0.6338, blue: 0.3950, alpha: 1)),
-        accentOn: .white,
-        chartPositive: chartPos, chartInfo: chartInf, chartAttention: chartAtt, chartHealth: chartHlt,
-        canvasLightRGB: (0.94, 0.95, 0.96), canvasDarkRGB: (0.04, 0.04, 0.05),
-        inkLightRGB: (0.05, 0.05, 0.06), inkDarkRGB: (0.96, 0.96, 0.98),
-        inkMutedLightRGB: (0.31, 0.31, 0.34), inkMutedDarkRGB: (0.65, 0.65, 0.70)
+        accentHex: "#000000",
+        swatches: ["#FFFFFF", "#EFEFEF", "#000000"],
+        canvas: Color(light: NSColor(white: 1.0, alpha: 1), dark: NSColor(white: 0.0, alpha: 1)),
+        ink: Color(light: NSColor(white: 0.0, alpha: 1), dark: NSColor(white: 1.0, alpha: 1)),
+        inkMuted: Color(light: NSColor(white: 0.40, alpha: 1), dark: NSColor(white: 0.62, alpha: 1)),
+        hairline: Color(light: NSColor(white: 0.0, alpha: 0.12), dark: NSColor(white: 1.0, alpha: 0.16)),
+        accent: Color(light: NSColor(white: 0.0, alpha: 1), dark: NSColor(white: 1.0, alpha: 1)),
+        accentOn: Color(light: .white, dark: .black),
+        chartPositive: monoPos, chartInfo: monoInf, chartAttention: monoAtt, chartHealth: monoHlt,
+        canvasLightRGB: (1.0, 1.0, 1.0), canvasDarkRGB: (0.0, 0.0, 0.0),
+        inkLightRGB: (0.0, 0.0, 0.0), inkDarkRGB: (1.0, 1.0, 1.0),
+        inkMutedLightRGB: (0.40, 0.40, 0.40), inkMutedDarkRGB: (0.62, 0.62, 0.62)
     )
 
     static let volvo = Palette(
@@ -217,10 +247,10 @@ extension Palette {
         inkMutedLightRGB: (0.06, 0.45, 0.32), inkMutedDarkRGB: (0.28, 0.82, 0.60)
     )
 
-    static let swedishGold = Palette(
-        theme: .swedishGold,
-        name: L10n.text("Swedish Gold"),
-        subtitle: L10n.text("Polestar BST Öhlins Swedish Gold, dark charcoal luxury"),
+    static let charcoalGold = Palette(
+        theme: .charcoalGold,
+        name: L10n.text("Charcoal Gold"),
+        subtitle: L10n.text("Dark charcoal surfaces with a gold accent"),
         category: .sport,
         accentHex: "#D4AF37",
         swatches: ["#D4AF37", "#E5A93C", "#1E1E24"],
@@ -236,10 +266,10 @@ extension Palette {
         inkMutedLightRGB: (0.48, 0.36, 0.10), inkMutedDarkRGB: (0.90, 0.82, 0.55)
     )
 
-    static let cyanRacing = Palette(
-        theme: .cyanRacing,
-        name: L10n.text("Cyan Racing"),
-        subtitle: L10n.text("Cyan Racing championship blue, crisp track geometry"),
+    static let circuitBlue = Palette(
+        theme: .circuitBlue,
+        name: L10n.text("Circuit Blue"),
+        subtitle: L10n.text("Championship blue, crisp track geometry"),
         category: .sport,
         accentHex: "#0090D0",
         swatches: ["#0090D0", "#00B4D8", "#0A0F1A"],
@@ -301,6 +331,13 @@ extension Palette {
     // times brighter than the other. The palette keeps the blue mid-bright and pushes the amber
     // toward white, which is the only pairing that satisfies both. The light variants are
     // unchanged. Re-run `Scripts/verify-app-contrast.py` before touching any of these.
+    // Polestar charts: ink for the primary series, greys for supporting ones, and a deep gold for
+    // the series that marks attention. Ink and that gold clear 3:1 against each other (5.6:1 on
+    // black ink, 3.7:1 on white ink) and against the card in both appearances.
+    private static let monoPos = Color(light: NSColor(red: 0.4196, green: 0.4196, blue: 0.4196, alpha: 1), dark: NSColor(red: 0.6392, green: 0.6392, blue: 0.6392, alpha: 1))
+    private static let monoInf = Color(light: NSColor(red: 0.0000, green: 0.0000, blue: 0.0000, alpha: 1), dark: NSColor(red: 1.0000, green: 1.0000, blue: 1.0000, alpha: 1))
+    private static let monoAtt = Color(light: NSColor(red: 0.7098, green: 0.4667, blue: 0.0588, alpha: 1), dark: NSColor(red: 0.7098, green: 0.4667, blue: 0.0588, alpha: 1))
+    private static let monoHlt = Color(light: NSColor(red: 0.5412, green: 0.5412, blue: 0.5412, alpha: 1), dark: NSColor(red: 0.4784, green: 0.4784, blue: 0.4784, alpha: 1))
     private static let chartPos = Color(light: NSColor(red: 0.0824, green: 0.5569, blue: 0.2824, alpha: 1), dark: NSColor(red: 0.2157, green: 0.7216, blue: 0.3843, alpha: 1))
     private static let chartInf = Color(light: NSColor(red: 0.0235, green: 0.1961, blue: 0.4392, alpha: 1), dark: NSColor(red: 0.2800, green: 0.5400, blue: 0.9200, alpha: 1))
     private static let chartAtt = Color(light: NSColor(red: 0.8392, green: 0.4118, blue: 0.0431, alpha: 1), dark: NSColor(red: 1.0000, green: 0.9800, blue: 0.5500, alpha: 1))
@@ -318,10 +355,15 @@ extension HisingenTheme {
         case .volvo: return .volvo
         case .nordicNight: return .nordicNight
         case .aurora: return .aurora
-        case .swedishGold: return .swedishGold
-        case .cyanRacing: return .cyanRacing
+        case .charcoalGold: return .charcoalGold
+        case .circuitBlue: return .circuitBlue
         case .forest: return .forest
         case .sandDune: return .sandDune
+        case .custom(let id):
+            // A deleted theme can still be named by an old vehicle mapping; it reads as the
+            // default palette until the reader picks another.
+            guard let definition = CustomThemeStore.definition(id: id) else { return .hisingen }
+            return CustomThemeStore.palette(for: definition)
         }
     }
 }

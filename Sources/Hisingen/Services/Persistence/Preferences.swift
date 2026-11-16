@@ -131,11 +131,10 @@ enum PanelSize: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// Independent content-zoom for inside the menu bar dropdown, separate from the
-/// window's PanelSize preset. Values below 1 lay the view tree out larger and then
-/// scale it down, so a fixed panel shows more rows before scrolling; values above
-/// 1 do the opposite. Applied in HisingenContentView via an inverse-layout
-/// scaleEffect wrapper.
+/// Content sizing inside the menu bar dropdown, separate from the window's PanelSize preset.
+/// It changes the type ramp and the section and card spacing, never a transform over the tree:
+/// a smaller type size plus tighter spacing is what fits more rows before scrolling, and the
+/// reader's text-size setting still applies on top of it.
 enum ContentDensity: String, CaseIterable, Codable, Sendable {
     case compact
     case standard
@@ -143,9 +142,9 @@ enum ContentDensity: String, CaseIterable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .compact: return L10n.text("Compact (85%)")
-        case .standard: return L10n.text("Standard (100%)")
-        case .relaxed: return L10n.text("Relaxed (115%)")
+        case .compact: return L10n.text("Compact")
+        case .standard: return L10n.text("Standard")
+        case .relaxed: return L10n.text("Relaxed")
         }
     }
 
@@ -184,15 +183,6 @@ enum ContentDensity: String, CaseIterable, Codable, Sendable {
         case .compact: return 0.82
         case .standard: return 1.0
         case .relaxed: return 1.18
-        }
-    }
-
-    /// The old raster factor, kept only so the preset can still describe itself as a percentage.
-    var scale: CGFloat {
-        switch self {
-        case .compact: return 0.85
-        case .standard: return 1.0
-        case .relaxed: return 1.15
         }
     }
 }
@@ -325,6 +315,38 @@ enum NowReadingsPosition: String, CaseIterable, Sendable {
     }
 }
 
+/// A control card the reader can place under the car on Now. Each one still needs its remote
+/// feature switched on, and a vehicle that reports the capability, before it draws.
+enum NowQuickControl: String, CaseIterable, Sendable {
+    case locks, climate, charging, airCleaning, windows, locate, tailgate
+
+    static let defaults: [NowQuickControl] = [.locks, .climate, .charging]
+
+    var title: String {
+        switch self {
+        case .locks: return L10n.text("Locks")
+        case .climate: return L10n.text("Climate")
+        case .charging: return L10n.text("Charging")
+        case .airCleaning: return L10n.text("Air Cleaning")
+        case .windows: return L10n.text("Windows")
+        case .locate: return L10n.text("Honk & Flash")
+        case .tailgate: return L10n.text("Tailgate")
+        }
+    }
+
+    /// The feature switch the control's commands belong to.
+    var feature: AppFeature {
+        switch self {
+        case .locks, .tailgate: return .remoteLocks
+        case .climate: return .remoteClimate
+        case .charging: return .remoteCharging
+        case .airCleaning: return .remotePreCleaning
+        case .windows: return .remoteWindows
+        case .locate: return .remoteHonkFlash
+        }
+    }
+}
+
 enum NowFirstReading: String, CaseIterable, Sendable {
     case battery, range
 
@@ -438,9 +460,11 @@ enum ThemeCategory: String, CaseIterable, Sendable {
     case dark = "dark"
     case sport = "sport"
     case nature = "nature"
+    case custom = "custom"
 
     var title: String {
         switch self {
+        case .custom: return L10n.text("Custom")
         case .all: return L10n.text("All")
         case .brand: return L10n.text("Brand")
         case .dark: return L10n.text("OLED & Dark")
@@ -450,16 +474,85 @@ enum ThemeCategory: String, CaseIterable, Sendable {
     }
 }
 
-enum AppTheme: String, CaseIterable, Codable, Sendable {
+/// A theme: one of the shipped palettes, or one the reader made.
+///
+/// Stored everywhere by `rawValue` (`app_theme`, `theme_for_<brand>`, `vehicle_themes_v1`), so a
+/// reader's own theme rides the same per-vehicle and per-brand paths as a shipped one. Its raw
+/// value is `custom:<id>`, the id of a ``CustomThemeDefinition``.
+enum AppTheme: Hashable, Sendable, RawRepresentable, CaseIterable, Codable {
     case hisingen
     case polestar
     case volvo
     case nordicNight
     case aurora
-    case swedishGold
-    case cyanRacing
+    case charcoalGold
+    case circuitBlue
     case forest
     case sandDune
+    case custom(String)
+
+    static let customPrefix = "custom:"
+
+    /// The shipped palettes, in their designed order. Reader-made themes come from
+    /// ``CustomThemeStore``.
+    static let allCases: [AppTheme] = [
+        .hisingen, .polestar, .volvo, .nordicNight, .aurora, .charcoalGold, .circuitBlue, .forest, .sandDune
+    ]
+
+    init?(rawValue: String) {
+        if rawValue.hasPrefix(Self.customPrefix) {
+            let id = String(rawValue.dropFirst(Self.customPrefix.count))
+            guard !id.isEmpty else { return nil }
+            self = .custom(id)
+            return
+        }
+        switch rawValue {
+        case "hisingen": self = .hisingen
+        case "polestar": self = .polestar
+        case "volvo": self = .volvo
+        case "nordicNight": self = .nordicNight
+        case "aurora": self = .aurora
+        case "charcoalGold": self = .charcoalGold
+        case "circuitBlue": self = .circuitBlue
+        case "forest": self = .forest
+        case "sandDune": self = .sandDune
+        default: return nil
+        }
+    }
+
+    var rawValue: String {
+        switch self {
+        case .hisingen: return "hisingen"
+        case .polestar: return "polestar"
+        case .volvo: return "volvo"
+        case .nordicNight: return "nordicNight"
+        case .aurora: return "aurora"
+        case .charcoalGold: return "charcoalGold"
+        case .circuitBlue: return "circuitBlue"
+        case .forest: return "forest"
+        case .sandDune: return "sandDune"
+        case .custom(let id): return Self.customPrefix + id
+        }
+    }
+
+    var customID: String? {
+        if case .custom(let id) = self { return id }
+        return nil
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let theme = AppTheme(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                                                    debugDescription: "Unknown theme \(raw)"))
+        }
+        self = theme
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 
     var title: String { HisingenTheme.palette(for: self).name }
     var subtitle: String { HisingenTheme.palette(for: self).subtitle }

@@ -58,14 +58,14 @@ enum VehicleDashboardRows {
         let row: DashboardRow
         if openCount > 0 {
             row = DashboardRow(
-                symbol: "lock.open.fill",
+                symbol: "lock.open",
                 value: L10n.format("%d Open", openCount),
                 label: L10n.text("Doors & Openings"),
                 tint: HisingenTheme.semanticWarning
             )
         } else if let locked = ext.isLocked {
             row = DashboardRow(
-                symbol: locked ? "lock.fill" : "lock.open.fill",
+                symbol: locked ? "lock" : "lock.open",
                 value: locked ? L10n.text("Locked") : L10n.text("Unlocked"),
                 label: L10n.text("Doors & Openings"),
                 tint: locked ? HisingenTheme.semanticGood : HisingenTheme.inkMuted
@@ -87,7 +87,7 @@ enum VehicleDashboardRows {
         let value: String
         let tint: Color
         if let level {
-            symbol = "fuelpump.fill"
+            symbol = "fuelpump"
             // The fuel card warned below 12 %; the row keeps exactly that threshold.
             tint = level <= 12 ? HisingenTheme.semanticWarning : HisingenTheme.ink
             if let range = state.fuelSystem.rangeKm {
@@ -96,7 +96,7 @@ enum VehicleDashboardRows {
                 value = String(format: "%.0f%%", locale: L10n.displayLocale, level)
             }
         } else if let running {
-            symbol = "engine.combustion.fill"
+            symbol = "engine.combustion"
             value = running ? L10n.text("Running") : L10n.text("Stopped")
             tint = HisingenTheme.ink
         } else {
@@ -114,30 +114,42 @@ enum VehicleDashboardRows {
 }
 
 /// The collapsed-by-default charging-before-departure checker.
-private struct DepartureCheckDisclosure: View {
+struct DepartureCheckDisclosure: View {
     let state: VehicleState
-    @State private var departure = Date().addingTimeInterval(3600)
+    @State private var selectedDeparture: Date?
     @State private var expanded = false
 
     init(state: VehicleState) {
         self.state = state
     }
 
-    /// The date picker refuses any earlier date, so a panel left open past the chosen departure
-    /// would keep computing a verdict for a time that has already passed.
-    private var departureIsPast: Bool { departure < Date() }
+    private var scheduledDeparture: Date? {
+        PlanTimeline.entries(for: state).first { $0.schedule.kind == .departure }?.next
+    }
+
+    private var departure: Binding<Date> {
+        Binding(get: { selectedDeparture ?? scheduledDeparture ?? Date().addingTimeInterval(3600) },
+                set: { selectedDeparture = $0 })
+    }
 
     var body: some View {
+        let assessment = VehicleReadiness.assessDeparture(state, departure: departure.wrappedValue)
+        let showSummary = scheduledDeparture != nil || selectedDeparture != nil
+            || (state.energy.connection == .disconnected && state.hasFreshReading(.charging))
         DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 6) {
-                DatePicker(L10n.text("Departure"), selection: $departure, in: Date()...,
+                DatePicker(L10n.text("Departure"), selection: departure, in: Date()...,
                            displayedComponents: .hourAndMinute)
                     .datePickerStyle(.compact)
-                Text(departureIsPast
-                     ? L10n.text("That departure time has passed. Pick a new one to check readiness.")
-                     : VehicleReadiness.chargingByDeparture(state, departure: departure))
-                    .hisType(.caption).fixedSize(horizontal: false, vertical: true)
-                Text(state.chargingEstimateDestination).hisType(.micro).foregroundStyle(.secondary)
+                if let target = state.energy.targetPercentage {
+                    Text(L10n.format("Target %d%%", target)).hisType(.label)
+                }
+                if let destination = assessment.estimateDestination {
+                    Text(destination).hisType(.label).foregroundStyle(.secondary)
+                }
+                Text(assessment.message)
+                    .hisType(.body)
+                    .fixedSize(horizontal: false, vertical: true)
             }.padding(.top, 6)
         } label: {
             HStack(spacing: 10) {
@@ -146,9 +158,17 @@ private struct DepartureCheckDisclosure: View {
                     .foregroundStyle(HisingenTheme.inkMuted)
                     .frame(width: 20)
                     .accessibilityHidden(true)
-                Text(L10n.text("Check charging before departure"))
-                    .hisType(.subhead, weight: .semibold)
-                    .foregroundStyle(HisingenTheme.ink)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L10n.text("Check charging before departure"))
+                        .hisType(.subhead, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.ink)
+                    if showSummary && !expanded {
+                        Text(assessment.message)
+                            .hisType(.label)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Spacer()
             }
         }

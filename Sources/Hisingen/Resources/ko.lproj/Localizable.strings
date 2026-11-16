@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "현재 차량: %@. 차량을 전환하세요.";
 "Custom App" = "사용자 지정 앱";
 "Cut" = "잘라내기";
-"Cyan Racing" = "시안 레이싱 (Cyan Racing)";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing 챔피언십 블루와 날렵한 서킷 지오메트리";
+"Circuit Blue" = "서킷 블루 (Circuit Blue)";
+"Championship blue, crisp track geometry" = "챔피언십 블루와 날렵한 서킷 지오메트리";
 "Daily" = "일상 주행";
 "Danish" = "덴마크어";
 "Dark" = "다크";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "플러그인 하이브리드 (PHEV)";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar 어시스턴스";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST 올린즈 스웨디시 골드와 다크 차콜 럭셔리";
+"Dark charcoal surfaces with a gold accent" = "다크 차콜 표면과 골드 포인트";
 "Polestar ID (Email)" = "Polestar ID(이메일)";
 "Polestar ID Password Required" = "Polestar ID 비밀번호 필요";
 "Polestar ID Required" = "Polestar ID 필요";
@@ -994,7 +994,7 @@
 "Sunroof" = "선루프";
 "Supported" = "지원됨";
 "Swedish" = "스웨덴어";
-"Swedish Gold" = "스웨디시 골드 (Swedish Gold)";
+"Charcoal Gold" = "차콜 골드 (Charcoal Gold)";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "스웨덴 소나무와 유칼립투스 어스 톤의 편안한 유기적 감성";
 "Switch Vehicle" = "차량 전환";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "차량 전환 (⌃⌥[ / ⌃⌥])";
@@ -1694,16 +1694,14 @@
 "Everything looks good" = "모든 것이 정상입니다";
 
 /* Text size & density options */
-"Compact (85%)" = "컴팩트(85%)";
-"Standard (100%)" = "표준(100%)";
-"Relaxed (115%)" = "여유(115%)";
+"Relaxed" = "여유";
 "Smallest text, most content per screen" = "가장 작은 텍스트, 화면당 최대 콘텐츠";
 "Default sizing" = "기본 크기";
 "Larger text and controls" = "더 큰 텍스트 및 컨트롤";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "콘텐츠 밀도";
-"Zoom content independently of panel size: compact shows more before scrolling" = "패널 크기와 별개로 콘텐츠 크기를 조절합니다 – 컴팩트는 스크롤 전에 더 많은 내용을 표시합니다";
+"Type size and spacing, independently of the panel size" = "패널 크기와 별도로 텍스트 크기와 간격을 조정합니다";
 "Custom Size" = "사용자 지정 크기";
 "Independent width and height overrides" = "독립적인 너비와 높이";
 "Width" = "너비";
@@ -2802,6 +2800,7 @@
 "History" = "기록";
 "Info" = "정보";
 "Info section category" = "정보 섹션 분류";
+"History section category" = "기록 섹션 분류";
 "Instantaneous drivetrain output power ceiling." = "구동계의 순간 출력 상한입니다.";
 "Interactive Verification Required" = "대화형 인증 필요";
 "Interior view of the vehicle" = "차량 실내 보기";
@@ -3283,3 +3282,13 @@
 "Battery at the start and end of each charge." = "각 충전 시작 및 종료 시의 배터리 잔량입니다.";
 "No complete charge readings in this period." = "이 기간에는 완전한 충전 측정값이 없습니다.";
 "Enable remote controls in Settings → Features." = "설정 → 기능에서 원격 제어를 켜세요.";
+"Windows" = "창문";
+"Controls on Now" = "지금 화면의 제어";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "차량 아래에 표시할 제어 카드를 선택하세요. 각 카드는 해당 원격 기능이 켜져 있어야 합니다.";
+"Create Theme" = "테마 만들기";
+"Edit Theme" = "테마 편집";
+"Accent" = "강조 색상";
+"Light Background" = "밝은 배경";
+"Dark Background" = "어두운 배경";
+"My Theme" = "내 테마";
+"Your colours, adjusted to stay readable in light and dark." = "밝은 모드와 어두운 모드에서 읽기 쉽도록 조정된 내 색상입니다.";

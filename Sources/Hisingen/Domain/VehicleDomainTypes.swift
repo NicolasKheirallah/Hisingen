@@ -1403,6 +1403,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
     /// Market-price cost from recorded samples against hourly spot prices, when coverage
     /// allows. Distinct from `cost`, which uses the user's flat day/night tariff.
     var spotCost: Double? = nil
+    /// What the home charger metered, when a paired charger recorded this session. Kept apart
+    /// from `kwhDelivered`, which is the battery-side estimate.
+    var wallbox: WallboxMeasurement? = nil
 
     init(
         id: UUID, vin: String, startDate: Date, endDate: Date,
@@ -1414,7 +1417,8 @@ struct ChargingSession: Codable, Equatable, Sendable {
         sampleCoverage: Double? = nil, tariffPricePerKwh: Double? = nil,
         currencySymbol: String? = nil,
         completionReason: ChargingSessionCompletionReason? = nil,
-        summaryVersion: Int = 1, spotCost: Double? = nil
+        summaryVersion: Int = 1, spotCost: Double? = nil,
+        wallbox: WallboxMeasurement? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -1435,13 +1439,14 @@ struct ChargingSession: Codable, Equatable, Sendable {
         self.completionReason = completionReason
         self.summaryVersion = summaryVersion
         self.spotCost = spotCost
+        self.wallbox = wallbox
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, vin, startDate, endDate, startBatteryPercentage, endBatteryPercentage
         case kwhDelivered, peakPowerWatts, cost, targetPercentage, samples
         case energySource, confidence, sampleCoverage, tariffPricePerKwh, currencySymbol
-        case completionReason, summaryVersion, spotCost
+        case completionReason, summaryVersion, spotCost, wallbox
     }
 
 
@@ -1466,9 +1471,14 @@ struct ChargingSession: Codable, Equatable, Sendable {
             currencySymbol: try c.decodeIfPresent(String.self, forKey: .currencySymbol),
             completionReason: try c.decodeIfPresent(ChargingSessionCompletionReason.self, forKey: .completionReason),
             summaryVersion: try c.decodeIfPresent(Int.self, forKey: .summaryVersion) ?? 1,
-            spotCost: try c.decodeIfPresent(Double.self, forKey: .spotCost)
+            spotCost: try c.decodeIfPresent(Double.self, forKey: .spotCost),
+            wallbox: try c.decodeIfPresent(WallboxMeasurement.self, forKey: .wallbox)
         )
     }
+
+    /// False for a session the charger recorded while no battery reading was available; the
+    /// battery percentages then carry a placeholder and must not be shown.
+    var hasBatteryReading: Bool { startBatteryPercentage >= 0 }
 
     var durationMinutes: Int {
         Int(max(0, endDate.timeIntervalSince(startDate)) / 60)

@@ -59,7 +59,7 @@ extension HisingenTheme {
     ///
     /// A banner is a slight concentric inset of the section carrying it, which is why it is 10
     /// rather than the card's 12.
-    static var bannerRadius: CGFloat { 10 }
+    static var bannerRadius: CGFloat { 0 }
 
     /// A compact, neutral marker for keyboard focus on custom pressable buttons.
     /// It deliberately uses the foreground ink instead of the theme accent so focus never becomes
@@ -76,7 +76,7 @@ extension HisingenTheme {
     /// ``StateSummaryChip`` render side by side in the vehicle hero. One value now, and a low one:
     /// a chip is far smaller than its section, so a literal concentric inset of the card's 12 would
     /// read as a rounded rectangle rather than a label.
-    static var statusChipRadius: CGFloat { 4 }
+    static var statusChipRadius: CGFloat { 0 }
 
     // MARK: - Popover Surface
 
@@ -129,7 +129,7 @@ extension HisingenTheme {
     /// Contrast drops the blur the panel becomes opaque, and the card is lifted toward white rather
     /// than being the canvas — so the panel has to go down for the card to separate at all. Using
     /// the theme canvas here, as an earlier comment claimed it did, would leave a light theme whose
-    /// canvas is already near-white (Swedish Gold, Sand Dune) with a card 2 % lighter than its own
+    /// canvas is already near-white (Charcoal Gold, Sand Dune) with a card 2 % lighter than its own
     /// panel.
     static var panelFill: Color {
         Color(
@@ -200,5 +200,32 @@ private struct FloatingGlassModifier<S: Shape>: ViewModifier {
         } else {
             content.background(.regularMaterial, in: shape)
         }
+    }
+}
+// MARK: - Notice surface
+
+/// A notice: the studio fill with a 2pt edge in the notice's colour, its text in ink. The edge
+/// carries the meaning, so the wash behind the words stays neutral and every text colour keeps
+/// its measured contrast. Under Increase Contrast the edge doubles.
+struct HisNoticeSurface: ViewModifier {
+    let tint: Color
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content
+            .background(HisingenTheme.palette.studioFill)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(tint)
+                    .frame(width: contrast == .increased ? 4 : 2)
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+extension View {
+    @MainActor
+    func hisNotice(_ tint: Color) -> some View {
+        modifier(HisNoticeSurface(tint: tint))
     }
 }

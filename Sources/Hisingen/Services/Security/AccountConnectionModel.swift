@@ -421,24 +421,6 @@ final class AccountConnectionModel: ObservableObject {
         return PolestarSaveOutcome(saved: true, keychainError: nil, effect: .credentialsChanged)
     }
 
-    /// Full removal used by sign-out and by clearing the form: Keychain + prefs +
-    /// suppression flag so built-ins cannot auto-restore. Idempotent.
-    func removePolestarCredentials() {
-        try? keychain.deletePassword()
-        try? keychain.deleteSessionToken()
-        try? keychain.deleteCommandSessionToken()
-        try? keychain.deletePolestarDataPortalCredentials()
-        try? keychain.deletePolestarDataPortalToken()
-        try? keychain.deleteEmail()
-        preferences.email = ""
-        preferences.setVin("", for: .polestar)
-        preferences.polestarDataPortalAccountID = ""
-        preferences.polestarDataPortalClientID = ""
-        preferences.setExplicitSignOut(for: .polestar)
-        draft.polestarPassword = ""
-        draft.polestarDataPortalClientSecret = ""
-    }
-
     // MARK: - Volvo sign-in handoff
 
     struct VolvoSignInRequest: Equatable {
@@ -473,16 +455,5 @@ final class AccountConnectionModel: ObservableObject {
         draft.volvoClientSecret = ""
         draft.volvoApiKey = ""
         return request
-    }
-
-    func removeVolvoCredentials() {
-        try? keychain.deleteVolvoSessionToken()
-        try? keychain.deleteVolvoClientSecret()
-        try? keychain.deleteVolvoApiKey()
-        preferences.volvoClientID = ""
-        preferences.setVin("", for: .volvo)
-        preferences.setExplicitSignOut(for: .volvo)
-        draft.volvoClientSecret = ""
-        draft.volvoApiKey = ""
     }
 }

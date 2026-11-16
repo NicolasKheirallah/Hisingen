@@ -46,7 +46,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image battery and range estimated range position relative to car first reading"
         case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels log observed changes rows per page"
         case .general: return "general display menu bar panel size density units language launch charging order"
-        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris"
+        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris home assistant nexblue tibber charger wallbox"
         case .features: return "feature capability vehicle data remote control remote commands lock climate charge schedule location weather authorize authorization"
         case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
         case .privacyData: return "privacy data database storage history retention export backup diagnostics location"
@@ -62,7 +62,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsNavigationBar: View {
-    @Environment(\.colorSchemeContrast) private var contrast
     @Binding var selection: SettingsSection
     @Binding var searchText: String
 
@@ -82,26 +81,22 @@ struct SettingsNavigationBar: View {
             // the shared indicator under it — because this row is the same kind of control, one
             // level down, and the accent-filled pill it used to wear was a second grammar.
             ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
+                ScrollView(.horizontal) {
                     HStack(spacing: 4) {
                         ForEach(SettingsSection.allCases) { section in
                             Button {
                                 selection = section
                             } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: section.symbol)
-                                        .hisType(.caption, weight: selection == section ? .semibold : .regular)
-                                    Text(section.title)
-                                        .hisType(.caption, weight: selection == section ? .semibold : .medium)
-                                        .lineLimit(1)
-                                        .fixedSize(horizontal: true, vertical: false)
-                                }
+                                Text(section.title)
+                                    .hisType(.body)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                 .foregroundStyle(selection == section ? HisingenTheme.ink : HisingenTheme.inkMuted)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 9)
                                 .contentShape(Rectangle())
-                                .background(alignment: .bottom) {
-                                    if selection == section { sectionIndicator }
+                                .overlay(alignment: .bottom) {
+                                    if selection == section { sectionIndicator.padding(.bottom, 3) }
                                 }
                             }
                             .buttonStyle(.pressable)
@@ -125,101 +120,54 @@ struct SettingsNavigationBar: View {
                 }
             }
 
-            searchField
+            SettingsSearchField(text: $searchText)
         }
     }
 
     /// The indicator the panel's tab bar draws, so a reader learns one mark for "you are here".
     private var sectionIndicator: some View {
-        Color.clear
-            .hisControlGlass(in: Capsule(), fallback: HisingenTheme.fill(.selected))
+        PanelDatum(color: HisingenTheme.accent)
             .matchedGeometryEffect(id: "settingsSectionIndicator", in: sectionIndicatorNamespace)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField(L10n.text("Search settings"), text: $searchText)
-                .textFieldStyle(.plain)
-                .accessibilityLabel(L10n.text("Search settings"))
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.pressable)
-                .help(L10n.text("Clear Search"))
-                .accessibilityLabel(L10n.text("Clear Search"))
-            }
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
-        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.045, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
-/// Stable desktop navigation for the award concept's Settings editor. Wide panels keep every
-/// destination visible, while the existing horizontal control remains the compact fallback.
 struct SettingsSidebar: View {
-    @Environment(\.colorSchemeContrast) private var contrast
     @Binding var selection: SettingsSection
     @Binding var searchText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.text("Settings"))
-                    .hisType(size: 28, weight: .bold)
+                    .hisType(.display)
+                    .accessibilityAddTraits(.isHeader)
                 Text(L10n.text("Changes save automatically"))
-                    .hisType(.micro, weight: .medium)
+                    .hisType(.label)
                     .foregroundStyle(HisingenTheme.inkMuted)
             }
 
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(L10n.text("Search settings"), text: $searchText)
-                    .textFieldStyle(.plain)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.pressable)
-                    .accessibilityLabel(L10n.text("Clear Search"))
-                }
-            }
-            .padding(.horizontal, 10)
-            .frame(minHeight: 38)
-            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.055, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            SettingsSearchField(text: $searchText)
 
             ScrollView(.vertical) {
                 VStack(spacing: 3) {
                     ForEach(SettingsSection.allCases) { section in
                         if searchText.isEmpty || section == .all || section.matches(searchText) {
                             Button { selection = section } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: section.symbol)
-                                        .frame(width: 18)
-                                        .accessibilityHidden(true)
+                                HStack(spacing: 0) {
                                     Text(section.title)
                                         .fixedSize(horizontal: false, vertical: true)
                                     Spacer(minLength: 0)
-                                    if selection == section {
-                                        Image(systemName: "checkmark")
-                                            .accessibilityHidden(true)
-                                    }
                                 }
-                                .hisType(.label, weight: selection == section ? .bold : .medium)
+                                .hisType(.subhead)
                                 .foregroundStyle(selection == section ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                                .padding(.horizontal, 10)
+                                .padding(.horizontal, 12)
                                 .padding(.vertical, 5)
-                                .frame(minHeight: 36)
-                                .background {
+                                .frame(minHeight: 34)
+                                // The panel's place mark, turned on its side for a vertical list.
+                                .overlay(alignment: .leading) {
                                     if selection == section {
-                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                            .fill(HisingenTheme.chipFill)
+                                        Rectangle().fill(HisingenTheme.ink).frame(width: 2)
+                                            .accessibilityHidden(true)
                                     }
                                 }
                                 .contentShape(Rectangle())
@@ -233,6 +181,43 @@ struct SettingsSidebar: View {
             }
         }
         .padding(22)
+    }
+}
+
+private struct SettingsSearchField: View {
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Binding var text: String
+
+    private var increasedContrast: Bool { contrast == .increased }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .accessibilityHidden(true)
+            TextField(L10n.text("Search settings"), text: $text)
+                .textFieldStyle(.plain)
+                .accessibilityLabel(L10n.text("Search settings"))
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(HisingenTheme.inkMuted)
+                }
+                .buttonStyle(.pressable)
+                .help(L10n.text("Clear Search"))
+                .accessibilityLabel(L10n.text("Clear Search"))
+            }
+        }
+        .hisType(.body)
+        .padding(.horizontal, 2)
+        .frame(minHeight: 34)
+        // polestar.com's input: no box, a 1pt rule underneath.
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(increasedContrast ? HisingenTheme.cardBoundaryIncreased : HisingenTheme.inkMuted)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+        }
     }
 }
 

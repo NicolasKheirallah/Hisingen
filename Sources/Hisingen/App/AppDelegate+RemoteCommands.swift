@@ -48,6 +48,7 @@ extension AppDelegate: CommandExecutionContext {
         message: String,
         success: Bool,
         target: RemoteCommandTarget?,
+        command: RemoteCommand,
         remedy: RemoteCommandRemedy?,
         followUp: RemoteCommandFollowUp?
     ) {
@@ -58,7 +59,8 @@ extension AppDelegate: CommandExecutionContext {
         // Inline banner in the Controls tab first – it is visible regardless of the system
         // notification permission – then the notification for when the panel is closed.
         lastRemoteCommandFeedback = RemoteCommandFeedback(
-            title: title, message: message, success: success, remedy: remedy, followUp: followUp)
+            title: title, message: message, success: success, remedy: remedy, followUp: followUp,
+            commandIdentifier: command.identifier, targetVIN: target?.vin ?? vehicleSession.latest?.identity.vin)
         render()
         resultPresenter.present(title: title, message: message, success: success, subtitle: subtitle)
     }

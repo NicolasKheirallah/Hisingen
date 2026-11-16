@@ -13,8 +13,8 @@ struct WelcomeSignInView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 18) {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
                 if let error, !error.isEmpty {
                     errorBanner(error)
@@ -33,21 +33,20 @@ struct WelcomeSignInView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 8) {
-            Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
-                .resizable()
-                .frame(width: 52, height: 52)
-                .padding(.top, 8)
-            Text(L10n.text("Welcome to Hisingen"))
-                .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
+        VStack(alignment: .leading, spacing: 9) {
+            Text(L10n.text("Hisingen"))
+                .hisType(.displayLarge)
                 .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
             Text(L10n.text("Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below."))
                 .hisType(.body)
                 .foregroundStyle(HisingenTheme.inkMuted)
-                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
+            PanelRule()
+                .padding(.top, 7)
         }
+        .padding(.horizontal, HisingenTheme.cardPadding)
+        .padding(.top, 24)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -62,7 +61,7 @@ struct WelcomeSignInView: View {
             Spacer(minLength: 0)
         }
         .padding(10)
-        .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

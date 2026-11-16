@@ -453,7 +453,7 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     private(set) var confirmationCount = 0
     private(set) var presentations: [(
         title: String, message: String, success: Bool, target: RemoteCommandTarget?,
-        remedy: RemoteCommandRemedy?
+        command: RemoteCommand, remedy: RemoteCommandRemedy?
     )] = []
     private let now: () -> Date
     /// The production receipt ledger, so filing (including the Remote Command target
@@ -521,9 +521,9 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
     func commandInProgressDidChange() {}
     func presentResult(
         title: String, message: String, success: Bool, target: RemoteCommandTarget?,
-        remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
+        command: RemoteCommand, remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
     ) {
-        presentations.append((title, message, success, target, remedy))
+        presentations.append((title, message, success, target, command, remedy))
     }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,

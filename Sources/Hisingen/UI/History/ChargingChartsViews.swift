@@ -445,7 +445,7 @@ struct ChargingCurveView: View {
                 }
             }
             .padding(9)
-            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 0))
         }
     }
 
@@ -511,7 +511,7 @@ struct ChargingCurveView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1.5)
-                    .background(HisingenTheme.chipFill, in: Capsule())
+                    .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                     // Live sessions project toward the target at the chart's right edge, right
                     // where this capsule sits, and the dashed line read through the label. A
                     // live curve spends its left half empty, so the capsule lives there while
@@ -700,8 +700,8 @@ struct ChargingCurveView: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(HisingenTheme.chipFill, in: Capsule())
-        .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+        .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
+        .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
         .shadow(color: HisingenTheme.shadowTint(0.18), radius: 3, y: 1)
         .position(
             x: min(max(info.point.x, 60), width - 60),

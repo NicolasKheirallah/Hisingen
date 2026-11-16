@@ -85,7 +85,7 @@ struct TabItemPickerSheet: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.04, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.04, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
 
             Picker("", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.title).tag($0) }
@@ -187,7 +187,7 @@ struct TabItemPickerSheet: View {
             .hisType(.nano, weight: .semibold)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
             .foregroundStyle(.secondary)
     }
 }

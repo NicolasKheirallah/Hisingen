@@ -36,6 +36,9 @@ final class ChargingPlannerController {
     private let latestState: () -> VehicleState?
     private let activeVINs: () -> [String]
     private let startCharging: (String) async -> RemoteCommandDispatchOutcome
+    /// True while Home Assistant runs a charging plan for the vehicle. The two planners must never
+    /// drive the same car, so everything that would notify or send a command waits for this to clear.
+    private let plannerOwnedByHomeAssistant: (String) -> Bool
     private let now: @Sendable () -> Date
 
     private let scheduler: AsyncTimerLoop
@@ -59,6 +62,7 @@ final class ChargingPlannerController {
         priceSource: (any ChargingPlannerPriceSource)? = nil,
         database: VehicleDatabase,
         latestState: @escaping () -> VehicleState?,
+        plannerOwnedByHomeAssistant: @escaping (String) -> Bool = { _ in false },
         activeVINs: @escaping () -> [String],
         startCharging: @escaping (String) async -> RemoteCommandDispatchOutcome,
         now: @escaping @Sendable () -> Date = { Date() },
@@ -71,6 +75,7 @@ final class ChargingPlannerController {
         self.latestState = latestState
         self.activeVINs = activeVINs
         self.startCharging = startCharging
+        self.plannerOwnedByHomeAssistant = plannerOwnedByHomeAssistant
         self.now = now
         self.scheduler = AsyncTimerLoop(wait: wait)
     }
@@ -136,6 +141,8 @@ final class ChargingPlannerController {
         backfillSpotCosts(prices: prices)
 
         guard let state = latestState() else { return }
+        // Home Assistant owns this car's charging: no window banner, no auto-start from here.
+        guard !plannerOwnedByHomeAssistant(state.identity.vin) else { return }
         let capacity = state.configuredCapacityReference(
             specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
         let energyKwh = ChargingPlannerSupport.neededEnergyKwh(
@@ -255,7 +262,8 @@ final class ChargingPlannerController {
         autoStartedWindowStarts[vin] = plan.start
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard self.isCurrent(generation, zone: zone, vin: vin), self.preferences.plannerAutoStartEnabled else {
+            guard self.isCurrent(generation, zone: zone, vin: vin), self.preferences.plannerAutoStartEnabled,
+                  !self.plannerOwnedByHomeAssistant(vin) else {
                 self.autoStartedWindowStarts[vin] = nil
                 return
             }

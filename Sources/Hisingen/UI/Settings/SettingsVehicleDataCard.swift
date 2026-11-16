@@ -108,7 +108,7 @@ struct SettingsVehicleDataCard: View {
                         }
                     }
                     .padding(8)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
                     .hisAnimation(Motion.layout, value: hasWarrantyInServiceDate)
                 }
 
@@ -171,7 +171,7 @@ struct SettingsVehicleDataCard: View {
                         }
                     }
                     .padding(8)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
                     // Both override texts feed the Reset button's visibility; keying
                     // on their emptiness animates its appear/disappear as one.
                     .animation(Motion.resolve(Motion.layout),
@@ -188,7 +188,7 @@ struct SettingsVehicleDataCard: View {
 
                 subsectionHeader("Charging & Energy")
                 VStack(spacing: 4) {
-                    row(.chargingDetails, symbol: "powerplug.fill", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
+                    row(.chargingDetails, symbol: "powerplug", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
                     row(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times", isSupported: !isVolvo, badgeText: isVolvo ? "Deprecated in API v2" : nil)
                     row(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Battery state, module health & energy usage")
                 }
@@ -208,8 +208,8 @@ struct SettingsVehicleDataCard: View {
 
                 subsectionHeader("Location & Weather")
                 VStack(spacing: 4) {
-                    row(.vehicleLocation, symbol: "location.fill", title: "Vehicle Location & Maps", detail: "Parking GPS coordinates and Apple Maps")
-                    row(.vehicleWeather, symbol: "cloud.sun.fill", title: "Vehicle Weather", detail: "Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo")
+                    row(.vehicleLocation, symbol: "location", title: "Vehicle Location & Maps", detail: "Parking GPS coordinates and Apple Maps")
+                    row(.vehicleWeather, symbol: "cloud.sun", title: "Vehicle Weather", detail: "Ambient weather at vehicle GPS location. Sends vehicle coordinates to Open-Meteo")
                 }
 
                 subsectionHeader("Advanced Diagnostics")
@@ -221,7 +221,7 @@ struct SettingsVehicleDataCard: View {
 
                 subsectionHeader("App Integration")
                 VStack(spacing: 4) {
-                    row(.multipleVehicles, symbol: "car.2.fill", title: "Vehicle Switcher", detail: "Show controls for moving between vehicles on the same account")
+                    row(.multipleVehicles, symbol: "car.2", title: "Vehicle Switcher", detail: "Show controls for moving between vehicles on the same account")
                     row(.updateChecks, symbol: "arrow.down.circle", title: "App Update Checks", detail: "Allow checks against Hisingen’s signed stable update feed")
                     row(.realTimeUpdates, symbol: "dot.radiowaves.left.and.right", title: "Real-Time Updates", detail: "Use live server streaming when supported, with polling as fallback", isSupported: !isVolvo, badgeText: isVolvo ? "Polling Only" : nil)
                 }

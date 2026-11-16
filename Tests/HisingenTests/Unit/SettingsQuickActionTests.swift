@@ -72,19 +72,26 @@ struct TypographyTokenTests {
     }
 
     @Test
-    func trackingReachesZeroWhereTheFaceIsAlreadyCorrect() {
-        // The hand-off to the display tiers: above 12pt the token must not fight them.
-        #expect(HisingenTheme.tracking(forSize: 12) == 0)
-        #expect(HisingenTheme.tracking(forSize: 13) == 0)
-        #expect(HisingenTheme.tracking(forSize: 40) == 0)
+    func runningTextTracksLikePolestarDotCom() {
+        // polestar.com sets 16pt running text at -0.3pt; the ratio keeps that relationship at
+        // every size from 11pt up, so 13pt body tightens by the same proportion.
+        #expect(abs(HisingenTheme.tracking(forSize: 16) - -0.304) < 0.001)
+        #expect(HisingenTheme.tracking(forSize: 13) < 0)
+        #expect(HisingenTheme.tracking(forSize: 11) < 0)
     }
 
     @Test
-    func trackingMatchesThePublishedSFTrackingTable() {
-        // Apple's SF Pro Text table: +0.24pt at 6pt, +0.12 at 9pt, 0 at 12pt.
-        #expect(abs(HisingenTheme.tracking(forSize: 6) - 0.24) < 0.001)
-        #expect(abs(HisingenTheme.tracking(forSize: 9) - 0.12) < 0.001)
-        #expect(abs(HisingenTheme.tracking(forSize: 9.5) - 0.10) < 0.001)
+    func smallTextGivesBackAir() {
+        // Below 11pt Helvetica Neue's counters close under negative tracking.
+        #expect(abs(HisingenTheme.tracking(forSize: 8) - 0.09) < 0.001)
+        #expect(abs(HisingenTheme.tracking(forSize: 10) - 0.03) < 0.001)
+    }
+
+    @Test
+    func displayTrackingIsTighterThanText() {
+        // 30pt headings at -1.2pt on polestar.com, about -0.04em.
+        #expect(HisingenTheme.displayTracking(forSize: 30) < HisingenTheme.tracking(forSize: 16))
+        #expect(abs(HisingenTheme.displayTracking(forSize: 30) - -1.08) < 0.001)
     }
 
     @Test
@@ -168,10 +175,10 @@ struct ContentDensityTests {
     }
 
     @Test
-    func thePresetStillDescribesItselfAsAPercentage() {
-        #expect(ContentDensity.compact.scale == 0.85)
-        #expect(ContentDensity.standard.scale == 1.0)
-        #expect(ContentDensity.relaxed.scale == 1.15)
+    func thePresetTypeScaleIsStable() {
+        #expect(ContentDensity.compact.typeScale == 0.92)
+        #expect(ContentDensity.standard.typeScale == 1.0)
+        #expect(ContentDensity.relaxed.typeScale == 1.12)
     }
 
     @Test
@@ -180,7 +187,6 @@ struct ContentDensityTests {
         let layout = PanelLayout.resolve(panelSizeRaw: PanelSize.standard.rawValue,
                                          densityRaw: ContentDensity.compact.rawValue,
                                          customEnabled: false, customWidth: 0, customHeight: 0)
-        #expect(layout.contentScale == 1)
         #expect(layout.logicalWidth == layout.width)
         // Use an injected visible frame: reading `layout.height` asks NSScreen for the
         // active display, which a package test runner has not initialized.

@@ -14,13 +14,13 @@ struct AccessControlsCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "lock.fill", title: L10n.text("Locks & Security"), color: HisingenTheme.semanticActive)
+                    CardHeader(symbol: "lock", title: L10n.text("Locks & Security"), color: HisingenTheme.semanticActive)
                     Spacer()
                     if let isLocked = state.exteriorStatus?.isLocked {
                         Pill(
                             text: isLocked ? L10n.text("Locked") : L10n.text("Unlocked"),
                             color: isLocked ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning,
-                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                            symbol: isLocked ? "lock" : "lock.open"
                         )
                     } else {
                         // Silently omitting the state was itself the problem: the card then showed
@@ -30,7 +30,7 @@ struct AccessControlsCard: View {
                         Pill(
                             text: L10n.text("Lock State Not Reported"),
                             color: HisingenTheme.semanticWarning,
-                            symbol: "questionmark.circle.fill"
+                            symbol: "questionmark.circle"
                         )
                     }
                 }
@@ -79,7 +79,7 @@ struct AccessControlsCard: View {
                             gate.send(.lockReducedGuard)
                         } label: {
                             VStack(spacing: 4) {
-                                Image(systemName: "lock.shield.fill").hisType(.title)
+                                Image(systemName: "lock.shield").hisType(.title)
                                 Text(L10n.text("Reduced Guard")).hisType(.label, weight: .medium)
                                 gate.sendingOverlay(.lockReducedGuard)
                             }
@@ -102,7 +102,7 @@ struct AccessControlsCard: View {
                                 gate.send(.unlockTrunk)
                             } label: {
                                 VStack(spacing: 4) {
-                                    Image(systemName: "car.side.rear.open.fill").hisType(.title)
+                                    Image(systemName: "car.side.rear.open").hisType(.title)
                                     Text(L10n.text("Unlock Trunk")).hisType(.label, weight: .medium)
                                     gate.sendingOverlay(.unlockTrunk)
                                 }
@@ -121,7 +121,7 @@ struct AccessControlsCard: View {
                             } label: {
                                 VStack(spacing: 4) {
                                     Image(systemName: tailgateIsOpen
-                                          ? "car.side.fill" : "car.side.rear.open.fill")
+                                          ? "car.side" : "car.side.rear.open")
                                         .hisType(.title)
                                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                                     Text(tailgateIsOpen
@@ -157,8 +157,8 @@ struct AccessControlsCard: View {
     /// so rather than showing a padlock, which reads as a claim about the car.
     private var lockIcon: String {
         switch state.exteriorStatus?.isLocked {
-        case true: return "lock.open.fill"
-        case false: return "lock.fill"
+        case true: return "lock.open"
+        case false: return "lock"
         case nil: return "questionmark.circle"
         }
     }

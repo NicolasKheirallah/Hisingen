@@ -36,7 +36,7 @@ struct NotificationToggleRow: View {
         }
         .padding(.vertical, 3)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(Color.primary.opacity(hovered ? 0.05 : 0))
         )
         .hisAnimation(Motion.interaction, value: hovered)

@@ -1,11 +1,6 @@
 import SwiftUI
 
-/// The energy line: Hisingen's signature since the 2026-11-16 redesign. One horizontal rule
-/// whose filled length is the battery's reported state of charge. It appears at three scales:
-/// the header mark, the Now rail, and the Log trace. It is the only element that carries the
-/// signal colour without being something to press.
-///
-/// It draws nothing it was not told: with no level, the track is empty, not guessed.
+/// Reported charge on a straight scale. Missing readings leave the track empty.
 struct EnergyLine: View {
     /// Reported state of charge, 0–100. `nil` draws the track only.
     let level: Double?
@@ -15,26 +10,49 @@ struct EnergyLine: View {
     /// where the charge is heading, not where it is.
     var isCharging: Bool = false
     var isHistorical: Bool = false
-    var thickness: CGFloat = 6
+    var thickness: CGFloat = 2
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        VStack(spacing: 3) {
+            scale
+                .frame(height: thickness + 10)
+            if let target, target.isFinite {
+                TargetCaptionLayout(fraction: Self.fraction(target)) {
+                    Text(L10n.format("Target %d%%", Int(target.rounded())))
+                        .hisType(.label)
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+                .accessibilityHidden(true)
+            }
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .animation(reduceMotion ? nil : Motion.telemetry, value: level)
+        .animation(reduceMotion ? nil : Motion.telemetry, value: target)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("Battery"))
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var scale: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let fill = Self.fraction(level) * width
             VStack(spacing: 4) {
                 ZStack(alignment: .leading) {
-                    Capsule()
+                    Rectangle()
                         .fill(HisingenTheme.hairline)
                     if isCharging, let target, Self.fraction(target) > Self.fraction(level) {
-                        Capsule()
-                            .fill(HisingenTheme.accent.opacity(0.28))
+                        Rectangle()
+                            .fill(HisingenTheme.liveSignal.opacity(0.28))
                             .frame(width: Self.fraction(target) * width)
                     }
                     if fill > 0 {
-                        Capsule()
-                            .fill(isHistorical ? HisingenTheme.inkMuted : HisingenTheme.accent)
+                        Rectangle()
+                            .fill(isHistorical ? HisingenTheme.inkMuted
+                                  : (isCharging ? HisingenTheme.liveSignal : HisingenTheme.accent))
                             .frame(width: fill)
                     }
                 }
@@ -42,7 +60,7 @@ struct EnergyLine: View {
                 .overlay(alignment: .leading) {
                     if let target {
                         let markerWidth: CGFloat = 2
-                        RoundedRectangle(cornerRadius: 1)
+                        Rectangle()
                             .fill(HisingenTheme.ink)
                             .frame(width: markerWidth, height: thickness + 6)
                             .offset(x: min(max(Self.fraction(target) * width - markerWidth / 2, 0),
@@ -62,12 +80,6 @@ struct EnergyLine: View {
                 .frame(height: 3)
             }
         }
-        .frame(height: thickness + 10)
-        .animation(reduceMotion ? nil : Motion.telemetry, value: level)
-        .animation(reduceMotion ? nil : Motion.telemetry, value: target)
-        .accessibilityElement()
-        .accessibilityLabel(L10n.text("Battery"))
-        .accessibilityValue(accessibilityValue)
     }
 
     private var accessibilityValue: String {
@@ -84,19 +96,21 @@ struct EnergyLine: View {
     }
 }
 
-/// The header mark: the energy line at its smallest, filled to the active car's level. With no
-/// car yet it is drawn full, as the wordmark's glyph rather than a reading.
-struct EnergyLineMark: View {
-    let level: Double?
+private struct TargetCaptionLayout: Layout {
+    let fraction: CGFloat
 
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Capsule().fill(HisingenTheme.hairline)
-            Capsule()
-                .fill(HisingenTheme.accent)
-                .frame(width: max(4, 22 * EnergyLine.fraction(level ?? 100)))
-        }
-        .frame(width: 22, height: 4)
-        .accessibilityHidden(true)
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let caption = subviews.first else { return .zero }
+        let size = caption.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? size.width, height: size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let caption = subviews.first else { return }
+        let size = caption.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        let ideal = bounds.width * fraction - size.width / 2
+        let x = min(max(ideal, 0), max(bounds.width - size.width, 0))
+        caption.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY), anchor: .topLeading,
+                      proposal: ProposedViewSize(size))
     }
 }

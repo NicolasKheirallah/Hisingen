@@ -1,12 +1,17 @@
+import Combine
 import SwiftUI
 
 @MainActor
 struct VehicleChargingCard: View {
     let state: VehicleState
     let history: HistoryWorkspace
+    var repeatsDisconnectedStatus = true
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The optional home charger. `nil` outside the app shell and for installs that never set it up.
+    @Environment(\.homeCharging) private var homeCharging
+    @State private var homeHistoryRevision = 0
     @State private var persistentSessions: [ChargingSession] = []
     /// Spot price in effect right now, settled the way the user's contract bills it. Only
     /// loaded in automatic rate mode; nil until the first fetch lands or when none exists.
@@ -17,7 +22,7 @@ struct VehicleChargingCard: View {
         state.freshness.isCached || state.hasOldData() || state.freshness.retainedDataCategories.contains(.chargingDetails)
     }
     private var loadIdentifier: String {
-        "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSinceReferenceDate)"
+        "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSinceReferenceDate)|\(homeHistoryRevision)"
     }
     private var eligible: Bool {
         (state.powertrain.hasElectricRange || state.isCharging || state.energy.connection != .disconnected)
@@ -25,7 +30,10 @@ struct VehicleChargingCard: View {
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            if let homeCharging {
+                HomeChargerSection(state: state, model: homeCharging)
+            }
             if eligible && state.powertrain.hasElectricRange && hasContent {
                 if isIdle {
                     idleCard
@@ -38,7 +46,7 @@ struct VehicleChargingCard: View {
                 // section at all. The Doors and Location cards explain themselves in this position.
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true)
+                        CardHeader(symbol: "bolt", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true)
                         HisingenEmptyState(
                             symbol: "questionmark.circle",
                             title: L10n.text("Temporarily unavailable"),
@@ -47,6 +55,9 @@ struct VehicleChargingCard: View {
                     }
                 }
             }
+        }
+        .onReceive(homeCharging?.$historyRevision.eraseToAnyPublisher() ?? Empty<Int, Never>().eraseToAnyPublisher()) {
+            homeHistoryRevision = $0
         }
         .task(id: loadIdentifier) { await loadPersistentSessions() }
         .task(id: "\(preferences.electricityRateMode.rawValue)|\(preferences.electricityPriceZone.rawValue)|\(preferences.electricityPriceContract.rawValue)|\(loadIdentifier)") {
@@ -80,7 +91,7 @@ struct VehicleChargingCard: View {
         switch state.energy.connection {
         case .connected: return L10n.text("Connected · Not charging")
         case .fault: return L10n.text("Charger fault")
-        case .disconnected: return L10n.text("Not connected")
+        case .disconnected: return L10n.text("Cable disconnected")
         case .unknown: return nil
         }
     }
@@ -125,7 +136,7 @@ struct VehicleChargingCard: View {
     private var taggedDetails: [(id: String, row: KVRow)] {
         var rows: [(String, KVRow)] = []
         if features.contains(.chargingDetails) {
-            if state.energy.connection != .unknown { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug.fill", valueWarning: state.energy.connection == .fault))) }
+            if state.energy.connection != .unknown { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug", valueWarning: state.energy.connection == .fault))) }
             if state.energy.type != .unknown, state.energy.type != .none { rows.append(("type", KVRow(L10n.text("Charging Type"), state.energy.type.displayName, symbol: "bolt.circle"))) }
             if let amps = state.energy.currentAmps, amps > 0 { rows.append(("draw", KVRow(L10n.text("Current Draw"), "\(amps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))) }
             if let amps = state.energy.currentLimitAmps, amps > 0 {
@@ -133,7 +144,7 @@ struct VehicleChargingCard: View {
                 if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.limitSource) { value += " (\(suffix))" }
                 rows.append(("limit", KVRow(L10n.text("Current Limit"), value, symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings."))))
             }
-            if let volts = state.energy.voltageVolts, volts > 0 { rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt.fill", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))) }
+            if let volts = state.energy.voltageVolts, volts > 0 { rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))) }
             if let target = state.energy.targetPercentage {
                 var value = "\(target)%"
                 if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.targetSource) { value += " (\(suffix))" }
@@ -169,7 +180,7 @@ struct VehicleChargingCard: View {
             if let value = diagnostics.averageConsumption { rows.append(("avgConsumption", KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))) }
             if let value = diagnostics.averageConsumptionSinceCharge { rows.append(("avgSinceCharge", KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))) }
             if let value = diagnostics.averageConsumptionAutomatic { rows.append(("avgAutoTrip", KVRow(L10n.text("Avg (Automatic Trip)"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))) }
-            if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), Format.energyKwh(wattHours / 1_000), symbol: "leaf.fill", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
+            if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), Format.energyKwh(wattHours / 1_000), symbol: "leaf", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
             if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
                 rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", locale: L10n.displayLocale, powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
             }
@@ -196,13 +207,13 @@ struct VehicleChargingCard: View {
             }
             if let breakdown = diagnostics.energyBreakdown, breakdown.hasData {
                 if let drive = breakdown.driving {
-                    rows.append(("energyDrive", KVRow(L10n.text("Traction Energy"), formatBreakdown(drive), symbol: "car.fill", info: L10n.text("Energy consumed directly by electric drivetrain motors."))))
+                    rows.append(("energyDrive", KVRow(L10n.text("Traction Energy"), formatBreakdown(drive), symbol: "car", info: L10n.text("Energy consumed directly by electric drivetrain motors."))))
                 }
                 if let climate = breakdown.climate {
-                    rows.append(("energyClimate", KVRow(L10n.text("Climate Energy"), formatBreakdown(climate), symbol: "fan.fill", info: L10n.text("Energy consumed by cabin heating and air conditioning."))))
+                    rows.append(("energyClimate", KVRow(L10n.text("Climate Energy"), formatBreakdown(climate), symbol: "fan", info: L10n.text("Energy consumed by cabin heating and air conditioning."))))
                 }
                 if let battery = breakdown.battery {
-                    rows.append(("energyBattery", KVRow(L10n.text("Battery Thermal"), formatBreakdown(battery), symbol: "flame.fill", info: L10n.text("Energy consumed by high-voltage battery thermal conditioning and warming."))))
+                    rows.append(("energyBattery", KVRow(L10n.text("Battery Thermal"), formatBreakdown(battery), symbol: "flame", info: L10n.text("Energy consumed by high-voltage battery thermal conditioning and warming."))))
                 }
                 if let other = breakdown.other {
                     rows.append(("energyOther", KVRow(L10n.text("Electronics & Aux"), formatBreakdown(other), symbol: "cpu", info: L10n.text("Energy consumed by 12 V computers, lighting, and auxiliary electronics."))))
@@ -291,21 +302,23 @@ struct VehicleChargingCard: View {
     }
 
     private var idleCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                if hasLastKnownChargingReadings { lastKnownLabel }
-                HStack(spacing: 8) {
-                    Image(systemName: "bolt.slash")
-                        .hisType(.subhead, weight: .semibold)
-                        .foregroundStyle(HisingenTheme.inkMuted)
-                        .accessibilityHidden(true)
-                    Text(headline ?? L10n.text("Not connected"))
-                        .hisType(.subhead, weight: .medium)
-                        .foregroundStyle(HisingenTheme.inkMuted)
-                    Spacer()
+        let showsSummary = repeatsDisconnectedStatus || state.energy.connection != .disconnected
+            || state.energy.chargingState != .idle
+        return Group {
+            if showsSummary || !persistentSessions.isEmpty {
+                Card {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if hasLastKnownChargingReadings && showsSummary { lastKnownLabel }
+                        if showsSummary {
+                            Label(headline ?? L10n.text("Unavailable"), systemImage: "bolt.slash")
+                                .hisType(.subhead)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .accessibilityElement(children: .combine)
+                        }
+                        if !persistentSessions.isEmpty { historySection }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .accessibilityElement(children: .combine)
-                if !persistentSessions.isEmpty { historySection }
             }
         }
     }
@@ -319,14 +332,14 @@ struct VehicleChargingCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true,
+                    CardHeader(symbol: "bolt", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true,
                                isPulsing: state.isCharging && !hasLastKnownChargingReadings)
                     if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
                     if state.energy.chargeNowActive == true {
                         Spacer()
                     }
                     if state.energy.chargeNowActive == true {
-                        Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
+                        Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt")
                             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }

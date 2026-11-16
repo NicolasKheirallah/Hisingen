@@ -19,6 +19,8 @@ struct VehicleTabView: View {
     let brand: VehicleBrand
     let remoteCommandInProgress: Bool
     let inFlightCommandID: String?
+    var feedback: RemoteCommandFeedback? = nil
+    var onAuthorizeRemoteCommands: (() -> Void)? = nil
     let onRemoteCommand: (RemoteCommand) -> Void
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
@@ -94,8 +96,7 @@ struct VehicleTabView: View {
         let shipped: [TabItemID] = [
             .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
             .vehicleExceptions, .vehicleCharging, .vehicleChargingPlanner,
-            .vehicleFuelEngine, .vehicleOpenings, .vehicleTyres, .vehicleLocation,
-            .vehicleReadiness
+            .vehicleFuelEngine, .vehicleOpenings, .vehicleTyres, .vehicleLocation, .vehicleReadiness
         ]
         // These legacy composition ids used to form Vehicle's "More" disclosure. Their content
         // now lives in Info, so old saved layouts must not re-introduce duplicate detail cards.
@@ -121,7 +122,9 @@ struct VehicleTabView: View {
         case .vehicleSwitcher:
             multiCarChips
         case .vehicleHero:
-            NowInstrument(state: state, imageCache: imageCache, commandGate: commandGate)
+            NowInstrument(state: state, imageCache: imageCache, commandGate: commandGate,
+                          feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                          showsDepartureCheck: draws(.vehicleReadiness))
         case .vehicleReceipts:
             ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
                 CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
@@ -135,7 +138,8 @@ struct VehicleTabView: View {
                 card.transition(cardTransition)
             }
         case .vehicleCharging:
-            VehicleChargingCard(state: state, history: history).transition(cardTransition)
+            VehicleChargingCard(state: state, history: history, repeatsDisconnectedStatus: !draws(.vehicleHero))
+                .transition(cardTransition)
         case .vehicleChargingPlanner:
             if let card = chargingPlannerCard { card.transition(cardTransition) }
         case .vehicleFuelEngine:
@@ -156,7 +160,7 @@ struct VehicleTabView: View {
             }
         case .vehicleReadiness:
             if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
-                if let check = VehicleDashboardRows.departureCheck(state: state) {
+                if !draws(.vehicleHero), let check = VehicleDashboardRows.departureCheck(state: state) {
                     check.transition(cardTransition)
                 }
             }
@@ -204,7 +208,7 @@ struct VehicleTabView: View {
                         let selected = car.vin == currentVin
                         Button { onSelectCar(car.vin) } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill").hisType(.caption)
+                                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car" : "car").hisType(.caption)
                                 Text(car.title).hisType(.label, weight: selected ? .bold : .medium)
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -214,11 +218,11 @@ struct VehicleTabView: View {
                             // the fill already said.
                             .background {
                                 if selected {
-                                    Capsule()
+                                    RoundedRectangle(cornerRadius: 0)
                                         .fill(HisingenTheme.accent.opacity(0.12))
                                         .matchedGeometryEffect(id: "carChipSelection", in: carChipNamespace)
                                 } else {
-                                    Capsule()
+                                    RoundedRectangle(cornerRadius: 0)
                                         .fill(Color.primary.opacity(0.04))
                                 }
                             }
@@ -266,11 +270,11 @@ struct VehicleTabView: View {
             let explanation = state.isVolvo ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.") : L10n.text("Parking position unavailable.")
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
+                    CardHeader(symbol: "location", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
                     HStack(spacing: 8) {
-                        Image(systemName: "location.slash.fill").hisType(.title).foregroundStyle(HisingenTheme.semanticWarning)
+                        Image(systemName: "location.slash").hisType(.title).foregroundStyle(HisingenTheme.semanticWarning)
                         Text(explanation).hisType(.label).foregroundStyle(HisingenTheme.inkMuted)
-                    }.padding(8).background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
+                    }.padding(8).background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 0))
                 }
             })
         }
@@ -313,7 +317,7 @@ struct VehicleTabView: View {
                 .padding(8)
                 .background(
                     (isError ? HisingenTheme.semanticCritical : Color.primary).opacity(isError ? 0.08 : 0.03),
-                    in: RoundedRectangle(cornerRadius: 6)
+                    in: RoundedRectangle(cornerRadius: 0)
                 )
                 .hisCaptionLeading()
             }

@@ -535,6 +535,10 @@ struct TabLayout: Equatable, Sendable {
     /// A tab the reader never rearranged draws an item it has never heard of, so a card shipped
     /// in a later version appears instead of going silently missing from their panel. Once they
     /// have arranged a tab themselves, that list is the whole truth about it.
+    /// Whether the layout names this item itself, as opposed to drawing it only because the tab
+    /// accepts new items.
+    func places(_ item: TabItemID) -> Bool { rank[item] != nil }
+
     func draws(_ item: TabItemID) -> Bool {
         if rank[item] != nil { return true }
         // The reader switched it off, wherever it used to live.

@@ -87,7 +87,7 @@ struct SettingsDatabaseCard: View {
 
     @ViewBuilder
     private var headerSection: some View {
-        CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
+        CardHeader(symbol: "cylinder.split.1x2", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
     }
 
     @ViewBuilder
@@ -97,9 +97,9 @@ struct SettingsDatabaseCard: View {
         VStack(spacing: 6) {
             KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
             KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
-            KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
-            KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
-            KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
+            KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side")
+            KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt")
+            KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart")
             KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
             KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
         }
@@ -108,7 +108,7 @@ struct SettingsDatabaseCard: View {
     @ViewBuilder
     private var locationHistoryRow: some View {
         HStack(spacing: 8) {
-            Image(systemName: "location.slash.fill")
+            Image(systemName: "location.slash")
                 .hisType(.body)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
@@ -488,7 +488,7 @@ struct SettingsDatabaseCard: View {
             showFleetLocationClearConfirmation = true
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "location.slash.fill")
+                Image(systemName: "location.slash")
                 Text(L10n.text("Clear All Vehicles’ Locations"))
             }
             .frame(maxWidth: .infinity)

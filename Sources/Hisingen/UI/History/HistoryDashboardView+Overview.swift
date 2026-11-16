@@ -9,45 +9,26 @@ extension HistoryDashboardView {
     // MARK: - Period picker
 
     func periodPicker(proxy: ScrollViewProxy) -> some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 6) {
-                Picker(L10n.text("History Period"), selection: $period) {
-                    ForEach(HistoryPeriod.allCases.filter { $0 != .custom }) { item in
-                        Text(L10n.text(item.rawValue)).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                // Every sibling control on this tab is `.small`; the period picker alone was at the
-                // default size, so the filter was the loudest element on a data tab and the first to
-                // overflow at a narrow panel width.
-                .controlSize(.small)
-                .accessibilityLabel(L10n.text("History Period"))
-
-                Button {
-                    showCustomRangeEditor = true
-                } label: {
-                    Image(systemName: period == .custom ? "calendar.badge.checkmark" : "calendar")
-                        .hisType(.label, weight: .medium)
-                }
-                .buttonStyle(.pressable)
-                .help(L10n.text("Pick a custom date range"))
-                .accessibilityLabel(L10n.text("Custom date range"))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 10) {
+                // Custom is the last period, not a separate calendar glyph: choosing it opens the
+                // range editor, and the period only becomes Custom once a range is applied.
+                UnderlineSegments(
+                    options: HistoryPeriod.allCases.map { ($0, L10n.text($0.rawValue)) },
+                    selection: Binding(
+                        get: { period },
+                        set: { choice in
+                            if choice == .custom { showCustomRangeEditor = true } else { period = choice }
+                        }
+                    ),
+                    accessibilityLabel: L10n.text("History Period")
+                )
                 .popover(isPresented: $showCustomRangeEditor, arrowEdge: .bottom) { customRangePopover }
 
-                Button {
-                    bumpRefresh()
-                } label: {
-                    Image(systemName: isLoading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                        .hisType(.label, weight: .medium)
-                        .frame(width: 14, height: 14)
-                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                }
-                .buttonStyle(.pressable)
-                // A re-tap during a load queues another refresh via `refreshToken`;
-                // disabling the button froze the control for the whole load instead.
-                .help(L10n.text("Reload history from the local database"))
-                .accessibilityLabel(L10n.text("Refresh history"))
+                InformationButton(
+                    message: L10n.text("Battery health, odometer totals and lifetime cost always use full history, regardless of the range above."),
+                    subject: L10n.text("History Period")
+                )
 
                 historyJumpMenu(proxy: proxy)
             }
@@ -57,7 +38,7 @@ extension HistoryDashboardView {
             // the status item all do. Shown only when there is something to say.
             if state.hasOldData() || state.freshness.isCached {
                 HStack(spacing: 4) {
-                    Image(systemName: state.freshness.isCached ? "wifi.slash" : "moon.stars.fill")
+                    Image(systemName: state.freshness.isCached ? "wifi.slash" : "moon.stars")
                         .hisType(.micro)
                         .accessibilityHidden(true)
                     Text(state.freshness.isCached
@@ -76,28 +57,29 @@ extension HistoryDashboardView {
                 .accessibilityElement(children: .combine)
             }
 
-            HStack(spacing: 4) {
-                Image(systemName: "info.circle").hisType(.nano)
-                if period == .custom {
-                    Text(L10n.format("Custom range: %@–%@",
-                                     Format.dateFormatter.string(from: min(customRangeStart, customRangeEnd)),
-                                     Format.dateFormatter.string(from: max(customRangeStart, customRangeEnd))))
-                        .hisType(.nano, weight: .medium)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(L10n.text("Battery health, odometer totals and lifetime cost always use full history, regardless of the range above."))
-                        .hisType(.nano)
-                }
-                Spacer()
-                if snapshot.truncated {
-                    Text(L10n.text("Older rows beyond the cap are not shown."))
-                        .hisType(.nano)
-                        .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.9))
+            UnderlineSegments(
+                options: HistorySectionGroup.allCases.map { ($0, $0.title) },
+                selection: $sectionGroup,
+                accessibilityLabel: L10n.text("History section category")
+            )
+
+            if period == .custom || snapshot.truncated {
+                HStack(spacing: 4) {
+                    if period == .custom {
+                        Text(L10n.format("Custom range: %@–%@",
+                                         Format.dateFormatter.string(from: min(customRangeStart, customRangeEnd)),
+                                         Format.dateFormatter.string(from: max(customRangeStart, customRangeEnd))))
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                    Spacer()
+                    if snapshot.truncated {
+                        Text(L10n.text("Older rows beyond the cap are not shown."))
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.semanticWarning)
+                    }
                 }
             }
-            // `.secondary`, not `.tertiary`: 8pt tertiary text over the panel material measured
-            // 1.6:1 against a dark window behind the panel.
-            .foregroundStyle(.secondary)
         }
     }
 
@@ -144,7 +126,7 @@ extension HistoryDashboardView {
                     Spacer()
                     if state.powertrain.hasCombustionEngine {
                         Button { showFuelSheet = true } label: {
-                            Label(L10n.text("Add Fuel"), systemImage: "drop.fill")
+                            Label(L10n.text("Add Fuel"), systemImage: "drop")
                                 .hisType(.caption, weight: .medium)
                         }
                         .buttonStyle(.pressable)
@@ -160,7 +142,7 @@ extension HistoryDashboardView {
                     metric(L10n.text("Driving"), Format.shortDuration(minutes: Int(drivingTime / 60)), "clock")
                 }
                 HStack(spacing: 10) {
-                    metric(L10n.text("Charge Sessions"), Format.count(chargingSessions.count), "bolt.fill")
+                    metric(L10n.text("Charge Sessions"), Format.count(chargingSessions.count), "bolt")
                     metricColumnDivider
                     metric(L10n.text("Estimated Energy"), Format.energyKwh(energy), "bolt.circle")
                     metricColumnDivider
@@ -355,15 +337,13 @@ extension HistoryDashboardView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "calendar", title: L10n.text("This Month vs Last"), color: HisingenTheme.chartInfo)
-                HStack(spacing: 10) {
+                HStack(alignment: .top, spacing: 20) {
                     comparisonMetric(L10n.text("Distance"),
                                      Format.distance(km: thisMonth.distanceKm, decimals: 0, unit: preferences.distanceUnit),
                                      delta(thisMonth.distanceKm, lastMonth.distanceKm), higherIsBetter: nil)
-                    metricColumnDivider
                     comparisonMetric(L10n.text("Energy"),
                                      Format.energyKwh(thisMonth.energyKwh),
                                      delta(thisMonth.energyKwh, lastMonth.energyKwh), higherIsBetter: nil)
-                    metricColumnDivider
                     if let thisConsumption = thisMonth.averageConsumption {
                         comparisonMetric(L10n.text("Consumption"),
                                          preferences.energyConsumptionUnit.format(kwhPer100Km: thisConsumption),
@@ -372,7 +352,7 @@ extension HistoryDashboardView {
                     }
                 }
                 Text(L10n.text("Compares the elapsed part of this month against the same number of days last month."))
-                    .hisType(.nano).foregroundStyle(.secondary)
+                    .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
                 if lastYear.distanceKm > 0 || lastYear.energyKwh > 0 {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack(spacing: 10) {
@@ -398,17 +378,17 @@ extension HistoryDashboardView {
     func comparisonMetric(_ title: String, _ value: String, _ delta: Double?, higherIsBetter: Bool?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
-                .hisType(.body, weight: .bold, design: .rounded).lineLimit(1)
-                .minimumScaleFactor(0.9)
+                .hisType(.display).lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .monospacedDigit()
                 .hisTelemetryValue(value, reduceMotion: reduceMotion)
-            HStack(spacing: 4) {
-                Text(title).hisType(.nano).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 6) {
+                Text(title).hisType(.subhead).foregroundStyle(HisingenTheme.inkMuted).lineLimit(1)
                 .minimumScaleFactor(0.9)
                 if let delta {
                     let color = deltaColor(delta, higherIsBetter: higherIsBetter)
                     Text(Format.signedPercent(delta))
-                        .hisType(.nano, weight: .semibold)
+                        .hisType(.label)
                         .foregroundStyle(color)
                         .hisAnimation(Motion.stateChange, value: color)
                 }
@@ -434,7 +414,7 @@ extension HistoryDashboardView {
                 .hisTelemetryValue(delta, reduceMotion: reduceMotion)
         }
         .padding(.horizontal, 5).padding(.vertical, 2)
-        .background(HisingenTheme.chipFill, in: Capsule())
+        .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
     }
 
     // MARK: - Emissions
@@ -456,7 +436,7 @@ extension HistoryDashboardView {
         else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "leaf.fill", title: L10n.text("Emissions vs Petrol"), color: HisingenTheme.semanticGood)
+                CardHeader(symbol: "leaf", title: L10n.text("Emissions vs Petrol"), color: HisingenTheme.semanticGood)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("CO₂ Avoided"), Format.massKg(comparison.avoidedKgCO2))
                     curveStat(L10n.text("EV Generation"), Format.massKg(comparison.electricKgCO2))

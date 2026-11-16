@@ -41,6 +41,7 @@ protocol CommandExecutionContext: AnyObject {
         message: String,
         success: Bool,
         target: RemoteCommandTarget?,
+        command: RemoteCommand,
         remedy: RemoteCommandRemedy?,
         followUp: RemoteCommandFollowUp?
     )
@@ -130,7 +131,7 @@ final class CommandCoordinator {
         guard !isInProgress && !isAuthorizing else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
-                message: RemoteCommandError.busy.localizedDescription, success: false, target: nil, remedy: nil,
+                message: RemoteCommandError.busy.localizedDescription, success: false, target: nil, command: command, remedy: nil,
                 followUp: nil)
             return .deferred(reason: RemoteCommandError.busy.localizedDescription)
         }
@@ -148,6 +149,7 @@ final class CommandCoordinator {
                 message: message,
                 success: false,
                 target: nil,
+                command: command,
                 remedy: nil,
                 followUp: nil)
             return stillLoading ? .deferred(reason: message) : .refused(reason: message)
@@ -184,6 +186,7 @@ final class CommandCoordinator {
                 message: message,
                 success: false,
                 target: nil,
+                command: command,
                 remedy: nil,
                 followUp: nil)
             return .refused(reason: message)
@@ -309,6 +312,7 @@ final class CommandCoordinator {
                 message: L10n.format("%@ – %@", commandTitle, detail),
                 success: true,
                 target: target,
+                command: command,
                 remedy: nil,
                 followUp: undo
             )
@@ -352,6 +356,7 @@ final class CommandCoordinator {
                     message),
                 success: false,
                 target: target,
+                command: command,
                 remedy: remedy(for: error),
                 followUp: RemoteCommandFollowUp.permitsRetry(after: error)
                     ? RemoteCommandFollowUp(kind: .retry, command: command, targetVIN: target.vin)

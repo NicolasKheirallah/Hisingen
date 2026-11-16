@@ -490,7 +490,7 @@ private struct ComposableLocationCard: View {
         } else {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
+                    CardHeader(symbol: "location", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
                     Text(state.isVolvo
                          ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.")
                          : L10n.text("Parking position unavailable."))
@@ -566,18 +566,18 @@ private struct GarageChipStrip: View {
                         let selected = car.vin == currentVin
                         Button { onSelectCar(car.vin) } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: brand == .polestar ? "bolt.car.fill" : "car.fill")
+                                Image(systemName: brand == .polestar ? "bolt.car" : "car")
                                     .hisType(.caption)
                                 Text(car.title).hisType(.label, weight: selected ? .bold : .medium)
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background {
                                 if selected {
-                                    Capsule()
+                                    RoundedRectangle(cornerRadius: 0)
                                         .fill(HisingenTheme.accent.opacity(0.12))
                                         .matchedGeometryEffect(id: "garageChipSelection", in: namespace)
                                 } else {
-                                    HoverChipFill(shape: Capsule(), resting: 0.04)
+                                    HoverChipFill(shape: RoundedRectangle(cornerRadius: 0), resting: 0.04)
                                 }
                             }
                         }

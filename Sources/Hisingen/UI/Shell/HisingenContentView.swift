@@ -251,19 +251,22 @@ struct HisingenContentView: View {
                     ScrollView(.vertical) {
                         ScrollViewReader { proxy in
                             PanelSwipeOffset(gesture: gesture) {
+                                // Zero-height anchor: one scroll container serves every tab, so a
+                                // new tab used to open at the previous tab's offset — its heading,
+                                // primary value and any banner already scrolled off. Resetting to an
+                                // anchor avoids giving each tab its own identity, which would discard
+                                // its internal state (expanded sections, disclosure rows). It sits
+                                // outside the spaced stack so it adds no section gap above the tab.
+                                VStack(spacing: 0) {
+                                Color.clear.frame(height: 0).id(Self.scrollTopAnchor)
                                 VStack(spacing: HisingenTheme.sectionSpacing) {
-                                    // Zero-height anchor: one scroll container serves every tab, so a
-                                    // new tab used to open at the previous tab's offset — its heading,
-                                    // primary value and any banner already scrolled off. Resetting to an
-                                    // anchor avoids giving each tab its own identity, which would discard
-                                    // its internal state (expanded sections, disclosure rows).
-                                    Color.clear.frame(height: 0).id(Self.scrollTopAnchor)
                                     if let noticeID = RetainedDataNoticeID(state: state),
                                        noticeID != dismissedRetainedDataNotice {
                                         retainedDataNotice(state, id: noticeID)
                                             .transition(retainedDataTransition)
                                     }
                                     selectedTabContent(state: state, tab: tab)
+                                }
                                 }
                                 .padding(HisingenTheme.sectionSpacing)
                                 .animation(reduceMotion ? nil : Motion.interaction, value: tab)
@@ -300,18 +303,6 @@ struct HisingenContentView: View {
                         gesture.scrollOffsetFromTop = offset
                     }
                     .simultaneousGesture(panelDragGesture)
-                    // The scroll edge effect: content softens as it passes under the floating
-                    // tab strip and over the footer, instead of meeting a drawn divider. This is
-                    // the 2026 replacement for the hairline strip the panel used to draw there.
-                    .mask {
-                        VStack(spacing: 0) {
-                            LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 18)
-                            Color.white
-                            LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 14)
-                        }
-                    }
                     .overlay(alignment: .top) {
                         PanelPullReadout(gesture: gesture, threshold: Self.pullThreshold)
                     }
@@ -322,16 +313,8 @@ struct HisingenContentView: View {
             }
             footerBar
         }
-        // Content-density zoom: lay out at panelSize/scale, then scale into the physical
-        // panel – so Compact fits more content and Relaxed enlarges it, independently of
-        // the window preset. Transforms are ignored by layout, hence the inverse frames.
         // Height comes pre-clamped by PanelLayout to what fits below the menu bar.
-        .frame(width: layout.logicalWidth, alignment: .topLeading)
-        .frame(height: layout.logicalHeight, alignment: .topLeading)
-        .scaleEffect(layout.contentScale, anchor: .topLeading)
         .frame(width: layout.width, height: layout.height, alignment: .topLeading)
-        // Clips the transformed tree to the physical panel; without it, scaled
-        // overflow would draw outside the transparent popover window.
         .clipped()
         // Hierarchical styles resolve to the palette, not to the system's vibrant labels:
         // `.secondary` over the panel material blends with whatever window sits behind the
@@ -339,10 +322,6 @@ struct HisingenContentView: View {
         // gate checks, so every `.secondary` and `.tertiary` in the panel inherits its 4.5:1.
         .foregroundStyle(HisingenTheme.ink, HisingenTheme.inkMuted, HisingenTheme.inkMuted)
         .background { HisingenTheme.popoverSurface }
-        // The material arrival: the panel settles from a slightly smaller, dimmer state on
-        // the shared entrance curve, so opening reads as glass arriving rather than a picture
-        // appearing. `hisAnimation` keeps a crossfade under Reduce Motion.
-        .scaleEffect(hasMaterialized ? 1 : 0.965)
         .opacity(hasMaterialized ? 1 : 0)
         .hisAnimation(Motion.materialize, value: hasMaterialized)
         .onAppear { hasMaterialized = true }
@@ -350,6 +329,8 @@ struct HisingenContentView: View {
         .animation(reduceMotion ? nil : Motion.entrance, value: setupMode)
         .animation(reduceMotion ? nil : Motion.entrance, value: authenticated)
         .tint(HisingenTheme.accent)
+        // Native controls and any text outside the ramp take the house face too.
+        .font(HisingenTheme.font(size: 13))
         // SwiftUI's own date renderings (`Text(date, style: .date)`, FormatStyle in Text) read
         // the environment locale, which is the system region by default; an English UI on a
         // Swedish-region Mac got "19 september 2026". Pin the environment to the same display
@@ -507,6 +488,8 @@ struct HisingenContentView: View {
                            brand: commandBrand,
                            remoteCommandInProgress: remoteCommandInProgress,
                            inFlightCommandID: inFlightRemoteCommandID,
+                           feedback: lastRemoteCommandFeedback,
+                           onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
                            onRemoteCommand: onRemoteCommand,
                            onSelectCar: onSelectCar,
                            onDismissCommandReceipt: onDismissCommandReceipt,
@@ -522,6 +505,10 @@ struct HisingenContentView: View {
                         reverseGeocoder: reverseGeocoder,
                         onNavigateToHistory: navigateFromInfoToHistory,
                         onRemoteCommand: onRemoteCommand,
+                        brand: commandBrand,
+                        remoteCommandInProgress: remoteCommandInProgress,
+                        inFlightCommandID: inFlightRemoteCommandID,
+                        onRefresh: onRefresh,
                         layout: TabLayout.resolve(tabComposition, for: tab))
                 .id(state.identity.vin)
                 .transition(.opacity)
@@ -544,7 +531,8 @@ struct HisingenContentView: View {
                             onRefresh: onRefresh,
                             onDismissCommandReceipt: onDismissCommandReceipt,
                             onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
-                            layout: TabLayout.resolve(tabComposition, for: tab))
+                            layout: TabLayout.resolve(tabComposition, for: tab),
+                            drawnOnCar: carDrawnControls)
                 .transition(.opacity)
 
         case .builtIn(.settings):
@@ -571,6 +559,14 @@ struct HisingenContentView: View {
             .id(state.identity.vin)
             .transition(.opacity)
         }
+    }
+
+    /// The moved controls the reader's Car tab will draw, so Plan knows which it can leave out.
+    private var carDrawnControls: Set<TabItemID> {
+        let car = TabRef.builtIn(.info)
+        guard tabComposition.visibleTabs().contains(car) else { return [] }
+        let layout = TabLayout.resolve(tabComposition, for: car)
+        return Set([TabItemID.controlsAccess, .controlsWindowsLocate, .controlsOTA].filter(layout.draws))
     }
 
     private var garageStates: [VehicleState] {
@@ -651,47 +647,39 @@ struct HisingenContentView: View {
         // needs one place that answers "where did everything go?".
         let tabs = tabComposition.visibleTabs()
         let current = currentTab
-        return awardConceptHeader(tabs: tabs, current: current)
+        return panelHeader(tabs: tabs, current: current)
     }
 
-    /// The panel header (2026-11-16 redesign): the energy-line mark and wordmark, the places as
-    /// words with an ink underline under the current one, and Settings at the trailing edge.
-    /// If text labels don't fit, keep every place reachable in a scrolling icon strip.
-    private func awardConceptHeader(tabs: [TabRef], current: TabRef) -> some View {
+    private func panelHeader(tabs: [TabRef], current: TabRef) -> some View {
         let compact = HisingenTheme.layoutWidth < 540
-        let wide = HisingenTheme.layoutWidth >= 700
-        return HStack(alignment: .center, spacing: wide ? 20 : 10) {
-            HStack(spacing: 8) {
-                EnergyLineMark(level: state?.energy.batteryPercentage)
-                if !compact {
-                    Text("Hisingen")
-                        .hisType(size: wide ? 15 : 14, relativeTo: .title3, weight: .semibold)
-                        .foregroundStyle(HisingenTheme.ink)
-                }
-            }
-            .fixedSize()
-            .layoutPriority(2)
+        return HStack(alignment: .center, spacing: compact ? 16 : 28) {
+            Text(L10n.text("Hisingen"))
+                .hisType(.displaySmall)
+                .foregroundStyle(HisingenTheme.ink)
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityAddTraits(.isHeader)
 
             ViewThatFits(in: .horizontal) {
-                tabButtons(tabs, selected: current, iconsOnly: false, spacing: wide ? 20 : 12)
+                tabButtons(tabs, selected: current, iconsOnly: false, spacing: compact ? 14 : 22)
                     .fixedSize(horizontal: true, vertical: false)
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {
-                        tabButtons(tabs, selected: current, iconsOnly: true, spacing: 4)
+                        tabButtons(tabs, selected: current, iconsOnly: true, spacing: 10)
                     }
                     .onAppear { proxy.scrollTo(current, anchor: .center) }
                     .onChange(of: current) { _, selected in proxy.scrollTo(selected, anchor: .center) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 onSettings()
             } label: {
                 Image(systemName: "gearshape")
-                    .hisSymbolSize(15, weight: .regular)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .frame(width: 30, height: 30)
+                    .hisSymbolSize(15)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .frame(minWidth: 34, minHeight: 34)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
@@ -699,12 +687,9 @@ struct HisingenContentView: View {
             .help(L10n.text("Settings…"))
             .accessibilityLabel(L10n.text("Settings…"))
         }
-        .padding(.horizontal, wide ? 22 : 14)
-        .padding(.top, wide ? 14 : 10)
-        .padding(.bottom, 4)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(HisingenTheme.hairline).frame(height: 1)
-        }
+        .padding(.horizontal, HisingenTheme.sectionSpacing + HisingenTheme.cardPadding)
+        .padding(.top, 4)
+        .background(alignment: .bottom) { PanelRule() }
     }
 
     private func tabButtons(_ tabs: [TabRef], selected: TabRef, iconsOnly: Bool, spacing: CGFloat) -> some View {
@@ -718,20 +703,18 @@ struct HisingenContentView: View {
                     Group {
                         if iconsOnly {
                             Image(systemName: tabComposition.symbol(for: tab))
-                                .hisType(.body, weight: .medium)
+                                .hisSymbolSize(14)
                         } else {
                             Text(title)
-                                .hisType(.body, weight: selected == tab ? .semibold : .regular)
+                                .hisType(.subhead)
                                 .lineLimit(1)
                         }
                     }
                     .foregroundStyle(selected == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                    .padding(.bottom, 9)
+                    .frame(minWidth: iconsOnly ? 30 : nil, minHeight: 44)
                     .overlay(alignment: .bottom) {
                         if selected == tab { tabIndicator }
                     }
-                    .padding(.horizontal, iconsOnly ? 8 : 2)
-                    .frame(minWidth: 32, minHeight: 30)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.pressable)
@@ -745,14 +728,14 @@ struct HisingenContentView: View {
         }
     }
 
-    /// The current place, drawn as the one piece of chrome that moves: a 2 pt ink rule that slides
-    /// between words on the selection spring. Ink, not accent: the accent belongs to energy and
-    /// to actions.
+    /// polestar.com's sub-navigation mark: a 2pt ink underline the width of the label, resting
+    /// on the header's rule.
     private var tabIndicator: some View {
-        Capsule()
+        Rectangle()
             .fill(HisingenTheme.ink)
             .frame(height: 2)
             .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
+            .accessibilityHidden(true)
     }
 
     /// Shown while authenticated but with no snapshot yet.
@@ -893,7 +876,7 @@ struct HisingenContentView: View {
             }
             return preferences.activeBrand.displayName
         }()
-        let brandIcon = preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill"
+        let brandIcon = preferences.activeBrand == .polestar ? "bolt.car" : "car"
         let fleetStates = garageStates
         let hasMultipleVehicles = fleetStates.count > 1 || cars.count > 1
 
@@ -979,30 +962,12 @@ struct HisingenContentView: View {
             if garageStates.count > 1 || cars.count > 1 || otherBrandResumable {
                 vehicleSwitcher
             }
-            // Data freshness indicator
-            if let fetchedAt = state?.freshness.fetchedAt, state?.hasOldData() == false {
-                let age = Date().timeIntervalSince(fetchedAt)
-                let freshnessColor: Color = age < 30 ? HisingenTheme.semanticGood : (age < 120 ? HisingenTheme.semanticWarning : HisingenTheme.semanticCritical)
-                let ageText: String = age < 60 ? "\(Int(age))s" : "\(Int(age / 60))m"
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(freshnessColor)
-                        .frame(width: 6, height: 6)
-                        // The hue already changes with age (green, yellow, red). Fading the dot
-                        // as well spent legibility on the one message that most needs reading.
-                        .hisAnimation(Motion.stateChange, value: freshnessColor)
-                    Text(ageText)
-                        // Tabular figures rather than a monospaced face: this is an ordinary UI
-                        // numeral, and SF Mono here was a different typeface from the battery
-                        // percentage one row above. `.secondary` because 9pt in `.tertiary` over
-                        // a material is below AA.
-                        .hisType(.micro, weight: .medium)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.numericText())
-                        .hisAnimation(Motion.telemetry, value: ageText)
-                }
-                .help(L10n.format("Last updated %@", Format.dateTimeFormatter.string(from: fetchedAt)))
+            if currentTab != .vehicle || !TabLayout.resolve(tabComposition, for: .vehicle).draws(.vehicleHero),
+               let fetchedAt = state?.freshness.fetchedAt, state?.hasOldData() == false {
+                Text(L10n.format("Updated %@", Format.relativeAge(since: fetchedAt)))
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .help(L10n.format("Last updated %@", Format.dateTimeFormatter.string(from: fetchedAt)))
             }
             if diagnostics?.liveStreamConnected == true {
                 HStack(spacing: 3) {
@@ -1033,7 +998,7 @@ struct HisingenContentView: View {
                 Button {
                     onOpenUpdate()
                 } label: {
-                    Label("v\(updateVersion)", systemImage: "arrow.down.circle.fill")
+                    Label("v\(updateVersion)", systemImage: "arrow.down.circle")
                         .hisType(.label, weight: .medium)
                         .foregroundStyle(.tint)
                 }
@@ -1064,8 +1029,9 @@ struct HisingenContentView: View {
             .disabled(!authenticated)
 
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, HisingenTheme.sectionSpacing + HisingenTheme.cardPadding)
+        .padding(.vertical, 5)
+        .overlay(alignment: .top) { PanelRule() }
         .hisAnimation(Motion.stateChange, value: updateVersion)
     }
 }

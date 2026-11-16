@@ -343,8 +343,8 @@
 "Current vehicle: %@. Switch vehicle." = "Current vehicle: %@. Switch vehicle.";
 "Custom App" = "Custom App";
 "Cut" = "Cut";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing championship blue, crisp track geometry";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Championship blue, crisp track geometry";
 "Daily" = "Daily";
 "Danish" = "Danish";
 "Dark" = "Dark";
@@ -755,7 +755,7 @@
 "Plug-in hybrid" = "Plug-in hybrid";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar Assistance";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, dark charcoal luxury";
+"Dark charcoal surfaces with a gold accent" = "Dark charcoal surfaces with a gold accent";
 "Polestar ID (Email)" = "Polestar ID (Email)";
 "Polestar ID Password Required" = "Polestar ID Password Required";
 "Polestar ID Required" = "Polestar ID Required";
@@ -1043,7 +1043,7 @@
 "Sunroof" = "Sunroof";
 "Supported" = "Supported";
 "Swedish" = "Swedish";
-"Swedish Gold" = "Swedish Gold";
+"Charcoal Gold" = "Charcoal Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Swedish pine and eucalyptus earth tones, organic soft feel";
 "Switch Vehicle" = "Switch Vehicle";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Switch Vehicle (⌃⌥[ / ⌃⌥])";
@@ -1792,16 +1792,14 @@
 "≈ %d days" = "≈ %d days";
 
 /* Text size & density options */
-"Compact (85%)" = "Compact (85%)";
-"Standard (100%)" = "Standard (100%)";
-"Relaxed (115%)" = "Relaxed (115%)";
+"Relaxed" = "Relaxed";
 "Smallest text, most content per screen" = "Smallest text, most content per screen";
 "Default sizing" = "Default sizing";
 "Larger text and controls" = "Larger text and controls";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Content Density";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Zoom content independently of panel size: compact shows more before scrolling";
+"Type size and spacing, independently of the panel size" = "Type size and spacing, independently of the panel size";
 "Custom Size" = "Custom Size";
 "Independent width and height overrides" = "Independent width and height overrides";
 "Width" = "Width";
@@ -2821,6 +2819,7 @@
 "History" = "History";
 "Info" = "Info";
 "Info section category" = "Info section category";
+"History section category" = "History section category";
 "Instantaneous drivetrain output power ceiling." = "Instantaneous drivetrain output power ceiling.";
 "Interactive Verification Required" = "Interactive Verification Required";
 "Interior view of the vehicle" = "Interior view of the vehicle";
@@ -3299,3 +3298,13 @@
 "Battery at the start and end of each charge." = "Battery at the start and end of each charge.";
 "No complete charge readings in this period." = "No complete charge readings in this period.";
 "Enable remote controls in Settings → Features." = "Enable remote controls in Settings → Features.";
+"Windows" = "Windows";
+"Controls on Now" = "Controls on Now";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Choose the control cards shown under the car. Each still needs its remote feature turned on.";
+"Create Theme" = "Create Theme";
+"Edit Theme" = "Edit Theme";
+"Accent" = "Accent";
+"Light Background" = "Light Background";
+"Dark Background" = "Dark Background";
+"My Theme" = "My Theme";
+"Your colours, adjusted to stay readable in light and dark." = "Your colours, adjusted to stay readable in light and dark.";

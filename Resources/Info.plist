@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.14</string>
+	<string>3.0.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -38,7 +38,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>32</string>
+	<string>33</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSUIElement</key>
@@ -47,6 +47,13 @@
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Hisingen connects to your Home Assistant on the local network to read your home charger and run charging plans.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Nicolas Kheirallah. Not affiliated with Polestar or Volvo Cars.</string>
 	<key>SUAutomaticallyUpdate</key>

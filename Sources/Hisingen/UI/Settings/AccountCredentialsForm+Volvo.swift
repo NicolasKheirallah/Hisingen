@@ -29,7 +29,7 @@ extension AccountCredentialsForm {
                     .foregroundStyle(HisingenTheme.accent)
                 }
                 .padding(8)
-                .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
             } else {
                 Text(L10n.text(
                     "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window."

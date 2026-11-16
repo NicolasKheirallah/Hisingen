@@ -344,18 +344,22 @@ struct RemoteCommandFeedback: Equatable, Sendable, Identifiable {
     let message: String
     let success: Bool
     let issuedAt: Date
+    let commandIdentifier: String?
+    let targetVIN: String?
     let remedy: RemoteCommandRemedy?
     /// The retry or undo the banner offers, when this result allows one.
     let followUp: RemoteCommandFollowUp?
 
     init(id: UUID = UUID(), title: String, message: String, success: Bool,
          issuedAt: Date = Date(), remedy: RemoteCommandRemedy? = nil,
-         followUp: RemoteCommandFollowUp? = nil) {
+         followUp: RemoteCommandFollowUp? = nil, commandIdentifier: String? = nil, targetVIN: String? = nil) {
         self.id = id
         self.title = title
         self.message = message
         self.success = success
         self.issuedAt = issuedAt
+        self.commandIdentifier = commandIdentifier
+        self.targetVIN = targetVIN
         self.remedy = remedy
         self.followUp = followUp
     }

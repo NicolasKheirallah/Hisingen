@@ -35,13 +35,13 @@ struct SettingsFleetCard: View {
         return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "car.2.fill", title: L10n.text("Garage & Fleet"), color: HisingenTheme.accent)
+                    CardHeader(symbol: "car.2", title: L10n.text("Garage & Fleet"), color: HisingenTheme.accent)
                     Spacer()
                     Text(L10n.format("%d Vehicles", allVins.count))
                         .hisType(.caption, weight: .bold)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 2.5)
-                        .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                        .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
                         .foregroundStyle(HisingenTheme.accent)
                 }
 
@@ -104,7 +104,7 @@ struct SettingsFleetCard: View {
         return HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Image(systemName: "gauge.with.needle.fill")
+                    Image(systemName: "gauge.with.needle")
                         .hisType(.micro)
                         .foregroundStyle(HisingenTheme.accent)
                     Text(L10n.text("Fleet Range"))
@@ -117,11 +117,11 @@ struct SettingsFleetCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Image(systemName: summary.chargingCount == 0 ? "bolt.slash" : "bolt.fill")
+                    Image(systemName: summary.chargingCount == 0 ? "bolt.slash" : "bolt")
                         .hisType(.micro)
                         .foregroundStyle(summary.chargingCount == 0 ? Color.secondary : HisingenTheme.semanticGood)
                     Text(L10n.text("Charging"))
@@ -148,7 +148,7 @@ struct SettingsFleetCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -165,7 +165,7 @@ struct SettingsFleetCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(7)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0))
         }
         .padding(.bottom, 2)
         .help(L10n.text("Totals include fresh readings only. Vehicles with missing or stale readings are excluded."))
@@ -187,11 +187,11 @@ struct SettingsFleetThumbnailView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 44, height: 26)
-                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0))
                     .transition(.opacity)
             } else {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 5)
+                    RoundedRectangle(cornerRadius: 0)
                         .fill(isActive ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05))
                         .frame(width: 28, height: 28)
                     Image(systemName: brandIcon)
@@ -232,7 +232,7 @@ struct FleetVehicleCardRow: View {
 
     var body: some View {
         let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
-        let brandIcon = brand == .polestar ? "bolt.car.fill" : "car.fill"
+        let brandIcon = brand == .polestar ? "bolt.car" : "car"
         let displayTitle = preferences.formattedVehicleTitle(
             vin: vin,
             modelName: vehicleState?.identity.modelName,
@@ -255,7 +255,7 @@ struct FleetVehicleCardRow: View {
                                 .hisType(.nano, weight: .bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
-                                .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+                                .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
                                 .foregroundStyle(HisingenTheme.accent)
                                 .transition(.opacity.combined(with: .scale(scale: 0.98)))
                         }
@@ -291,7 +291,7 @@ struct FleetVehicleCardRow: View {
             // wash is the pointer answer and the haptic confirms the vehicle switch.
             .onHover { isHovered = $0 }
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 0, style: .continuous)
                     .fill(Color.primary.opacity(isHovered && !isActive ? 0.04 : 0))
             )
             .onTapGesture {
@@ -305,7 +305,7 @@ struct FleetVehicleCardRow: View {
                 HStack(spacing: 12) {
                     if let battery = vehicleState.energy.batteryPercentage {
                         HStack(spacing: 4) {
-                            Image(systemName: vehicleState.isCharging ? "bolt.fill" : "battery.100")
+                            Image(systemName: vehicleState.isCharging ? "bolt" : "battery.100")
                                 .hisType(.micro)
                                 .foregroundStyle(HisingenTheme.fleetBatteryTint(level: vehicleState.batteryLevel))
                             Text(String(format: "%.0f%%", locale: L10n.displayLocale, battery))
@@ -319,7 +319,7 @@ struct FleetVehicleCardRow: View {
                         }
                     } else if let fuel = vehicleState.fuelSystem.levelPercent {
                         HStack(spacing: 4) {
-                            Image(systemName: "fuelpump.fill")
+                            Image(systemName: "fuelpump")
                                 .hisType(.micro)
                                 .foregroundStyle(Color.secondary)
                             Text(String(format: "%.0f%%", locale: L10n.displayLocale, fuel))
@@ -330,7 +330,7 @@ struct FleetVehicleCardRow: View {
 
                     if let range = vehicleState.primaryRangeKm {
                         HStack(spacing: 3) {
-                            Image(systemName: "gauge.with.needle.fill")
+                            Image(systemName: "gauge.with.needle")
                                 .hisType(.micro)
                                 .foregroundStyle(.secondary)
                             Text(Format.distance(km: range, unit: preferences.distanceUnit))
@@ -341,7 +341,7 @@ struct FleetVehicleCardRow: View {
 
                     if let isLocked = vehicleState.exteriorStatus?.isLocked {
                         HStack(spacing: 3) {
-                            Image(systemName: isLocked ? "lock.fill" : "lock.open.fill")
+                            Image(systemName: isLocked ? "lock" : "lock.open")
                                 .hisType(.micro)
                                 .foregroundStyle(isLocked ? Color.secondary : HisingenTheme.semanticWarning)
                             Text(isLocked ? L10n.text("Locked") : L10n.text("Unlocked"))
@@ -387,7 +387,7 @@ struct FleetVehicleCardRow: View {
                             onSettingsChanged(.presentation)
                         }
                     )) {
-                        ForEach(AppTheme.allCases, id: \.self) { t in
+                        ForEach(AppTheme.allCases + CustomThemeStore.all().map(\.theme), id: \.self) { t in
                             Text(t.title).tag(t)
                         }
                     }
@@ -402,7 +402,7 @@ struct FleetVehicleCardRow: View {
         .background(
             isActive ? HisingenTheme.accent.opacity(0.10)
                      : Color.primary.opacity(isHovered ? 0.045 : 0.025),
-            in: RoundedRectangle(cornerRadius: 8)
+            in: RoundedRectangle(cornerRadius: 0)
         )
         // isActive flips from an app-level SettingsChange with no transaction of
         // its own; this binding drives the badge/button swap and hover tint.

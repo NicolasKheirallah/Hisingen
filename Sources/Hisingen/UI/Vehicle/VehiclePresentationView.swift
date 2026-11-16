@@ -62,6 +62,7 @@ struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
     let imageData: Data?
     var fitHeight: CGFloat? = nil
+    var fillsInstrumentWidth = false
     private let artworkStore = VehicleArtworkStore.shared
     private let entranceLedger = VehicleEntranceLedger.shared
 
@@ -131,10 +132,10 @@ struct VehiclePresentationView: View {
             // Taken from the source's true dimensions rather than the decoded
             // thumbnail's rounded ones, so the budget cannot shift the layout.
             .aspectRatio(artwork.sourcePixelSize, contentMode: .fit)
-            .scaleEffect(fitHeight == nil ? VehicleRenderLayout.zoom : VehicleRenderLayout.instrumentZoom)
+            .scaleEffect(fillsInstrumentWidth ? 1 : fitHeight == nil ? VehicleRenderLayout.zoom : VehicleRenderLayout.instrumentZoom)
             .frame(maxWidth: .infinity)
             .frame(height: fitHeight ?? VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth))
-            .padding(.horizontal, VehicleRenderLayout.horizontalInset)
+            .padding(.horizontal, fillsInstrumentWidth ? 0 : VehicleRenderLayout.horizontalInset)
     }
 
     /// The old picture leaves in the direction of travel, the new one arrives
@@ -174,7 +175,11 @@ struct VehiclePresentationView: View {
         let decoded = await artworkStore.artwork(
             source: source,
             data: request.data,
-            pixelBudget: budget
+            pixelBudget: fillsInstrumentWidth
+                ? max(budget, VehicleArtworkStore.pixelBudget(
+                    pointSize: CGSize(width: HisingenTheme.layoutWidth, height: 0), scale: displayScale))
+                : budget,
+            trimsTransparentMargins: fillsInstrumentWidth
         )
         guard let decoded, !Task.isCancelled else { return }
 

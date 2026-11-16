@@ -49,7 +49,7 @@ struct ChargingControlsCard: View {
         let chargingCommands = [RemoteCommand.setChargeTarget(80), .setAmpLimit(16), .startChargingOverride]
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Controls"), color: HisingenTheme.semanticGood)
+                CardHeader(symbol: "bolt", title: L10n.text("Charging Controls"), color: HisingenTheme.semanticGood)
                 gate.dimReason(gate.liveAvailability(chargingCommands))
 
                 // Passive capability line, styled after the Target/Current Limit header rows.
@@ -187,47 +187,14 @@ struct ChargingControlsCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(L10n.text("Target Limit"))
-                    .hisType(.label, weight: .medium)
-                    .foregroundStyle(.secondary)
+                    .hisType(.subhead)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                 Spacer()
                 Text(displayedChargeTarget.map { Format.percent(Double($0)) } ?? L10n.text("Unavailable"))
-                    .hisType(.subhead, weight: .bold, design: .rounded)
+                    .hisType(.displaySmall)
                     .monospacedDigit()
                     .foregroundStyle(.primary)
                     .hisTelemetryValue(displayedChargeTarget, reduceMotion: reduceMotion)
-            }
-
-            HStack(spacing: 6) {
-                ForEach(chargeTargetPresets, id: \.self) { target in
-                    let selected = chargeTarget == target
-                    Button {
-                        gate.send(.setChargeTarget(target))
-                    } label: {
-                        Text(target == chargeBounds.dailyTarget
-                             ? L10n.format("Daily %@", Format.percent(Double(target)))
-                             : Format.percent(Double(target)))
-                            .hisType(.micro, weight: selected ? .bold : .medium)
-                            .padding(.vertical, 3)
-                            .frame(maxWidth: .infinity)
-                            .background {
-                                if selected {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(HisingenTheme.accent.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)))
-                                } else {
-                                    HoverChipFill(shape: RoundedRectangle(cornerRadius: 6))
-                                }
-                            }
-                            .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
-                            .animation(reduceMotion ? nil : Motion.selection, value: selected)
-                    }
-                    .buttonStyle(.pressable)
-                    .disabled(gate.isDisabled(.setChargeTarget(target)))
-                    .accessibilityLabel(L10n.format(
-                        "Set charge target to %@",
-                        Format.percent(Double(target))
-                    ))
-                    .accessibilityAddTraits(selected ? [.isSelected] : [])
-                }
             }
 
             if let chargeTarget {
@@ -246,7 +213,7 @@ struct ChargingControlsCard: View {
                         gate.send(.setChargeTarget(rounded))
                     }
                 )
-                .tint(HisingenTheme.semanticGood)
+                .tint(HisingenTheme.accent)
                 .disabled(gate.isDisabled(.setChargeTarget(chargeTarget)))
                 .accessibilityLabel(L10n.text("Charge target"))
                 .accessibilityValue(Format.percent(Double(
@@ -263,6 +230,40 @@ struct ChargingControlsCard: View {
                     distanceUnit: preferences.distanceUnit
                 )
             } else {
+                // Without a reported target the slider has nothing to start from, so the presets
+                // are the way to set one.
+            HStack(spacing: 6) {
+                    ForEach(chargeTargetPresets, id: \.self) { target in
+                        let selected = chargeTarget == target
+                        Button {
+                            gate.send(.setChargeTarget(target))
+                        } label: {
+                            Text(target == chargeBounds.dailyTarget
+                                 ? L10n.format("Daily %@", Format.percent(Double(target)))
+                                 : Format.percent(Double(target)))
+                                .hisType(.micro, weight: selected ? .bold : .medium)
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity)
+                                .background {
+                                    if selected {
+                                        RoundedRectangle(cornerRadius: 0)
+                                            .fill(HisingenTheme.accent.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)))
+                                    } else {
+                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 0))
+                                    }
+                                }
+                                .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
+                                .animation(reduceMotion ? nil : Motion.selection, value: selected)
+                        }
+                        .buttonStyle(.pressable)
+                        .disabled(gate.isDisabled(.setChargeTarget(target)))
+                        .accessibilityLabel(L10n.format(
+                            "Set charge target to %@",
+                            Format.percent(Double(target))
+                        ))
+                        .accessibilityAddTraits(selected ? [.isSelected] : [])
+                    }
+                }
                 Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
@@ -299,11 +300,15 @@ struct ChargingControlsCard: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(L10n.text("Current Limit"))
-                    .hisType(.label, weight: .medium)
-                    .foregroundStyle(.secondary)
+                    .hisType(.subhead)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                if ampLimit == nil {
+                    InformationButton(message: L10n.text("The vehicle did not report a configurable current limit."),
+                                      subject: L10n.text("Current Limit"))
+                }
                 Spacer()
                 Text(displayedAmpLimit.map { Format.amps($0) } ?? L10n.text("Unavailable"))
-                    .hisType(.subhead, weight: .bold, design: .rounded)
+                    .hisType(.displaySmall)
                     .monospacedDigit()
                     .foregroundStyle(.primary)
                     .hisTelemetryValue(displayedAmpLimit, reduceMotion: reduceMotion)
@@ -360,11 +365,6 @@ struct ChargingControlsCard: View {
                     ampLimitDraft.map { Int($0.rounded()) } ?? ampLimit
                 ))
                 .transition(.opacity)
-            } else {
-                Text(L10n.text("The vehicle did not report a configurable current limit."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
             }
             if let queued = state.energy.diagnostics?.unappliedLimitAmps(current: ampLimit) {
                 pendingSyncLine(Format.amps(queued))
@@ -381,7 +381,7 @@ struct ChargingControlsCard: View {
             // pill idiom, including the reduce-motion crossfade.
             if state.energy.chargeNowActive == true {
                 HStack(spacing: 6) {
-                    Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt.fill")
+                    Pill(text: L10n.text("Charge Now"), color: HisingenTheme.semanticGood, symbol: "bolt")
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     Spacer()
                 }
@@ -391,13 +391,13 @@ struct ChargingControlsCard: View {
                     gate.send(.startChargingOverride)
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "bolt.fill")
+                        Image(systemName: "bolt")
                         Text(L10n.text("Charge Now")).hisType(.label, weight: .medium)
                         gate.sendingOverlay(.startChargingOverride)
                     }
                     .frame(maxWidth: .infinity, minHeight: 30)
                 }
-                .buttonStyle(.hisProminent(HisingenTheme.semanticGood))
+                .buttonStyle(.hisProminent)
                 .disabled(gate.isDisabled(.startChargingOverride))
 
                 Button {
@@ -523,7 +523,7 @@ struct ChargingControlsCard: View {
     private func chargeLocationRow(_ location: ChargeLocationSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Image(systemName: "mappin.circle.fill")
+                Image(systemName: "mappin.circle")
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.accent)
                 Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
@@ -656,7 +656,7 @@ struct ChargingControlsCard: View {
             if !location.chargeTimers.isEmpty || !location.departureTimes.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
-                        Label(locationScheduleText(schedule), systemImage: "bolt.fill")
+                        Label(locationScheduleText(schedule), systemImage: "bolt")
                             .hisType(.micro)
                             .foregroundStyle(.secondary)
                     }
@@ -681,7 +681,7 @@ struct ChargingControlsCard: View {
             .disabled(gate.isDisabled(.deleteChargeLocation(id: location.id)))
         }
         .padding(8)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0))
         .hisAnimation(Motion.stateChange, value: location.optimisedChargingModeName)
     }
 }

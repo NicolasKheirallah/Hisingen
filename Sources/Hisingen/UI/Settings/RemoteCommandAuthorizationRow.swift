@@ -58,7 +58,7 @@ struct RemoteCommandAuthorizationRow: View {
             }
         }
         .padding(8)
-        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
     }
 
     private var authorizationRow: some View {
@@ -102,6 +102,6 @@ struct RemoteCommandAuthorizationRow: View {
         }
         .padding(8)
         .background((authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: 8))
+                    in: RoundedRectangle(cornerRadius: 0))
     }
 }

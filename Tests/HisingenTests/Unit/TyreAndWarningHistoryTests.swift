@@ -298,6 +298,6 @@ struct TyreAndWarningHistoryTests {
             return Int(stmt.columnInt64(at: 0) ?? 0)
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
-        #expect(VehicleDatabase.latestSchemaVersion == 6)
+        #expect(VehicleDatabase.latestSchemaVersion == 7)
     }
 }

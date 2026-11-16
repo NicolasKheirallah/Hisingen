@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "Nykyinen ajoneuvo: %@. Vaihda ajoneuvoa.";
 "Custom App" = "Mukautettu sovellus";
 "Cut" = "Leikkaa";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing -mestaruussininen, terävä ratageometria";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Mestaruussininen, terävä ratageometria";
 "Daily" = "Päivittäin";
 "Danish" = "Tanska";
 "Dark" = "Tumma";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "Ladattava hybridi";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar-avustus";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, tumma hiilenharmaa ylellisyys";
+"Dark charcoal surfaces with a gold accent" = "Tumman hiilenharmaat pinnat ja kultainen korostus";
 "Polestar ID (Email)" = "Polestar ID (sähköposti)";
 "Polestar ID Password Required" = "Polestar ID -salasana vaaditaan";
 "Polestar ID Required" = "Polestar ID vaaditaan";
@@ -994,7 +994,7 @@
 "Sunroof" = "Kattoluukku";
 "Supported" = "Tuettu";
 "Swedish" = "Ruotsi";
-"Swedish Gold" = "Swedish Gold";
+"Charcoal Gold" = "Charcoal Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Ruotsalainen mänty ja eukalyptus, maanläheiset sävyt, pehmeä tuntu";
 "Switch Vehicle" = "Vaihda ajoneuvoa";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Vaihda ajoneuvoa (⌃⌥[ / ⌃⌥])";
@@ -1694,16 +1694,14 @@
 "Everything looks good" = "Kaikki näyttää hyvältä";
 
 /* Text size & density options */
-"Compact (85%)" = "Tiivis (85 %)";
-"Standard (100%)" = "Vakio (100 %)";
-"Relaxed (115%)" = "Leveä (115 %)";
+"Relaxed" = "Leveä";
 "Smallest text, most content per screen" = "Pienin teksti, eniten sisältöä näytöllä";
 "Default sizing" = "Oletuskoko";
 "Larger text and controls" = "Suurempi teksti ja säätimet";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Sisällön tiheys";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Zoomaa sisältöä riippumatta paneelin koosta – tiivis näyttää enemmän ennen vieritystä";
+"Type size and spacing, independently of the panel size" = "Tekstin koko ja välit panelin koosta riippumatta";
 "Custom Size" = "Mukautettu koko";
 "Independent width and height overrides" = "Riippumaton leveys ja korkeus";
 "Width" = "Leveys";
@@ -2802,6 +2800,7 @@
 "History" = "Historia";
 "Info" = "Tiedot";
 "Info section category" = "Tietojen osion luokka";
+"History section category" = "Historian luokka";
 "Instantaneous drivetrain output power ceiling." = "Voimansiirron hetkellinen tehorajoitus.";
 "Interactive Verification Required" = "Vaaditaan interaktiivinen vahvistus";
 "Interior view of the vehicle" = "Ajoneuvon sisätilanäkymä";
@@ -3283,3 +3282,13 @@
 "Battery at the start and end of each charge." = "Akun varaustaso jokaisen latauksen alussa ja lopussa.";
 "No complete charge readings in this period." = "Tältä ajalta ei ole täydellisiä latauslukemia.";
 "Enable remote controls in Settings → Features." = "Ota etäohjaus käyttöön kohdassa Asetukset → Ominaisuudet.";
+"Windows" = "Ikkunat";
+"Controls on Now" = "Ohjaimet Nyt-näkymässä";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Valitse auton alla näkyvät ohjauskortit. Jokainen tarvitsee edelleen etätoimintonsa päälle.";
+"Create Theme" = "Luo teema";
+"Edit Theme" = "Muokkaa teemaa";
+"Accent" = "Korostus";
+"Light Background" = "Vaalea tausta";
+"Dark Background" = "Tumma tausta";
+"My Theme" = "Oma teema";
+"Your colours, adjusted to stay readable in light and dark." = "Omat värisi, säädettyinä luettaviksi vaaleassa ja tummassa tilassa.";

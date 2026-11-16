@@ -14,16 +14,16 @@ struct HisProminentButtonStyle: ButtonStyle {
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: HisingenTheme.keyRadius)
         return configuration.label
-            .hisType(controlSize == .large ? .body : .label, weight: .semibold)
+            .hisType(controlSize == .large ? .subhead : .body)
             .foregroundStyle(isEnabled ? HisingenTheme.canvas : HisingenTheme.inkMuted)
             .padding(.horizontal, horizontalPadding)
             .frame(minHeight: minHeight)
             .background(shape.fill(isEnabled ? fill : HisingenTheme.chipFill))
             .overlay {
                 if isEnabled && (hovering || configuration.isPressed) {
-                    shape.fill(HisingenTheme.canvas.opacity(configuration.isPressed ? 0.18 : 0.10))
+                    shape.fill(HisingenTheme.canvas.opacity(configuration.isPressed ? 0.24 : 0.14))
                 }
             }
             .contentShape(shape)
@@ -33,18 +33,18 @@ struct HisProminentButtonStyle: ButtonStyle {
 
     private var horizontalPadding: CGFloat {
         switch controlSize {
-        case .mini, .small: return 9
-        case .large, .extraLarge: return 16
-        default: return 12
+        case .mini, .small: return 12
+        case .large, .extraLarge: return 24
+        default: return 16
         }
     }
 
     private var minHeight: CGFloat {
         switch controlSize {
-        case .mini: return 18
-        case .small: return 22
-        case .large, .extraLarge: return 34
-        default: return 28
+        case .mini: return 22
+        case .small: return 26
+        case .large, .extraLarge: return 40
+        default: return 32
         }
     }
 }
@@ -54,8 +54,8 @@ extension ButtonStyle where Self == HisProminentButtonStyle {
     static func hisProminent(_ fill: Color) -> HisProminentButtonStyle { HisProminentButtonStyle(fill: fill) }
 }
 
-/// The secondary button: label in ink (or a status colour when the action carries one) on the
-/// solid chip fill, with a hairline edge.
+/// The secondary button: Polestar's outlined control. Label and 1pt edge in ink (or a status
+/// colour when the action carries one) on the canvas.
 ///
 /// It replaces `.bordered`, whose bezel takes its fill from the tint: in dark appearance a light
 /// accent turned the bezel light grey under a light label, and amber-on-wash read as faint brown
@@ -69,20 +69,19 @@ struct HisSecondaryButtonStyle: ButtonStyle {
     @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: HisingenTheme.keyRadius)
         return configuration.label
-            .hisType(controlSize == .large ? .body : .label, weight: .semibold)
+            .hisType(controlSize == .large ? .subhead : .body)
             .foregroundStyle(isEnabled ? (tint ?? HisingenTheme.ink) : HisingenTheme.inkMuted)
-            .padding(.horizontal, controlSize == .small || controlSize == .mini ? 9 : 12)
-            .frame(minHeight: controlSize == .small || controlSize == .mini ? 22 : 28)
-            .background(shape.fill(HisingenTheme.chipFill))
+            .padding(.horizontal, controlSize == .small || controlSize == .mini ? 12 : 16)
+            .frame(minHeight: controlSize == .small || controlSize == .mini ? 26 : 32)
+            .background(shape.fill(HisingenTheme.canvas))
             .overlay {
                 if isEnabled && (hovering || configuration.isPressed) {
-                    shape.fill(HisingenTheme.ink.opacity(configuration.isPressed ? 0.10 : HisingenTheme.chipHoverFill))
+                    shape.fill(HisingenTheme.ink.opacity(configuration.isPressed ? 0.10 : 0.05))
                 }
             }
-            .overlay(shape.stroke(HisingenTheme.hairline, lineWidth: 1))
-            .opacity(isEnabled ? 1 : 0.7)
+            .overlay(shape.strokeBorder(isEnabled ? (tint ?? HisingenTheme.ink) : HisingenTheme.hairline, lineWidth: 1))
             .contentShape(shape)
             .onHover { hovering = $0 }
             .hisAnimation(Motion.interaction, value: hovering)

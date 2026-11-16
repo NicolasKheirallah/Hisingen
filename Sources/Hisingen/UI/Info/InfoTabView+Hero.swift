@@ -40,10 +40,10 @@ extension InfoTabView {
                                     }
                                 } else {
                                     let exteriorAngle = exteriorAngles.first?.rawValue ?? preferences.carRenderAngle.rawValue
-                                    angleButton(title: L10n.text("Exterior"), angle: exteriorAngle, icon: "car.side.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Exterior"), angle: exteriorAngle, icon: "car.side", proxy: proxy)
                                 }
                                 if hasInterior {
-                                    angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left.fill", proxy: proxy)
+                                    angleButton(title: L10n.text("Interior"), angle: -1, icon: "carseat.left", proxy: proxy)
                                 }
                             }
                             .padding(.horizontal, 2)
@@ -100,11 +100,11 @@ extension InfoTabView {
                     .accessibilityAddTraits(.isButton)
                 } else {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 0)
                             .fill(Color.primary.opacity(0.04))
                             .frame(height: 120)
                         VStack(spacing: 6) {
-                            Image(systemName: isInterior ? "carseat.left.fill" : "car.side.fill")
+                            Image(systemName: isInterior ? "carseat.left" : "car.side")
                                 .hisSymbolSize(38)
                                 .foregroundStyle(HisingenTheme.accent.opacity(0.7))
                             Text(isInterior ? L10n.text("Interior View") : L10n.text("Studio Render"))
@@ -152,13 +152,13 @@ extension InfoTabView {
                                 Pill(
                                     text: color,
                                     color: HisingenTheme.accent,
-                                    symbol: "paintpalette.fill"
+                                    symbol: "paintpalette"
                                 )
                             } else if isInterior, let upholstery = state.identity.upholstery, !upholstery.isEmpty {
                                 Pill(
                                     text: upholstery,
                                     color: HisingenTheme.accent,
-                                    symbol: "carseat.left.fill"
+                                    symbol: "carseat.left"
                                 )
                             }
                         }
@@ -174,7 +174,7 @@ extension InfoTabView {
                             .hisType(.body, weight: .bold, design: .monospaced)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
                     }
                 }
             }
@@ -201,9 +201,9 @@ extension InfoTabView {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05), in: Capsule())
+            .background(isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 0))
             .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 0))
         }
         .buttonStyle(.pressable)
         .id(angle)

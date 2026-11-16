@@ -44,6 +44,8 @@ final class StatusItemController: NSObject {
     private let imageCache: CarImageCache
     private let preferences: PreferencesStore
     private let fleetStore: FleetStore
+    /// The optional Home Charging integration, handed over by the app delegate before the panel is built.
+    var homeCharging: HomeChargingModel?
     private var fleet: FleetSnapshot { fleetStore.snapshot(activeState: latestState) }
 
     var updateVersion: String?
@@ -376,57 +378,14 @@ final class StatusItemController: NSObject {
             let controlsMenu = NSMenu()
 
             if isVolvo {
-                let isLocked = state.exteriorStatus?.isLocked == true
-                let lockItem = NSMenuItem(
-                    title: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors"),
-                    action: #selector(contextToggleLock),
-                    keyEquivalent: ""
-                )
-                lockItem.target = self
-                controlsMenu.addItem(lockItem)
-
-                let climateActive = state.isClimateActive
-                let climateItem = NSMenuItem(
-                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
-                    action: #selector(contextToggleClimate),
-                    keyEquivalent: ""
-                )
-                climateItem.target = self
-                controlsMenu.addItem(climateItem)
-
-                let flashItem = NSMenuItem(
-                    title: L10n.text("Flash Lights"),
-                    action: #selector(contextFlashLights),
-                    keyEquivalent: ""
-                )
-                flashItem.target = self
-                controlsMenu.addItem(flashItem)
-
-                let honkItem = NSMenuItem(
-                    title: L10n.text("Honk Horn"),
-                    action: #selector(contextHonkHorn),
-                    keyEquivalent: ""
-                )
-                honkItem.target = self
-                controlsMenu.addItem(honkItem)
-
-                let honkFlashItem = NSMenuItem(
-                    title: L10n.text("Honk & Flash"),
-                    action: #selector(contextHonkAndFlash),
-                    keyEquivalent: ""
-                )
-                honkFlashItem.target = self
-                controlsMenu.addItem(honkFlashItem)
+                controlsMenu.addItem(lockMenuItem(for: state))
+                controlsMenu.addItem(climateMenuItem(for: state))
+                controlsMenu.addItem(flashLightsMenuItem())
+                controlsMenu.addItem(honkHornMenuItem())
+                controlsMenu.addItem(honkAndFlashMenuItem())
             } else {
                 // Polestar quick controls
-                let isLocked = state.exteriorStatus?.isLocked == true
-                let lockItem = NSMenuItem(
-                    title: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors"),
-                    action: #selector(contextToggleLock),
-                    keyEquivalent: ""
-                )
-                lockItem.target = self
-                controlsMenu.addItem(lockItem)
+                controlsMenu.addItem(lockMenuItem(for: state))
 
                 // Tailgate toggle if supported
                 if state.otaCapabilities?.supportsTrunkControl == true {
@@ -436,7 +395,7 @@ final class StatusItemController: NSObject {
                         action: #selector(contextToggleTailgate),
                         keyEquivalent: ""
                     )
-                    tailgateItem.image = NSImage(systemSymbolName: tailgateIsOpen ? "car.side.fill" : "car.side.rear.open.fill",
+                    tailgateItem.image = NSImage(systemSymbolName: tailgateIsOpen ? "car.side" : "car.side.rear.open",
                                                 accessibilityDescription: nil)
                     tailgateItem.target = self
                     controlsMenu.addItem(tailgateItem)
@@ -489,30 +448,9 @@ final class StatusItemController: NSObject {
                     controlsMenu.addItem(cleanItem)
                 }
 
-                let climateActive = state.isClimateActive
-                let climateItem = NSMenuItem(
-                    title: climateActive ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
-                    action: #selector(contextToggleClimate),
-                    keyEquivalent: ""
-                )
-                climateItem.target = self
-                controlsMenu.addItem(climateItem)
-
-                let flashItem = NSMenuItem(
-                    title: L10n.text("Flash Lights"),
-                    action: #selector(contextFlashLights),
-                    keyEquivalent: ""
-                )
-                flashItem.target = self
-                controlsMenu.addItem(flashItem)
-
-                let honkFlashItem = NSMenuItem(
-                    title: L10n.text("Honk & Flash"),
-                    action: #selector(contextHonkAndFlash),
-                    keyEquivalent: ""
-                )
-                honkFlashItem.target = self
-                controlsMenu.addItem(honkFlashItem)
+                controlsMenu.addItem(climateMenuItem(for: state))
+                controlsMenu.addItem(flashLightsMenuItem())
+                controlsMenu.addItem(honkAndFlashMenuItem())
             }
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
@@ -581,6 +519,64 @@ final class StatusItemController: NSObject {
         )
         quitItem.target = self
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+    }
+
+    // MARK: - Quick-control menu items
+
+    // Both brands show the same lock, climate, flash and honk/flash entries; only the
+    // brand-specific extras and their order differ. One factory each keeps the titles,
+    // selectors and target wiring from being edited in two places.
+
+    private func lockMenuItem(for state: VehicleState) -> NSMenuItem {
+        let isLocked = state.exteriorStatus?.isLocked == true
+        let item = NSMenuItem(
+            title: isLocked ? L10n.text("Unlock Doors") : L10n.text("Lock Doors"),
+            action: #selector(contextToggleLock),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    private func climateMenuItem(for state: VehicleState) -> NSMenuItem {
+        let active = state.isClimateActive
+        let item = NSMenuItem(
+            title: active ? L10n.text("Stop Climate") : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0)),
+            action: #selector(contextToggleClimate),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    private func flashLightsMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: L10n.text("Flash Lights"),
+            action: #selector(contextFlashLights),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    private func honkHornMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: L10n.text("Honk Horn"),
+            action: #selector(contextHonkHorn),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    private func honkAndFlashMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: L10n.text("Honk & Flash"),
+            action: #selector(contextHonkAndFlash),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
     }
 
     @objc private func contextOpenMaps() {
@@ -1138,7 +1134,8 @@ final class StatusItemController: NSObject {
 
     private func makeRootView(panel: PanelModel) -> AnyView {
         AnyView(HisingenContentView(panel: panel, selectedTab: selectedTabBinding)
-            .environment(\.preferencesStore, preferences))
+            .environment(\.preferencesStore, preferences)
+            .environment(\.homeCharging, homeCharging))
     }
 
     private func applyPopoverRefresh() {

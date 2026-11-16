@@ -149,8 +149,8 @@ extension HistoryDashboardView {
 
     func legendSwatch(_ color: Color, _ label: String, dashed: Bool = false) -> some View {
         HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 1).fill(color).frame(width: 14, height: 2.5)
-                .overlay(dashed ? RoundedRectangle(cornerRadius: 1).stroke(color, style: StrokeStyle(lineWidth: 2.5, dash: [2, 2])) : nil)
+            RoundedRectangle(cornerRadius: 0).fill(color).frame(width: 14, height: 2.5)
+                .overlay(dashed ? RoundedRectangle(cornerRadius: 0).stroke(color, style: StrokeStyle(lineWidth: 2.5, dash: [2, 2])) : nil)
             Text(label).hisType(.nano).foregroundStyle(.secondary)
         }
     }
@@ -164,7 +164,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Consumption Trend"), color: HisingenTheme.semanticWarning)
+                    CardHeader(symbol: "fuelpump", title: L10n.text("Fuel Consumption Trend"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     if let average {
                         Text(Format.fuelEconomy(lPer100Km: average, unit: preferences.fuelEconomyUnit))

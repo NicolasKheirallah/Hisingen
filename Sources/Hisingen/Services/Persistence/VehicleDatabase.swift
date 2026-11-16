@@ -95,7 +95,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 6
+    static let latestSchemaVersion = 7
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their

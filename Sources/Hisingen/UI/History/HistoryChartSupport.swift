@@ -92,8 +92,8 @@ extension View {
             .monospacedDigit()
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(HisingenTheme.chipFill, in: Capsule())
-            .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
+            .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
             .shadow(color: HisingenTheme.elevationShadow.opacity(0.15), radius: 3, y: 1)
     }
 }
@@ -165,14 +165,14 @@ enum HistoryExport {
     }
 
     static func chargingSessionsCSV(_ sessions: [HistoricalChargingSession]) -> String {
-        let header = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version"
+        let header = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version,\(WallboxCSV.header.joined(separator: ","))"
         var rows: [String] = [header]
         for s in sessions {
             let fields: [String] = [
                 s.id, s.vin,
                 Format.iso8601.string(from: s.startedAt),
                 s.endedAt.map { Format.iso8601.string(from: $0) } ?? "",
-                String(format: "%.1f", locale: L10n.displayLocale, s.startSoc),
+                s.startSoc < 0 ? "" : String(format: "%.1f", locale: L10n.displayLocale, s.startSoc),
                 opt(s.endSoc, 1),
                 String(format: "%.2f", locale: L10n.displayLocale, s.energyDeliveredKwh),
                 String(format: "%.1f", locale: L10n.displayLocale, s.peakPowerKw),
@@ -193,7 +193,7 @@ enum HistoryExport {
                 s.currencySymbol ?? "",
                 opt(s.targetSoc, 1),
                 String(s.summaryVersion)
-            ]
+            ] + WallboxCSV.fields(s.wallbox)
             rows.append(fields.map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"

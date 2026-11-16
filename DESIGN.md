@@ -1,359 +1,92 @@
-# DESIGN.md
+# Hisingen design
 
-Design direction for Hisingen. Transcribed on 2026-09-18 from the shipped app
-(`Sources/Hisingen/UI`), not invented: every field below is how the app already looks and
-behaves, with the source file named. Surfaces were redesigned into Apple's 2026 Liquid Glass
-language on 2026-09-19. The award concept's wide production shell and focal compositions were
-wired on 2026-09-20; the surface sections below describe that combined language as shipped. Nico
-owns this file; correct anything that reads wrong. Where this file and the code disagree, the
-code wins and this file gets fixed. Tokens live in
-`Sources/Hisingen/UI/Theme/` and `Sources/Hisingen/UI/Motion.swift`.
+Hisingen is an independent macOS menu bar instrument for connected-car owners. At a desk it answers two questions: what did the car last report, and what can I do about it? Its visual system is one typeface, white and black, square geometry, and specifications read as a figure over its label. This file is the single design reference. It holds the direction, the rules for each view, and how they are checked.
 
-Reading this as: a macOS menu-bar utility panel for Volvo and Polestar EV owners, in a
-Scandinavian instrument-panel language, dial ENERGY 2 / RHYTHM 3 / MOTION 2 (since the
-2026-11-16 redesign; see below).
+## Design read
 
-Hisingen (the Gothenburg island where Volvo builds cars) is a wide menu-bar instrument:
-battery, range and the vehicle itself lead; climate, charging, tyres, trips, service and remote
-controls sit one level deeper. Quiet and precise, with warmth only where energy acts.
+- **Product:** a desktop instrument for checking and operating a connected car.
+- **Use:** quick checks at a desk, with longer visits for schedules, charging records, and vehicle details. The pointer and keyboard are equal paths.
+- **Character:** literal, flat, quiet.
+- **Bright spot:** the car, and the battery and range figures under it. Black carries selection and the primary action. Live state (charging, an active control) takes the theme's active colour: its accent, or amber in Monochrome Precision, whose accent is ink.
+- **Signature:** the spec grammar. A figure sits above its muted label, rows are divided by hairlines, and a chosen place is marked by a 2pt underline the width of its label.
 
-Vehicle is the glanceable operational surface. Detailed identity, specification, lighting,
-software, diagnostics, climate and schedule information belongs to Info and is not duplicated
-behind a secondary disclosure on Vehicle.
+**Energy 2 / Rhythm 3 / Motion 2.** Contrast comes from scale: one large figure pair per screen and regular type everywhere else. Now, Plan, Log, and Car keep different reading patterns. Motion clarifies selection, live telemetry, and gesture response.
 
-The instrument layer (added 2026-09-18, same language): the hero render carries a living
-overlay drawn only from real vehicle signals (`LivingVehicleView`) — an open door or hood
-places a warning-tinted marker at its body position, an active climate session breathes
-accent warmth from the vent line, a charging session runs the gauge's particle rail beneath
-the body; with no signals it draws nothing, because a healthy car does not glow. Commands
-report their flight from the control itself via the shared `sendingOverlay` capsule.
-Pull-to-refresh (rubber-band physics, an arm tick when the pull crosses its threshold,
-commits on release velocity), one-step momentum tab swipes whose page settles on the
-flick spring from wherever the drag left it, and hover-handle card drag-reorder (the
-dragged card tracks the pointer 1:1 while its siblings part, and settles on release)
-make the panel directly manipulable; the
-flick spring (`Motion.flick`, the one sub-1.0 damping) is reserved for what a gesture
-threw. The panel materializes on arrival on the shared entrance curve. A charging session
-renders as the hero's scene (`ChargingSessionScene`): the car's own finish estimate leads
-at the display tier, arriving power supports it, and no figure is ever shown that the car
-did not report — projections derive capacity from readings only when they must, and say
-so (`ChargeTargetProjection`, `InstrumentMath`).
+Three principles hold the rest together. Strip away anything that delays reading. Keep the distinction between reported and estimated data. Keep control latency visible. An accent colour alone would produce a theme, and these three decisions are what make the instrument.
 
-## The instrument refinement (2026-11-16)
+## Surfaces and palette
 
-The panel is a desk instrument for Volvo and Polestar owners. It answers quick checks of
-charge, range and cabin state, then supports longer planning and history sessions. It should
-feel exact, wintry and unhurried. The amber charge rail is the bright spot; in Log it becomes
-the start and end of each charge, with gaps left blank.
-ENERGY 2 / RHYTHM 3 / MOTION 2.
+Monochrome Precision is the base palette: `#FFFFFF` and `#000000` canvases, a `#666666` secondary, a 12 % hairline, and a `#EFEFEF` studio fill (`#1A1A1A` in dark) for control cards and notices. Nothing inside the panel rounds, casts a shadow, or uses a gradient. The macOS window owns the corners.
 
-- **Now:** the vehicle name identifies the instrument. Battery and estimated range share the
-  left edge by default, with Battery first. Settings → Appearance lets readers put the group on
-  any side of the car and choose which reading comes first. At accessibility text sizes, the left and right
-  positions stack above and below the image to give the readings full width. The larger render
-  uses the studio image's margins to give the car room beside the readings. An open tailgate
-  gets the hatch symbol beside its warning. The rail carries state
-  of charge, quarter marks and the target tick. Old or offline readings are named above the
-  figures and use a neutral rail
-  without a charging projection. Below the rail, the owner's reference strip pairs a centered
-  icon and reported state with each available action; the fourth cell gives the reading's age.
-  Fine vertical dividers separate the cells, which reflow to two columns at narrow widths and
-  accessibility text sizes. Live values can still roll; the mere passage of time does not
-  animate the display.
-- **Plan:** a timed appointment leads by its clock time. Other active schedules follow in order,
-  and expired one-shot timers are omitted. The existing command-result banners precede the
-  schedule so feedback stays visible after an action.
-- **Log:** the wide EV overview leads with distance or estimated energy, whichever has observations.
-  The charge chart draws one vertical mark per session at its end time. A hollow point marks
-  the recorded start level and a filled point marks the end level. The latest session's range
-  sits next to the legend. Blank space between sessions means no plotted readings. Distance
-  uses one bar per day so the bar and its selected
-  value report the same total. The chart never joins a past charge to the current battery level.
-  The Compact and combustion-capable overviews keep their
-  denser summaries; the latter also keeps the fuel entry action in the overview.
-  Observed Changes opens with five rows so the timeline leaves room for the next card.
-  Tabs & Cards lets readers set rows per page beside each paginated Log card and arrange
-  the cards in the order they use them.
-- **Car:** the vehicle model, larger profile and identity form a type plate. VIN gets a full reading
-  line, with the remaining fields below. Screenshot Privacy Mode replaces sensitive plate values
-  with “Hidden.” Compact keeps the photo controls when there are photos to browse; otherwise it
-  draws the installed model outline.
-- **Chrome:** tab names fit first; a scrollable icon strip is the fallback for long translations
-  and custom tab sets. The Settings sidebar uses neutral fill and a checkmark for selection and
-  lets labels wrap. Both panes show macOS scroll indicators when the system requests them.
-  When Polestar web sign-in is offered, it has the accent and the credentials form stays secondary.
+| Palette | Light canvas | Dark canvas | Accent, light | Accent, dark |
+|---|---|---|---|---|
+| Monochrome Precision | `#FFFFFF` | `#000000` | `#000000` | `#FFFFFF` |
+| Hisingen | `#F7F7F7` | `#151515` | `#A3390A` | `#FFAA7A` |
 
-The rule and chart grid encode measurements, not a decorative background. The vehicle artwork
-is the manufacturer's render or the app's existing model outline. No new artwork, decorative
-surface, font, or motion loop is part of this pass.
+`Palette.activeFill` is the live colour: the charge line while charging, the timeline's charging bands, and every active control card. It is the theme's accent, with `activeOn` (the canvas) for text on it, so live state follows the reader's theme. Monochrome Precision's accent is ink, so it uses a warm amber (`#B5770F` light, `#E8A93A` dark) with black text instead: 3.7:1 and 10:1 as a graphic, 5.6:1 and 10:1 for the text. Other palettes keep their colours and take the same geometry, type, and states. Semantic colours identify safety, warning, and system status, always with a label.
 
-## The 2026-11-16 redesign (supersedes older sections where they disagree)
+The live colour and the Hisingen accent carry separate values in each appearance to meet contrast. Theme names describe a colour or a place.
 
-Direction, written before the work:
+A reader can make a theme: a name, an accent, and a light and a dark background. `CustomThemeColors.resolve` keeps the picked backgrounds as backgrounds and moves a colour only as far as it must for text to clear 4.7:1 on the canvas, the card fill and the accent wash, so no pair drops under the floor after the hex is rounded. The editor previews the resolved result in both appearances before the reader saves it. A reader theme is stored as `custom:<id>` and follows the same per-brand and per-vehicle paths as a shipped one; deleting it returns anything that pointed at it to the default palette.
 
-- **Product:** a menu-bar instrument for Volvo and Polestar EV owners.
-- **Use:** dozens of two-to-five-second glances a day at a desk, and a few planning sessions a
-  week. Pointer and keyboard; dense is fine; contrast must hold over any desktop.
-- **Character:** exact, wintry, unhurried.
-- **Bright spot:** the energy line. The battery's state of charge as one line, and the only
-  place besides actions that carries the signal colour.
-- **Signature:** the energy line at three scales: the header mark (`EnergyLineMark`), the Now
-  rail with its target tick and charging projection (`EnergyLine`), and the Log trace
-  (`EnergyTrace`).
+### Reader-made themes
 
-What changed:
+Settings, Appearance ends the theme grid with Create Theme. A theme is a name and three colours: accent, light background, and dark background. `CustomThemeColors` derives everything else and adjusts the picks until every text pair reads: a light background is lifted to at least 0.80 luminance and a dark one sunk to at most 0.03; muted text firms toward ink, and the accent darkens in light and lightens in dark, until each clears 4.7:1 on the canvas, the card, the chip and the accent's own 12 % wash. The editor previews both appearances in the resolved colours and says the colours are adjusted for readability. Themes are stored in `custom_themes_v1`, picked with `AppTheme.custom(id)` (raw value `custom:<id>`), so they ride the same per-vehicle and per-brand storage as shipped themes. Deleting a theme clears every selection that named it. `CustomThemeTests` sweeps 200 hostile combinations.
 
-- **Places:** Now, Plan, Log, Car (raw values `vehicle`, `controls`, `history`, `info`, so saved
-  compositions decode unchanged; the case order is the default tab order). Settings stays a
-  separate desktop window.
-- **Header:** energy-line mark plus wordmark, places as words, the current place marked by a 2 pt
-  ink rule that slides between them. No glass capsule.
-- **Surface:** the panel is the opaque theme canvas (`PopoverSurface`). The translucent panel let
-  the window behind it decide contrast. Sections still have no surface of their own.
-- **Default theme:** Sodium (`AppTheme.hisingen`): frost canvas `#F0F2F1`, slate night canvas
-  `#121519`, streetlight amber `#F0B86E` in dark and a deepened amber for text in light. Ink is
-  softened in both appearances (about 13:1 on the canvas, not the 16-18:1 of the first pass, which
-  glared). The canvases cannot move further without the shared status colours losing 4.5:1 on
-  their washes. The other eight themes remain as alternatives.
-- **Buttons:** two shared styles, no system bezels. `.hisProminent(fill)` is a solid fill with
-  its label in the canvas colour; `.hisSecondary(tint)` is ink (or a status colour) on the solid
-  chip fill with a hairline edge. The system styles drew white labels on light dark-mode accents
-  and tinted bezels light grey, about 2:1.
-  Settings uses the shared style for account and fleet actions. Its native pickers keep their
-  system foreground so the app's ink does not become the bezel color.
-- **Type:** focal figures are light weight at display size (battery, range, Log period, Car
-  title, Plan times); labels stay small and semibold; tabular figures throughout.
-- **Now** (`NowInstrument`): one readiness line from reported signals (what the car is doing,
-  its locks), the attention summary if any, the car beside the battery and range figures, the
-  energy line, then three rows (Locks, Climate, Charging), each a state plus one real button
-  (`.hisSecondary`).
-- **Plan** (`PlanTimeline`): "Upcoming", the car's active schedules soonest first, times in light
-  figures; the existing climate, charging and schedule controls follow.
-- **Log** (`awardHistoryOverview` + `EnergyTrace`): the period as one sentence, then the trace.
-  Charges rise as solid amber segments from recorded start and end levels; dotted lines join one
-  charge to the next and carry the distance driven between them. Battery level while driving is
-  not recorded, so the dotted stretch is never shaped like a curve.
-- **Car** (`awardVehiclePassport`): a type plate. Model and year in light display type, then
-  label-over-value fields (registration, VIN, capacity, charge port, odometer). Unknown fields are
-  left out, not dashed. VIN and plate follow Screenshot Privacy Mode.
-- **Not changed in this pass:** the menu-bar glyph (still the PNG set), the Settings window's
-  structure, and the detail cards under each place, which take the new tokens but keep their
-  layouts.
+## Type and copy
 
-## Dials
+One face: Helvetica Neue, which ships with macOS. `HisingenTheme.font` maps the weight ladder onto two cuts. Roman carries displays, values, labels, and headings; Medium appears only for semibold and heavier, or medium below 11pt. Running text tracks at -0.019em, display sizes at -0.036em, and text below 11pt gets a little air back. Monospaced design keeps the system face for the plate and readouts. The shared ramp still scales with the reader's text size and the density preset. Scale, alignment and white space carry the hierarchy, so headings are not repeated in bold.
 
-- **ENERGY 3**: the car, battery and range form one high-contrast instrument composition. The
-  amber energy rail is the only glow and is justified by live energy state.
-- **RHYTHM 3**: every destination has a different focal object before its supporting detail:
-  vehicle instrument, technical passport, history story, spatial controls, desktop settings.
-- **MOTION 2**: every state change animates, nothing bounces. Ambient motion only where the
-  car is actually doing something, and only while anyone can see it. Gesture-carried motion
-  (pull, swipe, reorder) may settle with the flick spring's one step of overshoot, because
-  the gesture itself carried the velocity; state changes stay critically damped.
+Hisingen's copy is literal: name the subject and its state, then say what to do. Battery, Estimated Range, Locked, Last known readings. Commands start with the verb and preserve established translations. Unsupported or missing readings stay distinguishable from zero. A labelled estimate remains an estimate.
 
-## Personality
+The voice shifts by view:
 
-Measured craft, and the discipline is the identity: every token in the theme files carries
-its reason in a doc comment, contrast is enforced by a build-failing script
-(`Scripts/verify-app-contrast.py`), and every question has one answer, one token, one written
-reason. Geometry, type and shadows are global; themes vary colour only, because a theme is a
-palette choice, not a layout choice.
+- In Now, “Estimated Range” qualifies the number and “Last known readings” qualifies the whole display. “Unlock” is an instruction, while “Locked” is a report.
+- In Plan, a time gets the largest type because it answers the question first.
+- In Log, dates, units, and an estimate label carry the evidence.
+- Car treats identity as specifications with labels and values. The title is the model itself, so the surrounding page needs very little prose.
 
-## Palette
+## Main views
 
-Neutrals carry structure, one accent carries action, semantics carry state. That is the whole
-active palette per theme: neutrals plus one accent, by construction.
+- **Shell:** the Hisingen wordmark in regular display type, text tabs, and a 2pt ink underline under the active tab resting on the header rule. Long tab sets fall back to a scrolling icon strip with full accessibility labels.
+- **Now:** model name, then freshness: "Checked" plus one shared reading age when every reading agrees; a reading that differs keeps its own line. The car sits straight on the canvas, grounded by its own render shadow; battery and range read as figures over labels, and the 2pt charge line is ink at rest, gold while charging, muted when historical. The control cards under the car are the reader's choice (Settings → Appearance → Controls on Now): Locks, Climate, and Charging by default, plus Air Cleaning, Windows, Honk & Flash, and Tailgate. A chosen card draws only when its remote feature is on and the car reports the capability; locks, climate, and charging always show their state. They sit in a grid: three across, four as two by two, one column at accessibility sizes. Each is a square card on the studio fill; each card is the control, with the verb and an arrow at the foot (the arrow appears on these cards only). An active card (climate or air cleaning running, the car charging) fills with the theme's `activeFill` and writes in `activeOn`: the accent with canvas-coloured text, the pairing the primary button already passes, or amber with black text in Monochrome Precision. A car already charging on its schedule offers no action, since there is no plain stop command, and an unplugged car offers no Charge Now. The state is always written on the card too.
+- **Plan:** the "when" page. It opens with the departure: the car's next reported departure, or a time the reader picks to check (kept in the panel, never sent to the car), in large type with the readiness message under it. A 24-hour hairline ruler follows: charging windows as amber bands (solid while charging), climate timers as ink marks, departure as a tick. Then every timer as a row with Edit or Details, and Add Schedule at the end. Charging follows (one target slider, the current limit with its note in an info button, Charge Now and Resume Schedule), then the planner, then climate settings: temperature and seats, which Now's climate card uses when it starts climate. Start Climate lives on Now. Lock, window and locate, and software install controls live on Car; Plan keeps one only when the reader placed it there or their Car layout does not draw it. The remote-commands footnote closes the tab.
+- **Log:** two underlined rows: the period (with Custom… opening the range editor) and the section group (All, Charging, Driving, Climate, Status). The full-history note lives in an info button. One large period figure, the ruled session chart, and month comparisons as figures over labels.
+- **Car:** the category filter shares a row with the jump and report menus. Freshness is named only for an offline copy, a stale check, or an old reading; the footer covers the rest. Model and year, the car straight on the canvas as on Now, the VIN and specifications as values over labels. Software install sits after the software section; lock controls and windows, honk and flash after parking location. Reading timestamps come last, with their explanation in an info button.
+- **Rows and headings:** `KVRow` is a spec row: label, value, hairline beneath; a symbol only for a warning. Section headings are words at display size, with a symbol only where it carries state.
+- **Notices:** `hisNotice` draws the studio fill with a 2pt edge in the notice colour (4pt under Increase Contrast); text stays ink.
+- **Settings and sign-in:** a text-only sidebar marked by a 2pt ink bar, a search field with a rule beneath, and the brand choice as an underlined row. Sign-in options are outlined tiles; the chosen one takes a 2pt ink edge.
+- **Mini panel:** flat canvas with a hairline edge, battery as a figure, power and time muted, and the gold charge line.
+- **Charts:** in the Monochrome Precision palette, ink for the primary series, greys for supporting ones, a deep gold for attention.
+- **Icons:** outline SF Symbols throughout; filled glyphs remain only for warning, success, and error marks.
 
-- Structure: `canvas`, `cardFill` (the canvas lifted toward white: 55% light, 16% dark),
-  `chipFill` (the card sunk toward black), `ink`, `inkMuted`, `hairline`. Every token is a
-  dual-appearance pair; light and dark are both first-class, never an afterthought.
-- Accent: one per theme, spent on acting elements and live values only. Tinted fills that
-  carry accent-coloured text hold at or below 12% opacity (hover 8%), the ceiling the
-  accent's 4.5:1 guarantee covers.
-- Status: `semanticGood/Active/Warning/Critical/Fault/Fuel` keep their system hue and move
-  lightness to hold 4.5:1 on every theme's card and on a 12% wash of themselves. A hardware
-  fault is never the same colour as a low tyre ("add air" and "book service" must not match).
-- Charts: series are data with their own tokens (`chartPositive/Info/Attention/Health`),
-  checked 3:1 against the card and against each other where they share axes. Decorative tint
-  is for header glyphs only, never for plotted data, and the header glyphs draw these same
-  chart tokens rather than raw system colors, so a tint varies by theme and survives the
-  contrast gate with the rest of the palette.
+## Motion and input
 
-The nine themes:
+`Motion.swift` defines selection, press, refresh, command feedback, and gesture timing. The panel appears with opacity. A swipe or reorder can settle from a position carried by the pointer; telemetry stays anchored while its figures roll. Reduce Motion keeps a crossfade or resolves without movement. The stage, the rules, and the underline add no decorative motion.
 
-| Theme | Accent | Character |
-|---|---|---|
-| Sodium (default) | `#F5B04C` streetlight amber | Frosted surfaces, slate nights, streetlight amber |
-| Monochrome Precision | `#E56E23` | Polestar monochrome, high-contrast type |
-| Heritage Blue | `#005B94` | Volvo blue, calm surfaces |
-| Nordic Night | `#00E5FF` | Pitch OLED black, electric cyan |
-| Aurora Borealis | `#00E676` | Midnight slate, northern-light emerald |
-| Swedish Gold | `#D4AF37` | Dark charcoal luxury, BST gold |
-| Cyan Racing | `#0090D0` | Championship blue, track geometry |
-| Gothenburg Forest | `#4CAF50` | Swedish pine, organic soft |
-| Sand Dune | `#C5A059` | Desert sand, titanium champagne |
+The keyboard reaches the whole panel. ⌘1 to ⌘9 select the first nine tabs, ⌘R refreshes telemetry, and ⌘, opens Settings. ⌃⌥P toggles the panel, and ⌃⌥[ and ⌃⌥] or ⌃⌥1 to ⌃⌥9 change car. The ⌃⌥ keys also work while another app is active once macOS has granted the permission.
 
-Gradient use is structural, not decorative: charts draw their series gradients, and the
-vehicle hero's scene carries its own lighting, but no surface draws a decorative gradient.
-The specular rim the old glass cards carried is gone with the 2026 surface pass. Brand warmth
-lives in the accent token, never as a wash over large surfaces.
+The reader chooses which of the seven control cards show on Now, and can hide and reorder tabs and the items inside them. The Now cards keep one fixed order: Locks, Climate, Charging, Air Cleaning, Windows, Honk & Flash, Tailgate.
 
-## Typography
+### Open candidates
 
-SF Pro, the platform face; a menu-bar utility does not import a brand font. Applied through
-one ramp (`HisingenTheme+Typography.swift`):
+Neither of these is decided or built. Do not implement either without a decision from the owner.
 
-- Tiers: nano 8, micro 9, caption 10, label 11, body 12, heading 13, subhead 14, title 15,
-  displaySmall 17, display 28, displayLarge 44. The two display tiers are the instrument's
-  focal figures: one displayLarge figure per screen (the hero's battery level), a display
-  headline for the charging scene's finish estimate. Every tier scales with the reader's
-  text size (`@ScaledMetric`) and the density preset; no frozen point sizes at call sites.
-  Set tiers via `hisType(_:weight:design:)`; a composition that needs a figure between tiers
-(the award surfaces' 24-42pt instrument scale) uses `hisType(size:relativeTo:)`, which keeps
-text-size scaling, the density multiplier and optical tracking owned by the ramp instead of
-re-freezing a point size. Display tiers and bespoke display figures track negative from
-displaySmall up.
-- Weight ladder frozen: headings semibold, values bold, captions semibold. Below 10pt, weight
-  goes up, not down.
-- Optical tracking: positive below 12pt (+0.04 per point), negative for display (-1.1% of
-  size), so tracking follows the rendered size.
-- Telemetry values roll with `.numericText()` plus `.monospacedDigit()` plus the telemetry
-  token (`hisTelemetryValue`); tabular figures are part of the contract.
-- Wrapped small text gets +2pt leading (`hisCaptionLeading`), because Swedish and German
-  ascenders run taller than English at the same point size.
-- No monospace headings, no uppercase labels with wide tracking.
-- One formatting locale (2026-09-20): every user-facing number and date resolves through
-  `L10n.displayLocale` — the selected interface language, else the system locale. An English
-  UI on a Swedish-region Mac used to render Swedish month names and split decimal separators
-  across its own surfaces; it now renders one language's numbers everywhere, panel and menu
-  bar alike.
+- **Shortcuts for the three frequent actions.** Lock, climate, and charging are what readers do most, and none has a shortcut. A shortcut would send a command to the car from a keystroke. It needs the same capability gate the cards use today, and a decision on whether a keystroke should ask before it sends, since remote commands show no confirmation dialog now.
+- **Reorderable Now cards.** The tab composition screen already has reorder controls that work by drag and by button. Reusing them would let a card keep the place the reader gave it.
 
-## Surfaces and geometry
+## Brand boundary
 
-The menu-bar surface remains restrained: Standard is 620 points wide and Grand stops at 760.
-The branded header owns four primary destinations; Settings is not a tab and opens from the one
-top-right icon into a separate 1080 × 760 resizable desktop window with stable sidebar navigation.
-The window has its own saved frame and never inherits a dropdown preset. At Standard width
-(620 points) and above, all four destinations use their focal compositions: Vehicle instrument,
-Info passport, History period instrument, and spatial Controls. Factory vehicle artwork leads
-Vehicle, Info, and Controls when cached; the model-specific line silhouette is the honest fallback
-when no image exists. Compact uses a deliberately simpler reading order and an icon-only header,
-while retaining every destination, action, and reading without horizontal overflow.
+Hisingen is an independent product with no affiliation to any vehicle maker. It ships no manufacturer wordmark or badge, no licensed typeface files, and no campaign imagery, and it keeps its own vehicle artwork path and outlines.
 
-One radius per question, all global (`HisingenTheme.swift`): sections 12, banners 10 (a
-concentric inset of the section), gauges 5, status chips 4. Nothing is pill-shaped by default.
+Theme names describe a colour or a place. None is named after a vehicle maker, a paint finish, or a racing team, and no theme name or subtitle contains a maker's name. `MeasurementUnitsAndThemeTests` checks every theme's title and subtitle against a list of names that must not appear. The two themes that used to carry such names are now Charcoal Gold and Circuit Blue. A saved choice made under an old identifier is rewritten at launch and when a settings archive is imported, so no one loses their theme.
 
-Material discipline, the app's strongest identity rule: exactly one surface in any stack.
-Panel = `.thickMaterial` under a 45% `canvas` wash in light appearance, `.regularMaterial` in dark.
-Light used `.thinMaterial` until 2026-11-16: over a dark window it settled at mid-gray and muted
-text fell to 1.6-2.5:1. The panel root also maps `.secondary` and `.tertiary` to `inkMuted`, so
-hierarchical text is the contrast-gated token, not a vibrant label that blends with whatever
-window sits behind the panel. Section = *no surface at all*,
-a group of content on the glass; chip = solid `chipFill`. Blurs never stack, and nothing competes
-with the material.
+## Verification
 
-The 2026 language (adopted 2026-09-19; the first pass kept a lifted fill on every section and
-read as same-looking, so the fill went too): a section is **not a surface**. The old card's
-fill, outline, specular rim and inner shadow are all deleted (`cardSurface` no longer exists)
-and content groups sit directly on the panel glass the way Apple's own popovers and Control
-Center do, grouped by whitespace, header typography and inset dividers. `cardFill` remains a
-palette token for the render reference, but nothing in the app draws it. Glass is the
-*functional* layer, drawn through exactly
-two tokens (`hisControlGlass`, `hisFloatingGlass` in `HisingenTheme+Surfaces.swift`) and only
-on what the reader operates: the selected tab capsule, the Settings section indicator, the
-floating charging mini panel. On macOS 26 these draw real system glass (`glassEffect`, with
-the system's own hover and press responses); on macOS 15 the same shapes fall back to palette
-fills and the panel material, so the hierarchy survives without the material. Under Reduce
-Transparency or Increase Contrast every surface goes opaque, per ``PopoverSurface``.
-`Scripts/verify-surface-discipline.mjs` fails when a second call site draws glass or a
-material, or when the section grammar regains a surface.
+Contrast is checked by `Scripts/verify-app-contrast.py`. `Scripts/verify-surface-discipline.mjs` and `Scripts/verify-ui-discipline.mjs` check shared surface, focus, type, and copy rules. For local snapshots of the production views with isolated sample vehicle data:
 
-Elevation belongs to windows, not to sections: the panel and the floating mini panel carry
-their system window shadows, and sections cast none. What the UI does draw is legibility:
-CardHeader's breathing glyph glow, the glows tied to live energy state (the rail, the hero
-overlay), the shadow under an instrument tick or a floating scrub callout so it reads over a
-glow, and the two mid-gesture `shadowTint` overlays the Surfaces token sanctions. Each exists
-to separate a foreground mark from what it sits on; none marks elevation. Separators inside
-a section are `Divider()` at `dividerOpacity`; where content passes under the tab strip or
-over the footer, the scroll edge softens through a gradient mask instead of meeting a drawn
-divider. The Increase Contrast boundary (`cardBoundary(increasedContrast:)`, 3:1, checked by
-`Scripts/verify-app-contrast.py`) is the one outline the app draws, and only when asked.
-Card padding 15 and section spacing 12, both density-scaled; whitespace is structural.
+```sh
+HISINGEN_PANEL_RENDERS=/tmp/hisingen-panel sh Scripts/test.sh --filter PanelInspectionTests --no-parallel
+```
 
-## Motion
-
-Tokens grouped by why (`Motion.swift`):
-
-- **Interaction**: fast, easeOut, no overshoot (0.2s; 0.11s for micro acknowledgements).
-  Buttons press with scale 0.97 plus a slight dim, minimum 24pt target, and answer the
-  pointer before the click: every pressable dims lightly on hover, and chips lift their fill
-  through `HoverChipFill` on top of it. Commits confirm on the tactile channel: switches,
-  saves, deletes, vehicle switches, tab swipes and clicks, command send and outcome. Pickers
-  and text input stay silent, because over-feedback trains readers to ignore all of it.
-- **State**: critically damped springs, damping 1.0. Nothing rings. Overshoot is reserved for
-  gestures that carry momentum: tab swipes, pull-to-refresh and card reordering use the flick
-  spring only after pointer movement, while state changes remain critically damped.
-- **Ambient**: breath 3.4s, live pulse 1.6s, spin 1.4s, tiny deltas (opacity 0.6 to 1.0,
-  scale 1.0 to 1.04), gated by panel visibility (`ambientMotionAllowed`), frugal frame counts
-  in the menu bar.
-- **Entrances** share one curve (0.16, 0.72, 0.20, 1.0) across SwiftUI, AppKit and the
-  vehicle roll-in, so every entrance reads as one system.
-- **Reduce Motion** resolves in one place: nil, or a 0.11s crossfade so a change is still
-  noticed. Keyboard focus is an ink underline (12x2), deliberately not accent-coloured.
-
-## Components and states
-
-- Sections are the universal grammar; one definition (`Card`) serves every card: content on
-  the panel glass, no surface of its own.
-- The dashboard's status primitive is the **instrument row** (`DashboardRow`): tinted icon,
-  ink value, muted trailing label, one line, **no surface**. Tiles were tried between the card
-  and the row and read as cards, because a filled rounded rectangle is a card whatever it
-  contains; rows are only typography on the panel glass, stacked on whitespace. The same rule
-  now holds for the History overview and month-comparison metrics (2026-09-20): a metric is a
-  value over its label, columns separated by inset hairlines, not tiles. Rows state;
-  the hero's living overlay shows *where*; Controls *act*. Doors-and-locks and fuel render as
-  rows (`VehicleDashboardRows`); the hero owns the battery figure, so no row repeats it; a
-  disconnected cable is one muted line, not a titled section
-  (`VehicleChargingCard.idleCard`); the departure checker is one collapsed disclosure.
-- The tab selection and the Settings section indicator are glass capsules sliding on
-  `matchedGeometryEffect`. Selection everywhere else (garage chips, pickers, schedule rows)
-  is a tinted fill with no outline. Unselected chips lift to `chipHoverFill` (8 %) under
-  the pointer through `HoverChipFill`, so everything clickable answers the pointer before
-  the click; selection itself stays the accent's business.
-- Status labels are one family (`Pill`, `StateSummaryChip`, `CommandReceiptChip`) at radius 4:
-  a 12 % wash of their own colour and no outline, the ceiling the accent's 4.5:1 guarantee
-  covers.
-- Empty states use `HisingenEmptyState` (ContentUnavailableView) with domain-specific copy
-  and real recovery actions; loading and error states are part of every data card.
-- Right-click belongs to the content macOS readers expect it on: trip rows (hide, route),
-  charging sessions (copy details), schedule rows (edit, delete), the car render. A row that
-  hosts a nested control cannot be a Button, so it answers the pointer through a hover wash
-  instead and marks the constraint where it taps.
-- Card reorder is a pointer drag and a VoiceOver verb at once: the drag handle is
-  pointer-only, and each card carries named Move Up / Move Down actions that perform the
-  same move one slot at a time.
-- SF Symbols, hierarchical rendering, domain-relevant glyphs (a fan for climate, a battery
-  for energy). If no genuinely relevant symbol exists, use none. CardHeader accepts a drawn
-  glyph in place of the symbol for the one header whose mark is animated (climate's spinning
-  fan); it still gets the heading tier, header trait and sort priority every header shares.
-  Air cleaning uses the air-quality glyph, presets use checklist or approval marks, and linked
-  account modes use the link glyph. The generic sparkle symbol is not part of this vocabulary.
-
-## Voice
-
-Instrument-panel English: terse, numeric, specific. "12 V battery low", "%d min remaining",
-"111.0 kWh Extended Range (CATL · 64.0 kWh Usable · 400V)". No marketing adjectives, no
-buzzwords, no em dashes in UI copy (verified zero in the 2,557-line English strings file).
-Claims come from the car, never from copy. Localized in 16 languages; layouts tolerate
-length, because Swedish and German run longer than English.
-
-## Focal point and accent
-
-- One focal point per screen: battery, range, and factory render on Vehicle; the technical
-  passport on Info; selected-period distance and real trip marks on History; the vehicle flanked
-  by climate and charge instruments on Controls. Everything else defers to it.
-- The accent is the one deliberate accent. Ink, not accent, marks focus; inkMuted, not
-  accent, marks muted text; semantics, not accent, mark state. If everything is amber,
-  nothing is.
-- Identity motif: cool Nordic neutrals with one warm accent, Swedish heritage naming, and
-  the vehicle silhouette as the recurring hero gesture.
+The Unslopovich visit in `.unslopovich/visits/` records what ran, what was inspected, and the limits of that evidence.

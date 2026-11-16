@@ -85,7 +85,9 @@ struct VehicleOutlinePlacementTests {
                     let i = (y * width + x) * 4
                     if pixels[i] != other.pixels[i]
                         || pixels[i + 1] != other.pixels[i + 1]
-                        || pixels[i + 2] != other.pixels[i + 2] {
+                        || pixels[i + 2] != other.pixels[i + 2]
+                        // Pure black ink on a clear field is 0,0,0 premultiplied: only alpha moves.
+                        || pixels[i + 3] != other.pixels[i + 3] {
                         points.append(CGPoint(x: x, y: y))
                     }
                 }

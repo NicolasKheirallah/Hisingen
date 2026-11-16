@@ -11,6 +11,7 @@ struct ChargingPlannerCard: View {
     let state: VehicleState
 
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.homeCharging) private var homeCharging
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var points: [ElectricityPricePoint] = []
     @State private var hasLoaded = false
@@ -54,11 +55,26 @@ struct ChargingPlannerCard: View {
             }
     }
 
+    /// The paired vehicle with a home charger: Home Assistant can run this car's plan.
+    private var showsHome: Bool {
+        guard let homeCharging else { return false }
+        return homeCharging.shouldShow(for: state)
+    }
+
     @ViewBuilder
     private var cardContent: some View {
         if neededEnergyKwh > 0.5 {
             plannerBody
                 .transition(plannerTransition)
+        } else if showsHome, let homeCharging {
+            // At the charge limit there is nothing for this Mac to plan, but a plan Home Assistant
+            // already runs, or one the reader wants to set, stays reachable.
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
+                    HomePlannerSection(state: state, model: homeCharging)
+                }
+            }
         }
     }
 
@@ -86,7 +102,7 @@ struct ChargingPlannerCard: View {
         let model = planModel
         return Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
+                CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
                 if let model {
                     Group {
@@ -102,7 +118,7 @@ struct ChargingPlannerCard: View {
                             .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
                         if let savingsLine = model.savingsLine {
                             HStack(spacing: 5) {
-                                Image(systemName: model.savings > 0 ? "arrow.down.circle.fill" : "clock")
+                                Image(systemName: model.savings > 0 ? "arrow.down.circle" : "clock")
                                     .hisType(.caption)
                                     .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
                                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
@@ -142,6 +158,11 @@ struct ChargingPlannerCard: View {
                 Text(attributionLine)
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
+
+                if showsHome, let homeCharging {
+                    PanelRule().padding(.vertical, 2)
+                    HomePlannerSection(state: state, model: homeCharging)
+                }
             }
             // Loading → loaded → status branch swaps key here; the persistent
             // VStack carries the animation because branches cannot animate

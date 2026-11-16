@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var persistLocationHistory = false
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.homeCharging) private var homeCharging
 
     /// Native text fields and segmented controls must not join an implicit section transition.
     /// AppKit rounds interpolated fitting widths independently, which can briefly invert
@@ -124,6 +125,9 @@ struct SettingsView: View {
                             SettingsElectricityCard(binder: binder)
                             if preferences.marketCountry.offersMarketPricing {
                                 SettingsChargingPlannerCard(binder: binder, state: state)
+                            }
+                            if let homeCharging {
+                                SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
                             }
                         }
                         .transition(Self.sectionSwapTransition)

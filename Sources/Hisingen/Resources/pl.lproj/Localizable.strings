@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "Bieżący pojazd: %@. Przełącz pojazd.";
 "Custom App" = "Własna aplikacja";
 "Cut" = "Wytnij";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Błękit mistrzowski Cyan Racing, wyrazista geometria torowa";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Błękit mistrzowski, wyrazista geometria torowa";
 "Daily" = "Codziennie";
 "Danish" = "Duński";
 "Dark" = "Ciemny";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "Hybryda plug-in (PHEV)";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Pomoc drogowa Polestar";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, luksusowy ciemny grafit";
+"Dark charcoal surfaces with a gold accent" = "Ciemne grafitowe powierzchnie ze złotym akcentem";
 "Polestar ID (Email)" = "Polestar ID (e-mail)";
 "Polestar ID Password Required" = "Wymagane hasło Polestar ID";
 "Polestar ID Required" = "Wymagany Polestar ID";
@@ -994,7 +994,7 @@
 "Sunroof" = "Szyberdach";
 "Supported" = "Obsługiwane";
 "Swedish" = "Szwedzki";
-"Swedish Gold" = "Swedish Gold";
+"Charcoal Gold" = "Charcoal Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Szwedzka sosna i eukaliptus, barwy ziemi, organiczny miękki styl";
 "Switch Vehicle" = "Przełącz pojazd";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Przełącz pojazd (⌃⌥[ / ⌃⌥])";
@@ -1694,16 +1694,14 @@
 "Everything looks good" = "Wszystko wygląda dobrze";
 
 /* Text size & density options */
-"Compact (85%)" = "Kompaktowy (85%)";
-"Standard (100%)" = "Standardowy (100%)";
-"Relaxed (115%)" = "Rozluźniony (115%)";
+"Relaxed" = "Rozluźniony";
 "Smallest text, most content per screen" = "Najmniejszy tekst, najwięcej treści na ekranie";
 "Default sizing" = "Rozmiar domyślny";
 "Larger text and controls" = "Większy tekst i elementy sterowania";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Gęstość zawartości";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Powiększaj zawartość niezależnie od rozmiaru panelu: tryb kompaktowy pokazuje więcej przed przewinięciem";
+"Type size and spacing, independently of the panel size" = "Rozmiar tekstu i odstępy, niezależnie od rozmiaru panelu";
 "Custom Size" = "Rozmiar niestandardowy";
 "Independent width and height overrides" = "Niezależna szerokość i wysokość";
 "Width" = "Szerokość";
@@ -2802,6 +2800,7 @@
 "History" = "Historia";
 "Info" = "Info";
 "Info section category" = "Kategoria sekcji Info";
+"History section category" = "Kategoria historii";
 "Instantaneous drivetrain output power ceiling." = "Chwilowy górny limit mocy wyjściowej układu napędowego.";
 "Interactive Verification Required" = "Wymagana weryfikacja interaktywna";
 "Interior view of the vehicle" = "Widok wnętrza pojazdu";
@@ -3283,3 +3282,13 @@
 "Battery at the start and end of each charge." = "Poziom naładowania na początku i na końcu każdego ładowania.";
 "No complete charge readings in this period." = "Brak pełnych odczytów ładowania w tym okresie.";
 "Enable remote controls in Settings → Features." = "Włącz zdalne sterowanie w sekcji Ustawienia → Funkcje.";
+"Windows" = "Szyby";
+"Controls on Now" = "Sterowanie w widoku Teraz";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Wybierz karty sterowania widoczne pod samochodem. Każda nadal wymaga włączonej funkcji zdalnej.";
+"Create Theme" = "Utwórz motyw";
+"Edit Theme" = "Edytuj motyw";
+"Accent" = "Akcent";
+"Light Background" = "Jasne tło";
+"Dark Background" = "Ciemne tło";
+"My Theme" = "Mój motyw";
+"Your colours, adjusted to stay readable in light and dark." = "Twoje kolory, dostosowane, by pozostały czytelne w trybie jasnym i ciemnym.";

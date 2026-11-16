@@ -75,22 +75,10 @@ private struct VehicleOutlineBaseImage: View {
 
     var body: some View {
         if let svgImage = VehicleOutlineImageProvider.shared.image(for: spec) {
-            Group {
-                if instrumentAppearance {
-                    let ink = HisingenTheme.inkMuted
-                    // The traced SVG has subpixel lines at panel size. Keep the stronger marks in ink.
-                    Canvas { context, size in
-                        context.addFilter(.alphaThreshold(min: 0.18, color: ink))
-                        context.draw(Image(nsImage: svgImage).resizable(),
-                                     in: CGRect(origin: .zero, size: size))
-                    }
-                } else {
-                    Image(nsImage: svgImage)
-                        .resizable()
-                        .renderingMode(.template)
-                        .foregroundStyle(HisingenTheme.ink.opacity(0.85))
-                }
-            }
+            Image(nsImage: svgImage)
+                .resizable()
+                .renderingMode(.template)
+                .foregroundStyle(instrumentAppearance ? HisingenTheme.ink : HisingenTheme.ink.opacity(0.85))
                 .frame(width: og.imageWidth, height: og.imageHeight)
                 .position(x: og.originX + og.imageWidth / 2,
                           y: og.originY + og.imageHeight / 2)
@@ -317,7 +305,7 @@ struct VehicleSideProfileDoorsView: View {
                     .foregroundStyle(activeColor)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
-                    .background(HisingenTheme.chipFill, in: Capsule())
+                    .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                     .offset(x: (resolved.anchor.x - 0.5) * resolved.frame.width,
                             y: (resolved.anchor.y - 0.5) * resolved.frame.height)
             }

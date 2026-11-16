@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "当前车辆：%@。切换车辆。";
 "Custom App" = "自定义应用";
 "Cut" = "剪切";
-"Cyan Racing" = "Cyan Racing 赛道蓝";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing 冠军蓝，利落的赛道几何设计";
+"Circuit Blue" = "赛道蓝 (Circuit Blue)";
+"Championship blue, crisp track geometry" = "冠军蓝，利落的赛道几何设计";
 "Daily" = "日常使用";
 "Danish" = "丹麦语";
 "Dark" = "深色";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "插电式混合动力 (PHEV)";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar 救援服务";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins 瑞典金与深炭黑奢华格调";
+"Dark charcoal surfaces with a gold accent" = "深炭灰表面搭配金色点缀";
 "Polestar ID (Email)" = "Polestar ID（邮箱）";
 "Polestar ID Password Required" = "需要 Polestar ID 密码";
 "Polestar ID Required" = "需要 Polestar ID";
@@ -994,7 +994,7 @@
 "Sunroof" = "全景天窗";
 "Supported" = "支持";
 "Swedish" = "瑞典语";
-"Swedish Gold" = "瑞典金 (Swedish Gold)";
+"Charcoal Gold" = "炭灰金 (Charcoal Gold)";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "瑞典松木与尤加利大地色系，温润自然的有机触感";
 "Switch Vehicle" = "切换车辆";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "切换车辆 (⌃⌥[ / ⌃⌥])";
@@ -1694,16 +1694,14 @@
 "Everything looks good" = "一切正常";
 
 /* Text size & density options */
-"Compact (85%)" = "紧凑（85%）";
-"Standard (100%)" = "标准（100%）";
-"Relaxed (115%)" = "宽松（115%）";
+"Relaxed" = "宽松";
 "Smallest text, most content per screen" = "最小文字，每屏最多内容";
 "Default sizing" = "默认大小";
 "Larger text and controls" = "更大的文字与控件";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "内容密度";
-"Zoom content independently of panel size: compact shows more before scrolling" = "独立于面板大小缩放内容：紧凑模式可在滚动前显示更多内容";
+"Type size and spacing, independently of the panel size" = "文字大小与间距，独立于面板尺寸";
 "Custom Size" = "自定义大小";
 "Independent width and height overrides" = "独立的宽度与高度";
 "Width" = "宽度";
@@ -2802,6 +2800,7 @@
 "History" = "历史记录";
 "Info" = "信息";
 "Info section category" = "信息分区类别";
+"History section category" = "历史分区类别";
 "Instantaneous drivetrain output power ceiling." = "传动系统瞬时输出功率上限。";
 "Interactive Verification Required" = "需要交互式验证";
 "Interior view of the vehicle" = "车辆内部视图";
@@ -3283,3 +3282,13 @@
 "Battery at the start and end of each charge." = "每次充电开始和结束时的电池电量。";
 "No complete charge readings in this period." = "此时段内没有完整的充电读数。";
 "Enable remote controls in Settings → Features." = "在“设置 → 功能”中启用远程控制。";
+"Windows" = "车窗";
+"Controls on Now" = "“现在”中的控制";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "选择显示在车辆下方的控制卡片。每张卡片仍需开启对应的远程功能。";
+"Create Theme" = "创建主题";
+"Edit Theme" = "编辑主题";
+"Accent" = "强调色";
+"Light Background" = "浅色背景";
+"Dark Background" = "深色背景";
+"My Theme" = "我的主题";
+"Your colours, adjusted to stay readable in light and dark." = "你的颜色，已调整为在浅色和深色下都清晰可读。";

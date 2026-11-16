@@ -189,6 +189,10 @@ extension HistoricalChargingSession {
     /// market cost; a session the spot series never covered keeps the fixed-rate figure,
     /// which `usedFallback` reports so totals can say how many sessions were not market-priced.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double) -> (amount: Double, usedFallback: Bool) {
+        // The charger's metered cost is the wall-side figure the bill sees, so it outranks every
+        // battery-side estimate.
+        if let measured = wallbox?.cost { return (measured, false) }
+        if wallbox != nil, energyDeliveredKwh <= 0 { return (0, true) }
         if let own = ownSessionCost(policy: policy, spotCost: spotEstimatedCost, energyKwh: energyDeliveredKwh,
                                     storedCost: estimatedCost, tariffPricePerKwh: tariffPricePerKwh) {
             return (own, false)
@@ -201,6 +205,9 @@ extension ChargingSession {
     /// Same contract as `HistoricalChargingSession.resolvedCost`, for the in-memory session
     /// the charging card and CSV export read. Returns nil only when no price is known at all.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double?) -> Double? {
+        if let measured = wallbox?.cost { return measured }
+        // Charger-only session whose cost could not be completed: no price rather than a zero.
+        if wallbox != nil, !hasBatteryReading { return nil }
         if let own = ownSessionCost(policy: policy, spotCost: spotCost, energyKwh: kwhDelivered,
                                     storedCost: cost, tariffPricePerKwh: tariffPricePerKwh) {
             return own

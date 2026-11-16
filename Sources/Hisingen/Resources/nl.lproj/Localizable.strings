@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "Huidig voertuig: %@. Voertuig wisselen.";
 "Custom App" = "Aangepaste app";
 "Cut" = "Knippen";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing kampioenschapsblauw, strakke circuitgeometrie";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Kampioenschapsblauw, strakke circuitgeometrie";
 "Daily" = "Dagelijks";
 "Danish" = "Deens";
 "Dark" = "Donker";
@@ -708,7 +708,7 @@
 "Plug-in hybrid" = "Plug-in hybride";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar Assistance";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, donker houtskool luxe";
+"Dark charcoal surfaces with a gold accent" = "Donkere houtskoolkleurige vlakken met een gouden accent";
 "Polestar ID (Email)" = "Polestar ID (e-mail)";
 "Polestar ID Password Required" = "Polestar ID-wachtwoord vereist";
 "Polestar ID Required" = "Polestar ID vereist";
@@ -994,7 +994,7 @@
 "Sunroof" = "Zonnedak";
 "Supported" = "Ondersteund";
 "Swedish" = "Zweeds";
-"Swedish Gold" = "Swedish Gold";
+"Charcoal Gold" = "Charcoal Gold";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Zweedse den en eucalyptus aardetinten, organisch zacht gevoel";
 "Switch Vehicle" = "Voertuig wisselen";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Voertuig wisselen (⌃⌥[ / ⌃⌥])";
@@ -1702,16 +1702,14 @@
 "Everything looks good" = "Alles ziet er goed uit";
 
 /* Text size & density options */
-"Compact (85%)" = "Compact (85%)";
-"Standard (100%)" = "Standaard (100%)";
-"Relaxed (115%)" = "Ruim (115%)";
+"Relaxed" = "Ruim";
 "Smallest text, most content per screen" = "Kleinste tekst, meeste inhoud per scherm";
 "Default sizing" = "Standaardgrootte";
 "Larger text and controls" = "Grotere tekst en bedieningselementen";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Inhoudsdichtheid";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Inhoud onafhankelijk van paneelgrootte zoomen – compact toont meer zonder scrollen";
+"Type size and spacing, independently of the panel size" = "Tekstgrootte en afstand, onafhankelijk van de paneelgrootte";
 "Custom Size" = "Aangepaste grootte";
 "Independent width and height overrides" = "Onafhankelijke breedte en hoogte";
 "Width" = "Breedte";
@@ -2810,6 +2808,7 @@
 "History" = "Geschiedenis";
 "Info" = "Info";
 "Info section category" = "Categorie van de sectie Info";
+"History section category" = "Categorie van de geschiedenis";
 "Instantaneous drivetrain output power ceiling." = "Maximaal momentaan uitgaand vermogen van de aandrijflijn.";
 "Interactive Verification Required" = "Interactieve verificatie vereist";
 "Interior view of the vehicle" = "Interieur van het voertuig";
@@ -3291,3 +3290,13 @@
 "Battery at the start and end of each charge." = "Batterijniveau aan het begin en einde van elke laadbeurt.";
 "No complete charge readings in this period." = "Geen volledige laadmetingen in deze periode.";
 "Enable remote controls in Settings → Features." = "Schakel bediening op afstand in via Instellingen → Functies.";
+"Windows" = "Ramen";
+"Controls on Now" = "Bediening op Nu";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Kies de bedieningskaarten onder de auto. Voor elke kaart moet de bijbehorende functie op afstand nog steeds aan staan.";
+"Create Theme" = "Thema maken";
+"Edit Theme" = "Thema bewerken";
+"Accent" = "Accentkleur";
+"Light Background" = "Lichte achtergrond";
+"Dark Background" = "Donkere achtergrond";
+"My Theme" = "Mijn thema";
+"Your colours, adjusted to stay readable in light and dark." = "Je eigen kleuren, aangepast zodat ze leesbaar blijven in licht en donker.";

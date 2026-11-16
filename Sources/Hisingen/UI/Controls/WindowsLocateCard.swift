@@ -69,14 +69,14 @@ struct WindowsLocateCard: View {
                         if mode?.permits(.honkAndFlash) ?? true {
                             windowButton(
                                 command: .honkAndFlash,
-                                symbol: "light.beacon.max.fill",
+                                symbol: "light.beacon.max",
                                 title: L10n.text("Honk & Flash")
                             )
                         }
                         if mode?.permits(.honkHorn) ?? true {
                             windowButton(
                                 command: .honkHorn,
-                                symbol: "speaker.wave.2.fill",
+                                symbol: "speaker.wave.2",
                                 title: L10n.text("Honk Horn")
                             )
                         }

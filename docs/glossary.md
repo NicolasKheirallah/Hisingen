@@ -20,7 +20,7 @@ reconfirmed; see [ADR-0006](adr/0006-runtime-capability-probing.md).
 software distributed outside the Mac App Store. Required for notarization.
 
 **Remote Command dispatch**: the awaited seam every Remote Command entry
-point (Controls tab, `hisingen://` deep links, Shortcuts intents) crosses once
+point (Plan tab, `hisingen://` deep links, Shortcuts intents) crosses once
 the app shell is wired: vehicle selection plus one dispatch that returns the
 outcome. Brand policy lives in `CapabilityGate` and the provider command
 catalog, never in an entry point; see
@@ -59,7 +59,7 @@ and its gap-tolerance policies live. See
 **Vehicle History ledger**: the read interface over the remaining local
 history tables (battery health, air quality, telemetry, trips, Remote Command
 outcomes, connectivity, cabin climate, fuel entries): one typed surface that
-assembles the History dashboard and Info tab bundles and owns the row-cap and
+assembles the Log dashboard and Car tab bundles and owns the row-cap and
 freshness policy those consumers used to re-derive at every call site. See
 `Services/Persistence/VehicleHistoryLedger.swift`.
 

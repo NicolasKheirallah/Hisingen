@@ -18,18 +18,19 @@ extension HistoryDashboardView {
             facts.append("\(Format.currency(cost.amount, symbol: cost.currency)) \(L10n.text("(estimated)"))")
         }
 
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L10n.text(period.rawValue))
-                        .hisType(.label, weight: .semibold)
+                        .hisType(.subhead)
                         .foregroundStyle(HisingenTheme.inkMuted)
                     if !aggregateTrips.isEmpty || energy > 0 {
                         Text(aggregateTrips.isEmpty ? Format.energyKwh(energy)
                              : Format.distance(km: totalDistance, decimals: 0, unit: preferences.distanceUnit))
-                            .hisType(.display, weight: .light)
+                            .hisType(.displayLarge)
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
                             .accessibilityAddTraits(.isHeader)
                     }
                     if aggregateTrips.isEmpty && energy > 0 {
@@ -50,6 +51,7 @@ extension HistoryDashboardView {
             }
 
             if state.powertrain.hasElectricRange || !chargingSessions.isEmpty {
+                PanelRule()
                 EnergyTrace(sessions: chargingSessions, window: activeRange)
             }
         }
@@ -85,7 +87,7 @@ struct EnergyTrace: View {
         let charges = Self.charges(sessions, in: window)
         VStack(alignment: .leading, spacing: 7) {
             Text(L10n.text("Charge level"))
-                .hisType(.heading, weight: .semibold)
+                .hisType(.subhead, weight: .medium)
                 .foregroundStyle(HisingenTheme.ink)
                 .accessibilityAddTraits(.isHeader)
             if let first = charges.first, let latest = charges.max(by: { $0.end < $1.end }) {
@@ -155,7 +157,7 @@ struct EnergyTrace: View {
         let end = PlottableValue.value(L10n.text("End"), charge.to)
         RuleMark(x: time, yStart: start, yEnd: end)
             .foregroundStyle(HisingenTheme.accent)
-            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            .lineStyle(StrokeStyle(lineWidth: 2))
             .accessibilityLabel(Text(Format.dateTimeFormatter.string(from: charge.end)))
             .accessibilityValue(Text(chargeRange(charge)))
         PointMark(x: time, y: start)
@@ -167,16 +169,16 @@ struct EnergyTrace: View {
     }
 
     private var startMarker: some View {
-        Circle()
+        Rectangle()
             .fill(HisingenTheme.canvas)
-            .overlay(Circle().strokeBorder(HisingenTheme.inkMuted, lineWidth: 1.25))
+            .overlay(Rectangle().strokeBorder(HisingenTheme.inkMuted, lineWidth: 1))
             .frame(width: 6, height: 6)
     }
 
     private var endMarker: some View {
-        Circle()
+        Rectangle()
             .fill(HisingenTheme.accent)
-            .frame(width: 7, height: 7)
+            .frame(width: 6, height: 6)
     }
 
     private func chartFooter(latest: Charge) -> some View {

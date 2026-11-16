@@ -53,7 +53,7 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                         }
                         .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
+                        .background(HisingenTheme.semanticGood.opacity(0.15), in: RoundedRectangle(cornerRadius: 0))
                         .accessibilityLabel(L10n.text("Session in progress"))
                         .onAppear {
                             curveLivePulse = false
@@ -65,7 +65,7 @@ extension HistoryDashboardView {
                             .hisType(.nano, weight: .bold, design: .rounded)
                             .monospacedDigit()
                             .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(badgeColor.opacity(0.18), in: Capsule())
+                            .background(badgeColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 0))
                             .foregroundStyle(badgeColor)
                     }
                     Spacer()
@@ -328,7 +328,7 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
+                    CardHeader(symbol: "bolt", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
                         .hisType(.micro).foregroundStyle(.secondary)
@@ -395,7 +395,7 @@ extension HistoryDashboardView {
                     if session.endedAt == nil {
                         Text(L10n.text("Active")).hisType(.nano, weight: .bold)
                             .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
+                            .background(HisingenTheme.semanticGood.opacity(0.15), in: RoundedRectangle(cornerRadius: 0))
                     }
                 }
                 HStack(spacing: 5) {
@@ -541,7 +541,7 @@ extension HistoryDashboardView {
                                 .hisType(.micro).foregroundStyle(.secondary)
                         }
                         GeometryReader { geo in
-                            RoundedRectangle(cornerRadius: 2)
+                            RoundedRectangle(cornerRadius: 0)
                                 .fill(HisingenTheme.chartPositive.opacity(0.3))
                                 .frame(width: max(2, geo.size.width * stat.energyKwh / totalEnergy), height: 4)
                                 .hisAnimation(Motion.progress, value: stat.energyKwh)
@@ -617,7 +617,7 @@ extension HistoryDashboardView {
                 if let perWeek {
                     KVRow(L10n.text("Sessions Per Week"), Format.number(perWeek, decimals: 1), symbol: "calendar.badge.clock")
                 }
-                KVRow(L10n.text("Estimated Energy Added"), Format.energyKwh(energy), symbol: "bolt.fill", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
+                KVRow(L10n.text("Estimated Energy Added"), Format.energyKwh(energy), symbol: "bolt", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
                 if averagePeak > 0 {
                     KVRow(L10n.text("Average Observed Peak"), Format.powerKw(averagePeak), symbol: "waveform.path.ecg")
                 }

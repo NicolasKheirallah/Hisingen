@@ -38,6 +38,7 @@ extension AppDelegate {
             }
         )
         .environment(\.preferencesStore, preferences)
+        .environment(\.homeCharging, homeCharging)
 
         let host = NSHostingController(rootView: settings)
         let isNewWindow = settingsWindow == nil

@@ -146,6 +146,7 @@ final class LocalDataEraser {
             clearLocalDefaults(vehicles)
             memoryCaches.drop(vehicles)
             dropImageTier(vehicles)
+            eraseHomeCharging(vehicles)
         case .locations(let vehicles):
             // Turning the preference off is what keeps the cleared coordinates cleared. The
             // snapshot mirror goes with them: it still carries the coordinates that were just
@@ -194,6 +195,21 @@ final class LocalDataEraser {
         case .all:
             preferences.clearAllSnapshotMirrors()
         }
+    }
+
+    /// The Home Assistant pairing is the reader's, tied to one vehicle. Erasing that vehicle removes
+    /// the pairing; erasing everything also removes the access token from the Keychain. A sign-out
+    /// touches neither: Home Assistant is a separate account. The running model is told to let go.
+    private func eraseHomeCharging(_ vehicles: VehicleScope) {
+        let store = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
+        switch vehicles {
+        case .all:
+            store.eraseAll()
+        case .vehicle:
+            guard let pairing = store.pairing, vehicles.covers(pairing.vin) else { return }
+            store.clearPairing()
+        }
+        NotificationCenter.default.post(name: .homeChargingDataErased, object: nil)
     }
 
     private func dropImageTier(_ vehicles: VehicleScope) {

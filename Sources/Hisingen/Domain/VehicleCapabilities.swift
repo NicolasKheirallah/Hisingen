@@ -50,6 +50,19 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             return
         }
 
+        // A Volvo name or VIN must not fall through to the Polestar number heuristics
+        // below: "Volvo 240" contains " 2", and the first-digit fallback would make it
+        // a Polestar 2.
+        if normalized.contains("volvo") {
+            self = .volvoUnknown(modelName)
+            return
+        }
+        if let vin = vin?.uppercased(),
+           vin.hasPrefix("YV1") || vin.hasPrefix("YV4") || vin.hasPrefix("LVY") {
+            self = .volvoUnknown(modelName)
+            return
+        }
+
         if normalized.contains("polestar 2") || normalized.contains("ps2") || normalized.contains(" 2") || normalized.contains("two") {
             self = .polestar2
             return
@@ -93,11 +106,7 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             case "five": self = .polestar5
             case "six": self = .polestar6
             default:
-                if let vin = vin?.uppercased(), (vin.hasPrefix("YV1") || vin.hasPrefix("YV4") || vin.hasPrefix("LVY")) {
-                    self = .volvoUnknown(modelName)
-                } else {
-                    self = .unknown(modelName)
-                }
+                self = .unknown(modelName)
             }
         }
     }

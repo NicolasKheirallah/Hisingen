@@ -78,7 +78,7 @@ extension InfoTabView {
                     if failed {
                         Pill(text: L10n.text("Update failed"), color: HisingenTheme.semanticCritical, symbol: "exclamationmark.triangle.fill")
                     } else if hasNewer {
-                        Pill(text: L10n.text("Update available"), color: HisingenTheme.semanticWarning, symbol: "arrow.down.circle.fill")
+                        Pill(text: L10n.text("Update available"), color: HisingenTheme.semanticWarning, symbol: "arrow.down.circle")
                     }
                 }
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
@@ -106,20 +106,20 @@ extension InfoTabView {
         if let feels = weather.apparentTemperatureCelsius {
             rows.append(KVRow(L10n.text("Feels Like"),
                               Format.temperature(celsius: feels, unit: preferences.temperatureUnit),
-                              symbol: "thermometer.sun.fill"))
+                              symbol: "thermometer.sun"))
         }
         if let condition = weather.condition, !condition.isEmpty {
-            rows.append(KVRow(L10n.text("Condition"), L10n.text(condition), symbol: "cloud.fill"))
+            rows.append(KVRow(L10n.text("Condition"), L10n.text(condition), symbol: "cloud"))
         }
         if let humidity = weather.relativeHumidity {
-            rows.append(KVRow(L10n.text("Humidity"), "\(humidity)%", symbol: "humidity.fill"))
+            rows.append(KVRow(L10n.text("Humidity"), "\(humidity)%", symbol: "humidity"))
         }
         if let timestamp = weather.timestamp {
             rows.append(KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: timestamp), symbol: "clock"))
         }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "cloud.sun.fill", title: L10n.text("Ambient Conditions"), color: HisingenTheme.chartInfo)
+                CardHeader(symbol: "cloud.sun", title: L10n.text("Ambient Conditions"), color: HisingenTheme.chartInfo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 Text(L10n.text("Reported by the vehicle at its parked location, not a forecast."))
                     .hisType(.micro)
@@ -180,7 +180,7 @@ extension InfoTabView {
                               info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))
         }
         if let wh = diag.energyUsedSinceChargeWh {
-            rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000), symbol: "leaf.fill",
+            rows.append(KVRow(L10n.text("Energy Since Charge"), String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000), symbol: "leaf",
                               info: L10n.text("Vehicle Calculation. Total high-voltage energy used by powertrain and HVAC since the last charge.")))
         }
         for (period, wh) in [(L10n.text("Trip Meter (TM)"), diag.energyUsedManualTripWh),
@@ -188,7 +188,7 @@ extension InfoTabView {
             if let wh {
                 rows.append(KVRow("\(L10n.text("Energy")) (\(period))",
                                   String(format: "%.1f kWh", locale: L10n.displayLocale, wh / 1_000),
-                                  symbol: "bolt.car.fill"))
+                                  symbol: "bolt.car"))
             }
         }
         if let periods = diag.energyBreakdownByPeriod {
@@ -196,7 +196,7 @@ extension InfoTabView {
                                         (L10n.text("Automatic Trip (AT)"), periods.automaticTrip),
                                         (L10n.text("Since Last Charge"), periods.sinceCharge)] {
                 if let breakdown, let summary = energyUseSummary(breakdown) {
-                    rows.append(KVRow("\(L10n.text("Energy Use")) (\(period))", summary, symbol: "chart.pie.fill",
+                    rows.append(KVRow("\(L10n.text("Energy Use")) (\(period))", summary, symbol: "chart.pie",
                                       info: L10n.text("Vehicle Calculation. Share of the period's energy used for driving, climate, the battery and other systems.")))
                 }
             }
@@ -271,7 +271,7 @@ extension InfoTabView {
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "batteryblock.fill", title: L10n.text("Battery Diagnostics"), color: HisingenTheme.semanticGood)
+                CardHeader(symbol: "batteryblock", title: L10n.text("Battery Diagnostics"), color: HisingenTheme.semanticGood)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
             }
         })
@@ -283,13 +283,13 @@ extension InfoTabView {
         var rows: [KVRow] = []
 
         if let manualKm = state.tripComputer.manualTripKm {
-            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle.fill"))
+            rows.append(KVRow(L10n.text("Trip Meter (TM)"), Format.distance(km: Int(manualKm.rounded()), unit: preferences.distanceUnit), symbol: "m.circle"))
         }
         if let autoKm = state.tripComputer.automaticTripKm {
-            rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle.fill"))
+            rows.append(KVRow(L10n.text("Automatic Trip (AT)"), Format.distance(km: autoKm, unit: preferences.distanceUnit), symbol: "a.circle"))
         }
         if let sinceChargeKm = state.tripComputer.sinceChargeTripKm {
-            rows.append(KVRow(L10n.text("Since Last Charge"), Format.distance(km: sinceChargeKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
+            rows.append(KVRow(L10n.text("Since Last Charge"), Format.distance(km: sinceChargeKm, unit: preferences.distanceUnit), symbol: "bolt.car"))
         }
         if let speed = state.tripComputer.manualAverageSpeedKmH, speed > 0 {
             rows.append(KVRow(L10n.text("Average Speed (TM)"),
@@ -310,16 +310,16 @@ extension InfoTabView {
                               info: L10n.text("Vehicle Calculation. Average speed recorded since the vehicle was last unplugged.")))
         }
         if let electricKm = state.tripComputer.electricDistanceKm, electricKm > 0 {
-            rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car.fill"))
+            rows.append(KVRow(L10n.text("Electric Driving"), Format.distance(km: electricKm, unit: preferences.distanceUnit), symbol: "bolt.car"))
         }
         if let fuelKm = state.tripComputer.fuelDistanceKm, fuelKm > 0 {
-            rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump.fill"))
+            rows.append(KVRow(L10n.text("Combustion Driving"), Format.distance(km: fuelKm, unit: preferences.distanceUnit), symbol: "fuelpump"))
         }
         if let regen = state.tripComputer.regeneratedEnergyKwh, regen > 0 {
             rows.append(KVRow(L10n.text("Regenerated Energy"), String(format: "%.2f kWh", locale: L10n.displayLocale, regen), symbol: "arrow.triangle.2.circlepath"))
         }
         if let speed = state.tripComputer.averageSpeedKmH, speed > 0 {
-            rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle.fill"))
+            rows.append(KVRow(L10n.text("Average Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "gauge.with.needle"))
         }
         if let odo = state.maintenance.odometerKm {
             // Metre-level odometer readings keep their decimal; integer-only providers keep
@@ -446,15 +446,15 @@ extension InfoTabView {
 
             let hasWasher = health.warnings.contains(.washerFluid)
             let washerReported = health.reportedWarnings.contains(.washerFluid)
-            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : (washerReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "drop.triangle.fill", valueWarning: hasWasher, info: L10n.text("Warning status only. The provider does not report a measured washer-fluid level.")))
+            rows.append(KVRow(L10n.text("Washer Fluid"), hasWasher ? L10n.text("Low Level") : (washerReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "drop.triangle", valueWarning: hasWasher, info: L10n.text("Warning status only. The provider does not report a measured washer-fluid level.")))
 
             let hasCoolant = health.warnings.contains(.engineCoolant)
             let coolantReported = health.reportedWarnings.contains(.engineCoolant)
-            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : (coolantReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "thermometer.sun.fill", valueWarning: hasCoolant, info: L10n.text("Warning status only. The provider does not report a measured coolant level.")))
+            rows.append(KVRow(L10n.text("Coolant System"), hasCoolant ? L10n.text("Check Level") : (coolantReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "thermometer.sun", valueWarning: hasCoolant, info: L10n.text("Warning status only. The provider does not report a measured coolant level.")))
 
             let hasLight = health.warnings.contains(.exteriorLight) || !health.lightFailures.isEmpty
             let lightsReported = health.reportedWarnings.contains(.exteriorLight)
-            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb.fill", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
+            rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
             for entry in health.lightFailures {
                 rows.append(KVRow(VehicleLampFailureName.name(for: entry), L10n.text("Bulb failure"), valueWarning: true))
             }
@@ -484,9 +484,9 @@ extension InfoTabView {
             if let rearPads = state.maintenance.rearBrakePadStatus, !rearPads.isEmpty {
                 rows.append(KVRow(L10n.text("Rear Brake Pads"), rearPads.capitalized, symbol: "circle.circle"))
             }
-            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Unavailable"), symbol: "drop.triangle.fill"))
-            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Unavailable"), symbol: "thermometer.sun.fill"))
-            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("Unavailable"), symbol: "lightbulb.fill"))
+            rows.append(KVRow(L10n.text("Washer Fluid"), L10n.text("Unavailable"), symbol: "drop.triangle"))
+            rows.append(KVRow(L10n.text("Coolant System"), L10n.text("Unavailable"), symbol: "thermometer.sun"))
+            rows.append(KVRow(L10n.text("Exterior Lighting"), L10n.text("Unavailable"), symbol: "lightbulb"))
         }
 
         return Card {

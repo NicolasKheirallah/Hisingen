@@ -139,7 +139,7 @@ extension HistoryDashboardView {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(7)
-        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+        .background(color.opacity(0.07), in: RoundedRectangle(cornerRadius: 0))
     }
 
     var distanceChartCard: some View {
@@ -150,7 +150,7 @@ extension HistoryDashboardView {
         let bestDay = daily.max { $0.distanceKm < $1.distanceKm }
         return Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
+                CardHeader(symbol: "chart.bar", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
                 Chart {
                     ForEach(daily) { day in
                         BarMark(
@@ -420,7 +420,7 @@ extension HistoryDashboardView {
                         }
                         if let lat = trip.endLatitude, let lon = trip.endLongitude {
                             Button { openMap(latitude: lat, longitude: lon) } label: {
-                                Label(L10n.text("End"), systemImage: "mappin.circle.fill")
+                                Label(L10n.text("End"), systemImage: "mappin.circle")
                                     .hisType(.micro)
                             }
                             .buttonStyle(.pressable)
@@ -474,7 +474,7 @@ extension HistoryDashboardView {
             setPurpose(purpose, for: trip)
         } label: {
             Label(purpose.displayName,
-                  systemImage: purpose == .business ? "briefcase.fill" : "person.fill")
+                  systemImage: purpose == .business ? "briefcase" : "person")
                 .hisType(.micro, weight: selected ? .semibold : .regular)
         }
         .buttonStyle(.hisSecondary(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : HisingenTheme.inkMuted))

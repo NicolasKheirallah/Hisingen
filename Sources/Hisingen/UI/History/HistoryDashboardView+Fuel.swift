@@ -60,7 +60,7 @@ extension HistoryDashboardView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
+                    CardHeader(symbol: "fuelpump", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let avgEconomy {
                         Text(Format.fuelEconomy(lPer100Km: avgEconomy, unit: preferences.fuelEconomyUnit))
@@ -134,7 +134,7 @@ extension HistoryDashboardView {
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
+                CardHeader(symbol: "drop", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Total Spend"), Format.currency(totalSpend, symbol: preferences.currencySymbol))
                     curveStat(L10n.text("Total Volume"), Format.fuelVolume(liters: totalLitres, unit: preferences.fuelVolumeUnit))

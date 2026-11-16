@@ -36,7 +36,7 @@ struct ChargingSessionScene: View {
                         Text(String(format: "%.1f kW", locale: L10n.displayLocale, Double(watts) / 1_000))
                             .hisType(.label, weight: .medium)
                     } icon: {
-                        Image(systemName: "bolt.fill")
+                        Image(systemName: "bolt")
                             .hisType(.caption)
                             .foregroundStyle(HisingenTheme.accent)
                     }

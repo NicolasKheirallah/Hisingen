@@ -16,25 +16,13 @@ extension ChargingSessionLedger {
             FROM charging_sessions
             WHERE ended_at IS NOT NULL
               AND lifecycle_state IN ('completed', 'interrupted')
-              AND (end_soc > start_soc OR energy_delivered_kwh > 0)
+              AND (end_soc > start_soc OR energy_delivered_kwh > 0 OR wallbox_energy_kwh > 0)
             ORDER BY started_at DESC;
             """
-            sessions = (try? sql.query(sql: query) { _ in } process: { stmt -> [HistoricalChargingSession] in
-                var list: [HistoricalChargingSession] = []
-                while try stmt.stepOrThrow() {
-                    guard let session = Self.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
-                                                        endSoc: stmt.columnDouble(at: 5),
-                                                        energy: stmt.columnDouble(at: 6),
-                                                        peak: stmt.columnDouble(at: 7),
-                                                        average: stmt.columnDouble(at: 8),
-                                                        location: stmt.columnText(at: 9)) else { continue }
-                    list.append(session)
-                }
-                return list
-            }) ?? []
+            sessions = (try? sql.query(sql: query) { _ in } process: { try Self.sessionRows($0) }) ?? []
         }
 
-        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version\n"
+        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version,\(WallboxCSV.header.joined(separator: ","))\n"
         let df = ISO8601DateFormatter()
         for s in sessions {
             let start = df.string(from: s.startedAt)
@@ -49,7 +37,7 @@ extension ChargingSessionLedger {
             let nightEnd = s.nightTariffEndHour.map(String.init) ?? ""
             let cost = s.estimatedCost.map { String(format: "%.2f", $0) } ?? ""
             let target = s.targetSoc.map { String(format: "%.1f", $0) } ?? ""
-            csv += "\(s.id),\(s.vin),\(start),\(end),\(String(format: "%.1f", s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc),\(s.lifecycleState.rawValue),\(s.completionReason?.rawValue ?? ""),\(s.energySource.rawValue),\(s.confidence.rawValue),\(coverage),\(capacity),\(tariff),\(s.nightTariffEnabled),\(nightTariff),\(nightStart),\(nightEnd),\(cost),\(s.currencySymbol ?? ""),\(target),\(s.summaryVersion)\n"
+            csv += "\(s.id),\(s.vin),\(start),\(end),\(WallboxCSV.percent(s.startSoc)),\(endSoc),\(String(format: "%.2f", s.energyDeliveredKwh)),\(String(format: "%.1f", s.peakPowerKw)),\(String(format: "%.1f", s.averagePowerKw)),\(loc),\(s.lifecycleState.rawValue),\(s.completionReason?.rawValue ?? ""),\(s.energySource.rawValue),\(s.confidence.rawValue),\(coverage),\(capacity),\(tariff),\(s.nightTariffEnabled),\(nightTariff),\(nightStart),\(nightEnd),\(cost),\(s.currencySymbol ?? ""),\(target),\(s.summaryVersion),\(WallboxCSV.fields(s.wallbox).map(CSV.field).joined(separator: ","))\n"
         }
         return csv
     }

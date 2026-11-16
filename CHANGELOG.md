@@ -3,6 +3,34 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-11-16
+
+### Added
+
+- Redraw the panel around four reading surfaces. Now answers what the car last reported and what
+  you can do next, with quick controls for locks, climate and charging under the car. Plan opens
+  with the departure time and a 24-hour ruler of charge windows and climate timers. Log opens with
+  the period and a trace of recorded charging. Car reads as a type plate.
+- Choose which control cards sit under the car on Now, in Settings → Appearance. A card draws only
+  when its remote feature is on and the car reports the capability.
+- Make a theme from an accent and a light and a dark background. Hisingen moves the picked colours
+  only as far as they need to go for text to stay readable in both appearances, previews the
+  result, and offers the theme beside the shipped ones, including per-brand and per-vehicle
+  choices.
+- Connect a charger that Home Assistant manages, such as NexBlue, to see what it reports beside
+  the car's own charging state, run its charging plan, and record the energy and cost it measured
+  with each session. Charger figures appear in History rows, the CSV exports and the handover
+  pack. The long-lived token stays in the Keychain and is never exported.
+
+### Changed
+
+- Replace the translucent card surfaces with an opaque canvas, studio fills and hairline rules,
+  and give the Hisingen theme neutral grey in both appearances with a functional orange signal
+  colour.
+- Rename two themes to Charcoal Gold and Circuit Blue and update their descriptions. Colours are
+  unchanged, and a theme you already chose carries over, including from a settings archive
+  exported before the rename.
+
 ## [2.0.14] - 2026-11-09
 
 ### Added

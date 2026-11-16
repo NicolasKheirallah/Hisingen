@@ -222,10 +222,10 @@ struct MultiCarFleetSwitchingTests {
             keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         )
 
-        preferences.setTheme(.swedishGold, for: Self.polestarVin1, brand: .polestar)
+        preferences.setTheme(.charcoalGold, for: Self.polestarVin1, brand: .polestar)
         preferences.setTheme(.volvo, for: Self.volvoVin1, brand: .volvo)
 
-        #expect(preferences.theme(for: Self.polestarVin1) == .swedishGold)
+        #expect(preferences.theme(for: Self.polestarVin1) == .charcoalGold)
         #expect(preferences.theme(for: Self.volvoVin1) == .volvo)
     }
 }

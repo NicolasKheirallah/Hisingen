@@ -27,7 +27,8 @@ struct KVRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if let symbol {
+            // A spec row is words; the symbol stays only when it carries a warning.
+            if let symbol, warning || critical {
                 Image(systemName: symbol)
                     .hisType(.label, weight: .medium)
                     .foregroundStyle(critical ? HisingenTheme.semanticCritical
@@ -53,6 +54,8 @@ struct KVRow: View {
                 .help(value)
                 .hisTelemetryValue(value, reduceMotion: reduceMotion)
         }
+        .padding(.vertical, 5)
+        .overlay(alignment: .bottom) { PanelRule() }
         .hisAnimation(Motion.stateChange, value: warning)
         .hisAnimation(Motion.stateChange, value: critical)
         .hisAnimation(Motion.stateChange, value: valueWarning)

@@ -99,13 +99,11 @@ struct AccountCredentialsForm: View {
                 }
             }
         } else {
-            Picker("", selection: $selectedBrand) {
-                ForEach(VehicleBrand.allCases, id: \.self) { brand in
-                    Text(brand.displayName).tag(brand)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            UnderlineSegments(
+                options: VehicleBrand.allCases.map { ($0, $0.displayName) },
+                selection: $selectedBrand,
+                accessibilityLabel: L10n.text("Brand")
+            )
             .onChange(of: selectedBrand) { _, _ in
                 withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                     testConnectionResult = nil
@@ -129,18 +127,20 @@ struct AccountCredentialsForm: View {
             }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: brand == .polestar ? "bolt.car.fill" : "car.fill")
+                Image(systemName: brand == .polestar ? "bolt.car" : "car")
                     .hisSymbolSize(20)
-                    .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
+                    .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
                 Text(brand.displayName)
-                    .hisType(.body, weight: isSelected ? .semibold : .medium)
+                    .hisType(.subhead)
                     .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(
-                isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .background(HisingenTheme.canvas)
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .strokeBorder(isSelected ? HisingenTheme.ink : HisingenTheme.hairline,
+                                  lineWidth: isSelected ? 2 : 1)
             )
             .contentShape(Rectangle())
         }
@@ -181,10 +181,8 @@ struct AccountCredentialsForm: View {
                         .frame(width: 10, height: 10)
                         .transition(.opacity)
                 } else {
-                    Circle().fill(statusColor)
-                        .frame(width: 8, height: 8)
-                        .frame(width: 10, height: 10)
-                        .transition(.opacity)
+                    // The notice's coloured edge carries the state; no dot beside it.
+                    EmptyView()
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -271,9 +269,10 @@ struct AccountCredentialsForm: View {
             }
         }
         .padding(10)
-        .background(statusColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.leading, 2)
+        .hisNotice(statusColor)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 0)
                 .stroke(statusColor.opacity(0.25), lineWidth: 0.5)
         )
         // The Test flow mutates state from a Task continuation with no surrounding

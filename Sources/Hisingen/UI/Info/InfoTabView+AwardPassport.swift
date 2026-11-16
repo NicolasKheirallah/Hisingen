@@ -9,33 +9,33 @@ extension InfoTabView {
         )?.kwh
         let title = identity.modelName.flatMap { $0.isEmpty ? nil : $0 } ?? model.displayName
         let redacted = preferences.privacyRedactionEnabled
+        let stacked = passportTypeSize.isAccessibilitySize || HisingenTheme.layoutWidth < 540
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .hisType(.display, weight: .light)
+                    .hisType(.display)
                     .foregroundStyle(HisingenTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
                 if let year = identity.modelYear {
                     Text(year)
-                        .hisType(.body, weight: .medium)
+                        .hisType(.subhead)
                         .monospacedDigit()
                         .foregroundStyle(HisingenTheme.inkMuted)
                 }
             }
+            // Straight on the canvas, as on Now.
+            InstrumentVehicleProfile(state: state, imageCache: imageCache, height: stacked ? 128 : 168, fillsWidth: true)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
 
-            InstrumentVehicleProfile(state: state, imageCache: imageCache, height: 172)
-
-            Rectangle().fill(HisingenTheme.hairline).frame(height: 1)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 plateEntry(label: L10n.text("VIN"), value: identity.vin, redacted: redacted)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 14, alignment: .topLeading)],
-                          alignment: .leading, spacing: 10) {
+                let column: CGFloat = passportTypeSize.isAccessibilitySize ? 280 : 130
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: column), spacing: 14, alignment: .topLeading)],
+                          alignment: .leading, spacing: 13) {
                     if let registration = identity.registrationNo, !registration.isEmpty {
                         plateEntry(label: L10n.text("Registration"), value: registration.uppercased(), redacted: redacted)
                     }
@@ -58,23 +58,27 @@ extension InfoTabView {
     }
 
     private func plateEntry(label: String, value: String, redacted: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .hisType(.label)
-                .foregroundStyle(HisingenTheme.inkMuted)
+        VStack(alignment: .leading, spacing: 5) {
+            PanelRule()
             if redacted {
                 Text(L10n.text("Hidden"))
-                    .hisType(.body)
+                    .hisType(.title)
                     .foregroundStyle(HisingenTheme.inkMuted)
             } else {
                 Text(value)
-                    .hisType(.body, weight: .semibold)
+                    .hisType(.title)
                     .monospacedDigit()
                     .foregroundStyle(HisingenTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
+            Text(label)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
         }
-        .accessibilityElement(children: .combine)
+        // Drawn value-first, spoken label-first.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(redacted ? L10n.text("Hidden") : value)
     }
 }

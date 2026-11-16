@@ -1,0 +1,14 @@
+[
+  [
+    {"entity_id": "sensor.nx1234567_charging_state", "state": "idle", "last_changed": "2026-11-14T10:00:00+00:00", "last_updated": "2026-11-14T10:00:00+00:00"},
+    {"state": "connected", "last_changed": "2026-11-14T17:30:12.123456+00:00"},
+    {"state": "charging", "last_changed": "2026-11-14T22:00:40.000000+00:00"},
+    {"state": "finished", "last_changed": "2026-11-15T01:12:05.500000+00:00"}
+  ],
+  [
+    {"entity_id": "sensor.nx1234567_energy", "state": "0.0", "last_changed": "2026-11-14T10:00:00+00:00", "last_updated": "2026-11-14T10:00:00+00:00"},
+    {"state": "0.31", "last_changed": "2026-11-14T22:01:41.000000+00:00"},
+    {"state": "unavailable", "last_changed": "2026-11-14T22:05:00.000000+00:00"},
+    {"state": "0.62", "last_changed": "2026-11-14T22:06:41.000000+00:00"}
+  ]
+]

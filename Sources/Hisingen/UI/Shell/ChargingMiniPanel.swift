@@ -42,18 +42,19 @@ final class ChargingMiniPanelController {
             panel.contentView = host
             self.host = host
         }
-        // Match the SwiftUI width so the frame never clips the density-scaled content.
-        let scaledWidth = 190 * HisingenTheme.contentScale
+        // Match the SwiftUI width so the frame never clips the content.
+        let scaledWidth: CGFloat = 200
+        let fittedHeight = max(panel.contentView?.fittingSize.height ?? 0, 92)
         // Appearing and disappearing are the same transition in both directions: they used
         // different curves at different durations, so dismissal did not retrace appearance, and
         // neither consulted Reduce Motion in a file that checks it for the glyph twenty lines away.
         let reduceMotion = Motion.prefersReducedMotion
         if !panel.isVisible {
             panel.alphaValue = 0
-            let size = NSSize(width: scaledWidth, height: panel.frame.height)
+            let size = NSSize(width: scaledWidth, height: fittedHeight)
             if panel.frameAutosaveName.isEmpty || !panel.setFrameUsingName("ChargingMiniPanel") {
                 panel.setFrame(NSRect(origin: topRightPosition(for: size), size: size), display: true)
-            } else if panel.frame.width != scaledWidth {
+            } else if panel.frame.width != scaledWidth || panel.frame.height != fittedHeight {
                 panel.setContentSize(size)
             }
             panel.orderFrontRegardless()
@@ -108,7 +109,7 @@ final class ChargingMiniPanelController {
 
     private func makePanel() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 190, height: 92),
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 120),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -144,69 +145,75 @@ private struct ChargingMiniPanelView: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Image(systemName: "bolt.car.fill")
-                    .hisType(.label)
-                    .foregroundStyle(HisingenTheme.semanticGood)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(L10n.text("Charging"))
-                    .hisType(.label, weight: .semibold)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                 Spacer()
-                if let target = targetPercent, target < 100,
-                   let battery = batteryPercentage {
-                    Text("\(String(format: "%.0f", locale: L10n.displayLocale, battery))→\(target)%")
-                        .hisType(.label, weight: .bold, design: .rounded)
-                        .monospacedDigit()
-                        .hisTelemetryValue(battery, reduceMotion: reduceMotion)
-                        .transition(.opacity)
-                } else if let battery = batteryPercentage {
-                    Text(String(format: "%.0f%%", locale: L10n.displayLocale, battery))
-                        .hisType(.heading, weight: .bold, design: .rounded)
-                        .monospacedDigit()
-                        .hisTelemetryValue(battery, reduceMotion: reduceMotion)
-                        .transition(.opacity)
-                }
                 // The panel floats above every window, on every Space, over full-screen apps, and
                 // it holds no controls of its own: the only way to dismiss it was to know the
-                // switch lived in Settings. A way out belongs where the thing appears. The
-                // pressable style is the house primitive, so the target meets the 24pt floor
-                // and the click is answered on pointer-down like every other control.
+                // switch lived in Settings. A way out belongs where the thing appears.
                 if let onClose {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
-                            .hisType(.nano, weight: .semibold)
-                            .foregroundStyle(.secondary)
+                            .hisSymbolSize(10)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.pressable)
                     .help(L10n.text("Hide this panel"))
                     .accessibilityLabel(L10n.text("Hide this panel"))
                 }
             }
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if let battery = batteryPercentage {
+                    Text(String(format: "%.0f", locale: L10n.displayLocale, battery))
+                        .hisType(size: 30, relativeTo: .title)
+                        .monospacedDigit()
+                        .hisTelemetryValue(battery, reduceMotion: reduceMotion)
+                    Text("%")
+                        .hisType(.subhead)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                    if let target = targetPercent, target < 100 {
+                        Text(L10n.format("Target %d%%", target))
+                            .hisType(.label)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .padding(.leading, 6)
+                            .transition(.opacity)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(HisingenTheme.ink)
             .hisAnimation(Motion.telemetry, value: targetPercent)
             HStack(spacing: 10) {
                 if let watts = powerWatts, watts > 0 {
-                    Label(Format.kilowatts(watts: watts), systemImage: "bolt.fill")
+                    Text(Format.kilowatts(watts: watts))
                         .hisTelemetryValue(watts, reduceMotion: reduceMotion)
                 }
                 if let minutes = minutesToTarget, minutes > 0 {
-                    Label(Format.shortDuration(minutes: minutes), systemImage: "timer")
+                    Text(Format.shortDuration(minutes: minutes))
                         .hisTelemetryValue(minutes, reduceMotion: reduceMotion)
                 }
                 Spacer()
             }
             .hisType(.caption)
-            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .foregroundStyle(HisingenTheme.inkMuted)
+            EnergyLine(level: batteryPercentage, target: nil, isCharging: true)
+                .accessibilityHidden(true)
         }
         .padding(12)
-        // Honors the dropdown's Content Density zoom so the floating panel scales
-        // consistently with the main panel's text size preference.
-        .frame(width: 190 * HisingenTheme.contentScale)
-        // The one surface that floats over the desktop gets the one window-level glass. The
-        // panel's own NSPanel supplies the shadow; a content-level shadow here would double it.
-        .hisFloatingGlass(in: RoundedRectangle(cornerRadius: HisingenTheme.cornerRadius, style: .continuous))
-        .overlay {
-            HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
-        }
+        .frame(width: 200)
+        // Flat and square like the main panel: the canvas, a hairline edge, no material. The
+        // NSPanel supplies the window shadow.
+        .background(HisingenTheme.canvas)
+        .overlay(Rectangle().strokeBorder(contrast == .increased
+                                          ? HisingenTheme.cardBoundaryIncreased : HisingenTheme.hairline,
+                                          lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.text("Charging status"))
     }

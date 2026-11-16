@@ -371,13 +371,13 @@ enum TabItemCatalog {
                 sourceTab: .controls, kind: .card,
                 detail: "The departure-aware charging plan for this vehicle.", feature: .smartChargingPlanner),
         TabItem(id: .controlsAccess, title: L10n.text("Lock controls"), symbol: "lock.fill",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Lock, unlock and tailgate control.", feature: .remoteLocks),
         TabItem(id: .controlsWindowsLocate, title: L10n.text("Windows, honk & flash"), symbol: "car.window.left",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Window closing, honk and flash to locate.", feature: .remoteWindows),
         TabItem(id: .controlsOTA, title: L10n.text("Vehicle software controls"), symbol: "arrow.down.circle.fill",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Install an available software update now.", feature: .remoteOTA),
 
         // MARK: Shared headers
@@ -426,7 +426,8 @@ enum TabItemCatalog {
         case .info:
             return [
                 .infoNavBar, .infoOverview, .infoFreshness, .infoDoors, .infoTyres,
-                .infoFluids, .infoSoftware, .infoLocation, .infoWeather, .infoTrip,
+                .infoFluids, .infoSoftware, .controlsOTA, .infoLocation, .controlsAccess,
+                .controlsWindowsLocate, .infoWeather, .infoTrip,
                 .infoPowertrain, .infoBatteryHealth, .infoBatteryDiagnostics, .infoAirQuality,
                 .infoConnectivity, .infoService, .infoWarranty, .infoExterior, .infoInterior,
                 .infoChargeLocations, .infoFactoryBuild, .infoCapabilities, .infoActivity
@@ -443,9 +444,8 @@ enum TabItemCatalog {
             ]
         case .controls:
             return [
-                .controlsBanners, .controlsReceipts, .controlsClimate, .controlsEngine,
-                .controlsCharging, .controlsChargingPlanner, .controlsAccess,
-                .controlsWindowsLocate, .controlsOTA
+                .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
+                .controlsClimate, .controlsEngine
             ]
         case .settings:
             // Settings is its own surface, managed by the settings sections rather than by

@@ -298,8 +298,8 @@
 "Current vehicle: %@. Switch vehicle." = "Aktuellt fordon: %@. Byt fordon.";
 "Custom App" = "Anpassad app";
 "Cut" = "Klipp ut";
-"Cyan Racing" = "Cyan Racing";
-"Cyan Racing championship blue, crisp track geometry" = "Cyan Racing mästerskapsblå, skarp banprofil";
+"Circuit Blue" = "Circuit Blue";
+"Championship blue, crisp track geometry" = "Mästerskapsblå, skarp banprofil";
 "Daily" = "Dagligen";
 "Danish" = "Danska";
 "Dark" = "Mörkt";
@@ -710,7 +710,7 @@
 "Plug-in hybrid" = "Laddhybrid";
 "Polestar" = "Polestar";
 "Polestar Assistance" = "Polestar Assistance";
-"Polestar BST Öhlins Swedish Gold, dark charcoal luxury" = "Polestar BST Öhlins Swedish Gold, mörk kolfiberlyx";
+"Dark charcoal surfaces with a gold accent" = "Mörka kolgrå ytor med guldaccent";
 "Polestar ID (Email)" = "Polestar ID (e-post)";
 "Polestar ID Password Required" = "Polestar ID-lösenord krävs";
 "Polestar ID Required" = "Polestar ID krävs";
@@ -996,7 +996,7 @@
 "Sunroof" = "Taklucka";
 "Supported" = "Stöds";
 "Swedish" = "Svenska";
-"Swedish Gold" = "Svenskt guld";
+"Charcoal Gold" = "Kolgrå och guld";
 "Swedish pine and eucalyptus earth tones, organic soft feel" = "Svensk tall och eukalyptus, jordnära toner och organisk känsla";
 "Switch Vehicle" = "Byt fordon";
 "Switch Vehicle (⌃⌥[ / ⌃⌥])" = "Byt fordon (⌃⌥[ / ⌃⌥])";
@@ -1726,16 +1726,14 @@
 "≈ %d days" = "≈ %d dagar";
 
 /* Text size & density options */
-"Compact (85%)" = "Kompakt (85 %)";
-"Standard (100%)" = "Standard (100 %)";
-"Relaxed (115%)" = "Avslappnad (115 %)";
+"Relaxed" = "Avslappnad";
 "Smallest text, most content per screen" = "Minst text, mest innehåll per skärm";
 "Default sizing" = "Standardstorlek";
 "Larger text and controls" = "Större text och kontroller";
 
 /* Panel size & content density (General settings) */
 "Content Density" = "Innehållsdensitet";
-"Zoom content independently of panel size: compact shows more before scrolling" = "Zooma innehållet oberoende av panelstorlek – kompakt visar mer innan scroll";
+"Type size and spacing, independently of the panel size" = "Textstorlek och avstånd, oberoende av panelstorleken";
 "Custom Size" = "Egen storlek";
 "Independent width and height overrides" = "Oberoende val av bredd och höjd";
 "Width" = "Bredd";
@@ -2819,6 +2817,7 @@
 "History" = "Historik";
 "Info" = "Info";
 "Info section category" = "Kategori i avsnittet Info";
+"History section category" = "Kategori i historiken";
 "Instantaneous drivetrain output power ceiling." = "Momentan övre gräns för drivlinans uteffekt.";
 "Interactive Verification Required" = "Interaktiv verifiering krävs";
 "Interior view of the vehicle" = "Vy över fordonets interiör";
@@ -3300,3 +3299,13 @@
 "Battery at the start and end of each charge." = "Batterinivå vid början och slutet av varje laddning.";
 "No complete charge readings in this period." = "Inga fullständiga laddningsvärden under perioden.";
 "Enable remote controls in Settings → Features." = "Aktivera fjärrstyrning i Inställningar → Funktioner.";
+"Windows" = "Fönster";
+"Controls on Now" = "Reglage på Nu";
+"Choose the control cards shown under the car. Each still needs its remote feature turned on." = "Välj vilka reglagekort som visas under bilen. Varje kort kräver fortfarande att fjärrfunktionen är på.";
+"Create Theme" = "Skapa tema";
+"Edit Theme" = "Redigera tema";
+"Accent" = "Accentfärg";
+"Light Background" = "Ljus bakgrund";
+"Dark Background" = "Mörk bakgrund";
+"My Theme" = "Mitt tema";
+"Your colours, adjusted to stay readable in light and dark." = "Dina färger, justerade så att de är läsbara i ljust och mörkt.";

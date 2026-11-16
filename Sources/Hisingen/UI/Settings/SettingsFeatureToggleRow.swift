@@ -31,7 +31,7 @@ struct SettingsFeatureToggleRow: View {
                             .hisType(.nano, weight: .semibold)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
+                            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
                             .foregroundStyle(.secondary)
                     }
                 }

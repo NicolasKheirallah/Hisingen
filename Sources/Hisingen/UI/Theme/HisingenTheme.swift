@@ -16,19 +16,10 @@ enum HisingenTheme {
     static var theme: AppTheme { PreferencesStore.shared.appTheme }
 
 
-    /// The app's corner radius. One value, not nine.
-    ///
-    /// This used to be a nine-case switch returning 0 for Polestar, 8 for Cyan Racing, 10 for Volvo
-    /// and Swedish Gold, 12, 14 and 16 for the rest — so choosing a *colour* palette silently
-    /// changed the shape of every card, chip, banner and popover in the app. That inverts
-    /// Simplicity and Craft: a theme is a palette, and a user picking one is expressing a colour
-    /// preference, not asking for different geometry. It also multiplied the surfaces that had to be
-    /// verified by nine.
-    ///
-    /// Theme geometry is now frozen: radius, padding, shadow, border width and the weight ladder are
-    /// global, and themes vary colour only. 12 is the median of the values the themes used to carry
-    /// and sits inside Apple's range for a compact utility panel.
-    static var cornerRadius: CGFloat { 12 }
+    // Square, as on every Polestar surface from the website to the centre display. The macOS
+    // window keeps its own corners; nothing inside it rounds.
+    static var cornerRadius: CGFloat { 0 }
+    static var keyRadius: CGFloat { 0 }
 
     /// The density preset's spacing multiplier. Type is the ramp's job; this is the other half of
     /// what density means now that the content tree is no longer raster-scaled — a denser layout is
@@ -38,7 +29,7 @@ enum HisingenTheme {
     }
 
     static var cardPadding: CGFloat {
-        (15 * densitySpacingScale).rounded()
+        (16 * densitySpacingScale).rounded()
     }
 
     /// Corner radius for a progress bar or gauge. Global for the same reason as ``cornerRadius``.
@@ -46,17 +37,13 @@ enum HisingenTheme {
     /// `EnergyGauges` carried its own `isPolestar ? 0 : 5` at three separate sites, so the energy
     /// bar, the fuel bar and the charging bar each decided the theme's shape independently and only
     /// agreed by coincidence. Tokens live here, not in the component that happens to draw them.
-    static var gaugeRadius: CGFloat { 5 }
+    static var gaugeRadius: CGFloat { 0 }
 
-    static var sectionSpacing: CGFloat { (12 * densitySpacingScale).rounded() }
-    /// Live panel geometry from the selected size preset / custom overrides /
-    /// density zoom, resolved through PanelLayout so every consumer agrees.
-    /// Re-evaluated on each layout pass: changing any of the three in Settings
-    /// resizes the open dropdown immediately.
+    static var sectionSpacing: CGFloat { (16 * densitySpacingScale).rounded() }
+    /// Live panel geometry from the selected size preset or custom overrides, resolved through
+    /// PanelLayout so every consumer agrees. Re-evaluated on each layout pass: changing either
+    /// in Settings resizes the open dropdown immediately.
     static var panelLayout: PanelLayout { .resolve(from: .shared) }
-    /// Content zoom factor from the density preset; <1 shows more content in the same
-    /// panel, >1 enlarges it.
-    static var contentScale: CGFloat { panelLayout.contentScale }
     /// Width that fixed-width views must lay out at. Identical to `width`, because nothing
     /// scales the tree any more; kept named so call sites do not silently assume the two agree.
     static var layoutWidth: CGFloat { panelLayout.logicalWidth }

@@ -29,6 +29,9 @@ struct HistoryDashboardView: View {
     @Environment(\.accessibilityDifferentiateWithoutColor) var differentiateWithoutColor
 
     @State var period: HistoryPeriod = .month
+    /// Which group of sections the tab shows. All by default, so a jump from another tab always
+    /// lands on its section.
+    @State var sectionGroup: HistorySectionGroup = .all
 
     @State var selectedSessionID: String?
 
@@ -277,6 +280,38 @@ struct HistoryDashboardView: View {
     /// no way to reach a card except by scrolling past every one before it, while Info solved the
     /// identical problem with its own jump menu. The list is the single source for both the cards
     /// and the menu, so a card cannot be reachable from one and invisible to the other.
+    /// The groups the Log filter offers. Overview stays in every group: it is the period's answer.
+    enum HistorySectionGroup: String, CaseIterable, Hashable {
+        case all, charging, driving, climate, status
+
+        var title: String {
+            switch self {
+            case .all: return L10n.text("All")
+            case .charging: return L10n.text("Charging")
+            case .driving: return L10n.text("Driving")
+            case .climate: return L10n.text("Climate")
+            case .status: return L10n.text("Status")
+            }
+        }
+
+        func contains(_ sectionID: String) -> Bool {
+            if self == .all || sectionID == "overview" { return true }
+            switch self {
+            case .all: return true
+            case .charging:
+                return ["charging-sessions", "charging-curve", "monthly-charging", "charge-locations",
+                        "charging-history", "month"].contains(sectionID)
+            case .driving:
+                return ["driving-patterns", "distance", "monthly-mileage", "trips", "efficiency", "consumption",
+                        "odometer", "fuel-economy", "recent-fills", "emissions", "month"].contains(sectionID)
+            case .climate:
+                return ["air-cleaning", "air-quality", "cabin-climate"].contains(sectionID)
+            case .status:
+                return ["activity", "warnings", "battery-health", "tyre-pressure", "automations"].contains(sectionID)
+            }
+        }
+    }
+
     struct HistorySection: Identifiable {
         let id: String
         let title: String
@@ -346,8 +381,9 @@ struct HistoryDashboardView: View {
         }
         // The reader's order, with the terminal states left where they are: they describe the
         // data, not the layout, and belong at the end whichever way the cards are arranged.
-        let cards = drawn.compactMap { section in section.item.map { (section: section, item: $0) } }
-        return ordered(cards, by: \.item).map(\.section) + drawn.filter { $0.item == nil }
+        let grouped = drawn.filter { $0.item == nil || sectionGroup.contains($0.id) }
+        let cards = grouped.compactMap { section in section.item.map { (section: section, item: $0) } }
+        return ordered(cards, by: \.item).map(\.section) + grouped.filter { $0.item == nil }
     }
 
     /// key flips (that precedes the async query).
@@ -498,7 +534,7 @@ struct HistoryDashboardView: View {
                 .hisType(.caption, weight: .semibold)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(HisingenTheme.chipFill, in: Capsule())
+                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                 .transition(.opacity)
                 .padding(.bottom, 12)
                 .accessibilityElement(children: .combine)
@@ -685,8 +721,8 @@ struct HistoryDashboardView: View {
                             CardHeader(symbol: "chart.xyaxis.line", title: " ", color: HisingenTheme.chartInfo)
                                 .accessibilityHidden(true)
                         }
-                        RoundedRectangle(cornerRadius: 6).frame(height: chartHeight)
-                        HStack { ForEach(0..<3, id: \.self) { _ in RoundedRectangle(cornerRadius: 6).frame(height: 34) } }
+                        RoundedRectangle(cornerRadius: 0).frame(height: chartHeight)
+                        HStack { ForEach(0..<3, id: \.self) { _ in RoundedRectangle(cornerRadius: 0).frame(height: 34) } }
                     }
                 }
                 .redacted(reason: .placeholder)
@@ -798,7 +834,7 @@ struct HistoryDashboardView: View {
             }
         }
         .padding(5)
-        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.03, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 5))
+        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.03, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 0))
     }
 
     struct LabeledField: View {

@@ -70,15 +70,15 @@ struct SettingsRemoteControlsCard: View {
                             .controlSize(.small)
                         }
                         .padding(8)
-                        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
                     } else {
                         // One control, two pages: Accounts draws the same row, so the grant is
                         // found where account sign-in is, not only where the toggles are.
                         RemoteCommandAuthorizationRow(binder: binder)
                     }
-                    row(.remoteClimate, symbol: "fan.fill", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop), badgeText: isVolvo ? nil : commandAuthBadge(true))
-                    row(.remoteLocks, symbol: "lock.fill", title: "Remote Locks", detail: "Central lock and unlock", isSupported: supportsCapability(.locks) && (!isVolvo || prefs.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : commandAuthBadge(true))
-                    row(.remoteCharging, symbol: "bolt.fill", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo && supportsCapability(.chargeTarget), badgeText: isVolvo ? "Read-Only in API" : nil)
+                    row(.remoteClimate, symbol: "fan", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop), badgeText: isVolvo ? nil : commandAuthBadge(true))
+                    row(.remoteLocks, symbol: "lock", title: "Remote Locks", detail: "Central lock and unlock", isSupported: supportsCapability(.locks) && (!isVolvo || prefs.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : commandAuthBadge(true))
+                    row(.remoteCharging, symbol: "bolt", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo && supportsCapability(.chargeTarget), badgeText: isVolvo ? "Read-Only in API" : nil)
                     row(.remoteSchedules, symbol: "calendar.badge.clock", title: "Charging & Climate Timers", detail: "Create and edit charge windows and departure timers", isSupported: !isVolvo && (supportsCapability(.chargingSchedule) || supportsCapability(.climateTimers)), badgeText: isVolvo ? "Not in API" : nil)
                     row(.remoteWindows, symbol: "rectangle.arrowtriangle.2.outward", title: "Window Controls", detail: "Vent or close vehicle windows", isSupported: !isVolvo && supportsCapability(.windows), badgeText: isVolvo ? "Not in API" : commandAuthBadge(true))
                     row(.remoteHonkFlash, symbol: "flashlight.on.fill", title: "Locate Vehicle", detail: "Flash headlights and honk horn", isSupported: supportsCapability(.honkAndFlash) && (!isVolvo || prefs.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : commandAuthBadge(true))

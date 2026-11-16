@@ -1,0 +1,21 @@
+{
+  "changed_states": [],
+  "service_response": {
+    "sessions": [
+      {
+        "id": "c0ffee01",
+        "started_at": "2026-11-12T01:15:00+00:00",
+        "ended_at": "2026-11-12T03:30:00+00:00",
+        "energy_kwh": 16.2,
+        "peak_power_kw": 7.3,
+        "vehicle_start_percent": 41,
+        "vehicle_end_percent": 79,
+        "intervals": [
+          {"start": "2026-11-12T01:15:00+00:00", "end": "2026-11-12T01:30:00+00:00", "kwh": 1.8},
+          {"start": "2026-11-12T01:30:00+00:00", "end": "2026-11-12T01:45:00+00:00", "kwh": 1.8}
+        ]
+      },
+      {"id": "", "started_at": "2026-11-13T01:15:00+00:00", "ended_at": "2026-11-13T03:30:00+00:00", "energy_kwh": 9.0}
+    ]
+  }
+}

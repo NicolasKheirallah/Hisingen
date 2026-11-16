@@ -66,6 +66,8 @@ extension PreferencesStore {
                 d.set(value, forKey: key)
             }
         }
+        // An archive exported before a theme was renamed still carries the old identifier.
+        migrateRenamedThemeIdentifiers()
     }
 
     func resetTransferableSettings() {

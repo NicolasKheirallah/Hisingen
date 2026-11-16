@@ -5,6 +5,9 @@ struct NowInstrument: View {
     let state: VehicleState
     let imageCache: CarImageCache
     let commandGate: ControlsCommandGate
+    var feedback: RemoteCommandFeedback? = nil
+    var onAuthorizeRemoteCommands: (() -> Void)? = nil
+    var showsDepartureCheck = false
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -43,13 +46,52 @@ struct NowInstrument: View {
         if state.freshness.isCached { return L10n.text("Showing an offline copy") }
         if showsLastReading { return L10n.text("Last known readings") }
         if case .unavailable = state.identity.availability { return state.identity.availability.displayName }
-        return state.activeVerdict ?? state.identity.usageModeDisplayName
+        return state.activeVerdict
     }
 
+    private var modelName: String { state.identity.modelName ?? state.model.displayName }
+
     private var ageLine: String {
-        let updated = L10n.format("Updated %@", Format.relativeAge(since: state.dataTimestamp))
-        guard showsLastReading, state.vehicleReportedAt != nil else { return updated }
-        return L10n.format("%@ · Checked %@", updated, Format.relativeAge(since: state.fetchedAt))
+        L10n.format("Checked %@", Format.relativeAge(since: state.fetchedAt))
+    }
+
+    static func readingAge(_ reading: VehicleReading, in state: VehicleState, now: Date = Date()) -> String? {
+        guard let reportedAt = state.reportedDate(for: reading) else {
+            return L10n.text("Reading time unknown")
+        }
+        let age = now.timeIntervalSince(reportedAt)
+        guard age >= -60 else { return L10n.text("Reading time unknown") }
+        guard state.freshness.isCached || age > 600 || state.fetchedAt.timeIntervalSince(reportedAt) > 120 else {
+            return nil
+        }
+        return L10n.format("Reported %@", Format.relativeAge(since: reportedAt, now: now))
+    }
+
+    /// The one reading age every figure and control shares, when they agree. Said once beside
+    /// the freshness line instead of under each value; a reading that differs keeps its own line.
+    private var sharedReadingAge: String? {
+        var readings: [VehicleReading] = [.locks, .climateStatus]
+        if state.powertrain.hasElectricRange { readings += [.battery, .charging] }
+        readings.append(.range)
+        let ages = Set(readings.map { Self.readingAge($0, in: state) ?? "" })
+        guard ages.count == 1, let only = ages.first, !only.isEmpty else { return nil }
+        return only
+    }
+
+    private func ownAge(_ reading: VehicleReading) -> String? {
+        let age = Self.readingAge(reading, in: state)
+        return age == sharedReadingAge ? nil : age
+    }
+
+    static func quickCommand(_ identifier: String) -> Bool {
+        ["lock", "unlock", "start-climate", "stop-climate", "start-charge-override", "stop-charge-override"]
+            .contains(identifier)
+    }
+
+    private var inlineFeedback: RemoteCommandFeedback? {
+        guard let feedback, let identifier = feedback.commandIdentifier, Self.quickCommand(identifier),
+              feedback.targetVIN?.caseInsensitiveCompare(state.identity.vin) == .orderedSame else { return nil }
+        return feedback
     }
 
     private var attentionMessage: VehicleStateSummary? {
@@ -61,60 +103,81 @@ struct NowInstrument: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 16) {
             header
-                .padding(.bottom, 12)
-
-            energyBlock
-
-            if state.powertrain.hasElectricRange {
-                chargeLine
-                    .padding(.top, 10)
+            if typeSize.isAccessibilitySize {
+                readings(alignment: .leading, spread: false)
+            } else {
+                energyBlock
             }
-
+            if state.powertrain.hasElectricRange { chargeLine }
             quickStatusStrip
-                .padding(.top, 18)
+            if let inlineFeedback {
+                ControlsBanners(state: state, feedback: inlineFeedback, features: [],
+                                isBrandVolvo: state.model.brand == .volvo, showRestrictedNotice: false,
+                                showsVehicleOffline: false,
+                                onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                                onFollowUp: commandGate.send)
+            }
+            if showsDepartureCheck, state.powertrain.hasElectricRange {
+                PanelRule()
+                DepartureCheckDisclosure(state: state)
+            }
+            if typeSize.isAccessibilitySize { profile(height: 116) }
         }
         .padding(.horizontal, inset)
-        .padding(.top, 10)
         .accessibilityElement(children: .contain)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .hisType(.displaySmall, weight: .semibold)
-                .foregroundStyle(HisingenTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
 
-            if let status {
-                Text(status)
-                    .hisType(.body, weight: .semibold)
-                    .foregroundStyle(showsLastReading ? HisingenTheme.semanticWarning : HisingenTheme.ink)
+        return layout {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .hisType(.display)
+                    .foregroundStyle(HisingenTheme.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(reduceMotion ? .identity : .opacity)
+                    .accessibilityAddTraits(.isHeader)
+                if title.range(of: modelName, options: .caseInsensitive) == nil {
+                    Text(modelName)
+                        .hisType(.subhead)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+                if let status {
+                    Text(status)
+                        .hisType(.subhead)
+                        .foregroundStyle(showsLastReading ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(reduceMotion ? .identity : .opacity)
+                }
+                if let attentionMessage {
+                    Label(attentionMessage.message, systemImage: attentionSymbol(for: attentionMessage))
+                        .hisType(.subhead)
+                        .foregroundStyle(attentionMessage.severity == .critical
+                                         ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            if let attentionMessage {
-                Label(attentionMessage.message, systemImage: attentionSymbol(for: attentionMessage))
-                    .hisType(.body, weight: .semibold)
-                    .foregroundStyle(attentionMessage.severity == .critical
-                                     ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            freshnessLabel
         }
     }
 
     private func attentionSymbol(for summary: VehicleStateSummary) -> String {
         if summary.severity == .critical { return "exclamationmark.octagon.fill" }
-        if state.exteriorStatus?.itemsNeedingAttention == [.tailgate] { return "car.side.rear.open.fill" }
+        if state.exteriorStatus?.itemsNeedingAttention == [.tailgate] { return "car.side.rear.open" }
         return "exclamationmark.triangle.fill"
     }
 
-    private var profile: some View {
-        InstrumentVehicleProfile(state: state, imageCache: imageCache,
-                                 height: condensed ? 144 : 194)
+    /// The car on Polestar's studio stage: one flat #EFEFEF field, no frame, no shadow.
+    private func profile(height: CGFloat) -> some View {
+        // Straight on the canvas: the render's own shadow grounds the car.
+        InstrumentVehicleProfile(state: state, imageCache: imageCache, height: height, fillsWidth: true)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
     }
 
     private enum EnergyBlockPart: Hashable {
@@ -129,159 +192,246 @@ struct NowInstrument: View {
         let order: [EnergyBlockPart] = readingsFirst ? [.readings, .profile] : [.profile, .readings]
         let alignment: HorizontalAlignment = stacked || readingsFirst ? .leading : .trailing
         let layout = stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
 
         return layout {
             ForEach(order, id: \.self) { part in
                 switch part {
                 case .readings:
-                    readings(alignment: alignment).layoutPriority(1)
+                    readings(alignment: alignment, spread: stacked && !typeSize.isAccessibilitySize)
+                        .layoutPriority(1)
                 case .profile:
-                    profile
+                    profile(height: condensed ? 128 : min(196, HisingenTheme.layoutWidth * 0.30))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func readings(alignment: HorizontalAlignment) -> some View {
+    private func readings(alignment: HorizontalAlignment, spread: Bool) -> some View {
         let showsBattery = state.powertrain.hasElectricRange
         let first = preferences.nowFirstReading
-        let battery = figure(batteryText, unit: "%", size: condensed ? 48 : 58,
-                             label: L10n.text("Battery"), alignment: alignment)
+        let battery = figure(batteryText, unit: "%", size: condensed ? 44 : 54,
+                             label: L10n.text("Battery"), reading: .battery, alignment: alignment)
+            .frame(maxWidth: spread ? .infinity : nil, alignment: .leading)
+        let range = figure(rangeParts.value, unit: rangeParts.unit,
+                           size: spread || !showsBattery ? (condensed ? 44 : 54) : 32,
+                           label: L10n.text("Estimated Range"), reading: .range, alignment: alignment)
+            .frame(maxWidth: spread ? .infinity : nil, alignment: .leading)
+        let layout = spread
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(alignment: alignment, spacing: 8))
 
-        return VStack(alignment: alignment, spacing: 8) {
+        return layout {
             if showsBattery && first == .battery { battery }
-            figure(rangeParts.value, unit: rangeParts.unit,
-                   size: showsBattery ? (condensed ? 24 : 29) : 42,
-                   label: L10n.text("Estimated Range"), alignment: alignment)
+            range
             if showsBattery && first == .range { battery }
         }
     }
 
-    private func figure(_ value: String, unit: String, size: CGFloat, label: String,
+    private func figure(_ value: String, unit: String, size: CGFloat, label: String, reading: VehicleReading,
                         alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 0) {
+        let age = value == "–" ? nil : ownAge(reading)
+        return VStack(alignment: alignment, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .hisType(size: size, relativeTo: .largeTitle, weight: .light)
+                    .hisType(size: size, relativeTo: .largeTitle)
                     .monospacedDigit()
                     .contentTransition(reduceMotion ? .opacity : .numericText())
                     .animation(reduceMotion ? nil : Motion.telemetry, value: value)
                 if value != "–" {
                     Text(unit)
-                        .hisType(size: max(13, size * 0.34), relativeTo: .title3)
+                        .hisType(size: max(14, size * 0.40), relativeTo: .title3)
                         .foregroundStyle(HisingenTheme.inkMuted)
                 }
             }
             .foregroundStyle(HisingenTheme.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-
             Text(label)
-                .hisType(.label)
+                .hisType(.subhead)
                 .foregroundStyle(HisingenTheme.inkMuted)
                 .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
                 .fixedSize(horizontal: false, vertical: true)
+            if let age {
+                Text(age)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityValue(value == "–" ? L10n.text("Unavailable") : "\(value) \(unit)")
+        .accessibilityValue([value == "–" ? L10n.text("Unavailable") : "\(value) \(unit)", age].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var chargeLine: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            EnergyLine(level: state.energy.batteryPercentage, target: state.energy.targetPercentage.map(Double.init),
-                       isCharging: state.isCharging && !showsLastReading, isHistorical: showsLastReading)
+        EnergyLine(level: state.energy.batteryPercentage, target: state.energy.targetPercentage.map(Double.init),
+                   isCharging: state.isCharging && state.hasFreshReading(.charging),
+                   isHistorical: showsLastReading || !state.hasFreshReading(.battery))
+    }
 
-            if let target = state.energy.targetPercentage {
-                Text(L10n.format("Target %d%%", target))
-                    .hisType(.label, weight: .medium)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
+    /// The reader's chosen controls that this car and their feature switches can actually use.
+    private var visibleQuickControls: [NowQuickControl] {
+        let features = preferences.features.enabled
+        let profile = state.capabilityProfile
+        return preferences.nowQuickControls.filter { control in
+            guard features.contains(control.feature) else {
+                // Locks, climate and charging were always drawn, so a reader with remote commands
+                // off still sees the state; the command gate disables their verbs.
+                return control == .locks || control == .climate
+                    || (control == .charging && state.powertrain.hasElectricRange)
             }
+            switch control {
+            case .locks, .climate: return true
+            case .charging: return state.powertrain.hasElectricRange
+            case .airCleaning: return profile.permits(.preCleaning)
+            case .windows: return profile.permits(.windows)
+            case .locate: return profile.permits(.honkAndFlash)
+            case .tailgate: return state.otaCapabilities?.supportsTrunkControl == true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func quickControlCard(_ control: NowQuickControl) -> some View {
+        switch control {
+        case .locks: doorsControl
+        case .climate: climateControl
+        case .charging: chargingControl
+        case .airCleaning: airCleaningControl
+        case .windows: windowsControl
+        case .locate: locateControl
+        case .tailgate: tailgateControl
         }
     }
 
     private var quickStatusStrip: some View {
-        let hasCharging = state.powertrain.hasElectricRange
-        let count = hasCharging ? 4 : 3
-        let columns = condensed || typeSize.isAccessibilitySize ? 2 : count
+        let controls = visibleQuickControls
+        // Three across at most; four sit two by two so no card is left alone on a row.
+        let columns = typeSize.isAccessibilitySize ? 1 : (controls.count == 4 ? 2 : max(1, min(3, controls.count)))
         return LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 0, alignment: .top), count: columns),
-            spacing: 10
+            columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: columns),
+            alignment: .leading, spacing: 8
         ) {
-            stripCell(index: 0, count: count, columns: columns) { doorsControl }
-            stripCell(index: 1, count: count, columns: columns) { climateControl }
-            if hasCharging {
-                stripCell(index: 2, count: count, columns: columns) { chargingControl }
-            }
-            stripCell(index: count - 1, count: count, columns: columns) { freshnessCell }
+            ForEach(controls, id: \.self) { quickControlCard($0) }
         }
     }
 
-    private func stripCell<Content: View>(
-        index: Int, count: Int, columns: Int, @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .top)
-            .overlay(alignment: .trailing) {
-                if index < count - 1 && (index + 1) % columns != 0 {
-                    Rectangle()
-                        .fill(HisingenTheme.hairline)
-                        .frame(width: 1)
-                        .padding(.vertical, 4)
-                        .accessibilityHidden(true)
-                        .allowsHitTesting(false)
-                }
-            }
+    private var airCleaningControl: some View {
+        let cleaning = state.airQuality?.cleaningState
+        let command: RemoteCommand = cleaning == .on ? .stopPreCleaning : .startPreCleaning
+        return quickControl(
+            symbol: "aqi.medium",
+            name: L10n.text("Air Cleaning"),
+            value: cleaning.map { $0 == .on ? L10n.text("On") : L10n.text("Off") } ?? L10n.text("Unavailable"),
+            reading: .airQuality, hasReading: cleaning != nil,
+            activity: cleaning == .on && state.hasFreshReading(.airQuality) ? .running : nil,
+            action: command.title(temperatureUnit: preferences.temperatureUnit),
+            command: command
+        )
     }
 
-    private var freshnessCell: some View {
-        VStack(spacing: 5) {
-            stripGlyph("clock.arrow.circlepath")
-            Text(ageLine)
-                .hisType(.label, weight: .medium)
-                .monospacedDigit()
-                .foregroundStyle(HisingenTheme.inkMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.center)
+    private var windowsControl: some View {
+        let states = state.exteriorStatus?.windowStates ?? []
+        let open = states.filter { $0 == .open || $0 == .ajar }.count
+        let value: String = {
+            if states.isEmpty { return L10n.text("Unavailable") }
+            if open == 0 { return L10n.text("Windows Closed") }
+            if open == states.count { return L10n.text("Windows Open") }
+            return L10n.format("%1$d of %2$d windows open", open, states.count)
+        }()
+        return quickControl(
+            symbol: "car.window.left",
+            name: L10n.text("Windows"),
+            value: value,
+            reading: .openings, hasReading: !states.isEmpty,
+            valueIsWarning: open > 0 && state.hasFreshReading(.openings),
+            action: RemoteCommand.closeWindows.title(temperatureUnit: preferences.temperatureUnit),
+            command: .closeWindows
+        )
+    }
+
+    private var locateControl: some View {
+        let mode = state.otaCapabilities?.honkFlashMode
+        let command: RemoteCommand = (mode?.permits(.honkAndFlash) ?? true) ? .honkAndFlash : .flashLights
+        return quickControl(
+            symbol: "light.beacon.max",
+            name: L10n.text("Honk & Flash"),
+            value: "",
+            reading: .location, hasReading: false,
+            action: command.title(temperatureUnit: preferences.temperatureUnit),
+            command: command
+        )
+    }
+
+    private var tailgateControl: some View {
+        let isOpen = state.exteriorStatus?.isTailgateOpen
+        let command: RemoteCommand = isOpen == true ? .closeTailgate : .openTailgate
+        return quickControl(
+            symbol: "car.side.rear.open",
+            name: L10n.text("Tailgate"),
+            value: isOpen.map { $0 ? L10n.text("Open") : L10n.text("Closed") } ?? L10n.text("Unavailable"),
+            reading: .openings, hasReading: isOpen != nil,
+            valueIsWarning: isOpen == true && state.hasFreshReading(.openings),
+            action: command.title(temperatureUnit: preferences.temperatureUnit),
+            command: command
+        )
+    }
+
+    private var freshnessLabel: some View {
+        let lines = [ageLine, sharedReadingAge].compactMap { $0 }
+        return VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+            }
         }
-        .padding(.vertical, 5)
-        .help(ageLine)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L10n.text("Last Updated"))
-        .accessibilityValue(ageLine)
+        .hisType(.label)
+        .monospacedDigit()
+        .foregroundStyle(HisingenTheme.inkMuted)
+        .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 6)
+        .accessibilityElement(children: .combine)
     }
 
     private var doorsControl: some View {
         let locked = state.exteriorStatus?.isLocked
         return quickControl(
-            symbol: locked == false ? "lock.open.fill" : "lock.fill",
+            symbol: locked == false ? "lock.open" : "lock",
             name: L10n.text("Locks"),
             value: locked.map { $0 ? L10n.text("Locked") : L10n.text("Unlocked") } ?? L10n.text("Unavailable"),
-            valueIsWarning: locked == false && !showsLastReading,
+            reading: .locks, hasReading: locked != nil,
+            valueIsWarning: locked == false && state.hasFreshReading(.locks),
             action: locked == true ? L10n.text("Unlock") : L10n.text("Lock"),
             command: locked == true ? .unlock : .lock
         )
     }
 
+    private var rearSeatsSet: Bool {
+        preferences.remoteRearLeftSeatHeating != .unspecified || preferences.remoteRearRightSeatHeating != .unspecified
+    }
+
     private var climateControl: some View {
         let command: RemoteCommand = state.isClimateActive
             ? .stopClimate
+            // The same command Plan's climate settings describe: the saved temperature, seats and
+            // wheel, with rear seats only when one was set. Plan no longer has its own start.
             : .startClimate(
                 temperatureCelsius: Float(preferences.remoteClimateTemperature),
-                frontLeftSeat: .off, frontRightSeat: .off,
-                rearLeftSeat: .off, rearRightSeat: .off,
-                steeringWheel: .off
+                frontLeftSeat: preferences.remoteDriverSeatHeating,
+                frontRightSeat: preferences.remoteFrontRightSeatHeating,
+                rearLeftSeat: rearSeatsSet ? preferences.remoteRearLeftSeatHeating : .unspecified,
+                rearRightSeat: rearSeatsSet ? preferences.remoteRearRightSeatHeating : .unspecified,
+                steeringWheel: preferences.remoteSteeringWheelHeating
             )
         return quickControl(
-            symbol: "fan.fill",
+            symbol: "fan",
             name: L10n.text("Climate"),
             value: state.climateStatus?.activity.displayName ?? L10n.text("Unavailable"),
+            reading: .climateStatus, hasReading: state.climateStatus != nil,
+            activity: state.isClimateActive && state.hasFreshReading(.climateStatus) ? .running : nil,
             action: state.isClimateActive ? L10n.text("Stop Climate") : L10n.text("Start Climate"),
             command: command
         )
@@ -289,11 +439,24 @@ struct NowInstrument: View {
 
     private var chargingControl: some View {
         let overriding = state.energy.chargeNowActive == true
-        let hasAction = overriding || state.energy.chargingState != .complete
+        // There is no plain "stop charging" command, only the schedule override. A car that is
+        // already charging on its own schedule has nothing to offer here; one charging because of
+        // an override offers to hand control back to the schedule.
+        // Nor can a car without a cable start charging: Charge Now waits for a plug. Judged on the
+        // same reported cable state the card writes, so the verb never contradicts the value.
+        let unplugged = state.energy.connection == .disconnected
+        let hasAction = overriding
+            || (state.energy.chargingState != .complete && !unplugged
+                && !(state.isCharging && state.hasFreshReading(.charging)))
+        let status = state.energy.connection == .disconnected && state.energy.chargingState == .idle
+            ? L10n.text("Cable disconnected")
+            : state.energy.chargingState.displayName
         return quickControl(
-            symbol: "bolt.fill",
+            symbol: "bolt",
             name: L10n.text("Charging"),
-            value: state.energy.chargingState.displayName,
+            value: status,
+            reading: .charging, hasReading: state.energy.connection != .unknown || state.energy.chargingState.isRecognised,
+            activity: state.isCharging && state.hasFreshReading(.charging) ? .live : nil,
             action: hasAction ? (overriding ? L10n.text("Resume Schedule") : L10n.text("Charge Now")) : nil,
             command: overriding ? .stopChargingOverride : .startChargingOverride
         )
@@ -304,75 +467,127 @@ struct NowInstrument: View {
         symbol: String,
         name: String,
         value: String,
+        reading: VehicleReading,
+        hasReading: Bool,
+        activity: CardActivity? = nil,
         valueIsWarning: Bool = false,
         action: String?,
         command: RemoteCommand
     ) -> some View {
-        let valueColor = valueIsWarning ? HisingenTheme.semanticWarning : HisingenTheme.ink
+        let valueColor = valueIsWarning && activity == nil ? HisingenTheme.semanticWarning : (activity?.foreground ?? HisingenTheme.ink)
+        let age = hasReading ? ownAge(reading) : nil
+        let spokenValue = [value, age].compactMap { $0 }.joined(separator: ", ")
+        let awaiting = state.commandState.receipts.contains {
+            $0.status.isAwaiting && $0.command?.descriptor.proofReading == reading
+        }
+        let detail = awaiting ? L10n.text("Command sent: waiting for the vehicle") : age
         if let action {
             let availability = commandGate.availability(command)
             let sending = commandGate.isSending(command)
             let commandTitle = command.title(temperatureUnit: preferences.temperatureUnit)
+            let visibleAction = sending ? L10n.text("Sending…") : action
             Button {
                 commandGate.send(command)
             } label: {
                 quickControlLabel(
-                    symbol: symbol, value: value, valueColor: valueColor,
-                    action: sending ? L10n.text("Sending…") : action,
-                    actionColor: availability.isAvailable ? HisingenTheme.accent : HisingenTheme.inkMuted,
-                    sending: sending
+                    symbol: symbol, name: name, value: value, valueColor: valueColor,
+                    detail: detail, action: visibleAction,
+                    actionColor: activity.map { availability.isAvailable ? $0.foreground : $0.secondary }
+                        ?? (availability.isAvailable ? HisingenTheme.ink : HisingenTheme.inkMuted),
+                    sending: sending, activity: activity
                 )
             }
             .buttonStyle(.pressable)
             .focusEffectDisabled()
             .disabled(!availability.isAvailable)
             .help(availability.shortReason ?? commandTitle)
-            .accessibilityLabel(sending ? L10n.text("Sending…") : commandTitle)
-            .accessibilityValue(value)
+            .accessibilityLabel(sending ? visibleAction : commandTitle)
+            .accessibilityValue([spokenValue, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
             .accessibilityHint(availability.shortReason ?? "")
         } else {
-            quickControlLabel(symbol: symbol, value: value, valueColor: valueColor)
+            quickControlLabel(symbol: symbol, name: name, value: value, valueColor: valueColor, detail: detail,
+                              activity: activity)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(name)
-                .accessibilityValue(value)
+                .accessibilityValue([spokenValue, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
         }
     }
 
+    /// A control card: the subject and its symbol, the state, then the verb with an arrow at the
+    /// foot. Square and flat on the studio fill, so the cards read as part of the same stage as
+    /// the car above them. The whole card is the control.
     private func quickControlLabel(
-        symbol: String, value: String, valueColor: Color,
-        action: String? = nil, actionColor: Color = HisingenTheme.inkMuted, sending: Bool = false
+        symbol: String, name: String, value: String, valueColor: Color,
+        detail: String? = nil, action: String? = nil, actionColor: Color = HisingenTheme.inkMuted, sending: Bool = false,
+        activity: CardActivity? = nil
     ) -> some View {
-        VStack(spacing: 5) {
-            if sending {
-                ProgressView()
-                    .controlSize(.mini)
-                    .accessibilityHidden(true)
-            } else {
-                stripGlyph(symbol)
+        let secondary = activity?.secondary ?? HisingenTheme.inkMuted
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 4) {
+                Text(name)
+                    .hisType(.label)
+                    .foregroundStyle(secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 2)
+                if sending {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(secondary)
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: symbol)
+                        .hisSymbolSize(12)
+                        .foregroundStyle(secondary)
+                        .accessibilityHidden(true)
+                }
             }
-            Text(value)
-                .hisType(.label, weight: .semibold)
-                .foregroundStyle(valueColor)
-                .fixedSize(horizontal: false, vertical: true)
-            if let action {
-                Text(action)
-                    .hisType(.caption, weight: .semibold)
-                    .foregroundStyle(actionColor)
+            if !value.isEmpty {
+                Text(value)
+                    .hisType(.title)
+                    .foregroundStyle(valueColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let detail {
+                Text(detail)
+                    .hisType(.label)
+                    .foregroundStyle(secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            if let action {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(action)
+                        .hisType(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !sending {
+                        Image(systemName: "arrow.right")
+                            .hisSymbolSize(10)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .foregroundStyle(actionColor)
+                .padding(.top, 6)
+            }
         }
-        .multilineTextAlignment(.center)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .top)
+        .multilineTextAlignment(.leading)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: typeSize.isAccessibilitySize ? 56 : 96, alignment: .topLeading)
+        .background(activity?.fill ?? HisingenTheme.palette.studioFill)
+        .hisAnimation(Motion.stateChange, value: activity)
         .contentShape(Rectangle())
     }
+}
 
-    private func stripGlyph(_ symbol: String) -> some View {
-        Image(systemName: symbol)
-            .hisSymbolSize(17, weight: .semibold)
-            .foregroundStyle(HisingenTheme.ink)
-            .accessibilityHidden(true)
-    }
+/// A control card's live state: a running climate or air-cleaning session, or a charge. Every
+/// kind fills with the theme's ``Palette/activeFill`` and writes on it in ``Palette/activeOn``, so
+/// active controls follow the reader's theme. The state is always written on the card as well.
+enum CardActivity: Equatable {
+    case running
+    case live
+
+    @MainActor var fill: Color { HisingenTheme.palette.activeFill }
+    @MainActor var foreground: Color { HisingenTheme.palette.activeOn }
+    @MainActor var secondary: Color { foreground.opacity(0.78) }
 }
 
 @MainActor
@@ -380,6 +595,7 @@ struct InstrumentVehicleProfile: View {
     let state: VehicleState
     let imageCache: CarImageCache
     let height: CGFloat
+    var fillsWidth = false
 
     @Environment(\.preferencesStore) private var preferences
 
@@ -391,7 +607,7 @@ struct InstrumentVehicleProfile: View {
         Group {
             if let data {
                 VehiclePresentationView(identity: .init(vin: vin, angle: angle), imageData: data,
-                                        fitHeight: height)
+                                        fitHeight: height, fillsInstrumentWidth: fillsWidth)
                     .accessibilityHidden(true)
             } else {
                 VehicleSideProfileDoorsView(openings: state.exteriorStatus?.openings ?? [],

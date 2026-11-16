@@ -10,7 +10,7 @@ struct SettingsPrivacyCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "hand.raised.fill", title: L10n.text("Privacy Dashboard"), color: HisingenTheme.chartInfo)
+                CardHeader(symbol: "hand.raised", title: L10n.text("Privacy Dashboard"), color: HisingenTheme.chartInfo)
                 Text(L10n.text("Hisingen keeps account secrets in the macOS Keychain and vehicle history in a local SQLite database."))
                     .hisType(.caption)
                     .foregroundStyle(.secondary)
@@ -18,17 +18,17 @@ struct SettingsPrivacyCard: View {
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
-                KVRow(L10n.text("Account secrets"), L10n.text("macOS Keychain"), symbol: "key.fill")
-                KVRow(L10n.text("Vehicle history"), L10n.text("Stored locally on this Mac"), symbol: "internaldrive.fill")
+                KVRow(L10n.text("Account secrets"), L10n.text("macOS Keychain"), symbol: "key")
+                KVRow(L10n.text("Vehicle history"), L10n.text("Stored locally on this Mac"), symbol: "internaldrive")
                 KVRow(
                     L10n.text("Precise location retention"),
                     persistLocationHistory ? L10n.text("Enabled") : L10n.text("Off (recommended)"),
-                    symbol: persistLocationHistory ? "location.fill" : "location.slash.fill"
+                    symbol: persistLocationHistory ? "location" : "location.slash"
                 )
                 KVRow(
                     L10n.text("Screenshot redaction"),
                     preferences.privacyRedactionEnabled ? L10n.text("Enabled") : L10n.text("Disabled"),
-                    symbol: "eye.slash.fill"
+                    symbol: "eye.slash"
                 )
                 KVRow(
                     L10n.text("Remote-command authentication"),
