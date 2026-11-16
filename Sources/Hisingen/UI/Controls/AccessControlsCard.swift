@@ -115,23 +115,24 @@ struct AccessControlsCard: View {
 
                         if showTailgateControl {
                             let tailgateIsOpen = state.exteriorStatus?.isTailgateOpen ?? false
+                            let tailgateCommand: RemoteCommand = tailgateIsOpen ? .closeTailgate : .openTailgate
                             Button {
-                                gate.send(tailgateIsOpen ? .closeTailgate : .openTailgate)
+                                gate.send(tailgateCommand)
                             } label: {
                                 VStack(spacing: 4) {
                                     Image(systemName: tailgateIsOpen
-                                          ? "car.side.rear.open.fill" : "car.side.rear.fill")
+                                          ? "car.side.fill" : "car.side.rear.open.fill")
                                         .hisType(.title)
                                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                                     Text(tailgateIsOpen
                                          ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"))
                                         .hisType(.label, weight: .medium)
-                                    gate.sendingOverlay(tailgateIsOpen ? .closeTailgate : .openTailgate)
+                                    gate.sendingOverlay(tailgateCommand)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 46)
                             }
                             .buttonStyle(.hisSecondary(tailgateIsOpen ? HisingenTheme.semanticWarning : nil))
-                            .disabled(gate.isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
+                            .disabled(gate.isDisabled(tailgateCommand))
                             .hisAnimation(Motion.stateChange, value: tailgateIsOpen)
                         }
                     }

@@ -259,7 +259,8 @@ struct HistoryDashboardView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: HisingenTheme.chartInfo)
-                PaginatedSection(items: snapshot.activities, pageSize: 15, resetKeys: [periodLoadKey],
+                PaginatedSection(items: snapshot.activities, pageSize: preferences.historyPageSize(for: .historyActivity),
+                                 resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No activity was recorded in this period.")) { visible, footer in
                     VehicleActivityList(events: Array(visible))
                     footer
@@ -280,12 +281,14 @@ struct HistoryDashboardView: View {
         let id: String
         let title: String
         let isVisible: Bool
+
+        var item: TabItemID? { TabItemID(rawValue: "history-\(id)") }
     }
 
     var historySections: [HistorySection] {
         [
             HistorySection(id: "overview", title: L10n.text("Overview"), isVisible: true),
-            HistorySection(id: "activity", title: L10n.text("Activity"), isVisible: !snapshot.activities.isEmpty),
+            HistorySection(id: "activity", title: L10n.text("Observed Changes"), isVisible: !snapshot.activities.isEmpty),
             HistorySection(id: "warnings", title: L10n.text("Warning Timeline"), isVisible: !warningEvents.isEmpty),
             HistorySection(id: "month", title: L10n.text("Month Comparison"), isVisible: true),
             HistorySection(id: "air-cleaning", title: L10n.text("Air Cleaning"),
@@ -338,15 +341,13 @@ struct HistoryDashboardView: View {
             guard section.isVisible else { return false }
             // The terminal states are never composable: a reader who emptied the tab still
             // needs to be told the store could not be read, or that nothing was recorded.
-            guard let item = TabItemID(rawValue: section.id) else { return true }
+            guard let item = section.item else { return true }
             return draws(item)
         }
         // The reader's order, with the terminal states left where they are: they describe the
         // data, not the layout, and belong at the end whichever way the cards are arranged.
-        let cards = ordered(drawn.filter { TabItemID(rawValue: $0.id) != nil },
-                            by: { TabItemID(rawValue: $0.id) ?? .historyOverview })
-        let tail = drawn.filter { TabItemID(rawValue: $0.id) == nil }
-        return cards + tail
+        let cards = drawn.compactMap { section in section.item.map { (section: section, item: $0) } }
+        return ordered(cards, by: \.item).map(\.section) + drawn.filter { $0.item == nil }
     }
 
     /// key flips (that precedes the async query).
@@ -364,7 +365,11 @@ struct HistoryDashboardView: View {
     private func historySectionContent(_ id: String) -> some View {
         switch id {
         case "overview":
-            if HisingenTheme.layoutWidth >= 580 { awardHistoryOverview } else { overviewCard }
+            if HisingenTheme.layoutWidth >= 580 && !state.powertrain.hasCombustionEngine {
+                awardHistoryOverview
+            } else {
+                overviewCard
+            }
         case "activity": observedChangesCard
         case "month": monthComparisonCard
         case "air-cleaning": airCleaningCyclesCard
@@ -436,10 +441,10 @@ struct HistoryDashboardView: View {
             .task(id: didInitialLoad) {
                 guard didInitialLoad, let initialSection else { return }
                 await Task.yield()
-                let destination = historySections.first {
-                    $0.id == initialSection && $0.isVisible
-                }?.id ?? "overview"
-                proxy.scrollTo(destination, anchor: .top)
+                let sections = visibleHistorySections
+                if let destination = sections.first(where: { $0.id == initialSection }) ?? sections.first {
+                    proxy.scrollTo(destination.id, anchor: .top)
+                }
             }
         }
 

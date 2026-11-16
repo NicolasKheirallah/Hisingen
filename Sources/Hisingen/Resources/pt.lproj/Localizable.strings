@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Garantia da bateria (restante)";
 "Battery and Power" = "Bateria e potência";
 "Battery and Range" = "Bateria e autonomia";
+"Position relative to car" = "Posição em relação ao carro";
+"First reading" = "Primeira leitura";
+"Above" = "Acima";
+"Below" = "Abaixo";
 "Battery at %d%%" = "Bateria a %d%%";
 "Battery data was unavailable" = "Dados da bateria indisponíveis";
 "Battery diagnostics" = "Diagnóstico da bateria";
@@ -2422,6 +2426,7 @@
 "Use" = "Usar";
 "Show newer entries" = "Mostrar registos mais recentes";
 "Show older entries" = "Mostrar registos mais antigos";
+"Rows per page" = "Linhas por página";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervalos entre estados observados de funcionamento e paragem, e não a duração exata do ciclo nem prova de limpeza bem-sucedida. Ficam excluídos os ciclos que atravessam o período selecionado ou uma lacuna de duas horas.";
 "Set up Hisingen" = "Configurar o Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "O seu veículo está ligado. Escolha um ponto de partida: tudo pode ser alterado mais tarde em Definições → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Sem sessões de carregamento neste período.";
 "Solid: charging. Dotted: driving between charges." = "Contínua: carregamento. Pontilhada: condução entre carregamentos.";
 "%d charges, lowest start %@, last ended at %@" = "%d carregamentos, início mais baixo %@, o último terminou em %@";
+"Last known readings" = "Últimas leituras conhecidas";
+"Last reported schedules" = "Últimas programações comunicadas";
+"No upcoming schedules reported" = "Nenhuma programação futura comunicada";
+"Battery at the start and end of each charge." = "Nível da bateria no início e no fim de cada carregamento.";
+"No complete charge readings in this period." = "Não há leituras de carregamento completas neste período.";
+"Enable remote controls in Settings → Features." = "Ative os controlos remotos em Definições → Funcionalidades.";

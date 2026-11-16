@@ -4,6 +4,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension InfoTabView {
+    var hasVehiclePhotos: Bool {
+        state.identity.imageData != nil || state.identity.interiorImageData != nil
+            || !availableExteriorAngles.isEmpty || imageCache.interiorImage(for: state.identity.vin) != nil
+    }
+
     // MARK: - Hero visual
 
     var heroVisualSection: some View {

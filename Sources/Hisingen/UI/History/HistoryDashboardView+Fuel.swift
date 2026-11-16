@@ -142,7 +142,7 @@ extension HistoryDashboardView {
                         curveStat(L10n.text("Avg Price/L"), Format.currency(avgPrice, symbol: preferences.currencySymbol, decimals: 3))
                     }
                 }
-                PaginatedSection(items: fuelEntries, pageSize: 8,
+                PaginatedSection(items: fuelEntries, pageSize: preferences.historyPageSize(for: .historyRecentFills),
                                  emptyMessage: L10n.text("No fill-ups were recorded in this period.")) { visible, footer in
                     ForEach(visible) { entry in
                         HStack {

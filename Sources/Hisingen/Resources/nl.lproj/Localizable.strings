@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterijgarantie (resterend)";
 "Battery and Power" = "Batterij en vermogen";
 "Battery and Range" = "Batterij en actieradius";
+"Position relative to car" = "Positie ten opzichte van de auto";
+"First reading" = "Eerste waarde";
+"Above" = "Boven";
+"Below" = "Onder";
 "Battery at %d%%" = "Batterij op %d%%";
 "Battery data was unavailable" = "Batterijgegevens waren niet beschikbaar";
 "Battery diagnostics" = "Batterijdiagnostiek";
@@ -2430,6 +2434,7 @@
 "Use" = "Gebruiken";
 "Show newer entries" = "Nieuwere items tonen";
 "Show older entries" = "Oudere items tonen";
+"Rows per page" = "Rijen per pagina";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervallen tussen waargenomen actieve en gestopte toestanden. Dit is niet de exacte duur van een cyclus en geen bewijs van geslaagde reiniging. Runs die over de geselecteerde periode of een gat van twee uur lopen, zijn uitgesloten.";
 "Set up Hisingen" = "Hisingen instellen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Je voertuig is verbonden. Kies een startpunt: alles kan later worden gewijzigd in Instellingen → Features.";
@@ -3280,3 +3285,9 @@
 "No charging sessions in this period." = "Geen laadsessies in deze periode.";
 "Solid: charging. Dotted: driving between charges." = "Doorgetrokken: laden. Gestippeld: rijden tussen laadbeurten.";
 "%d charges, lowest start %@, last ended at %@" = "%d laadbeurten, laagste start %@, laatste eindigde op %@";
+"Last known readings" = "Laatst bekende metingen";
+"Last reported schedules" = "Laatst gemelde schema’s";
+"No upcoming schedules reported" = "Geen komende schema’s gemeld";
+"Battery at the start and end of each charge." = "Batterijniveau aan het begin en einde van elke laadbeurt.";
+"No complete charge readings in this period." = "Geen volledige laadmetingen in deze periode.";
+"Enable remote controls in Settings → Features." = "Schakel bediening op afstand in via Instellingen → Functies.";

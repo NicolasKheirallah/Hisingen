@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Garanzia batteria (rimanente)";
 "Battery and Power" = "Batteria e potenza";
 "Battery and Range" = "Batteria e autonomia";
+"Position relative to car" = "Posizione rispetto all’auto";
+"First reading" = "Primo valore";
+"Above" = "Sopra";
+"Below" = "Sotto";
 "Battery at %d%%" = "Batteria al %d%%";
 "Battery data was unavailable" = "Dati della batteria non disponibili";
 "Battery diagnostics" = "Diagnostica batteria";
@@ -2422,6 +2426,7 @@
 "Use" = "Usa";
 "Show newer entries" = "Mostra voci più recenti";
 "Show older entries" = "Mostra voci più vecchie";
+"Rows per page" = "Righe per pagina";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervalli tra gli stati osservati di funzionamento e arresto, non durata esatta del ciclo né prova di una pulizia riuscita. Sono esclusi i cicli che attraversano il periodo selezionato o un intervallo di due ore.";
 "Set up Hisingen" = "Configura Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Il tuo veicolo è connesso. Scegli un punto di partenza: tutto può essere modificato in seguito in Impostazioni → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Nessuna ricarica in questo periodo.";
 "Solid: charging. Dotted: driving between charges." = "Continua: ricarica. Tratteggiata: guida tra una ricarica e l'altra.";
 "%d charges, lowest start %@, last ended at %@" = "%d ricariche, inizio più basso %@, l'ultima terminata al %@";
+"Last known readings" = "Ultime letture note";
+"Last reported schedules" = "Ultime programmazioni segnalate";
+"No upcoming schedules reported" = "Nessuna programmazione imminente segnalata";
+"Battery at the start and end of each charge." = "Livello della batteria all’inizio e alla fine di ogni ricarica.";
+"No complete charge readings in this period." = "Nessuna lettura di ricarica completa in questo periodo.";
+"Enable remote controls in Settings → Features." = "Abilita i comandi remoti in Impostazioni → Funzionalità.";

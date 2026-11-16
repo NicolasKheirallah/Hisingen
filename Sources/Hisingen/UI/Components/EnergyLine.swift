@@ -14,6 +14,7 @@ struct EnergyLine: View {
     /// While charging, the stretch between `level` and `target` is drawn as a fainter segment:
     /// where the charge is heading, not where it is.
     var isCharging: Bool = false
+    var isHistorical: Bool = false
     var thickness: CGFloat = 6
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,29 +23,44 @@ struct EnergyLine: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let fill = Self.fraction(level) * width
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(HisingenTheme.hairline)
-                if isCharging, let target, Self.fraction(target) > Self.fraction(level) {
+            VStack(spacing: 4) {
+                ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(HisingenTheme.accent.opacity(0.28))
-                        .frame(width: Self.fraction(target) * width)
+                        .fill(HisingenTheme.hairline)
+                    if isCharging, let target, Self.fraction(target) > Self.fraction(level) {
+                        Capsule()
+                            .fill(HisingenTheme.accent.opacity(0.28))
+                            .frame(width: Self.fraction(target) * width)
+                    }
+                    if fill > 0 {
+                        Capsule()
+                            .fill(isHistorical ? HisingenTheme.inkMuted : HisingenTheme.accent)
+                            .frame(width: fill)
+                    }
                 }
-                if level != nil {
-                    Capsule()
-                        .fill(HisingenTheme.accent)
-                        .frame(width: max(fill, thickness))
+                .frame(height: thickness)
+                .overlay(alignment: .leading) {
+                    if let target {
+                        let markerWidth: CGFloat = 2
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(HisingenTheme.ink)
+                            .frame(width: markerWidth, height: thickness + 6)
+                            .offset(x: min(max(Self.fraction(target) * width - markerWidth / 2, 0),
+                                           max(width - markerWidth, 0)))
+                    }
                 }
-                if let target {
-                    // 2.5 pt and taller than the rail, so the target reads as a mark, not a seam.
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(HisingenTheme.ink)
-                        .frame(width: 2.5, height: thickness + 10)
-                        .offset(x: min(max(Self.fraction(target) * width - 1.25, 0), width - 2.5))
+                .padding(.top, 3)
+
+                Path { ticks in
+                    for fraction in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                        let x = max(0.5, min(width - 0.5, fraction * width))
+                        ticks.move(to: CGPoint(x: x, y: 0))
+                        ticks.addLine(to: CGPoint(x: x, y: 3))
+                    }
                 }
+                .stroke(HisingenTheme.inkMuted, lineWidth: 1)
+                .frame(height: 3)
             }
-            .frame(height: thickness)
-            .frame(maxHeight: .infinity, alignment: .center)
         }
         .frame(height: thickness + 10)
         .animation(reduceMotion ? nil : Motion.telemetry, value: level)
@@ -55,15 +71,15 @@ struct EnergyLine: View {
     }
 
     private var accessibilityValue: String {
-        guard let level else { return L10n.text("Unavailable") }
-        let percent = String(format: "%.0f%%", locale: L10n.displayLocale, level)
+        let percent = level.map { String(format: "%.0f%%", locale: L10n.displayLocale, $0) }
+            ?? L10n.text("Unavailable")
         guard let target else { return percent }
         return L10n.format("%@, target %@", percent,
                            String(format: "%.0f%%", locale: L10n.displayLocale, target))
     }
 
-    static func fraction(_ value: Double?) -> CGFloat {
-        guard let value else { return 0 }
+    nonisolated static func fraction(_ value: Double?) -> CGFloat {
+        guard let value, value.isFinite else { return 0 }
         return CGFloat(min(max(value, 0), 100) / 100)
     }
 }

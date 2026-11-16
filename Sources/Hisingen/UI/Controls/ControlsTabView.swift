@@ -137,7 +137,6 @@ struct ControlsTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            PlanTimeline(state: state)
             if draws(.controlsBanners) {
                 ControlsBanners(
                 state: state,
@@ -156,6 +155,8 @@ struct ControlsTabView: View {
                                        onVerify: { _ in onRefresh() })
                 }
             }
+
+            PlanTimeline(state: state)
 
             if !visibleCards.isEmpty {
                 ForEach(visibleCards) { entry in entry.view() }
@@ -218,22 +219,19 @@ struct ControlsTabView: View {
 
     private var noControlsEnabledCard: some View {
         Card {
-            VStack(spacing: 8) {
-                Image(systemName: "switch.2")
-                    .hisSymbolSize(24)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.text("No Remote Controls Enabled"))
                     .hisType(.heading, weight: .semibold)
-                Text(L10n.text("Enable remote controls in Settings under Telemetry & Features to display controls here."))
+                    .accessibilityAddTraits(.isHeader)
+                Text(L10n.text("Enable remote controls in Settings → Features."))
                     .hisType(.label)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 if state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

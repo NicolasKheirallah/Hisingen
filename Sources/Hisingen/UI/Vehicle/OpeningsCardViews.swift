@@ -35,7 +35,7 @@ struct OpeningChipView: View {
         case .frontRightDoor, .rearRightDoor: return isOpen ? "door.right.hand.open" : "door.right.hand.closed"
         case .frontLeftWindow, .frontRightWindow, .rearLeftWindow, .rearRightWindow: return "window.vertical.closed"
         case .hood: return "car.front.waves.up"
-        case .tailgate: return "car.rear.and.tire.marks"
+        case .tailgate: return isOpen ? "car.side.rear.open.fill" : "car.side.fill"
         case .chargeLid: return "powerplug.fill"
         case .fuelFlap: return "fuelpump.fill"
         case .sunroof: return "sun.max.fill"

@@ -129,6 +129,8 @@ extension AppDelegate {
         case .presentation:
             preferences.applyAppearance()
             vehicleSession.reloadVehicleMetadata()
+        case .panelLayout:
+            break
         case .launchAtLogin:
             launchAtLoginController.reconcile(userInitiated: true)
         case .updater:

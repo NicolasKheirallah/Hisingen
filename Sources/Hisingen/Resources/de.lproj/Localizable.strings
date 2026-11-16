@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batteriegarantie (verbleibend)";
 "Battery and Power" = "Batterie und Leistung";
 "Battery and Range" = "Batterie und Reichweite";
+"Position relative to car" = "Position zum Fahrzeug";
+"First reading" = "Erste Anzeige";
+"Above" = "Oberhalb";
+"Below" = "Unterhalb";
 "Battery at %d%%" = "Batterie bei %d %%";
 "Battery data was unavailable" = "Batteriedaten waren nicht verfügbar";
 "Battery diagnostics" = "Batteriediagnose";
@@ -2432,6 +2436,7 @@
 "Use" = "Verwenden";
 "Show newer entries" = "Neuere Einträge anzeigen";
 "Show older entries" = "Ältere Einträge anzeigen";
+"Rows per page" = "Zeilen pro Seite";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Zeitspannen zwischen beobachteten Lauf- und Stopp-Zuständen, keine exakte Zyklusdauer und kein Nachweis einer erfolgreichen Reinigung. Läufe, die den gewählten Zeitraum oder eine Lücke von zwei Stunden überschreiten, sind ausgeschlossen.";
 "Set up Hisingen" = "Hisingen einrichten";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Dein Fahrzeug ist verbunden. Wähle einen Startpunkt: alles hier lässt sich später unter Einstellungen → Features ändern.";
@@ -3282,3 +3287,9 @@
 "No charging sessions in this period." = "Keine Ladevorgänge in diesem Zeitraum.";
 "Solid: charging. Dotted: driving between charges." = "Durchgezogen: Laden. Gepunktet: Fahrten zwischen Ladevorgängen.";
 "%d charges, lowest start %@, last ended at %@" = "%d Ladevorgänge, niedrigster Start %@, letzter endete bei %@";
+"Last known readings" = "Letzte bekannte Messwerte";
+"Last reported schedules" = "Zuletzt gemeldete Zeitpläne";
+"No upcoming schedules reported" = "Keine anstehenden Zeitpläne gemeldet";
+"Battery at the start and end of each charge." = "Akkustand zu Beginn und Ende jedes Ladevorgangs.";
+"No complete charge readings in this period." = "Keine vollständigen Lademesswerte in diesem Zeitraum.";
+"Enable remote controls in Settings → Features." = "Aktiviere die Fernsteuerung unter Einstellungen → Funktionen.";

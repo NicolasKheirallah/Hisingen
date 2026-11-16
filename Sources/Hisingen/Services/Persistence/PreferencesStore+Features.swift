@@ -3,6 +3,21 @@ import OSLog
 import SwiftUI
 
 extension PreferencesStore {
+    static let historyPageSizesKey = "history_page_sizes"
+
+    func historyPageSize(for item: TabItemID) -> Int {
+        let stored = d.dictionary(forKey: Self.historyPageSizesKey)?[item.rawValue] as? Int
+        if let stored, TabItemID.historyPageSizes.contains(stored) { return stored }
+        return item.defaultHistoryPageSize ?? 5
+    }
+
+    func setHistoryPageSize(_ size: Int, for item: TabItemID) {
+        guard let defaultSize = item.defaultHistoryPageSize, TabItemID.historyPageSizes.contains(size) else { return }
+        var sizes = d.dictionary(forKey: Self.historyPageSizesKey) ?? [:]
+        sizes[item.rawValue] = size == defaultSize ? nil : size
+        d.set(sizes, forKey: Self.historyPageSizesKey)
+    }
+
     var features: FeatureSelection {
         get {
             if let values = d.array(forKey: "enabled_features_v2") as? [String] {

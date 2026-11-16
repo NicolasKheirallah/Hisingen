@@ -312,6 +312,30 @@ enum CarRenderAngle: Int, CaseIterable, Codable, Sendable {
     }
 }
 
+enum NowReadingsPosition: String, CaseIterable, Sendable {
+    case left, right, above, below
+
+    var title: String {
+        switch self {
+        case .left: return L10n.text("Left")
+        case .right: return L10n.text("Right")
+        case .above: return L10n.text("Above")
+        case .below: return L10n.text("Below")
+        }
+    }
+}
+
+enum NowFirstReading: String, CaseIterable, Sendable {
+    case battery, range
+
+    var title: String {
+        switch self {
+        case .battery: return L10n.text("Battery")
+        case .range: return L10n.text("Estimated Range")
+        }
+    }
+}
+
 enum VehicleModelBadgePosition: String, CaseIterable, Codable, Sendable {
     case inlineHeader = "inline-header"
     case topRightOverlay = "top-right-overlay"

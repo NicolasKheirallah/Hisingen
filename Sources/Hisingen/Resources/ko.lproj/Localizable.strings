@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "배터리 보증 (잔여)";
 "Battery and Power" = "배터리 및 전력";
 "Battery and Range" = "배터리 및 주행 가능 거리";
+"Position relative to car" = "차량 기준 위치";
+"First reading" = "첫 번째 표시 항목";
+"Above" = "위";
+"Below" = "아래";
 "Battery at %d%%" = "배터리 %d%%";
 "Battery data was unavailable" = "배터리 데이터를 사용할 수 없었습니다";
 "Battery diagnostics" = "배터리 진단";
@@ -2422,6 +2426,7 @@
 "Use" = "사용";
 "Show newer entries" = "최신 항목 보기";
 "Show older entries" = "이전 항목 보기";
+"Rows per page" = "페이지당 행 수";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "관측된 작동 상태와 정지 상태 사이의 간격입니다. 정확한 사이클 시간이나 세척 성공 여부를 뜻하지 않습니다. 선택한 기간을 넘기거나 2시간 이상 공백이 있는 실행은 제외합니다.";
 "Set up Hisingen" = "Hisingen 설정";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "차량이 연결되었습니다. 시작점을 선택하세요. 모든 항목은 나중에 설정 → Features에서 변경할 수 있습니다.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "이 기간에 충전 기록이 없습니다.";
 "Solid: charging. Dotted: driving between charges." = "실선: 충전. 점선: 충전 사이의 주행.";
 "%d charges, lowest start %@, last ended at %@" = "충전 %d회, 최저 시작 %@, 마지막 종료 %@";
+"Last known readings" = "마지막으로 확인된 측정값";
+"Last reported schedules" = "마지막으로 보고된 일정";
+"No upcoming schedules reported" = "보고된 예정 일정 없음";
+"Battery at the start and end of each charge." = "각 충전 시작 및 종료 시의 배터리 잔량입니다.";
+"No complete charge readings in this period." = "이 기간에는 완전한 충전 측정값이 없습니다.";
+"Enable remote controls in Settings → Features." = "설정 → 기능에서 원격 제어를 켜세요.";

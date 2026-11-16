@@ -568,6 +568,10 @@ struct SettingsTabsAndCardsCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                if item.defaultHistoryPageSize != nil {
+                    historyPageSizePicker(for: item)
+                        .padding(.top, 3)
+                }
             }
 
             Spacer(minLength: 6)
@@ -645,6 +649,25 @@ struct SettingsTabsAndCardsCard: View {
             save(updated)
             return true
         }
+    }
+
+    private func historyPageSizePicker(for item: TabItemID) -> some View {
+        Picker(L10n.text("Rows per page"), selection: Binding(
+            get: { prefs.historyPageSize(for: item) },
+            set: { size in
+                prefs.setHistoryPageSize(size, for: item)
+                binder.bump()
+                binder.notify(.panelLayout)
+            }
+        )) {
+            ForEach(TabItemID.historyPageSizes, id: \.self) { size in
+                Text(Format.count(size)).tag(size)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .hisType(.label)
+        .accessibilityLabel(L10n.format("%@ · %@", TabItemCatalog.title(item), L10n.text("Rows per page")))
     }
 
     private func reorderControls(item: TabItemID) -> some View {

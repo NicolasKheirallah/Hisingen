@@ -1,71 +1,67 @@
+import Charts
 import SwiftUI
 
 extension HistoryDashboardView {
-    /// Log (2026-11-16 redesign): the period as one sentence, then the energy trace.
-    ///
-    /// The trace is the energy line stretched over time, drawn only from what was recorded:
-    /// each charging session rises as a solid segment from its start to its end level, and a
-    /// dotted line joins one charge to the next, labelled with the distance driven in between.
-    /// Hisingen does not store the battery level while driving, so the dotted stretch is not
-    /// shaped to look like a discharge curve.
     var awardHistoryOverview: some View {
         let totalDistance = aggregateTrips.reduce(0) { $0 + $1.distanceKm }
         let drivingTime = aggregateTrips.reduce(0) { $0 + $1.duration }
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
         let cost = aggregateChargingCost()
-        let condensed = HisingenTheme.layoutWidth < 600
 
-        var facts: [String] = [
-            L10n.format("%d trips", aggregateTrips.count),
-            L10n.format("%@ driving", Format.shortDuration(minutes: Int(drivingTime / 60)))
-        ]
-        if energy > 0 { facts.append(Format.energyKwh(energy)) }
+        var facts: [String] = []
+        if !aggregateTrips.isEmpty {
+            facts.append(L10n.format("%d trips", aggregateTrips.count))
+            facts.append(L10n.format("%@ driving", Format.shortDuration(minutes: Int(drivingTime / 60))))
+        }
+        if energy > 0 && !aggregateTrips.isEmpty { facts.append(Format.energyKwh(energy)) }
         if let cost {
             facts.append("\(Format.currency(cost.amount, symbol: cost.currency)) \(L10n.text("(estimated)"))")
         }
 
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.format("%@ · %@",
-                                     Format.distance(km: totalDistance, decimals: 0, unit: preferences.distanceUnit),
-                                     L10n.text(period.rawValue)))
-                        .hisType(size: condensed ? 26 : 32, relativeTo: .largeTitle, weight: .light)
-                        .monospacedDigit()
-                        .foregroundStyle(HisingenTheme.ink)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(facts.joined(separator: " · "))
-                        .hisType(.label)
-                        .monospacedDigit()
+                    Text(L10n.text(period.rawValue))
+                        .hisType(.label, weight: .semibold)
                         .foregroundStyle(HisingenTheme.inkMuted)
+                    if !aggregateTrips.isEmpty || energy > 0 {
+                        Text(aggregateTrips.isEmpty ? Format.energyKwh(energy)
+                             : Format.distance(km: totalDistance, decimals: 0, unit: preferences.distanceUnit))
+                            .hisType(.display, weight: .light)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.ink)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    if aggregateTrips.isEmpty && energy > 0 {
+                        Text(L10n.text("Estimated Energy"))
+                            .hisType(.label)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                    if !facts.isEmpty {
+                        Text(facts.joined(separator: " · "))
+                            .hisType(.label)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 exportMenu
             }
 
-            EnergyTrace(
-                sessions: chargingSessions,
-                trips: aggregateTrips,
-                window: activeRange,
-                currentLevel: state.energy.batteryPercentage,
-                distanceUnit: preferences.distanceUnit
-            )
+            if state.powertrain.hasElectricRange || !chargingSessions.isEmpty {
+                EnergyTrace(sessions: chargingSessions, window: activeRange)
+            }
         }
-        .padding(.horizontal, condensed ? 16 : 24)
-        .padding(.vertical, condensed ? 12 : 18)
+        .padding(.horizontal, HisingenTheme.cardPadding)
+        .padding(.vertical, 10)
     }
 }
 
-/// The energy line over time. See ``HistoryDashboardView/awardHistoryOverview``.
-@MainActor
 struct EnergyTrace: View {
     let sessions: [HistoricalChargingSession]
-    let trips: [TripHistoryEntry]
     let window: ClosedRange<Date>?
-    let currentLevel: Double?
-    let distanceUnit: DistanceUnit
-
-    private let plotHeight: CGFloat = 118
+    @ScaledMetric(relativeTo: .caption) private var plotHeight: CGFloat = 154
 
     struct Charge: Identifiable {
         let id: String
@@ -75,11 +71,11 @@ struct EnergyTrace: View {
         let to: Double
     }
 
-    /// Completed sessions with both levels, oldest first, clipped to the window.
     static func charges(_ sessions: [HistoricalChargingSession], in window: ClosedRange<Date>?) -> [Charge] {
         sessions.compactMap { session -> Charge? in
-            guard let end = session.endedAt, let to = session.endSoc else { return nil }
-            if let window, end < window.lowerBound || session.startedAt > window.upperBound { return nil }
+            guard let end = session.endedAt, let to = session.endSoc, end >= session.startedAt,
+                  (0...100).contains(session.startSoc), (0...100).contains(to) else { return nil }
+            if let window, !window.contains(session.startedAt) || !window.contains(end) { return nil }
             return Charge(id: session.id, start: session.startedAt, end: end, from: session.startSoc, to: to)
         }
         .sorted { $0.start < $1.start }
@@ -87,146 +83,134 @@ struct EnergyTrace: View {
 
     var body: some View {
         let charges = Self.charges(sessions, in: window)
-        let now = Date()
-        let lower = window?.lowerBound ?? charges.first?.start ?? now.addingTimeInterval(-7 * 86_400)
-        let upper = max(window?.upperBound ?? now, now)
-        VStack(alignment: .leading, spacing: 6) {
-            if charges.isEmpty {
-                Text(L10n.text("No charging sessions in this period."))
+        VStack(alignment: .leading, spacing: 7) {
+            Text(L10n.text("Charge level"))
+                .hisType(.heading, weight: .semibold)
+                .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+            if let first = charges.first, let latest = charges.max(by: { $0.end < $1.end }) {
+                let lower = window?.lowerBound ?? first.start
+                let upper = max(window?.upperBound ?? latest.end, lower.addingTimeInterval(5 * 60))
+                chart(charges, lower: lower, upper: upper)
+                chartFooter(latest: latest)
+            } else {
+                Text(L10n.text(sessions.isEmpty ? "No charging sessions in this period." : "No complete charge readings in this period."))
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.inkMuted)
-                    .frame(maxWidth: .infinity, minHeight: plotHeight / 2, alignment: .leading)
-            } else {
-                GeometryReader { proxy in
-                    let size = CGSize(width: proxy.size.width - 30, height: plotHeight)
-                    ZStack(alignment: .topLeading) {
-                        grid(size)
-                        tracePaths(charges, lower: lower, upper: upper, now: now, size: size)
-                        gapLabels(charges, lower: lower, upper: upper, size: size)
-                        axisLabels(size)
-                    }
-                }
-                .frame(height: plotHeight)
-                HStack {
-                    Text(Format.dateFormatter.string(from: lower))
-                    Spacer()
-                    Text(L10n.text("Now"))
-                }
-                .hisType(.micro)
-                .foregroundStyle(HisingenTheme.inkMuted)
-                .padding(.trailing, 30)
-                Text(L10n.text("Solid: charging. Dotted: driving between charges."))
-                    .hisType(.micro)
-                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L10n.text("Battery"))
+    }
+
+    private func chart(_ charges: [Charge], lower: Date, upper: Date) -> some View {
+        let span = upper.timeIntervalSince(lower)
+        let dateFormat = Date.FormatStyle().locale(L10n.displayLocale)
+        let tickFormat = span <= 86_400 ? dateFormat.hour().minute()
+            : span <= 3 * 86_400 ? dateFormat.month(.abbreviated).day().hour()
+            : span > 365 * 86_400 ? dateFormat.month(.abbreviated).year()
+            : dateFormat.month(.abbreviated).day()
+
+        return Chart(charges) { charge in
+            sessionMarks(charge)
+        }
+        .chartXScale(domain: lower...upper, range: .plotDimension(startPadding: 6, endPadding: 6))
+        .chartYScale(domain: 0.0...100.0, range: .plotDimension(startPadding: 6, endPadding: 6))
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                AxisTick().foregroundStyle(HisingenTheme.hairline)
+                if let date = value.as(Date.self) {
+                    let fraction = date.timeIntervalSince(lower) / span
+                    let anchor: UnitPoint = fraction < 0.12 ? .topLeading : fraction > 0.88 ? .topTrailing : .top
+                    AxisValueLabel(centered: false, anchor: anchor, collisionResolution: .greedy) {
+                        Text(date.formatted(tickFormat))
+                            .hisType(.label)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize()
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: [0.0, 25, 50, 75, 100]) { value in
+                AxisGridLine().foregroundStyle(HisingenTheme.hairline)
+                AxisValueLabel {
+                    if let level = value.as(Double.self) {
+                        Text(Format.percent(level))
+                            .hisType(.label)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                }
+            }
+        }
+        .frame(height: plotHeight)
+        .accessibilityLabel(L10n.text("Battery at the start and end of each charge."))
         .accessibilityValue(accessibilitySummary(charges))
     }
 
-    private func x(_ date: Date, lower: Date, upper: Date, width: CGFloat) -> CGFloat {
-        let span = max(upper.timeIntervalSince(lower), 1)
-        return CGFloat(min(max(date.timeIntervalSince(lower) / span, 0), 1)) * width
+    @ChartContentBuilder
+    private func sessionMarks(_ charge: Charge) -> some ChartContent {
+        let time = PlottableValue.value(L10n.text("Ended"), charge.end)
+        let start = PlottableValue.value(L10n.text("Start"), charge.from)
+        let end = PlottableValue.value(L10n.text("End"), charge.to)
+        RuleMark(x: time, yStart: start, yEnd: end)
+            .foregroundStyle(HisingenTheme.accent)
+            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            .accessibilityLabel(Text(Format.dateTimeFormatter.string(from: charge.end)))
+            .accessibilityValue(Text(chargeRange(charge)))
+        PointMark(x: time, y: start)
+            .symbol { startMarker }
+            .accessibilityHidden(true)
+        PointMark(x: time, y: end)
+            .symbol { endMarker }
+            .accessibilityHidden(true)
     }
 
-    private func y(_ level: Double, height: CGFloat) -> CGFloat {
-        height - CGFloat(min(max(level, 0), 100) / 100) * height
+    private var startMarker: some View {
+        Circle()
+            .fill(HisingenTheme.canvas)
+            .overlay(Circle().strokeBorder(HisingenTheme.inkMuted, lineWidth: 1.25))
+            .frame(width: 6, height: 6)
     }
 
-    private func grid(_ size: CGSize) -> some View {
-        Path { path in
-            for level in [0.0, 50.0, 100.0] {
-                let yy = y(level, height: size.height)
-                path.move(to: CGPoint(x: 0, y: yy))
-                path.addLine(to: CGPoint(x: size.width, y: yy))
-            }
-        }
-        .stroke(HisingenTheme.hairline, lineWidth: 1)
+    private var endMarker: some View {
+        Circle()
+            .fill(HisingenTheme.accent)
+            .frame(width: 7, height: 7)
     }
 
-    private func tracePaths(_ charges: [Charge], lower: Date, upper: Date, now: Date, size: CGSize) -> some View {
-        let point: (Date, Double) -> CGPoint = { date, level in
-            CGPoint(x: x(date, lower: lower, upper: upper, width: size.width), y: y(level, height: size.height))
+    private func chartFooter(latest: Charge) -> some View {
+        let legend = HStack(spacing: 16) {
+            Label { Text(L10n.text("Start")) } icon: { startMarker }
+            Label { Text(L10n.text("End")) } icon: { endMarker }
         }
-        return ZStack(alignment: .topLeading) {
-            Path { path in
-                for (index, charge) in charges.enumerated() where index > 0 {
-                    let previous = charges[index - 1]
-                    path.move(to: point(previous.end, previous.to))
-                    path.addLine(to: point(charge.start, charge.from))
-                }
-                if let last = charges.last, let currentLevel {
-                    path.move(to: point(last.end, last.to))
-                    path.addLine(to: point(now, currentLevel))
-                }
-            }
-            .stroke(HisingenTheme.inkMuted, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [2, 4]))
+        .accessibilityHidden(true)
+        let last = Text(L10n.format("%@ · %@", L10n.text("Last Charge"), chargeRange(latest)))
+            .monospacedDigit()
 
-            Path { path in
-                for charge in charges {
-                    path.move(to: point(charge.start, charge.from))
-                    path.addLine(to: point(charge.end, charge.to))
-                }
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                legend
+                Spacer(minLength: 12)
+                last
             }
-            .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-
-            if let currentLevel {
-                Circle()
-                    .fill(HisingenTheme.accent)
-                    .frame(width: 8, height: 8)
-                    .position(point(now, currentLevel))
+            VStack(alignment: .leading, spacing: 6) {
+                legend
+                last
             }
         }
+        .hisType(.label)
+        .foregroundStyle(HisingenTheme.inkMuted)
     }
 
-    /// The distance driven between two charges, written over the dotted stretch when there is
-    /// room for it. Summed from recorded trips only.
-    private func gapLabels(_ charges: [Charge], lower: Date, upper: Date, size: CGSize) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(Array(charges.enumerated()), id: \.element.id) { index, charge in
-                if index > 0 {
-                    let previous = charges[index - 1]
-                    let driven = trips
-                        .filter { $0.startedAt >= previous.end && $0.endedAt <= charge.start }
-                        .reduce(0) { $0 + $1.distanceKm }
-                    let x0 = x(previous.end, lower: lower, upper: upper, width: size.width)
-                    let x1 = x(charge.start, lower: lower, upper: upper, width: size.width)
-                    if driven >= 1, x1 - x0 >= 46 {
-                        Text(Format.distance(km: driven, decimals: 0, unit: distanceUnit))
-                            .hisType(.micro, weight: .medium)
-                            .monospacedDigit()
-                            .foregroundStyle(HisingenTheme.inkMuted)
-                            .fixedSize()
-                            .position(x: (x0 + x1) / 2,
-                                      y: max(10, (y(previous.to, height: size.height) + y(charge.from, height: size.height)) / 2 - 10))
-                    }
-                }
-            }
-        }
-    }
-
-    private func axisLabels(_ size: CGSize) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach([100, 50, 0], id: \.self) { level in
-                Text("\(level)%")
-                    .hisType(.nano, weight: .medium)
-                    .monospacedDigit()
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .fixedSize()
-                    .position(x: size.width + 16, y: y(Double(level), height: size.height))
-            }
-        }
+    private func chargeRange(_ charge: Charge) -> String {
+        L10n.format("%@ to %@", Format.percent(charge.from), Format.percent(charge.to))
     }
 
     private func accessibilitySummary(_ charges: [Charge]) -> String {
-        guard let first = charges.first, let last = charges.last else {
-            return L10n.text("No charging sessions in this period.")
-        }
-        let lowest = charges.map(\.from).min() ?? first.from
+        guard let lowest = charges.map(\.from).min(), let last = charges.max(by: { $0.end < $1.end }) else { return "" }
         return L10n.format("%d charges, lowest start %@, last ended at %@",
                            charges.count,
-                           String(format: "%.0f%%", locale: L10n.displayLocale, lowest),
-                           String(format: "%.0f%%", locale: L10n.displayLocale, last.to))
+                           Format.percent(lowest), Format.percent(last.to))
     }
 }

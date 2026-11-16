@@ -39,7 +39,8 @@ struct ExceptionsCard: View {
         }
         if features.contains(.exteriorStatus), let exterior = state.exteriorStatus {
             for opening in exterior.itemsNeedingAttention {
-                rows.append(KVRow(L10n.format("%@ Open", opening.displayName), L10n.text("Warning"), symbol: "exclamationmark.circle.fill", warning: true))
+                let symbol = opening == .tailgate ? "car.side.rear.open.fill" : "exclamationmark.circle.fill"
+                rows.append(KVRow(L10n.format("%@ Open", opening.displayName), L10n.text("Warning"), symbol: symbol, warning: true))
             }
         }
         if features.contains(.tyreAndWarnings), let tyres = state.maintenance.details?.tyres {

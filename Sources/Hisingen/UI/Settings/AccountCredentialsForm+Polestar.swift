@@ -115,48 +115,11 @@ extension AccountCredentialsForm {
         .accessibilityAddTraits(option.isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
-    @ViewBuilder
     private var polestarModeExplanation: some View {
-        if enablePolestarID && enableDataPortal {
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "link.badge.plus")
-                    .foregroundStyle(HisingenTheme.accent)
-                    .hisType(.label)
-                Text(PreferencesStore.PolestarConnectionMode.augmented.detailDescription)
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            .transition(.opacity)
-        } else if enablePolestarID {
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "person.badge.key.fill")
-                    .foregroundStyle(HisingenTheme.accent)
-                    .hisType(.label)
-                Text(PreferencesStore.PolestarConnectionMode.polestarID.detailDescription)
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            .transition(.opacity)
-        } else {
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .foregroundStyle(HisingenTheme.accent)
-                    .hisType(.label)
-                Text(PreferencesStore.PolestarConnectionMode.dataPortal.detailDescription)
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(8)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-            .transition(.opacity)
-        }
+        Text(credentialSelection.mode.detailDescription)
+            .hisType(.label)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var polestarIDStatusBanner: some View {
@@ -364,7 +327,7 @@ extension AccountCredentialsForm {
     private var polestarActionButtons: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                Button {
+                let save = Button {
                     withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                         attemptedPolestarSignIn = true
                     }
@@ -375,7 +338,6 @@ extension AccountCredentialsForm {
                             Image(systemName: "checkmark")
                             Text(polestarSaveButtonSavedTitle)
                         } else {
-                            Image(systemName: "arrow.right.circle.fill")
                             Text(polestarSaveButtonTitle)
                         }
                     }
@@ -383,10 +345,15 @@ extension AccountCredentialsForm {
                     .id(showSavedFeedback)
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.hisProminent)
                 .controlSize(.regular)
                 .disabled(enableDataPortal && !enablePolestarID && !model.canConnectDataPortal)
                 .padding(.top, style == .welcoming ? 6 : 4)
+
+                if enablePolestarID && (!isPolestarIDSignedIn || (polestarFallbackKind ?? inheritedPolestarFallbackKind) != nil) {
+                    save.buttonStyle(.hisSecondary)
+                } else {
+                    save.buttonStyle(.hisProminent)
+                }
 
                 if enableDataPortal {
                     Button {

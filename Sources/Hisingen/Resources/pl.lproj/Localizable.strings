@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Gwarancja na baterię (pozostało)";
 "Battery and Power" = "Bateria i moc";
 "Battery and Range" = "Bateria i zasięg";
+"Position relative to car" = "Położenie względem samochodu";
+"First reading" = "Pierwszy odczyt";
+"Above" = "Powyżej";
+"Below" = "Poniżej";
 "Battery at %d%%" = "Bateria na poziomie %d%%";
 "Battery data was unavailable" = "Dane baterii były niedostępne";
 "Battery diagnostics" = "Diagnostyka baterii";
@@ -2422,6 +2426,7 @@
 "Use" = "Użyj";
 "Show newer entries" = "Pokaż nowsze wpisy";
 "Show older entries" = "Pokaż starsze wpisy";
+"Rows per page" = "Wiersze na stronę";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Odstępy między zaobserwowanymi stanami pracy i postoju, a nie dokładny czas cyklu ani dowód skutecznego czyszczenia. Przebiegi przechodzące przez wybrany okres lub przerwę dwugodzinną są pomijane.";
 "Set up Hisingen" = "Skonfiguruj Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Twój pojazd jest połączony. Wybierz punkt wyjścia: wszystko można później zmienić w Ustawieniach → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Brak sesji ładowania w tym okresie.";
 "Solid: charging. Dotted: driving between charges." = "Linia ciągła: ładowanie. Kropkowana: jazda między ładowaniami.";
 "%d charges, lowest start %@, last ended at %@" = "Ładowania: %d, najniższy start %@, ostatnie zakończone przy %@";
+"Last known readings" = "Ostatnie znane odczyty";
+"Last reported schedules" = "Ostatnio zgłoszone harmonogramy";
+"No upcoming schedules reported" = "Nie zgłoszono nadchodzących harmonogramów";
+"Battery at the start and end of each charge." = "Poziom naładowania na początku i na końcu każdego ładowania.";
+"No complete charge readings in this period." = "Brak pełnych odczytów ładowania w tym okresie.";
+"Enable remote controls in Settings → Features." = "Włącz zdalne sterowanie w sekcji Ustawienia → Funkcje.";

@@ -231,7 +231,11 @@ struct InfoTabView: View {
             out.append(InfoSectionEntry(id: id, view: AnyView(view)))
         }
 
-        add(.overview, HisingenTheme.layoutWidth >= 580 ? AnyView(awardVehiclePassport) : AnyView(heroVisualSection))
+        if HisingenTheme.layoutWidth < 580 && hasVehiclePhotos {
+            add(.overview, heroVisualSection)
+        } else {
+            add(.overview, awardVehiclePassport)
+        }
         add(.freshness, readingFreshnessCard)
 
         if let ext = state.exteriorStatus, !ext.openings.isEmpty {

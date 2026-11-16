@@ -20,6 +20,7 @@ extension PreferencesStore {
             "content_density", "custom_panel_size_enabled", "custom_panel_width",
             "custom_panel_height", "wide_card_layout", "panel_close_behavior",
             "car_render_angle", "vehicle_model_badge_position", "registration_badge_position",
+            "now_readings_position", "now_first_reading",
             "vehicle_label_format", "distance_unit", "temperature_unit", "pressure_unit",
             "fuel_volume_unit", "fuel_economy_unit", "energy_consumption_unit",
             "history_sample_retention_days", "interface_language", "tint_menu_bar_icon",
@@ -28,7 +29,7 @@ extension PreferencesStore {
             "low_battery_threshold",
             "automatically_check_for_updates", "automatically_download_updates",
             "update_check_interval",
-            "show_warning_badge", "grid_carbon_intensity_g_per_kwh", "tab_composition_v1"
+            "show_warning_badge", "grid_carbon_intensity_g_per_kwh", "tab_composition_v1", historyPageSizesKey
         ]
         return exact.contains(key)
             || ["notify_", "remote_", "night_", "electricity_", "theme_for_"].contains(where: key.hasPrefix)

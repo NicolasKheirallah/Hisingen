@@ -13,6 +13,9 @@ struct VehicleChargingCard: View {
     @State private var currentSpotPrice: Double?
 
     private var features: FeatureSelection { preferences.features }
+    private var hasLastKnownChargingReadings: Bool {
+        state.freshness.isCached || state.hasOldData() || state.freshness.retainedDataCategories.contains(.chargingDetails)
+    }
     private var loadIdentifier: String {
         "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSinceReferenceDate)"
     }
@@ -83,7 +86,7 @@ struct VehicleChargingCard: View {
     }
 
     private var readyLine: String? {
-        guard state.isCharging, let completion = state.formattedCompletionTime,
+        guard !hasLastKnownChargingReadings, state.isCharging, let completion = state.formattedCompletionTime,
               let minutes = state.remainingChargingMinutes, minutes > 0 else { return nil }
         // Marked as an estimate in the line itself. It sits one weight step below the measured
         // headline and the card already calls this a "Vehicle Dynamic Calculation" in its
@@ -92,7 +95,7 @@ struct VehicleChargingCard: View {
     }
 
     private var secondaryLine: String? {
-        guard state.isCharging else { return nil }
+        guard !hasLastKnownChargingReadings, state.isCharging else { return nil }
         var parts: [String] = []
         if let rate = state.formattedChargingRate(unit: preferences.distanceUnit) { parts.append(rate) }
         if let battery = state.energy.batteryPercentage, let target = state.energy.targetPercentage, battery < Double(target) {
@@ -290,6 +293,7 @@ struct VehicleChargingCard: View {
     private var idleCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
+                if hasLastKnownChargingReadings { lastKnownLabel }
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.slash")
                         .hisType(.subhead, weight: .semibold)
@@ -306,11 +310,17 @@ struct VehicleChargingCard: View {
         }
     }
 
+    private var lastKnownLabel: some View {
+        Text(L10n.text("Last known readings")).hisType(.label, weight: .semibold)
+            .foregroundStyle(HisingenTheme.semanticWarning)
+    }
+
     private var card: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true, isPulsing: state.isCharging)
+                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging"), color: HisingenTheme.semanticGood, isSemantic: true,
+                               isPulsing: state.isCharging && !hasLastKnownChargingReadings)
                     if state.isComplete { Image(systemName: "checkmark.circle.fill").hisType(.heading, weight: .semibold).foregroundStyle(HisingenTheme.semanticGood).transition(.scale(scale: 0.86).combined(with: .opacity)).accessibilityLabel(L10n.text("Complete")) }
                     if state.energy.chargeNowActive == true {
                         Spacer()
@@ -331,10 +341,11 @@ struct VehicleChargingCard: View {
                 // No `.id(...)` on the formatted string. It destroyed and rebuilt each line on
                 // every refresh, so the countdown flickered instead of morphing and could not be
                 // interrupted mid-update. `hisTelemetryValue` rolls the digits in place.
-                if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging ? HisingenTheme.semanticGood : .primary).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
+                if hasLastKnownChargingReadings { lastKnownLabel }
+                if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging && !hasLastKnownChargingReadings ? HisingenTheme.semanticGood : .primary).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
                 if let readyLine { Text(readyLine).hisType(.body, weight: .medium).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(readyLine, reduceMotion: reduceMotion) }
                 if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
-                if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: state.estimatedChargingCompletion, isLive: state.isCharging && !state.hasOldData(), currentPowerWatts: state.energy.powerWatts).transition(.opacity) }
+                if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: hasLastKnownChargingReadings ? nil : state.estimatedChargingCompletion, isLive: state.isCharging && !hasLastKnownChargingReadings, currentPowerWatts: hasLastKnownChargingReadings ? nil : state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
                     Text(state.chargingExplanation).hisType(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)

@@ -248,7 +248,7 @@ struct HisingenContentView: View {
                         .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                         .transition(.opacity)
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
+                    ScrollView(.vertical) {
                         ScrollViewReader { proxy in
                             PanelSwipeOffset(gesture: gesture) {
                                 VStack(spacing: HisingenTheme.sectionSpacing) {
@@ -656,7 +656,7 @@ struct HisingenContentView: View {
 
     /// The panel header (2026-11-16 redesign): the energy-line mark and wordmark, the places as
     /// words with an ink underline under the current one, and Settings at the trailing edge.
-    /// Compact width keeps every place as an icon rather than hiding any.
+    /// If text labels don't fit, keep every place reachable in a scrolling icon strip.
     private func awardConceptHeader(tabs: [TabRef], current: TabRef) -> some View {
         let compact = HisingenTheme.layoutWidth < 540
         let wide = HisingenTheme.layoutWidth >= 700
@@ -672,37 +672,15 @@ struct HisingenContentView: View {
             .fixedSize()
             .layoutPriority(2)
 
-            HStack(spacing: compact ? 4 : (wide ? 22 : 14)) {
-                ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
-                    Button {
-                        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
-                        withAnimation(tabIndicatorAnimation) { select(tab) }
-                    } label: {
-                        Group {
-                            if compact {
-                                Image(systemName: tabComposition.symbol(for: tab))
-                                    .hisType(.body, weight: .medium)
-                            } else {
-                                Text(tabComposition.title(for: tab))
-                                    .hisType(.body, weight: current == tab ? .semibold : .regular)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .foregroundStyle(current == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                        .padding(.bottom, 9)
-                        .overlay(alignment: .bottom) {
-                            if current == tab { tabIndicator }
-                        }
-                        .padding(.horizontal, compact ? 8 : 2)
-                        .frame(minWidth: compact ? 32 : nil, minHeight: 30)
-                        .contentShape(Rectangle())
+            ViewThatFits(in: .horizontal) {
+                tabButtons(tabs, selected: current, iconsOnly: false, spacing: wide ? 20 : 12)
+                    .fixedSize(horizontal: true, vertical: false)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        tabButtons(tabs, selected: current, iconsOnly: true, spacing: 4)
                     }
-                    .buttonStyle(.pressable)
-                    .focusEffectDisabled()
-                    .help(tabComposition.title(for: tab))
-                    .accessibilityLabel(tabComposition.title(for: tab))
-                    .applyTabShortcut(index: index)
-                    .accessibilityAddTraits(current == tab ? .isSelected : [])
+                    .onAppear { proxy.scrollTo(current, anchor: .center) }
+                    .onChange(of: current) { _, selected in proxy.scrollTo(selected, anchor: .center) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
@@ -726,6 +704,44 @@ struct HisingenContentView: View {
         .padding(.bottom, 4)
         .overlay(alignment: .bottom) {
             Rectangle().fill(HisingenTheme.hairline).frame(height: 1)
+        }
+    }
+
+    private func tabButtons(_ tabs: [TabRef], selected: TabRef, iconsOnly: Bool, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
+                let title = tabComposition.title(for: tab)
+                Button {
+                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                    withAnimation(tabIndicatorAnimation) { select(tab) }
+                } label: {
+                    Group {
+                        if iconsOnly {
+                            Image(systemName: tabComposition.symbol(for: tab))
+                                .hisType(.body, weight: .medium)
+                        } else {
+                            Text(title)
+                                .hisType(.body, weight: selected == tab ? .semibold : .regular)
+                                .lineLimit(1)
+                        }
+                    }
+                    .foregroundStyle(selected == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                    .padding(.bottom, 9)
+                    .overlay(alignment: .bottom) {
+                        if selected == tab { tabIndicator }
+                    }
+                    .padding(.horizontal, iconsOnly ? 8 : 2)
+                    .frame(minWidth: 32, minHeight: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .focusEffectDisabled()
+                .help(title)
+                .accessibilityLabel(title)
+                .applyTabShortcut(index: index)
+                .accessibilityAddTraits(selected == tab ? .isSelected : [])
+                .id(tab)
+            }
         }
     }
 
@@ -1035,9 +1051,13 @@ struct HisingenContentView: View {
                 onRefresh()
             } label: {
                 Image(systemName: "arrow.clockwise")
+                    .hisType(.body, weight: .medium)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                     .rotationEffect(.degrees(refreshRotation))
+                    .frame(width: 28, height: 28)
             }
-            .controlSize(.small)
+            .buttonStyle(.pressable)
+            .focusEffectDisabled()
             .help(L10n.text("Refresh Telemetry (⌘R)"))
             .accessibilityLabel(L10n.text("Refresh Telemetry"))
             .keyboardShortcut("r", modifiers: .command)

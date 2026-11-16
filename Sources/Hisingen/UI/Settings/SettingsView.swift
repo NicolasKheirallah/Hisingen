@@ -65,6 +65,7 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: showsHeaderBar ? HisingenTheme.layoutWidth : .infinity, maxHeight: .infinity)
+        .background(HisingenTheme.canvas)
         .onAppear {
             persistLocationHistory = preferences.persistLocationHistory
         }
@@ -89,7 +90,7 @@ struct SettingsView: View {
     }
 
     private var settingsContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) {
                         Group {

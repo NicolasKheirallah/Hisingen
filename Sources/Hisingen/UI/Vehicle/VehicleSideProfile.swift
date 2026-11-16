@@ -71,18 +71,31 @@ private struct VehicleOutlineBaseImage: View {
     let container: CGSize
     var model: VehicleModel? = nil
     var brand: VehicleBrand? = nil
+    var instrumentAppearance = false
 
     var body: some View {
         if let svgImage = VehicleOutlineImageProvider.shared.image(for: spec) {
-            Image(nsImage: svgImage)
-                .resizable()
-                .renderingMode(.template)
-                .foregroundStyle(HisingenTheme.ink.opacity(0.85))
+            Group {
+                if instrumentAppearance {
+                    let ink = HisingenTheme.inkMuted
+                    // The traced SVG has subpixel lines at panel size. Keep the stronger marks in ink.
+                    Canvas { context, size in
+                        context.addFilter(.alphaThreshold(min: 0.18, color: ink))
+                        context.draw(Image(nsImage: svgImage).resizable(),
+                                     in: CGRect(origin: .zero, size: size))
+                    }
+                } else {
+                    Image(nsImage: svgImage)
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundStyle(HisingenTheme.ink.opacity(0.85))
+                }
+            }
                 .frame(width: og.imageWidth, height: og.imageHeight)
                 .position(x: og.originX + og.imageWidth / 2,
                           y: og.originY + og.imageHeight / 2)
         } else {
-            FallbackCarSilhouetteView(model: model, brand: brand)
+            FallbackCarSilhouetteView(model: model, brand: brand, instrumentAppearance: instrumentAppearance)
                 .frame(width: container.width, height: container.height)
         }
     }
@@ -110,6 +123,8 @@ struct VehicleSideProfileDoorsView: View {
     let openings: [OpeningReading]
     var model: VehicleModel? = nil
     var brand: VehicleBrand? = nil
+    var profileHeight: CGFloat = 96
+    var instrumentAppearance = false
     var hoveredOpening: VehicleOpening? = nil
     /// Reports which part the pointer is over, so the card's chip grid can follow the car rather
     /// than the other way round. Nil when the pointer leaves every zone.
@@ -178,11 +193,11 @@ struct VehicleSideProfileDoorsView: View {
                                      spec: spec)
 
             ZStack {
-                VehicleGroundShadow(spec: spec, og: og)
+                if !instrumentAppearance { VehicleGroundShadow(spec: spec, og: og) }
 
                 // The model's own SVG base outline (facing right).
                 VehicleOutlineBaseImage(spec: spec, og: og, container: geo.size,
-                                        model: model, brand: brand)
+                                        model: model, brand: brand, instrumentAppearance: instrumentAppearance)
 
                 // Lamp glows sit at the clusters the model's own artwork draws, so a Polestar 3's
                 // headlamp lights up where a Polestar 3's headlamp is.
@@ -245,7 +260,7 @@ struct VehicleSideProfileDoorsView: View {
                 )
             }
         }
-        .frame(height: 96)
+        .frame(height: profileHeight)
         // Was `accessibilityHidden(true)`, so a VoiceOver reader got twelve chips and no car. The
         // zones now carry their own names, states and button trait.
         .accessibilityElement(children: .contain)
@@ -541,14 +556,20 @@ struct VehicleSideProfileTiresView: View {
 private struct FallbackCarSilhouetteView: View {
     var model: VehicleModel? = nil
     var brand: VehicleBrand? = nil
+    var instrumentAppearance = false
 
     var body: some View {
         let profile = CarProfile.profile(for: model, brand: brand)
         GeometryReader { _ in
             ZStack {
-                CarSilhouetteShape(profile: profile)
-                    .fill(LinearGradient(colors: [HisingenTheme.ink.opacity(0.14), HisingenTheme.ink.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                    .overlay(CarSilhouetteShape(profile: profile).stroke(HisingenTheme.hairline, lineWidth: 0.8))
+                let shape = CarSilhouetteShape(profile: profile)
+                if instrumentAppearance {
+                    shape.fill(HisingenTheme.ink.opacity(0.08))
+                        .overlay(shape.stroke(HisingenTheme.inkMuted, lineWidth: 1))
+                } else {
+                    shape.fill(LinearGradient(colors: [HisingenTheme.ink.opacity(0.14), HisingenTheme.ink.opacity(0.08)], startPoint: .top, endPoint: .bottom))
+                        .overlay(shape.stroke(HisingenTheme.hairline, lineWidth: 0.8))
+                }
 
                 CarGlassShape(profile: profile)
                     .fill(HisingenTheme.ink.opacity(0.22))

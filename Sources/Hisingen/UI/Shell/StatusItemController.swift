@@ -436,6 +436,8 @@ final class StatusItemController: NSObject {
                         action: #selector(contextToggleTailgate),
                         keyEquivalent: ""
                     )
+                    tailgateItem.image = NSImage(systemSymbolName: tailgateIsOpen ? "car.side.fill" : "car.side.rear.open.fill",
+                                                accessibilityDescription: nil)
                     tailgateItem.target = self
                     controlsMenu.addItem(tailgateItem)
                 }

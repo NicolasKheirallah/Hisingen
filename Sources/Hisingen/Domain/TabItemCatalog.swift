@@ -7,6 +7,18 @@ import Foundation
 /// place a reader could turn any of them off, and no place a new card could be added without
 /// editing a second list (a jump menu) to keep up.
 enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
+    static let historyPageSizes = [3, 5, 8, 10, 12, 15, 20, 25]
+
+    var defaultHistoryPageSize: Int? {
+        switch self {
+        case .historyActivity, .historyTrips: return 5
+        case .historyChargingSessions, .historyRecentFills: return 8
+        case .historyAirCleaning, .historyWarnings: return 10
+        case .historyAutomations: return 12
+        default: return nil
+        }
+    }
+
     // Vehicle
     case vehicleHero = "vehicle-hero"
     case vehicleReceipts = "vehicle-receipts"
@@ -53,6 +65,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     // History
     case historyOverview = "history-overview"
     case historyActivity = "history-activity"
+    case historyWarnings = "history-warnings"
     case historyMonth = "history-month"
     case historyAirCleaning = "history-air-cleaning"
     case historyEmissions = "history-emissions"
@@ -71,6 +84,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case historyConsumption = "history-consumption"
     case historyOdometer = "history-odometer"
     case historyBatteryHealth = "history-battery-health"
+    case historyTyrePressure = "history-tyre-pressure"
     case historyAirQuality = "history-air-quality"
     case historyCabinClimate = "history-cabin-climate"
     case historyAutomations = "history-automations"
@@ -264,9 +278,12 @@ enum TabItemCatalog {
         TabItem(id: .historyOverview, title: L10n.text("Overview"), symbol: "chart.pie.fill",
                 sourceTab: .history, kind: .card,
                 detail: "Period totals for distance, energy and cost.", feature: nil),
-        TabItem(id: .historyActivity, title: L10n.text("Activity"), symbol: "clock.arrow.circlepath",
+        TabItem(id: .historyActivity, title: L10n.text("Observed Changes"), symbol: "clock.arrow.circlepath",
                 sourceTab: .history, kind: .card,
                 detail: "Observed changes recorded in this period.", feature: nil),
+        TabItem(id: .historyWarnings, title: L10n.text("Warning Timeline"), symbol: "exclamationmark.triangle",
+                sourceTab: .history, kind: .card,
+                detail: "Vehicle warnings recorded in this period.", feature: nil),
         TabItem(id: .historyMonth, title: L10n.text("Month Comparison"), symbol: "calendar",
                 sourceTab: .history, kind: .card,
                 detail: "This month against the previous one.", feature: nil),
@@ -321,6 +338,9 @@ enum TabItemCatalog {
         TabItem(id: .historyBatteryHealth, title: L10n.text("Battery Health"), symbol: "batteryblock",
                 sourceTab: .history, kind: .card,
                 detail: "State of health over time.", feature: nil),
+        TabItem(id: .historyTyrePressure, title: L10n.text("Tyre Pressure"), symbol: "circle.grid.2x2",
+                sourceTab: .history, kind: .card,
+                detail: "Tyre pressure readings over time.", feature: nil),
         TabItem(id: .historyAirQuality, title: L10n.text("Air Quality"), symbol: "wind",
                 sourceTab: .history, kind: .card,
                 detail: "Cabin and outside particulate matter over time.", feature: nil),
@@ -413,13 +433,13 @@ enum TabItemCatalog {
             ]
         case .history:
             return [
-                .historyPeriodPicker, .historyOverview, .historyActivity, .historyMonth,
+                .historyPeriodPicker, .historyOverview, .historyActivity, .historyWarnings, .historyMonth,
                 .historyAirCleaning, .historyEmissions, .historyDrivingPatterns, .historyDistance,
                 .historyMonthlyMileage, .historyTrips, .historyChargingSessions,
                 .historyChargingCurve, .historyMonthlyCharging, .historyChargeLocations,
                 .historyChargingHistory, .historyFuelEconomy, .historyRecentFills,
                 .historyEfficiency, .historyConsumption, .historyOdometer, .historyBatteryHealth,
-                .historyAirQuality, .historyCabinClimate, .historyAutomations
+                .historyTyrePressure, .historyAirQuality, .historyCabinClimate, .historyAutomations
             ]
         case .controls:
             return [

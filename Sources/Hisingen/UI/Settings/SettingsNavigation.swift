@@ -43,8 +43,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .all: return ""
         case .accounts: return "account login sign in polestar volvo credentials vehicle vin garage fleet authorize authorization remote commands"
-        case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image"
-        case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels"
+        case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image battery and range estimated range position relative to car first reading"
+        case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels log observed changes rows per page"
         case .general: return "general display menu bar panel size density units language launch charging order"
         case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris"
         case .features: return "feature capability vehicle data remote control remote commands lock climate charge schedule location weather authorize authorization"
@@ -194,7 +194,7 @@ struct SettingsSidebar: View {
             .frame(minHeight: 38)
             .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.055, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-            ScrollView(.vertical, showsIndicators: false) {
+            ScrollView(.vertical) {
                 VStack(spacing: 3) {
                     ForEach(SettingsSection.allCases) { section in
                         if searchText.isEmpty || section == .all || section.matches(searchText) {
@@ -202,29 +202,30 @@ struct SettingsSidebar: View {
                                 HStack(spacing: 10) {
                                     Image(systemName: section.symbol)
                                         .frame(width: 18)
+                                        .accessibilityHidden(true)
                                     Text(section.title)
-                                        .lineLimit(1)
-                                    Spacer()
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 0)
+                                    if selection == section {
+                                        Image(systemName: "checkmark")
+                                            .accessibilityHidden(true)
+                                    }
                                 }
                                 .hisType(.label, weight: selection == section ? .bold : .medium)
                                 .foregroundStyle(selection == section ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                                .padding(.horizontal, 12)
-                                .frame(minHeight: 42)
-                                .background(alignment: .leading) {
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .frame(minHeight: 36)
+                                .background {
                                     if selection == section {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.primary.opacity(0.075))
-                                            .overlay(alignment: .leading) {
-                                                Capsule()
-                                                    .fill(HisingenTheme.accent)
-                                                    .frame(width: 3)
-                                                    .padding(.vertical, 8)
-                                            }
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(HisingenTheme.chipFill)
                                     }
                                 }
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.pressable)
+                            .focusEffectDisabled()
                             .accessibilityAddTraits(selection == section ? .isSelected : [])
                         }
                     }

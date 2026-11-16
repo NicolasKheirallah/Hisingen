@@ -82,6 +82,7 @@ struct PaginatedSection<Row: Identifiable, Content: View>: View {
         // only feedback the page change had.
         .hisAnimation(Motion.layout, value: current)
         .onChange(of: resetKeys) { _, _ in page = 0 }
+        .onChange(of: pageSize) { _, _ in page = 0 }
         .onChange(of: current) { _, newPage in
             // The rows are replaced in place, so nothing told VoiceOver the page had moved.
             AccessibilityNotification.Announcement(

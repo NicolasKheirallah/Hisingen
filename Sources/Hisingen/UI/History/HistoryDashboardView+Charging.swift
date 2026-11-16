@@ -337,7 +337,7 @@ extension HistoryDashboardView {
                     searchField(L10n.text("Search sessions by date, place or energy"), text: $sessionSearchText,
                                 count: filteredSessionsForPicker.count, total: chargingSessions.count)
                 }
-                PaginatedSection(items: matches, pageSize: 8,
+                PaginatedSection(items: matches, pageSize: preferences.historyPageSize(for: .historyChargingSessions),
                                  resetKeys: [sessionSearchText, periodLoadKey],
                                  emptyMessage: L10n.text("No charging sessions match this search.")) { rows, footer in
                     ForEach(rows) { session in

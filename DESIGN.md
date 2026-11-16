@@ -39,7 +39,55 @@ at the display tier, arriving power supports it, and no figure is ever shown tha
 did not report — projections derive capacity from readings only when they must, and say
 so (`ChargeTargetProjection`, `InstrumentMath`).
 
-## The 2026-11-16 redesign (supersedes the sections below where they disagree)
+## The instrument refinement (2026-11-16)
+
+The panel is a desk instrument for Volvo and Polestar owners. It answers quick checks of
+charge, range and cabin state, then supports longer planning and history sessions. It should
+feel exact, wintry and unhurried. The amber charge rail is the bright spot; in Log it becomes
+the start and end of each charge, with gaps left blank.
+ENERGY 2 / RHYTHM 3 / MOTION 2.
+
+- **Now:** the vehicle name identifies the instrument. Battery and estimated range share the
+  left edge by default, with Battery first. Settings → Appearance lets readers put the group on
+  any side of the car and choose which reading comes first. At accessibility text sizes, the left and right
+  positions stack above and below the image to give the readings full width. The larger render
+  uses the studio image's margins to give the car room beside the readings. An open tailgate
+  gets the hatch symbol beside its warning. The rail carries state
+  of charge, quarter marks and the target tick. Old or offline readings are named above the
+  figures and use a neutral rail
+  without a charging projection. Below the rail, the owner's reference strip pairs a centered
+  icon and reported state with each available action; the fourth cell gives the reading's age.
+  Fine vertical dividers separate the cells, which reflow to two columns at narrow widths and
+  accessibility text sizes. Live values can still roll; the mere passage of time does not
+  animate the display.
+- **Plan:** a timed appointment leads by its clock time. Other active schedules follow in order,
+  and expired one-shot timers are omitted. The existing command-result banners precede the
+  schedule so feedback stays visible after an action.
+- **Log:** the wide EV overview leads with distance or estimated energy, whichever has observations.
+  The charge chart draws one vertical mark per session at its end time. A hollow point marks
+  the recorded start level and a filled point marks the end level. The latest session's range
+  sits next to the legend. Blank space between sessions means no plotted readings. Distance
+  uses one bar per day so the bar and its selected
+  value report the same total. The chart never joins a past charge to the current battery level.
+  The Compact and combustion-capable overviews keep their
+  denser summaries; the latter also keeps the fuel entry action in the overview.
+  Observed Changes opens with five rows so the timeline leaves room for the next card.
+  Tabs & Cards lets readers set rows per page beside each paginated Log card and arrange
+  the cards in the order they use them.
+- **Car:** the vehicle model, larger profile and identity form a type plate. VIN gets a full reading
+  line, with the remaining fields below. Screenshot Privacy Mode replaces sensitive plate values
+  with “Hidden.” Compact keeps the photo controls when there are photos to browse; otherwise it
+  draws the installed model outline.
+- **Chrome:** tab names fit first; a scrollable icon strip is the fallback for long translations
+  and custom tab sets. The Settings sidebar uses neutral fill and a checkmark for selection and
+  lets labels wrap. Both panes show macOS scroll indicators when the system requests them.
+  When Polestar web sign-in is offered, it has the accent and the credentials form stays secondary.
+
+The rule and chart grid encode measurements, not a decorative background. The vehicle artwork
+is the manufacturer's render or the app's existing model outline. No new artwork, decorative
+surface, font, or motion loop is part of this pass.
+
+## The 2026-11-16 redesign (supersedes older sections where they disagree)
 
 Direction, written before the work:
 
@@ -71,6 +119,8 @@ What changed:
   its label in the canvas colour; `.hisSecondary(tint)` is ink (or a status colour) on the solid
   chip fill with a hairline edge. The system styles drew white labels on light dark-mode accents
   and tinted bezels light grey, about 2:1.
+  Settings uses the shared style for account and fleet actions. Its native pickers keep their
+  system foreground so the app's ink does not become the bezel color.
 - **Type:** focal figures are light weight at display size (battery, range, Log period, Car
   title, Plan times); labels stay small and semibold; tabular figures throughout.
 - **Now** (`NowInstrument`): one readiness line from reported signals (what the car is doing,

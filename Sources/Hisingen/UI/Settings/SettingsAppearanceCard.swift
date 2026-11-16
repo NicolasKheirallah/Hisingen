@@ -98,6 +98,8 @@ struct SettingsAppearanceCard: View {
 
                 vehicleImageSection(availableAngles: availableAngles, supportsMultipleAngles: supportsMultipleAngles)
 
+                nowReadingsSection
+
                 Divider().opacity(HisingenTheme.dividerOpacity)
 
                 Text(L10n.format("Active for %@. Each vehicle saves its own theme preference.", vehicleLabel))
@@ -301,6 +303,30 @@ struct SettingsAppearanceCard: View {
                 }
             }
         }
+    }
+
+    private var nowReadingsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("Battery and Range"))
+                .hisType(.label, weight: .semibold)
+                .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+
+            Picker(L10n.text("Position relative to car"), selection: binder(\.nowReadingsPosition, .panelLayout)) {
+                ForEach(NowReadingsPosition.allCases, id: \.self) { position in
+                    Text(position.title).tag(position)
+                }
+            }
+
+            Picker(L10n.text("First reading"), selection: binder(\.nowFirstReading, .panelLayout)) {
+                ForEach(NowFirstReading.allCases, id: \.self) { reading in
+                    Text(reading.title).tag(reading)
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .hisType(.body)
     }
 
     @ViewBuilder

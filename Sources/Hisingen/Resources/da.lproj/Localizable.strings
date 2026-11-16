@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterigaranti (resterende)";
 "Battery and Power" = "Batteri og effekt";
 "Battery and Range" = "Batteri og rækkevidde";
+"Position relative to car" = "Placering i forhold til bilen";
+"First reading" = "Første aflæsning";
+"Above" = "Ovenfor";
+"Below" = "Nedenfor";
 "Battery at %d%%" = "Batteri på %d %%";
 "Battery data was unavailable" = "Batteridata var utilgængelige";
 "Battery diagnostics" = "Batteridiagnostik";
@@ -2429,6 +2433,7 @@
 "Use" = "Brug";
 "Show newer entries" = "Vis nyere poster";
 "Show older entries" = "Vis ældre poster";
+"Rows per page" = "Rækker pr. side";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervaller mellem observerede kørende og stoppede tilstande. De er ikke en præcis cyklusvarighed eller bevis for, at rengøringen lykkedes. Kørsler, der går ud over den valgte periode eller har et hul på to timer, er udeladt.";
 "Set up Hisingen" = "Konfigurer Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Dit køretøj er forbundet. Vælg et udgangspunkt: alt her kan ændres senere under Indstillinger → Features.";
@@ -3279,3 +3284,9 @@
 "No charging sessions in this period." = "Ingen opladninger i denne periode.";
 "Solid: charging. Dotted: driving between charges." = "Fuld linje: opladning. Prikket: kørsel mellem opladninger.";
 "%d charges, lowest start %@, last ended at %@" = "%d opladninger, laveste start %@, seneste sluttede ved %@";
+"Last known readings" = "Senest kendte målinger";
+"Last reported schedules" = "Senest rapporterede tidsplaner";
+"No upcoming schedules reported" = "Ingen kommende tidsplaner rapporteret";
+"Battery at the start and end of each charge." = "Batteriniveau ved begyndelsen og slutningen af hver opladning.";
+"No complete charge readings in this period." = "Ingen komplette opladningsmålinger i denne periode.";
+"Enable remote controls in Settings → Features." = "Slå fjernbetjening til i Indstillinger → Funktioner.";

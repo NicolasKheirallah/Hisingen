@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterigaranti (gjenstående)";
 "Battery and Power" = "Batteri og effekt";
 "Battery and Range" = "Batteri og rekkevidde";
+"Position relative to car" = "Plassering i forhold til bilen";
+"First reading" = "Første avlesning";
+"Above" = "Over";
+"Below" = "Under";
 "Battery at %d%%" = "Batteri på %d %%";
 "Battery data was unavailable" = "Batteridata var ikke tilgjengelig";
 "Battery diagnostics" = "Batteridiagnostikk";
@@ -2422,6 +2426,7 @@
 "Use" = "Bruk";
 "Show newer entries" = "Vis nyere oppføringer";
 "Show older entries" = "Vis eldre oppføringer";
+"Rows per page" = "Rader per side";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervaller mellom observert kjøring og stans. Dette er ikke nøyaktig varighet for syklusen eller bevis på vellykket rensing. Kjøringer som går over den valgte perioden eller et gap på to timer, er utelatt.";
 "Set up Hisingen" = "Sett opp Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Kjøretøyet ditt er tilkoblet. Velg et utgangspunkt: alt her kan endres senere i Innstillinger → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Ingen ladeøkter i denne perioden.";
 "Solid: charging. Dotted: driving between charges." = "Heltrukket: lading. Prikket: kjøring mellom ladinger.";
 "%d charges, lowest start %@, last ended at %@" = "%d ladinger, laveste start %@, siste endte på %@";
+"Last known readings" = "Sist kjente målinger";
+"Last reported schedules" = "Sist rapporterte tidsplaner";
+"No upcoming schedules reported" = "Ingen kommende tidsplaner rapportert";
+"Battery at the start and end of each charge." = "Batterinivå ved start og slutt for hver lading.";
+"No complete charge readings in this period." = "Ingen fullstendige lademålinger i denne perioden.";
+"Enable remote controls in Settings → Features." = "Slå på fjernkontroller i Innstillinger → Funksjoner.";

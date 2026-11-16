@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Garantie batterie (restante)";
 "Battery and Power" = "Batterie et puissance";
 "Battery and Range" = "Batterie et autonomie";
+"Position relative to car" = "Position par rapport à la voiture";
+"First reading" = "Première donnée";
+"Above" = "Au-dessus";
+"Below" = "En dessous";
 "Battery at %d%%" = "Batterie à %d%%";
 "Battery data was unavailable" = "Les données de la batterie étaient indisponibles";
 "Battery diagnostics" = "Diagnostics de batterie";
@@ -2422,6 +2426,7 @@
 "Use" = "Utiliser";
 "Show newer entries" = "Afficher les entrées plus récentes";
 "Show older entries" = "Afficher les entrées plus anciennes";
+"Rows per page" = "Lignes par page";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervalles entre les états observés en marche et à l'arrêt, et non durée exacte du cycle ni preuve d'un nettoyage réussi. Les séquences qui chevauchent la période sélectionnée ou un écart de deux heures sont exclues.";
 "Set up Hisingen" = "Configurer Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Votre véhicule est connecté. Choisissez un point de départ: tout peut être modifié plus tard dans Réglages → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Aucune recharge sur cette période.";
 "Solid: charging. Dotted: driving between charges." = "Trait plein : recharge. Pointillé : trajets entre deux recharges.";
 "%d charges, lowest start %@, last ended at %@" = "%d recharges, départ le plus bas %@, la dernière s'est terminée à %@";
+"Last known readings" = "Derniers relevés connus";
+"Last reported schedules" = "Dernières programmations signalées";
+"No upcoming schedules reported" = "Aucune programmation à venir signalée";
+"Battery at the start and end of each charge." = "Niveau de batterie au début et à la fin de chaque recharge.";
+"No complete charge readings in this period." = "Aucun relevé de recharge complet sur cette période.";
+"Enable remote controls in Settings → Features." = "Activez les commandes à distance dans Réglages → Fonctionnalités.";

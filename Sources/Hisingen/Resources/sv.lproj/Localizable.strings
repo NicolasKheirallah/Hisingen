@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterigaranti (återstående)";
 "Battery and Power" = "Batteri och effekt";
 "Battery and Range" = "Batteri och räckvidd";
+"Position relative to car" = "Placering i förhållande till bilen";
+"First reading" = "Första värdet";
+"Above" = "Ovanför";
+"Below" = "Nedanför";
 "Battery at %d%%" = "Batteri på %d%%";
 "Battery data was unavailable" = "Batteridata var inte tillgängliga";
 "Battery diagnostics" = "Batteridiagnostik";
@@ -2439,6 +2443,7 @@
 "Use" = "Använd";
 "Show newer entries" = "Visa nyare poster";
 "Show older entries" = "Visa äldre poster";
+"Rows per page" = "Rader per sida";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Intervall mellan observerade lägen med igång och stoppat läge, inte exakt cykellängd eller bevis för lyckad rengöring. Körningar som går över den valda perioden eller ett gap på två timmar utesluts.";
 "Set up Hisingen" = "Konfigurera Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Ditt fordon är anslutet. Välj en startpunkt: allt här kan ändras senare under Inställningar → Features.";
@@ -3289,3 +3294,9 @@
 "No charging sessions in this period." = "Inga laddningar under perioden.";
 "Solid: charging. Dotted: driving between charges." = "Heldragen: laddning. Prickad: körning mellan laddningar.";
 "%d charges, lowest start %@, last ended at %@" = "%d laddningar, lägsta start %@, senaste slutade på %@";
+"Last known readings" = "Senast kända värden";
+"Last reported schedules" = "Senast rapporterade scheman";
+"No upcoming schedules reported" = "Inga kommande scheman har rapporterats";
+"Battery at the start and end of each charge." = "Batterinivå vid början och slutet av varje laddning.";
+"No complete charge readings in this period." = "Inga fullständiga laddningsvärden under perioden.";
+"Enable remote controls in Settings → Features." = "Aktivera fjärrstyrning i Inställningar → Funktioner.";

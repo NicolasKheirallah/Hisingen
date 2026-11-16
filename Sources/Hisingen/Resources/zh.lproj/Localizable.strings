@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "电池保修（剩余里程）";
 "Battery and Power" = "电池与动力";
 "Battery and Range" = "电池与续航";
+"Position relative to car" = "相对于车辆的位置";
+"First reading" = "首项读数";
+"Above" = "上方";
+"Below" = "下方";
 "Battery at %d%%" = "电量 %d%%";
 "Battery data was unavailable" = "电池数据不可用";
 "Battery diagnostics" = "电池诊断";
@@ -2422,6 +2426,7 @@
 "Use" = "使用";
 "Show newer entries" = "显示较新的条目";
 "Show older entries" = "显示较旧的条目";
+"Rows per page" = "每页行数";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "这是观测到的运行与停止状态之间的间隔，并非精确的周期时长，也不能证明净化已成功。跨越所选时段或间隔两小时的运行记录会被排除。";
 "Set up Hisingen" = "设置 Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "您的车辆已连接。请选择一个起点：所有内容稍后都可在“设置 → Features”中更改。";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "此期间没有充电记录。";
 "Solid: charging. Dotted: driving between charges." = "实线：充电。虚线：两次充电之间的驾驶。";
 "%d charges, lowest start %@, last ended at %@" = "%d 次充电，最低起始 %@，最近一次结束于 %@";
+"Last known readings" = "最近已知读数";
+"Last reported schedules" = "最近报告的计划";
+"No upcoming schedules reported" = "未报告即将执行的计划";
+"Battery at the start and end of each charge." = "每次充电开始和结束时的电池电量。";
+"No complete charge readings in this period." = "此时段内没有完整的充电读数。";
+"Enable remote controls in Settings → Features." = "在“设置 → 功能”中启用远程控制。";

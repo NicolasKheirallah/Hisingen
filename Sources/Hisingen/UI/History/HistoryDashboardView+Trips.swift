@@ -152,16 +152,17 @@ extension HistoryDashboardView {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "chart.bar.fill", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
                 Chart {
-                    ForEach(trips) { trip in
+                    ForEach(daily) { day in
                         BarMark(
-                            x: .value(L10n.text("Date"), trip.endedAt, unit: .day),
-                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: trip.distanceKm))
+                            x: .value(L10n.text("Date"), day.day, unit: .day),
+                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: day.distanceKm)),
+                            width: .ratio(0.65)
                         )
-                        .foregroundStyle(HisingenTheme.accent.gradient)
+                        .foregroundStyle(HisingenTheme.accent)
                         .cornerRadius(2)
                     }
                     if let scrubDistance, let hit = HistoryInsights.nearest(to: scrubDistance, in: daily, timestamp: \.day) {
-                        RuleMark(x: .value(L10n.text("Date"), hit.day))
+                        RuleMark(x: .value(L10n.text("Date"), hit.day, unit: .day))
                             .foregroundStyle(Color.primary.opacity(0.25))
                             .annotation(position: .top, spacing: 0,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
@@ -171,10 +172,18 @@ extension HistoryDashboardView {
                     }
                 }
                 .chartXSelection(value: $scrubDistance)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) {
+                        AxisGridLine().foregroundStyle(HisingenTheme.hairline)
+                        AxisValueLabel().foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                }
                 .chartYAxisLabel(preferences.distanceUnit.suffix)
-                .frame(height: chartHeight)
+                .frame(height: chartHeight * 1.35)
                 .accessibilityLabel(L10n.text("Trip distance history chart"))
-                .accessibilityValue(chartAccessibilityValue(points: trips.map { $0.distanceKm }))
+                .accessibilityValue(chartAccessibilityValue(
+                    points: daily.map { preferences.distanceUnit.convert(km: $0.distanceKm) }
+                ))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Distance Over Time"),
                     yLabel: preferences.distanceUnit.suffix,
@@ -247,7 +256,7 @@ extension HistoryDashboardView {
                     searchField(L10n.text("Search trips by date"), text: $tripSearchText,
                                 count: trips.count, total: snapshot.trips.count)
                 }
-                PaginatedSection(items: trips, pageSize: HistoryPagination.tripsPerPage,
+                PaginatedSection(items: trips, pageSize: preferences.historyPageSize(for: .historyTrips),
                                  resetKeys: [tripFilterText, periodLoadKey],
                                  newerHelp: L10n.text("Show newer trips"),
                                  olderHelp: L10n.text("Show older trips")) { visible, footer in

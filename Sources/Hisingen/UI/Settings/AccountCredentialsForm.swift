@@ -238,8 +238,8 @@ struct AccountCredentialsForm: View {
                             Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
                             Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit Credentials"))
                         }
-                        .hisType(.caption, weight: .medium)
                     }
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.mini)
 
                     if model.isConnected(selectedBrand) {
@@ -247,8 +247,8 @@ struct AccountCredentialsForm: View {
                             testCurrentConnection()
                         } label: {
                             Text(L10n.text("Test"))
-                                .hisType(.caption, weight: .medium)
                         }
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.mini)
                         .disabled(isTestingConnection)
                     }

@@ -542,7 +542,8 @@ extension HistoryDashboardView {
                     }
                     .padding(.vertical, 2)
                 }
-                PaginatedSection(items: commands, pageSize: 12, resetKeys: [periodLoadKey],
+                PaginatedSection(items: commands, pageSize: preferences.historyPageSize(for: .historyAutomations),
+                                 resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No automations ran in this period.")) { visibleCommands, footer in
                     ForEach(visibleCommands) { record in
                         HStack {

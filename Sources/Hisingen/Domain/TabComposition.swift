@@ -104,7 +104,7 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
 struct TabComposition: Equatable, Sendable {
     /// Layout version, so a future shape change can migrate rather than silently reset a
     /// reader's tabs.
-    var version: Int = 1
+    var version: Int = 2
 
     /// Tabs whose contents differ from the shipped layout, keyed by `TabRef.storageKey`.
     /// A built-in tab is absent until the reader changes something about it, which is what
@@ -420,6 +420,14 @@ struct TabComposition: Equatable, Sendable {
     /// longer exists — which would render as an empty slot with no way to remove it.
     func normalized() -> TabComposition {
         var result = self
+        if result.version < 2 {
+            // These two Log cards used to appear even in layouts that didn't list them.
+            let key = TabRef.history.storageKey
+            if let items = result.tabContents[key] {
+                result.tabContents[key] = items + [.historyWarnings, .historyTyrePressure].filter { !items.contains($0) }
+            }
+            result.version = 2
+        }
         let known = Set(TabItemID.allCases)
         // Settings is never hideable, whatever a stored file claims.
         result.hiddenTabs.subtract([.settings])

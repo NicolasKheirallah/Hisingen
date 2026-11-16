@@ -280,8 +280,8 @@ struct FleetVehicleCardRow: View {
                         onSettingsChanged(.selectVehicle(vin))
                     } label: {
                         Text(L10n.text("Switch To"))
-                            .hisType(.caption, weight: .medium)
                     }
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }

@@ -11,6 +11,9 @@ enum VehicleRenderLayout {
     static let contentHeight: CGFloat = 205
     static let containerHeight: CGFloat = 220
     static let zoom: CGFloat = 1.33
+    // The instrument shares its row with the readings. A tighter zoom keeps the
+    // nose and tail in frame for wide side-profile renders.
+    static let instrumentZoom: CGFloat = 1.16
 
     /// Points the render is actually drawn at, which is what the decode should
     /// be sized to. A studio render is far wider than it is tall, so it is the
@@ -58,6 +61,7 @@ struct VehicleEntranceFrame: Equatable {
 struct VehiclePresentationView: View {
     let identity: VehiclePresentationIdentity
     let imageData: Data?
+    var fitHeight: CGFloat? = nil
     private let artworkStore = VehicleArtworkStore.shared
     private let entranceLedger = VehicleEntranceLedger.shared
 
@@ -89,7 +93,7 @@ struct VehiclePresentationView: View {
         .frame(maxWidth: .infinity)
         // Grows with the panel width (bounded) so Wide/Grand presets use the
         // horizontal room for a larger render rather than dead margins.
-        .frame(height: VehicleRenderLayout.containerHeight(for: HisingenTheme.layoutWidth))
+        .frame(height: fitHeight ?? VehicleRenderLayout.containerHeight(for: HisingenTheme.layoutWidth))
         .animation(transition.animation, value: shown)
         // Keyed on the request, so the several telemetry refreshes a minute that
         // re-evaluate this body with the same picture do not restart anything.
@@ -127,9 +131,9 @@ struct VehiclePresentationView: View {
             // Taken from the source's true dimensions rather than the decoded
             // thumbnail's rounded ones, so the budget cannot shift the layout.
             .aspectRatio(artwork.sourcePixelSize, contentMode: .fit)
-            .scaleEffect(VehicleRenderLayout.zoom, anchor: .center)
+            .scaleEffect(fitHeight == nil ? VehicleRenderLayout.zoom : VehicleRenderLayout.instrumentZoom)
             .frame(maxWidth: .infinity)
-            .frame(height: VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth))
+            .frame(height: fitHeight ?? VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth))
             .padding(.horizontal, VehicleRenderLayout.horizontalInset)
     }
 
@@ -162,7 +166,7 @@ struct VehiclePresentationView: View {
         // panels get a proportionally larger decode instead of an upscale.
         let drawn = VehicleRenderLayout.drawnSize(
             sourcePixelSize: sourcePixelSize,
-            contentHeight: VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth)
+            contentHeight: fitHeight ?? VehicleRenderLayout.scaledContentHeight(for: HisingenTheme.layoutWidth)
         )
         let budget = VehicleArtworkStore.pixelBudget(pointSize: drawn, scale: displayScale)
         let source = VehicleArtworkStore.source(vin: identity.vin, angle: identity.angle)

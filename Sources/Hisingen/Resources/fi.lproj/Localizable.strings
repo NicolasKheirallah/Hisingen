@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Akkutakuu (jäljellä)";
 "Battery and Power" = "Akku ja teho";
 "Battery and Range" = "Akku ja toimintamatka";
+"Position relative to car" = "Sijainti auton suhteen";
+"First reading" = "Ensimmäinen lukema";
+"Above" = "Yläpuolella";
+"Below" = "Alapuolella";
 "Battery at %d%%" = "Akku %d%%";
 "Battery data was unavailable" = "Akkutietoja ei ollut saatavilla";
 "Battery diagnostics" = "Akun diagnostiikka";
@@ -2422,6 +2426,7 @@
 "Use" = "Käytä";
 "Show newer entries" = "Näytä uudemmat merkinnät";
 "Show older entries" = "Näytä vanhemmat merkinnät";
+"Rows per page" = "Rivejä sivulla";
 "Intervals between observed running and stopped states, not exact cycle duration or proof of successful cleaning. Runs crossing the selected period or a two-hour gap are excluded." = "Havaittujen käynnissä- ja pysähtyneiden tilojen väliset ajat. Ne eivät ole tarkka jakson kesto tai todiste onnistuneesta puhdistuksesta. Valitun jakson ylittävät ajot tai kahden tunnin aukot jätetään pois.";
 "Set up Hisingen" = "Määritä Hisingen";
 "Your vehicle is connected. Pick a starting point. Everything here can be changed later in Settings → Features." = "Ajoneuvosi on yhdistetty. Valitse lähtökohta: kaikkea voi muuttaa myöhemmin kohdassa Asetukset → Features.";
@@ -3272,3 +3277,9 @@
 "No charging sessions in this period." = "Ei latauksia tällä jaksolla.";
 "Solid: charging. Dotted: driving between charges." = "Yhtenäinen: lataus. Pisteviiva: ajo latausten välillä.";
 "%d charges, lowest start %@, last ended at %@" = "%d latausta, alin aloitus %@, viimeisin päättyi %@";
+"Last known readings" = "Viimeisimmät tiedossa olevat lukemat";
+"Last reported schedules" = "Viimeksi ilmoitetut aikataulut";
+"No upcoming schedules reported" = "Tulevia aikatauluja ei ole ilmoitettu";
+"Battery at the start and end of each charge." = "Akun varaustaso jokaisen latauksen alussa ja lopussa.";
+"No complete charge readings in this period." = "Tältä ajalta ei ole täydellisiä latauslukemia.";
+"Enable remote controls in Settings → Features." = "Ota etäohjaus käyttöön kohdassa Asetukset → Ominaisuudet.";

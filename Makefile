@@ -21,16 +21,9 @@ AUTODETECTED_IDENTITY := $(shell sh Scripts/signing-identity.sh)
 IDENTITY ?= $(if $(AUTODETECTED_IDENTITY),$(AUTODETECTED_IDENTITY),Hisingen Development)
 SWIFT_FLAGS ?=
 
-# SwiftUI's @State and its siblings are external macros whose implementation plugin
-# ships with full Xcode, not with standalone Command Line Tools. When the selected
-# toolchain lacks it every @State in the view layer fails to expand, and the build
-# buries that one cause under hundreds of "self is immutable" errors. CI already pins
-# a complete Xcode through Scripts/select-xcode.sh; local builds do the same instead
-# of depending on whatever xcode-select currently points at.
-# When the pinned Xcode is not installed the script says why on stderr and selects
-# nothing. Keep any DEVELOPER_DIR the caller already set rather than overwriting it with
-# an empty value, which would silently drop a build back to Command Line Tools. Set
-# XCODE_VERSION to an installed version for a local compatibility run.
+# SwiftUI's @State macros need the plugin shipped with full Xcode. CI uses the pinned
+# version in .github/ci-toolchain.json; local builds use the selected Xcode or the newest
+# installed version. Set XCODE_VERSION to request a specific version.
 SELECTED_XCODE := $(shell sh Scripts/select-xcode.sh | sed -n 's/^Selected Xcode developer directory: //p')
 ifneq ($(strip $(SELECTED_XCODE)),)
 DEVELOPER_DIR := $(SELECTED_XCODE)
@@ -152,15 +145,26 @@ package-dmg:
 	mkdir -p $(DMG_STAGING)
 	cp -R $(APP) $(DMG_STAGING)/
 	ln -s /Applications $(DMG_STAGING)/Applications
-	@# Hosted runners intermittently return "Resource busy" from hdiutil create
-	@# while diskarbitrationd settles; retry before treating it as a real failure.
-	@ok=0; for attempt in 1 2 3 4 5; do \
-		if hdiutil create -volname Hisingen -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG); then \
+	@# Hosted runners can report "Resource busy" while disk arbitration settles.
+	@if diskutil help image create from >/dev/null 2>&1; then \
+		image_creator=diskutil; \
+	else \
+		image_creator=hdiutil; \
+	fi; \
+	create_image() { \
+		if [ "$$image_creator" = diskutil ]; then \
+			diskutil image create from --volumeName Hisingen --format UDZO "$(DMG_STAGING)" "$(DMG)"; \
+		else \
+			hdiutil create -volname Hisingen -srcfolder "$(DMG_STAGING)" -ov -format UDZO "$(DMG)"; \
+		fi; \
+	}; \
+	ok=0; for attempt in 1 2 3 4 5; do \
+		if create_image; then \
 			ok=1; break; \
 		fi; \
-		echo "hdiutil create attempt $$attempt failed; retrying in 5s" >&2; \
+		echo "Disk image creation attempt $$attempt failed; retrying in 5s" >&2; \
 		sleep 5; \
-	done; [ "$$ok" = 1 ] || { echo "hdiutil create still failing after 5 attempts" >&2; exit 1; }
+	done; [ "$$ok" = 1 ] || { echo "Disk image creation still failing after 5 attempts" >&2; exit 1; }
 	rm -rf $(DMG_STAGING)
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
 	codesign --force --timestamp -s "$(IDENTITY)" $(DMG)

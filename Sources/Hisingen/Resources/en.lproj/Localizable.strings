@@ -132,6 +132,10 @@
 "Battery Warranty Remaining" = "Battery Warranty Remaining";
 "Battery and Power" = "Battery and Power";
 "Battery and Range" = "Battery and Range";
+"Position relative to car" = "Position relative to car";
+"First reading" = "First reading";
+"Above" = "Above";
+"Below" = "Below";
 "Battery at %d%%" = "Battery at %d%%";
 "Battery data was unavailable" = "Battery data was unavailable";
 "Battery diagnostics" = "Battery diagnostics";
@@ -1596,6 +1600,7 @@
 "Show older trips" = "Show older trips";
 "Show newer entries" = "Show newer entries";
 "Show older entries" = "Show older entries";
+"Rows per page" = "Rows per page";
 "Page %d of %d" = "Page %1$d of %2$d";
 "%d%% observed" = "%d%% observed";
 "%d observation gaps" = "%d observation gaps";
@@ -3288,3 +3293,9 @@
 "No charging sessions in this period." = "No charging sessions in this period.";
 "Solid: charging. Dotted: driving between charges." = "Solid: charging. Dotted: driving between charges.";
 "%d charges, lowest start %@, last ended at %@" = "%d charges, lowest start %@, last ended at %@";
+"Last known readings" = "Last known readings";
+"Last reported schedules" = "Last reported schedules";
+"No upcoming schedules reported" = "No upcoming schedules reported";
+"Battery at the start and end of each charge." = "Battery at the start and end of each charge.";
+"No complete charge readings in this period." = "No complete charge readings in this period.";
+"Enable remote controls in Settings → Features." = "Enable remote controls in Settings → Features.";
