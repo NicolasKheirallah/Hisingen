@@ -137,9 +137,7 @@ struct ControlsTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            if HisingenTheme.layoutWidth >= 580 {
-                AwardControlMap(state: state, imageCache: imageCache)
-            }
+            PlanTimeline(state: state)
             if draws(.controlsBanners) {
                 ControlsBanners(
                 state: state,

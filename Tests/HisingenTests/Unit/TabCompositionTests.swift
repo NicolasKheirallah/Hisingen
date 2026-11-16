@@ -78,7 +78,7 @@ struct TabCompositionTests {
             #expect(composition.visibleItems(for: .builtIn(tab)) == TabItemCatalog.defaultItems(for: tab),
                     "\(tab.rawValue) hides something by default")
         }
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info])
     }
 
     @Test
@@ -295,7 +295,7 @@ struct TabCompositionTests {
     func tabsShipInTheirDeclaredOrderWithTheReadersOwnTabsLast() {
         var composition = TabComposition.default
         let mine = composition.addCustomTab(name: "Charging")
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls, mine])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info, mine])
         // Settings is never part of the reader's order: it is where the order is managed.
         #expect(!composition.orderedTabs().contains(.settings))
         #expect(composition.tabOrder.isEmpty)
@@ -314,37 +314,37 @@ struct TabCompositionTests {
     @Test
     func movingATabByOneSwapsItWithItsNeighbourAndMovingBackDropsTheOverride() {
         var composition = TabComposition.default
-        #expect(composition.canMoveTab(.info, by: -1))
+        #expect(composition.canMoveTab(.controls, by: -1))
         #expect(!composition.canMoveTab(.vehicle, by: -1))
-        #expect(!composition.canMoveTab(.controls, by: 1))
+        #expect(!composition.canMoveTab(.info, by: 1))
 
-        composition.moveTab(.info, by: -1)
-        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
+        composition.moveTab(.controls, by: -1)
+        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
 
         // Back to the shipped order, so the override is dropped rather than frozen.
-        composition.moveTab(.info, by: 1)
+        composition.moveTab(.controls, by: 1)
         #expect(composition.tabOrder.isEmpty)
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info])
     }
 
     @Test
     func draggingATabOntoAnotherPutsItInThatPosition() {
         var composition = TabComposition.default
-        composition.moveTab(.controls, onto: .vehicle)
-        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
+        composition.moveTab(.info, onto: .vehicle)
+        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
         // Onto itself is a no-op, not a write.
-        composition.moveTab(.controls, onto: .controls)
-        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
+        composition.moveTab(.info, onto: .info)
+        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
     }
 
     @Test
     func movingATabDownLandsItAfterTheNeighbourAndADownwardDropAfterTheTarget() {
         var composition = TabComposition.default
         composition.moveTab(.vehicle, by: 1)
-        #expect(composition.visibleTabs().prefix(2) == [.info, .vehicle])
+        #expect(composition.visibleTabs().prefix(2) == [.controls, .vehicle])
         // A downward drop lands after the target, the same rule the card move uses.
-        composition.moveTab(.info, onto: .history)
-        #expect(composition.visibleTabs().prefix(3) == [.vehicle, .history, .info])
+        composition.moveTab(.controls, onto: .history)
+        #expect(composition.visibleTabs().prefix(3) == [.vehicle, .history, .controls])
     }
 
     @Test
@@ -355,7 +355,7 @@ struct TabCompositionTests {
         composition.moveTabToFirst(.settings)
         composition.moveTab(.settings, by: -1)
         #expect(composition.tabOrder.isEmpty)
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info])
     }
 
     @Test
@@ -369,28 +369,28 @@ struct TabCompositionTests {
         // The shipped tabs are back in the shipped order, so nothing is stored and Restore is
         // not offered for an override that no longer differs from the default.
         #expect(composition.tabOrder.isEmpty)
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info])
     }
 
     @Test
     func aHiddenTabKeepsItsPlaceSoShowingItAgainPutsItBack() {
         var composition = TabComposition.default
         composition.moveTab(.history, onto: .vehicle)
-        #expect(composition.visibleTabs() == [.history, .vehicle, .info, .controls])
+        #expect(composition.visibleTabs() == [.history, .vehicle, .controls, .info])
 
         composition.setTab(.history, shown: false)
         #expect(!composition.visibleTabs().contains(.history))
 
         composition.setTab(.history, shown: true)
-        #expect(composition.visibleTabs() == [.history, .vehicle, .info, .controls])
+        #expect(composition.visibleTabs() == [.history, .vehicle, .controls, .info])
     }
 
     @Test
     func aTabTheStoredOrderHasNeverHeardOfKeepsAPlaceAtTheEnd() {
         var composition = TabComposition.default
-        composition.tabOrder = [TabRef.info.storageKey, TabRef.vehicle.storageKey]
+        composition.tabOrder = [TabRef.controls.storageKey, TabRef.vehicle.storageKey]
         // A tab shipped, or created, after the order was written is not dropped by it.
-        #expect(composition.orderedTabs() == [.info, .vehicle, .history, .controls])
+        #expect(composition.orderedTabs() == [.controls, .vehicle, .history, .info])
 
         let mine = composition.addCustomTab(name: "Charging")
         #expect(composition.visibleTabs().last == mine)
@@ -399,7 +399,7 @@ struct TabCompositionTests {
     @Test
     func resettingTheTabOrderBringsBackTheShippedOrderAndLeavesCardsAlone() {
         var composition = TabComposition.default
-        composition.moveTab(.controls, onto: .vehicle)
+        composition.moveTab(.info, onto: .vehicle)
         composition.move(.vehicleDiagnostics, onto: .vehicleHero, in: .vehicle)
 
         let arrangedCards = composition.items(for: .vehicle)
@@ -408,7 +408,7 @@ struct TabCompositionTests {
         #expect(arrangedCards != TabItemCatalog.defaultItems(for: .vehicle))
 
         composition.resetTabOrder()
-        #expect(composition.visibleTabs() == [.vehicle, .info, .history, .controls])
+        #expect(composition.visibleTabs() == [.vehicle, .controls, .history, .info])
         #expect(composition.items(for: .vehicle) == arrangedCards)
     }
 

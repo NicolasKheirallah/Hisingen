@@ -3,16 +3,19 @@ import Foundation
 /// The tabs Hisingen ships with. Settings is deliberately not composable — it is the surface
 /// where composition is managed, so a reader who hid it would have no way back.
 enum BuiltInTab: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
-    case vehicle, info, history, controls, settings
+    // Case order is the default tab order (2026-11-16 redesign): what the car is doing now,
+    // what it will do next, what it did, and what it is. Raw values are unchanged, so saved
+    // compositions decode exactly as before.
+    case vehicle, controls, history, info, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .vehicle: return L10n.text("Vehicle")
-        case .info: return L10n.text("Info")
-        case .history: return L10n.text("History")
-        case .controls: return L10n.text("Controls")
+        case .vehicle: return L10n.text("Now")
+        case .controls: return L10n.text("Plan")
+        case .history: return L10n.text("Log")
+        case .info: return L10n.text("Car")
         case .settings: return L10n.text("Settings")
         }
     }
@@ -20,16 +23,16 @@ enum BuiltInTab: String, CaseIterable, Codable, Hashable, Sendable, Identifiable
     var symbol: String {
         switch self {
         case .vehicle: return "bolt.car"
-        case .info: return "info.circle"
+        case .controls: return "calendar.day.timeline.left"
         case .history: return "chart.xyaxis.line"
-        case .controls: return "slider.horizontal.3"
+        case .info: return "car.side"
         case .settings: return "gearshape"
         }
     }
 
     /// Tabs a reader may hide. Settings cannot be hidden, and hiding the last visible tab
     /// would leave an empty panel with no way to navigate.
-    static var hideableCases: [BuiltInTab] { [.vehicle, .info, .history, .controls] }
+    static var hideableCases: [BuiltInTab] { [.vehicle, .controls, .history, .info] }
 
     var isHideable: Bool { Self.hideableCases.contains(self) }
 }

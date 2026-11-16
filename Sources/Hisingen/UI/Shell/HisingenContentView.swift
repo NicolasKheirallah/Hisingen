@@ -654,56 +654,48 @@ struct HisingenContentView: View {
         return awardConceptHeader(tabs: tabs, current: current)
     }
 
-    /// Production counterpart of the award concept's instrument header. The compact panel uses
-    /// the same destinations as the wide panel, expressed as icons instead of hiding tabs in a
-    /// horizontal scroller. At standard width the labels return and the full wordmark still fits.
+    /// The panel header (2026-11-16 redesign): the energy-line mark and wordmark, the places as
+    /// words with an ink underline under the current one, and Settings at the trailing edge.
+    /// Compact width keeps every place as an icon rather than hiding any.
     private func awardConceptHeader(tabs: [TabRef], current: TabRef) -> some View {
         let compact = HisingenTheme.layoutWidth < 540
         let wide = HisingenTheme.layoutWidth >= 700
-        return HStack(spacing: wide ? 18 : 8) {
-            HStack(spacing: 7) {
-                HStack(spacing: 3) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(HisingenTheme.accent)
-                        .frame(width: 4, height: 18)
-                        .rotationEffect(.degrees(8))
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(HisingenTheme.accent)
-                        .frame(width: 4, height: 18)
-                        .rotationEffect(.degrees(8))
-                }
-                .accessibilityHidden(true)
+        return HStack(alignment: .center, spacing: wide ? 20 : 10) {
+            HStack(spacing: 8) {
+                EnergyLineMark(level: state?.energy.batteryPercentage)
                 if !compact {
                     Text("Hisingen")
-                        .hisType(size: wide ? 17 : 15, relativeTo: .title2, weight: .semibold)
+                        .hisType(size: wide ? 15 : 14, relativeTo: .title3, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.ink)
                 }
             }
-            .frame(width: compact ? 14 : (wide ? 104 : 82), alignment: .leading)
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize()
             .layoutPriority(2)
 
-            HStack(spacing: wide ? 5 : 2) {
+            HStack(spacing: compact ? 4 : (wide ? 22 : 14)) {
                 ForEach(Array(tabs.enumerated()), id: \.element) { index, tab in
                     Button {
                         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
                         withAnimation(tabIndicatorAnimation) { select(tab) }
                     } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: tabComposition.symbol(for: tab))
-                                .hisType(.label, weight: current == tab ? .semibold : .regular)
-                            if !compact {
+                        Group {
+                            if compact {
+                                Image(systemName: tabComposition.symbol(for: tab))
+                                    .hisType(.body, weight: .medium)
+                            } else {
                                 Text(tabComposition.title(for: tab))
-                                    .hisType(.label, weight: current == tab ? .bold : .medium)
+                                    .hisType(.body, weight: current == tab ? .semibold : .regular)
                                     .lineLimit(1)
                             }
                         }
                         .foregroundStyle(current == tab ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                        .padding(.horizontal, compact ? 11 : (wide ? 15 : 7))
-                        .frame(minWidth: compact ? 38 : nil, minHeight: wide ? 46 : 38)
-                        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .background {
+                        .padding(.bottom, 9)
+                        .overlay(alignment: .bottom) {
                             if current == tab { tabIndicator }
                         }
+                        .padding(.horizontal, compact ? 8 : 2)
+                        .frame(minWidth: compact ? 32 : nil, minHeight: 30)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.pressable)
                     .focusEffectDisabled()
@@ -713,32 +705,37 @@ struct HisingenContentView: View {
                     .accessibilityAddTraits(current == tab ? .isSelected : [])
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
 
             Button {
                 onSettings()
             } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .hisSymbolSize(16, weight: .semibold)
-                    .frame(width: wide ? 40 : 34, height: wide ? 40 : 34)
+                Image(systemName: "gearshape")
+                    .hisSymbolSize(15, weight: .regular)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .keyboardShortcut(",", modifiers: .command)
             .help(L10n.text("Settings…"))
             .accessibilityLabel(L10n.text("Settings…"))
         }
-        .padding(.horizontal, wide ? 22 : 12)
-        .padding(.vertical, wide ? 14 : 8)
-        .overlay(alignment: .bottom) { Divider() }
+        .padding(.horizontal, wide ? 22 : 14)
+        .padding(.top, wide ? 14 : 10)
+        .padding(.bottom, 4)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(HisingenTheme.hairline).frame(height: 1)
+        }
     }
 
-    /// The tab selection, drawn as the one piece of chrome that moves: in the 2026 language it
-    /// is glass, a lens over the panel material that carries the system's own hover and press
-    /// responses rather than a tinted rectangle. On macOS 15 the same capsule falls back to the
-    /// palette's selected fill, so the selection still reads without the material.
+    /// The current place, drawn as the one piece of chrome that moves: a 2 pt ink rule that slides
+    /// between words on the selection spring. Ink, not accent: the accent belongs to energy and
+    /// to actions.
     private var tabIndicator: some View {
-        Color.clear
-            .hisControlGlass(in: Capsule(), fallback: HisingenTheme.fill(.selected))
+        Capsule()
+            .fill(HisingenTheme.ink)
+            .frame(height: 2)
             .matchedGeometryEffect(id: "tabIndicator", in: tabIndicatorNamespace)
     }
 

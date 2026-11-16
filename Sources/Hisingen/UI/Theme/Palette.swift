@@ -118,23 +118,27 @@ struct Palette: Sendable {
 // MARK: - Per-Theme Definitions
 
 extension Palette {
+    /// Sodium, the default identity (2026-11-16 redesign): a frosted day surface, a slate night
+    /// surface, and the warm amber of a Swedish winter streetlight as the one signal colour. The
+    /// light accent is deepened to hold 4.5:1 as text on the frost; the dark accent is the lamp
+    /// itself. Surfaces are opaque, so these values are what the reader actually sees.
     static let hisingen = Palette(
         theme: .hisingen,
-        name: L10n.text("Hisingen Glass"),
-        subtitle: L10n.text("Rounded cards, translucent materials, amber accents"),
+        name: L10n.text("Sodium"),
+        subtitle: L10n.text("Frosted surfaces, slate nights, streetlight amber"),
         category: .brand,
-        accentHex: "#E56E23",
-        swatches: ["#E56E23", "#FFA726", "#424242"],
-        canvas: Color(light: NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1), dark: NSColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)),
-        ink: Color(light: NSColor(red: 0.06, green: 0.08, blue: 0.12, alpha: 1), dark: NSColor(white: 0.98, alpha: 1)),
-        inkMuted: Color(light: NSColor(red: 0.29, green: 0.33, blue: 0.40, alpha: 1), dark: NSColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 1)),
-        hairline: Color(light: NSColor(white: 0.0, alpha: 0.08), dark: NSColor(white: 1.0, alpha: 0.12)),
-        accent: Color(light: NSColor(red: 0.6489, green: 0.2802, blue: 0.0369, alpha: 1), dark: NSColor(red: 0.9719, green: 0.6492, blue: 0.4037, alpha: 1)),
-        accentOn: .white,
+        accentHex: "#F5B04C",
+        swatches: ["#F5B04C", "#F0F2F1", "#101317"],
+        canvas: Color(light: NSColor(red: 0.941, green: 0.949, blue: 0.945, alpha: 1), dark: NSColor(red: 0.063, green: 0.074, blue: 0.090, alpha: 1)),
+        ink: Color(light: NSColor(red: 0.07, green: 0.08, blue: 0.09, alpha: 1), dark: NSColor(red: 0.93, green: 0.94, blue: 0.94, alpha: 1)),
+        inkMuted: Color(light: NSColor(red: 0.33, green: 0.36, blue: 0.38, alpha: 1), dark: NSColor(red: 0.64, green: 0.68, blue: 0.71, alpha: 1)),
+        hairline: Color(light: NSColor(white: 0.0, alpha: 0.10), dark: NSColor(white: 1.0, alpha: 0.12)),
+        accent: Color(light: NSColor(red: 0.5500, green: 0.2900, blue: 0.0000, alpha: 1), dark: NSColor(red: 0.9600, green: 0.6900, blue: 0.3000, alpha: 1)),
+        accentOn: Color(light: .white, dark: .black),
         chartPositive: chartPos, chartInfo: chartInf, chartAttention: chartAtt, chartHealth: chartHlt,
-        canvasLightRGB: (0.96, 0.97, 0.98), canvasDarkRGB: (0.07, 0.08, 0.10),
-        inkLightRGB: (0.06, 0.08, 0.12), inkDarkRGB: (0.98, 0.98, 0.98),
-        inkMutedLightRGB: (0.29, 0.33, 0.40), inkMutedDarkRGB: (0.65, 0.70, 0.78)
+        canvasLightRGB: (0.941, 0.949, 0.945), canvasDarkRGB: (0.063, 0.074, 0.090),
+        inkLightRGB: (0.07, 0.08, 0.09), inkDarkRGB: (0.93, 0.94, 0.94),
+        inkMutedLightRGB: (0.33, 0.36, 0.38), inkMutedDarkRGB: (0.64, 0.68, 0.71)
     )
 
     static let polestar = Palette(

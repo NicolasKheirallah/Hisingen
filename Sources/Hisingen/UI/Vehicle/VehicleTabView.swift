@@ -121,11 +121,7 @@ struct VehicleTabView: View {
         case .vehicleSwitcher:
             multiCarChips
         case .vehicleHero:
-            if HisingenTheme.layoutWidth >= 580 {
-                AwardVehicleInstrument(state: state, imageCache: imageCache, commandGate: commandGate)
-            } else {
-                VehicleHeroCard(state: state, displayedStateSummary: displayedStateSummary, imageCache: imageCache)
-            }
+            NowInstrument(state: state, imageCache: imageCache, commandGate: commandGate)
         case .vehicleReceipts:
             ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
                 CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,

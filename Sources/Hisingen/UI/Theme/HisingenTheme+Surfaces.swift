@@ -83,51 +83,28 @@ extension HisingenTheme {
     /// Full-bleed popover surface: the panel's own material, over the standard `NSPopover`
     /// backing.
     ///
-    /// `.regularMaterial` at full opacity, over AppKit's own popover backing, with the popover's
-    /// corners, arrow and shadow intact. It stays the one translucent surface in any stack: in the
-    /// 2026 language the material is also what the glass layer samples, so a second blur anywhere
-    /// under a glass control would be two blurs compositing toward grey.
+    /// The theme canvas, opaque, over AppKit's own popover backing, with the popover's corners,
+    /// arrow and shadow intact.
     @ViewBuilder
     static var popoverSurface: some View {
         PopoverSurface()
     }
 }
 
-/// The popover's own surface, as a view rather than a token, because the decision
-/// depends on the environment: Reduce Transparency and Increase Contrast both ask for
-/// an opaque surface, and a static token cannot see either.
+/// The popover's own surface. Opaque since the 2026-11-16 redesign: the panel is the theme's
+/// canvas, so every contrast figure the gate checks is the figure the reader sees, whatever
+/// window sits behind the panel. The translucent panel let a dark window drag light-mode text to
+/// 1.6:1. Increase Contrast still drops to ``panelFill``, a neutral a step darker than any
+/// canvas, so lifted fills keep separating from it.
 @MainActor
 struct PopoverSurface: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.colorScheme) private var colorScheme
-
-    /// Under either setting the blur is dropped entirely and ``panelFill`` — a neutral, darker than
-    /// any canvas — supplies the panel, so the lifted card still separates from it. Light
-    /// appearance uses `.thickMaterial`: `.thinMaterial` over a dark window settled the panel at
-    /// mid-gray and muted text measured 1.6 to 2.5:1, and `.regularMaterial` still only reached
-    /// 3.0 to 4.4:1 (review of 2026-11-16), so it also carries a 45 % canvas wash. Dark
-    /// appearance keeps `.regularMaterial`.
-    private var prefersOpaqueSurface: Bool {
-        reduceTransparency || contrast == .increased
-    }
 
     var body: some View {
-        if prefersOpaqueSurface {
-            // The panel goes *down*, not the cards going up: an opaque card on an opaque canvas
-            // panel would have been invisible, which is exactly the defect the lifted `cardFill`
-            // exists to fix, arriving by a different route.
+        if contrast == .increased {
             Rectangle().fill(HisingenTheme.panelFill)
-        } else if colorScheme == .light {
-            // A neutral canvas wash over the material keeps the panel near its own canvas
-            // whatever window sits behind it, so accent and warning captions keep 4.5:1. It is
-            // a tint of the same surface, not a second one: no blur, no outline, no shadow.
-            ZStack {
-                Rectangle().fill(.thickMaterial)
-                Rectangle().fill(HisingenTheme.canvas.opacity(0.45))
-            }
         } else {
-            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(HisingenTheme.canvas)
         }
     }
 }

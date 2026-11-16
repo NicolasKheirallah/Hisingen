@@ -1,8 +1,10 @@
 import SwiftUI
 
 extension InfoTabView {
-    /// The Info destination is a technical passport, not a second dashboard. The side profile
-    /// anchors identity while the four callouts answer the specifications people check first.
+    /// Car: the type plate (2026-11-16 redesign). Laid out like the stamped plate in the door
+    /// jamb: the model and year as the title, then identity and specification as label-over-value
+    /// pairs on a tight grid. Only reported or derived facts appear; an unknown field is left out
+    /// rather than shown as a dash, because a plate does not print blanks.
     var awardVehiclePassport: some View {
         let model = state.model
         let capacity = state.measuredCapacityReference(
@@ -14,18 +16,35 @@ extension InfoTabView {
         let factoryImageData = state.identity.imageData
             ?? imageCache.image(for: state.identity.vin, angle: preferences.carRenderAngle.rawValue)
             ?? imageCache.image(for: state.identity.vin)
+        let redacted = preferences.privacyRedactionEnabled
+        let condensed = HisingenTheme.layoutWidth < 600
 
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("Vehicle & Identity"))
-                .hisType(.micro, weight: .bold)
-                .foregroundStyle(HisingenTheme.accent)
+        var entries: [(label: String, value: String, sensitive: Bool)] = []
+        if let registration = state.identity.registrationNo, !registration.isEmpty {
+            entries.append((L10n.text("Registration"), registration.uppercased(), true))
+        }
+        entries.append((L10n.text("VIN"), state.identity.vin, true))
+        if let capacity { entries.append((L10n.text("Battery Capacity"), Format.energyKwh(capacity), false)) }
+        if let connector = model.connectorSpec?.connector {
+            entries.append((L10n.text("DC Charge Port"), connector, false))
+        }
+        if let odometer = state.odometerKm {
+            entries.append((L10n.text("Odometer"),
+                            Format.distance(km: Double(odometer), decimals: 0, unit: preferences.distanceUnit), false))
+        }
 
-            Text(title.isEmpty ? state.model.displayName : title)
-                .hisType(size: 30, weight: .bold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 16) {
+                Text(title.isEmpty ? state.model.displayName : title)
+                    .hisType(size: condensed ? 26 : 32, relativeTo: .largeTitle, weight: .light)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+            }
 
-            HStack(spacing: 24) {
+            HStack(alignment: .center, spacing: condensed ? 12 : 22) {
                 Group {
                     if let factoryImageData {
                         VehiclePresentationView(
@@ -43,68 +62,44 @@ extension InfoTabView {
                         )
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 165, maxHeight: 190)
+                .frame(maxWidth: .infinity, minHeight: condensed ? 120 : 150, maxHeight: condensed ? 140 : 170)
                 .accessibilityLabel(L10n.format("%@ vehicle profile", title))
 
-                VStack(alignment: .leading, spacing: 0) {
-                    passportCallout(
-                        symbol: "bolt.fill",
-                        value: capacity.map { Format.energyKwh($0) } ?? "–",
-                        label: L10n.text("Battery Capacity")
-                    )
-                    passportCallout(
-                        symbol: "road.lanes",
-                        value: state.primaryRangeKm.map {
-                            Format.distance(km: $0, unit: preferences.distanceUnit)
-                        } ?? "–",
-                        label: L10n.text("Estimated Range")
-                    )
-                    passportCallout(
-                        symbol: "cable.connector",
-                        value: model.connectorSpec?.connector ?? "–",
-                        label: L10n.text("DC Charge Port")
-                    )
-                    passportCallout(
-                        symbol: "thermometer.medium",
-                        value: state.climateStatus?.interiorTemperatureCelsius.map {
-                            Format.temperature(celsius: $0, unit: preferences.temperatureUnit)
-                        } ?? "–",
-                        label: L10n.text("Cabin Temperature"),
-                        drawsDivider: false
-                    )
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                        plateEntry(label: entry.label, value: entry.value,
+                                   redacted: entry.sensitive && redacted)
+                    }
                 }
-                .frame(width: 205)
+                .frame(width: condensed ? 220 : 260)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.horizontal, condensed ? 16 : 24)
+        .padding(.vertical, condensed ? 12 : 18)
         .accessibilityElement(children: .contain)
     }
 
-    private func passportCallout(
-        symbol: String,
-        value: String,
-        label: String,
-        drawsDivider: Bool = true
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .frame(width: 18)
-                .foregroundStyle(HisingenTheme.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .hisType(.body, weight: .bold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                Text(label)
-                    .hisType(.micro, weight: .medium)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-            }
-            Spacer(minLength: 0)
+    /// One stamped field: a small muted label over the value in tabular figures. The VIN and the
+    /// registration follow Screenshot Privacy Mode.
+    private func plateEntry(label: String, value: String, redacted: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .hisType(.caption, weight: .semibold)
+                .foregroundStyle(HisingenTheme.inkMuted)
+            Text(value)
+                .hisType(.body, weight: .semibold)
+                .monospacedDigit()
+                .foregroundStyle(HisingenTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .textSelection(.enabled)
+                .privacySensitive(redacted)
+                .redacted(reason: redacted ? .privacy : [])
         }
-        .frame(minHeight: 42)
-        .overlay(alignment: .bottom) {
-            if drawsDivider { Divider() }
-        }
+        .accessibilityElement(children: .combine)
     }
 }

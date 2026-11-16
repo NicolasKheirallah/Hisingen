@@ -1,152 +1,232 @@
 import SwiftUI
 
 extension HistoryDashboardView {
-    /// A period instrument for History. Every mark is derived from the selected range, so the
-    /// composition stays useful with one trip, many trips, or none without inventing activity.
+    /// Log (2026-11-16 redesign): the period as one sentence, then the energy trace.
+    ///
+    /// The trace is the energy line stretched over time, drawn only from what was recorded:
+    /// each charging session rises as a solid segment from its start to its end level, and a
+    /// dotted line joins one charge to the next, labelled with the distance driven in between.
+    /// Hisingen does not store the battery level while driving, so the dotted stretch is not
+    /// shaped to look like a discharge curve.
     var awardHistoryOverview: some View {
         let totalDistance = aggregateTrips.reduce(0) { $0 + $1.distanceKm }
         let drivingTime = aggregateTrips.reduce(0) { $0 + $1.duration }
         let energy = chargingSessions.reduce(0) { $0 + $1.energyDeliveredKwh }
         let cost = aggregateChargingCost()
+        let condensed = HisingenTheme.layoutWidth < 600
 
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.text("History Overview"))
-                        .hisType(.micro, weight: .bold)
-                        .foregroundStyle(HisingenTheme.accent)
-                    Text(Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit))
-                        .hisType(.displayLarge, weight: .bold)
+        var facts: [String] = [
+            L10n.format("%d trips", aggregateTrips.count),
+            L10n.format("%@ driving", Format.shortDuration(minutes: Int(drivingTime / 60)))
+        ]
+        if energy > 0 { facts.append(Format.energyKwh(energy)) }
+        if let cost {
+            facts.append("\(Format.currency(cost.amount, symbol: cost.currency)) \(L10n.text("(estimated)"))")
+        }
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.format("%@ · %@",
+                                     Format.distance(km: totalDistance, decimals: 0, unit: preferences.distanceUnit),
+                                     L10n.text(period.rawValue)))
+                        .hisType(size: condensed ? 26 : 32, relativeTo: .largeTitle, weight: .light)
                         .monospacedDigit()
-                    Text(L10n.text(period.rawValue))
-                        .hisType(.label, weight: .medium)
+                        .foregroundStyle(HisingenTheme.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(facts.joined(separator: " · "))
+                        .hisType(.label)
+                        .monospacedDigit()
                         .foregroundStyle(HisingenTheme.inkMuted)
                 }
                 Spacer()
                 exportMenu
             }
 
-            tripDistanceBars
-
-            HStack(spacing: 0) {
-                historyReading(value: Format.count(aggregateTrips.count), label: L10n.text("Trips"))
-                Divider().frame(height: 40)
-                historyReading(value: Format.shortDuration(minutes: Int(drivingTime / 60)), label: L10n.text("Driving"))
-                Divider().frame(height: 40)
-                historyReading(value: Format.energyKwh(energy), label: L10n.text("Estimated Energy"))
-                Divider().frame(height: 40)
-                historyReading(
-                    value: cost.map { Format.currency($0.amount, symbol: $0.currency) } ?? "–",
-                    label: L10n.text("Estimated Cost")
-                )
-            }
-            .padding(.vertical, 12)
-            .overlay(alignment: .top) { Divider() }
-            .overlay(alignment: .bottom) { Divider() }
+            EnergyTrace(
+                sessions: chargingSessions,
+                trips: aggregateTrips,
+                window: activeRange,
+                currentLevel: state.energy.batteryPercentage,
+                distanceUnit: preferences.distanceUnit
+            )
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-    }
-
-    private var tripDistanceBars: some View {
-        let recent = Array(aggregateTrips.sorted { $0.endedAt < $1.endedAt }.suffix(14))
-        let maximum = recent.map(\.distanceKm).max() ?? 0
-        return AwardTripBars(trips: recent, maximum: max(maximum, 1),
-                             distanceUnit: preferences.distanceUnit)
-    }
-
-    private func historyReading(value: String, label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .hisType(.subhead, weight: .bold)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .hisType(.micro, weight: .medium)
-                .foregroundStyle(HisingenTheme.inkMuted)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, condensed ? 16 : 24)
+        .padding(.vertical, condensed ? 12 : 18)
     }
 }
 
-/// The last fourteen trips as a bar strip. A bar answers with its detail line when selected:
-/// pointer click or keyboard activation both select, so the strip is reachable without a
-/// mouse. Only one bar is selected at a time; selecting is reading, it changes nothing.
+/// The energy line over time. See ``HistoryDashboardView/awardHistoryOverview``.
 @MainActor
-private struct AwardTripBars: View {
+struct EnergyTrace: View {
+    let sessions: [HistoricalChargingSession]
     let trips: [TripHistoryEntry]
-    let maximum: Double
+    let window: ClosedRange<Date>?
+    let currentLevel: Double?
     let distanceUnit: DistanceUnit
 
-    @State private var selectedID: String?
-    @FocusState private var focusedID: String?
+    private let plotHeight: CGFloat = 118
+
+    struct Charge: Identifiable {
+        let id: String
+        let start: Date
+        let end: Date
+        let from: Double
+        let to: Double
+    }
+
+    /// Completed sessions with both levels, oldest first, clipped to the window.
+    static func charges(_ sessions: [HistoricalChargingSession], in window: ClosedRange<Date>?) -> [Charge] {
+        sessions.compactMap { session -> Charge? in
+            guard let end = session.endedAt, let to = session.endSoc else { return nil }
+            if let window, end < window.lowerBound || session.startedAt > window.upperBound { return nil }
+            return Charge(id: session.id, start: session.startedAt, end: end, from: session.startSoc, to: to)
+        }
+        .sorted { $0.start < $1.start }
+    }
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 5) {
-                if trips.isEmpty {
-                    Text(L10n.text("No trips were recorded in this period."))
-                        .hisType(.label)
-                        .foregroundStyle(HisingenTheme.inkMuted)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                } else {
-                    ForEach(trips) { trip in
-                        bar(for: trip)
+        let charges = Self.charges(sessions, in: window)
+        let now = Date()
+        let lower = window?.lowerBound ?? charges.first?.start ?? now.addingTimeInterval(-7 * 86_400)
+        let upper = max(window?.upperBound ?? now, now)
+        VStack(alignment: .leading, spacing: 6) {
+            if charges.isEmpty {
+                Text(L10n.text("No charging sessions in this period."))
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .frame(maxWidth: .infinity, minHeight: plotHeight / 2, alignment: .leading)
+            } else {
+                GeometryReader { proxy in
+                    let size = CGSize(width: proxy.size.width - 30, height: plotHeight)
+                    ZStack(alignment: .topLeading) {
+                        grid(size)
+                        tracePaths(charges, lower: lower, upper: upper, now: now, size: size)
+                        gapLabels(charges, lower: lower, upper: upper, size: size)
+                        axisLabels(size)
+                    }
+                }
+                .frame(height: plotHeight)
+                HStack {
+                    Text(Format.dateFormatter.string(from: lower))
+                    Spacer()
+                    Text(L10n.text("Now"))
+                }
+                .hisType(.micro)
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .padding(.trailing, 30)
+                Text(L10n.text("Solid: charging. Dotted: driving between charges."))
+                    .hisType(.micro)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L10n.text("Battery"))
+        .accessibilityValue(accessibilitySummary(charges))
+    }
+
+    private func x(_ date: Date, lower: Date, upper: Date, width: CGFloat) -> CGFloat {
+        let span = max(upper.timeIntervalSince(lower), 1)
+        return CGFloat(min(max(date.timeIntervalSince(lower) / span, 0), 1)) * width
+    }
+
+    private func y(_ level: Double, height: CGFloat) -> CGFloat {
+        height - CGFloat(min(max(level, 0), 100) / 100) * height
+    }
+
+    private func grid(_ size: CGSize) -> some View {
+        Path { path in
+            for level in [0.0, 50.0, 100.0] {
+                let yy = y(level, height: size.height)
+                path.move(to: CGPoint(x: 0, y: yy))
+                path.addLine(to: CGPoint(x: size.width, y: yy))
+            }
+        }
+        .stroke(HisingenTheme.hairline, lineWidth: 1)
+    }
+
+    private func tracePaths(_ charges: [Charge], lower: Date, upper: Date, now: Date, size: CGSize) -> some View {
+        let point: (Date, Double) -> CGPoint = { date, level in
+            CGPoint(x: x(date, lower: lower, upper: upper, width: size.width), y: y(level, height: size.height))
+        }
+        return ZStack(alignment: .topLeading) {
+            Path { path in
+                for (index, charge) in charges.enumerated() where index > 0 {
+                    let previous = charges[index - 1]
+                    path.move(to: point(previous.end, previous.to))
+                    path.addLine(to: point(charge.start, charge.from))
+                }
+                if let last = charges.last, let currentLevel {
+                    path.move(to: point(last.end, last.to))
+                    path.addLine(to: point(now, currentLevel))
+                }
+            }
+            .stroke(HisingenTheme.inkMuted, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [2, 4]))
+
+            Path { path in
+                for charge in charges {
+                    path.move(to: point(charge.start, charge.from))
+                    path.addLine(to: point(charge.end, charge.to))
+                }
+            }
+            .stroke(HisingenTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+
+            if let currentLevel {
+                Circle()
+                    .fill(HisingenTheme.accent)
+                    .frame(width: 8, height: 8)
+                    .position(point(now, currentLevel))
+            }
+        }
+    }
+
+    /// The distance driven between two charges, written over the dotted stretch when there is
+    /// room for it. Summed from recorded trips only.
+    private func gapLabels(_ charges: [Charge], lower: Date, upper: Date, size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(charges.enumerated()), id: \.element.id) { index, charge in
+                if index > 0 {
+                    let previous = charges[index - 1]
+                    let driven = trips
+                        .filter { $0.startedAt >= previous.end && $0.endedAt <= charge.start }
+                        .reduce(0) { $0 + $1.distanceKm }
+                    let x0 = x(previous.end, lower: lower, upper: upper, width: size.width)
+                    let x1 = x(charge.start, lower: lower, upper: upper, width: size.width)
+                    if driven >= 1, x1 - x0 >= 46 {
+                        Text(Format.distance(km: driven, decimals: 0, unit: distanceUnit))
+                            .hisType(.micro, weight: .medium)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize()
+                            .position(x: (x0 + x1) / 2,
+                                      y: max(10, (y(previous.to, height: size.height) + y(charge.from, height: size.height)) / 2 - 10))
                     }
                 }
             }
-            .frame(height: 68)
+        }
+    }
 
-            if let detail = selectedDetail {
-                Text(detail)
-                    .hisType(.label, weight: .medium)
+    private func axisLabels(_ size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach([100, 50, 0], id: \.self) { level in
+                Text("\(level)%")
+                    .hisType(.nano, weight: .medium)
                     .monospacedDigit()
-                    .foregroundStyle(HisingenTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .onChange(of: trips) { _, trips in
-            // A period switch replaces the trips; a selection that no longer names one of
-            // them would keep a stale detail line on screen.
-            if let selectedID, !trips.contains(where: { $0.id == selectedID }) {
-                self.selectedID = nil
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .fixedSize()
+                    .position(x: size.width + 16, y: y(Double(level), height: size.height))
             }
         }
     }
 
-    private var selectedDetail: String? {
-        guard let selectedID, let trip = trips.first(where: { $0.id == selectedID }) else { return nil }
-        return L10n.format("%@, %@",
-                           Format.dateFormatter.string(from: trip.endedAt),
-                           Format.distance(km: trip.distanceKm, decimals: 1, unit: distanceUnit))
-    }
-
-    private func bar(for trip: TripHistoryEntry) -> some View {
-        let isSelected = trip.id == selectedID
-        let isLatest = trip.id == trips.last?.id
-        return Button {
-            selectedID = isSelected ? nil : trip.id
-        } label: {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(HisingenTheme.accent.opacity(isSelected || isLatest ? 1 : 0.42))
-                .frame(maxWidth: .infinity)
-                .frame(height: max(5, 68 * trip.distanceKm / max(maximum, 1)))
+    private func accessibilitySummary(_ charges: [Charge]) -> String {
+        guard let first = charges.first, let last = charges.last else {
+            return L10n.text("No charging sessions in this period.")
         }
-        .buttonStyle(.pressable)
-        .focusable()
-        .focused($focusedID, equals: trip.id)
-        .onSubmit { selectedID = isSelected ? nil : trip.id }
-        .help(Format.distance(km: trip.distanceKm, decimals: 1, unit: distanceUnit))
-        .accessibilityLabel(
-            L10n.format("%@, %@",
-                        Format.dateFormatter.string(from: trip.endedAt),
-                        Format.distance(km: trip.distanceKm, decimals: 1, unit: distanceUnit))
-        )
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        let lowest = charges.map(\.from).min() ?? first.from
+        return L10n.format("%d charges, lowest start %@, last ended at %@",
+                           charges.count,
+                           String(format: "%.0f%%", locale: L10n.displayLocale, lowest),
+                           String(format: "%.0f%%", locale: L10n.displayLocale, last.to))
     }
 }

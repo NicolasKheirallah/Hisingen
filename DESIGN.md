@@ -10,7 +10,8 @@ code wins and this file gets fixed. Tokens live in
 `Sources/Hisingen/UI/Theme/` and `Sources/Hisingen/UI/Motion.swift`.
 
 Reading this as: a macOS menu-bar utility panel for Volvo and Polestar EV owners, in a
-Scandinavian instrument-panel language, dial ENERGY 3 / RHYTHM 3 / MOTION 2.
+Scandinavian instrument-panel language, dial ENERGY 2 / RHYTHM 3 / MOTION 2 (since the
+2026-11-16 redesign; see below).
 
 Hisingen (the Gothenburg island where Volvo builds cars) is a wide menu-bar instrument:
 battery, range and the vehicle itself lead; climate, charging, tyres, trips, service and remote
@@ -37,6 +38,51 @@ renders as the hero's scene (`ChargingSessionScene`): the car's own finish estim
 at the display tier, arriving power supports it, and no figure is ever shown that the car
 did not report — projections derive capacity from readings only when they must, and say
 so (`ChargeTargetProjection`, `InstrumentMath`).
+
+## The 2026-11-16 redesign (supersedes the sections below where they disagree)
+
+Direction, written before the work:
+
+- **Product:** a menu-bar instrument for Volvo and Polestar EV owners.
+- **Use:** dozens of two-to-five-second glances a day at a desk, and a few planning sessions a
+  week. Pointer and keyboard; dense is fine; contrast must hold over any desktop.
+- **Character:** exact, wintry, unhurried.
+- **Bright spot:** the energy line. The battery's state of charge as one line, and the only
+  place besides actions that carries the signal colour.
+- **Signature:** the energy line at three scales: the header mark (`EnergyLineMark`), the Now
+  rail with its target tick and charging projection (`EnergyLine`), and the Log trace
+  (`EnergyTrace`).
+
+What changed:
+
+- **Places:** Now, Plan, Log, Car (raw values `vehicle`, `controls`, `history`, `info`, so saved
+  compositions decode unchanged; the case order is the default tab order). Settings stays a
+  separate desktop window.
+- **Header:** energy-line mark plus wordmark, places as words, the current place marked by a 2 pt
+  ink rule that slides between them. No glass capsule.
+- **Surface:** the panel is the opaque theme canvas (`PopoverSurface`). The translucent panel let
+  the window behind it decide contrast. Sections still have no surface of their own.
+- **Default theme:** Sodium (`AppTheme.hisingen`): frost canvas `#F0F2F1`, slate night canvas
+  `#101317`, streetlight amber `#F5B04C` in dark and a deepened amber for text in light. The other
+  eight themes remain as alternatives.
+- **Type:** focal figures are light weight at display size (battery, range, Log period, Car
+  title, Plan times); labels stay small and semibold; tabular figures throughout.
+- **Now** (`NowInstrument`): one readiness line from reported signals (what the car is doing,
+  its locks), the attention summary if any, the car beside the battery and range figures, the
+  energy line, then three rows (Locks, Climate, Charging), each a state plus one real button
+  (`RowActionButtonStyle`: accent text on a 9-12 % accent wash).
+- **Plan** (`PlanTimeline`): "Upcoming", the car's active schedules soonest first, times in light
+  figures; the existing climate, charging and schedule controls follow.
+- **Log** (`awardHistoryOverview` + `EnergyTrace`): the period as one sentence, then the trace.
+  Charges rise as solid amber segments from recorded start and end levels; dotted lines join one
+  charge to the next and carry the distance driven between them. Battery level while driving is
+  not recorded, so the dotted stretch is never shaped like a curve.
+- **Car** (`awardVehiclePassport`): a type plate. Model and year in light display type, then
+  label-over-value fields (registration, VIN, capacity, charge port, odometer). Unknown fields are
+  left out, not dashed. VIN and plate follow Screenshot Privacy Mode.
+- **Not changed in this pass:** the menu-bar glyph (still the PNG set), the Settings window's
+  structure, and the detail cards under each place, which take the new tokens but keep their
+  layouts.
 
 ## Dials
 
@@ -81,7 +127,7 @@ The nine themes:
 
 | Theme | Accent | Character |
 |---|---|---|
-| Hisingen Glass (default) | `#E56E23` amber | Rounded cards, translucent materials, amber accents |
+| Sodium (default) | `#F5B04C` streetlight amber | Frosted surfaces, slate nights, streetlight amber |
 | Monochrome Precision | `#E56E23` | Polestar monochrome, high-contrast type |
 | Heritage Blue | `#005B94` | Volvo blue, calm surfaces |
 | Nordic Night | `#00E5FF` | Pitch OLED black, electric cyan |
