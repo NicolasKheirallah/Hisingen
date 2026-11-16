@@ -116,7 +116,7 @@ extension HistoryDashboardView {
                     period = .custom
                     showCustomRangeEditor = false
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -495,7 +495,7 @@ extension HistoryDashboardView {
                 Text(L10n.text("Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history."))
                     .hisType(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button(L10n.text("Refresh history")) { Task { await loadDashboardData() } }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(.hisSecondary).controlSize(.small)
             }
             .frame(maxWidth: .infinity)
         }
@@ -509,7 +509,7 @@ extension HistoryDashboardView {
                 message: L10n.text("There is history outside the selected dates. Widen the period or choose “All”.")
             ) {
                 Button(L10n.text("Show all history")) { period = .all }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(.hisSecondary).controlSize(.small)
             }
         }
     }

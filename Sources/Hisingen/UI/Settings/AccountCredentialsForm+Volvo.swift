@@ -103,7 +103,7 @@ extension AccountCredentialsForm {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.hisProminent)
             .controlSize(.regular)
             .disabled((!BuiltinVolvoSecrets.isConfigured && model.draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN))
             .padding(.top, style == .welcoming ? 6 : 4)

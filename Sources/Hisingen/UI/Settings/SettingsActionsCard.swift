@@ -34,7 +34,7 @@ struct SettingsActionsCard: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
 
                 if let settingsTransferFeedback {
@@ -59,9 +59,8 @@ struct SettingsActionsCard: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
                 .controlSize(.regular)
-                .tint(HisingenTheme.semanticCritical)
 
                 Button {
                     NSApp.terminate(nil)

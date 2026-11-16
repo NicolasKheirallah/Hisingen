@@ -148,7 +148,7 @@ struct WindowsLocateCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 42)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .disabled(gate.isDisabled(command))
         .transition(.opacity)
     }

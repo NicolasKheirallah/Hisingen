@@ -102,7 +102,7 @@ struct OTAControlsCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .help(L10n.text("Checks the vehicle again for the current software status."))
             .transition(.opacity)
@@ -200,7 +200,7 @@ struct OTAControlsCard: View {
                     Text(L10n.text("Schedule")).hisType(.caption, weight: .medium)
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .disabled(gate.isDisabled(.scheduleOTA(delayMinutes: otaScheduleDelayMinutes)))
         }
@@ -234,13 +234,12 @@ struct OTAControlsCard: View {
 
         if prominent {
             Button { gate.send(command) } label: { label }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticActive)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticActive))
                 .controlSize(.regular)
                 .disabled(gate.isDisabled(command))
         } else {
             Button { gate.send(command) } label: { label }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.regular)
                 .disabled(gate.isDisabled(command))
         }

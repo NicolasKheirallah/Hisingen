@@ -335,7 +335,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Add Cards…"), systemImage: "plus.circle")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
 
                 Button {
@@ -347,7 +347,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Show All"), systemImage: "eye")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
 
                 Button {
@@ -358,7 +358,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Hide All"), systemImage: "eye.slash")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(visibleCount == 0)
 
@@ -376,7 +376,7 @@ struct SettingsTabsAndCardsCard: View {
                         Label(L10n.text("Reset Tab"), systemImage: "arrow.uturn.backward")
                             .hisType(.micro, weight: .medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .help(L10n.text("Restores this tab's original cards and order."))
                 } else {
@@ -386,7 +386,7 @@ struct SettingsTabsAndCardsCard: View {
                         Label(L10n.text("Delete Tab"), systemImage: "trash")
                             .hisType(.micro, weight: .medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                 }
             }
@@ -799,7 +799,7 @@ struct SettingsTabsAndCardsCard: View {
                 Spacer()
                 Button(L10n.text("Cancel"), role: .cancel) { showNewTabSheet = false }
                 Button(L10n.text("Create")) { createTab() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
                     .disabled(newTabName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

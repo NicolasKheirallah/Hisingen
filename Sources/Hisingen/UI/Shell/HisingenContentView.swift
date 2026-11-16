@@ -756,7 +756,7 @@ struct HisingenContentView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(L10n.text("Refresh Now")) { onRefresh() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
                     .controlSize(.small)
             } else {
                 ProgressView()

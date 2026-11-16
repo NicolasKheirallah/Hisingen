@@ -317,7 +317,7 @@ struct NowInstrument: View {
                     }
                     .frame(minWidth: 72)
                 }
-                .buttonStyle(RowActionButtonStyle())
+                .buttonStyle(.hisSecondary)
                 .disabled(!availability.isAvailable)
                 .help(availability.shortReason ?? command.title(temperatureUnit: preferences.temperatureUnit))
                 .accessibilityLabel(command.title(temperatureUnit: preferences.temperatureUnit))
@@ -325,32 +325,5 @@ struct NowInstrument: View {
         }
         .frame(minHeight: 44)
         .accessibilityElement(children: .contain)
-    }
-}
-
-/// The row action: accent text on a 12 % accent wash, the one combination the palette's accent
-/// guarantees 4.5:1 for in every theme and appearance. The system bordered style rendered a grey
-/// fill under white text in dark appearance (2.1:1). Hover lifts the wash, press dims, disabled
-/// drops to muted ink with no wash.
-struct RowActionButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .hisType(.label, weight: .semibold)
-            .foregroundStyle(isEnabled ? HisingenTheme.accent : HisingenTheme.inkMuted)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 28)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isEnabled
-                          ? HisingenTheme.accent.opacity(hovering || configuration.isPressed ? 0.12 : 0.09)
-                          : HisingenTheme.hairline)
-            )
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .onHover { hovering = $0 }
-            .hisAnimation(Motion.interaction, value: hovering)
     }
 }

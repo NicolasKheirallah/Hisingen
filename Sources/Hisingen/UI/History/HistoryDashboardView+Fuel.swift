@@ -31,7 +31,7 @@ extension HistoryDashboardView {
                     showFuelSheet = false
                     bumpRefresh()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!validation.isValid)
             }

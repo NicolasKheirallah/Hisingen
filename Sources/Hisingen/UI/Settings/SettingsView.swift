@@ -217,7 +217,7 @@ struct SettingsView: View {
                 }
                 .hisType(.label, weight: .semibold)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
             Spacer()
@@ -306,9 +306,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .semibold)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.accent)
-            .foregroundStyle(HisingenTheme.accentOn)
+            .buttonStyle(.hisProminent(HisingenTheme.accent))
             .controlSize(.small)
 
             Button {
@@ -324,7 +322,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
             Button {
@@ -337,7 +335,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
         }
     }

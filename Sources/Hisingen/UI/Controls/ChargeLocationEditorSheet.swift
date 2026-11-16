@@ -100,7 +100,7 @@ struct ChargeLocationEditorSheet: View {
                 // button that merely says Cancel — the pattern the rest of the app already uses.
                 Button(L10n.text("Cancel"), role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                 Spacer()
                 Button(L10n.text("Save")) {
@@ -117,9 +117,7 @@ struct ChargeLocationEditorSheet: View {
                     )
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.accent)
-                .foregroundStyle(HisingenTheme.accentOn)
+                .buttonStyle(.hisProminent(HisingenTheme.accent))
                 .controlSize(.small)
                 .keyboardShortcut(.defaultAction)
             }

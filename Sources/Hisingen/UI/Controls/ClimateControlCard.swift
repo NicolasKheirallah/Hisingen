@@ -112,7 +112,7 @@ struct ClimateControlCard: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 26)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.small)
                         if (state.energy.pendingClimateTimerCount ?? 0) > 0
                             || (state.energy.pendingClimateTimerDeletionCount ?? 0) > 0
@@ -149,7 +149,7 @@ struct ClimateControlCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 30)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .disabled(gate.isDisabled(actionCommand))
                 }
@@ -260,9 +260,8 @@ struct ClimateControlCard: View {
                         gate.sendingOverlay(maxHeatCommand)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary(HisingenTheme.semanticWarning))
                 .controlSize(.small)
-                .tint(HisingenTheme.semanticWarning)
                 .disabled(gate.isDisabled(maxHeatCommand))
                 .help(L10n.text("Sends 30 °C with every heater at maximum. Does not change your saved settings."))
                 Spacer()
@@ -301,7 +300,7 @@ struct ClimateControlCard: View {
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(targetTemperature <= climateTemperatureRange.lowerBound)
                 // It hard-stopped at the vehicle's limit with nothing saying why, so the control
@@ -350,7 +349,7 @@ struct ClimateControlCard: View {
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(targetTemperature >= climateTemperatureRange.upperBound)
                 .accessibilityLabel(L10n.text("Increase target temperature"))
@@ -583,7 +582,7 @@ struct ClimateControlCard: View {
             HStack(spacing: 6) {
                 ZStack {
                     if climateActive {
-                        SpinningFanView(isSpinning: !reduceMotion, size: 13, color: .white)
+                        SpinningFanView(isSpinning: !reduceMotion, size: 13, color: HisingenTheme.canvas)
                             .transition(.opacity)
                     } else {
                         Image(systemName: "fan.fill")
@@ -598,8 +597,7 @@ struct ClimateControlCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 34)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.accent)
+        .buttonStyle(.hisProminent(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.accent))
         .disabled(gate.isDisabled(climateActive ? .stopClimate : startClimateCommand))
         .accessibilityHint(
             climateActive

@@ -210,7 +210,7 @@ extension AccountCredentialsForm {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.hisProminent)
             .controlSize(.small)
         }
         .padding(8)
@@ -288,7 +288,7 @@ extension AccountCredentialsForm {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.hisProminent)
             .controlSize(.small)
             HStack(spacing: 4) {
                 Text(L10n.text("Still failing?"))
@@ -383,7 +383,7 @@ extension AccountCredentialsForm {
                     .id(showSavedFeedback)
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .controlSize(.regular)
                 .disabled(enableDataPortal && !enablePolestarID && !model.canConnectDataPortal)
                 .padding(.top, style == .welcoming ? 6 : 4)
@@ -401,7 +401,7 @@ extension AccountCredentialsForm {
                             Text(L10n.text("Test Connection"))
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.regular)
                     .disabled(isTestingConnection)
                     .padding(.top, style == .welcoming ? 6 : 4)

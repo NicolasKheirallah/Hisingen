@@ -102,7 +102,7 @@ struct ChargingControlsCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 28)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     if state.energy.pendingGlobalChargeTimer == true {
                         pendingSyncLine(L10n.text("Timer update queued · applies when the car wakes"))
                     }
@@ -322,7 +322,7 @@ struct ChargingControlsCard: View {
                                     .monospacedDigit()
                                     .frame(minWidth: 34)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.hisSecondary)
                             .controlSize(.small)
                             .disabled(gate.isDisabled(.setAmpLimit(preset)))
                             .accessibilityLabel(L10n.format(
@@ -397,8 +397,7 @@ struct ChargingControlsCard: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 30)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticGood)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticGood))
                 .disabled(gate.isDisabled(.startChargingOverride))
 
                 Button {
@@ -411,7 +410,7 @@ struct ChargingControlsCard: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 30)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .disabled(gate.isDisabled(.stopChargingOverride))
             }
             if let queuedOverride = state.energy.unappliedChargeNowOverride(current: state.energy.chargeNowActive) {

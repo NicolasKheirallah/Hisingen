@@ -92,7 +92,7 @@ struct ControlsBanners: View {
                     Text(L10n.text("Authorize…"))
                         .hisType(.caption, weight: .semibold)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .controlSize(.small)
                 .fixedSize()
             }
@@ -107,7 +107,7 @@ struct ControlsBanners: View {
                     Text(followUp.kind == .retry ? L10n.text("Retry") : L10n.text("Undo"))
                         .hisType(.caption, weight: .semibold)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .fixedSize()
             }
@@ -204,7 +204,7 @@ struct ControlsReprobeButton: View {
             }
             .frame(maxWidth: .infinity, minHeight: 26)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
         .help(L10n.text("Refreshes telemetry and re-probes the vehicle's capability set."))
         .transition(.move(edge: .top).combined(with: .opacity))

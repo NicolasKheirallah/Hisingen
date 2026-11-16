@@ -366,7 +366,7 @@ struct ScheduleEditorSheet: View {
                                         HoverChipFill(shape: RoundedRectangle(cornerRadius: 4), resting: 0.06)
                                     }
                                 }
-                                .foregroundStyle(selected ? HisingenTheme.accentOn : Color.primary)
+                                .foregroundStyle(selected ? HisingenTheme.canvas : Color.primary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: selected)
                         }
                         .buttonStyle(.pressable)
@@ -388,7 +388,7 @@ struct ScheduleEditorSheet: View {
             Button(L10n.text("Cancel")) {
                 dismiss()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .keyboardShortcut(.cancelAction)
 
@@ -399,9 +399,7 @@ struct ScheduleEditorSheet: View {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 dismiss()
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.accent)
-            .foregroundStyle(HisingenTheme.accentOn)
+            .buttonStyle(.hisProminent(HisingenTheme.accent))
             .controlSize(.small)
             .keyboardShortcut(.defaultAction)
             .disabled(chargingWindowInvalid || isBusy)

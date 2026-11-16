@@ -366,7 +366,7 @@ extension InfoTabView {
                         Label(L10n.text("Export Factory Passport (CSV)"), systemImage: "square.and.arrow.down")
                             .hisType(.caption, weight: .medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .help(L10n.text("Exports the factory identity and specification as a CSV file."))
                 }

@@ -468,9 +468,8 @@ extension HistoryDashboardView {
                   systemImage: purpose == .business ? "briefcase.fill" : "person.fill")
                 .hisType(.micro, weight: selected ? .semibold : .regular)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : HisingenTheme.inkMuted))
         .controlSize(.mini)
-        .tint(selected ? (purpose == .business ? HisingenTheme.semanticActive : HisingenTheme.semanticGood) : HisingenTheme.inkMuted)
         .hisAnimation(Motion.selection, value: selected)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

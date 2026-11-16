@@ -60,8 +60,7 @@ struct AccessControlsCard: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 52)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(isLocked == true ? HisingenTheme.semanticActive : HisingenTheme.semanticGood)
+                        .buttonStyle(.hisSecondary(isLocked == true ? HisingenTheme.semanticActive : HisingenTheme.semanticGood))
                         .help(lockAvailability.shortReason
                               ?? (isLocked == nil
                                   ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
@@ -86,7 +85,7 @@ struct AccessControlsCard: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 52)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .disabled(gate.isDisabled(.lockReducedGuard))
                         .help(L10n.text("Locks the vehicle with reduced alarm guard sensitivity, when supported."))
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -109,7 +108,7 @@ struct AccessControlsCard: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 46)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.hisSecondary)
                             .disabled(gate.isDisabled(.unlockTrunk))
                             .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         }
@@ -131,8 +130,7 @@ struct AccessControlsCard: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 46)
                             }
-                            .buttonStyle(.bordered)
-                            .tint(tailgateIsOpen ? HisingenTheme.semanticWarning : nil)
+                            .buttonStyle(.hisSecondary(tailgateIsOpen ? HisingenTheme.semanticWarning : nil))
                             .disabled(gate.isDisabled(tailgateIsOpen ? .closeTailgate : .openTailgate))
                             .hisAnimation(Motion.stateChange, value: tailgateIsOpen)
                         }

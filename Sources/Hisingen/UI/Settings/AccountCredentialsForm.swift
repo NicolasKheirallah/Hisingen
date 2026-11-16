@@ -220,7 +220,7 @@ struct AccountCredentialsForm: View {
                         }
                         .hisType(.caption, weight: .semibold)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
                     .controlSize(.mini)
                 }
             }
@@ -291,12 +291,11 @@ struct AccountCredentialsForm: View {
 
         if prominent {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticWarning)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticWarning))
                 .controlSize(.mini)
         } else {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.mini)
         }
     }

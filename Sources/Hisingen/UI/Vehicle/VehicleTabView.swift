@@ -305,7 +305,7 @@ struct VehicleTabView: View {
                             .fixedSize(horizontal: false, vertical: true)
                         if let onRetry {
                             Button(L10n.text("Try Again"), action: onRetry)
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.hisSecondary)
                                 .controlSize(.small)
                         }
                     }

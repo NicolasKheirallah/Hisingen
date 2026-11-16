@@ -323,7 +323,7 @@ struct InfoTabView: View {
                     Text(message).hisType(.label).foregroundStyle(.secondary)
                     if let retry {
                         Button(L10n.text("Refresh history"), action: retry)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.hisSecondary)
                             .controlSize(.small)
                     }
                 } else {

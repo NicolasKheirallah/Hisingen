@@ -402,7 +402,7 @@ struct SettingsAppearanceCard: View {
                     Text(L10n.text("Reset Sizes"))
                         .hisType(.caption, weight: .semibold)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .help(L10n.text("Back to Standard panel and density"))
             }

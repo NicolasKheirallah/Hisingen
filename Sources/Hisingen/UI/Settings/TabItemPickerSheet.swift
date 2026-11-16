@@ -130,7 +130,7 @@ struct TabItemPickerSheet: View {
                     for item in selected.sorted(by: { $0.rawValue < $1.rawValue }) { onAdd(item) }
                     selected.removeAll()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .disabled(selected.isEmpty)
                 Button(L10n.text("Close"), action: onDone)
                     .keyboardShortcut(.cancelAction)

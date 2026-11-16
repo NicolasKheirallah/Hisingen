@@ -127,18 +127,18 @@ extension Palette {
         name: L10n.text("Sodium"),
         subtitle: L10n.text("Frosted surfaces, slate nights, streetlight amber"),
         category: .brand,
-        accentHex: "#F5B04C",
-        swatches: ["#F5B04C", "#F0F2F1", "#101317"],
-        canvas: Color(light: NSColor(red: 0.941, green: 0.949, blue: 0.945, alpha: 1), dark: NSColor(red: 0.063, green: 0.074, blue: 0.090, alpha: 1)),
-        ink: Color(light: NSColor(red: 0.07, green: 0.08, blue: 0.09, alpha: 1), dark: NSColor(red: 0.93, green: 0.94, blue: 0.94, alpha: 1)),
-        inkMuted: Color(light: NSColor(red: 0.33, green: 0.36, blue: 0.38, alpha: 1), dark: NSColor(red: 0.64, green: 0.68, blue: 0.71, alpha: 1)),
+        accentHex: "#E8B066",
+        swatches: ["#E8B066", "#F0F2F1", "#121519"],
+        canvas: Color(light: NSColor(red: 0.941, green: 0.949, blue: 0.945, alpha: 1), dark: NSColor(red: 0.071, green: 0.082, blue: 0.098, alpha: 1)),
+        ink: Color(light: NSColor(red: 0.15, green: 0.17, blue: 0.19, alpha: 1), dark: NSColor(red: 0.85, green: 0.86, blue: 0.87, alpha: 1)),
+        inkMuted: Color(light: NSColor(red: 0.31, green: 0.34, blue: 0.36, alpha: 1), dark: NSColor(red: 0.66, green: 0.69, blue: 0.72, alpha: 1)),
         hairline: Color(light: NSColor(white: 0.0, alpha: 0.10), dark: NSColor(white: 1.0, alpha: 0.12)),
-        accent: Color(light: NSColor(red: 0.5500, green: 0.2900, blue: 0.0000, alpha: 1), dark: NSColor(red: 0.9600, green: 0.6900, blue: 0.3000, alpha: 1)),
+        accent: Color(light: NSColor(red: 0.5200, green: 0.2750, blue: 0.0300, alpha: 1), dark: NSColor(red: 0.9400, green: 0.7200, blue: 0.4300, alpha: 1)),
         accentOn: Color(light: .white, dark: .black),
         chartPositive: chartPos, chartInfo: chartInf, chartAttention: chartAtt, chartHealth: chartHlt,
-        canvasLightRGB: (0.941, 0.949, 0.945), canvasDarkRGB: (0.063, 0.074, 0.090),
-        inkLightRGB: (0.07, 0.08, 0.09), inkDarkRGB: (0.93, 0.94, 0.94),
-        inkMutedLightRGB: (0.33, 0.36, 0.38), inkMutedDarkRGB: (0.64, 0.68, 0.71)
+        canvasLightRGB: (0.941, 0.949, 0.945), canvasDarkRGB: (0.071, 0.082, 0.098),
+        inkLightRGB: (0.15, 0.17, 0.19), inkDarkRGB: (0.85, 0.86, 0.87),
+        inkMutedLightRGB: (0.31, 0.34, 0.36), inkMutedDarkRGB: (0.66, 0.69, 0.72)
     )
 
     static let polestar = Palette(

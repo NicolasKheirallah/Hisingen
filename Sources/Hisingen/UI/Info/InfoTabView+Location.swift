@@ -439,7 +439,7 @@ extension InfoTabView {
                             .hisType(.label, weight: .medium)
                             .frame(maxWidth: .infinity, minHeight: 28)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.small)
                         .padding(.top, 2)
                         .accessibilityLabel(air.cleaningState == .on

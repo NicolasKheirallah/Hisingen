@@ -696,7 +696,7 @@ struct LocationCardView: View {
                             }
                             .hisType(.label, weight: .medium)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.hisProminent)
                         .controlSize(.small)
 
                         Button {
@@ -711,7 +711,7 @@ struct LocationCardView: View {
                             }
                             .hisType(.caption, weight: .medium)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.mini)
                     }
                 }

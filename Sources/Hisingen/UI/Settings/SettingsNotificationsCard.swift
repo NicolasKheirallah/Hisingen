@@ -87,7 +87,7 @@ struct SettingsNotificationsCard: View {
                     Text(L10n.text("Open Settings"))
                         .hisType(.caption, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.mini)
             }
             .padding(8)
@@ -420,7 +420,7 @@ struct SettingsNotificationsCard: View {
             Label(L10n.text("Send Test Notification"), systemImage: "bell.and.waves.left.and.right")
                 .hisType(.caption, weight: .medium)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
 
         Divider().opacity(HisingenTheme.dividerOpacity)

@@ -53,8 +53,7 @@ struct RemoteCommandAuthorizationRow: View {
                     }
                     .hisType(.caption, weight: .semibold)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticWarning)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticWarning))
                 .controlSize(.mini)
             }
         }

@@ -63,14 +63,20 @@ What changed:
 - **Surface:** the panel is the opaque theme canvas (`PopoverSurface`). The translucent panel let
   the window behind it decide contrast. Sections still have no surface of their own.
 - **Default theme:** Sodium (`AppTheme.hisingen`): frost canvas `#F0F2F1`, slate night canvas
-  `#101317`, streetlight amber `#F5B04C` in dark and a deepened amber for text in light. The other
-  eight themes remain as alternatives.
+  `#121519`, streetlight amber `#F0B86E` in dark and a deepened amber for text in light. Ink is
+  softened in both appearances (about 13:1 on the canvas, not the 16-18:1 of the first pass, which
+  glared). The canvases cannot move further without the shared status colours losing 4.5:1 on
+  their washes. The other eight themes remain as alternatives.
+- **Buttons:** two shared styles, no system bezels. `.hisProminent(fill)` is a solid fill with
+  its label in the canvas colour; `.hisSecondary(tint)` is ink (or a status colour) on the solid
+  chip fill with a hairline edge. The system styles drew white labels on light dark-mode accents
+  and tinted bezels light grey, about 2:1.
 - **Type:** focal figures are light weight at display size (battery, range, Log period, Car
   title, Plan times); labels stay small and semibold; tabular figures throughout.
 - **Now** (`NowInstrument`): one readiness line from reported signals (what the car is doing,
   its locks), the attention summary if any, the car beside the battery and range figures, the
   energy line, then three rows (Locks, Climate, Charging), each a state plus one real button
-  (`RowActionButtonStyle`: accent text on a 9-12 % accent wash).
+  (`.hisSecondary`).
 - **Plan** (`PlanTimeline`): "Upcoming", the car's active schedules soonest first, times in light
   figures; the existing climate, charging and schedule controls follow.
 - **Log** (`awardHistoryOverview` + `EnergyTrace`): the period as one sentence, then the trace.

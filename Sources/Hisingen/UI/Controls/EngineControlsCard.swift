@@ -67,8 +67,7 @@ struct EngineControlsCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(HisingenTheme.semanticWarning)
+                    .buttonStyle(.hisProminent(HisingenTheme.semanticWarning))
                     .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning != false)
 
                     Button {
@@ -81,7 +80,7 @@ struct EngineControlsCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .disabled(gate.isDisabled(.stopEngine) || state.fuelSystem.isEngineRunning != true)
                 }
             }
