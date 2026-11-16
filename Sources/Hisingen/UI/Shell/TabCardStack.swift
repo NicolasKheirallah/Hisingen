@@ -368,7 +368,7 @@ struct TabCardStack: View {
                         Image(systemName: TabItemCatalog.symbol(item)).hisType(.micro).foregroundStyle(.tertiary)
                         Text(TabItemCatalog.title(item)).hisType(.micro).foregroundStyle(.secondary)
                         if let source = TabItemCatalog.item(item)?.sourceTab {
-                            Text(source.title).hisType(.nano).foregroundStyle(.tertiary)
+                            Text(source.title).hisType(.nano).foregroundStyle(.secondary)
                         }
                     }
                 }

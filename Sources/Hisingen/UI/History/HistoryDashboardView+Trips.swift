@@ -211,12 +211,12 @@ extension HistoryDashboardView {
                     Text(L10n.format("Cold raises consumption by about %@ per 10 °C, across %d trips.",
                                      Format.percent(slope.percentPer10DegreesColder, decimals: 0),
                                      slope.observationCount))
-                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let correlation, correlation < -0.2 {
                     Text(L10n.text("Colder trips consume more: consumption rises as ambient temperature drops."))
-                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -260,7 +260,7 @@ extension HistoryDashboardView {
                 .hisAnimation(Motion.cardChange, value: tripListKey)
                 hiddenTripsSection
                 Text(L10n.text("Trips are inferred from consecutive odometer or trip-meter changes. They are not a provider trip log and may combine journeys when telemetry is sparse."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }

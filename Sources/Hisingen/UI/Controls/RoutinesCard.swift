@@ -236,7 +236,7 @@ struct RoutineEditorSheet: View {
                         if steps.isEmpty {
                             Text(L10n.text("No steps yet. Add a step to send it in order."))
                                 .hisType(.label)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         } else {
                             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                                 stepRow(index: index, step: step)

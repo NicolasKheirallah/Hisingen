@@ -195,7 +195,7 @@ struct APIDiagnosticInspectorView: View {
                             }
                             Text(entry.timestamp, style: .time)
                                 .hisType(.caption, design: .monospaced).monospacedDigit()
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

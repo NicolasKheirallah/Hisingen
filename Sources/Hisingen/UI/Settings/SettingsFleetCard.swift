@@ -52,7 +52,9 @@ struct SettingsFleetCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(.secondary)
                 } else {
-                    if allVins.count > 1 {
+                    // The fleet row speaks only when its totals resolve. With any car missing a
+                    // reading it showed three tiles reading "--", "Incomplete readings", "--".
+                    if allVins.count > 1, fleetSummaryResolves(vins: allVins) {
                         fleetSummaryBanner(vins: allVins)
                     }
 
@@ -84,6 +86,11 @@ struct SettingsFleetCard: View {
                 }
             }
         }
+    }
+
+    private func fleetSummaryResolves(vins: [String]) -> Bool {
+        let summary = VehicleFleetSummary(states: vins.compactMap { fleet.snapshot(for: $0) })
+        return summary.rangeKm != nil && summary.odometerKm != nil
     }
 
     private func fleetSummaryBanner(vins: [String]) -> some View {
@@ -244,7 +251,7 @@ struct FleetVehicleCardRow: View {
                         Text(displayTitle)
                             .hisType(.label, weight: .semibold)
                         if isActive {
-                            Text(L10n.text("ACTIVE"))
+                            Text(L10n.text("Active"))
                                 .hisType(.nano, weight: .bold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)

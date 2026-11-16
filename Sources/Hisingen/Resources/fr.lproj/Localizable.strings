@@ -2199,7 +2199,6 @@
 "Software & Updates" = "Logiciel et mises à jour";
 "Software installation cancelled" = "Installation du logiciel annulée";
 "Software installation scheduled in %d minutes" = "Installation du logiciel programmée dans %d minutes";
-"Something Went Wrong" = "Une erreur s'est produite";
 "Start cabin air purification" = "Démarrer la purification de l'air de l'habitacle";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Référence statique par famille de modèles. La norme de connecteur et les puissances de charge maximales varient selon le marché et l'année-modèle ; il ne s'agit pas d'une valeur propre au VIN.";
 "Steering-wheel settings are managed by the vehicle." = "Les réglages du volant sont gérés par le véhicule.";
@@ -2262,7 +2261,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ à %@ sur %d observations. Le calcul utilise le niveau actuel de la batterie et la capacité utile configurée ; il ne s'agit pas d'une prévision d'itinéraire.";
 "%d Vehicles" = "%d véhicules";
 "%d active" = "%d actifs";
-"ACTIVE" = "ACTIF";
 "Fleet Mileage" = "Kilométrage de la flotte";
 "Fleet Range" = "Autonomie de la flotte";
 "Garage & Fleet" = "Garage et flotte";
@@ -2609,7 +2607,6 @@
 "Vehicle Controls" = "Commandes du véhicule";
 "Vehicle Online" = "Véhicule en ligne";
 "Vehicle status received" = "État du véhicule reçu";
-"Choose a control below to send a command." = "Choisissez une commande ci-dessous pour l'envoyer.";
 "Climate unavailable" = "Climatisation indisponible";
 "Climate running" = "Climatisation en marche";
 "Climate running, %d min remaining" = "Climatisation en marche, %d min restantes";

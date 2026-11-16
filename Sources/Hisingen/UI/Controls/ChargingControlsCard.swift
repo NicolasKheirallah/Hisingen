@@ -470,7 +470,7 @@ struct ChargingControlsCard: View {
                 if locations.isEmpty {
                     Text(L10n.text("No saved locations. Use “Add here” while parked where you charge."))
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
 
@@ -589,7 +589,7 @@ struct ChargingControlsCard: View {
                 if location.ampLimit == 0, locationAmpDraft == nil {
                     Text(L10n.text("Vehicle default"))
                         .hisType(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 } else if let draftAmps = locationAmpDraft.map({ Int($0.rounded()) }) {
                     Text(Format.amps(draftAmps))
                         .hisType(.label, weight: .bold, design: .rounded)
@@ -601,7 +601,7 @@ struct ChargingControlsCard: View {
                 } else {
                     Text(L10n.text("Vehicle default"))
                         .hisType(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             Slider(
@@ -649,7 +649,7 @@ struct ChargingControlsCard: View {
             if let modeName = location.optimisedChargingModeName {
                 Text(modeName)
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.leading, 4)
                     .transition(.opacity)
             }

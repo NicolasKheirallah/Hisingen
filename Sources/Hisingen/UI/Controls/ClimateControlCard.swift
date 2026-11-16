@@ -72,7 +72,7 @@ struct ClimateControlCard: View {
                     if let climatizationNote {
                         Text(climatizationNote)
                             .hisType(.micro)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -81,7 +81,7 @@ struct ClimateControlCard: View {
                     if state.otaCapabilities?.supportsAutomaticSeatAndWheelHeating == true {
                         Text(L10n.text("May heat seats and steering wheel automatically"))
                             .hisType(.micro)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -224,7 +224,7 @@ struct ClimateControlCard: View {
                         .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
                     if let requested = state.climateStatus?.requestedTemperatureCelsius {
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                         Text(L10n.text("Target"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
@@ -235,7 +235,7 @@ struct ClimateControlCard: View {
                     }
                     if let exterior = state.weather?.temperatureCelsius {
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                         Text(L10n.text("Outside:"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
@@ -272,7 +272,7 @@ struct ClimateControlCard: View {
                         .foregroundStyle(.secondary)
                     Text(L10n.text("Saved command setting; not live cabin telemetry"))
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                     if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive, remaining > 0 {
                         Text(L10n.format("%d min remaining", remaining))
                             .hisType(.caption, weight: .medium)

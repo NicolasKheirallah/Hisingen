@@ -16,7 +16,7 @@ extension InfoTabView {
                               Self.freshnessValue(reportedAt: date,
                                                   receivedAt: state.freshness.metaReceivedDates?[reading]),
                               symbol: "clock",
-                              valueWarning: !state.hasFreshReading(reading))
+                              valueWarning: Self.readingLags(reading, in: state))
                     }
                 }
                 if VehicleReading.allCases.allSatisfy({ state.reportedDate(for: $0) == nil }) {
@@ -26,10 +26,23 @@ extension InfoTabView {
         }
     }
 
+    /// Whether one reading deserves the warning tint. Every reading of a sleeping car is hours
+    /// old, so age alone painted the whole section orange. What a reader can act on is a domain
+    /// lagging the car's own latest report by more than an hour, or Hisingen being unable to
+    /// re-check at all.
+    static func readingLags(_ reading: VehicleReading, in state: VehicleState) -> Bool {
+        guard !state.hasFreshReading(reading), let reported = state.reportedDate(for: reading) else { return false }
+        if state.freshness.isCached || state.isStale() { return true }
+        return state.dataTimestamp.timeIntervalSince(reported) > 60 * 60
+    }
+
     /// One freshness row's value: the vehicle's report time, plus the portal queue time
     /// when that gap is large enough to explain a stale domain next to a fresh one.
-    static func freshnessValue(reportedAt: Date, receivedAt: Date?) -> String {
-        var value = Format.dateTimeFormatter.string(from: reportedAt)
+    static func freshnessValue(reportedAt: Date, receivedAt: Date?, now: Date = Date()) -> String {
+        // Relative age first, because "how old" is the question this section answers; the clock
+        // time follows so the row still lines up with History's timestamps.
+        var value = L10n.format("%@ · %@", Format.relativeAge(since: reportedAt, now: now),
+                                Format.timeFormatter.string(from: reportedAt))
         if let lag = portalIngestLagMinutes(receivedAt: receivedAt, reportedAt: reportedAt) {
             value += " · " + L10n.format("portal +%d min", lag)
         }

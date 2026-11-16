@@ -2199,7 +2199,6 @@
 "Software & Updates" = "소프트웨어 및 업데이트";
 "Software installation cancelled" = "소프트웨어 설치가 취소되었습니다";
 "Software installation scheduled in %d minutes" = "%d분 후 소프트웨어 설치가 예약되었습니다";
-"Something Went Wrong" = "문제가 발생했습니다";
 "Start cabin air purification" = "실내 공기 정화 시작";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "모델군 기준 참고 정보입니다. 커넥터 규격과 최대 충전 속도는 시장과 연식에 따라 다르며, VIN별 등급이 아닙니다.";
 "Steering-wheel settings are managed by the vehicle." = "스티어링 휠 설정은 차량에서 관리합니다.";
@@ -2262,7 +2261,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@에서 %@까지, 관측 %d회 기준입니다. 현재 배터리 잔량과 설정된 사용 가능 용량을 사용하며, 경로 예측이 아닙니다.";
 "%d Vehicles" = "차량 %d대";
 "%d active" = "%d개 활성";
-"ACTIVE" = "활성";
 "Fleet Mileage" = "차량군 주행거리";
 "Fleet Range" = "차량군 주행 가능 거리";
 "Garage & Fleet" = "차고 및 차량군";
@@ -2609,7 +2607,6 @@
 "Vehicle Controls" = "차량 제어";
 "Vehicle Online" = "차량 온라인";
 "Vehicle status received" = "차량 상태를 받았습니다";
-"Choose a control below to send a command." = "아래에서 제어 항목을 선택해 명령을 보내세요.";
 "Climate unavailable" = "공조를 사용할 수 없음";
 "Climate running" = "공조 작동 중";
 "Climate running, %d min remaining" = "공조 작동 중, %d분 남음";

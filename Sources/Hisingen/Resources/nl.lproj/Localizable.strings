@@ -2207,7 +2207,6 @@
 "Software & Updates" = "Software en updates";
 "Software installation cancelled" = "Softwareinstallatie geannuleerd";
 "Software installation scheduled in %d minutes" = "Softwareinstallatie gepland over %d minuten";
-"Something Went Wrong" = "Er ging iets mis";
 "Start cabin air purification" = "Luchtreiniging interieur starten";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Statische referentie voor de modelfamilie. Aansluitstandaard en maximale laadsnelheden verschillen per markt en modeljaar. Dit is geen VIN-specifieke waarde.";
 "Steering-wheel settings are managed by the vehicle." = "Instellingen van het stuur worden door het voertuig beheerd.";
@@ -2270,7 +2269,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ tot %@ over %d metingen. Gebruikt het huidige batterijniveau en de ingestelde bruikbare capaciteit. Dit is geen routevoorspelling.";
 "%d Vehicles" = "%d voertuigen";
 "%d active" = "%d actief";
-"ACTIVE" = "ACTIEF";
 "Fleet Mileage" = "Kilometerstand vloot";
 "Fleet Range" = "Actieradius vloot";
 "Garage & Fleet" = "Garage en vloot";
@@ -2617,7 +2615,6 @@
 "Vehicle Controls" = "Voertuigbediening";
 "Vehicle Online" = "Voertuig online";
 "Vehicle status received" = "Voertuigstatus ontvangen";
-"Choose a control below to send a command." = "Kies hieronder een bediening om een opdracht te sturen.";
 "Climate unavailable" = "Klimaatregeling niet beschikbaar";
 "Climate running" = "Klimaatregeling actief";
 "Climate running, %d min remaining" = "Klimaatregeling actief, nog %d min";

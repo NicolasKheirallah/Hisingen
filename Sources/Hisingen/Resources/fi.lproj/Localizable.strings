@@ -2199,7 +2199,6 @@
 "Software & Updates" = "Ohjelmisto ja päivitykset";
 "Software installation cancelled" = "Ohjelmiston asennus peruttu";
 "Software installation scheduled in %d minutes" = "Ohjelmiston asennus ajastettu %d minuutin kuluttua";
-"Something Went Wrong" = "Jotain meni pieleen";
 "Start cabin air purification" = "Käynnistä matkustamon ilmanpuhdistus";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Mallisarjan yleinen vertailutieto. Liitinstandardi ja huippulatausnopeudet vaihtelevat markkinan ja vuosimallin mukaan. Tämä ei ole VIN-kohtainen arvo.";
 "Steering-wheel settings are managed by the vehicle." = "Ajoneuvo hallitsee ohjauspyörän asetuksia.";
@@ -2262,7 +2261,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ ja %@ välillä %d havainnon perusteella. Laskenta käyttää akun nykyistä varausta ja määritettyä käytettävissä olevaa kapasiteettia. Tämä ei ole reittiennuste.";
 "%d Vehicles" = "%d ajoneuvoa";
 "%d active" = "%d aktiivista";
-"ACTIVE" = "AKTIIVINEN";
 "Fleet Mileage" = "Kaluston mittarilukema";
 "Fleet Range" = "Kaluston toimintamatka";
 "Garage & Fleet" = "Autotalli ja kalusto";
@@ -2609,7 +2607,6 @@
 "Vehicle Controls" = "Ajoneuvon ohjaimet";
 "Vehicle Online" = "Ajoneuvo verkossa";
 "Vehicle status received" = "Ajoneuvon tila vastaanotettu";
-"Choose a control below to send a command." = "Valitse alta ohjain, jolla lähetät komennon.";
 "Climate unavailable" = "Ilmastointi ei ole käytettävissä";
 "Climate running" = "Ilmastointi käynnissä";
 "Climate running, %d min remaining" = "Ilmastointi käynnissä, %d min jäljellä";

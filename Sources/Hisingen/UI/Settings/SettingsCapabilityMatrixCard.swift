@@ -116,7 +116,7 @@ struct SettingsCapabilityMatrixCard: View {
 
                     Text(L10n.text("\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications."))
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .hisCaptionLeading()
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)

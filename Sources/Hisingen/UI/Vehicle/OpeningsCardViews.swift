@@ -641,7 +641,7 @@ struct LocationCardView: View {
                                 if let hum = weather.relativeHumidity {
                                     Text("· \(hum)%")
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                             .padding(.top, 2)
@@ -655,7 +655,7 @@ struct LocationCardView: View {
                                 if let heading {
                                     Text("· \(Int(heading))°")
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -670,7 +670,7 @@ struct LocationCardView: View {
                                 if let accuracy {
                                     Text(String(format: "±%.1f m", locale: L10n.displayLocale, accuracy))
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }

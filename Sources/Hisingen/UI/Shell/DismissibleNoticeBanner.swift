@@ -53,7 +53,7 @@ struct DismissibleNoticeBanner: View {
                 if let footnote {
                     Text(footnote)
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .accessibilityElement(children: .combine)

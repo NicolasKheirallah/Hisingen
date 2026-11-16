@@ -1020,13 +1020,15 @@ final class StatusItemController: NSObject {
                 }
                 parts.append(batStr)
             } else if let fuel = state?.fuelSystem.levelPercent {
-                parts.append(String(format: "%.0f%% fuel", locale: L10n.displayLocale, fuel))
+                parts.append(L10n.format("%.0f%% fuel", fuel))
             }
             if let range = state?.primaryRangeKm {
                 parts.append(Format.distance(km: range, unit: preferences.distanceUnit))
             }
             if let locked = state?.exteriorStatus?.isLocked {
-                parts.append(locked ? "Locked" : "Unlocked ⚠️")
+                // Localized words, no emoji: the tooltip is read in sixteen languages and by
+                // VoiceOver, and "Unlocked" already carries the warning.
+                parts.append(locked ? L10n.text("Locked") : L10n.text("Unlocked"))
             }
             let isCurrent = (vin == currentVin)
             let prefix = isCurrent ? "● " : "○ "

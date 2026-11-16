@@ -270,7 +270,7 @@ enum TabItemCatalog {
         TabItem(id: .historyMonth, title: L10n.text("Month Comparison"), symbol: "calendar",
                 sourceTab: .history, kind: .card,
                 detail: "This month against the previous one.", feature: nil),
-        TabItem(id: .historyAirCleaning, title: L10n.text("Air Cleaning"), symbol: "sparkles",
+        TabItem(id: .historyAirCleaning, title: L10n.text("Air Cleaning"), symbol: "aqi.medium",
                 sourceTab: .history, kind: .card,
                 detail: "Cabin cleaning cycles and their runtime.", feature: nil),
         TabItem(id: .historyEmissions, title: L10n.text("Emissions"), symbol: "leaf.fill",

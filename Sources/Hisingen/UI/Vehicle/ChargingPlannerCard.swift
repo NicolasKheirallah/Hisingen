@@ -136,12 +136,12 @@ struct ChargingPlannerCard: View {
                     Label(L10n.text("The car has its own charging schedules. The planner does not use them"),
                           systemImage: "calendar.badge.exclamationmark")
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
 
                 Text(attributionLine)
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             // Loading → loaded → status branch swaps key here; the persistent
             // VStack carries the animation because branches cannot animate

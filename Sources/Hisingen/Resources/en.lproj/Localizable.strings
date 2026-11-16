@@ -2286,7 +2286,6 @@
 "Software & Updates" = "Software & Updates";
 "Software installation cancelled" = "Software installation cancelled";
 "Software installation scheduled in %d minutes" = "Software installation scheduled in %d minutes";
-"Something Went Wrong" = "Something Went Wrong";
 "Start cabin air purification" = "Start cabin air purification";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating.";
 "Steering-wheel settings are managed by the vehicle." = "Steering-wheel settings are managed by the vehicle.";
@@ -2349,7 +2348,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction.";
 "%d Vehicles" = "%d Vehicles";
 "%d active" = "%d active";
-"ACTIVE" = "ACTIVE";
 "Fleet Mileage" = "Fleet Mileage";
 "Fleet Range" = "Fleet Range";
 "Garage & Fleet" = "Garage & Fleet";
@@ -2626,7 +2624,6 @@
 "Vehicle Controls" = "Vehicle Controls";
 "Vehicle Online" = "Vehicle Online";
 "Vehicle status received" = "Vehicle status received";
-"Choose a control below to send a command." = "Choose a control below to send a command.";
 "Climate unavailable" = "Climate unavailable";
 "Climate running" = "Climate running";
 "Climate running, %d min remaining" = "Climate running, %d min remaining";

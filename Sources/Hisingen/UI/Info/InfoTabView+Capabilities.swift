@@ -161,7 +161,7 @@ extension InfoTabView {
                             }
                             Text(L10n.text("Rows appear only when the backend sent the field. They are backend statements, not controls."))
                                 .hisType(.micro)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -181,7 +181,7 @@ extension InfoTabView {
 
                 Text(L10n.text("Controls also depend on account permissions, enabled features and available command implementations."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         })
     }

@@ -33,7 +33,6 @@ struct HisingenContentView: View {
     let inFlightRemoteCommandID: String?
     let lastRemoteCommandFeedback: RemoteCommandFeedback?
     let updateVersion: String?
-    let checkingForUpdates: Bool
     let notificationPermission: NotificationPermission
     let diagnostics: DiagnosticsSnapshot?
     let onRefresh: () -> Void
@@ -41,7 +40,6 @@ struct HisingenContentView: View {
     /// Dismisses the panel. Reached from Escape, which is the one key every panel-shaped surface
     /// on this platform answers and which nothing here answered before.
     let onClose: () -> Void
-    let onCheckForUpdates: () -> Void
     let onOpenUpdate: () -> Void
     let onRemoteCommand: (RemoteCommand) -> Void
     let onSelectCar: (String) -> Void
@@ -174,13 +172,11 @@ struct HisingenContentView: View {
         self.inFlightRemoteCommandID = display.inFlightRemoteCommandID
         self.lastRemoteCommandFeedback = display.lastRemoteCommandFeedback
         self.updateVersion = display.updateVersion
-        self.checkingForUpdates = display.checkingForUpdates
         self.notificationPermission = display.notificationPermission
         self.diagnostics = display.diagnostics
         self.onRefresh = actions.onRefresh
         self.onSettings = actions.onSettings
         self.onClose = actions.onClose
-        self.onCheckForUpdates = actions.onCheckForUpdates
         self.onOpenUpdate = actions.onOpenUpdate
         self.onRemoteCommand = actions.onRemoteCommand
         self.onSelectCar = actions.onSelectCar
@@ -337,6 +333,11 @@ struct HisingenContentView: View {
         // Clips the transformed tree to the physical panel; without it, scaled
         // overflow would draw outside the transparent popover window.
         .clipped()
+        // Hierarchical styles resolve to the palette, not to the system's vibrant labels:
+        // `.secondary` over the panel material blends with whatever window sits behind the
+        // panel and measured 3.2 to 3.5:1 over a dark one. `inkMuted` is the token the contrast
+        // gate checks, so every `.secondary` and `.tertiary` in the panel inherits its 4.5:1.
+        .foregroundStyle(HisingenTheme.ink, HisingenTheme.inkMuted, HisingenTheme.inkMuted)
         .background { HisingenTheme.popoverSurface }
         // The material arrival: the panel settles from a slightly smaller, dimmer state on
         // the shared entrance curve, so opening reads as glass arriving rather than a picture
@@ -519,7 +520,6 @@ struct HisingenContentView: View {
         case .builtIn(.info):
             InfoTabView(state: state, history: history, imageCache: imageCache,
                         reverseGeocoder: reverseGeocoder,
-                        onRefresh: onRefresh,
                         onNavigateToHistory: navigateFromInfoToHistory,
                         onRemoteCommand: onRemoteCommand,
                         layout: TabLayout.resolve(tabComposition, for: tab))
@@ -1026,23 +1026,10 @@ struct HisingenContentView: View {
                 }
                 .controlSize(.small)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            } else if preferences.features.contains(.updateChecks) {
-                Button {
-                    onCheckForUpdates()
-                } label: {
-                    if checkingForUpdates {
-                        ProgressView().controlSize(.small)
-                            .transition(.opacity)
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                            .transition(.opacity)
-                    }
-                }
-                .controlSize(.small)
-                .help(L10n.text("Check for Updates…"))
-                .accessibilityLabel(L10n.text("Check for Updates…"))
             }
+            // No idle "Check for Updates" glyph here: beside Refresh it read as a second refresh
+            // button. Checking lives in the status item's menu and Settings → Updates; the
+            // footer speaks only when an update is actually available.
             Button {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 withAnimation(reduceMotion ? nil : Motion.refreshSweep) {
@@ -1063,7 +1050,6 @@ struct HisingenContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .hisAnimation(Motion.stateChange, value: updateVersion)
-        .hisAnimation(Motion.stateChange, value: checkingForUpdates)
     }
 }
 

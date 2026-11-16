@@ -142,8 +142,11 @@ One radius per question, all global (`HisingenTheme.swift`): sections 12, banner
 concentric inset of the section), gauges 5, status chips 4. Nothing is pill-shaped by default.
 
 Material discipline, the app's strongest identity rule: exactly one surface in any stack.
-Panel = `.thinMaterial` in light appearance so desktop detail remains visible through it, and
-`.regularMaterial` in dark appearance for a steadier text surface; section = *no surface at all*,
+Panel = `.thickMaterial` under a 45% `canvas` wash in light appearance, `.regularMaterial` in dark.
+Light used `.thinMaterial` until 2026-11-16: over a dark window it settled at mid-gray and muted
+text fell to 1.6-2.5:1. The panel root also maps `.secondary` and `.tertiary` to `inkMuted`, so
+hierarchical text is the contrast-gated token, not a vibrant label that blends with whatever
+window sits behind the panel. Section = *no surface at all*,
 a group of content on the glass; chip = solid `chipFill`. Blurs never stack, and nothing competes
 with the material.
 

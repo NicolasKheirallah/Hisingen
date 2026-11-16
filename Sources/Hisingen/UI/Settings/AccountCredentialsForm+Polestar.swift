@@ -293,7 +293,7 @@ extension AccountCredentialsForm {
             HStack(spacing: 4) {
                 Text(L10n.text("Still failing?"))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Button {
                     onSettingsChanged(.exportDiagnosticLogs)
                 } label: {

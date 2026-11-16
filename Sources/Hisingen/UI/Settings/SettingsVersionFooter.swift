@@ -21,12 +21,12 @@ struct SettingsVersionFooter: View {
                     .foregroundStyle(.secondary)
                 Text("(\(buildNumber))")
                     .hisType(.micro, weight: .regular, design: .monospaced)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             HStack(spacing: 3) {
                 Text(L10n.text("Created by"))
                     .hisType(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Button("Nicolas Kheirallah") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah") {
                         NSWorkspace.shared.open(url)
@@ -36,7 +36,7 @@ struct SettingsVersionFooter: View {
                 .hisType(.caption, weight: .medium)
                 Text("·")
                     .hisType(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Button("GitHub") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah/Hisingen") {
                         NSWorkspace.shared.open(url)

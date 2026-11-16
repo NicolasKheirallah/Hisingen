@@ -418,7 +418,7 @@ struct ChargingCurveView: View {
                         VStack(alignment: .center, spacing: 1) {
                             Text(L10n.text("PEAK POWER"))
                                 .hisType(.nano, weight: .semibold)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                             Text(Format.kilowatts(watts: peakWatts))
                                 .hisType(.label, weight: .bold)
                                 .foregroundStyle(HisingenTheme.chartPositive)
@@ -468,7 +468,7 @@ struct ChargingCurveView: View {
                 Text(title)
                     .textCase(.uppercase)
                     .hisType(.nano, weight: .semibold)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             Text(String(format: "%.0f%%", locale: L10n.displayLocale, pct))
                 .hisType(.body, weight: emphasized ? .bold : .semibold)
@@ -479,7 +479,7 @@ struct ChargingCurveView: View {
                 Text(Format.shortTime(date: date))
                     .hisType(.micro)
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -691,7 +691,7 @@ struct ChargingCurveView: View {
             Text("· " + Format.shortTime(date: info.date))
                 .hisType(.nano)
                 .monospacedDigit()
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             if info.isProjected {
                 Text("(\(L10n.text("Projected")))")
                     .hisType(.nano, weight: .medium)

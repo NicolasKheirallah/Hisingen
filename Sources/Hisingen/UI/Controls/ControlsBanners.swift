@@ -28,6 +28,13 @@ struct ControlsBanners: View {
         return false
     }
 
+    /// With every remote-control group on, the notice only listed eight names above the
+    /// controls themselves and pushed Start Climate to the panel's edge. It speaks only when
+    /// something is off, which is when the list explains a missing control.
+    private var allRemoteControlsEnabled: Bool {
+        AppFeature.allCases.filter(\.isRemoteControl).allSatisfy { features.contains($0) }
+    }
+
     private var liveFeedback: RemoteCommandFeedback? {
         guard let feedback,
               feedback.id != dismissedFeedbackID,
@@ -45,7 +52,7 @@ struct ControlsBanners: View {
             if vehicleOffline {
                 offlineBanner
             }
-            if showRestrictedNotice {
+            if showRestrictedNotice, !allRemoteControlsEnabled {
                 restrictedNoticeBanner
             }
         }
@@ -53,7 +60,7 @@ struct ControlsBanners: View {
         // entrance while the removal rides the dismissing transaction.
         .hisAnimation(Motion.entrance, value: liveFeedback?.id)
         .hisAnimation(Motion.entrance, value: vehicleOffline)
-        .hisAnimation(Motion.entrance, value: showRestrictedNotice)
+        .hisAnimation(Motion.entrance, value: showRestrictedNotice && !allRemoteControlsEnabled)
         // The expiry needs a clock, not a render.
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { tick in
             now = tick

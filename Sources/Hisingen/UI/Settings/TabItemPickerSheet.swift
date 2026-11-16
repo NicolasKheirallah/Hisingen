@@ -102,7 +102,7 @@ struct TabItemPickerSheet: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(source.title)
                                     .hisType(.caption, weight: .bold)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                     .textCase(.uppercase)
                                 ForEach(entries) { entry in
                                     row(entry)

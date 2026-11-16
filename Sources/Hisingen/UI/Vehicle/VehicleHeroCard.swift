@@ -510,7 +510,7 @@ struct VehicleHeroCard: View {
             .foregroundStyle(HisingenTheme.inkMuted)
             Text(title)
                 .hisType(.caption, weight: .medium)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
     }
 }

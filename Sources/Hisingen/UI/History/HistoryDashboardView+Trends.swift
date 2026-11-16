@@ -119,7 +119,7 @@ extension HistoryDashboardView {
                         .foregroundStyle(monthlySlope > 0.5 ? HisingenTheme.semanticWarning : .secondary)
                 }
                 Text(L10n.text("Vehicle-reported consumption between charges. Short drives and climate use raise it; motorway cruising lowers it."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: points.map(\.timestamp))
@@ -193,7 +193,7 @@ extension HistoryDashboardView {
                 ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 Text(L10n.text("Vehicle-reported litres per 100 km between fill-ups. Short, cold trips raise it."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                 dataConfidenceNote(for: points.map(\.timestamp))
             }
         }
@@ -268,7 +268,7 @@ extension HistoryDashboardView {
                               Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit) + "/" + L10n.text("day"))
                 }
                 Text(L10n.text("Monthly totals and the daily average use all recorded odometer history, independent of the period selector above."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: allTimeOdometerPoints.map(\.timestamp))
@@ -486,7 +486,7 @@ extension HistoryDashboardView {
                           info: L10n.text("Extrapolated from the observed filter-life decline between locally stored readings. Real wear depends on usage and conditions; treat it as a rough guide only."))
                 }
                 Text(L10n.text("Recorded from vehicle-reported CleanZone readings during normal refreshes. The provider keeps no history of its own, so coverage depends on how often Hisingen was running."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: chronological.map(\.timestamp))
@@ -551,7 +551,7 @@ extension HistoryDashboardView {
                             Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
                                 .hisType(.caption, weight: .medium)
                             if let ms = record.durationMs {
-                                Text(L10n.format("%d ms", ms)).hisType(.nano).foregroundStyle(.tertiary)
+                                Text(L10n.format("%d ms", ms)).hisType(.nano).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(record.executedAt, style: .relative).hisType(.micro).foregroundStyle(.secondary)
@@ -565,7 +565,7 @@ extension HistoryDashboardView {
                         Text(L10n.text("Recent failures")).hisType(.nano, weight: .semibold).foregroundStyle(.secondary)
                         ForEach(Array(failures), id: \.id) { record in
                             Text("• " + (record.errorMessage ?? ""))
-                                .hisType(.nano).foregroundStyle(.tertiary).lineLimit(2)
+                                .hisType(.nano).foregroundStyle(.secondary).lineLimit(2)
                         }
                     }
                 }
@@ -613,7 +613,7 @@ extension HistoryDashboardView {
                         .map { preferences.temperatureUnit.convert(celsius: $0) }))
                 .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }

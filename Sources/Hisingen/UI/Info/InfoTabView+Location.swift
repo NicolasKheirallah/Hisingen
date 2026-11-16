@@ -124,7 +124,7 @@ extension InfoTabView {
                 }
                 Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -177,7 +177,7 @@ extension InfoTabView {
                 }
                 Text(L10n.text("Saved in the vehicle's charging backend. Managed from the Controls tab."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         })
     }

@@ -697,7 +697,7 @@ struct HistoryDashboardView: View {
             Text(text).hisType(.micro).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.secondary)
     }
 
     func sessionLabel(_ session: HistoricalChargingSession) -> String {
@@ -787,7 +787,7 @@ struct HistoryDashboardView: View {
             TextField(prompt, text: text)
                 .textFieldStyle(.plain).hisType(.micro)
             if !text.wrappedValue.isEmpty {
-                Text("\(count)/\(total)").hisType(.nano).foregroundStyle(.tertiary)
+                Text("\(count)/\(total)").hisType(.nano).foregroundStyle(.secondary)
                 Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").hisType(.micro) }
                     .buttonStyle(.pressable).accessibilityLabel(L10n.text("Clear search"))
             }

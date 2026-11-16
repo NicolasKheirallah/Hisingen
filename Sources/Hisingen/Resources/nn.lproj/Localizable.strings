@@ -2199,7 +2199,6 @@
 "Software & Updates" = "Programvare og oppdateringar";
 "Software installation cancelled" = "Programvareinstallasjonen er avbroten";
 "Software installation scheduled in %d minutes" = "Programvareinstallasjonen er planlagt om %d minutt";
-"Something Went Wrong" = "Noko gjekk galt";
 "Start cabin air purification" = "Start luftrensing i kupéen";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Statisk referanse for modellfamilien. Kontaktstandard og toppladeeffekt varierer etter marknad og modellår. Dette er ikkje ein VIN-spesifikk vurdering.";
 "Steering-wheel settings are managed by the vehicle." = "Innstillingar for rattet blir styrte av køyretøyet.";
@@ -2262,7 +2261,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ til %@ over %d observasjonar. Bygger på noverande batterinivå og konfigurert brukbar kapasitet. Dette er ikkje ei ruteprognose.";
 "%d Vehicles" = "%d køyretøy";
 "%d active" = "%d aktive";
-"ACTIVE" = "AKTIV";
 "Fleet Mileage" = "Kilometerstand i flåten";
 "Fleet Range" = "Rekkjevidde i flåten";
 "Garage & Fleet" = "Garasje og flåte";
@@ -2609,7 +2607,6 @@
 "Vehicle Controls" = "Køyretøystyring";
 "Vehicle Online" = "Køyretøy på nett";
 "Vehicle status received" = "Køyretøystatus er motteken";
-"Choose a control below to send a command." = "Vel ein kontroll under for å sende ein kommando.";
 "Climate unavailable" = "Klima utilgjengeleg";
 "Climate running" = "Klima køyrer";
 "Climate running, %d min remaining" = "Klima køyrer, %d min att";

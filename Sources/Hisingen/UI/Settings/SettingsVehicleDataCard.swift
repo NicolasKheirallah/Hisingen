@@ -27,7 +27,7 @@ struct SettingsVehicleDataCard: View {
     private func subsectionHeader(_ title: String) -> some View {
         Text(L10n.text(title))
             .hisType(.caption, weight: .bold)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .padding(.top, 6)
     }

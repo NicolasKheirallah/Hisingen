@@ -333,7 +333,7 @@ struct VehicleChargingCard: View {
                 // interrupted mid-update. `hisTelemetryValue` rolls the digits in place.
                 if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging ? HisingenTheme.semanticGood : .primary).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
                 if let readyLine { Text(readyLine).hisType(.body, weight: .medium).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(readyLine, reduceMotion: reduceMotion) }
-                if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.tertiary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
+                if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
                 if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: state.estimatedChargingCompletion, isLive: state.isCharging && !state.hasOldData(), currentPowerWatts: state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
                     Text(state.chargingExplanation).hisType(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

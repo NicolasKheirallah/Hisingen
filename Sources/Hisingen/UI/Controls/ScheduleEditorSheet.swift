@@ -104,7 +104,7 @@ struct ScheduleEditorSheet: View {
             if allSchedules.isEmpty {
                 Text(L10n.text("No schedules configured."))
                     .hisType(.label)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
             } else {
                 VStack(spacing: 6) {

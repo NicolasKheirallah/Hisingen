@@ -232,7 +232,7 @@ extension HistoryDashboardView {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: curve.map(\.timestamp))
@@ -331,7 +331,7 @@ extension HistoryDashboardView {
                     CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
-                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                 }
                 if chargingSessions.count > 8 {
                     searchField(L10n.text("Search sessions by date, place or energy"), text: $sessionSearchText,
@@ -585,7 +585,7 @@ extension HistoryDashboardView {
                     Text(L10n.text("Cost")).gridColumnAlignment(.trailing)
                     Text(L10n.text("Per kWh")).gridColumnAlignment(.trailing)
                 }
-                .hisType(.nano, weight: .semibold).foregroundStyle(.tertiary)
+                .hisType(.nano, weight: .semibold).foregroundStyle(.secondary)
                 ForEach(rows) { row in
                     GridRow {
                         Text(row.name).lineLimit(1).minimumScaleFactor(0.9)

@@ -69,7 +69,10 @@ extension HistoryDashboardView {
                         .truncationMode(.middle)
                     Spacer()
                 }
-                .foregroundStyle(HisingenTheme.semanticWarning)
+                // Asleep with a recent check is the car's resting state: muted. Warning colour is
+                // kept for an offline copy or a reading Hisingen could not re-check.
+                .foregroundStyle(state.freshness.isCached || state.isStale()
+                                 ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
                 .accessibilityElement(children: .combine)
             }
 
@@ -92,7 +95,9 @@ extension HistoryDashboardView {
                         .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.9))
                 }
             }
-            .foregroundStyle(.tertiary)
+            // `.secondary`, not `.tertiary`: 8pt tertiary text over the panel material measured
+            // 1.6:1 against a dark window behind the panel.
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -183,7 +188,7 @@ extension HistoryDashboardView {
                             .hisType(.micro).foregroundStyle(.secondary)
                         if let odo = serviceProjection.projectedOdometerKm {
                             Text("· " + Format.distance(km: Int(odo.rounded()), unit: preferences.distanceUnit))
-                                .hisType(.micro).foregroundStyle(.tertiary)
+                                .hisType(.micro).foregroundStyle(.secondary)
                         }
                         Spacer()
                     }
@@ -206,7 +211,7 @@ extension HistoryDashboardView {
                                          Format.currency(perUnit, symbol: preferences.currencySymbol, decimals: 3),
                                          preferences.distanceUnit == .kilometers ? "km" : "mi"))
                             .hisType(.micro).foregroundStyle(.secondary)
-                        Text(L10n.text("(estimated)")).hisType(.nano).foregroundStyle(.tertiary)
+                        Text(L10n.text("(estimated)")).hisType(.nano).foregroundStyle(.secondary)
                         Spacer()
                     }
                     .accessibilityElement(children: .combine)
@@ -367,7 +372,7 @@ extension HistoryDashboardView {
                     }
                 }
                 Text(L10n.text("Compares the elapsed part of this month against the same number of days last month."))
-                    .hisType(.nano).foregroundStyle(.tertiary)
+                    .hisType(.nano).foregroundStyle(.secondary)
                 if lastYear.distanceKm > 0 || lastYear.energyKwh > 0 {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack(spacing: 10) {
@@ -422,7 +427,7 @@ extension HistoryDashboardView {
 
     func yoyChip(_ title: String, _ delta: Double) -> some View {
         HStack(spacing: 3) {
-            Text(title).hisType(.nano).foregroundStyle(.tertiary)
+            Text(title).hisType(.nano).foregroundStyle(.secondary)
             Text(Format.signedPercent(delta))
                 .hisType(.nano, weight: .semibold)
                 .foregroundStyle(.secondary)
@@ -460,7 +465,7 @@ extension HistoryDashboardView {
                 Text(L10n.format("Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity.",
                                  Format.count(Int(preferences.gridCarbonIntensityGramsPerKwh)),
                                  Format.count(Int(HistoryInsights.petrolCarGramsCO2PerKm))))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }

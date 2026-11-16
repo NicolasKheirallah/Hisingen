@@ -2216,7 +2216,6 @@
 "Software & Updates" = "Programvara och uppdateringar";
 "Software installation cancelled" = "Programvaruinstallationen avbröts";
 "Software installation scheduled in %d minutes" = "Programvaruinstallationen schemalagd om %d minuter";
-"Something Went Wrong" = "Något gick fel";
 "Start cabin air purification" = "Starta luftrening i kupén";
 "Static model-family reference. Connector standard and peak charging rates vary by market and model year; this is not a VIN-specific rating." = "Statisk referens för modellfamiljen. Anslutningsstandard och högsta laddeffekt varierar mellan marknader och modellår. Detta är inte en VIN-specifik klassning.";
 "Steering-wheel settings are managed by the vehicle." = "Inställningarna för ratten styrs av fordonet.";
@@ -2279,7 +2278,6 @@
 "%@ to %@ across %d observations. Uses current battery charge and configured usable capacity; this is not a route prediction." = "%@ till %@ över %d observationer. Använder aktuell batteriladdning och konfigurerad användbar kapacitet. Detta är inte en ruttprognos.";
 "%d Vehicles" = "%d fordon";
 "%d active" = "%d aktiva";
-"ACTIVE" = "AKTIV";
 "Fleet Mileage" = "Flottans körsträcka";
 "Fleet Range" = "Flottans räckvidd";
 "Garage & Fleet" = "Garage och flotta";
@@ -2626,7 +2624,6 @@
 "Vehicle Controls" = "Fordonskontroller";
 "Vehicle Online" = "Fordonet är online";
 "Vehicle status received" = "Fordonsstatus mottagen";
-"Choose a control below to send a command." = "Välj en kontroll nedan för att skicka ett kommando.";
 "Climate unavailable" = "Klimat ej tillgängligt";
 "Climate running" = "Klimatet körs";
 "Climate running, %d min remaining" = "Klimatet körs, %d min återstår";

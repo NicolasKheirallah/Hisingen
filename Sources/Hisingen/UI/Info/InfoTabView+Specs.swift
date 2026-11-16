@@ -232,7 +232,7 @@ extension InfoTabView {
                     }
                     Text(L10n.text("Only groups with a verified meaning are named; the rest keep their position."))
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

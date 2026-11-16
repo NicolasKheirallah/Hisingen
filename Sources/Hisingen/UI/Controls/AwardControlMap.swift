@@ -32,13 +32,9 @@ struct AwardControlMap: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.text("Vehicle Controls"))
-                        .hisType(size: condensed ? 25 : 30, weight: .bold)
-                    Text(L10n.text("Choose a control below to send a command."))
-                        .hisType(.label)
-                        .foregroundStyle(HisingenTheme.inkMuted)
-                }
+                Text(L10n.text("Vehicle Controls"))
+                    .hisType(size: condensed ? 25 : 30, weight: .bold)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Label(
                     isOnline ? L10n.text("Vehicle Online") : L10n.text("Vehicle status received"),

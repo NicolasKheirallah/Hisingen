@@ -36,7 +36,7 @@ extension HistoryDashboardView {
                 .disabled(!validation.isValid)
             }
             Text(L10n.text("Fill-ups are stored locally and included in lifetime cost-per-distance estimates. Add an odometer reading to unlock the economy trend."))
-                .hisType(.micro).foregroundStyle(.tertiary)
+                .hisType(.micro).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(width: 300)
@@ -122,7 +122,7 @@ extension HistoryDashboardView {
                     .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 Text(L10n.text("Economy is measured tank-to-tank and needs an odometer reading on each fill-up."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
             }
         })
     }

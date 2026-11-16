@@ -103,9 +103,11 @@ struct PopoverSurface: View {
     @Environment(\.colorScheme) private var colorScheme
 
     /// Under either setting the blur is dropped entirely and ``panelFill`` — a neutral, darker than
-    /// any canvas — supplies the panel, so the lifted card still separates from it. In light
-    /// appearance, `.thinMaterial` reveals more of the desktop through the panel; dark appearance
-    /// keeps `.regularMaterial` for a steadier text surface.
+    /// any canvas — supplies the panel, so the lifted card still separates from it. Light
+    /// appearance uses `.thickMaterial`: `.thinMaterial` over a dark window settled the panel at
+    /// mid-gray and muted text measured 1.6 to 2.5:1, and `.regularMaterial` still only reached
+    /// 3.0 to 4.4:1 (review of 2026-11-16), so it also carries a 45 % canvas wash. Dark
+    /// appearance keeps `.regularMaterial`.
     private var prefersOpaqueSurface: Bool {
         reduceTransparency || contrast == .increased
     }
@@ -117,7 +119,13 @@ struct PopoverSurface: View {
             // exists to fix, arriving by a different route.
             Rectangle().fill(HisingenTheme.panelFill)
         } else if colorScheme == .light {
-            Rectangle().fill(.thinMaterial)
+            // A neutral canvas wash over the material keeps the panel near its own canvas
+            // whatever window sits behind it, so accent and warning captions keep 4.5:1. It is
+            // a tint of the same surface, not a second one: no blur, no outline, no shadow.
+            ZStack {
+                Rectangle().fill(.thickMaterial)
+                Rectangle().fill(HisingenTheme.canvas.opacity(0.45))
+            }
         } else {
             Rectangle().fill(.regularMaterial)
         }

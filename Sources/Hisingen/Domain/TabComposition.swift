@@ -88,7 +88,7 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
         "square.grid.2x2", "bolt.car", "car.side", "bolt.fill", "batteryblock",
         "thermometer.medium", "location.fill", "chart.xyaxis.line", "chart.pie.fill",
         "powerplug.fill", "lock.fill", "fan", "wind", "road.lanes", "gauge.with.needle",
-        "wrench.and.screwdriver", "sparkles", "shield.lefthalf.filled", "star.fill",
+        "wrench.and.screwdriver", "shield.lefthalf.filled", "star.fill",
         "leaf.fill", "speedometer", "calendar", "clock", "mappin.and.ellipse"
     ]
 }

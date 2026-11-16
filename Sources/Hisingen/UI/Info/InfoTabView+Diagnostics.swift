@@ -123,7 +123,7 @@ extension InfoTabView {
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 Text(L10n.text("Reported by the vehicle at its parked location, not a forecast."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         })
     }

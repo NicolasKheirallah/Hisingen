@@ -451,6 +451,7 @@ struct SettingsTabsAndCardsCard: View {
         case "road.lanes": return L10n.text("Tab icon: Road")
         case "gauge.with.needle": return L10n.text("Tab icon: Gauge")
         case "wrench.and.screwdriver": return L10n.text("Tab icon: Tools")
+        // No longer offered in the picker, but a tab saved with it still needs a spoken name.
         case "sparkles": return L10n.text("Tab icon: Sparkles")
         case "shield.lefthalf.filled": return L10n.text("Tab icon: Shield")
         case "star.fill": return L10n.text("Tab icon: Star")

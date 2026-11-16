@@ -49,7 +49,14 @@ struct ExceptionsCard: View {
             }
         }
         if features.contains(.tyreAndWarnings) || features.contains(.vehicleHealth), let health = state.maintenance.details {
+            // The service flag and the tyre count above already speak for these two categories;
+            // repeating them here counted one fault as two in the header.
+            let serviceRowShown = features.contains(.vehicleHealth) && state.maintenance.service.serviceWarning
+            let tyreRowShown = features.contains(.tyreAndWarnings)
+                && health.tyres.contains { $0.warning.needsAttention }
             for warning in health.warnings {
+                if warning == .service, serviceRowShown { continue }
+                if warning == .tyrePressure, tyreRowShown { continue }
                 rows.append(KVRow(warning.displayName, L10n.text("Warning"), symbol: "exclamationmark.triangle.fill", warning: true))
             }
         }

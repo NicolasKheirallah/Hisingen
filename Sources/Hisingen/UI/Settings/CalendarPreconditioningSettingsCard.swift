@@ -99,7 +99,7 @@ struct CalendarPreconditioningSettingsCard: View {
                             .hisType(.caption, weight: .semibold).foregroundStyle(.secondary)
                         if calendars.isEmpty {
                             Text(L10n.text("No event calendars are available."))
-                                .hisType(.micro).foregroundStyle(.tertiary)
+                                .hisType(.micro).foregroundStyle(.secondary)
                         } else {
                             ForEach(calendars, id: \.calendarIdentifier) { calendar in
                                 Toggle(isOn: calendarBinding(calendar.calendarIdentifier)) {
@@ -109,7 +109,7 @@ struct CalendarPreconditioningSettingsCard: View {
                                         Text(calendar.title).hisType(.caption)
                                         Spacer()
                                         Text(calendar.source.title)
-                                            .hisType(.micro).foregroundStyle(.tertiary)
+                                            .hisType(.micro).foregroundStyle(.secondary)
                                     }
                                 }
                                 .toggleStyle(.checkbox)

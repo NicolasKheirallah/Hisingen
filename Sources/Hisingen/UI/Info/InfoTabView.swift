@@ -23,7 +23,6 @@ struct InfoTabView: View {
     let history: HistoryWorkspace
     let imageCache: CarImageCache
     let reverseGeocoder: ReverseGeocoder
-    var onRefresh: () -> Void = {}
     var onNavigateToHistory: () -> Void = {}
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
 
@@ -41,10 +40,6 @@ struct InfoTabView: View {
     @State var asyncDataLoaded = false
     @State var showAllCapabilities = false
     @State var reportError: String?
-    @State private var isRefreshing = false
-    /// Cumulative sweep angle, like the footer's refresh glyph. Animating a fixed 360 back
-    /// down to 0 spun the icon visibly in reverse when a refresh ended.
-    @State private var refreshRotation: Double = 0
     @State private var selectedCategory: InfoCategory = .all
 
     enum InfoCategory: String, CaseIterable, Identifiable {
@@ -86,7 +81,6 @@ struct InfoTabView: View {
         history: HistoryWorkspace,
         imageCache: CarImageCache,
         reverseGeocoder: ReverseGeocoder,
-        onRefresh: @escaping () -> Void = {},
         onNavigateToHistory: @escaping () -> Void = {},
         onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
         layout: TabLayout = .everything
@@ -95,7 +89,6 @@ struct InfoTabView: View {
         self.history = history
         self.imageCache = imageCache
         self.reverseGeocoder = reverseGeocoder
-        self.onRefresh = onRefresh
         self.onNavigateToHistory = onNavigateToHistory
         self.onRemoteCommand = onRemoteCommand
         self.layout = layout
@@ -214,8 +207,10 @@ struct InfoTabView: View {
             }
             .task(id: "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
             .task(id: coordinateKey) { await resolveAddressIfNeeded() }
+            // Every `reportError` comes from writing a report, CSV, pack or image out of the
+            // app, so the title names that; the message carries the system's cause.
             .alert(
-                L10n.text("Something Went Wrong"),
+                L10n.text("Export failed"),
                 isPresented: Binding(get: { reportError != nil }, set: { if !$0 { reportError = nil } })
             ) {
                 Button(L10n.text("OK"), role: .cancel) {}
@@ -338,20 +333,29 @@ struct InfoTabView: View {
         }
     }
 
+    /// An offline copy, or a reading Hisingen has not been able to re-check, is worth flagging.
+    /// A car that is merely asleep, with a recent successful check, is not.
+    private var freshnessNeedsAttention: Bool {
+        state.freshness.isCached || state.isStale()
+    }
+
     private func infoNavBar(proxy: ScrollViewProxy, entries: [InfoSectionEntry]) -> some View {
         HStack(spacing: 8) {
+            // A sleeping car's hour-old reading is the normal resting state, so it stays muted.
+            // Warning colour is kept for when Hisingen itself could not reach the car (`isStale`),
+            // which keeps it meaningful next to a real fault such as a service warning.
             Image(systemName: state.hasOldData() ? "moon.stars.fill" : "clock.arrow.circlepath")
                 .hisType(.label)
-                .foregroundStyle(state.hasOldData() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.7))
-                .hisAnimation(Motion.theme, value: state.hasOldData())
+                .foregroundStyle(freshnessNeedsAttention ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
+                .hisAnimation(Motion.theme, value: freshnessNeedsAttention)
                 .accessibilityHidden(true)
             Text(state.freshness.isCached ? L10n.text("Showing an offline copy") : state.freshnessDescription)
-                .hisType(.caption, weight: state.hasOldData() ? .semibold : .regular)
-                .foregroundStyle(state.hasOldData() ? HisingenTheme.semanticWarning : Color.secondary.opacity(0.8))
+                .hisType(.caption, weight: freshnessNeedsAttention ? .semibold : .regular)
+                .foregroundStyle(freshnessNeedsAttention ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.9)
                 .truncationMode(.middle)
-                .hisAnimation(Motion.theme, value: state.hasOldData())
+                .hisAnimation(Motion.theme, value: freshnessNeedsAttention)
 
             Spacer(minLength: 6)
 
@@ -401,33 +405,8 @@ struct InfoTabView: View {
             .help(L10n.text("Vehicle report"))
             .accessibilityLabel(L10n.text("Vehicle report"))
 
-            Button {
-                guard !isRefreshing else { return }
-                isRefreshing = true
-                withAnimation(reduceMotion ? nil : Motion.refreshSweep) {
-                    refreshRotation += 360
-                }
-                onRefresh()
-                Task {
-                    // Backstop only. The spinner is normally cleared by the `.onChange` below when
-                    // the refresh actually lands. A fixed 2.5s cleared it regardless, so a slow
-                    // wake showed a finished spinner while data was still arriving, and a fast
-                    // local read kept spinning after it had finished.
-                    try? await Task.sleep(nanoseconds: 12_000_000_000)
-                    isRefreshing = false
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .hisType(.label, weight: .semibold)
-                    .rotationEffect(.degrees(refreshRotation))
-            }
-            .buttonStyle(.pressable)
-            .disabled(isRefreshing)
-            .onChange(of: state.freshness.fetchedAt) { _, _ in isRefreshing = false }
-            // "Refresh Telemetry", matching the footer's button and its tooltip: one action,
-            // one description. It was "Refresh now" here and "Refresh Telemetry" there.
-            .help(L10n.text("Refresh Telemetry"))
-            .accessibilityLabel(L10n.text("Refresh Telemetry"))
+            // No refresh button here: the panel footer's Refresh Telemetry (⌘R) is the same
+            // action, and two identical glyphs on one screen read as two different things.
         }
         .padding(.horizontal, 4)
         .accessibilityElement(children: .contain)

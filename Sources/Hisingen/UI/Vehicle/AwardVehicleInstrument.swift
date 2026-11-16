@@ -246,7 +246,15 @@ struct AwardVehicleInstrument: View {
                         : L10n.text("Charge Now"),
                     command: chargingCommand
                 )
-                ledgerItem(symbol: "clock.arrow.circlepath", value: state.freshnessDescription, drawsDivider: false)
+                // The age alone: the header already carries the full freshness sentence, and
+                // repeating it here truncated to "Updated 2 hr a…".
+                ledgerItem(
+                    symbol: "clock.arrow.circlepath",
+                    value: Format.relativeAge(since: state.dataTimestamp),
+                    caption: L10n.text("Updated"),
+                    help: state.freshnessDescription,
+                    drawsDivider: false
+                )
             }
             .padding(.top, 20)
         }
@@ -320,17 +328,34 @@ struct AwardVehicleInstrument: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    private func ledgerItem(symbol: String, value: String, drawsDivider: Bool = true) -> some View {
+    private func ledgerItem(
+        symbol: String,
+        value: String,
+        caption: String? = nil,
+        help: String? = nil,
+        drawsDivider: Bool = true
+    ) -> some View {
         HStack(spacing: 12) {
-            VStack(spacing: 7) {
+            VStack(spacing: 5) {
                 Image(systemName: symbol)
                     .hisSymbolSize(17, weight: .semibold)
                 Text(value)
                     .hisType(.label, weight: .semibold)
+                    .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
+                if let caption {
+                    // Muted, not accent: this slot states, it does not act.
+                    Text(caption)
+                        .hisType(.micro, weight: .semibold)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 58)
+            .help(help ?? value)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(help ?? value)
             if drawsDivider { Divider().frame(height: 48) }
         }
         .frame(maxWidth: .infinity)
