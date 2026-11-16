@@ -49,6 +49,7 @@ Both are documented in detail, including API confidence levels; see [api/overvie
 - API integrations: `Sources/Hisingen/Services/API/`; see [api/](api/)
 - Domain logic: `Sources/Hisingen/Domain/`; see [domain/](domain/)
 - Capability/refresh/concurrency architecture: [architecture/](architecture/)
+- Optional Home Assistant charger integration, app and component: [home-charging.md](home-charging.md)
 - Security posture, threat model, privacy: [security/](security/)
 - Contributor workflow: [development/](development/)
 - Test suite and fixtures: [testing/](testing/)

@@ -33,7 +33,7 @@ struct VehicleCrossModelTests {
         #expect(profile.support(for: .climateStartStop) == .supported)
         #expect(profile.support(for: .locks) == .supported)
         #expect(profile.support(for: .windows) == .supported)
-        #expect(profile.support(for: .honkAndFlash) == .unavailable)
+        #expect(profile.support(for: .honkAndFlash) == .supported)
     }
 
     @Test

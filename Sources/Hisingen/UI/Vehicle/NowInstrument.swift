@@ -274,24 +274,13 @@ struct NowInstrument: View {
 
     /// The reader's chosen controls that this car and their feature switches can actually use.
     private var visibleQuickControls: [NowQuickControl] {
-        let features = preferences.features.enabled
-        let profile = state.capabilityProfile
-        return preferences.nowQuickControls.filter { control in
-            guard features.contains(control.feature) else {
-                // Locks, climate and charging were always drawn, so a reader with remote commands
-                // off still sees the state; the command gate disables their verbs.
-                return control == .locks || control == .climate
-                    || (control == .charging && state.powertrain.hasElectricRange)
-            }
-            switch control {
-            case .locks, .climate: return true
-            case .charging: return state.powertrain.hasElectricRange
-            case .airCleaning: return profile.permits(.preCleaning)
-            case .windows: return profile.permits(.windows)
-            case .locate: return profile.permits(.honkAndFlash)
-            case .tailgate: return state.otaCapabilities?.supportsTrunkControl == true
-            }
-        }
+        NowQuickControl.applicable(
+            preferences.nowQuickControls,
+            features: preferences.features.enabled,
+            hasElectricRange: state.powertrain.hasElectricRange,
+            profile: state.capabilityProfile,
+            supportsTrunkControl: state.otaCapabilities?.supportsTrunkControl == true
+        )
     }
 
     @ViewBuilder

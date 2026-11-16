@@ -262,6 +262,22 @@ A few more things that follow from the same history:
 * the trip computer shows distance and average speed since the last charge, taken from the C3
   odometer reading
 
+### Home charging (optional)
+
+If a charger is managed by Home Assistant, Hisingen can read it and show it beside the car.
+The charging card then adds the charger's own power, session energy and cost, and History rows
+show **Charger Energy** and **Charger Cost**. A charging plan can be handed to Home Assistant,
+which keeps running it when the Mac sleeps or Hisingen is closed.
+
+**Settings → Home Charging** takes the Home Assistant address and a long-lived access token,
+finds the charger (NexBlue first, or map the entities by hand), and pairs it to one vehicle.
+The token is stored in the macOS Keychain, is never exported, and the app talks only to the
+address you entered. Plans need the small Hisingen component installed in Home Assistant;
+status, controls and charger history work without it.
+
+The [Home Charging guide](docs/home-charging.md) covers the component install, entity mapping,
+plans, prices, privacy and troubleshooting.
+
 ### Electricity prices & the Charging Planner
 
 **Settings → Electricity** sets the country, either Sweden or another country.
@@ -579,9 +595,8 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 ## Product tour
 
 These captures were taken before the 3.0.0 redesign. That release renamed the four tabs to
-Now, Plan, Log and Car and redrew how each one reads. Current fixture renders of every surface,
-in both appearances and at Compact, Standard and Grand widths, are in
-[docs/design/renders/3.0.0](docs/design/renders/3.0.0/).
+Now, Plan, Log and Car and redrew how each one reads. DESIGN.md describes the shipped views, and
+the render test named there writes current snapshots of every surface to a local folder.
 
 The screenshots below show the main views of the app.
 
