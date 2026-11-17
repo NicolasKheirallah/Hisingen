@@ -37,7 +37,8 @@ swift test --disable-xctest --enable-swift-testing --filter VehicleCapabilityTes
 
 ## Signing into a real account for manual testing
 
-You'll need your own Polestar ID or your own Volvo Developer Portal application (Client ID, Client Secret, VCC API Key registered at developer.volvocars.com, redirect URI set to `hisingen://oauth/volvo/callback`); see the root [README.md](../../README.md#volvo-support) for the exact Developer Portal setup steps. There is no shared/test account.
+Use your own Polestar ID or Volvo ID for live testing. For Volvo custom credentials, follow the
+[Volvo setup guide](../install.md#volvo-setup) for the required products, credentials and callback URL.
 
 ## What you don't need
 

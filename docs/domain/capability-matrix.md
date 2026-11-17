@@ -33,7 +33,8 @@ fields for a coherent four-value pressure quadruple before giving up, so firmwar
 that report at other positions upgrade automatically. Warning-level status (OK/low/very
 low/high) is decoded on all models regardless.
 
-Per Hisingen's own README: Polestar 1 needs "broad live verification"; Polestar 2 is "model-aware... direct tyre pressure and selectable climate temperature are not assumed"; Polestar 3 has "runtime confirmation for backend-dependent capabilities"; Polestar 4 has "Digital Twin support; current limit, pre-cleaning, legacy connectivity, and remote OTA are not assumed"; Polestar 5/6 are "conservative backend-dependent" with only positive runtime observations trusted. Future/unrecognized Polestar models preserve their name and remain fully probeable rather than being rejected.
+Polestar 1, 5 and 6 rely on runtime capability reports. Hisingen also keeps the model name
+and probes capabilities when it encounters a model it doesn't recognise. [Recognised models](../vehicle-features.md#vehicle-support)
 
 ## Volvo
 
@@ -51,7 +52,7 @@ All Volvo models (XC40, XC60, XC90, S60, S90, V60, V90, C40, EX30, EX90, ES90) s
 | Charge target | Runtime detected | Only ever `.supported`/`.unavailable` once the Energy Capabilities endpoint has been probed; `.backendDependent` before that |
 | Charging current limit | Runtime detected | Same as above |
 | Everything else (windows, trunk, seat/steering heating, climate temperature, schedules, trip meters, connectivity, climate timers) | Best effort | `.backendDependent`, no static claim either way |
-| Remote command execution | Runtime-implemented for 6 of ~20 commands | Lock, unlock, climate start/stop, honk-flash, flash-lights work; everything else returns `RemoteCommandError.unsupported` regardless of capability state; see [api/volvo.md](../api/volvo.md#remote-commands) |
+| Remote command execution | Provider command list for the selected VIN | Hisingen implements lock, reduced-guard lock, unlock, climate start/stop, horn, lights and engine start/stop. Permissions also apply. See [Remote controls](../remote-controls.md). |
 
 ## What this table doesn't claim
 
