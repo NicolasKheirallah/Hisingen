@@ -218,7 +218,7 @@ A row can contain:
 ### `connectivity_history`
 
 Change-gated connectivity samples (written only when network type, signal bars, or wake
-reason changed, or after a one-hour heartbeat). Powers the Info tab's Connectivity & Wake
+reason changed, or after a one-hour heartbeat). Powers the Car tab's Connectivity & Wake
 card: current wake reason, signal sparkline, recent wake-reason counts.
 
 A row can contain: VIN; timestamp; network type; signal bars (0–4); wake reason.
@@ -226,7 +226,7 @@ A row can contain: VIN; timestamp; network type; signal bars (0–4); wake reaso
 ### `cabin_climate_history`
 
 Hourly-gated interior/requested cabin temperatures from digital-twin climate platforms.
-Powers the History tab's Cabin Temperature Trend card. Hidden on vehicles that never report
+Powers the Log tab's Cabin Temperature Trend card. Hidden on vehicles that never report
 interior temperature.
 
 ### `fuel_entries`

@@ -52,11 +52,7 @@ extension RefreshCoordinator {
         return portalPacedInterval(RefreshPolicy.interval(
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
-            isVehicleAvailable: {
-                if case .unavailable = state.identity.availability { return false }
-                if case .available = state.identity.availability { return true }
-                return nil
-            }()
+            isVehicleAvailable: state.identity.availability.isAvailable
         ))
     }
 

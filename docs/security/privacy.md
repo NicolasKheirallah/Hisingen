@@ -162,7 +162,7 @@ before the snapshot is persisted.
 Therefore the cached `VehicleState` payload stored in:
 
 - SQLite `vehicle_snapshots`; and
-- the `cached_vehicle_snapshots_v1` `UserDefaults` fallback
+- the `cached_vehicle_snapshots_v1` `UserDefaults` cache that releases up to 2.0.1 wrote, which is deleted at launch
 
 does not contain the current `VehicleState.location`.
 

@@ -8,7 +8,7 @@
 //
 // Checked against Sources/:
 //   1. no specular rim: liquidGlassSpecularBorder and cardRim are gone entirely
-//   2. glassEffect( appears only in Theme/ (the hisControlGlass / hisFloatingGlass tokens)
+//   2. glassEffect( appears only in Theme/
 //   3. SwiftUI materials appear only in Theme/ (the one-translucent-surface rule)
 //   4. cardBoundary(increasedContrast:) is the only boundary form (accessibility-only)
 //   5. Card.swift draws no shadow beyond CardHeader's one permitted glyph glow

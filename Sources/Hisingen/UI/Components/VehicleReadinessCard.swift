@@ -3,11 +3,6 @@ import SwiftUI
 struct VehicleReadinessCard: View {
     let state: VehicleState
     let lowBatteryThreshold: Int
-    @State private var departure = Date().addingTimeInterval(3600)
-
-    /// The date picker refuses any earlier date, so a panel left open past the chosen departure
-    /// would keep computing a verdict for a time that has already passed.
-    private var departureIsPast: Bool { departure < Date() }
 
     var body: some View {
         Card {
@@ -25,19 +20,7 @@ struct VehicleReadinessCard: View {
                     }
                 }
                 if state.powertrain.hasElectricRange {
-                    DisclosureGroup(L10n.text("Check charging before departure")) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            DatePicker(L10n.text("Departure"), selection: $departure, in: Date()...,
-                                       displayedComponents: .hourAndMinute)
-                                .datePickerStyle(.compact)
-                            Text(departureIsPast
-                                 ? L10n.text("That departure time has passed. Pick a new one to check readiness.")
-                                 : VehicleReadiness.chargingByDeparture(state, departure: departure))
-                                .hisType(.caption).fixedSize(horizontal: false, vertical: true)
-                            Text(state.chargingEstimateDestination).hisType(.micro).foregroundStyle(.secondary)
-                        }.padding(.top, 6)
-                    }
-                    .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    DepartureCheckDisclosure(state: state)
                 }
             }
         }

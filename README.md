@@ -15,7 +15,7 @@ Built with AppKit and SwiftUI. No Electron, no telemetry middlemen, and no third
 [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
-  <img src="assets/vehicle-overview-factory-art.png" width="460" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
+  <img src="assets/screenshots/now.png" width="560" alt="Hisingen Now tab showing a sample Polestar 2 at 72% battery with 308 km of estimated range and cards for locks, climate and charging">
 </p>
 
 > [!IMPORTANT]
@@ -123,28 +123,7 @@ Polestar doesn't currently provide a supported public vehicle API for third-part
 
 The Polestar integration therefore uses interfaces based on the services used by Polestar's own applications and real-world vehicle testing.
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Vehicle overview</strong><br><br>
-<img src="assets/vehicle-overview-factory-art.png" width="420" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
-</td>
-<td width="50%" align="center">
-<strong>Charging history</strong><br><br>
-<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Doors &amp; openings</strong><br><br>
-<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
-</td>
-<td width="50%" align="center">
-<strong>Remote controls</strong><br><br>
-<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
-</td>
-</tr>
-</table>
+See the [product tour](#product-tour) for screenshots with a sample Polestar 2.
 
 ### Volvo
 
@@ -262,6 +241,55 @@ A few more things that follow from the same history:
 * the trip computer shows distance and average speed since the last charge, taken from the C3
   odometer reading
 
+### Home charging (optional)
+
+#### NexBlue
+
+Open **Settings → Electricity → Home Charging** to pair a charger to a vehicle. Choose
+**NexBlue**, sign in with your myNexBlue account, then select the charger and vehicle.
+The connection works without Home Assistant and saves the NexBlue refresh token in the macOS Keychain.
+The screenshots below use sample charger and vehicle data.
+
+**Charge now and Pause** require a live connection and a fresh charger reading. After NexBlue
+accepts a command, the card waits for the charger to confirm it. Refusals such as disabled
+charging or another user on the charger have their own messages.
+
+<img src="assets/screenshots/3.0.0/nexblue-charger-controls.png" width="464" loading="lazy" alt="NexBlue charger card waiting for the charger to confirm a start command">
+
+**Cheapest overnight charge** previews a one-time window of 1–8 hours between 18:00 and 07:00
+using the selected Swedish spot price area and the charger's time zone. It requires an owner
+account, normal scheduling mode, and a free slot. An active schedule blocks a new timer. Hisingen
+reads the timer back after saving it to the charger, which can run it while the Mac sleeps.
+
+<img src="assets/screenshots/3.0.0/nexblue-overnight-timer.png" width="432" loading="lazy" alt="Three-hour timer preview showing 01:00 to 04:00 in Europe/Stockholm and a Save timer button">
+
+**Import earlier sessions** in Home Charging settings lets you select up to a year at a time when
+charging history is on. The settings show the time and date range of the last successful import.
+Repeating an import keeps one copy of each session, and separate sessions after a pause keep
+their own energy readings.
+
+<img src="assets/screenshots/3.0.0/nexblue-import-range.png" width="432" loading="lazy" alt="Import earlier sessions sheet with start and end date fields">
+
+<img src="assets/screenshots/3.0.0/nexblue-import-summary.png" width="560" loading="lazy" alt="Home Charging settings showing a successful NexBlue session import and the date range checked">
+
+#### Easee, Zaptec and Home Assistant
+
+Choose **Easee** or **Zaptec** to sign in with the account you use in the vendor's app. They
+show status and power, offer **Charge now** and **Pause**, and import finished sessions. Plans
+need Home Assistant. The account and password are stored in the macOS Keychain.
+
+Open **Settings → Electricity → Electricity Supplier** to connect Tibber with an access token.
+Charging sessions are then priced from Tibber's own 15-minute prices, with no Home Assistant
+needed. The token is stored in the macOS Keychain.
+
+Choose **Home Assistant** to connect through its address and access token. The optional
+Hisingen component runs charging plans while the Mac sleeps or Hisingen is closed.
+History can show **Charger Energy** and **Charger Cost**. When Hisingen computes a cost
+from session totals and your electricity settings, it labels the cost as an estimate.
+
+The [Home Charging guide](docs/home-charging.md) covers the component install, entity mapping,
+plans, prices, privacy and troubleshooting.
+
 ### Electricity prices & the Charging Planner
 
 **Settings → Electricity** sets the country, either Sweden or another country.
@@ -332,7 +360,7 @@ On top of the live readings Hisingen keeps some local context:
 * **Service.** The next service date is estimated from the last 30 days of driving.
 * **Usage mode.** The reported vehicle usage mode shows in the connectivity details, including on
   vehicles without separate network diagnostics.
-* **Weight.** The reported gross vehicle weight shows on the Info specs card (Polestar).
+* **Weight.** The reported gross vehicle weight shows on the Car specs card (Polestar).
 
 ### Climate
 
@@ -400,9 +428,9 @@ Polestar currently exposes more software information to Hisingen than Volvo's de
 When a car does not report update status at all, the card says "Not reported by this vehicle"
 instead of claiming that no update is available.
 
-### Info tab and the capabilities inspector
+### Car tab and the capabilities inspector
 
-The Info tab is the car's technical passport: identity and specifications on top, then the
+The Car tab is the car's technical passport: identity and specifications on top, then the
 capabilities the backend reports for this exact vehicle.
 
 * **Specifications.** Model, year, battery capacity, charge port, reported gross vehicle weight
@@ -503,7 +531,7 @@ offered climate setpoints, windows, trunk or charging controls that the public A
 
 * **Retry** is offered on a failed command only when the failure proves it did not run.
 * **Undo** is offered for 30 seconds on a reversible command.
-* **Routines** (Controls tab) are saved sequences of commands. Each step goes through the same
+* **Routines** (Plan tab) are saved sequences of commands. Each step goes through the same
   capability check and authorization as a single command, steps run in order, and a routine stops
   at the first failure.
 
@@ -578,125 +606,37 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 
 ## Product tour
 
-The screenshots below show the main views of the app.
+These screenshots use sample data for a Polestar 2.
 
-<details open>
-<summary><strong>Vehicle</strong></summary>
+### Now
 
-<br>
+Check the car’s battery, estimated range and lock status. If the car supports remote climate, you can start or stop it from the same panel.
 
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>Vehicle overview with factory render</strong><br><br>
-<img src="assets/vehicle-overview-factory-art.png" width="460" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Charging history &amp; session curve</strong><br><br>
-<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
-</td>
-<td width="50%" align="center">
-<strong>Charging planner &amp; spot prices</strong><br><br>
-<img src="assets/vehicle-charging-planner.png" width="420" loading="lazy" alt="Hisingen charging planner showing the cheapest window to reach 90% and an hourly spot-price chart">
-</td>
-</tr>
-</table>
+<img src="assets/screenshots/now-charging-dark.png" width="620" loading="lazy" alt="Now tab in dark mode with amber cards for active cabin heating and charging">
 
-</details>
+### Plan
 
-<details>
-<summary><strong>Remote Controls</strong></summary>
+Check whether charging will finish before departure. Plan also shows cabin climate timers and lets you adjust the charge target or current limit.
 
-<br>
+<img src="assets/screenshots/plan.png" width="620" loading="lazy" alt="Plan tab showing the departure check, a 24-hour timeline, a cabin climate timer and charging controls">
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Controls overview &amp; command confirmation</strong><br><br>
-<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
-</td>
-<td width="50%" align="center">
-<strong>Climate &amp; charging controls</strong><br><br>
-<img src="assets/controls-charging.png" width="420" loading="lazy" alt="Hisingen climate and charging controls with target limit and current limit selectors and Charge Now and Resume Schedule buttons">
-</td>
-</tr>
-</table>
+### Log
 
-</details>
+Pick a period to review activity. The charge-level chart shows the battery level at the start and end of each charging session.
 
-<details>
-<summary><strong>History &amp; Energy Analytics</strong></summary>
+<img src="assets/screenshots/log.png" width="620" loading="lazy" alt="Log tab showing 30 days of estimated charging energy, four charge-level ranges and a month-to-month comparison">
 
-<br>
+### Car
 
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>History overview &amp; observed changes</strong><br><br>
-<img src="assets/history-overview.png" width="460" loading="lazy" alt="Hisingen History tab with a 30-day distance chart, trip, driving time, energy and cost totals, and a list of observed lock changes">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Monthly mileage &amp; detected trips</strong><br><br>
-<img src="assets/history-trips-and-charging.png" width="420" loading="lazy" alt="Hisingen monthly mileage report split into business, private and unclassified trips, with a paged list of detected trips">
-</td>
-<td width="50%" align="center">
-<strong>Charging &amp; consumption trends</strong><br><br>
-<img src="assets/history-charging-trends.png" width="420" loading="lazy" alt="Hisingen charging trends summary and a consumption trend chart in kWh per 100 km">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Odometer &amp; battery health trends</strong><br><br>
-<img src="assets/history-odometer-and-battery-health.png" width="420" loading="lazy" alt="Hisingen odometer history, average daily distance and a battery health trend with degradation and usable capacity">
-</td>
-<td width="50%" align="center">
-<strong>Usage insights &amp; driving patterns</strong><br><br>
-<img src="assets/history-insights.png" width="420" loading="lazy" alt="Hisingen month-over-month comparison, observed air-cleaning runs, emissions compared with a petrol car and a driving patterns chart">
-</td>
-</tr>
-</table>
+Find the model year, odometer, battery capacity and charge port type in one place.
 
-</details>
+<img src="assets/screenshots/car.png" width="620" loading="lazy" alt="Car tab showing the Polestar 2 profile and specifications above timestamps for battery and range readings">
 
-<details>
-<summary><strong>Vehicle Info</strong></summary>
+### Settings
 
-<br>
+Open **Appearance → Create Theme** to preview your accent and background colours in light and dark mode.
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Vehicle identity &amp; reading freshness</strong><br><br>
-<img src="assets/info-vehicle-identity.png" width="420" loading="lazy" alt="Hisingen Info tab with vehicle identity, battery capacity, estimated range, charge port type and the time of each reading">
-</td>
-<td width="50%" align="center">
-<strong>Doors, openings &amp; tyre status</strong><br><br>
-<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
-</td>
-</tr>
-</table>
-
-</details>
-
-<details>
-<summary><strong>Preferences &amp; Customization</strong></summary>
-
-<br>
-
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>Appearance, themes &amp; vehicle perspective</strong><br><br>
-<img src="assets/settings-appearance.png" width="460" loading="lazy" alt="Hisingen Settings window on Appearance, with screenshot privacy mode, light and dark mode, vehicle perspective and the theme gallery">
-</td>
-</tr>
-</table>
-
-</details>
+<img src="assets/screenshots/create-theme.png" width="400" loading="lazy" alt="Create Theme editor with colour pickers and side-by-side battery and heating previews in light and dark mode">
 
 ---
 
@@ -844,7 +784,7 @@ inside field 35. Anything Hisingen cannot name is kept as a raw field.
 Legacy charging status values 7 and 8 mean smart charging paused and done, and field 28 is
 preferred when present. Seat intensities use a different scale from the Developer Portal's 0 to 3
 levels, and Hisingen converts between them. Unknown enum values and unsupported wire types stay
-raw instead of becoming a known value. Decoded tags that no control uses appear on the Info tab under
+raw instead of becoming a known value. Decoded tags that no control uses appear on the Car tab under
 "Unwired Backend Fields", and most `GetMyCars` tags now show under "Backend Reporting" instead.
 
 </details>
@@ -1105,18 +1045,36 @@ vehicles and history.
 
 Nine themes are currently included:
 
-* Hisingen Glass
+* Hisingen
 * Monochrome Precision
 * Heritage Blue
 * Nordic Night
 * Aurora Borealis
-* Swedish Gold
-* Cyan Racing
+* Charcoal Gold
+* Circuit Blue
 * Gothenburg Forest
 * Sand Dune
 
 Monochrome Precision and Heritage Blue are independent themes based on publicly documented
 design principles from Polestar and Volvo Cars. They don't imply affiliation or endorsement.
+
+**Your own theme.** *Create Theme* beside the theme grid asks for a name, an accent colour,
+and a light and a dark background. Hisingen keeps the backgrounds as backgrounds and moves the
+picked colours only as far as they need to go for text to clear a 4.5:1 contrast floor, then
+previews the result in both appearances before you save. The theme joins the grid and can be
+chosen per brand and per vehicle like any shipped one. *Delete* on an existing theme returns
+anything that pointed at it to the default palette.
+
+### Controls on Now
+
+The cards under the car on Now are yours to choose. **Settings → Appearance → Controls on
+Now** switches each one on or off: Locks, Climate, Charging, Air Cleaning, Windows, Honk &
+Flash, and Tailgate. Locks, Climate and Charging are on by default. A chosen card draws only
+when its remote feature is switched on and the car reports the capability, except that Locks
+and Climate keep showing their state with remote commands off, and Charging shows its state on
+any car with electric range. The grid closes up around whatever draws: three cards sit across,
+four arrange as two by two, and accessibility text sizes stack them in one column.
+
 
 ### Tabs & Cards
 
@@ -1133,11 +1091,11 @@ starting layout, so a card that was already off does not reappear.
 **Tabs of your own.** *New tab* in the same pane creates a tab, names it and gives it an
 icon; *Add Cards…* places anything you want on it, from any of the shipped tabs. Cards
 are drawn by the same views the shipped tabs use, so the charging card behaves the same
-whether it is on Vehicle or on a tab you built. Cards that own a tab's own state — the
-History charts and the Info section bars — stay on the tab that gives them that state,
+whether it is on Now or on a tab you built. Cards that own a tab's own state — the
+Log charts and the Car section bars — stay on the tab that gives them that state,
 and the pane names them rather than leaving them out silently.
 
-Any of Vehicle, Info, History and Controls can also be hidden from the tab bar.
+Any of Now, Plan, Log and Car can also be hidden from the tab bar.
 Settings is always there: it is where the list is managed.
 
 **Tab order.** The tab bar draws your tabs in your order, not the order they were
@@ -1155,9 +1113,10 @@ Compact, Standard, Large (tall), Wide, and Grand (wide & tall). **Custom Size**
 enables independent width and height sliders. On Wide and Grand panels, mid-size
 cards flow two per row and the vehicle render grows to use the extra room.
 
-**Content Density** zooms everything inside the panel independently of its
-window size: Compact (85%) shows more content before scrolling, Relaxed (115%)
-enlarges text and controls. The right-click menu on the status icon offers both
+**Content Density** changes type size and spacing independently of the window size:
+Compact tightens both so more content fits before scrolling, and Relaxed enlarges
+both. It is a layout setting, not a zoom, so a text size chosen in System Settings
+still applies on top of it. The right-click menu on the status icon offers both
 settings for quick switching, every change applies live to an open panel, and
 the panel never grows taller than the screen it opens on. The floating charging
 panel follows the same density choice.
@@ -1206,9 +1165,9 @@ Everything Hisingen keeps lives on your Mac, in a local SQLite database plus the
 for credentials.
 
 * **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
-  The export menu on the History tab also offers a **Full Backup (JSON)**, and Settings can export
+  The export menu on the Log tab also offers a **Full Backup (JSON)**, and Settings can export
   your settings (see [Make it yours](#make-it-yours)).
-* **Handover pack.** **Info → Export Handover Pack…** writes a folder for a sale or trade: a
+* **Handover pack.** **Car → Export Handover Pack…** writes a folder for a sale or trade: a
   summary, charging and trip CSVs without locations, an optional VIN (a checkbox in the save
   panel) and a checklist of the steps that still happen in the manufacturer app or in the car.
 * **Erase.** **Settings → Privacy & Data → Erase This Vehicle’s Local Data** and **Erase All Local Vehicle Data**
@@ -1494,7 +1453,7 @@ A few things are worth keeping in mind:
 * Charging energy and cost are estimates.
 * Some Polestar fields are decoded from the app's published protobuf schema and captured frames,
   not from documentation. A few are unconfirmed, and anything Hisingen cannot name is kept as a
-  raw field you can inspect on the Info tab under Unwired Backend Fields.
+  raw field you can inspect on the Car tab under Unwired Backend Fields.
 * The Polestar Android app version Hisingen reports to the app-backend endpoint has to stay
   current, or that discovery source answers 426. Hisingen then stands down for a day and falls
   back to the main discovery source.

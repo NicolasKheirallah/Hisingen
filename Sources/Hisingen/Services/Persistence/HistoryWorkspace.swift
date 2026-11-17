@@ -91,7 +91,7 @@ final class HistoryWorkspace {
         return await Task.detached(priority: .userInitiated) {
             database.charging.recentChargingSessions(for: vin)
                 .map { database.charging.domainSession(from: $0, usableCapacityKwh: capacity) }
-                .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
+                .filter { ($0.percentageAdded > 0 && $0.kwhDelivered > 0) || ($0.wallbox?.energyKwh ?? 0) > 0 }
         }.value
     }
 

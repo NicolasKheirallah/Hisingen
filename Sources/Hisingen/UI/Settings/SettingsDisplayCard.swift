@@ -141,7 +141,7 @@ struct SettingsDisplayCard: View {
                 .hisType(.label, weight: .medium)
                 .foregroundStyle(.secondary)
             HStack(spacing: 4) {
-                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car.fill" : "car.fill")
+                Image(systemName: preferences.activeBrand == .polestar ? "bolt.car" : "car")
                     .hisType(.caption)
                     .foregroundStyle(HisingenTheme.accent)
                 Text(previewTitle)
@@ -149,7 +149,7 @@ struct SettingsDisplayCard: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
             Spacer()
         }
         .padding(.vertical, 2)
@@ -245,7 +245,7 @@ struct SettingsDisplayCard: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
             Spacer()
         }
         .padding(.vertical, 2)
@@ -403,8 +403,7 @@ struct SettingsDisplayCard: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                TextField("120", text: $gridCarbonIntensity)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField("120", text: $gridCarbonIntensity)
                     .frame(width: 55)
                     .multilineTextAlignment(.trailing)
                     .controlSize(.small)

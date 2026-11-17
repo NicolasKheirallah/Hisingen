@@ -1,0 +1,146 @@
+register_charger:
+  name: Register charger
+  description: Tell the component which entities belong to a charger so it can record its sessions.
+  fields:
+    charger_id:
+      required: true
+      example: NX1234567
+      selector:
+        text:
+    charger:
+      required: true
+      description: Entity ids for switch, charging_state, power, session_energy and optionally charging_enabled and vehicle_battery.
+      selector:
+        object:
+    tibber_home:
+      required: false
+      selector:
+        text:
+
+submit_plan:
+  name: Submit plan
+  description: Start or replace the charging plan for a charger. Home Assistant runs it from here on.
+  fields:
+    plan_id:
+      required: true
+      selector:
+        text:
+    charger_id:
+      required: true
+      selector:
+        text:
+    charger:
+      required: true
+      selector:
+        object:
+    target:
+      required: true
+      description: "{type: add_kwh | reach_percent, value: number}"
+      selector:
+        object:
+    deadline:
+      required: true
+      description: The absolute deadline as an ISO 8601 timestamp.
+      selector:
+        text:
+    time_zone:
+      required: false
+      selector:
+        text:
+    vehicle:
+      required: false
+      selector:
+        object:
+    price:
+      required: false
+      selector:
+        object:
+    rate_hint_kw:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 50
+
+preview_plan:
+  name: Preview plan
+  description: Work out what a plan would do without starting it.
+  fields:
+    plan_id:
+      required: true
+      selector:
+        text:
+    charger_id:
+      required: true
+      selector:
+        text:
+    charger:
+      required: true
+      selector:
+        object:
+    target:
+      required: true
+      selector:
+        object:
+    deadline:
+      required: true
+      selector:
+        text:
+
+cancel_plan:
+  name: Cancel plan
+  description: Stop the plan and leave the charger as it is.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+
+pause_plan:
+  name: Pause plan
+  description: Hold the plan. No command is sent until the plan is resumed or replaced.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+
+resume_plan:
+  name: Resume plan
+  description: Release a held plan.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+
+charge_now:
+  name: Charge now
+  description: Charge immediately until the target is reached, ignoring the planned windows.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+
+get_status:
+  name: Get status
+  description: Return the plan status for a charger.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+
+get_sessions:
+  name: Get sessions
+  description: Return the charger's finished sessions that the component recorded.
+  fields:
+    charger_id:
+      required: true
+      selector:
+        text:
+    since:
+      required: false
+      selector:
+        text:

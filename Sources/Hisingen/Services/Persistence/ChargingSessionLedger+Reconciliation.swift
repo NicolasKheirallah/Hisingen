@@ -52,7 +52,8 @@ extension ChargingSessionLedger {
             energySource: record.energySource, confidence: record.confidence,
             sampleCoverage: record.sampleCoverage, tariffPricePerKwh: record.tariffPricePerKwh,
             currencySymbol: record.currencySymbol, completionReason: record.completionReason,
-            summaryVersion: record.summaryVersion, spotCost: record.spotEstimatedCost
+            summaryVersion: record.summaryVersion, spotCost: record.spotEstimatedCost,
+            wallbox: record.wallbox
         )
     }
 
@@ -61,6 +62,8 @@ extension ChargingSessionLedger {
     /// Historical-dashboard representation of the same repaired curve used by the vehicle
     /// card, while retaining voltage/current fields that the domain chart does not carry.
     func reconciledSamples(for record: HistoricalChargingSession) -> [HistoricalChargingSample] {
+        // A session the charger recorded without any battery reading has no curve to repair.
+        guard record.startSoc >= 0 else { return [] }
         var samples = chargingSamples(for: record.id).sorted { $0.timestamp < $1.timestamp }
         // Synthetic boundaries inherit the nearest real power so cost/summary integration
         // does not drop the first/last real intervals (nil power intervals are skipped).

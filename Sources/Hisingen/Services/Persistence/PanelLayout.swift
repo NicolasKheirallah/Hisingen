@@ -14,15 +14,6 @@ struct PanelLayout: Equatable {
     let width: CGFloat
     /// Physical ideal height in points, before the screen-fit clamp.
     let unclampedHeight: CGFloat
-    /// Always `1`. The density preset used to be applied as a `scaleEffect` over the whole panel
-    /// tree, which shrank already-small text rather than reflowing content to fit more of it — the
-    /// opposite of what the type ramp asks, and it meant the app ignored the reader's text-size
-    /// setting and substituted its own zoom. Type now comes from the ramp and spacing from the same
-    /// preset, so the tree lays out at the panel's real size and nothing scales it.
-    ///
-    /// Kept as a property rather than deleted because the shell and the floating mini panel both
-    /// read it; it is the single place that would change if a raster zoom ever returned.
-    var contentScale: CGFloat { 1 }
 
     /// Height after clamping to what fits below the menu bar on the current
     /// screen. Popovers taller than this get shifted by AppKit and silently
@@ -36,10 +27,6 @@ struct PanelLayout: Equatable {
     func clampedToVisibleFrame(_ availableHeight: CGFloat) -> CGFloat {
         min(unclampedHeight, max(Self.minimumHeight, availableHeight - 24))
     }
-
-    /// Width fixed-width views lay out at. Identical to `width` now that nothing scales the tree.
-    var logicalWidth: CGFloat { width }
-    var logicalHeight: CGFloat { height }
 
     /// Compact "430 × 580" style summary for readouts and menu items.
     var dimensionsLabel: String { "\(Int(width)) × \(Int(unclampedHeight))" }
@@ -80,7 +67,7 @@ struct PanelLayout: Equatable {
         customHeight: Double
     ) -> PanelLayout {
         let size = PanelSize(rawValue: panelSizeRaw ?? "") ?? .standard
-        // Density is applied by the shell's scale transform, not folded into the physical window.
+        // Density is applied as spacing, not folded into the physical window.
         _ = densityRaw
 
         let width: CGFloat

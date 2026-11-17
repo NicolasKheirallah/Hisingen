@@ -145,7 +145,7 @@ final class VehicleSessionController {
         if !preferences.vin(for: .polestar).isEmpty && upper == preferences.vin(for: .polestar).uppercased() {
             return .polestar
         }
-        if upper.hasPrefix("YV") {
+        if VehicleBrand.isVolvoVIN(upper) {
             return .volvo
         }
         if upper.hasPrefix("YS") || upper.hasPrefix("LP") {

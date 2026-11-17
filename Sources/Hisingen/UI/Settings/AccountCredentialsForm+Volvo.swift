@@ -4,19 +4,16 @@ import SwiftUI
 /// Volvo ID sign-in handoff.
 extension AccountCredentialsForm {
     var volvoFields: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: style == .welcoming ? 16 : 8) {
             if BuiltinVolvoSecrets.isConfigured && !showCustomVolvoApp {
                 HStack(spacing: 8) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(HisingenTheme.semanticGood)
-                        .hisType(.subhead)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.text("Developer Access Ready"))
-                            .hisType(.label, weight: .semibold)
-                            .foregroundStyle(.primary)
+                            .hisType(.body)
+                            .foregroundStyle(HisingenTheme.ink)
                         Text(L10n.text("Default developer application credentials configured."))
-                            .hisType(.micro)
-                            .foregroundStyle(.secondary)
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.inkMuted)
                     }
                     Spacer()
                     Button {
@@ -28,8 +25,9 @@ extension AccountCredentialsForm {
                     .buttonStyle(.pressable)
                     .foregroundStyle(HisingenTheme.accent)
                 }
-                .padding(8)
-                .background(HisingenTheme.semanticGood.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .padding(10)
+                .padding(.leading, 2)
+                .hisNotice(HisingenTheme.semanticGood)
             } else {
                 Text(L10n.text(
                     "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window."
@@ -57,43 +55,37 @@ extension AccountCredentialsForm {
                 }
 
                 labeledField(L10n.text("Client ID")) {
-                    TextField("Client ID", text: model.binding(\.volvoClientID))
-                        .textFieldStyle(.roundedBorder)
+                    HisTextField("", text: model.binding(\.volvoClientID), label: L10n.text("Client ID"))
                 }
 
                 labeledField(L10n.text("Client Secret")) {
-                    SecureField(model.hasResumableVolvoSession && model.draft.volvoClientSecret.isEmpty
-                                ? L10n.text("•••••••• (Saved in Keychain)")
-                                : L10n.text("Client Secret"), text: model.binding(\.volvoClientSecret))
-                        .textFieldStyle(.roundedBorder)
+                    HisSecureField(model.hasResumableVolvoSession && model.draft.volvoClientSecret.isEmpty
+                                   ? L10n.text("•••••••• (Saved in Keychain)") : "",
+                                   text: model.binding(\.volvoClientSecret), label: L10n.text("Client Secret"))
                 }
 
                 labeledField(L10n.text("VCC API Key")) {
-                    SecureField(model.hasResumableVolvoSession && model.draft.volvoApiKey.isEmpty
-                                ? L10n.text("•••••••• (Saved in Keychain)")
-                                : L10n.text("VCC API Key"), text: model.binding(\.volvoApiKey))
-                        .textFieldStyle(.roundedBorder)
+                    HisSecureField(model.hasResumableVolvoSession && model.draft.volvoApiKey.isEmpty
+                                   ? L10n.text("•••••••• (Saved in Keychain)") : "",
+                                   text: model.binding(\.volvoApiKey), label: L10n.text("VCC API Key"))
                 }
             }
 
-            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                TextField(L10n.text("e.g. My Volvo, Family car"), text: model.binding(\.volvoNickname))
-                    .textFieldStyle(.roundedBorder)
-            }
+            if style != .welcoming {
+                labeledField(L10n.text("Vehicle Nickname (Optional)")) {
+                    HisTextField(L10n.text("e.g. My Volvo, Family car"), text: model.binding(\.volvoNickname))
+                }
 
-            labeledField(L10n.text("VIN (Optional, auto-detected)")) {
-                TextField("YV1...", text: model.binding(\.volvoVIN))
-                    .textFieldStyle(.roundedBorder)
-            }
-            if attemptedVolvoSignIn && !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN) {
-                InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
+                labeledField(L10n.text("VIN (Optional, auto-detected)")) {
+                    HisTextField("YV1...", text: model.binding(\.volvoVIN))
+                }
+                if attemptedVolvoSignIn && !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN) {
+                    InlineValidationLabel(message: L10n.text("A VIN must contain 17 valid letters or digits."))
+                }
             }
 
             Button {
-                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                    attemptedVolvoSignIn = true
-                }
-                beginVolvoSignIn()
+                submitVolvoSignIn()
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "globe")
@@ -103,11 +95,26 @@ extension AccountCredentialsForm {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.hisProminent)
             .controlSize(.regular)
-            .disabled((!BuiltinVolvoSecrets.isConfigured && model.draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN))
+            .disabled(volvoSignInDisabled)
             .padding(.top, style == .welcoming ? 6 : 4)
         }
+        // Return in any field does what the button does, with the same guard.
+        .onSubmit { submitVolvoSignIn() }
+    }
+
+    private var volvoSignInDisabled: Bool {
+        (!BuiltinVolvoSecrets.isConfigured && model.draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            || !SettingsValidation.isValidOptionalVIN(model.draft.volvoVIN)
+    }
+
+    private func submitVolvoSignIn() {
+        guard !volvoSignInDisabled else { return }
+        withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+            attemptedVolvoSignIn = true
+        }
+        beginVolvoSignIn()
     }
 
     private func beginVolvoSignIn() {

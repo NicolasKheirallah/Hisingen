@@ -48,12 +48,12 @@ struct SettingsChargingPlannerCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "chart.bar.fill", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
+                CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
                 SettingsFeatureToggleRow(
                     binder: binder,
                     feature: .smartChargingPlanner,
-                    symbol: "bolt.fill",
+                    symbol: "bolt",
                     title: "Smart Charging Planner",
                     detail: "Show the cheapest charging window to your charge limit, from Swedish spot prices"
                 )

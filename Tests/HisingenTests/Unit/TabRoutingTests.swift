@@ -29,7 +29,7 @@ struct TabRoutingTests {
     @Test func aHiddenTabFallsBackToTheFirstVisibleOne() {
         var composition = TabComposition.default
         composition.hiddenTabs = [.vehicle]
-        #expect(TabRouting.resolve(composition: composition, selected: .vehicle) == .info)
+        #expect(TabRouting.resolve(composition: composition, selected: .vehicle) == .controls)
     }
 
     @Test func settingsIsNotListedAmongTheVisibleTabs() {

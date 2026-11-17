@@ -208,6 +208,7 @@ struct HistoryWorkspaceTests {
             .chargingSessions, scope: .selectedPeriod, vin: vin, selectedSessionID: nil,
             periodTrips: [], periodSessions: [])
         #expect(!period.contains(vin))
+        #expect(full.split(separator: "\n").first == period.split(separator: "\n").first)
 
         let samples = await harness.workspace.exportCSV(
             .sessionSamples, scope: .fullHistory, vin: vin, selectedSessionID: sessionID,
@@ -223,6 +224,40 @@ struct HistoryWorkspaceTests {
             .batteryHealth, scope: .selectedPeriod, vin: vin, selectedSessionID: nil,
             periodTrips: [], periodSessions: [])
         #expect(battery.contains("VIN"))
+    }
+
+    @Test
+    func chargingExportsKeepTheirFormattingForWallboxOnlySessions() throws {
+        let harness = Harness(label: "workspace-wallbox-export")
+        defer { harness.close() }
+        let start = Date(timeIntervalSince1970: 1_780_000_000)
+        let end = start.addingTimeInterval(1_800)
+        let session = HomeChargingSessionCandidate(
+            key: "test-session", keyKind: .history, chargerID: "test-charger",
+            startedAt: start, endedAt: end, energyKwh: 7.25,
+            energySource: "ha_session_energy_sensor", measuredAt: end, peakPowerKw: 5.5
+        )
+        let ledger = harness.database.charging
+        let inserted = try #require(ledger.recordWallboxSession(
+            session, decision: .newForVehicle(vin: vin), cost: nil, locationName: "Home, Garage"
+        ))
+        let sessions = ledger.recentChargingSessions(for: vin)
+        let full = ledger.exportChargingSessionsCSV(for: vin)
+        let period = L10n.withInterfaceLanguageOverride("sv") {
+            HistoryExport.chargingSessionsCSV(sessions)
+        }
+        let fullLines = full.split(separator: "\n")
+        let periodLines = period.split(separator: "\n")
+        #expect(fullLines.count == 2)
+        #expect(periodLines.count == 2)
+        #expect(fullLines.first == periodLines.first)
+        #expect(full.hasSuffix("\n"))
+        #expect(period.hasSuffix("\n"))
+        let prefix = "\(inserted.rowID),\(vin),\(Format.iso8601.string(from: start)),\(Format.iso8601.string(from: end)),,,"
+        #expect(fullLines.last?.hasPrefix(prefix + "0.00,5.5,0.0,Home  Garage,") == true)
+        #expect(periodLines.last?.hasPrefix(prefix + "\"0,00\",\"5,5\",\"0,0\",\"Home, Garage\",") == true)
+        #expect(fullLines.last?.contains(",7.250,ha_session_energy_sensor,") == true)
+        #expect(periodLines.last?.contains(",7.250,ha_session_energy_sensor,") == true)
     }
 
     @Test

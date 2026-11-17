@@ -7,13 +7,18 @@ import UniformTypeIdentifiers
 enum ChargingHistoryExport {
     static func csv(sessions: [ChargingSession], tariffPricePerKwh: Double, currencySymbol: String,
                     ratePolicy: ElectricityRatePolicy = .fixed) -> String {
-        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency,Energy Source,Confidence,Sample Coverage,Summary Version\n"
+        let headers = "Date,Start Battery %,End Battery %,Battery Added %,kWh Delivered,Peak Power (kW),Duration (min),Estimated Cost,Currency,Energy Source,Confidence,Sample Coverage,Summary Version,\(WallboxCSV.header.joined(separator: ","))\n"
         let rows = sessions.map { session in
             let dateStr = Format.iso8601.string(from: session.startDate)
             let costStr = session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: tariffPricePerKwh).map { String(format: "%.2f", $0) } ?? ""
             let peakKw = session.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000.0) } ?? ""
             let coverage = session.sampleCoverage.map { String(format: "%.3f", $0) } ?? ""
-            return "\(dateStr),\(session.startBatteryPercentage),\(session.endBatteryPercentage),\(session.percentageAdded),\(session.kwhDelivered),\(peakKw),\(session.durationMinutes),\(costStr),\(session.currencySymbol ?? currencySymbol),\(session.energySource.rawValue),\(session.confidence.rawValue),\(coverage),\(session.summaryVersion)"
+            let hasBattery = session.hasBatteryReading
+            let start = hasBattery ? "\(session.startBatteryPercentage)" : ""
+            let end = hasBattery ? "\(session.endBatteryPercentage)" : ""
+            let added = hasBattery ? "\(session.percentageAdded)" : ""
+            let wallbox = WallboxCSV.fields(session.wallbox).map(CSV.field).joined(separator: ",")
+            return "\(dateStr),\(start),\(end),\(added),\(session.kwhDelivered),\(peakKw),\(session.durationMinutes),\(costStr),\(session.currencySymbol ?? currencySymbol),\(session.energySource.rawValue),\(session.confidence.rawValue),\(coverage),\(session.summaryVersion),\(wallbox)"
         }.joined(separator: "\n")
         return headers + rows
     }

@@ -9,7 +9,7 @@ struct SettingsVersionFooter: View {
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
         return VStack(spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: "car.fill")
+                Image(systemName: "car")
                     .hisType(.caption, weight: .semibold)
                     .foregroundStyle(HisingenTheme.accent)
                 Text(L10n.text("Hisingen"))
@@ -21,12 +21,12 @@ struct SettingsVersionFooter: View {
                     .foregroundStyle(.secondary)
                 Text("(\(buildNumber))")
                     .hisType(.micro, weight: .regular, design: .monospaced)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             HStack(spacing: 3) {
                 Text(L10n.text("Created by"))
                     .hisType(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Button("Nicolas Kheirallah") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah") {
                         NSWorkspace.shared.open(url)
@@ -36,7 +36,7 @@ struct SettingsVersionFooter: View {
                 .hisType(.caption, weight: .medium)
                 Text("·")
                     .hisType(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Button("GitHub") {
                     if let url = URL(string: "https://github.com/NicolasKheirallah/Hisingen") {
                         NSWorkspace.shared.open(url)
@@ -57,7 +57,7 @@ struct SettingsVersionFooter: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(HisingenTheme.canvas.opacity(0.5))
         }
     }

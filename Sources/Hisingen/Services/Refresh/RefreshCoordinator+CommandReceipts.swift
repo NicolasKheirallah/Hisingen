@@ -29,19 +29,7 @@ extension RefreshCoordinator {
 
     func dismissCommandReceipt(id: UUID) {
         guard confirmations.dismiss(id: id, vin: latest?.identity.vin) else { return }
-        publishAfterReceiptDismissal()
-    }
-
-    func dismissCommandReceipt(issuedAt: Date) {
-        guard confirmations.dismiss(issuedAt: issuedAt, vin: latest?.identity.vin) else { return }
-        publishAfterReceiptDismissal()
-    }
-
-    private func publishAfterReceiptDismissal() {
-        if var displayState = latest {
-            displayState.publish(confirmations.overlay)
-            onEvent?(.state(displayState))
-        }
+        publishCommandReceipts()
         publishDiagnostics()
     }
 

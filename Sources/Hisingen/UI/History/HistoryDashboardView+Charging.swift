@@ -53,7 +53,7 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                         }
                         .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
+                        .background(HisingenTheme.semanticGood.opacity(0.15), in: RoundedRectangle(cornerRadius: 0))
                         .accessibilityLabel(L10n.text("Session in progress"))
                         .onAppear {
                             curveLivePulse = false
@@ -65,7 +65,7 @@ extension HistoryDashboardView {
                             .hisType(.nano, weight: .bold, design: .rounded)
                             .monospacedDigit()
                             .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(badgeColor.opacity(0.18), in: Capsule())
+                            .background(badgeColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 0))
                             .foregroundStyle(badgeColor)
                     }
                     Spacer()
@@ -232,7 +232,7 @@ extension HistoryDashboardView {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 Text(L10n.text("Curves are drawn from locally recorded polls of vehicle telemetry, so resolution follows how often the vehicle reported while plugged in."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                 dataConfidenceNote(for: curve.map(\.timestamp))
@@ -328,16 +328,16 @@ extension HistoryDashboardView {
         return Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "bolt.fill", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
+                    CardHeader(symbol: "bolt", title: L10n.text("Charging Sessions"), color: HisingenTheme.semanticGood)
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
-                        .hisType(.micro).foregroundStyle(.tertiary)
+                        .hisType(.micro).foregroundStyle(.secondary)
                 }
                 if chargingSessions.count > 8 {
                     searchField(L10n.text("Search sessions by date, place or energy"), text: $sessionSearchText,
                                 count: filteredSessionsForPicker.count, total: chargingSessions.count)
                 }
-                PaginatedSection(items: matches, pageSize: 8,
+                PaginatedSection(items: matches, pageSize: preferences.historyPageSize(for: .historyChargingSessions),
                                  resetKeys: [sessionSearchText, periodLoadKey],
                                  emptyMessage: L10n.text("No charging sessions match this search.")) { rows, footer in
                     ForEach(rows) { session in
@@ -395,7 +395,7 @@ extension HistoryDashboardView {
                     if session.endedAt == nil {
                         Text(L10n.text("Active")).hisType(.nano, weight: .bold)
                             .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(HisingenTheme.semanticGood.opacity(0.15), in: Capsule())
+                            .background(HisingenTheme.semanticGood.opacity(0.15), in: RoundedRectangle(cornerRadius: 0))
                     }
                 }
                 HStack(spacing: 5) {
@@ -541,7 +541,7 @@ extension HistoryDashboardView {
                                 .hisType(.micro).foregroundStyle(.secondary)
                         }
                         GeometryReader { geo in
-                            RoundedRectangle(cornerRadius: 2)
+                            RoundedRectangle(cornerRadius: 0)
                                 .fill(HisingenTheme.chartPositive.opacity(0.3))
                                 .frame(width: max(2, geo.size.width * stat.energyKwh / totalEnergy), height: 4)
                                 .hisAnimation(Motion.progress, value: stat.energyKwh)
@@ -585,7 +585,7 @@ extension HistoryDashboardView {
                     Text(L10n.text("Cost")).gridColumnAlignment(.trailing)
                     Text(L10n.text("Per kWh")).gridColumnAlignment(.trailing)
                 }
-                .hisType(.nano, weight: .semibold).foregroundStyle(.tertiary)
+                .hisType(.nano, weight: .semibold).foregroundStyle(.secondary)
                 ForEach(rows) { row in
                     GridRow {
                         Text(row.name).lineLimit(1).minimumScaleFactor(0.9)
@@ -617,7 +617,7 @@ extension HistoryDashboardView {
                 if let perWeek {
                     KVRow(L10n.text("Sessions Per Week"), Format.number(perWeek, decimals: 1), symbol: "calendar.badge.clock")
                 }
-                KVRow(L10n.text("Estimated Energy Added"), Format.energyKwh(energy), symbol: "bolt.fill", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
+                KVRow(L10n.text("Estimated Energy Added"), Format.energyKwh(energy), symbol: "bolt", info: L10n.text("Estimated from stored vehicle telemetry unless a future metered wallbox source is explicitly identified."))
                 if averagePeak > 0 {
                     KVRow(L10n.text("Average Observed Peak"), Format.powerKw(averagePeak), symbol: "waveform.path.ecg")
                 }

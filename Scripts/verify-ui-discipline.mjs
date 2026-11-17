@@ -230,7 +230,6 @@ const WASH_FILES = [
   'Shell/DismissibleNoticeBanner.swift',
   'Controls/ControlsBanners.swift',
   'Components/CommandReceiptChip.swift',
-  'Controls/ChargingControlsCard.swift',
   'Settings/SettingsNavigation.swift',
   'Settings/TabItemPickerSheet.swift',
   'History/HistoryDashboardView.swift',
@@ -240,7 +239,9 @@ function checkWashes() {
     const f = files.find((x) => x.rel.endsWith(rel));
     if (!f) { fail('washes', `missing file ${rel}`); continue; }
     const text = f.lines.join('\n');
-    if (!text.includes('increasedContrast') && !text.includes('tintedWashOpacity')) {
+    // `hisNotice` is the notice surface: a neutral fill whose coloured edge doubles under
+    // Increase Contrast, so a file that draws its notices through it has already answered this.
+    if (!text.includes('increasedContrast') && !text.includes('tintedWashOpacity') && !text.includes('hisNotice')) {
       fail('washes', `${rel} wash does not respond to Increase Contrast`);
     }
   }

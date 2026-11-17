@@ -76,6 +76,13 @@ extension VehicleDatabase {
         let currency: String?
         let targetSoc: Double?
         let summaryVersion: Int
+        let wallboxChargerID: String?
+        let wallboxEnergyKwh: Double?
+        let wallboxEnergySource: String?
+        let wallboxMeasuredAt: String?
+        let wallboxCost: Double?
+        let wallboxCostMethod: String?
+        let wallboxPriceSource: String?
     }
 
     private func backupChargingSessions(includeCoordinates: Bool) throws -> [BackupSession] {
@@ -86,7 +93,8 @@ extension VehicleDatabase {
                usable_capacity_kwh, tariff_price_per_kwh, night_tariff_enabled,
                night_tariff_price_per_kwh, night_tariff_start_hour,
                night_tariff_end_hour, estimated_cost, currency_symbol, target_soc,
-               summary_version
+               summary_version, wallbox_charger_id, wallbox_energy_kwh, wallbox_energy_source,
+               wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source
         FROM charging_sessions ORDER BY started_at DESC;
         """
         let df = ISO8601DateFormatter()
@@ -119,7 +127,14 @@ extension VehicleDatabase {
                     estimatedCost: stmt.columnDouble(at: 20),
                     currency: stmt.columnText(at: 21),
                     targetSoc: stmt.columnDouble(at: 22),
-                    summaryVersion: Int(stmt.columnInt64(at: 23) ?? 1)
+                    summaryVersion: Int(stmt.columnInt64(at: 23) ?? 1),
+                    wallboxChargerID: stmt.columnText(at: 24),
+                    wallboxEnergyKwh: stmt.columnDouble(at: 25),
+                    wallboxEnergySource: stmt.columnText(at: 26),
+                    wallboxMeasuredAt: stmt.columnDate(at: 27).map { df.string(from: $0) },
+                    wallboxCost: stmt.columnDouble(at: 28),
+                    wallboxCostMethod: stmt.columnText(at: 29),
+                    wallboxPriceSource: stmt.columnText(at: 30)
                 ))
             }
             return out

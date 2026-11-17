@@ -96,11 +96,13 @@ extension RefreshCoordinator {
         if confirmations.restore(forVIN: vin) {
             scheduleConfirmationWatchdog(vin: vin)
         }
-        latestAuthoritative = stateStore.snapshot(for: vin)
-        latestAuthoritative?.setOptimisticLock(nil)
-        latest = latestAuthoritative
-        latest?.publish(confirmations.overlay)
-        if let latest { onEvent?(.state(latest)) } else { onEvent?(.loading) }
+        if var cached = stateStore.snapshot(for: vin) {
+            restoreCachedState(&cached)
+        } else {
+            latestAuthoritative = nil
+            latest = nil
+            onEvent?(.loading)
+        }
         onEvent?(.selectionChanged(vin))
         publishDiagnostics()
         runSelection(vin: vin)

@@ -22,6 +22,10 @@ extension VehicleDatabase {
     /// numbers the reader compares come from one place.
     static let sessionRetentionDays = 730
 
+    /// How long a cached snapshot or charging baseline may answer. The snapshot read and the
+    /// store's baseline read and pruning pass all use this one figure.
+    static let cacheRetention: TimeInterval = 7 * 24 * 60 * 60
+
     /// Bounds growth of the tables that previously had no retention path at all (manual or
     /// automatic) – `charging_sessions`, `battery_health_history`, `remote_commands_log`,
     /// and the per-hour `connectivity_history`/`cabin_climate_history` heartbeats. Defaults

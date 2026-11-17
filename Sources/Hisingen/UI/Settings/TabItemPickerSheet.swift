@@ -85,7 +85,7 @@ struct TabItemPickerSheet: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.04, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.04, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
 
             Picker("", selection: $filter) {
                 ForEach(Filter.allCases) { Text($0.title).tag($0) }
@@ -102,7 +102,7 @@ struct TabItemPickerSheet: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(source.title)
                                     .hisType(.caption, weight: .bold)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                     .textCase(.uppercase)
                                 ForEach(entries) { entry in
                                     row(entry)
@@ -130,7 +130,7 @@ struct TabItemPickerSheet: View {
                     for item in selected.sorted(by: { $0.rawValue < $1.rawValue }) { onAdd(item) }
                     selected.removeAll()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .disabled(selected.isEmpty)
                 Button(L10n.text("Close"), action: onDone)
                     .keyboardShortcut(.cancelAction)
@@ -187,7 +187,7 @@ struct TabItemPickerSheet: View {
             .hisType(.nano, weight: .semibold)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
-            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 3))
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
             .foregroundStyle(.secondary)
     }
 }

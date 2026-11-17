@@ -43,19 +43,41 @@ struct VehicleReadiness {
         return checks
     }
 
+    struct DepartureAssessment: Equatable {
+        let message: String
+        var estimateDestination: String? = nil
+    }
+
     static func chargingByDeparture(_ state: VehicleState, departure: Date, now: Date = Date()) -> String {
-        guard departure > now else { return L10n.text("Choose a future departure time.") }
+        assessDeparture(state, departure: departure, now: now).message
+    }
+
+    static func assessDeparture(_ state: VehicleState, departure: Date, now: Date = Date()) -> DepartureAssessment {
+        guard departure > now else { return .init(message: L10n.text("Choose a future departure time.")) }
         guard state.hasFreshReading(.battery, now: now), let battery = state.energy.batteryPercentage,
-              let target = state.energy.targetPercentage else { return L10n.text("Fresh battery and charge-target readings are required.") }
-        if battery >= Double(target) { return L10n.text("The reported charge target has been reached.") }
-        guard state.isCharging, state.hasFreshReading(.charging, now: now),
+              let target = state.energy.targetPercentage else {
+            return .init(message: L10n.text("Fresh battery and charge-target readings are required."))
+        }
+        if battery >= Double(target) {
+            return .init(message: L10n.text("The reported charge target has been reached."))
+        }
+        guard state.hasFreshReading(.charging, now: now) else {
+            return .init(message: L10n.text("No current charging estimate is available for this departure."))
+        }
+        guard state.energy.connection != .disconnected && state.energy.connection != .fault, state.isCharging else {
+            return .init(message: state.chargingExplanation)
+        }
+        guard
               let minutes = state.remainingChargingMinutes, let timestamp = state.reportedDate(for: .charging) else {
-            return L10n.text("No current charging estimate is available for this departure.")
+            return .init(message: L10n.text("No current charging estimate is available for this departure."))
         }
         let completion = timestamp.addingTimeInterval(TimeInterval(minutes) * 60)
-        guard completion > now else { return L10n.text("The charging estimate needs a new vehicle reading.") }
-        return completion <= departure
+        guard completion > now else {
+            return .init(message: L10n.text("The charging estimate needs a new vehicle reading."))
+        }
+        let message = completion <= departure
             ? L10n.text("The current vehicle estimate finishes before departure.")
             : L10n.text("The current vehicle estimate finishes after departure.")
+        return .init(message: message, estimateDestination: state.chargingEstimateDestination)
     }
 }

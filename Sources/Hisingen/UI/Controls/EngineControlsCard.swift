@@ -16,7 +16,7 @@ struct EngineControlsCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     CardHeader(
-                        symbol: "flame.fill",
+                        symbol: "flame",
                         title: L10n.text("Remote Engine Start (RES)"),
                         color: HisingenTheme.semanticWarning
                     )
@@ -60,28 +60,27 @@ struct EngineControlsCard: View {
                         gate.send(startCommand)
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "flame.fill")
+                            Image(systemName: "flame")
                             Text(L10n.format("Start Engine (%d min)", engineRuntimeMinutes))
                                 .hisType(.label, weight: .medium)
                             gate.sendingOverlay(startCommand)
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(HisingenTheme.semanticWarning)
+                    .buttonStyle(.hisProminent(HisingenTheme.semanticWarning))
                     .disabled(gate.isDisabled(startCommand) || state.fuelSystem.isEngineRunning != false)
 
                     Button {
                         gate.send(.stopEngine)
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "stop.fill")
+                            Image(systemName: "stop")
                             Text(L10n.text("Stop Engine")).hisType(.label, weight: .medium)
                             gate.sendingOverlay(.stopEngine)
                         }
                         .frame(maxWidth: .infinity, minHeight: 34)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .disabled(gate.isDisabled(.stopEngine) || state.fuelSystem.isEngineRunning != true)
                 }
             }
@@ -111,7 +110,7 @@ struct EngineControlsCard: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(HisingenTheme.semanticGood.opacity(0.12), in: Capsule())
+            .background(HisingenTheme.semanticGood.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
             .transition(.opacity.combined(with: .scale(scale: 0.95)))
         } else if state.fuelSystem.isEngineRunning == false {
             statusPill(L10n.text("Engine Stopped"))
@@ -126,6 +125,6 @@ struct EngineControlsCard: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(HisingenTheme.chipFill, in: Capsule())
+            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
     }
 }

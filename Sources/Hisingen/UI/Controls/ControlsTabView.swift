@@ -24,6 +24,14 @@ struct ControlsTabView: View {
     /// The reader's layout for this tab: what to draw, and in what order. The default draws
     /// everything exactly as designed.
     var layout: TabLayout = .everything
+    /// Controls that moved to Car (locks, windows and locate, software install). Plan still draws
+    /// one when the reader placed it here, or when their Car layout does not draw it, so a control
+    /// is never left with no home.
+    var drawnOnCar: Set<TabItemID> = []
+
+    private func keepsOnPlan(_ item: TabItemID) -> Bool {
+        layout.places(item) || !drawnOnCar.contains(item)
+    }
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
@@ -34,6 +42,7 @@ struct ControlsTabView: View {
     @Environment(\.preferencesStore) private var preferences
     @State private var showScheduleEditor = false
     @State private var scheduleEditorKind: ScheduleKind = .climate
+    @State private var scheduleToEdit: VehicleSchedule?
 
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { preferences.features.enabled }
@@ -80,7 +89,8 @@ struct ControlsTabView: View {
                     AnyView(ClimateControlCard(
                         state: state,
                         gate: gate,
-                        onShowSchedule: showScheduleEditor(for:)
+                        onShowSchedule: showScheduleEditor(for:),
+                        settingsOnly: true
                     ))
                 }
             ),
@@ -110,18 +120,19 @@ struct ControlsTabView: View {
             ),
             CardEntry(
                 id: TabItemID.controlsAccess.rawValue, item: TabItemID.controlsAccess,
-                isVisible: features.contains(.remoteLocks),
+                isVisible: features.contains(.remoteLocks) && keepsOnPlan(.controlsAccess),
                 view: { AnyView(AccessControlsCard(state: state, gate: gate)) }
             ),
             CardEntry(
                 id: TabItemID.controlsWindowsLocate.rawValue, item: TabItemID.controlsWindowsLocate,
-                isVisible: (features.contains(.remoteWindows) && profile.permits(.windows))
-                    || features.contains(.remoteHonkFlash),
+                isVisible: ((features.contains(.remoteWindows) && profile.permits(.windows))
+                    || features.contains(.remoteHonkFlash)) && keepsOnPlan(.controlsWindowsLocate),
                 view: { AnyView(WindowsLocateCard(state: state, gate: gate)) }
             ),
             CardEntry(
                 id: TabItemID.controlsOTA.rawValue, item: TabItemID.controlsOTA,
-                isVisible: features.contains(.remoteOTA) && profile.permits(.softwareInstallControl),
+                isVisible: features.contains(.remoteOTA) && profile.permits(.softwareInstallControl)
+                    && keepsOnPlan(.controlsOTA),
                 view: { AnyView(OTAControlsCard(state: state, gate: gate, onRefresh: onRefresh)) }
             )
         ]
@@ -137,9 +148,6 @@ struct ControlsTabView: View {
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            if HisingenTheme.layoutWidth >= 580 {
-                AwardControlMap(state: state, imageCache: imageCache)
-            }
             if draws(.controlsBanners) {
                 ControlsBanners(
                 state: state,
@@ -159,12 +167,26 @@ struct ControlsTabView: View {
                 }
             }
 
+            // When: the departure, the next 24 hours, then every timer.
+            VStack(alignment: .leading, spacing: 20) {
+                if state.powertrain.hasElectricRange {
+                    PlanDeparture(state: state)
+                }
+                PlanDayTimeline(state: state)
+                PlanTimeline(state: state, canEdit: canEdit, onEdit: editSchedule,
+                             onAdd: canAddSchedule ? { showScheduleEditor(for: .climate) } : nil)
+            }
+            .padding(.horizontal, HisingenTheme.cardPadding)
+            .padding(.top, 4)
+
             if !visibleCards.isEmpty {
                 ForEach(visibleCards) { entry in entry.view() }
                 if anyCardDimmed || state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
                 RoutinesCard(state: state, gate: commandGate, isBusy: remoteCommandInProgress)
+                RemoteControlsFootnote(features: features, isBrandVolvo: isBrandVolvo)
+                    .padding(.horizontal, HisingenTheme.cardPadding)
             } else {
                 noControlsEnabledCard
             }
@@ -178,14 +200,39 @@ struct ControlsTabView: View {
             ScheduleEditorSheet(
                 state: state,
                 initialKind: scheduleEditorKind,
+                initialSchedule: scheduleToEdit,
                 onRemoteCommand: onRemoteCommand,
                 isBusy: remoteCommandInProgress
             )
         }
     }
 
+    private var canAddSchedule: Bool {
+        features.contains(.remoteSchedules)
+            && (profile.permits(.climateTimers) || profile.permits(.chargingSchedule))
+    }
+
     private func showScheduleEditor(for kind: ScheduleKind) {
+        scheduleToEdit = nil
         scheduleEditorKind = kind
+        showScheduleEditor = true
+    }
+
+    private func canEdit(_ schedule: VehicleSchedule) -> Bool {
+        switch schedule.kind {
+        case .climate:
+            guard schedule.backendID != nil, schedule.oneShotDate == nil else { return false }
+            return commandGate.availability(.setClimateTimer(schedule), ignoreBusy: true).isAvailable
+        case .globalCharging:
+            return commandGate.availability(.setGlobalChargeTimer(schedule), ignoreBusy: true).isAvailable
+        case .locationCharging, .departure:
+            return false
+        }
+    }
+
+    private func editSchedule(_ schedule: VehicleSchedule) {
+        scheduleToEdit = schedule
+        scheduleEditorKind = schedule.kind
         showScheduleEditor = true
     }
 
@@ -220,22 +267,19 @@ struct ControlsTabView: View {
 
     private var noControlsEnabledCard: some View {
         Card {
-            VStack(spacing: 8) {
-                Image(systemName: "switch.2")
-                    .hisSymbolSize(24)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.text("No Remote Controls Enabled"))
                     .hisType(.heading, weight: .semibold)
-                Text(L10n.text("Enable remote controls in Settings under Telemetry & Features to display controls here."))
+                    .accessibilityAddTraits(.isHeader)
+                Text(L10n.text("Enable remote controls in Settings → Features."))
                     .hisType(.label)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 if state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

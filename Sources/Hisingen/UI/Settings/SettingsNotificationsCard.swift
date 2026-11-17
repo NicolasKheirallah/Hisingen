@@ -66,7 +66,7 @@ struct SettingsNotificationsCard: View {
     private var permissionBanner: some View {
         if notificationPermission == .denied {
             HStack(spacing: 8) {
-                Image(systemName: "bell.slash.fill")
+                Image(systemName: "bell.slash")
                     .hisType(.body)
                     .foregroundStyle(HisingenTheme.semanticWarning)
                 VStack(alignment: .leading, spacing: 1) {
@@ -87,11 +87,11 @@ struct SettingsNotificationsCard: View {
                     Text(L10n.text("Open Settings"))
                         .hisType(.caption, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.mini)
             }
             .padding(8)
-            .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 0))
             .accessibilityElement(children: .combine)
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
@@ -182,7 +182,7 @@ struct SettingsNotificationsCard: View {
         }
 
         notificationRow(
-            symbol: "bolt.car.fill",
+            symbol: "bolt.car",
             title: "Left in Convenience Mode",
             detail: "Alert after 30 minutes in convenience mode, which keeps systems on and drains the 12 V battery",
             \.notifyUsageModeConvenience
@@ -192,7 +192,7 @@ struct SettingsNotificationsCard: View {
     @ViewBuilder
     private var serviceAndTelemetryRows: some View {
         notificationRow(
-            symbol: "wrench.and.screwdriver.fill",
+            symbol: "wrench.and.screwdriver",
             title: "Service Due Soon",
             detail: "Alert at 30 days, 1,000 km, or a provider service warning",
             \.notifyServiceDue
@@ -213,7 +213,7 @@ struct SettingsNotificationsCard: View {
         )
 
         notificationRow(
-            symbol: "powerplug.fill",
+            symbol: "powerplug",
             title: "Plug-In Reminder",
             detail: L10n.format("Alert once at %d%% or below while unplugged and not charging", prefs.plugInReminderThreshold),
             \.notifyPlugInReminder
@@ -274,14 +274,14 @@ struct SettingsNotificationsCard: View {
             .padding(.vertical, 2)
 
         notificationRow(
-            symbol: "cloud.rain.fill",
+            symbol: "cloud.rain",
             title: "Rain Alert (Windows Open)",
             detail: "Alert if rain starts while windows or sunroof are open",
             \.notifyRainWithWindowsOpen
         )
 
         notificationRow(
-            symbol: "lock.shield.fill",
+            symbol: "lock.shield",
             title: "Evening Unlocked Reminder",
             detail: L10n.format("Alert if parked and unlocked after %02d:00", prefs.eveningUnlockedStartHour),
             \.notifyEveningUnlocked
@@ -303,7 +303,7 @@ struct SettingsNotificationsCard: View {
             .padding(.vertical, 2)
 
         notificationRow(
-            symbol: "list.bullet.rectangle.fill",
+            symbol: "list.bullet.rectangle",
             title: "Daily Summary",
             detail: "One notification a day with battery, range, charging, warnings, service and failed commands",
             \.notifyDailySummary
@@ -325,14 +325,14 @@ struct SettingsNotificationsCard: View {
             .padding(.vertical, 2)
 
         notificationRow(
-            symbol: "speaker.wave.2.fill",
+            symbol: "speaker.wave.2",
             title: "Notification Sounds",
             detail: "Play a sound on urgent alerts: alarms, warnings and charging problems",
             \.notifySounds
         )
 
         notificationRow(
-            symbol: "moon.zzz.fill",
+            symbol: "moon.zzz",
             title: "Quiet Hours",
             detail: "Hold non-urgent alerts until the morning; security alerts always come through",
             \.quietHoursEnabled
@@ -394,7 +394,7 @@ struct SettingsNotificationsCard: View {
                 ? (hasVehicle ? String(settingsVehicleVIN.suffix(6)) : "")
                 : String(nickname.prefix(24))
             notificationRow(
-                symbol: "bell.slash.fill",
+                symbol: "bell.slash",
                 title: "Mute This Vehicle",
                 detail: hasVehicle
                     ? "Silence banners for \(carLabel) while telemetry keeps updating"
@@ -420,14 +420,14 @@ struct SettingsNotificationsCard: View {
             Label(L10n.text("Send Test Notification"), systemImage: "bell.and.waves.left.and.right")
                 .hisType(.caption, weight: .medium)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
 
         Divider().opacity(HisingenTheme.dividerOpacity)
             .padding(.vertical, 2)
 
         notificationRow(
-            symbol: "eye.slash.fill",
+            symbol: "eye.slash",
             title: "Private Notification Banners",
             detail: "Hide license plate and battery % from lock screen",
             \.privateNotificationDetails

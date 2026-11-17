@@ -19,14 +19,6 @@ struct DismissibleNoticeBanner: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// A banner should read as a notice rather than as a card, so it takes the shared banner radius
-    /// (`HisingenTheme.bannerRadius`, 10) instead of the card's 12. This used to be a second,
-    /// independent value — `min(8, cornerRadius)` — while `ControlsBanners` drew its own banners at
-    /// the token's 10, so the two notices in the same column had different curves. The `min(8, …)`
-    /// also guarded against a sharp-cornered theme that no longer exists; `cornerRadius` is 12 for
-    /// every theme.
-    private var bannerRadius: CGFloat { HisingenTheme.bannerRadius }
-
     var body: some View {
         if let containerHelp {
             banner.help(containerHelp)
@@ -53,7 +45,7 @@ struct DismissibleNoticeBanner: View {
                 if let footnote {
                     Text(footnote)
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -76,7 +68,8 @@ struct DismissibleNoticeBanner: View {
             .help(L10n.text("Dismiss"))
         }
         .padding(9)
-        .background(tint.opacity(HisingenTheme.tintedWashOpacity(0.10, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: bannerRadius))
+        .padding(.leading, 2)
+        .hisNotice(tint)
         .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.opacity.combined(with: .scale(scale: 0.95)))
     }
 }

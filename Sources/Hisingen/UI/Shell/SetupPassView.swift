@@ -76,7 +76,7 @@ struct SetupPassView: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 26)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.hisSecondary)
                             .controlSize(.small)
                         }
                     }
@@ -89,7 +89,7 @@ struct SetupPassView: View {
                     Text(L10n.text("Done"))
                         .frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .controlSize(.regular)
                 .staggeredIn(index: 3, hasEntered: hasEntered, reduceMotion: reduceMotion)
             }
@@ -128,10 +128,10 @@ struct SetupPassView: View {
         Group {
             if prominent {
                 Button(action: action) { label }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
             } else {
                 Button(action: action) { label }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
             }
         }
         .controlSize(.small)

@@ -41,8 +41,7 @@ struct ChargeLocationEditorSheet: View {
                         Text(L10n.text("Name"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
-                        TextField(L10n.text("Home, Office…"), text: $alias)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField(L10n.text("Home, Office…"), text: $alias)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -100,7 +99,7 @@ struct ChargeLocationEditorSheet: View {
                 // button that merely says Cancel — the pattern the rest of the app already uses.
                 Button(L10n.text("Cancel"), role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                 Spacer()
                 Button(L10n.text("Save")) {
@@ -117,9 +116,7 @@ struct ChargeLocationEditorSheet: View {
                     )
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.accent)
-                .foregroundStyle(HisingenTheme.accentOn)
+                .buttonStyle(.hisProminent(HisingenTheme.accent))
                 .controlSize(.small)
                 .keyboardShortcut(.defaultAction)
             }

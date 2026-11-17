@@ -122,6 +122,44 @@ enum ChargingPlanner {
             .sekPerKwh
     }
 
+    enum FixedWindow {
+        case missingPrices, unavailable, available(DateInterval)
+    }
+
+    static func cheapestWindow(
+        prices: [ElectricityPricePoint], within range: DateInterval, duration: TimeInterval,
+        canSchedule: (DateInterval) -> Bool
+    ) -> FixedWindow {
+        guard duration > 0, duration <= range.duration else { return .unavailable }
+        let slots = prices.filter { $0.startDate < range.end && $0.endDate > range.start }
+            .sorted { $0.startDate < $1.startDate }
+        var coveredUntil = range.start
+        for slot in slots {
+            guard slot.endDate > slot.startDate, slot.sekPerKwh.isFinite,
+                  max(slot.startDate, range.start) == coveredUntil else { return .missingPrices }
+            coveredUntil = slot.endDate
+        }
+        guard coveredUntil >= range.end else { return .missingPrices }
+
+        var best: DateInterval?
+        var bestCost = Double.infinity
+        var start = Date(timeIntervalSince1970: (range.start.timeIntervalSince1970 / 60).rounded(.up) * 60)
+        while start.addingTimeInterval(duration) <= range.end {
+            let end = start.addingTimeInterval(duration)
+            let window = DateInterval(start: start, end: end)
+            let cost = slots.reduce(0.0) { total, slot in
+                let seconds = min(end, slot.endDate).timeIntervalSince(max(start, slot.startDate))
+                return total + max(0, seconds) * slot.sekPerKwh
+            }
+            if cost < bestCost - 0.000_001, canSchedule(window) {
+                best = window
+                bestCost = cost
+            }
+            start = start.addingTimeInterval(60)
+        }
+        return best.map(FixedWindow.available) ?? .unavailable
+    }
+
     /// Last instant the series can speak for – used to tell "tomorrow not published yet"
     /// apart from "no data at all".
     static func dataHorizonEnd(prices: [ElectricityPricePoint]) -> Date? {

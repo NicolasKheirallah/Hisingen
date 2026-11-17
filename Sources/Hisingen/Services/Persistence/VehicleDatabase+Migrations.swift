@@ -275,5 +275,69 @@ extension VehicleDatabase {
                 logger.error("Tyre-pressure and warning-event migration remains incomplete: \(error, privacy: .public)")
             }
         }
+
+        // v7: what a paired home charger metered for a session, on the same row as the vehicle's
+        // own record. Additive and nullable, so every earlier session reads exactly as before. The
+        // unique index on the session key is what keeps a repeated sync from adding a second row.
+        if version == 6 {
+            let additions: [(String, String)] = [
+                ("wallbox_charger_id", "TEXT"),
+                ("wallbox_session_key", "TEXT"),
+                ("wallbox_key_kind", "TEXT"),
+                ("wallbox_energy_kwh", "REAL"),
+                ("wallbox_energy_source", "TEXT"),
+                ("wallbox_measured_at", "REAL"),
+                ("wallbox_started_at", "REAL"),
+                ("wallbox_ended_at", "REAL"),
+                ("wallbox_peak_kw", "REAL"),
+                ("wallbox_intervals", "TEXT"),
+                ("wallbox_cost", "REAL"),
+                ("wallbox_partial_cost", "REAL"),
+                ("wallbox_cost_method", "TEXT"),
+                ("wallbox_price_source", "TEXT"),
+                ("wallbox_cost_assumptions", "TEXT"),
+                ("wallbox_missing_kwh", "REAL"),
+                ("wallbox_currency", "TEXT"),
+                ("wallbox_attribution", "TEXT")
+            ]
+            for (column, declaration) in additions {
+                addColumnIfMissing(table: "charging_sessions", column: column, declaration: declaration)
+            }
+            if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0.0) }) {
+                do {
+                    try db.execute(sql: """
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_charging_sessions_wallbox_key
+                            ON charging_sessions(wallbox_session_key) WHERE wallbox_session_key IS NOT NULL;
+                        CREATE INDEX IF NOT EXISTS idx_charging_sessions_wallbox_charger
+                            ON charging_sessions(wallbox_charger_id, started_at DESC) WHERE wallbox_charger_id IS NOT NULL;
+                        PRAGMA user_version = 7;
+                        """)
+                    version = 7
+                } catch {
+                    logger.error("Wallbox session migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
+            } else {
+                logger.error("Wallbox session schema migration remains incomplete; it will retry next launch")
+            }
+        }
+
+        // v8: the reader's own themes, kept in the database so they outlive app updates and a
+        // reset of the preferences domain. A new table; nothing existing changes.
+        if version == 7 {
+            do {
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS custom_themes (
+                        id TEXT PRIMARY KEY,
+                        definition TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        updated_at REAL NOT NULL
+                    );
+                    PRAGMA user_version = 8;
+                    """)
+                version = 8
+            } catch {
+                logger.error("Custom theme table migration failed; it will retry next launch: \(error, privacy: .public)")
+            }
+        }
     }
 }

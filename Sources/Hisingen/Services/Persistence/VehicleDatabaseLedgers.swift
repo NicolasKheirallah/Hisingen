@@ -56,8 +56,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             guard var state = try? JSONDecoder().decode(VehicleState.self, from: blob) else { return nil }
             if let fetchedAt = stmt.columnDate(at: 1) {
-                // Drop expired snapshots older than 7 days
-                if Date().timeIntervalSince(fetchedAt) > 7 * 24 * 60 * 60 {
+                if Date().timeIntervalSince(fetchedAt) > VehicleDatabase.cacheRetention {
                     snapshotExpired = true
                     return nil
                 }
@@ -66,7 +65,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             return state
         }
         if snapshotExpired {
-            deleteExpiredSnapshot(for: vin, cutoff: Date().addingTimeInterval(-7 * 24 * 60 * 60))
+            deleteExpiredSnapshot(for: vin, cutoff: Date().addingTimeInterval(-VehicleDatabase.cacheRetention))
             return nil
         }
         return state
@@ -86,14 +85,6 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             try stmt.bindText(vin, at: 1)
             try stmt.executeUpdate()
         } process: { _ in }
-    }
-
-    /// Drops every cached snapshot without touching durable history. Used by the sign-out
-    /// path when the user has chosen to keep local history: the snapshot holds live-ish
-    /// fields (location, owner name) that should not linger after sign-out, but charging
-    /// sessions, telemetry and the rest are kept.
-    func deleteAllSnapshots() {
-        try? db.execute(sql: "DELETE FROM vehicle_snapshots;")
     }
 }
 
@@ -139,18 +130,6 @@ final class ChargingBaselineLedger: @unchecked Sendable {
             guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             return try? JSONDecoder().decode(ChargingBaseline.self, from: blob)
         }
-    }
-
-    func deleteBaseline(for vin: String) {
-        let sql = "DELETE FROM charging_baselines WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func deleteAllBaselines() {
-        try? db.execute(sql: "DELETE FROM charging_baselines;")
     }
 
     /// The 7-day lifetime is a property of the baseline, not of the reader that noticed it.
@@ -298,10 +277,6 @@ final class CommandReceiptStore: @unchecked Sendable {
             try stmt.executeUpdate()
         } process: { _ in }
     }
-
-    func deleteAllCommandReceipts() {
-        try? db.execute(sql: "DELETE FROM command_receipts;")
-    }
 }
 
 
@@ -331,12 +306,6 @@ final class ProviderBackoffLedger: @unchecked Sendable {
         } process: { _ in }
     }
 
-    /// The stand-downs that name a vehicle, dropped by a fleet-wide sign-out. The provider-wide
-    /// ones stay: a client-version rejection is not something a sign-out answers.
-    func deleteVehicleScopedProviderBackoffs() {
-        try? db.execute(sql: "DELETE FROM provider_backoff WHERE vin IS NOT NULL;")
-    }
-
     /// Drops stand-downs whose window has closed. Reading one already answers nil, so keeping the
     /// row only grows the file.
     func deleteExpiredProviderBackoffs(now: Date) {
@@ -361,14 +330,6 @@ final class ProviderBackoffLedger: @unchecked Sendable {
             try stmt.bindText(vin, at: 2)
             try stmt.bindDouble(blockedUntil.timeIntervalSince1970, at: 3)
             try stmt.bindText(reason, at: 4)
-            try stmt.executeUpdate()
-        } process: { _ in }
-    }
-
-    func deleteProviderBackoffs(for vin: String) {
-        let sql = "DELETE FROM provider_backoff WHERE vin = ?;"
-        try? db.query(sql: sql) { stmt in
-            try stmt.bindText(vin, at: 1)
             try stmt.executeUpdate()
         } process: { _ in }
     }

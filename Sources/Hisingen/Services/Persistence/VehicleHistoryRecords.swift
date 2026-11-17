@@ -24,12 +24,16 @@ enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
     case observedPowerIntegration = "observed_power_integration"
     case socCapacityEstimate = "soc_capacity_estimate"
     case legacyEstimate = "legacy_estimate"
+    /// A row created from the home charger's own record, with no battery-side reading behind it.
+    /// `energy_delivered_kwh` stays zero; the metered energy lives in the wallbox columns.
+    case wallboxOnly = "wallbox_only"
 
     var displayName: String {
         switch self {
         case .observedPowerIntegration: return L10n.text("Integrated observed power")
         case .socCapacityEstimate: return L10n.text("SoC and usable-capacity estimate")
         case .legacyEstimate: return L10n.text("Legacy estimate")
+        case .wallboxOnly: return L10n.text("Charger measurement only")
         }
     }
 }
@@ -46,6 +50,34 @@ enum ChargingSessionConfidence: String, Codable, Equatable, Sendable {
         case .low: return L10n.text("Low confidence")
         }
     }
+}
+
+/// What the home charger metered for a session, kept apart from the battery-side estimate in
+/// `energyDeliveredKwh`. The two answer different questions: wall energy is what the meter and
+/// the bill see, battery energy is what the pack gained.
+struct WallboxMeasurement: Codable, Equatable, Sendable {
+    var chargerID: String
+    var sessionKey: String
+    var keyKind: String
+    var energyKwh: Double
+    var energySource: String
+    /// The timestamp of the last charger reading behind `energyKwh`.
+    var measuredAt: Date
+    var startedAt: Date?
+    var endedAt: Date?
+    var peakPowerKw: Double?
+    var cost: Double?
+    /// The priced part when interval prices were missing and no total could be given.
+    var partialCost: Double?
+    var costMethod: String?
+    var priceSource: String?
+    var costAssumptions: [String]
+    var missingKwh: Double?
+    var currency: String?
+    /// How the session was matched to its vehicle (`overlap`, `dedicated`, or why it is unassigned).
+    var attribution: String?
+
+    var isEstimatedCost: Bool { costMethod != nil && costMethod != HomeSessionCost.Method.intervalTibber.rawValue }
 }
 
 /// Historical records exposed by `VehicleDatabase`. Kept outside the repository
@@ -83,6 +115,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     /// Market-price cost of the session, computed from recorded samples against hourly
     /// spot prices. `nil` until a covered backfill pass prices it.
     var spotEstimatedCost: Double? = nil
+    /// The home charger's measurement for this session, when a paired charger recorded one.
+    var wallbox: WallboxMeasurement? = nil
 
     init(
         id: String, vin: String, startedAt: Date, endedAt: Date?, startSoc: Double,
@@ -99,7 +133,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         currencySymbol: String? = nil, targetSoc: Double? = nil,
         lastObservedAt: Date? = nil, summaryVersion: Int = 1,
         pendingStopCount: Int = 0, estimatedCost: Double? = nil,
-        spotEstimatedCost: Double? = nil
+        spotEstimatedCost: Double? = nil,
+        wallbox: WallboxMeasurement? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -130,6 +165,7 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         self.pendingStopCount = pendingStopCount
         self.estimatedCost = estimatedCost
         self.spotEstimatedCost = spotEstimatedCost
+        self.wallbox = wallbox
     }
 }
 

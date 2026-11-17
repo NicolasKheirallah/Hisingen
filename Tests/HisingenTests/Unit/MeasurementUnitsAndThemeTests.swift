@@ -142,6 +142,14 @@ struct MeasurementUnitsAndThemeTests {
             #expect(!(theme.subtitle.isEmpty))
             #expect(!(theme.accentColorHex.isEmpty))
             #expect(theme.previewHexColors.count >= 3)
+
+            // No theme is named or described with a Polestar finish or model name.
+            for text in [theme.title, theme.subtitle] {
+                #expect(!text.localizedCaseInsensitiveContains("Polestar"))
+                #expect(!text.localizedCaseInsensitiveContains("Swedish Gold"))
+                #expect(!text.localizedCaseInsensitiveContains("Öhlins"))
+                #expect(!text.localizedCaseInsensitiveContains("Cyan Racing"))
+            }
         }
 
         #expect(AppTheme.hisingen.category == .brand)
@@ -153,8 +161,8 @@ struct MeasurementUnitsAndThemeTests {
         #expect(!(AppTheme.volvo.title.localizedCaseInsensitiveContains("Volvo")))
         #expect(AppTheme.nordicNight.category == .dark)
         #expect(AppTheme.aurora.category == .nature)
-        #expect(AppTheme.swedishGold.category == .sport)
-        #expect(AppTheme.cyanRacing.category == .sport)
+        #expect(AppTheme.charcoalGold.category == .sport)
+        #expect(AppTheme.circuitBlue.category == .sport)
         #expect(AppTheme.forest.category == .nature)
         #expect(AppTheme.sandDune.category == .brand)
     }

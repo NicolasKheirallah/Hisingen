@@ -87,7 +87,7 @@ struct SettingsDatabaseCard: View {
 
     @ViewBuilder
     private var headerSection: some View {
-        CardHeader(symbol: "cylinder.split.1x2.fill", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
+        CardHeader(symbol: "cylinder.split.1x2", title: L10n.text("SQLite Storage & Data"), color: HisingenTheme.semanticActive)
     }
 
     @ViewBuilder
@@ -97,9 +97,9 @@ struct SettingsDatabaseCard: View {
         VStack(spacing: 6) {
             KVRow(L10n.text("Database Engine"), "SQLite 3 · WAL Mode", symbol: "server.rack")
             KVRow(L10n.text("Storage Size"), sizeStr, symbol: "internaldrive")
-            KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side.fill")
-            KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt.fill")
-            KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart.fill")
+            KVRow(L10n.text("Vehicle Snapshots"), "\(counts.snapshots)", symbol: "car.side")
+            KVRow(L10n.text("Charging Sessions"), "\(counts.chargingSessions) (\(counts.chargingSamples) samples)", symbol: "bolt")
+            KVRow(L10n.text("Battery Health Logs"), "\(counts.batteryHealth)", symbol: "heart")
             KVRow(L10n.text("Telemetry Entries"), "\(counts.telemetry)", symbol: "chart.xyaxis.line")
             KVRow(L10n.text("Remote Command Audit"), "\(counts.commands)", symbol: "checklist")
         }
@@ -108,7 +108,7 @@ struct SettingsDatabaseCard: View {
     @ViewBuilder
     private var locationHistoryRow: some View {
         HStack(spacing: 8) {
-            Image(systemName: "location.slash.fill")
+            Image(systemName: "location.slash")
                 .hisType(.body)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
@@ -233,9 +233,8 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary(justOptimised ? HisingenTheme.semanticGood : nil))
             .controlSize(.small)
-            .tint(justOptimised ? HisingenTheme.semanticGood : nil)
             .disabled(isMaintaining)
 
             Button {
@@ -247,9 +246,8 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary(justPruned ? HisingenTheme.semanticGood : nil))
             .controlSize(.small)
-            .tint(justPruned ? HisingenTheme.semanticGood : nil)
             .disabled(isMaintaining)
         }
     }
@@ -295,7 +293,7 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
             Button {
@@ -314,7 +312,7 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
         }
 
@@ -335,7 +333,7 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .disabled(state == nil)
 
@@ -355,7 +353,7 @@ struct SettingsDatabaseCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .disabled(state == nil)
         }
@@ -376,7 +374,7 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
     }
 
@@ -409,7 +407,7 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
 
         Button {
@@ -421,7 +419,7 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
         .help(L10n.text("Shows the in-memory redacted request log with live filters. No raw credentials, VINs, or locations are retained."))
 
@@ -448,7 +446,7 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary)
         .controlSize(.small)
         .help(L10n.text("Bundles recent app log entries, refresh diagnostics, and redacted API request metadata into one file you can attach to a bug report."))
     }
@@ -464,9 +462,8 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
         .controlSize(.small)
-        .tint(HisingenTheme.semanticCritical)
         .disabled(selectedVIN == nil || isMaintaining)
 
         // Fleet-wide erasing is its own labelled action with its own confirmation:
@@ -481,9 +478,8 @@ struct SettingsDatabaseCard: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
         .controlSize(.small)
-        .tint(HisingenTheme.semanticCritical)
         .disabled(isMaintaining)
 
         // The location toggle's dialog can only clear the loaded vehicle, so the
@@ -492,14 +488,13 @@ struct SettingsDatabaseCard: View {
             showFleetLocationClearConfirmation = true
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "location.slash.fill")
+                Image(systemName: "location.slash")
                 Text(L10n.text("Clear All Vehicles’ Locations"))
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
         .controlSize(.small)
-        .tint(HisingenTheme.semanticCritical)
         .disabled(isMaintaining)
     }
 

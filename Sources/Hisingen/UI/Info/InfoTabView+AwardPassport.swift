@@ -1,110 +1,84 @@
 import SwiftUI
 
 extension InfoTabView {
-    /// The Info destination is a technical passport, not a second dashboard. The side profile
-    /// anchors identity while the four callouts answer the specifications people check first.
     var awardVehiclePassport: some View {
+        let identity = state.identity
         let model = state.model
         let capacity = state.measuredCapacityReference(
-            specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)
+            specification: preferences.vehicleSpecificationOverride(for: identity.vin)
         )?.kwh
-        let title = [state.identity.modelName, state.identity.modelYear]
-            .compactMap { $0 }
-            .joined(separator: " · ")
-        let factoryImageData = state.identity.imageData
-            ?? imageCache.image(for: state.identity.vin, angle: preferences.carRenderAngle.rawValue)
-            ?? imageCache.image(for: state.identity.vin)
+        let title = identity.modelName.flatMap { $0.isEmpty ? nil : $0 } ?? model.displayName
+        let redacted = preferences.privacyRedactionEnabled
+        let stacked = passportTypeSize.isAccessibilitySize || HisingenTheme.layoutWidth < 540
 
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.text("Vehicle & Identity"))
-                .hisType(.micro, weight: .bold)
-                .foregroundStyle(HisingenTheme.accent)
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .hisType(.display)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                if let year = identity.modelYear {
+                    Text(year)
+                        .hisType(.subhead)
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+            }
+            // Straight on the canvas, as on Now.
+            InstrumentVehicleProfile(state: state, imageCache: imageCache, height: stacked ? 128 : 168, fillsWidth: true)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
 
-            Text(title.isEmpty ? state.model.displayName : title)
-                .hisType(size: 30, weight: .bold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            VStack(alignment: .leading, spacing: 14) {
+                plateEntry(label: L10n.text("VIN"), value: identity.vin, redacted: redacted)
 
-            HStack(spacing: 24) {
-                Group {
-                    if let factoryImageData {
-                        VehiclePresentationView(
-                            identity: VehiclePresentationIdentity(
-                                vin: state.identity.vin,
-                                angle: preferences.carRenderAngle.rawValue
-                            ),
-                            imageData: factoryImageData
-                        )
-                    } else {
-                        VehicleSideProfileDoorsView(
-                            openings: state.exteriorStatus?.openings ?? [],
-                            model: model,
-                            brand: state.model.brand
-                        )
+                let column: CGFloat = passportTypeSize.isAccessibilitySize ? 280 : 130
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: column), spacing: 14, alignment: .topLeading)],
+                          alignment: .leading, spacing: 13) {
+                    if let registration = identity.registrationNo, !registration.isEmpty {
+                        plateEntry(label: L10n.text("Registration"), value: registration.uppercased(), redacted: redacted)
+                    }
+                    if let odometer = state.odometerKm {
+                        plateEntry(label: L10n.text("Odometer"),
+                                   value: Format.distance(km: Double(odometer), decimals: 0, unit: preferences.distanceUnit))
+                    }
+                    if let capacity {
+                        plateEntry(label: L10n.text("Battery Capacity"), value: Format.energyKwh(capacity))
+                    }
+                    if let connector = model.connectorSpec?.connector {
+                        plateEntry(label: L10n.text("DC Charge Port"), value: connector)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 165, maxHeight: 190)
-                .accessibilityLabel(L10n.format("%@ vehicle profile", title))
-
-                VStack(alignment: .leading, spacing: 0) {
-                    passportCallout(
-                        symbol: "bolt.fill",
-                        value: capacity.map { Format.energyKwh($0) } ?? "–",
-                        label: L10n.text("Battery Capacity")
-                    )
-                    passportCallout(
-                        symbol: "road.lanes",
-                        value: state.primaryRangeKm.map {
-                            Format.distance(km: $0, unit: preferences.distanceUnit)
-                        } ?? "–",
-                        label: L10n.text("Estimated Range")
-                    )
-                    passportCallout(
-                        symbol: "cable.connector",
-                        value: model.connectorSpec?.connector ?? "–",
-                        label: L10n.text("DC Charge Port")
-                    )
-                    passportCallout(
-                        symbol: "thermometer.medium",
-                        value: state.climateStatus?.interiorTemperatureCelsius.map {
-                            Format.temperature(celsius: $0, unit: preferences.temperatureUnit)
-                        } ?? "–",
-                        label: L10n.text("Cabin Temperature"),
-                        drawsDivider: false
-                    )
-                }
-                .frame(width: 205)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.horizontal, HisingenTheme.cardPadding)
+        .padding(.vertical, 10)
         .accessibilityElement(children: .contain)
     }
 
-    private func passportCallout(
-        symbol: String,
-        value: String,
-        label: String,
-        drawsDivider: Bool = true
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .frame(width: 18)
-                .foregroundStyle(HisingenTheme.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .hisType(.body, weight: .bold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                Text(label)
-                    .hisType(.micro, weight: .medium)
+    private func plateEntry(label: String, value: String, redacted: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            PanelRule()
+            if redacted {
+                Text(L10n.text("Hidden"))
+                    .hisType(.title)
                     .foregroundStyle(HisingenTheme.inkMuted)
+            } else {
+                Text(value)
+                    .hisType(.title)
+                    .monospacedDigit()
+                    .foregroundStyle(HisingenTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
-            Spacer(minLength: 0)
+            Text(label)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
         }
-        .frame(minHeight: 42)
-        .overlay(alignment: .bottom) {
-            if drawsDivider { Divider() }
-        }
+        // Drawn value-first, spoken label-first.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(redacted ? L10n.text("Hidden") : value)
     }
 }

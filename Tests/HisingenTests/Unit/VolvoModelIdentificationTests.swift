@@ -32,6 +32,15 @@ struct VolvoModelIdentificationTests {
     }
 
     @Test
+    func testUnknownVolvoNamesNeverBecomePolestars() {
+        // " 2" and the first-digit fallback used to win before the Volvo check.
+        #expect(VehicleModelFamily(modelName: "Volvo 240") == .volvoUnknown("Volvo 240"))
+        #expect(VehicleModelFamily(modelName: "Volvo V50") == .volvoUnknown("Volvo V50"))
+        #expect(VehicleModelFamily(modelName: "Volvo 240", vin: "YV1ABCDEFGHIJKLMN")
+            == .volvoUnknown("Volvo 240"))
+    }
+
+    @Test
     func testVolvoModelsReportVolvoBrand() {
         #expect(VehicleModelFamily.volvoXC60.brand == .volvo)
         #expect(VehicleModelFamily.volvoXC40.brand == .volvo)

@@ -56,6 +56,28 @@ extension PreferencesStore {
     var carRenderAngle: CarRenderAngle { get { CarRenderAngle(rawValue: d.object(forKey: "car_render_angle") as? Int ?? CarRenderAngle.frontThreeQuarter.rawValue) ?? .frontThreeQuarter } set { d.set(newValue.rawValue, forKey: "car_render_angle") } }
     var vehicleModelBadgePosition: VehicleModelBadgePosition { get { VehicleModelBadgePosition(rawValue: d.string(forKey: "vehicle_model_badge_position") ?? "") ?? .inlineHeader } set { d.set(newValue.rawValue, forKey: "vehicle_model_badge_position") } }
     var registrationBadgePosition: RegistrationNumberBadgePosition { get { RegistrationNumberBadgePosition(rawValue: d.string(forKey: "registration_badge_position") ?? "") ?? .belowGreeting } set { d.set(newValue.rawValue, forKey: "registration_badge_position") } }
+    var nowReadingsPosition: NowReadingsPosition {
+        get { d.string(forKey: "now_readings_position").flatMap(NowReadingsPosition.init(rawValue:)) ?? .below }
+        set { d.set(newValue.rawValue, forKey: "now_readings_position") }
+    }
+    /// The control cards under the car on Now, in the order they draw. Unknown names from a later
+    /// version are dropped rather than failing the whole list.
+    var nowQuickControls: [NowQuickControl] {
+        get {
+            guard let raw = d.string(forKey: "now_quick_controls") else { return NowQuickControl.defaults }
+            return raw.split(separator: ",").compactMap { NowQuickControl(rawValue: String($0)) }
+        }
+        set { d.set(newValue.map(\.rawValue).joined(separator: ","), forKey: "now_quick_controls") }
+    }
+    /// How far one press on Charge Limit or Current Limit raises the limit.
+    var nowLimitStep: LimitStep {
+        get { LimitStep(rawValue: d.integer(forKey: "now_limit_step")) ?? .five }
+        set { d.set(newValue.rawValue, forKey: "now_limit_step") }
+    }
+    var nowFirstReading: NowFirstReading {
+        get { d.string(forKey: "now_first_reading").flatMap(NowFirstReading.init(rawValue:)) ?? .battery }
+        set { d.set(newValue.rawValue, forKey: "now_first_reading") }
+    }
     var vehicleLabelFormat: VehicleLabelFormat { get { VehicleLabelFormat(rawValue: d.string(forKey: "vehicle_label_format") ?? "") ?? .modelAndYear } set { d.set(newValue.rawValue, forKey: "vehicle_label_format") } }
     var distanceUnit: DistanceUnit { get { let raw = d.string(forKey: "distance_unit") ?? ""; return DistanceUnit(rawValue: raw) ?? (raw == "Miles (mi)" ? .miles : .kilometers) } set { d.set(newValue.rawValue, forKey: "distance_unit") } }
     var hasExplicitTemperatureUnit: Bool { d.object(forKey: "temperature_unit") != nil }
@@ -77,7 +99,7 @@ extension PreferencesStore {
 
     func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (key.hasPrefix("YV") ? .volvo : activeBrand))
+        let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (VehicleBrand.isVolvoVIN(key) ? .volvo : activeBrand))
         return ThemeChoice.resolve(vin: key, brand: resolvedBrand, defaults: d)
     }
 

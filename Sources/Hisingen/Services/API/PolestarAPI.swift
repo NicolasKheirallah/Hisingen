@@ -454,23 +454,38 @@ actor PolestarAPI {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
-        let verifier = try Self.randomURLSafeString()
-        let state = try Self.randomURLSafeString()
-        guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
+        let request = try Self.makeAuthorizationRequest(
+            endpoint: authorizationEndpoint,
+            clientID: oidcClientID,
+            redirectURI: oidcRedirectURL,
+            scope: oidcScope
+        )
+        webAuthorization.begin(verifier: request.verifier, state: request.state, now: now())
+        return (request.url, oidcRedirectURL)
+    }
+
+    /// Builds one PKCE authorization request. The web and command flows differ only in the
+    /// client id and redirect URI; keeping the assembly here is what stops the two from
+    /// drifting on query order or PKCE handling.
+    private static func makeAuthorizationRequest(
+        endpoint: URL, clientID: String, redirectURI: URL, scope: String
+    ) throws -> (url: URL, verifier: String, state: String) {
+        let verifier = try randomURLSafeString()
+        let state = try randomURLSafeString()
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
         }
-        components.queryItems = Self.authorizationQueryItems(
-            clientID: oidcClientID,
-            redirectURI: oidcRedirectURL.absoluteString,
-            scope: oidcScope,
+        components.queryItems = authorizationQueryItems(
+            clientID: clientID,
+            redirectURI: redirectURI.absoluteString,
+            scope: scope,
             state: state,
-            challenge: Self.codeChallenge(for: verifier)
+            challenge: codeChallenge(for: verifier)
         )
         guard let url = components.url else {
             throw PolestarError.incompatibleAPI(operation: "authorization request")
         }
-        webAuthorization.begin(verifier: verifier, state: state, now: now())
-        return (url, oidcRedirectURL)
+        return (url, verifier, state)
     }
 
     /// Completes web-client authorization from the `https://www.polestar.com/sign-in-callback` redirect
@@ -537,23 +552,14 @@ actor PolestarAPI {
         guard let authorizationEndpoint else {
             throw PolestarError.authenticationRequired(.callbackRejected)
         }
-        let verifier = try Self.randomURLSafeString()
-        let state = try Self.randomURLSafeString()
-        guard var components = URLComponents(url: authorizationEndpoint, resolvingAgainstBaseURL: false) else {
-            throw PolestarError.incompatibleAPI(operation: "authorization endpoint")
-        }
-        components.queryItems = Self.authorizationQueryItems(
+        let request = try Self.makeAuthorizationRequest(
+            endpoint: authorizationEndpoint,
             clientID: commandClientID,
-            redirectURI: commandRedirectURL.absoluteString,
-            scope: oidcScope,
-            state: state,
-            challenge: Self.codeChallenge(for: verifier)
+            redirectURI: commandRedirectURL,
+            scope: oidcScope
         )
-        guard let url = components.url else {
-            throw PolestarError.incompatibleAPI(operation: "authorization request")
-        }
-        commandAuthorization.begin(verifier: verifier, state: state, now: now())
-        return url
+        commandAuthorization.begin(verifier: request.verifier, state: request.state, now: now())
+        return request.url
     }
 
     /// Completes command-client authorization from the `polestar-explore://` callback the OS

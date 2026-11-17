@@ -1,0 +1,87 @@
+[
+  {
+    "entity_id": "sensor.nx1234567_charging_state",
+    "state": "charging",
+    "attributes": {
+      "options": ["idle", "connected", "charging", "finished", "error", "lb_waiting", "delay_waiting", "ev_waiting"],
+      "device_class": "enum",
+      "friendly_name": "NX1234567 Charging state"
+    },
+    "last_changed": "2026-11-16T01:14:07.482913+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:14:07.482913+00:00",
+    "context": {"id": "01JD", "parent_id": null, "user_id": null}
+  },
+  {
+    "entity_id": "sensor.nx1234567_power",
+    "state": "7.31",
+    "attributes": {"unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement", "friendly_name": "NX1234567 Power"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.nx1234567_energy",
+    "state": "12.42",
+    "attributes": {"unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total", "friendly_name": "NX1234567 Energy"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.nx1234567_lifetime_energy",
+    "state": "1840.5",
+    "attributes": {"unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing", "friendly_name": "NX1234567 Lifetime energy"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.nx1234567_current_limit",
+    "state": "16",
+    "attributes": {"unit_of_measurement": "A", "device_class": "current", "state_class": "measurement", "friendly_name": "NX1234567 Current limit"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "sensor.nx1234567_cable_current_limit",
+    "state": "32",
+    "attributes": {"unit_of_measurement": "A", "device_class": "current", "state_class": "measurement", "friendly_name": "NX1234567 Cable current limit"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "switch.nx1234567_charging",
+    "state": "on",
+    "attributes": {"assumed_state": true, "friendly_name": "NX1234567 Charging"},
+    "last_changed": "2026-11-16T01:14:09.000000+00:00",
+    "last_updated": "2026-11-16T01:14:09.000000+00:00"
+  },
+  {
+    "entity_id": "binary_sensor.nx1234567_charging_enabled",
+    "state": "on",
+    "attributes": {"friendly_name": "NX1234567 Charging enabled"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "binary_sensor.nx1234567_cable_lock_state",
+    "state": "off",
+    "attributes": {"device_class": "lock", "friendly_name": "NX1234567 Cable lock state"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "sensor.polestar_2_battery",
+    "state": "62",
+    "attributes": {"unit_of_measurement": "%", "device_class": "battery", "friendly_name": "Polestar 2 Battery"},
+    "last_changed": "2026-11-16T01:30:00.000000+00:00",
+    "last_updated": "2026-11-16T01:30:00.000000+00:00"
+  },
+  {
+    "entity_id": "sensor.living_room_temperature",
+    "state": "21.4",
+    "attributes": {"unit_of_measurement": "°C", "device_class": "temperature", "friendly_name": "Living room temperature"},
+    "last_changed": "2026-11-16T01:00:00.000000+00:00",
+    "last_updated": "2026-11-16T01:00:00.000000+00:00"
+  }
+]

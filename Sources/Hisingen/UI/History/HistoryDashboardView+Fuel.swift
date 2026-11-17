@@ -31,12 +31,12 @@ extension HistoryDashboardView {
                     showFuelSheet = false
                     bumpRefresh()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.hisProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!validation.isValid)
             }
             Text(L10n.text("Fill-ups are stored locally and included in lifetime cost-per-distance estimates. Add an odometer reading to unlock the economy trend."))
-                .hisType(.micro).foregroundStyle(.tertiary)
+                .hisType(.micro).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(width: 300)
@@ -60,7 +60,7 @@ extension HistoryDashboardView {
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump.fill", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
+                    CardHeader(symbol: "fuelpump", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let avgEconomy {
                         Text(Format.fuelEconomy(lPer100Km: avgEconomy, unit: preferences.fuelEconomyUnit))
@@ -122,7 +122,7 @@ extension HistoryDashboardView {
                     .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 Text(L10n.text("Economy is measured tank-to-tank and needs an odometer reading on each fill-up."))
-                    .hisType(.micro).foregroundStyle(.tertiary)
+                    .hisType(.micro).foregroundStyle(.secondary)
             }
         })
     }
@@ -134,7 +134,7 @@ extension HistoryDashboardView {
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "drop.fill", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
+                CardHeader(symbol: "drop", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Total Spend"), Format.currency(totalSpend, symbol: preferences.currencySymbol))
                     curveStat(L10n.text("Total Volume"), Format.fuelVolume(liters: totalLitres, unit: preferences.fuelVolumeUnit))
@@ -142,7 +142,7 @@ extension HistoryDashboardView {
                         curveStat(L10n.text("Avg Price/L"), Format.currency(avgPrice, symbol: preferences.currencySymbol, decimals: 3))
                     }
                 }
-                PaginatedSection(items: fuelEntries, pageSize: 8,
+                PaginatedSection(items: fuelEntries, pageSize: preferences.historyPageSize(for: .historyRecentFills),
                                  emptyMessage: L10n.text("No fill-ups were recorded in this period.")) { visible, footer in
                     ForEach(visible) { entry in
                         HStack {

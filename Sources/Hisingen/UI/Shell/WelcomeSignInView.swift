@@ -13,56 +13,54 @@ struct WelcomeSignInView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 18) {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
                 if let error, !error.isEmpty {
                     errorBanner(error)
+                        .padding(.horizontal, HisingenTheme.cardPadding)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
-                Card {
-                    AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
-                                            onTestConnection: onTestConnection,
-                                            model: accountConnection)
-                }
+                // The form sits on the canvas. It was wrapped in a section that drew nothing
+                // but an Increase Contrast outline, one more box around a form that is already
+                // ruled.
+                AccountCredentialsForm(style: .welcoming, onSettingsChanged: onSettingsChanged,
+                                        onTestConnection: onTestConnection,
+                                        model: accountConnection)
+                    .padding(.horizontal, HisingenTheme.cardPadding)
             }
-            .padding(HisingenTheme.sectionSpacing)
+            .padding(.vertical, HisingenTheme.sectionSpacing)
             .hisAnimation(Motion.stateChange, value: error)
         }
         .frame(width: HisingenTheme.layoutWidth)
     }
 
     private var header: some View {
-        VStack(spacing: 8) {
-            Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
-                .resizable()
-                .frame(width: 52, height: 52)
-                .padding(.top, 8)
-            Text(L10n.text("Welcome to Hisingen"))
-                .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
+        VStack(alignment: .leading, spacing: 9) {
+            Text(L10n.text("Hisingen"))
+                .hisType(.displayLarge)
                 .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
             Text(L10n.text("Monitor your Polestar or Volvo from the menu bar. Pick your vehicle's brand and sign in below."))
                 .hisType(.body)
                 .foregroundStyle(HisingenTheme.inkMuted)
-                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
+            PanelRule()
+                .padding(.top, 7)
         }
+        .padding(.horizontal, HisingenTheme.cardPadding)
+        .padding(.top, 24)
     }
 
     private func errorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .hisType(.body)
-                .foregroundStyle(HisingenTheme.semanticWarning)
-            Text(message)
-                .hisType(.label)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .background(HisingenTheme.semanticWarning.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .accessibilityElement(children: .combine)
+        Text(message)
+            .hisType(.label)
+            .foregroundStyle(HisingenTheme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .padding(.leading, 2)
+            .hisNotice(HisingenTheme.semanticWarning)
+            .accessibilityElement(children: .combine)
     }
 }

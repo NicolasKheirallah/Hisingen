@@ -24,7 +24,7 @@ struct StateSummaryChip: View {
 
     private var symbol: String {
         switch severity {
-        case .neutral: return "info.circle.fill"
+        case .neutral: return "info.circle"
         case .good: return "checkmark.circle.fill"
         case .warning: return "exclamationmark.triangle.fill"
         case .critical: return "exclamationmark.octagon.fill"

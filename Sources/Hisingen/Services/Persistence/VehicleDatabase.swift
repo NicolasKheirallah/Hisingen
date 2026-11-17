@@ -49,7 +49,7 @@ final class VehicleDatabase: @unchecked Sendable {
         let vehicles: VehicleScope
         switch scope {
         case .everything(let target), .locations(let target), .session(let target): vehicles = target
-        case .samples, .aged, .compact: return nil
+        case .samples, .compact: return nil
         }
         historyAdmission.lock()
         defer { historyAdmission.unlock() }
@@ -95,7 +95,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 6
+    static let latestSchemaVersion = 8
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -111,6 +111,8 @@ final class VehicleDatabase: @unchecked Sendable {
     let images: VehicleImageLedger
     let commandReceipts: CommandReceiptStore
     let providerBackoffs: ProviderBackoffLedger
+    /// The reader's own themes. Settings, not history: never wiped or pruned with vehicle data.
+    let customThemes: CustomThemeLedger
 
     /// SQLite persistence for the Charging Planner's fetched spot-price series. Market
     /// data, not user history: excluded from wipes, prunes, and backups because a fresh
@@ -141,6 +143,7 @@ final class VehicleDatabase: @unchecked Sendable {
         self.images = VehicleImageLedger(sql: handle)
         self.commandReceipts = CommandReceiptStore(sql: handle)
         self.providerBackoffs = ProviderBackoffLedger(sql: handle)
+        self.customThemes = CustomThemeLedger(sql: handle)
         createTables()
     }
 

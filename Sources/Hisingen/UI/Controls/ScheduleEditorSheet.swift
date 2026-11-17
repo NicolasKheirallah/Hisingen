@@ -6,6 +6,7 @@ struct ScheduleEditorSheet: View {
     /// Which segment the "Add Schedule" form opens on, so the caller's context (a climate card
     /// vs. a charging card) carries through.
     var initialKind: ScheduleKind = .climate
+    var initialSchedule: VehicleSchedule? = nil
     let onRemoteCommand: (RemoteCommand) -> Void
     /// Whether another remote command is already running.
     ///
@@ -24,7 +25,8 @@ struct ScheduleEditorSheet: View {
     @State private var endMinute: Int = 0
     @State private var selectedWeekdays: Set<VehicleWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
     @State private var isEnabled: Bool = true
-    @State private var editingScheduleID: String? = nil
+    @State private var editingSchedule: VehicleSchedule?
+    private var editingScheduleID: String? { editingSchedule?.backendID }
     @State private var rowHovered = false
     /// Deleting a timer is remote and not undoable locally, so it is confirmed. It was the only
     /// destructive action in the app that fired on a single click.
@@ -68,7 +70,8 @@ struct ScheduleEditorSheet: View {
         .frame(minHeight: 460, maxHeight: dynamicTypeSize.isAccessibilitySize ? 620 : 460)
         .background(HisingenTheme.canvas)
         .onAppear {
-            if editingScheduleID == nil { selectedKind = initialKind }
+            if let initialSchedule { beginEditing(initialSchedule) }
+            else { selectedKind = initialKind }
         }
     }
 
@@ -104,7 +107,7 @@ struct ScheduleEditorSheet: View {
             if allSchedules.isEmpty {
                 Text(L10n.text("No schedules configured."))
                     .hisType(.label)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
             } else {
                 VStack(spacing: 6) {
@@ -126,7 +129,7 @@ struct ScheduleEditorSheet: View {
     private func scheduleRow(_ sched: VehicleSchedule) -> some View {
         let isEditable = sched.backendID != nil
         return HStack(spacing: 8) {
-            Image(systemName: sched.kind == .climate ? "fan.fill" : "bolt.fill")
+            Image(systemName: sched.kind == .climate ? "fan" : "bolt")
                 .foregroundStyle(sched.kind == .climate ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
                 .hisType(.body)
             VStack(alignment: .leading, spacing: 1) {
@@ -150,7 +153,7 @@ struct ScheduleEditorSheet: View {
                         .foregroundStyle(HisingenTheme.semanticWarning)
                 }
                 if !isEditable {
-                    Label(L10n.text("View only"), systemImage: "lock.fill")
+                    Label(L10n.text("View only"), systemImage: "lock")
                         .hisType(.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
@@ -205,10 +208,10 @@ struct ScheduleEditorSheet: View {
             editingScheduleID == sched.backendID && isEditable
                 ? HisingenTheme.accent.opacity(0.12)
                 : Color.primary.opacity(0.04),
-            in: RoundedRectangle(cornerRadius: 6)
+            in: RoundedRectangle(cornerRadius: 0)
         )
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(Color.primary.opacity(rowHovered && isEditable ? 0.05 : 0))
         )
         .hisAnimation(Motion.selection, value: editingScheduleID)
@@ -255,7 +258,7 @@ struct ScheduleEditorSheet: View {
     /// creating a new one – `saveSchedule()` already passes `editingScheduleID` through as
     /// `backendID` for exactly this reason; only entering edit mode was previously missing.
     private func beginEditing(_ sched: VehicleSchedule) {
-        editingScheduleID = sched.backendID
+        editingSchedule = sched
         selectedKind = sched.kind
         startHour = sched.startHour ?? 7
         startMinute = sched.startMinute ?? 30
@@ -266,7 +269,7 @@ struct ScheduleEditorSheet: View {
     }
 
     private func resetToAddMode() {
-        editingScheduleID = nil
+        editingSchedule = nil
         selectedKind = .climate
         startHour = 7
         startMinute = 30
@@ -279,10 +282,10 @@ struct ScheduleEditorSheet: View {
     private var scheduleConfigSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(editingScheduleID != nil ? L10n.text("Edit Schedule") : L10n.text("Add Schedule"))
+                Text(editingSchedule != nil ? L10n.text("Edit Schedule") : L10n.text("Add Schedule"))
                     .hisType(.label, weight: .semibold)
                     .foregroundStyle(.secondary)
-                if editingScheduleID != nil {
+                if editingSchedule != nil {
                     HStack {
                         Spacer()
                         Button(L10n.text("Cancel Edit")) {
@@ -361,12 +364,12 @@ struct ScheduleEditorSheet: View {
                                 .frame(maxWidth: .infinity, minHeight: 24)
                                 .background {
                                     if selected {
-                                        RoundedRectangle(cornerRadius: 4).fill(HisingenTheme.accent)
+                                        RoundedRectangle(cornerRadius: 0).fill(HisingenTheme.accent)
                                     } else {
-                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 4), resting: 0.06)
+                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 0), resting: 0.06)
                                     }
                                 }
-                                .foregroundStyle(selected ? HisingenTheme.accentOn : Color.primary)
+                                .foregroundStyle(selected ? HisingenTheme.canvas : Color.primary)
                                 .animation(reduceMotion ? nil : Motion.selection, value: selected)
                         }
                         .buttonStyle(.pressable)
@@ -388,7 +391,7 @@ struct ScheduleEditorSheet: View {
             Button(L10n.text("Cancel")) {
                 dismiss()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .keyboardShortcut(.cancelAction)
 
@@ -399,9 +402,7 @@ struct ScheduleEditorSheet: View {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
                 dismiss()
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.accent)
-            .foregroundStyle(HisingenTheme.accentOn)
+            .buttonStyle(.hisProminent(HisingenTheme.accent))
             .controlSize(.small)
             .keyboardShortcut(.defaultAction)
             .disabled(chargingWindowInvalid || isBusy)
@@ -414,7 +415,7 @@ struct ScheduleEditorSheet: View {
     private func saveSchedule() {
         let schedule = VehicleSchedule(
             backendID: editingScheduleID,
-            index: nil,
+            index: editingSchedule?.index,
             kind: selectedKind,
             startHour: startHour,
             startMinute: startMinute,

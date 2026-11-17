@@ -116,8 +116,7 @@ struct APIDiagnosticInspectorView: View {
                     }
                 }
                 .frame(width: 150)
-                TextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
                 Button(role: .destructive) {
                     showClearConfirmation = true
                 } label: {
@@ -167,7 +166,7 @@ struct APIDiagnosticInspectorView: View {
                                     .textSelection(.enabled)
                                     .padding(7)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+                                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 0))
                             } else if entry.payloadOmitted {
                                 Text(L10n.format("Payload omitted (%@).",
                                                  entry.payloadOmissionReason ?? "unknown"))
@@ -195,7 +194,7 @@ struct APIDiagnosticInspectorView: View {
                             }
                             Text(entry.timestamp, style: .time)
                                 .hisType(.caption, design: .monospaced).monospacedDigit()
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

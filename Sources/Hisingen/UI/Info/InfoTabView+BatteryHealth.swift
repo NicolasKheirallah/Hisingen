@@ -54,11 +54,11 @@ extension InfoTabView {
                 }
 
                 VStack(spacing: 6) {
-                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube.fill", info: L10n.text("Manufacturer Specification. Architecture, chemical composition, and gross capacity of the high-voltage battery."))
+                    KVRow(L10n.text("Battery Pack"), packDesc, symbol: "cube", info: L10n.text("Manufacturer Specification. Architecture, chemical composition, and gross capacity of the high-voltage battery."))
 
                     HStack {
                         HStack(spacing: 6) {
-                            Image(systemName: "heart.fill")
+                            Image(systemName: "heart")
                                 .hisType(.label)
                                 .foregroundStyle(HisingenTheme.accent)
                                 .frame(width: 14)
@@ -109,7 +109,7 @@ extension InfoTabView {
                     KVRow(L10n.text("Last 100% calculation"),
                           Format.dateTimeFormatter.string(from: estimate.recordedAt),
                           symbol: "clock")
-                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", locale: L10n.displayLocale, deg), symbol: "arrow.down.right.circle.fill", valueWarning: deg > 15.0, info: estimate.methodologySummary)
+                    KVRow(L10n.text("Calculated Degradation"), String(format: "%.1f%%", locale: L10n.displayLocale, deg), symbol: "arrow.down.right.circle", valueWarning: deg > 15.0, info: estimate.methodologySummary)
                     KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", locale: L10n.displayLocale, usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
                     KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
 

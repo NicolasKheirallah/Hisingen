@@ -16,7 +16,7 @@ struct VehicleSoftwareCard: View {
             let statusNotReported = state.otaCapabilities?.supportsUpdateStatus == false
             return AnyView(Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
+                    CardHeader(symbol: "gearshape.2", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
                     if statusNotReported {
                         KVRow(L10n.text("Update Status"), L10n.text("Not reported by this vehicle"),
                               symbol: "arrow.triangle.2.circlepath")
@@ -45,7 +45,7 @@ struct VehicleSoftwareCard: View {
             rows.append(KVRow(L10n.text("Backend-Reported Version"), installed, symbol: "checkmark.seal.fill", info: L10n.text("Reported by an undocumented Polestar backend field. Treat as unverified until it matches the version shown in the vehicle.")))
         }
         if let latest = software.latestAvailableVersion {
-            rows.append(KVRow(software.rawState == .updateAvailable ? L10n.text("Announced Version") : L10n.text("Update Version"), latest, symbol: "shippingbox.fill"))
+            rows.append(KVRow(software.rawState == .updateAvailable ? L10n.text("Announced Version") : L10n.text("Update Version"), latest, symbol: "shippingbox"))
         }
         if let title = software.title { rows.append(KVRow(L10n.text("Release"), title, symbol: "doc.text")) }
         if let summary = software.shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty, summary != software.title { rows.append(KVRow(L10n.text("Summary"), summary, symbol: "doc.plaintext")) }
@@ -68,12 +68,12 @@ struct VehicleSoftwareCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "gearshape.2.fill", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
+                CardHeader(symbol: "gearshape.2", title: L10n.text("Vehicle Software"), color: HisingenTheme.semanticActive)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
                 if updateInstallable {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack {
-                        Image(systemName: "arrow.down.circle.fill").foregroundStyle(HisingenTheme.accent)
+                        Image(systemName: "arrow.down.circle").foregroundStyle(HisingenTheme.accent)
                         Text(L10n.format("Version %@ is ready to install in Controls.", software.latestAvailableVersion ?? software.version ?? "–"))
                             .hisType(.caption, weight: .medium).foregroundStyle(HisingenTheme.ink)
                     }

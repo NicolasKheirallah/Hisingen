@@ -4,23 +4,6 @@ import SwiftUI
 @MainActor
 extension HisingenTheme {
 
-    // MARK: - Decorative Tint
-
-    /// Recolours a *glyph* into the theme's voice. Never use this for data.
-    ///
-    /// Its one caller is ``CardHeader``'s symbol, which is decoration: the card's meaning is in its
-    /// title and its contents. Chart series used to come through here and inherited the theme accent
-    /// at four alpha steps, which made two plotted series 1.21:1 apart. Series are data and now
-    /// carry their own tokens.
-    static func decorativeTint(_ preferred: Color) -> Color {
-        switch theme {
-        case .polestar: return palette.inkMuted
-        case .volvo: return volvoNavy
-        case .hisingen: return preferred
-        default: return palette.accent
-        }
-    }
-
     // MARK: - Chart Series
 
     static var chartPositive: Color { palette.chartPositive }
@@ -40,6 +23,10 @@ extension HisingenTheme {
     //
     // Each keeps its system colour's hue and moves only lightness.
     // `Scripts/verify-app-contrast.py` recomputes every one of these pairs and fails the build.
+    /// Live state: the charge fill while the car is charging. The active theme's
+    /// ``Palette/activeFill``, so it matches the active control cards. Never a text colour; the
+    /// state is always written beside it.
+    static var liveSignal: Color { palette.activeFill }
     static let semanticGood = Color(
         light: NSColor(red: 0.0500, green: 0.4000, blue: 0.1800, alpha: 1),
         dark: NSColor(red: 0.3000, green: 0.8500, blue: 0.5000, alpha: 1)

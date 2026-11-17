@@ -61,97 +61,6 @@ struct VehicleStateCodableTests {
         #expect(roundTripped == state)
     }
 
-    @Test("Flat pre-cluster service and trip fields still decode into the clusters")
-    func testLegacyServiceAndTripDecode() throws {
-        var object = try JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(fullyPopulated())) as! [String: Any]
-        // Strip clustered encodings, inject the flat shapes older builds wrote – and drop the
-        // schema marker, which is the absence that selects the legacy decode path.
-        object.removeValue(forKey: "schemaVersion")
-        object.removeValue(forKey: "maintenance")
-        object.removeValue(forKey: "tripComputer")
-        object["daysToService"] = 17
-        object["distanceToServiceKm"] = 900
-        object["serviceWarning"] = false
-        object["fluidWarnings"] = [String]()
-        object["tripMeterManualKm"] = 64.5
-        object["averageSpeedKmH"] = 48.25
-        object["tripComputerElectricRangeKm"] = 33
-
-        let decoded = try JSONDecoder().decode(
-            VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
-        #expect(decoded.maintenance.service.daysToService == 17)
-        #expect(decoded.maintenance.service.distanceToServiceKm == 900)
-        #expect(decoded.tripComputer.manualTripKm == 64.5)
-        #expect(decoded.tripComputer.averageSpeedKmH == 48.25)
-        #expect(decoded.tripComputer.electricRangeKm == 33)
-    }
-
-    @Test("A fully flat snapshot decodes and re-encodes only as nested clusters")
-    func testLegacyFlatSnapshotMigration() throws {
-        var object = try #require(JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(fullyPopulated())) as? [String: Any])
-
-        object.removeValue(forKey: "schemaVersion")
-        let energy = try #require(object.removeValue(forKey: "energy") as? [String: Any])
-        let identity = try #require(object.removeValue(forKey: "identity") as? [String: Any])
-        let maintenance = try #require(object.removeValue(forKey: "maintenance") as? [String: Any])
-        let freshness = try #require(object.removeValue(forKey: "freshness") as? [String: Any])
-        let command = try #require(object.removeValue(forKey: "commandState") as? [String: Any])
-
-        let energyKeys = [
-            "batteryPercentage": "batteryPercentage", "rangeKm": "rangeKm",
-            "chargingState": "chargingState", "estimatedTimeToFullMinutes": "estimatedChargingTimeToFullMinutes",
-            "estimatedTimeToTargetMinutes": "estimatedChargingTimeToTargetMinutes",
-            "targetPercentage": "chargeTargetPercentage", "powerWatts": "chargingPowerWatts",
-            "currentAmps": "chargingCurrentAmps", "voltageVolts": "chargingVoltageVolts",
-            "type": "chargingType", "connection": "chargerConnection",
-            "currentLimitAmps": "chargingCurrentLimitAmps",
-            "reportedBatteryCapacityKwh": "reportedBatteryCapacityKwh", "diagnostics": "batteryDiagnostics",
-            "schedules": "chargingSchedules", "locations": "chargeLocations",
-            "samples": "chargingSamples", "sessions": "chargingSessions"
-        ]
-        for (nested, flat) in energyKeys { object[flat] = energy[nested] }
-        for key in ["availability", "modelName", "modelYear", "registrationNo", "vin", "ownerFirstName",
-                    "externalColour", "gearbox", "structureWeek", "internalVehicleIdentifier", "pno34",
-                    "accountMarket", "upholstery", "wheels", "packages", "steeringOrientation",
-                    "imageData", "interiorImageData"] {
-            object[key] = identity[key]
-        }
-        object["odometerKm"] = maintenance["odometerKm"]
-        object["healthDetails"] = maintenance["details"]
-        object["serviceInfo"] = maintenance["service"]
-        object["warrantyInfo"] = maintenance["warranty"]
-        object["frontBrakePadStatus"] = maintenance["frontBrakePadStatus"]
-        object["rearBrakePadStatus"] = maintenance["rearBrakePadStatus"]
-        object["isCachedSnapshot"] = freshness["isCached"]
-        object["fetchedAt"] = freshness["fetchedAt"]
-        object["vehicleReportedAt"] = freshness["vehicleReportedAt"]
-        object["readingDates"] = freshness["readingDates"]
-        object["dataWarnings"] = freshness["dataWarnings"]
-        object["unavailableFeatures"] = freshness["unavailableFeatures"]
-        object["retainedDataCategories"] = freshness["retainedDataCategories"]
-        object["retainedDataAt"] = freshness["retainedDataAt"]
-        object["pendingCommand"] = command["receipt"]
-
-        let decoded = try JSONDecoder().decode(
-            VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
-        #expect(decoded == fullyPopulated())
-
-        let migrated = try #require(JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(decoded)) as? [String: Any])
-        #expect(migrated["energy"] != nil)
-        #expect(migrated["identity"] != nil)
-        #expect(migrated["maintenance"] != nil)
-        #expect(migrated["freshness"] != nil)
-        #expect(migrated["commandState"] != nil)
-        #expect(migrated["batteryPercentage"] == nil)
-        #expect(migrated["vin"] == nil)
-        #expect(migrated["odometerKm"] == nil)
-        #expect(migrated["fetchedAt"] == nil)
-        #expect(migrated["pendingCommand"] == nil)
-    }
-
     @Test("Command receipt survives Codable round-trip but is absent when unset")
     func commandReceiptCodableRoundTrip() throws {
         var state = fullyPopulated()
@@ -176,26 +85,6 @@ struct VehicleStateCodableTests {
         #expect(bare.commandState.receipt == nil)
     }
 
-    @Test("Legacy commandState.pending decodes as the renamed receipt")
-    func legacyPendingReceiptKeyMigration() throws {
-        let receipt = CommandReceipt(
-            commandIdentifier: "lock",
-            issuedAt: Date(timeIntervalSince1970: 1_750_000_100),
-            status: .timedOut(at: Date(timeIntervalSince1970: 1_750_000_200))
-        )
-        let receiptObject = try JSONSerialization.jsonObject(with: JSONEncoder().encode(receipt))
-        let legacy = try JSONSerialization.data(withJSONObject: ["pending": receiptObject])
-
-        let decoded = try JSONDecoder().decode(CommandPresentationState.self, from: legacy)
-        #expect(decoded.receipt == receipt)
-        let migrated = try #require(JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(decoded)
-        ) as? [String: Any])
-        #expect(migrated["receipts"] != nil)
-        #expect(migrated["receipt"] == nil)
-        #expect(migrated["pending"] == nil)
-    }
-
     @Test("Legacy confirmedAt receipts migrate to the unified terminal status")
     func legacyConfirmedAtStatusMigration() throws {
         struct LegacyReceipt: Encodable {
@@ -216,30 +105,12 @@ struct VehicleStateCodableTests {
         #expect(decoded.status == .confirmed(at: confirmedAt))
     }
 
-    /// Builds a pre-cluster snapshot payload: takes a genuine modern encoding, removes the
-    /// nested `fuelSystem` object and re-injects its fields under the flat legacy keys.
-    private func legacyPayload(fuel: FuelSystemSnapshot) throws -> Data {
-        var base = fullyPopulated()
-        base.fuelSystem = FuelSystemSnapshot()
-        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(base)) as! [String: Any]
-        object.removeValue(forKey: "schemaVersion")
-        object.removeValue(forKey: "fuelSystem")
-        object["fuelLevelPercent"] = fuel.levelPercent
-        object["fuelRangeKm"] = fuel.rangeKm
-        object["fuelAmountLiters"] = fuel.amountLiters
-        object["averageFuelConsumptionLPer100Km"] = fuel.averageConsumptionLPer100Km
-        object["isEngineRunning"] = fuel.isEngineRunning
-        object["fuelType"] = fuel.type
-        return try JSONSerialization.data(withJSONObject: object)
-    }
-
-    @Test("A payload carrying the schema marker is never rescued by flat keys")
-    func testCurrentVersionPayloadIsNotRescuedByFlatKeys() throws {
+    @Test("A payload missing a cluster is never rescued by flat keys")
+    func testMissingClusterIsNotRescuedByFlatKeys() throws {
         var object = try #require(JSONSerialization.jsonObject(
             with: JSONEncoder().encode(fullyPopulated())) as? [String: Any])
-        // Everything the flat fallback would need is here, but the payload claims to be current:
-        // the clusters are the state, so a missing one is a corrupt snapshot rather than an old
-        // one, and it must fail loudly instead of decoding into a half-empty vehicle.
+        // The flat keys are present, but the clusters are the state: a missing one is a corrupt
+        // snapshot, and it must fail loudly instead of decoding into a half-empty vehicle.
         let energy = try #require(object.removeValue(forKey: "energy") as? [String: Any])
         object["batteryPercentage"] = energy["batteryPercentage"]
         object["rangeKm"] = energy["rangeKm"]
@@ -248,27 +119,5 @@ struct VehicleStateCodableTests {
             _ = try JSONDecoder().decode(
                 VehicleState.self, from: JSONSerialization.data(withJSONObject: object))
         }
-    }
-
-    @Test("Snapshots written before the fuel cluster migration still decode")
-    func testLegacyFlatFuelDecode() throws {
-        let fuel = FuelSystemSnapshot(
-            levelPercent: 48, rangeKm: 77, amountLiters: 9.5,
-            averageConsumptionLPer100Km: 5.9, isEngineRunning: false, type: "PETROL"
-        )
-        let decoded = try JSONDecoder().decode(VehicleState.self, from: legacyPayload(fuel: fuel))
-        #expect(decoded.fuelSystem == fuel)
-    }
-
-    @Test("Re-encoding a legacy-decoded state migrates it to the clustered format")
-    func testLegacyStateReencodesAsCluster() throws {
-        let fuel = FuelSystemSnapshot(levelPercent: 33, rangeKm: nil, amountLiters: nil,
-                                      averageConsumptionLPer100Km: nil, isEngineRunning: nil,
-                                      type: nil)
-        let decoded = try JSONDecoder().decode(VehicleState.self, from: legacyPayload(fuel: fuel))
-        let reencoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
-        let object = try JSONSerialization.jsonObject(with: Data(reencoded.utf8)) as! [String: Any]
-        #expect(object["fuelSystem"] != nil, "re-encoding must use the clustered key")
-        #expect(object["fuelLevelPercent"] == nil, "flat keys must not be written")
     }
 }

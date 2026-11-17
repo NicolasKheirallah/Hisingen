@@ -97,68 +97,6 @@ struct DataRetentionHardeningTests {
     }
 
     @Test
-    func legacyPlistBaselinesMigrateIntoRowsAndExpiredOnesDoNot() throws {
-        let vin = "LEGACY_BASELINE_TEST"
-        let expiredVIN = "LEGACY_BASELINE_EXPIRED"
-        let defaults = try makeDefaults()
-        let baseline = ChargingBaseline(
-            vin: vin, state: .charging, connection: .connected, batteryPercentage: 42,
-            targetPercentage: 80, vehicleReportedAt: Date(), sampledAt: Date(),
-            chargingSessionActive: true, interruptionSamples: 0, lowBatteryNotified: false)
-        // The stale one must not come forward: the retention rule is about the baseline, not
-        // about which tier it happens to be sitting in.
-        let expired = ChargingBaseline(
-            vin: expiredVIN, state: .idle, connection: .disconnected, batteryPercentage: 12,
-            targetPercentage: 80, vehicleReportedAt: Date().addingTimeInterval(-9 * 24 * 60 * 60),
-            sampledAt: Date().addingTimeInterval(-9 * 24 * 60 * 60),
-            chargingSessionActive: false, interruptionSamples: 0, lowBatteryNotified: false)
-        defaults.set(
-            try JSONEncoder().encode([vin: baseline, expiredVIN: expired]),
-            forKey: "charging_baselines_v1")
-
-        let database = VehicleDatabase.inMemory()
-        let stateStore = VehicleStateStore(defaults: defaults, database: database)
-        // The read is pure: nothing is in the row yet, and reading must not move the entry.
-        #expect(stateStore.baseline(for: vin) == nil)
-
-        stateStore.activate()
-
-        #expect(stateStore.baseline(for: vin)?.batteryPercentage == 42)
-        #expect(database.baselines.loadBaseline(for: vin)?.batteryPercentage == 42)
-        #expect(stateStore.baseline(for: expiredVIN) == nil)
-        #expect(database.baselines.loadBaseline(for: expiredVIN) == nil)
-        #expect(defaults.data(forKey: "charging_baselines_v1") == nil)
-    }
-
-    @Test
-    func legacySingleReceiptStorageMigratesToACollection() throws {
-        struct LegacyReceipt: Codable {
-            var receipt: CommandReceipt
-            var confirmationDeadline: Date?
-        }
-
-        let vin = "LEGACY_RECEIPT_TEST"
-        let defaults = try makeDefaults()
-        let deadline = Date(timeIntervalSince1970: 1_750_000_100)
-        let receipt = CommandReceipt(
-            commandIdentifier: "lock",
-            issuedAt: deadline.addingTimeInterval(-60)
-        )
-        defaults.set(
-            try JSONEncoder().encode([
-                vin: LegacyReceipt(receipt: receipt, confirmationDeadline: deadline)
-            ]),
-            forKey: "command_receipts_v1"
-        )
-        let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
-        stateStore.activate()
-
-        #expect(stateStore.commandReceipts(for: vin) == [
-            StoredCommandReceipt(receipt: receipt, confirmationDeadline: deadline)
-        ])
-    }
-
-    @Test
     func clearingOneVehicleKeepsOtherReceiptCollections() throws {
         let defaults = try makeDefaults()
         let stateStore = VehicleStateStore(defaults: defaults, database: .inMemory())
