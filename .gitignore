@@ -2,6 +2,16 @@
 releases/
 .swiftpm/
 docs/*
+!docs/help.md
+!docs/install.md
+!docs/product-tour.md
+!docs/project.md
+!docs/remote-controls.md
+!docs/using-hisingen.md
+!docs/vehicle-features.md
+!docs/api/
+docs/api/*
+!docs/api/field-mappings.md
 !docs/architecture/
 docs/architecture/*
 !docs/architecture/polestar-trailers-2026-10-31.md

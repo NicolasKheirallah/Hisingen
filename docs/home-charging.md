@@ -1,5 +1,7 @@
 # Home charging
 
+[Charger setup](#connect-nexblue-directly) · [Tibber](#connect-tibber) · [Home Assistant](#connect-through-home-assistant) · [Electricity prices and the Charging Planner](#electricity-prices-and-the-charging-planner) · [Charger screenshots](product-tour.md#home-charging)
+
 ## Connect NexBlue directly
 
 1. Open **Settings → Electricity → Home Charging** and choose **NexBlue** under **Charger connection**.
@@ -13,7 +15,7 @@ The direct provider reads from NexBlue's cloud and saves its refresh token in th
 
 Use **Cheapest overnight charge** on the paired vehicle’s charger card to preview a fixed one-time window using your selected Swedish spot price area. Choose a duration from one to eight hours. Hisingen compares the published prices between 18:00 and 07:00 in the charger’s time zone. An owner account, normal scheduling mode, and a free schedule slot are required. An existing active timer blocks a new one. **Save timer** appends the new window and reads it back from the charger. The charger runs the saved window on its own. To cancel it or clear a used slot, open **Schedule** in myNexBlue. The vehicle’s charging schedule and charge limit still apply. [NexBlue scheduling guide](https://nexblue.com/en-nl/apps/hc/mynexblue-app/how-to-set-the-charging-schedule)
 
-In **Settings → Electricity → Home Charging**, **Import earlier sessions** lets you choose up to one year at a time. Both dates are included. Settings shows when the most recent successful import ran and the date range it checked. Older sessions appear when NexBlue still has them and your account can read them.
+In **Settings → Electricity → Home Charging**, **Import earlier sessions** lets you choose up to one year at a time. Both dates are included. Settings shows when the most recent successful import ran and the date range it checked. Older sessions appear when NexBlue still has them and your account can read them. Repeating an import keeps one copy of each session. If a pause ends a session, each session keeps its own energy reading.
 
 ## Connect Easee or Zaptec directly
 
@@ -223,6 +225,31 @@ Plan windows use Tibber import prices through Home Assistant's `tibber.get_price
 the currency Home Assistant reports. The network fee from the pairing is added to each price.
 Hisingen shows the price source in the preview so an estimate is never mistaken for a published
 price.
+
+## Electricity prices and the Charging Planner
+
+**Settings → Electricity** sets the country, either Sweden or another country.
+
+* **Sweden, Automatic rate.** Charging is priced from the spot price for your zone (SE1 to SE4)
+  plus your provider's markup, with optional tax and grid fee in öre/kWh and a VAT toggle. You
+  choose the contract type: 15-minute price, as the market publishes it, or hourly price, which
+  averages the four quarters in each hour. The provider list (Vattenfall, Fortum, E.ON, Tibber,
+  Bixia, Greenely, Göteborg Energi, Skellefteå Kraft, Telge Energi, Jämtkraft, or other) only
+  names the contract. It carries no prices, because markups differ per agreement. The price your
+  settings produce is shown next to the controls.
+* **Every other country.** A typed-in rate and the optional night tariff.
+
+Hisingen uses the selected rate for charge-to-target estimates, session costs and totals in Log
+and CSV exports. A connected Tibber home supplies prices for sessions it covers. Changing the markup re-prices past sessions that have a stored market cost.
+Sessions the market prices do not cover keep their saved cost or your fixed rate.
+
+The **Charging Planner** needs Sweden and its feature switch. It shows an hourly price curve and
+the cheapest window to reach your target. Automatic charging commands are bound to the vehicle
+the plan was calculated for. Choosing another country stops the planner and
+keeps its settings for when Sweden is selected again. Spot prices come from
+[Elpriset just nu.se](https://www.elprisetjustnu.se/), are fetched once a day after 14:15 and
+exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
+each zone refreshes on its own schedule.
 
 ## What the NexBlue integration provides
 
