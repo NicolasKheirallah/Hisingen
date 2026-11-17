@@ -137,8 +137,15 @@ struct HomeAssistantClientTests {
 struct HomeAssistantSocketTests {
     private let base = URL(string: "http://homeassistant.local:8123")!
 
-    private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async {
-        for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+    /// Polls for up to two seconds. Returns whether the condition held, so a test that depends on
+    /// it can fail at the cause instead of timing out later.
+    @discardableResult
+    private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async -> Bool {
+        for _ in 0..<200 {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return condition()
     }
 
     @Test("The handshake authenticates once and the token is sent only in the auth message")
@@ -198,13 +205,16 @@ struct HomeAssistantSocketTests {
         connection.push("{\"type\":\"auth_ok\"}")
         let socket = try await HomeAssistantSocket.open(baseURL: base, token: "t", connector: ScriptedSocketConnector(connection: connection))
         async let answer = socket.command("search/related", fields: ["item_type": .string("entity")])
-        await waitUntil { connection.sent.contains { $0.contains("search/related") } }
+        // The encoder escapes "/" as "\\/", so match a fragment without one.
+        let firstSent: Bool = await waitUntil { connection.sent.contains { $0.contains("related") } }
+        #expect(firstSent)
         connection.push("{\"id\":1,\"type\":\"result\",\"success\":true,\"result\":{\"automation\":[\"automation.x\"]}}")
         let value = try await answer
         #expect(value.objectValue?["automation"]?.arrayValue?.first?.stringValue == "automation.x")
 
         async let failing = socket.command("config/entity_registry/list")
-        await waitUntil { connection.sent.contains { $0.contains("entity_registry") } }
+        let secondSent: Bool = await waitUntil { connection.sent.contains { $0.contains("entity_registry") } }
+        #expect(secondSent)
         connection.push("{\"id\":2,\"type\":\"result\",\"success\":false,\"error\":{\"code\":\"unauthorized\",\"message\":\"Unauthorized\"}}")
         do {
             _ = try await failing
