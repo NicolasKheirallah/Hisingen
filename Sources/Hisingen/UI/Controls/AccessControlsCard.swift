@@ -5,143 +5,68 @@ struct AccessControlsCard: View {
     let state: VehicleState
     let gate: ControlsCommandGate
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private var profile: VehicleCapabilityProfile { state.capabilityProfile }
     private var features: Set<AppFeature> { gate.features }
 
     var body: some View {
-        Card {
+        let isLocked = state.exteriorStatus?.isLocked
+        let lockCommand: RemoteCommand = isLocked == true ? .unlock : .lock
+        let lockAvailability = gate.liveAvailability([lockCommand])
+        Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "lock", title: L10n.text("Locks & Security"), color: HisingenTheme.semanticActive)
-                    Spacer()
-                    if let isLocked = state.exteriorStatus?.isLocked {
-                        Pill(
-                            text: isLocked ? L10n.text("Locked") : L10n.text("Unlocked"),
-                            color: isLocked ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning,
-                            symbol: isLocked ? "lock" : "lock.open"
-                        )
-                    } else {
-                        // Silently omitting the state was itself the problem: the card then showed
-                        // a definite "Lock" button with nothing to say the vehicle had never
-                        // reported a state. The engine card in this same area already states
-                        // "Status Unavailable" rather than nothing.
-                        Pill(
-                            text: L10n.text("Lock State Not Reported"),
-                            color: HisingenTheme.semanticWarning,
-                            symbol: "questionmark.circle"
-                        )
-                    }
+                CardHeaderWithAccessory(
+                    heading: CardHeader(symbol: "lock", title: L10n.text("Locks & Security"), color: HisingenTheme.semanticActive)
+                ) {
+                    lockStatus(isLocked)
                 }
-                // Three states, not two. `nil` used to collapse to `false`, which chose the action,
-                // the label, the icon and the tint from a reading the vehicle had not sent. The
-                // button still offers Lock, because locking is the safe direction and refusing to
-                // act on an unknown state would strand the user; what changes is that the control
-                // no longer claims to know, and Reduced Guard waits for a reported state.
-                let isLocked = state.exteriorStatus?.isLocked
-                // Lock and unlock are separate capabilities: `Locks.unlock_type` can be `none` or
-                // `trunkOnly` on a car that still locks remotely, so the reason names this action.
-                let lockCommand: RemoteCommand = isLocked == true ? .unlock : .lock
-                let lockAvailability = gate.liveAvailability([lockCommand])
                 gate.dimReason(lockAvailability)
-                HStack(spacing: 8) {
+
+                VehicleCommandRow {
                     if profile.permits(.locks) && features.contains(.remoteLocks) {
-                        Button {
-                            gate.send(lockCommand)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: lockIcon)
-                                    .hisType(.displaySmall)
-                                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                                Text(isLocked == true ? L10n.text("Unlock") : L10n.text("Lock"))
-                                    .hisType(.body, weight: .semibold)
-                                gate.sendingOverlay(lockCommand)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                        }
-                        .buttonStyle(.hisSecondary(isLocked == true ? HisingenTheme.semanticActive : HisingenTheme.semanticGood))
-                        .help(lockAvailability.shortReason
-                              ?? (isLocked == nil
-                                  ? L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
-                                  : (isLocked == true
-                                     ? L10n.text("Unlocks the vehicle.")
-                                     : L10n.text("Locks the vehicle."))))
-                        .disabled(gate.isDisabled(lockCommand))
-                        .hisAnimation(Motion.stateChange, value: isLocked)
+                        VehicleCommandButton(
+                            title: isLocked == true ? L10n.text("Unlock") : L10n.text("Lock"),
+                            symbol: isLocked == true ? "lock.open" : "lock",
+                            command: lockCommand, gate: gate, isPrimary: true
+                        )
+                        .help(lockAvailability.shortReason ?? lockHelp(isLocked))
                     }
 
                     if state.model.brand == .volvo,
                        isLocked == false,
                        profile.permits(.reducedGuardLock),
                        features.contains(.remoteLocks) {
-                        Button {
-                            gate.send(.lockReducedGuard)
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "lock.shield").hisType(.title)
-                                Text(L10n.text("Reduced Guard")).hisType(.label, weight: .medium)
-                                gate.sendingOverlay(.lockReducedGuard)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                        }
-                        .buttonStyle(.hisSecondary)
-                        .disabled(gate.isDisabled(.lockReducedGuard))
+                        VehicleCommandButton(
+                            title: L10n.text("Reduced Guard"), symbol: "lock.shield",
+                            command: .lockReducedGuard, gate: gate
+                        )
                         .help(L10n.text("Locks the vehicle with reduced alarm guard sensitivity, when supported."))
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
 
                     if features.contains(.remoteLocks) {
                         let capabilities = state.otaCapabilities
                         let showTrunkUnlock = profile.permits(.trunk)
                             && (capabilities?.supportsTrunkUnlock ?? profile.permits(.trunk))
-                        let showTailgateControl = capabilities?.supportsTrunkControl ?? false
 
                         if showTrunkUnlock {
-                            Button {
-                                gate.send(.unlockTrunk)
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: "car.side.rear.open").hisType(.title)
-                                    Text(L10n.text("Unlock Trunk")).hisType(.label, weight: .medium)
-                                    gate.sendingOverlay(.unlockTrunk)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 46)
-                            }
-                            .buttonStyle(.hisSecondary)
-                            .disabled(gate.isDisabled(.unlockTrunk))
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                            VehicleCommandButton(
+                                title: L10n.text("Unlock Trunk"), symbol: "lock.open",
+                                command: .unlockTrunk, gate: gate
+                            )
                         }
 
-                        if showTailgateControl {
+                        if capabilities?.supportsTrunkControl == true {
                             let tailgateIsOpen = state.exteriorStatus?.isTailgateOpen ?? false
-                            let tailgateCommand: RemoteCommand = tailgateIsOpen ? .closeTailgate : .openTailgate
-                            Button {
-                                gate.send(tailgateCommand)
-                            } label: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: tailgateIsOpen
-                                          ? "car.side" : "car.side.rear.open")
-                                        .hisType(.title)
-                                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                                    Text(tailgateIsOpen
-                                         ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"))
-                                        .hisType(.label, weight: .medium)
-                                    gate.sendingOverlay(tailgateCommand)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 46)
-                            }
-                            .buttonStyle(.hisSecondary(tailgateIsOpen ? HisingenTheme.semanticWarning : nil))
-                            .disabled(gate.isDisabled(tailgateCommand))
-                            .hisAnimation(Motion.stateChange, value: tailgateIsOpen)
+                            VehicleCommandButton(
+                                title: tailgateIsOpen ? L10n.text("Close Tailgate") : L10n.text("Open Tailgate"),
+                                symbol: tailgateIsOpen ? "car.side" : "car.side.rear.open",
+                                command: tailgateIsOpen ? .closeTailgate : .openTailgate, gate: gate
+                            )
                         }
                     }
                 }
-                // Keyed on every condition that adds/removes a button so the row
-                // reflows instead of popping (Reduced Guard, trunk, tailgate).
                 .hisAnimation(Motion.cardChange, value: [
                     state.model.brand == .volvo,
-                    isLocked == true,
+                    isLocked == false,
                     profile.permits(.reducedGuardLock),
                     features.contains(.remoteLocks)
                 ])
@@ -149,17 +74,37 @@ struct AccessControlsCard: View {
                 .hisAnimation(Motion.cardChange, value: state.otaCapabilities?.supportsTrunkUnlock)
             }
         }
-        .opacity(gate.liveOpacity([.lock, .unlock]))
-        .hisAnimation(Motion.stateChange, value: gate.liveAvailability([.lock, .unlock]))
     }
 
-    /// The action's own icon, except when the vehicle has not reported a state: then the icon says
-    /// so rather than showing a padlock, which reads as a claim about the car.
-    private var lockIcon: String {
-        switch state.exteriorStatus?.isLocked {
-        case true: return "lock.open"
-        case false: return "lock"
-        case nil: return "questionmark.circle"
+    private func lockStatus(_ isLocked: Bool?) -> some View {
+        let text: String
+        let symbol: String
+        let color: Color
+        switch isLocked {
+        case true?:
+            text = L10n.text("Locked")
+            symbol = "lock"
+            color = HisingenTheme.ink
+        case false?:
+            text = L10n.text("Unlocked")
+            symbol = "lock.open"
+            color = HisingenTheme.semanticWarning
+        case nil:
+            text = L10n.text("Lock State Not Reported")
+            symbol = "questionmark.circle"
+            color = HisingenTheme.inkMuted
+        }
+        return Label(text, systemImage: symbol)
+            .hisType(.body)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func lockHelp(_ isLocked: Bool?) -> String {
+        switch isLocked {
+        case true?: return L10n.text("Unlocks the vehicle.")
+        case false?: return L10n.text("Locks the vehicle.")
+        case nil: return L10n.text("The vehicle has not reported a lock state yet, so this sends Lock.")
         }
     }
 }

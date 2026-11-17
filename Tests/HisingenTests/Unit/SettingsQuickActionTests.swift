@@ -183,11 +183,9 @@ struct ContentDensityTests {
 
     @Test
     func thePanelLaysOutAtItsRealSize() {
-        // Nothing raster-scales the tree any more, so the logical frame is the physical frame.
         let layout = PanelLayout.resolve(panelSizeRaw: PanelSize.standard.rawValue,
                                          densityRaw: ContentDensity.compact.rawValue,
                                          customEnabled: false, customWidth: 0, customHeight: 0)
-        #expect(layout.logicalWidth == layout.width)
         // Use an injected visible frame: reading `layout.height` asks NSScreen for the
         // active display, which a package test runner has not initialized.
         #expect(layout.clampedToVisibleFrame(1200) == layout.unclampedHeight)

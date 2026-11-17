@@ -8,11 +8,13 @@ struct NowInstrument: View {
     var feedback: RemoteCommandFeedback? = nil
     var onAuthorizeRemoteCommands: (() -> Void)? = nil
     var showsDepartureCheck = false
+    var showsWeather = false
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.layoutDirection) private var layoutDirection
+    @State private var cardsShown = false
 
     private var condensed: Bool { HisingenTheme.layoutWidth < 540 }
     private var inset: CGFloat { HisingenTheme.cardPadding }
@@ -84,7 +86,8 @@ struct NowInstrument: View {
     }
 
     static func quickCommand(_ identifier: String) -> Bool {
-        ["lock", "unlock", "start-climate", "stop-climate", "start-charge-override", "stop-charge-override"]
+        ["lock", "unlock", "start-climate", "stop-climate", "start-charge-override", "stop-charge-override",
+         "set-charge-target", "set-amp-limit"]
             .contains(identifier)
     }
 
@@ -133,7 +136,6 @@ struct NowInstrument: View {
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
-
         return layout {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
@@ -146,6 +148,7 @@ struct NowInstrument: View {
                         .hisType(.subhead)
                         .foregroundStyle(HisingenTheme.inkMuted)
                 }
+                freshnessLabel
                 if let status {
                     Text(status)
                         .hisType(.subhead)
@@ -162,7 +165,9 @@ struct NowInstrument: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            freshnessLabel
+            if showsWeather, preferences.features.contains(.vehicleWeather) {
+                NowWeatherButton(state: state)
+            }
         }
     }
 
@@ -289,6 +294,8 @@ struct NowInstrument: View {
         case .locks: doorsControl
         case .climate: climateControl
         case .charging: chargingControl
+        case .chargeLimit: chargeLimitControl
+        case .currentLimit: currentLimitControl
         case .airCleaning: airCleaningControl
         case .windows: windowsControl
         case .locate: locateControl
@@ -304,8 +311,20 @@ struct NowInstrument: View {
             columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: columns),
             alignment: .leading, spacing: 8
         ) {
-            ForEach(controls, id: \.self) { quickControlCard($0) }
+            ForEach(Array(controls.enumerated()), id: \.element) { index, control in
+                quickControlCard(control)
+                    .opacity(cardsShown ? 1 : 0)
+                    // A short stagger so the cards arrive in reading order. Capped, so a long
+                    // selection does not keep the last card waiting.
+                    .animation(
+                        Motion.resolveCrossfade(Motion.entrance.delay(Double(min(index, 5)) * 0.04)),
+                        value: cardsShown
+                    )
+                    .transition(.opacity)
+            }
         }
+        .onAppear { cardsShown = true }
+        .hisAnimation(Motion.cardChange, value: controls)
     }
 
     private var airCleaningControl: some View {
@@ -371,18 +390,12 @@ struct NowInstrument: View {
 
     private var freshnessLabel: some View {
         let lines = [ageLine, sharedReadingAge].compactMap { $0 }
-        return VStack(alignment: typeSize.isAccessibilitySize ? .leading : .trailing, spacing: 2) {
-            ForEach(lines, id: \.self) { line in
-                Text(line)
-            }
-        }
-        .hisType(.label)
-        .monospacedDigit()
-        .foregroundStyle(HisingenTheme.inkMuted)
-        .multilineTextAlignment(typeSize.isAccessibilitySize ? .leading : .trailing)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, 6)
-        .accessibilityElement(children: .combine)
+        return Text(lines.joined(separator: " · "))
+            .hisType(.label)
+            .monospacedDigit()
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(lines.joined(separator: ", "))
     }
 
     private var doorsControl: some View {
@@ -400,6 +413,15 @@ struct NowInstrument: View {
 
     private var rearSeatsSet: Bool {
         preferences.remoteRearLeftSeatHeating != .unspecified || preferences.remoteRearRightSeatHeating != .unspecified
+    }
+
+    private var climateRunning: Bool { state.isClimateActive && state.hasFreshReading(.climateStatus) }
+
+    /// The car's own remaining time with the moment it said so, which the card counts down from.
+    private var climateCountdown: CardCountdownSource? {
+        guard climateRunning, let minutes = state.climateStatus?.timeRemainingMinutes, minutes > 0,
+              let reportedAt = state.reportedDate(for: .climateStatus) else { return nil }
+        return CardCountdownSource(minutes: minutes, reportedAt: reportedAt)
     }
 
     private var climateControl: some View {
@@ -420,7 +442,9 @@ struct NowInstrument: View {
             name: L10n.text("Climate"),
             value: state.climateStatus?.activity.displayName ?? L10n.text("Unavailable"),
             reading: .climateStatus, hasReading: state.climateStatus != nil,
-            activity: state.isClimateActive && state.hasFreshReading(.climateStatus) ? .running : nil,
+            activity: climateRunning ? .running : nil,
+            symbolMotion: climateRunning ? .spin : .still,
+            countdown: climateCountdown,
             action: state.isClimateActive ? L10n.text("Stop Climate") : L10n.text("Start Climate"),
             command: command
         )
@@ -446,8 +470,75 @@ struct NowInstrument: View {
             value: status,
             reading: .charging, hasReading: state.energy.connection != .unknown || state.energy.chargingState.isRecognised,
             activity: state.isCharging && state.hasFreshReading(.charging) ? .live : nil,
+            symbolMotion: state.isCharging && state.hasFreshReading(.charging) ? .breathe : .still,
             action: hasAction ? (overriding ? L10n.text("Resume Schedule") : L10n.text("Charge Now")) : nil,
             command: overriding ? .stopChargingOverride : .startChargingOverride
+        )
+    }
+
+    private var chargeBounds: VehicleChargeBounds { VehicleChargeBounds(capabilities: state.otaCapabilities) }
+
+    /// The charge target, raised one step a press. A press builds on a queued value when the car has
+    /// not applied one yet, so two quick presses climb instead of sending the same number twice.
+    private var chargeLimitControl: some View {
+        let current = state.energy.targetPercentage.flatMap { $0 > 0 ? $0 : nil }
+        let queued = state.energy.diagnostics?.unappliedTargetPercentage(current: current)
+        let base = queued ?? current
+        let range = chargeBounds.targetRange
+        let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
+        let next = press?.value
+        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", Format.percent(Double($0))) }
+            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
+        let action = next.map { value in
+            press?.restarts == true
+                ? L10n.format("Lower to %@", Format.percent(Double(value)))
+                : L10n.format("Raise to %@", Format.percent(Double(value)))
+        }
+        return quickControl(
+            symbol: "battery.75percent",
+            name: L10n.text("Charge Limit"),
+            value: current.map { Format.percent(Double($0)) } ?? L10n.text("Unavailable"),
+            reading: .charging, hasReading: current != nil,
+            note: note,
+            entry: current == nil ? nil : LimitEntry(
+                title: L10n.text("Charge Limit"), unit: "%", range: range, current: current,
+                rangeText: L10n.format("From %1$@ to %2$@", Format.percent(Double(range.lowerBound)),
+                                       Format.percent(Double(range.upperBound))),
+                command: { .setChargeTarget($0) }
+            ),
+            action: action,
+            command: .setChargeTarget(next ?? base ?? range.upperBound)
+        )
+    }
+
+    /// The charging current limit, raised one step a press.
+    private var currentLimitControl: some View {
+        let current = state.energy.currentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
+        let queued = state.energy.diagnostics?.unappliedLimitAmps(current: current)
+        let base = queued ?? current
+        let range = chargeBounds.amperageRange
+        let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
+        let next = press?.value
+        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", Format.amps($0)) }
+            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
+        let action = next.map { value in
+            press?.restarts == true
+                ? L10n.format("Lower to %@", Format.amps(value))
+                : L10n.format("Raise to %@", Format.amps(value))
+        }
+        return quickControl(
+            symbol: "gauge.with.dots.needle.bottom.100percent",
+            name: L10n.text("Current Limit"),
+            value: current.map { Format.amps($0) } ?? L10n.text("Unavailable"),
+            reading: .charging, hasReading: current != nil,
+            note: note,
+            entry: current == nil ? nil : LimitEntry(
+                title: L10n.text("Current Limit"), unit: "A", range: range, current: current,
+                rangeText: L10n.format("From %1$@ to %2$@", Format.amps(range.lowerBound), Format.amps(range.upperBound)),
+                command: { .setAmpLimit($0) }
+            ),
+            action: action,
+            command: .setAmpLimit(next ?? base ?? range.upperBound)
         )
     }
 
@@ -459,17 +550,24 @@ struct NowInstrument: View {
         reading: VehicleReading,
         hasReading: Bool,
         activity: CardActivity? = nil,
+        symbolMotion: CardSymbol.Kind = .still,
+        countdown: CardCountdownSource? = nil,
+        note: String? = nil,
+        entry: LimitEntry? = nil,
         valueIsWarning: Bool = false,
         action: String?,
         command: RemoteCommand
     ) -> some View {
         let valueColor = valueIsWarning && activity == nil ? HisingenTheme.semanticWarning : (activity?.foreground ?? HisingenTheme.ink)
         let age = hasReading ? ownAge(reading) : nil
-        let spokenValue = [value, age].compactMap { $0 }.joined(separator: ", ")
         let awaiting = state.commandState.receipts.contains {
             $0.status.isAwaiting && $0.command?.descriptor.proofReading == reading
         }
-        let detail = awaiting ? L10n.text("Command sent: waiting for the vehicle") : age
+        let detail = awaiting ? L10n.text("Command sent: waiting for the vehicle") : (note ?? age)
+        let remainingNow = countdown.flatMap {
+            ClimateCountdown.minutesRemaining(reported: $0.minutes, at: $0.reportedAt, now: Date())
+        }
+        let spoken = [value, remainingNow.map { L10n.format("%d min remaining", $0) }, age].compactMap { $0 }.joined(separator: ", ")
         if let action {
             let availability = commandGate.availability(command)
             let sending = commandGate.isSending(command)
@@ -483,7 +581,8 @@ struct NowInstrument: View {
                     detail: detail, action: visibleAction,
                     actionColor: activity.map { availability.isAvailable ? $0.foreground : $0.secondary }
                         ?? (availability.isAvailable ? HisingenTheme.ink : HisingenTheme.inkMuted),
-                    sending: sending, activity: activity
+                    sending: sending, activity: activity,
+                    symbolMotion: symbolMotion, waiting: awaiting, countdown: countdown
                 )
             }
             .buttonStyle(.pressable)
@@ -491,14 +590,24 @@ struct NowInstrument: View {
             .disabled(!availability.isAvailable)
             .help(availability.shortReason ?? commandTitle)
             .accessibilityLabel(sending ? visibleAction : commandTitle)
-            .accessibilityValue([spokenValue, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityValue([spoken, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
             .accessibilityHint(availability.shortReason ?? "")
+            .overlay(alignment: .bottomTrailing) {
+                if let entry {
+                    LimitEntryButton(
+                        entry: entry, isAvailable: availability.isAvailable,
+                        color: activity?.secondary ?? HisingenTheme.inkMuted, send: commandGate.send
+                    )
+                    .padding(6)
+                }
+            }
         } else {
             quickControlLabel(symbol: symbol, name: name, value: value, valueColor: valueColor, detail: detail,
-                              activity: activity)
+                              activity: activity, symbolMotion: symbolMotion, waiting: awaiting,
+                              countdown: countdown)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(name)
-                .accessibilityValue([spokenValue, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityValue([spoken, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
         }
     }
 
@@ -508,7 +617,10 @@ struct NowInstrument: View {
     private func quickControlLabel(
         symbol: String, name: String, value: String, valueColor: Color,
         detail: String? = nil, action: String? = nil, actionColor: Color = HisingenTheme.inkMuted, sending: Bool = false,
-        activity: CardActivity? = nil
+        activity: CardActivity? = nil,
+        symbolMotion: CardSymbol.Kind = .still,
+        waiting: Bool = false,
+        countdown: CardCountdownSource? = nil
     ) -> some View {
         let secondary = activity?.secondary ?? HisingenTheme.inkMuted
         return VStack(alignment: .leading, spacing: 4) {
@@ -524,10 +636,7 @@ struct NowInstrument: View {
                         .tint(secondary)
                         .accessibilityHidden(true)
                 } else {
-                    Image(systemName: symbol)
-                        .hisSymbolSize(12)
-                        .foregroundStyle(secondary)
-                        .accessibilityHidden(true)
+                    CardSymbol(name: symbol, kind: symbolMotion, waiting: waiting, color: secondary)
                 }
             }
             if !value.isEmpty {
@@ -535,6 +644,11 @@ struct NowInstrument: View {
                     .hisType(.title)
                     .foregroundStyle(valueColor)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .hisAnimation(Motion.stateChange, value: value)
+            }
+            if let countdown {
+                CardCountdown(minutes: countdown.minutes, reportedAt: countdown.reportedAt, color: secondary)
             }
             if let detail {
                 Text(detail)
@@ -560,11 +674,18 @@ struct NowInstrument: View {
         }
         .multilineTextAlignment(.leading)
         .padding(12)
-        .frame(maxWidth: .infinity, minHeight: typeSize.isAccessibilitySize ? 56 : 96, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: typeSize.isAccessibilitySize ? 56 : 96, maxHeight: .infinity,
+               alignment: .topLeading)
         .background(activity?.fill ?? HisingenTheme.palette.studioFill)
         .hisAnimation(Motion.stateChange, value: activity)
         .contentShape(Rectangle())
     }
+}
+
+/// The car's reported time remaining and when it reported it, so a card can count down.
+struct CardCountdownSource: Equatable {
+    let minutes: Int
+    let reportedAt: Date
 }
 
 /// A control card's live state: a running climate or air-cleaning session, or a charge. Every

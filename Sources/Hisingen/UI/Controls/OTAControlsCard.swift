@@ -11,15 +11,17 @@ struct OTAControlsCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Card {
+        Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(
                     symbol: "shippingbox",
                     title: L10n.text("Vehicle Software & OTA"),
                     color: HisingenTheme.semanticActive
                 )
-                gate.dimReason(gate.liveAvailability([.installOTANow]))
                 if let software = state.softwareInfo {
+                    if [.downloaded, .deferred, .scheduled].contains(software.state) {
+                        gate.dimReason(gate.liveAvailability([.installOTANow]))
+                    }
                     // One keyed animation drives the whole status morph: symbol
                     // replace-crossfade, progress line and action groups in/out.
                     Group {
@@ -37,8 +39,6 @@ struct OTAControlsCard: View {
                 }
             }
         }
-        .opacity(gate.liveOpacity([.installOTANow]))
-        .hisAnimation(Motion.stateChange, value: gate.liveAvailability([.installOTANow]))
     }
 
     @ViewBuilder
@@ -207,13 +207,16 @@ struct OTAControlsCard: View {
     }
 
     private func otaStatusRow(symbol: String, tint: Color, text: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol)
+                .hisType(.body)
                 .foregroundStyle(tint)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .accessibilityHidden(true)
             Text(text)
-                .hisType(.label, weight: .medium)
+                .hisType(.body)
                 .foregroundStyle(HisingenTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }

@@ -15,6 +15,7 @@ struct HomeChargerSection: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsPlanEditor = false
+    @State private var showsNexBlueTimer = false
 
     var body: some View {
         if let input = model.cardInput(for: state) {
@@ -32,6 +33,9 @@ struct HomeChargerSection: View {
             .sheet(isPresented: $showsPlanEditor) {
                 HomeChargingPlanSheet(state: state, model: model)
             }
+            .sheet(isPresented: $showsNexBlueTimer) {
+                NexBlueTimerSheet(model: model)
+            }
         }
     }
 
@@ -45,9 +49,9 @@ struct HomeChargerSection: View {
 
         if let session = card.sessionLine {
             Text(session)
-                .hisType(.title, weight: .semibold)
+                .hisType(card.sessionIsLive ? .title : .body, weight: card.sessionIsLive ? .semibold : .regular)
                 .monospacedDigit()
-                .foregroundStyle(HisingenTheme.ink)
+                .foregroundStyle(card.sessionIsLive ? HisingenTheme.ink : HisingenTheme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .hisTelemetryValue(session, reduceMotion: reduceMotion)
         }
@@ -76,6 +80,11 @@ struct HomeChargerSection: View {
                 ForEach(card.actions) { action in actionButton(action) }
             }
             .padding(.top, 2)
+        }
+        if input.pairing.source == .nexBlue {
+            Button(L10n.text("Cheapest overnight charge")) { showsNexBlueTimer = true }
+                .buttonStyle(.hisSecondary)
+                .disabled(input.link != .live)
         }
     }
 

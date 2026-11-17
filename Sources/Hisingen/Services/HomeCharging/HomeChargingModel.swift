@@ -25,6 +25,8 @@ enum HomeChargingPlanError: Error, Equatable, LocalizedError {
     case componentNotInstalled
     case rejected(String)
     case unreachable
+    /// Plans run inside Home Assistant; a charger read straight from its vendor has none.
+    case needsHomeAssistant
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +35,8 @@ enum HomeChargingPlanError: Error, Equatable, LocalizedError {
             return L10n.text("The Hisingen component is not installed in Home Assistant, so it cannot run a plan.")
         case .rejected(let message): return message
         case .unreachable: return L10n.text("Home Assistant could not be reached.")
+        case .needsHomeAssistant:
+            return L10n.text("Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history.")
         }
     }
 }
@@ -71,6 +75,9 @@ final class HomeChargingModel: ObservableObject {
         var spotPrices: @Sendable (ElspotZone) async -> [ElectricityPricePoint] = { zone in
             await ElectricityPriceService.shared.cachedPoints(for: zone)
         }
+        var timerPrices: @Sendable (ElspotZone) async -> [ElectricityPricePoint] = { zone in
+            await ElectricityPriceService.shared.prices(for: zone)
+        }
         var observesWake = true
     }
 
@@ -86,6 +93,11 @@ final class HomeChargingModel: ObservableObject {
     @Published private(set) var capabilities = HomeChargingCapabilities()
     @Published private(set) var componentInstalled: Bool?
     @Published private(set) var syncState: SyncState = .idle
+    /// The Tibber home that prices sessions, when the reader connected one.
+    @Published private(set) var tibberHome: TibberHome?
+    /// Why Tibber's prices could not be read on the last import, or `nil`.
+    @Published private(set) var tibberProblem: String?
+    @Published private(set) var lastNexBlueImport: HomeSessionSync.ImportReceipt?
     /// Bumped whenever a sync changed history, so the charging card reloads its sessions.
     @Published private(set) var historyRevision = 0
     /// Ticks while connected so ages ("updated 14 min ago") and staleness keep moving.
@@ -101,6 +113,7 @@ final class HomeChargingModel: ObservableObject {
 
     private var table: [String: HAEntityState] = [:]
     private var client: HomeAssistantClient?
+    private var directProvider: (any DirectChargerProvider)?
     private var socket: HomeAssistantSocket?
     private var loopTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
@@ -110,6 +123,8 @@ final class HomeChargingModel: ObservableObject {
     private var sessionPeakKw: Double?
     private var lastSyncAt: Date?
     private var syncInFlight = false
+    private var timerWriteInFlight = false
+    private var pairingRevision = 0
     private var wakeObserver: (any NSObjectProtocol)?
     private var eraseObserver: (any NSObjectProtocol)?
 
@@ -124,6 +139,12 @@ final class HomeChargingModel: ObservableObject {
         self.store = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
         self.pairing = store.pairing
         self.planRecord = store.planRecord
+        self.tibberHome = store.tibberHome
+        self.lastNexBlueImport = store.nexBlueImport.flatMap { receipt in
+            guard store.pairing?.source == .nexBlue, store.pairing?.chargerID == receipt.chargerID,
+                  store.pairing?.vin == receipt.vin else { return nil }
+            return receipt
+        }
         if pairing != nil { link = .connecting }
         eraseObserver = NotificationCenter.default.addObserver(
             forName: .homeChargingDataErased, object: nil, queue: .main
@@ -136,7 +157,11 @@ final class HomeChargingModel: ObservableObject {
     private func storeWasErased() {
         guard store.pairing == nil else { return }
         stop()
+        pairingRevision &+= 1
+        tibberHome = store.tibberHome
         pairing = nil
+        lastNexBlueImport = nil
+        syncState = .idle
         planStatus = nil
         planRecord = nil
         telemetry = HomeChargerTelemetry()
@@ -169,6 +194,7 @@ final class HomeChargingModel: ObservableObject {
         if let socket { Task { await socket.close() } }
         socket = nil
         client = nil
+        directProvider = nil
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
         link = pairing == nil ? .notConfigured : .reconnecting
@@ -178,6 +204,7 @@ final class HomeChargingModel: ObservableObject {
     /// reader asks. The readings on screen keep their own timestamps until fresh ones arrive.
     func refreshNow() {
         guard pairing != nil else { return }
+        if pairing?.source == .nexBlue { link = .reconnecting }
         generation &+= 1
         loopTask?.cancel(); loopTask = nil
         eventTask?.cancel(); eventTask = nil
@@ -218,6 +245,10 @@ final class HomeChargingModel: ObservableObject {
     // MARK: - Connection loop
 
     private func runLoop(generation current: Int) async {
+        if let pairing, pairing.source.isDirect {
+            await runDirectLoop(generation: current, pairing: pairing)
+            return
+        }
         var backoff: TimeInterval = 2
         while !Task.isCancelled, current == generation {
             guard let pairing, let client = makeClient(for: pairing) else {
@@ -249,7 +280,7 @@ final class HomeChargingModel: ObservableObject {
             } catch let error as HomeAssistantError {
                 link = lastContact == nil ? .unreachable(error.localizedDescription) : .reconnecting
                 tick()
-                logger.notice("Home Assistant unavailable: \(String(describing: error), privacy: .public)")
+                logger.notice("Home Assistant unavailable: \(String(describing: error), privacy: .private)")
             } catch {
                 link = .reconnecting
                 tick()
@@ -268,6 +299,78 @@ final class HomeChargingModel: ObservableObject {
     }
 
     private func nudgePoll() { pollSleeper?.cancel() }
+
+    /// The loop for a charger read straight from its vendor: one read a minute (every ten seconds
+    /// while a command waits), the same freshness and confirmation rules as the Home Assistant path.
+    private func runDirectLoop(generation current: Int, pairing: HomeChargingPairing) async {
+        var backoff: TimeInterval = 2
+        while !Task.isCancelled, current == generation {
+            guard let provider = directProvider ?? makeDirectProvider(for: pairing) else {
+                link = .unauthorized
+                return
+            }
+            directProvider = provider
+            do {
+                if link != .live { link = .connecting }
+                try await readDirect(provider: provider, pairing: pairing)
+                backoff = 2
+                while !Task.isCancelled, current == generation {
+                    if shouldSyncSessions() { Task { await syncSessions() } }
+                    let interval = command.isPending ? Self.pendingPollInterval : Self.pollInterval
+                    await sleepForPoll(interval)
+                    guard !Task.isCancelled, current == generation else { return }
+                    try await readDirect(provider: provider, pairing: pairing)
+                }
+            } catch DirectChargerError.unauthorized {
+                link = .unauthorized
+                tick()
+                return
+            } catch is CancellationError {
+                return
+            } catch let error as DirectChargerError {
+                link = lastContact == nil ? .unreachable(error.localizedDescription) : .reconnecting
+                tick()
+                logger.notice("\(pairing.source.providerName, privacy: .public) unavailable: \(String(describing: error), privacy: .private)")
+                if case .rateLimited(let retryAfter) = error {
+                    let delay = retryAfter.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? Self.pollInterval
+                    backoff = max(backoff, min(delay, 86_400))
+                }
+            } catch {
+                link = .reconnecting
+                tick()
+            }
+            guard !Task.isCancelled, current == generation else { return }
+            try? await dependencies.wait(backoff)
+            backoff = min(backoff * 2, 120)
+        }
+    }
+
+    private func readDirect(provider: any DirectChargerProvider, pairing: HomeChargingPairing) async throws {
+        let now = dependencies.now()
+        let fresh = try await provider.telemetry(chargerID: pairing.chargerID, now: now)
+        try Task.checkCancellation()
+        telemetry = fresh
+        lastContact = now
+        link = .live
+        clock = now
+        trackSessionPeak()
+        command.observe(telemetry, now: now)
+    }
+
+    private func makeDirectProvider(for pairing: HomeChargingPairing) -> (any DirectChargerProvider)? {
+        if pairing.source == .nexBlue {
+            let store = store
+            guard let token = try? store.nexBlueRefreshToken(), !token.isEmpty else { return nil }
+            return NexBlueProvider(transport: dependencies.transport, now: dependencies.now) { transport in
+                guard let previous = try await store.nexBlueRefreshToken() else { throw DirectChargerError.unauthorized }
+                let result = try await NexBlueProvider.refresh(previous, transport: transport)
+                try await store.updateNexBlueRefreshToken(result.rotatedRefreshToken, previous: previous)
+                return result.bearer
+            }
+        }
+        guard let credentials = (try? store.credentials(for: pairing.source)) ?? nil, credentials.isComplete else { return nil }
+        return DirectChargerProviders.make(pairing.source, credentials: credentials, transport: dependencies.transport)
+    }
 
     private func makeClient(for pairing: HomeChargingPairing) -> HomeAssistantClient? {
         let address = store.address ?? pairing.baseURL
@@ -296,12 +399,12 @@ final class HomeChargingModel: ObservableObject {
     }
 
     private func openSocket(pairing: HomeChargingPairing) async {
-        guard let connector = dependencies.socketConnector, let client else { return }
+        guard let connector = dependencies.socketConnector, client != nil else { return }
+        if let previous = socket { socket = nil; await previous.close() }
         let address = store.address ?? pairing.baseURL
         guard case .success(let url) = HomeAssistantAddress.normalise(address), let token = (try? store.token()) ?? nil else { return }
         guard let opened = try? await HomeAssistantSocket.open(baseURL: url, token: token, connector: connector) else {
             // Polling carries on alone; the socket only makes updates arrive sooner.
-            _ = client
             return
         }
         guard let stream = try? await opened.stateChanges() else { await opened.close(); return }
@@ -390,15 +493,128 @@ final class HomeChargingModel: ObservableObject {
         store.address = url.absoluteString
     }
 
+    func connectDirect(_ source: ChargerSource, credentials: DirectChargerCredentials) async throws -> [DirectChargerSummary] {
+        guard credentials.isComplete else { throw DirectChargerError.unauthorized }
+        if source == .nexBlue {
+            let result = try await NexBlueProvider.signIn(credentials, transport: dependencies.transport)
+            try Task.checkCancellation()
+            try store.saveNexBlueRefreshToken(result.refreshToken)
+            return result.chargers
+        }
+        guard let provider = DirectChargerProviders.make(source, credentials: credentials, transport: dependencies.transport) else {
+            throw DirectChargerError.unauthorized
+        }
+        let chargers = try await provider.chargers()
+        try Task.checkCancellation()
+        try store.saveCredentials(credentials, for: source)
+        return chargers
+    }
+
+    func hasSavedCredentials(for source: ChargerSource) -> Bool { store.hasCredentials(for: source) }
+
+    func savedUsername(for source: ChargerSource) -> String? {
+        ((try? store.credentials(for: source)) ?? nil)?.username
+    }
+
+    /// New login for the existing pairing and a fresh start. For an account whose password changed.
+    func replaceCredentials(_ credentials: DirectChargerCredentials) async throws {
+        guard let pairing, pairing.source.isDirect, credentials.isComplete else { return }
+        if pairing.source == .nexBlue {
+            let result = try await NexBlueProvider.signIn(credentials, transport: dependencies.transport)
+            try Task.checkCancellation()
+            guard pairing == self.pairing else { return }
+            guard result.chargers.contains(where: { $0.id == pairing.chargerID }) else {
+                throw DirectChargerError.forbidden
+            }
+            try store.saveNexBlueRefreshToken(result.refreshToken)
+        } else {
+            try store.saveCredentials(credentials, for: pairing.source)
+        }
+        directProvider = nil
+        link = .connecting
+        refreshNow()
+        start()
+    }
+
+    var supportsPlans: Bool { pairing?.source.supportsPlans ?? false }
+
+    // MARK: - Electricity supplier (Tibber)
+
+    var hasTibberToken: Bool { store.hasTibberToken }
+
+    /// Reads the homes a Tibber token can see, without saving anything.
+    func testTibber(token: String) async -> Result<[TibberHome], DirectChargerError> {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .failure(.unauthorized) }
+        do {
+            return .success(try await TibberClient(token: trimmed, transport: dependencies.transport).homes())
+        } catch let error as DirectChargerError {
+            return .failure(error)
+        } catch {
+            return .failure(.unreachable)
+        }
+    }
+
+    func connectTibber(token: String, home: TibberHome) throws {
+        try store.saveTibberToken(token.trimmingCharacters(in: .whitespacesAndNewlines))
+        store.tibberHome = home
+        tibberHome = home
+        tibberProblem = nil
+        // Sessions already imported were priced without it; the next import prices them again.
+        lastSyncAt = nil
+        if pairing != nil { Task { await syncSessions() } }
+    }
+
+    func disconnectTibber() {
+        store.clearTibber()
+        tibberHome = nil
+        tibberProblem = nil
+    }
+
+    /// Tibber's own price source for a sync, or `nil` when none is connected.
+    private func tibberPriceSource() -> (@Sendable (Date, Date) async throws -> [HomePricePoint])? {
+        guard let home = store.tibberHome, let token = (try? store.tibberToken()) ?? nil, !token.isEmpty else { return nil }
+        let client = TibberClient(token: token, transport: dependencies.transport)
+        let homeID = home.id
+        return { from, to in try await client.prices(homeID: homeID, from: from, to: to) }
+    }
+
+    /// Unpairs a direct charger and forgets its login. Signing in again is all it takes to come back.
+    func signOutDirect() {
+        guard let source = pairing?.source, source.isDirect else { return }
+        unpair()
+        store.deleteCredentials(for: source)
+    }
+
     func pair(_ newPairing: HomeChargingPairing) {
         stop()
+        pairingRevision &+= 1
+        if newPairing.source != .nexBlue || newPairing.chargerID != lastNexBlueImport?.chargerID ||
+            newPairing.vin != lastNexBlueImport?.vin {
+            lastNexBlueImport = nil
+            store.nexBlueImport = nil
+        }
         store.pairing = newPairing
-        store.address = newPairing.baseURL
+        if newPairing.source == .homeAssistant { store.address = newPairing.baseURL }
         pairing = newPairing
         table = [:]
         telemetry = HomeChargerTelemetry()
+        lastContact = nil
+        lastSyncAt = nil
+        syncState = .idle
+        command = HomeChargerCommandTracker()
         planStatus = nil
         link = .connecting
+        start()
+    }
+
+    /// Saves a new token for the existing pairing and reconnects. For a token that was rejected or revoked.
+    func replaceToken(_ token: String) throws {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try store.saveToken(trimmed)
+        link = .connecting
+        refreshNow()
         start()
     }
 
@@ -417,10 +633,22 @@ final class HomeChargingModel: ObservableObject {
         refreshNow()
     }
 
+    /// Unpairs. A plan Home Assistant is still running for this charger is cancelled first, best effort,
+    /// so nothing keeps commanding a charger Hisingen no longer controls; the charger is left as it is.
+    func unpairCancellingPlan() async {
+        if let status = planStatus, !status.phase.isTerminal {
+            try? await cancelPlan()
+        }
+        unpair()
+    }
+
     func unpair() {
         stop()
+        pairingRevision &+= 1
         store.clearPairing()
         pairing = nil
+        lastNexBlueImport = nil
+        syncState = .idle
         planStatus = nil
         planRecord = nil
         telemetry = HomeChargerTelemetry()
@@ -431,8 +659,13 @@ final class HomeChargingModel: ObservableObject {
     /// Everything Home Charging holds, the token included. History rows already written stay.
     func eraseEverything() {
         stop()
+        pairingRevision &+= 1
         store.eraseAll()
+        tibberHome = nil
+        tibberProblem = nil
         pairing = nil
+        lastNexBlueImport = nil
+        syncState = .idle
         planStatus = nil
         planRecord = nil
         telemetry = HomeChargerTelemetry()
@@ -462,7 +695,8 @@ final class HomeChargingModel: ObservableObject {
             vehicleTargetPercent: state.energy.targetPercentage, vehicleConnection: state.energy.connection,
             plan: planStatus, command: command.phase, vehicleFinish: state.estimatedChargingCompletion,
             currency: preferences.currencySymbol, sessionPeakKw: sessionPeakKw,
-            canEditPlan: preferences.features.contains(.smartChargingPlanner) && componentInstalled != false
+            // Always offered with the planner on: when the component is missing the editor says how to install it.
+            canEditPlan: pairing.source.supportsPlans && preferences.features.contains(.smartChargingPlanner)
         )
     }
 
@@ -476,9 +710,19 @@ final class HomeChargingModel: ObservableObject {
     /// Sends a start or pause through Home Assistant and keeps the card pending until the charger
     /// answers. With a plan active the plan service is used so the plan and the charger agree.
     func send(_ kind: HomeChargerCommandKind) async {
-        guard let pairing, let client else { return }
-        guard !command.isPending else { return }
+        guard let pairing else { return }
+        guard !command.isPending, !timerWriteInFlight else { return }
         let now = dependencies.now()
+        if pairing.source.isDirect {
+            await sendDirect(kind, pairing: pairing, now: now)
+            return
+        }
+        guard let client else {
+            command.begin(kind, now: now)
+            command.rejected(reason: L10n.text("Hisingen is not connected to Home Assistant yet."), now: now)
+            objectWillChange.send()
+            return
+        }
         if HomeChargerCommandTracker.alreadySatisfied(kind, telemetry: telemetry, now: now) {
             command.confirmedWithoutSending(kind, telemetry: telemetry, now: now)
             return
@@ -507,6 +751,49 @@ final class HomeChargingModel: ObservableObject {
         objectWillChange.send()
     }
 
+    private func sendDirect(_ kind: HomeChargerCommandKind, pairing: HomeChargingPairing, now: Date) async {
+        if pairing.source == .nexBlue,
+           !HomeChargingCardInput.nexBlueControlsAvailable(link: link, telemetry: telemetry, now: now) {
+            command.begin(kind, now: now)
+            command.rejected(reason: L10n.text("Current charger status is required to send this command."), now: now)
+            return
+        }
+        guard let provider = directProvider ?? makeDirectProvider(for: pairing) else {
+            command.begin(kind, now: now)
+            command.rejected(reason: L10n.format("Hisingen is not signed in to %@ yet.", pairing.source.providerName), now: now)
+            objectWillChange.send()
+            return
+        }
+        if HomeChargerCommandTracker.alreadySatisfied(kind, telemetry: telemetry, now: now) {
+            command.confirmedWithoutSending(kind, telemetry: telemetry, now: now)
+            return
+        }
+        command.begin(kind, now: now)
+        let sentPhase = command.phase
+        let revision = pairingRevision
+        do {
+            try await provider.send(kind, chargerID: pairing.chargerID, telemetry: telemetry)
+            guard pairingRevision == revision, command.phase == sentPhase else { return }
+            command.accepted(now: dependencies.now())
+            nudgePoll()
+        } catch let error as DirectChargerError {
+            guard pairingRevision == revision, command.phase == sentPhase else { return }
+            if pairing.source == .nexBlue {
+                if error == .unauthorized {
+                    link = .unauthorized
+                } else if error.isTransient {
+                    link = .reconnecting
+                    nudgePoll()
+                }
+            }
+            command.rejected(reason: error.errorDescription ?? "", now: dependencies.now())
+        } catch {
+            guard pairingRevision == revision, command.phase == sentPhase else { return }
+            command.rejected(reason: error.localizedDescription, now: dependencies.now())
+        }
+        objectWillChange.send()
+    }
+
     func dismissCommandResult() {
         command.dismiss()
         objectWillChange.send()
@@ -519,11 +806,50 @@ final class HomeChargingModel: ObservableObject {
         }
     }
 
+    // MARK: - NexBlue timer
+
+    private func nexBlueTimerConnection() throws -> (HomeChargingPairing, NexBlueProvider) {
+        guard let pairing, pairing.source == .nexBlue else { throw NexBlueTimerError.changed }
+        guard link == .live, let provider = directProvider as? NexBlueProvider else {
+            throw DirectChargerError.unreachable
+        }
+        return (pairing, provider)
+    }
+
+    func previewNexBlueTimer(hours: Int) async throws -> NexBlueTimerPreview {
+        let (pairing, provider) = try nexBlueTimerConnection()
+        let revision = pairingRevision
+        let zone = preferences.electricityPriceZone
+        let schedule = try await provider.schedule(chargerID: pairing.chargerID)
+        try schedule.checkAvailable()
+        let prices = await dependencies.timerPrices(zone)
+        guard pairingRevision == revision, link == .live, preferences.electricityPriceZone == zone else {
+            throw NexBlueTimerError.changed
+        }
+        return try NexBlueTimerPreview.make(chargerID: pairing.chargerID, schedule: schedule, zone: zone,
+                                           prices: prices, hours: hours, now: dependencies.now())
+    }
+
+    func saveNexBlueTimer(_ preview: NexBlueTimerPreview) async throws {
+        let (pairing, provider) = try nexBlueTimerConnection()
+        guard pairing.chargerID == preview.chargerID, !timerWriteInFlight, !command.isPending else {
+            throw NexBlueTimerError.changed
+        }
+        timerWriteInFlight = true
+        defer { timerWriteInFlight = false }
+        let revision = pairingRevision
+        try await provider.saveTimer(preview, now: dependencies.now) {
+            self.pairingRevision == revision && self.link == .live && self.preferences.electricityPriceZone == preview.zone
+        }
+        nudgePoll()
+    }
+
     // MARK: - Plans (Home Assistant executes)
 
     static let componentDomain = "hisingen_home_charging"
 
     private func planCall(_ service: String, _ data: HAJSONValue) async throws -> HomeChargingPlanStatus? {
+        if pairing?.source.supportsPlans == false { throw HomeChargingPlanError.needsHomeAssistant }
         guard let client else { throw HomeChargingPlanError.unreachable }
         do {
             let result = try await client.callService(domain: Self.componentDomain, service: service, data: data, returnResponse: true)
@@ -555,6 +881,10 @@ final class HomeChargingModel: ObservableObject {
     }
 
     func submitPlan(_ request: HomeChargingPlanRequest, vin: String) async throws {
+        // A vehicle-specific plan runs only for the vehicle the charger was explicitly paired with.
+        guard let pairing, pairing.isPaired(toVehicle: vin), pairing.chargerID == request.chargerID else {
+            throw HomeChargingPlanError.notPaired
+        }
         let status = try await planCall("submit_plan", request.actionData)
         let now = dependencies.now()
         let record = HomeChargingPlanRecord(planID: request.planID, vin: vin, chargerID: request.chargerID,
@@ -589,7 +919,7 @@ final class HomeChargingModel: ObservableObject {
     }
 
     private func loadComponentInfo() async {
-        guard let pairing else { return }
+        guard let pairing, pairing.source.supportsPlans else { return }
         do {
             _ = try await planCall("get_status", .object(["charger_id": .string(pairing.chargerID)]))
         } catch HomeChargingPlanError.componentNotInstalled {
@@ -597,6 +927,13 @@ final class HomeChargingModel: ObservableObject {
         } catch {
             // Leave it unknown: a transient failure says nothing about the install.
         }
+    }
+
+    /// What the charger really delivers while charging, from its recent sessions, for planning.
+    func recentChargingRateKw() -> Double? {
+        guard let pairing else { return nil }
+        let rate = HomeChargingRate.estimate(fromSessions: database.charging.recentWallboxIntervals(chargerID: pairing.chargerID))
+        return rate.flatMap { $0 >= 1 ? $0 : nil }
     }
 
     // MARK: - Setup conflicts
@@ -630,8 +967,17 @@ final class HomeChargingModel: ObservableObject {
     }
 
     /// Imports the charger's completed sessions into charging history. Safe to call at any time.
-    func syncSessions() async {
-        guard let pairing, let client, !syncInFlight else { return }
+    func syncSessions(backfill: DateInterval? = nil) async {
+        guard let pairing, !syncInFlight else { return }
+        let now = dependencies.now()
+        if let backfill {
+            guard pairing.source == .nexBlue, backfill.duration > 0,
+                  backfill.duration <= Self.maxNexBlueBackfill, backfill.end <= now else { return }
+        }
+        let client = pairing.source.isDirect ? nil : client
+        let direct = pairing.source.isDirect ? (directProvider ?? makeDirectProvider(for: pairing)) : nil
+        guard client != nil || direct != nil else { return }
+        let revision = pairingRevision
         syncInFlight = true
         syncState = .running
         defer { syncInFlight = false }
@@ -642,19 +988,45 @@ final class HomeChargingModel: ObservableObject {
             recordingEnabled: preferences.storeChargingHistory,
             fallback: HomeSessionPricer.Fallback(fixedPricePerKwh: preferences.electricityPricePerKwh, policy: policy,
                                                  spotPrices: spot, currency: preferences.currencySymbol),
-            now: dependencies.now())
+            now: now, direct: direct, backfill: backfill,
+            canWrite: { self.pairingRevision == revision && self.preferences.storeChargingHistory },
+            tibberPrices: tibberPriceSource())
         do {
             let summary = try await HomeSessionSync.run(environment)
-            lastSyncAt = dependencies.now()
+            guard pairingRevision == revision else { return }
+            tibberProblem = summary.tibberProblem
+            let importedAt = dependencies.now()
+            if backfill == nil { lastSyncAt = importedAt }
+            if pairing.source == .nexBlue, !summary.skippedByPrivacy,
+               let start = summary.windowStart, let end = summary.windowEnd {
+                let receipt = HomeSessionSync.ImportReceipt(chargerID: pairing.chargerID, vin: pairing.vin,
+                                                           importedAt: importedAt, range: DateInterval(start: start, end: end))
+                store.nexBlueImport = receipt
+                lastNexBlueImport = receipt
+            }
             if summary.captureComponentAnswered { store.captureComponentSeen = true; componentInstalled = true }
             syncState = .finished(summary)
             if summary.changedRows > 0 { historyRevision += 1 }
+        } catch is CancellationError {
+            if pairingRevision == revision { syncState = .idle }
         } catch let error as HomeAssistantError {
+            guard pairingRevision == revision else { return }
             syncState = .failed(Self.reasonText(error))
-            logger.notice("Charger session sync failed: \(String(describing: error), privacy: .public)")
+            logger.notice("Charger session sync failed: \(String(describing: error), privacy: .private)")
+        } catch let error as DirectChargerError {
+            guard pairingRevision == revision else { return }
+            syncState = .failed(error.errorDescription ?? "")
+            logger.notice("Charger session sync failed: \(String(describing: error), privacy: .private)")
         } catch {
+            guard pairingRevision == revision else { return }
             syncState = .failed(error.localizedDescription)
         }
+    }
+
+    static let maxNexBlueBackfill: TimeInterval = 366 * 86_400
+
+    var canBackfillNexBlue: Bool {
+        pairing?.source == .nexBlue && preferences.storeChargingHistory && link == .live && syncState != .running
     }
 }
 

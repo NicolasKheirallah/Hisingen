@@ -29,13 +29,6 @@ struct ControlsBanners: View {
         return false
     }
 
-    /// With every remote-control group on, the notice only listed eight names above the
-    /// controls themselves and pushed Start Climate to the panel's edge. It speaks only when
-    /// something is off, which is when the list explains a missing control.
-    private var allRemoteControlsEnabled: Bool {
-        AppFeature.allCases.filter(\.isRemoteControl).allSatisfy { features.contains($0) }
-    }
-
     private var liveFeedback: RemoteCommandFeedback? {
         guard let feedback,
               feedback.targetVIN.map({ $0.caseInsensitiveCompare(state.identity.vin) == .orderedSame }) ?? true,

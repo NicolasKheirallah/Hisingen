@@ -320,5 +320,24 @@ extension VehicleDatabase {
                 logger.error("Wallbox session schema migration remains incomplete; it will retry next launch")
             }
         }
+
+        // v8: the reader's own themes, kept in the database so they outlive app updates and a
+        // reset of the preferences domain. A new table; nothing existing changes.
+        if version == 7 {
+            do {
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS custom_themes (
+                        id TEXT PRIMARY KEY,
+                        definition TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        updated_at REAL NOT NULL
+                    );
+                    PRAGMA user_version = 8;
+                    """)
+                version = 8
+            } catch {
+                logger.error("Custom theme table migration failed; it will retry next launch: \(error, privacy: .public)")
+            }
+        }
     }
 }

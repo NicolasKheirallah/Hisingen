@@ -27,11 +27,19 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
     /// reader has not set one, and recorded as an assumption on every priced session.
     var networkFeeOrePerKwh: Double
     var pairedAt: Date
+    /// Optional on disk so a pairing saved before direct chargers existed still decodes, as Home
+    /// Assistant. Read it through `source`.
+    private var chargerSource: ChargerSource?
+
+    /// Where the charger's readings come from. A direct charger has no Home Assistant address or
+    /// entity map; both stay empty for it.
+    var source: ChargerSource { chargerSource ?? .homeAssistant }
 
     init(baseURL: String, chargerID: String, chargerName: String, entities: HomeChargerEntityMap,
          vin: String, locationID: String?, locationAlias: String, isSharedCharger: Bool = false,
          timeZoneIdentifier: String = TimeZone.current.identifier, tibberHome: String? = nil,
-         networkFeeOrePerKwh: Double = 0, pairedAt: Date = Date()) {
+         networkFeeOrePerKwh: Double = 0, pairedAt: Date = Date(), source: ChargerSource = .homeAssistant) {
+        self.chargerSource = source == .homeAssistant ? nil : source
         self.baseURL = baseURL
         self.chargerID = chargerID
         self.chargerName = chargerName

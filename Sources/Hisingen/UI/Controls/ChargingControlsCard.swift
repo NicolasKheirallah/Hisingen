@@ -2,7 +2,6 @@ import SwiftUI
 
 @MainActor
 struct ChargingControlsCard: View {
-    @Environment(\.colorSchemeContrast) private var contrast
     let state: VehicleState
     let gate: ControlsCommandGate
     let onShowSchedule: (ScheduleKind) -> Void
@@ -232,38 +231,17 @@ struct ChargingControlsCard: View {
             } else {
                 // Without a reported target the slider has nothing to start from, so the presets
                 // are the way to set one.
-            HStack(spacing: 6) {
-                    ForEach(chargeTargetPresets, id: \.self) { target in
-                        let selected = chargeTarget == target
-                        Button {
-                            gate.send(.setChargeTarget(target))
-                        } label: {
-                            Text(target == chargeBounds.dailyTarget
-                                 ? L10n.format("Daily %@", Format.percent(Double(target)))
-                                 : Format.percent(Double(target)))
-                                .hisType(.micro, weight: selected ? .bold : .medium)
-                                .padding(.vertical, 3)
-                                .frame(maxWidth: .infinity)
-                                .background {
-                                    if selected {
-                                        RoundedRectangle(cornerRadius: 0)
-                                            .fill(HisingenTheme.accent.opacity(HisingenTheme.tintedWashOpacity(0.12, increasedContrast: contrast == .increased)))
-                                    } else {
-                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 0))
-                                    }
-                                }
-                                .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
-                                .animation(reduceMotion ? nil : Motion.selection, value: selected)
-                        }
-                        .buttonStyle(.pressable)
-                        .disabled(gate.isDisabled(.setChargeTarget(target)))
-                        .accessibilityLabel(L10n.format(
-                            "Set charge target to %@",
-                            Format.percent(Double(target))
-                        ))
-                        .accessibilityAddTraits(selected ? [.isSelected] : [])
-                    }
-                }
+                UnderlineSegments(
+                    options: chargeTargetPresets.map { target in
+                        (value: target,
+                         title: target == chargeBounds.dailyTarget
+                            ? L10n.format("Daily %@", Format.percent(Double(target)))
+                            : Format.percent(Double(target)))
+                    },
+                    // Nothing is selected: the vehicle did not report a target to mark.
+                    selection: Binding(get: { chargeTarget ?? -1 }, set: { gate.send(.setChargeTarget($0)) }),
+                    accessibilityLabel: L10n.text("Charge target")
+                )
                 Text(L10n.text("The vehicle did not report its current target. Choose a preset to set a new value."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
@@ -296,6 +274,15 @@ struct ChargingControlsCard: View {
         .transition(.opacity)
     }
 
+    private func amperageEntry(title: String, current: Int?, command: @escaping (Int) -> RemoteCommand) -> LimitEntry {
+        let range = chargeBounds.amperageRange
+        return LimitEntry(
+            title: title, unit: "A", range: range, current: current,
+            rangeText: L10n.format("From %1$@ to %2$@", Format.amps(range.lowerBound), Format.amps(range.upperBound)),
+            command: command
+        )
+    }
+
     private var currentLimitControls: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
@@ -307,6 +294,13 @@ struct ChargingControlsCard: View {
                                       subject: L10n.text("Current Limit"))
                 }
                 Spacer()
+                if let ampLimit {
+                    LimitEntryButton(
+                        entry: amperageEntry(title: L10n.text("Current Limit"), current: ampLimit) { .setAmpLimit($0) },
+                        isAvailable: !gate.isDisabled(.setAmpLimit(ampLimit)),
+                        color: HisingenTheme.inkMuted, send: gate.send
+                    )
+                }
                 Text(displayedAmpLimit.map { Format.amps($0) } ?? L10n.text("Unavailable"))
                     .hisType(.displaySmall)
                     .monospacedDigit()
@@ -315,33 +309,23 @@ struct ChargingControlsCard: View {
             }
 
             if let ampLimit {
-                let chips = chargeBounds.amperagePresets().filter { $0 != ampLimit }
-                if !chips.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(chips, id: \.self) { preset in
-                            Button {
+                let presets = chargeBounds.amperagePresets()
+                if presets.count > 1 {
+                    // The reported limit is underlined, so the row reads as "where it is now" and a
+                    // press as "move it there". The mark follows the car's report, not the press.
+                    UnderlineSegments(
+                        options: presets.map { (value: $0, title: Format.amps($0)) },
+                        selection: Binding(
+                            get: { ampLimit },
+                            set: { preset in
+                                guard preset != ampLimit else { return }
                                 gate.send(.setAmpLimit(preset))
-                            } label: {
-                                Text(Format.amps(preset))
-                                    .hisType(.micro, weight: .semibold, design: .rounded)
-                                    .monospacedDigit()
-                                    .frame(minWidth: 34)
                             }
-                            .buttonStyle(.hisSecondary)
-                            .controlSize(.small)
-                            .disabled(gate.isDisabled(.setAmpLimit(preset)))
-                            .accessibilityLabel(L10n.format(
-                                "Set charging current to %@",
-                                Format.amps(preset)
-                            ))
-                            .transition(.opacity)
-                        }
-                        Spacer()
-                    }
-                    .padding(.bottom, 2)
-                    // Keyed on the filtered collection so the chip for the now-current
-                    // limit slides out instead of vanishing with the next read.
-                    .hisAnimation(Motion.layout, value: chips)
+                        ),
+                        accessibilityLabel: L10n.text("Current limit")
+                    )
+                    .disabled(gate.isDisabled(.setAmpLimit(ampLimit)))
+                    gate.sendingOverlay(.setAmpLimit(ampLimit))
                 }
                 Slider(
                     value: Binding(
@@ -358,7 +342,7 @@ struct ChargingControlsCard: View {
                         gate.send(.setAmpLimit(rounded))
                     }
                 )
-                .tint(HisingenTheme.semanticWarning)
+                .tint(HisingenTheme.accent)
                 .disabled(gate.isDisabled(.setAmpLimit(ampLimit)))
                 .accessibilityLabel(L10n.text("Current limit"))
                 .accessibilityValue(Format.amps(
@@ -572,7 +556,7 @@ struct ChargingControlsCard: View {
                     gate.send(.updateChargeLocationMinimumSoc(id: location.id, soc: rounded))
                 }
             )
-            .tint(HisingenTheme.semanticGood)
+            .tint(HisingenTheme.accent)
             .disabled(gate.isDisabled(.updateChargeLocationMinimumSoc(id: location.id, soc: 0)))
             .accessibilityLabel(L10n.text("Minimum charge at location"))
 
@@ -602,6 +586,14 @@ struct ChargingControlsCard: View {
                         .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
+                LimitEntryButton(
+                    entry: amperageEntry(
+                        title: L10n.text("Current limit"),
+                        current: location.ampLimit > 0 ? location.ampLimit : nil
+                    ) { .updateChargeLocationAmpLimit(id: location.id, amps: $0) },
+                    isAvailable: !gate.isDisabled(.updateChargeLocationAmpLimit(id: location.id, amps: 0)),
+                    color: HisingenTheme.inkMuted, send: gate.send
+                )
             }
             Slider(
                 value: Binding(
@@ -618,11 +610,29 @@ struct ChargingControlsCard: View {
                     gate.send(.updateChargeLocationAmpLimit(id: location.id, amps: rounded))
                 }
             )
-            .tint(HisingenTheme.semanticWarning)
+            .tint(HisingenTheme.accent)
             // Probed with 0 A so the question is "does this vehicle support location amperage",
             // not "is the reading the vehicle last sent inside its own range".
             .disabled(gate.isDisabled(.updateChargeLocationAmpLimit(id: location.id, amps: 0)))
             .accessibilityLabel(L10n.text("Charging current at location"))
+            if location.ampLimit > 0 {
+                let press = LimitStepping.pressed(location.ampLimit, within: chargeBounds.amperageRange,
+                                                  step: preferences.nowLimitStep)
+                HStack {
+                    Button {
+                        gate.send(.updateChargeLocationAmpLimit(id: location.id, amps: press.value))
+                    } label: {
+                        Text(press.restarts
+                             ? L10n.format("Lower to %@", Format.amps(press.value))
+                             : L10n.format("Raise to %@", Format.amps(press.value)))
+                            .monospacedDigit()
+                    }
+                    .buttonStyle(.hisSecondary)
+                    .controlSize(.small)
+                    .disabled(gate.isDisabled(.updateChargeLocationAmpLimit(id: location.id, amps: 0)))
+                    Spacer()
+                }
+            }
 
             Toggle(
                 isOn: Binding(

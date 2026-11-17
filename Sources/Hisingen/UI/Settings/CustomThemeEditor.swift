@@ -49,8 +49,7 @@ struct CustomThemeEditor: View {
                 Text(L10n.text("Name"))
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.inkMuted)
-                TextField(L10n.text("My Theme"), text: $draft.name)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField(L10n.text("My Theme"), text: $draft.name)
                     .accessibilityLabel(L10n.text("Name"))
             }
 

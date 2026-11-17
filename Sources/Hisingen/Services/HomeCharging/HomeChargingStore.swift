@@ -9,6 +9,9 @@ struct HomeChargingStore {
     static let pairingKey = "home_charging_pairing_v1"
     static let planRecordKey = "home_charging_plan_record_v1"
     static let capturePresenceKey = "home_charging_capture_seen_v1"
+    static let tibberHomeKey = "home_charging_tibber_home_v1"
+    static let tibberVendor = "tibber"
+    private static let nexBlueImportKey = "home_charging_nexblue_import_v1"
 
     private let defaults: UserDefaults
     private let keychain: KeychainStore
@@ -57,15 +60,88 @@ struct HomeChargingStore {
         nonmutating set { defaults.set(newValue, forKey: Self.capturePresenceKey) }
     }
 
+    var nexBlueImport: HomeSessionSync.ImportReceipt? {
+        get {
+            guard let data = defaults.data(forKey: Self.nexBlueImportKey) else { return nil }
+            return try? JSONDecoder.iso.decode(HomeSessionSync.ImportReceipt.self, from: data)
+        }
+        nonmutating set {
+            defaults.set(newValue.flatMap { try? JSONEncoder.sortedISO.encode($0) }, forKey: Self.nexBlueImportKey)
+        }
+    }
+
     var hasToken: Bool { keychain.hasStoredHomeAssistantToken }
 
     func token() throws -> String? { try keychain.readHomeAssistantToken() }
     func saveToken(_ token: String) throws { try keychain.saveHomeAssistantToken(token) }
 
+    // MARK: Electricity supplier (Tibber)
+
+    /// The Tibber home that prices charger sessions. The token is in the Keychain; this is not secret.
+    var tibberHome: TibberHome? {
+        get {
+            guard let data = defaults.data(forKey: Self.tibberHomeKey) else { return nil }
+            return try? JSONDecoder().decode(TibberHome.self, from: data)
+        }
+        nonmutating set {
+            guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+                defaults.removeObject(forKey: Self.tibberHomeKey)
+                return
+            }
+            defaults.set(data, forKey: Self.tibberHomeKey)
+        }
+    }
+
+    var hasTibberToken: Bool { keychain.hasStoredChargerCredentials(vendor: Self.tibberVendor) }
+    func tibberToken() throws -> String? { try keychain.readChargerCredentials(vendor: Self.tibberVendor) }
+    func saveTibberToken(_ token: String) throws { try keychain.saveChargerCredentials(token, vendor: Self.tibberVendor) }
+
+    func clearTibber() {
+        defaults.removeObject(forKey: Self.tibberHomeKey)
+        try? keychain.deleteChargerCredentials(vendor: Self.tibberVendor)
+    }
+
+    // MARK: Direct chargers
+
+    func hasCredentials(for source: ChargerSource) -> Bool {
+        source.isDirect && keychain.hasStoredChargerCredentials(vendor: source.rawValue)
+    }
+
+    func credentials(for source: ChargerSource) throws -> DirectChargerCredentials? {
+        guard source.isDirect, source != .nexBlue, let json = try keychain.readChargerCredentials(vendor: source.rawValue),
+              let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(DirectChargerCredentials.self, from: data)
+    }
+
+    func saveCredentials(_ credentials: DirectChargerCredentials, for source: ChargerSource) throws {
+        guard source.isDirect, source != .nexBlue else { return }
+        let data = try JSONEncoder().encode(credentials)
+        try keychain.saveChargerCredentials(String(decoding: data, as: UTF8.self), vendor: source.rawValue)
+    }
+
+    func nexBlueRefreshToken() throws -> String? {
+        try keychain.readChargerCredentials(vendor: ChargerSource.nexBlue.rawValue)
+    }
+
+    func saveNexBlueRefreshToken(_ token: String) throws {
+        try keychain.saveChargerCredentials(token, vendor: ChargerSource.nexBlue.rawValue)
+    }
+
+    func updateNexBlueRefreshToken(_ rotatedToken: String?, previous: String) throws {
+        guard try nexBlueRefreshToken() == previous else { throw DirectChargerError.unauthorized }
+        if let rotatedToken, rotatedToken != previous { try saveNexBlueRefreshToken(rotatedToken) }
+    }
+
+    func deleteCredentials(for source: ChargerSource) {
+        guard source.isDirect else { return }
+        try? keychain.deleteChargerCredentials(vendor: source.rawValue)
+    }
+
     /// Removes the pairing and the plan record but keeps address and token, so the reader can pair again.
     func clearPairing() {
         defaults.removeObject(forKey: Self.pairingKey)
         defaults.removeObject(forKey: Self.planRecordKey)
+        defaults.removeObject(forKey: Self.nexBlueImportKey)
     }
 
     /// Everything Home Charging holds, token included.
@@ -74,5 +150,7 @@ struct HomeChargingStore {
         defaults.removeObject(forKey: Self.addressKey)
         defaults.removeObject(forKey: Self.capturePresenceKey)
         try? keychain.deleteHomeAssistantToken()
+        for source in ChargerSource.allCases where source.isDirect { deleteCredentials(for: source) }
+        clearTibber()
     }
 }

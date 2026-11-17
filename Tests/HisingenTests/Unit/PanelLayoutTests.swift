@@ -86,20 +86,6 @@ struct PanelLayoutTests {
     }
 
     @Test
-    func testLogicalWidthTimesScaleEqualsPhysicalWidth() {
-        for size in PanelSize.allCases {
-            for density in ContentDensity.allCases {
-                let layout = PanelLayout.resolve(
-                    panelSizeRaw: size.rawValue, densityRaw: density.rawValue,
-                    customEnabled: false, customWidth: 0, customHeight: 0
-                )
-                // The logical frame and the physical frame are the same frame now.
-                #expect(layout.logicalWidth == layout.width)
-            }
-        }
-    }
-
-    @Test
     func testCustomOverridesTakePrecedenceAndClamp() {
         // In-range values pass through.
         let inRange = PanelLayout.resolve(

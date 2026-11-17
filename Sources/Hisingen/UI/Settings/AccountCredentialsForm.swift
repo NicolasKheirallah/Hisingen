@@ -68,10 +68,14 @@ struct AccountCredentialsForm: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 10) {
+        VStack(alignment: .leading, spacing: style == .welcoming ? 16 : 10) {
             brandPicker
 
-            accountStatusBanner
+            // First sign-in already says it is not connected: the header is the whole message.
+            // A renewal or a mismatch is news, so those states keep their notice.
+            if style != .welcoming || connectionHealth != .notConnected {
+                accountStatusBanner
+            }
 
             if style == .welcoming || connectionHealth == .notConnected || showUpdateFields {
                 if selectedBrand == .polestar {
@@ -90,62 +94,20 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    @ViewBuilder
     private var brandPicker: some View {
-        if style == .welcoming {
-            HStack(spacing: 8) {
-                ForEach(VehicleBrand.allCases, id: \.self) { brand in
-                    brandCard(brand)
-                }
-            }
-        } else {
-            UnderlineSegments(
-                options: VehicleBrand.allCases.map { ($0, $0.displayName) },
-                selection: $selectedBrand,
-                accessibilityLabel: L10n.text("Brand")
-            )
-            .onChange(of: selectedBrand) { _, _ in
-                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                    testConnectionResult = nil
-                    keychainError = nil
-                    polestarFallbackKind = nil
-                    showUpdateFields = false
-                }
-            }
-        }
-    }
-
-    private func brandCard(_ brand: VehicleBrand) -> some View {
-        let isSelected = selectedBrand == brand
-        let radius = HisingenTheme.bannerRadius
-        return Button {
-            withAnimation(reduceMotion ? nil : Motion.interaction) {
-                selectedBrand = brand
+        UnderlineSegments(
+            options: VehicleBrand.allCases.map { ($0, $0.displayName) },
+            selection: $selectedBrand,
+            accessibilityLabel: L10n.text("Brand")
+        )
+        .onChange(of: selectedBrand) { _, _ in
+            withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                 testConnectionResult = nil
                 keychainError = nil
                 polestarFallbackKind = nil
+                showUpdateFields = false
             }
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: brand == .polestar ? "bolt.car" : "car")
-                    .hisSymbolSize(20)
-                    .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
-                Text(brand.displayName)
-                    .hisType(.subhead)
-                    .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(HisingenTheme.canvas)
-            .overlay(
-                RoundedRectangle(cornerRadius: radius)
-                    .strokeBorder(isSelected ? HisingenTheme.ink : HisingenTheme.hairline,
-                                  lineWidth: isSelected ? 2 : 1)
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.pressable)
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
     private var isActiveBrand: Bool {
@@ -316,8 +278,8 @@ struct AccountCredentialsForm: View {
     func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .hisType(.label, weight: .medium)
-                .foregroundStyle(.secondary)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
             field()
         }
     }

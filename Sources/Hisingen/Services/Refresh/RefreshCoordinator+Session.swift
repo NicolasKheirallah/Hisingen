@@ -11,14 +11,20 @@ extension RefreshCoordinator {
                 scheduleConfirmationWatchdog(vin: preferredVIN)
             }
             if var cached = stateStore.snapshot(for: preferredVIN) {
-                cached.setOptimisticLock(nil)
-                latestAuthoritative = cached
-                cached.publish(confirmations.overlay)
-                latest = cached
-                onEvent?(.state(cached))
+                restoreCachedState(&cached)
             }
         }
         beginSession(preferredVIN: preferredVIN)
+    }
+
+    /// Restores a cached snapshot into the published state: clears the optimistic lock, folds in
+    /// pending receipts, and emits one `.state` event. Callers keep their own empty-state handling.
+    func restoreCachedState(_ cached: inout VehicleState) {
+        cached.setOptimisticLock(nil)
+        latestAuthoritative = cached
+        cached.publish(confirmations.overlay)
+        latest = cached
+        onEvent?(.state(cached))
     }
 
     /// Resolves the account email used for account-change detection without touching the

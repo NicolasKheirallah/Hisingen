@@ -69,6 +69,11 @@ extension PreferencesStore {
         }
         set { d.set(newValue.map(\.rawValue).joined(separator: ","), forKey: "now_quick_controls") }
     }
+    /// How far one press on Charge Limit or Current Limit raises the limit.
+    var nowLimitStep: LimitStep {
+        get { LimitStep(rawValue: d.integer(forKey: "now_limit_step")) ?? .five }
+        set { d.set(newValue.rawValue, forKey: "now_limit_step") }
+    }
     var nowFirstReading: NowFirstReading {
         get { d.string(forKey: "now_first_reading").flatMap(NowFirstReading.init(rawValue:)) ?? .battery }
         set { d.set(newValue.rawValue, forKey: "now_first_reading") }
@@ -94,7 +99,7 @@ extension PreferencesStore {
 
     func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {
         let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (key.hasPrefix("YV") ? .volvo : activeBrand))
+        let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (VehicleBrand.isVolvoVIN(key) ? .volvo : activeBrand))
         return ThemeChoice.resolve(vin: key, brand: resolvedBrand, defaults: d)
     }
 

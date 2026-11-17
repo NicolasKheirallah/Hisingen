@@ -8,31 +8,6 @@ struct StoredCommandReceipt: Codable, Equatable, Sendable {
 
 struct StoredCommandReceipts: Codable, Equatable, Sendable {
     var records: [StoredCommandReceipt]
-
-    init(records: [StoredCommandReceipt]) {
-        self.records = records
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case records, receipt, confirmationDeadline
-    }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        if let records = try values.decodeIfPresent([StoredCommandReceipt].self, forKey: .records) {
-            self.records = records
-        } else {
-            self.records = [StoredCommandReceipt(
-                receipt: try values.decode(CommandReceipt.self, forKey: .receipt),
-                confirmationDeadline: try values.decodeIfPresent(Date.self, forKey: .confirmationDeadline)
-            )]
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(records, forKey: .records)
-    }
 }
 
 /// The per-vehicle cache in front of SQLite: the cached snapshot, the charging baseline and the
@@ -44,13 +19,13 @@ struct StoredCommandReceipts: Codable, Equatable, Sendable {
 @MainActor
 final class VehicleStateStore {
     private let defaults: UserDefaults
-    /// Where older releases kept their caches. Nothing writes these any more: `activate()` reads
-    /// each once, moves what it finds into SQLite, and deletes the key so no stale payload can be
-    /// read back by a later launch.
+    /// Where releases up to 2.0.1 kept their caches. Nothing writes these any more, and a copy
+    /// is never carried forward: every one of them is past the seven-day retention below, so
+    /// `activate()` only deletes the keys. A payload that held a location, an owner name or a
+    /// registration must not sit in `UserDefaults` once nothing can read it.
     private let legacySnapshotsKey = "cached_vehicle_snapshots_v1"
     private let legacyBaselinesKey = "charging_baselines_v1"
     private let legacyCommandReceiptsKey = "command_receipts_v1"
-    private let decoder = JSONDecoder()
     private let logger = AppLog.logger("state-store")
 
     let database: VehicleDatabase
@@ -59,10 +34,6 @@ final class VehicleStateStore {
     /// Owns the cross-mechanism maintenance sequences. This store supplies the pieces; the
     /// ordering lives in one place instead of once per caller.
     private let eraser: LocalDataEraser
-
-    /// How long a cached snapshot or charging baseline may answer. Named once because the legacy
-    /// migration, the pruning pass and the reads all have to agree on it.
-    private static let cacheRetention: TimeInterval = 7 * 24 * 60 * 60
 
     init(defaults: UserDefaults = .standard, database: VehicleDatabase,
          preferences: PreferencesStore? = nil, imageCache: CarImageCache = .shared) {
@@ -87,11 +58,9 @@ final class VehicleStateStore {
     /// side-effecting and ran it per instance. Reads are pure now, and this is idempotent: a
     /// relaunch with nothing to move costs one dictionary read.
     func activate() {
-        migrateLegacySnapshots()
-        migrateLegacyBaselines()
-        migrateLegacyCommandReceipts()
+        discardLegacyMirrors()
         let now = Date()
-        database.baselines.deleteBaselines(olderThan: now.addingTimeInterval(-Self.cacheRetention))
+        database.baselines.deleteBaselines(olderThan: now.addingTimeInterval(-VehicleDatabase.cacheRetention))
         // Stand-downs are the database's other expiring tier: a closed window answers nil on read,
         // so the launch pass is where the row goes away instead of accumulating in the file.
         database.providerBackoffs.deleteExpiredProviderBackoffs(now: now)
@@ -105,65 +74,14 @@ final class VehicleStateStore {
         database.snapshots.loadSnapshot(for: vin)
     }
 
-    /// Moves legacy plist snapshots into SQLite, which is authoritative, and drops the expired
-    /// ones on the way. Older releases stored complete snapshots in `UserDefaults`. That
-    /// representation must never carry sensitive live fields (location, owner name, registration)
-    /// forward, so the sanitized copy is what lands in SQLite – a schema migration and a privacy
-    /// seam for caches written by older versions of the app.
-    private func migrateLegacySnapshots() {
-        guard let legacy = load([String: VehicleState].self, key: legacySnapshotsKey) else { return }
-        let now = Date()
-        do {
-            try database.db.withTransaction {
-                for (_, snapshot) in legacy where
-                    now.timeIntervalSince(snapshot.freshness.fetchedAt) <= Self.cacheRetention {
-                    try database.snapshots.saveSnapshotOrThrow(snapshot.cacheableCopy, preserveExisting: true)
-                }
-            }
-            defaults.removeObject(forKey: legacySnapshotsKey)
-        } catch {
-            logger.error("Legacy migration failed: \(error, privacy: .public)")
+    /// Deletes the plist caches older releases wrote. Nothing is decoded, so a payload this build
+    /// can no longer read is removed too instead of staying behind with its location, owner name
+    /// and registration.
+    private func discardLegacyMirrors() {
+        for key in [legacySnapshotsKey, legacyBaselinesKey, legacyCommandReceiptsKey] {
+            defaults.removeObject(forKey: key)
         }
     }
-
-    /// The baseline and receipt halves of the same move: one pass over each legacy key, the rows
-    /// that land in SQLite, then the key is gone. Expired baselines are dropped rather than moved,
-    /// because the retention rule says they must not answer again.
-    private func migrateLegacyBaselines() {
-        guard let legacy = load([String: ChargingBaseline].self, key: legacyBaselinesKey) else { return }
-        let now = Date()
-        do {
-            try database.db.withTransaction {
-                for (_, baseline) in legacy {
-                    guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
-                          now.timeIntervalSince(timestamp) <= Self.cacheRetention else { continue }
-                    try database.baselines.saveBaselineOrThrow(baseline, preserveExisting: true)
-                }
-            }
-            defaults.removeObject(forKey: legacyBaselinesKey)
-        } catch {
-            logger.error("Legacy migration failed: \(error, privacy: .public)")
-        }
-    }
-
-    /// The receipt decoding is deliberately tolerant: older releases wrote one receipt where later
-    /// ones wrote a list, and `StoredCommandReceipts` reads both shapes, so an install that skipped
-    /// a version still comes forward.
-    private func migrateLegacyCommandReceipts() {
-        guard let legacy = load([String: StoredCommandReceipts].self, key: legacyCommandReceiptsKey)
-        else { return }
-        do {
-            try database.db.withTransaction {
-                for (vin, receipts) in legacy {
-                    try database.commandReceipts.saveCommandReceiptsOrThrow(receipts, for: vin, preserveExisting: true)
-                }
-            }
-            defaults.removeObject(forKey: legacyCommandReceiptsKey)
-        } catch {
-            logger.error("Legacy migration failed: \(error, privacy: .public)")
-        }
-    }
-
 
     /// Persist one fresh observation.
     ///
@@ -194,7 +112,7 @@ final class VehicleStateStore {
     func baseline(for vin: String) -> ChargingBaseline? {
         guard let baseline = database.baselines.loadBaseline(for: vin) else { return nil }
         guard let timestamp = baseline.sampledAt ?? baseline.vehicleReportedAt,
-              Date().timeIntervalSince(timestamp) <= Self.cacheRetention else { return nil }
+              Date().timeIntervalSince(timestamp) <= VehicleDatabase.cacheRetention else { return nil }
         return baseline
     }
 
@@ -266,16 +184,6 @@ final class VehicleStateStore {
         } catch {
             logger.error("Could not erase local data on sign-out: \(error, privacy: .public)")
             return false
-        }
-    }
-
-    private func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        do {
-            return try decoder.decode(type, from: data)
-        } catch {
-            logger.error("Could not decode persisted state for key \(key, privacy: .public): \(error, privacy: .public)")
-            return nil
         }
     }
 }

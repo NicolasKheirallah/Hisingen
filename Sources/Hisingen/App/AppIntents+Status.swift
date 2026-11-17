@@ -55,7 +55,6 @@ struct GetGarageStatusIntent: AppIntent {
             let vin = preferences.vin(for: brand)
             if !vin.isEmpty && !knownVINs.contains(vin) { knownVINs.append(vin) }
         }
-        if knownVINs.isEmpty && !preferences.vin.isEmpty { knownVINs.append(preferences.vin) }
 
         var lines: [String] = []
         for vin in knownVINs {

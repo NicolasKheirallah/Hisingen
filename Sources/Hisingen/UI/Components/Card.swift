@@ -18,13 +18,20 @@ import SwiftUI
 @MainActor
 struct Card<Content: View>: View {
     let content: Content
-    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    private let compact: Bool
+
+    init(compact: Bool = false, @ViewBuilder content: () -> Content) {
+        self.compact = compact
+        self.content = content()
+    }
 
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
+        let padding = HisingenTheme.cardPadding
         content
-            .padding(HisingenTheme.cardPadding)
+            .padding(.horizontal, padding)
+            .padding(.vertical, compact ? padding / 2 : padding)
             .overlay {
                 HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
             }
@@ -89,5 +96,23 @@ struct CardHeader: View {
         // the reading order is construction order, which put a footnote before a headline in the
         // composite cards that build their rows conditionally.
         .accessibilitySortPriority(2)
+    }
+}
+
+struct CardHeaderWithAccessory<Accessory: View>: View {
+    let heading: CardHeader
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                heading
+                accessory
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                heading
+                accessory
+            }
+        }
     }
 }

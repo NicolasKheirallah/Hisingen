@@ -22,7 +22,7 @@ extension ChargingSessionLedger {
             sessions = (try? sql.query(sql: query) { _ in } process: { try Self.sessionRows($0) }) ?? []
         }
 
-        var csv = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version,\(WallboxCSV.header.joined(separator: ","))\n"
+        var csv = CSV.chargingHistoryHeader + "\n"
         let df = ISO8601DateFormatter()
         for s in sessions {
             let start = df.string(from: s.startedAt)

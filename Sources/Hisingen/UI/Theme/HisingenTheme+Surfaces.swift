@@ -164,44 +164,8 @@ extension View {
             background(fallback, in: shape)
         }
     }
-
-    /// Window-level glass for the one surface that floats over the desktop: the charging mini
-    /// panel. The window itself supplies the shadow; the glass supplies the material, sampling
-    /// whatever is behind it. On macOS 15 it falls back to the panel material, and under Reduce
-    /// Transparency or Increase Contrast both paths go opaque with ``HisingenTheme/panelFill``,
-    /// the same contract ``PopoverSurface`` keeps for the main panel.
-    @ViewBuilder
-    func hisFloatingGlass<S: Shape>(in shape: S) -> some View {
-        modifier(FloatingGlassModifier(shape: shape))
-    }
 }
 
-/// The body of ``View/hisFloatingGlass(in:)``, split out so the fallback can read the
-/// accessibility environment; a plain `View` extension cannot.
-private struct FloatingGlassModifier<S: Shape>: ViewModifier {
-    let shape: S
-
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            // The system adapts glass to the appearance, but Reduce Transparency and Increase
-            // Contrast are app-honored promises here: the mini panel goes opaque like the
-            // macOS 15 path below instead of staying translucent.
-            if reduceTransparency || contrast == .increased {
-                content.background(HisingenTheme.panelFill, in: shape)
-            } else {
-                content.glassEffect(.regular, in: shape)
-            }
-        } else if reduceTransparency || contrast == .increased {
-            content.background(HisingenTheme.panelFill, in: shape)
-        } else {
-            content.background(.regularMaterial, in: shape)
-        }
-    }
-}
 // MARK: - Notice surface
 
 /// A notice: the studio fill with a 2pt edge in the notice's colour, its text in ink. The edge

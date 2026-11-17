@@ -283,7 +283,6 @@ struct KeychainStore: Sendable {
 
     func savePolestarDataPortalToken(_ token: String) throws {
         try save(token, account: Self.polestarDataPortalTokenAccount)
-        UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_dataportal_token")
     }
 
     func readPolestarDataPortalToken() throws -> String? {
@@ -292,7 +291,6 @@ struct KeychainStore: Sendable {
 
     func deletePolestarDataPortalToken() throws {
         try delete(account: Self.polestarDataPortalTokenAccount)
-        UserDefaults.standard.set(false, forKey: "has_polestar_dataportal_token")
     }
 
     /// Home Assistant long-lived access token for the optional Home Charging integration.
@@ -321,6 +319,33 @@ struct KeychainStore: Sendable {
         guard !isTestService else { return }
         UserDefaults.standard.set(false, forKey: "has_home_assistant_token")
     }
+
+    /// One Keychain item per direct charger vendor. Easee and Zaptec use a login JSON payload,
+    /// while NexBlue stores a refresh token.
+    func hasStoredChargerCredentials(vendor: String) -> Bool {
+        let account = Self.chargerCredentialsAccount(vendor)
+        if isTestService { return Self.testStore.get(cacheKey(account: account))?.isEmpty == false }
+        return UserDefaults.standard.bool(forKey: Self.chargerCredentialsPresenceKey(vendor))
+    }
+    func saveChargerCredentials(_ value: String, vendor: String) throws {
+        try save(value, account: Self.chargerCredentialsAccount(vendor))
+        guard !isTestService else { return }
+        UserDefaults.standard.set(!value.isEmpty, forKey: Self.chargerCredentialsPresenceKey(vendor))
+    }
+    func readChargerCredentials(vendor: String) throws -> String? {
+        let value = try read(account: Self.chargerCredentialsAccount(vendor))
+        if !isTestService {
+            UserDefaults.standard.set(value?.isEmpty == false, forKey: Self.chargerCredentialsPresenceKey(vendor))
+        }
+        return value
+    }
+    func deleteChargerCredentials(vendor: String) throws {
+        try delete(account: Self.chargerCredentialsAccount(vendor))
+        guard !isTestService else { return }
+        UserDefaults.standard.set(false, forKey: Self.chargerCredentialsPresenceKey(vendor))
+    }
+    private static func chargerCredentialsAccount(_ vendor: String) -> String { "charger-credentials-\(vendor)" }
+    private static func chargerCredentialsPresenceKey(_ vendor: String) -> String { "has_charger_credentials_\(vendor)" }
 
     /// Read-modify-write of the Volvo credential bundle. The bundle is one Keychain item
     /// holding three secrets, so concurrent single-field writes (e.g. a sign-in flow saving

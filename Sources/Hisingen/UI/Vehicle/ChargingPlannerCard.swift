@@ -57,7 +57,7 @@ struct ChargingPlannerCard: View {
 
     /// The paired vehicle with a home charger: Home Assistant can run this car's plan.
     private var showsHome: Bool {
-        guard let homeCharging else { return false }
+        guard let homeCharging, homeCharging.supportsPlans else { return false }
         return homeCharging.shouldShow(for: state)
     }
 

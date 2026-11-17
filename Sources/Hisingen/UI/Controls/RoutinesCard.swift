@@ -225,8 +225,7 @@ struct RoutineEditorSheet: View {
                         Text(L10n.text("Name"))
                             .hisType(.label, weight: .semibold)
                             .foregroundStyle(.secondary)
-                        TextField(L10n.text("Leave work"), text: $name)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField(L10n.text("Leave work"), text: $name)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {

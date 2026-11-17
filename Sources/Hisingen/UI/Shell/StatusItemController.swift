@@ -1120,8 +1120,8 @@ final class StatusItemController: NSObject {
             onOpenUpdate: { [weak self] in self?.onOpenUpdate() },
             onRemoteCommand: { [weak self] cmd in self?.onRemoteCommand(cmd) },
             onSelectCar: { [weak self] vin in self?.selectCar(vin) },
-            onDismissCommandReceipt: { [weak self] issuedAt in
-                self?.onDismissCommandReceipt(issuedAt)
+            onDismissCommandReceipt: { [weak self] id in
+                self?.onDismissCommandReceipt(id)
             },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
             onSignOut: { [weak self] in self?.onSignOut() },

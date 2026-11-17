@@ -142,6 +142,16 @@ enum VehicleAvailability: Codable, Equatable, Sendable {
     case unavailable(reason: String?)
     case unknown
 
+    /// `RefreshPolicy` takes an optional availability flag; keeping the translation here means a
+    /// new case cannot be missed by the two refresh cadence call sites.
+    var isAvailable: Bool? {
+        switch self {
+        case .available: return true
+        case .unavailable: return false
+        case .unknown: return nil
+        }
+    }
+
     var displayName: String {
         switch self {
         case .available: return L10n.text("Online")

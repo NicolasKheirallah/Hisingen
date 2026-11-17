@@ -47,11 +47,14 @@ enum HomeSessionPricer {
     }
 
     static let tibberSource = "Tibber import prices via Home Assistant (tibber.get_prices)"
+    static let tibberAPISource = "Tibber import prices from the Tibber API"
     static let spotSource = "Spot prices from elprisetjustnu.se with the Hisingen rate settings"
     static let tariffSource = "Fixed tariff from the Hisingen rate settings"
 
+    /// `tibberSource` names where `tibber` came from: Home Assistant by default, or the Tibber API.
     static func price(_ session: HomeChargingSessionCandidate, tibber: [HomePricePoint],
-                      networkFeeOrePerKwh: Double, fallback: Fallback) -> HomeSessionCost {
+                      networkFeeOrePerKwh: Double, fallback: Fallback,
+                      tibberSource: String = HomeSessionPricer.tibberSource) -> HomeSessionCost {
         let fee = max(0, networkFeeOrePerKwh) / 100
         var assumptions = ["Tibber's price includes energy, taxes and Tibber's markup"]
         assumptions.append(fee > 0

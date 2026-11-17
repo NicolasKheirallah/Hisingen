@@ -189,6 +189,8 @@ struct HomeChargingPlanStatus: Equatable, Sendable {
         case "charger_unavailable": return L10n.text("The charger is unavailable in Home Assistant.")
         case "prices_missing": return L10n.text("Tibber prices are missing for part of the period.")
         case "waiting_for_power": return L10n.text("Waiting for available power.")
+        case "waiting_for_vehicle": return L10n.text("Waiting for the car to start drawing power.")
+        case "car_limit_reached": return L10n.text("The car stopped at its own battery limit, which is the ceiling for a plan.")
         default: return code
         }
     }

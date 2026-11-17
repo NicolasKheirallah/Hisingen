@@ -20,6 +20,7 @@ enum ComposableCards {
         .vehicleTyres,
         .vehicleReadiness,
         .vehicleLocation,
+        .vehicleWeather,
         .vehicleReceipts,
         .vehicleAttention,
         .controlsClimate,
@@ -76,6 +77,9 @@ enum ComposableCards {
 
             case .vehicleLocation:
                 ComposableLocationCard(state: state, reverseGeocoder: reverseGeocoder)
+
+            case .vehicleWeather:
+                NowWeatherReadout(state: state)
 
             case .vehicleReceipts:
                 ComposableReceiptsCard(state: state, onDismiss: onDismissCommandReceipt,

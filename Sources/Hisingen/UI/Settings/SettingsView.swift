@@ -128,6 +128,7 @@ struct SettingsView: View {
                             }
                             if let homeCharging {
                                 SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
+                                SettingsTibberCard(model: homeCharging)
                             }
                         }
                         .transition(Self.sectionSwapTransition)

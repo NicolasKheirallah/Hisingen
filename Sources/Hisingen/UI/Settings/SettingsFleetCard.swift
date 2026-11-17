@@ -231,7 +231,7 @@ struct FleetVehicleCardRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        let brand: VehicleBrand = vehicleState?.model.brand ?? (vin.hasPrefix("YV") ? .volvo : .polestar)
+        let brand: VehicleBrand = vehicleState?.model.brand ?? (VehicleBrand.isVolvoVIN(vin) ? .volvo : .polestar)
         let brandIcon = brand == .polestar ? "bolt.car" : "car"
         let displayTitle = preferences.formattedVehicleTitle(
             vin: vin,
@@ -362,11 +362,10 @@ struct FleetVehicleCardRow: View {
                         .hisType(.micro)
                         .foregroundStyle(.secondary)
 
-                    TextField(L10n.text("Nickname"), text: Binding(
+                    HisTextField(L10n.text("Nickname"), text: Binding(
                         get: { preferences.vehicleNickname(for: vin) },
                         set: { preferences.setVehicleNickname($0, for: vin) }
                     ))
-                    .textFieldStyle(.roundedBorder)
                     .controlSize(.mini)
                     .frame(maxWidth: 110)
                 }

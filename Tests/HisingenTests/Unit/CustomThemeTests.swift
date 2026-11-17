@@ -82,4 +82,36 @@ struct CustomThemeTests {
         #expect(defaults.string(forKey: "app_theme") == AppTheme.hisingen.rawValue)
         #expect(ThemeChoice.resolve(vin: "VIN1", brand: .polestar, defaults: defaults) != definition.theme)
     }
+
+    @Test func themesComeBackFromTheDatabaseWhenPreferencesAreCleared() throws {
+        let suite = "io.kheirallah.hisingen.tests.customthemes.db.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = VehicleDatabase.inMemory()
+
+        let fjord = CustomThemeDefinition.blank(named: "Fjord")
+        CustomThemeStore.save(fjord, defaults: defaults, database: database)
+        #expect(database.customThemes.all() == [fjord])
+
+        // An update, a reinstall or a reset clears the preferences mirror.
+        defaults.removeObject(forKey: CustomThemeStore.key)
+        CustomThemeStore.invalidate()
+        CustomThemeStore.reconcile(defaults: defaults, database: database)
+        #expect(CustomThemeStore.all(defaults: defaults) == [fjord])
+
+        CustomThemeStore.delete(id: fjord.id, defaults: defaults, database: database)
+        #expect(database.customThemes.all().isEmpty)
+    }
+
+    @Test func themesMadeBeforeTheTableExistedMoveIntoTheDatabase() throws {
+        let suite = "io.kheirallah.hisingen.tests.customthemes.legacy.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let database = VehicleDatabase.inMemory()
+
+        let legacy = CustomThemeDefinition.blank(named: "Legacy")
+        defaults.set(try JSONEncoder().encode([legacy]), forKey: CustomThemeStore.key)
+        CustomThemeStore.reconcile(defaults: defaults, database: database)
+        #expect(database.customThemes.all() == [legacy])
+    }
 }

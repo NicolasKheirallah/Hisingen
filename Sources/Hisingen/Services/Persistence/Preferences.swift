@@ -318,7 +318,7 @@ enum NowReadingsPosition: String, CaseIterable, Sendable {
 /// A control card the reader can place under the car on Now. Each one still needs its remote
 /// feature switched on, and a vehicle that reports the capability, before it draws.
 enum NowQuickControl: String, CaseIterable, Sendable {
-    case locks, climate, charging, airCleaning, windows, locate, tailgate
+    case locks, climate, charging, chargeLimit, currentLimit, airCleaning, windows, locate, tailgate
 
     static let defaults: [NowQuickControl] = [.locks, .climate, .charging]
 
@@ -327,6 +327,8 @@ enum NowQuickControl: String, CaseIterable, Sendable {
         case .locks: return L10n.text("Locks")
         case .climate: return L10n.text("Climate")
         case .charging: return L10n.text("Charging")
+        case .chargeLimit: return L10n.text("Charge Limit")
+        case .currentLimit: return L10n.text("Current Limit")
         case .airCleaning: return L10n.text("Air Cleaning")
         case .windows: return L10n.text("Windows")
         case .locate: return L10n.text("Honk & Flash")
@@ -339,7 +341,7 @@ enum NowQuickControl: String, CaseIterable, Sendable {
         switch self {
         case .locks, .tailgate: return .remoteLocks
         case .climate: return .remoteClimate
-        case .charging: return .remoteCharging
+        case .charging, .chargeLimit, .currentLimit: return .remoteCharging
         case .airCleaning: return .remotePreCleaning
         case .windows: return .remoteWindows
         case .locate: return .remoteHonkFlash

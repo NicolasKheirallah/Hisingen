@@ -116,8 +116,7 @@ struct APIDiagnosticInspectorView: View {
                     }
                 }
                 .frame(width: 150)
-                TextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
                 Button(role: .destructive) {
                     showClearConfirmation = true
                 } label: {

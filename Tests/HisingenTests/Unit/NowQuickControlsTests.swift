@@ -40,7 +40,33 @@ struct NowQuickControlsTests {
             profile: profile([.preCleaning: false, .windows: false, .honkAndFlash: false]),
             supportsTrunkControl: false
         )
-        #expect(result == [.locks, .climate, .charging])
+        #expect(result == [.locks, .climate, .charging, .chargeLimit, .currentLimit])
+    }
+
+    @Test func limitCardsNeedTheCarToReportTheMatchingCapability() {
+        let result = NowQuickControl.applicable(
+            [.chargeLimit, .currentLimit], features: everyFeature, hasElectricRange: true,
+            profile: profile([.chargeTarget: false, .chargingCurrentLimit: true]), supportsTrunkControl: false
+        )
+        #expect(result == [.currentLimit])
+    }
+
+    @Test func limitCardsNeedRemoteChargingAndAnElectricRange() {
+        let withoutFeature = NowQuickControl.applicable(
+            [.chargeLimit, .currentLimit], features: [.remoteLocks], hasElectricRange: true,
+            profile: profile(), supportsTrunkControl: false
+        )
+        let withoutRange = NowQuickControl.applicable(
+            [.chargeLimit, .currentLimit], features: everyFeature, hasElectricRange: false,
+            profile: profile(), supportsTrunkControl: false
+        )
+        #expect(withoutFeature.isEmpty)
+        #expect(withoutRange.isEmpty)
+    }
+
+    @Test func limitCardsSitBesideChargingInTheFixedOrder() {
+        let order = NowQuickControl.allCases
+        #expect(order.starts(with: [.locks, .climate, .charging, .chargeLimit, .currentLimit]))
     }
 
     @Test func theReadersOrderIsKept() {

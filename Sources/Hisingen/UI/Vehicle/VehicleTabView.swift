@@ -95,18 +95,14 @@ struct VehicleTabView: View {
     private var rowItems: [TabItemID] {
         let shipped: [TabItemID] = [
             .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-            .vehicleExceptions, .vehicleCharging, .vehicleChargingPlanner,
+            .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
             .vehicleFuelEngine, .vehicleOpenings, .vehicleTyres, .vehicleLocation, .vehicleReadiness
         ]
-        // These legacy composition ids used to form Vehicle's "More" disclosure. Their content
-        // now lives in Info, so old saved layouts must not re-introduce duplicate detail cards.
-        let detailItemsOwnedByInfo: Set<TabItemID> = [
-            .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
-            .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
-        ]
+        // Retired ids used to form Vehicle's "More" disclosure. Their content now lives in Info,
+        // so old saved layouts must not re-introduce duplicate detail cards.
         let unmatched = TabItemCatalog.defaultItems(for: .vehicle).filter { item in
             !shipped.contains(item)
-                && !detailItemsOwnedByInfo.contains(item)
+                && !TabItemCatalog.isRetired(item)
                 && TabItemCatalog.item(item)?.kind == .card
         }
         return ordered(shipped + unmatched, by: { $0 }).filter { draws($0) }
@@ -124,7 +120,8 @@ struct VehicleTabView: View {
         case .vehicleHero:
             NowInstrument(state: state, imageCache: imageCache, commandGate: commandGate,
                           feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
-                          showsDepartureCheck: draws(.vehicleReadiness))
+                          showsDepartureCheck: draws(.vehicleReadiness),
+                          showsWeather: draws(.vehicleWeather))
         case .vehicleReceipts:
             ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
                 CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
@@ -136,6 +133,10 @@ struct VehicleTabView: View {
         case .vehicleExceptions:
             if let card = ExceptionsCard.make(state: state, features: features, dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier) {
                 card.transition(cardTransition)
+            }
+        case .vehicleWeather:
+            if !draws(.vehicleHero), features.contains(.vehicleWeather) {
+                NowWeatherReadout(state: state)
             }
         case .vehicleCharging:
             VehicleChargingCard(state: state, history: history, repeatsDisconnectedStatus: !draws(.vehicleHero))
@@ -278,7 +279,8 @@ struct VehicleTabView: View {
                 }
             })
         }
-        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: state.weather, isLive: !state.hasOldData(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
+        let inlineWeather = !draws(.vehicleWeather) && features.contains(.vehicleWeather) ? state.weather : nil
+        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: inlineWeather, isLive: !state.hasOldData(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
     }
 
     /// A section that cannot show its data.

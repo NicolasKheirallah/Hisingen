@@ -57,19 +57,13 @@ extension InfoTabView {
         if let short = sw.shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !short.isEmpty {
             rows.append(KVRow(L10n.text("Summary"), short, symbol: "doc.plaintext"))
         }
-        if let long = sw.longDescription?.trimmingCharacters(in: .whitespacesAndNewlines), !long.isEmpty {
-            rows.append(KVRow(L10n.text("Release Notes"),
-                              VehicleSoftwareCard.strippedReleaseNotes(long), symbol: "doc.richtext"))
-        }
-        if let updatedAt = sw.updatedAt {
-            rows.append(KVRow(L10n.text("Status Reported"), Format.dateTimeFormatter.string(from: updatedAt), symbol: "clock"))
-        }
+        let releaseNotes = sw.longDescription.map(VehicleSoftwareCard.strippedReleaseNotes)
 
-        guard !rows.isEmpty else { return AnyView(EmptyView()) }
+        guard !rows.isEmpty || releaseNotes?.isEmpty == false || sw.updatedAt != nil else { return AnyView(EmptyView()) }
 
         let headerColor: Color = failed ? HisingenTheme.semanticCritical : (hasNewer ? HisingenTheme.semanticWarning : HisingenTheme.semanticActive)
 
-        return AnyView(Card {
+        return AnyView(Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     CardHeader(symbol: failed ? "exclamationmark.arrow.triangle.2.circlepath" : "arrow.triangle.2.circlepath",
@@ -81,7 +75,27 @@ extension InfoTabView {
                         Pill(text: L10n.text("Update available"), color: HisingenTheme.semanticWarning, symbol: "arrow.down.circle")
                     }
                 }
-                VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(rows.indices, id: \.self) { rows[$0] }
+                    if let releaseNotes, !releaseNotes.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.text("Release Notes"))
+                                .hisType(.body)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(releaseNotes)
+                                .hisType(.body)
+                                .foregroundStyle(HisingenTheme.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 5)
+                        .overlay(alignment: .bottom) { PanelRule() }
+                    }
+                    if let updatedAt = sw.updatedAt {
+                        KVRow(L10n.text("Status Reported"), Format.dateTimeFormatter.string(from: updatedAt))
+                    }
+                }
                 if failed {
                     Text(L10n.text("The backend recorded a failed update event. This is an event record, not a live vehicle fault. A Polestar workshop can apply the update directly if it keeps failing."))
                         .hisType(.micro)

@@ -41,8 +41,7 @@ struct ChargeLocationEditorSheet: View {
                         Text(L10n.text("Name"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
-                        TextField(L10n.text("Home, Office…"), text: $alias)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField(L10n.text("Home, Office…"), text: $alias)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {

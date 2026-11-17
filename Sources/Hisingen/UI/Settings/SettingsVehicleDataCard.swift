@@ -132,8 +132,7 @@ struct SettingsVehicleDataCard: View {
                             Text(L10n.text("Usable battery capacity"))
                                 .hisType(.caption)
                             Spacer()
-                            TextField(L10n.text("Automatic"), text: $usableBatteryCapacityOverride)
-                                .textFieldStyle(.roundedBorder)
+                            HisTextField(L10n.text("Automatic"), text: $usableBatteryCapacityOverride)
                                 .frame(width: 70)
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }
@@ -143,8 +142,7 @@ struct SettingsVehicleDataCard: View {
                             Text(L10n.text("WLTP reference range"))
                                 .hisType(.caption)
                             Spacer()
-                            TextField(L10n.text("Automatic"), text: $wltpRangeOverride)
-                                .textFieldStyle(.roundedBorder)
+                            HisTextField(L10n.text("Automatic"), text: $wltpRangeOverride)
                                 .frame(width: 70)
                                 .multilineTextAlignment(.trailing)
                                 .onSubmit { saveSpecificationOverride(vin: warrantyVIN) }

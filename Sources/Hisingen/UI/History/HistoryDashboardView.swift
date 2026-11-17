@@ -845,7 +845,7 @@ struct HistoryDashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).hisType(.caption).foregroundStyle(.secondary)
                 TextField("", text: $text)
-                    .textFieldStyle(.roundedBorder)
+                    .hisField()
                     .hisType(.body)
                 if let reason {
                     Text(reason)

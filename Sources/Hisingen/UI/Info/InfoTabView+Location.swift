@@ -193,11 +193,11 @@ extension InfoTabView {
         let lonStr = String(format: "%.4f° %@", locale: L10n.displayLocale, abs(lon), lon >= 0 ? L10n.text("E") : L10n.text("W"))
         let modelTitle = state.identity.modelName ?? L10n.text("Vehicle")
 
-        return AnyView(Card {
+        return AnyView(Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "location", title: L10n.text("Parking Location & Navigation"), color: HisingenTheme.semanticActive)
-                    Spacer()
+                CardHeaderWithAccessory(
+                    heading: CardHeader(symbol: "location", title: L10n.text("Parking Location"), color: HisingenTheme.semanticActive)
+                ) {
                     Menu {
                         Button {
                             if let url = MapLinks.appleMapsPin(latitude: lat, longitude: lon,
@@ -221,45 +221,33 @@ extension InfoTabView {
                             Label(L10n.text("Copy Coordinates"), systemImage: "doc.on.doc")
                         }
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "map")
-                                .hisType(.caption)
-                            Text(L10n.text("Open in Maps"))
-                                .hisType(.caption, weight: .semibold)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(HisingenTheme.semanticActive.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
-                        .foregroundStyle(HisingenTheme.semanticActive)
+                        Text(L10n.text("Open in Maps"))
+                            .hisType(.body, weight: .semibold)
+                            .foregroundStyle(HisingenTheme.ink)
                     }
                     .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
+                    .menuIndicator(.visible)
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
+                        .hisType(.title)
+                        .foregroundStyle(addressText == nil ? HisingenTheme.inkMuted : HisingenTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(reduceMotion ? .identity : .opacity)
+                        .hisAnimation(Motion.theme, value: addressText)
+                    Text(L10n.text("Address"))
+                        .hisType(.label)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.text("Address"))
+                .accessibilityValue(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
+                .privacySensitive()
+
                 VStack(spacing: 6) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .hisType(.label)
-                                .foregroundStyle(HisingenTheme.accent)
-                                .frame(width: 14)
-                            Text(L10n.text("Address"))
-                                .hisType(.label, weight: .medium)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
-                            .hisType(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.trailing)
-                            .privacySensitive()
-                            .contentTransition(reduceMotion ? .identity : .opacity)
-                            .hisAnimation(Motion.theme, value: addressText)
-                    }
-                    .padding(.vertical, 1)
-                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle")
+                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)")
                         .privacySensitive()
                     if let speed = location.speed, speed > 0 {
                         KVRow(L10n.text("Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer")

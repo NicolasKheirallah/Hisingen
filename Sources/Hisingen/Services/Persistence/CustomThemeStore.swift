@@ -18,10 +18,13 @@ struct CustomThemeDefinition: Codable, Hashable, Sendable, Identifiable {
     var theme: AppTheme { .custom(id) }
 }
 
-/// Reader-made themes, kept as one JSON list in `custom_themes_v1`.
+/// Reader-made themes.
 ///
-/// Palette lookups happen on every token read, so decoded definitions are cached and the cache
-/// is replaced on every save.
+/// The database's `custom_themes` table is the durable copy: it lives in Application Support,
+/// so themes survive app updates, a reinstalled app bundle and a reset preferences domain. The
+/// preferences key `custom_themes_v1` is a mirror for fast reads (palette lookups happen on every
+/// token read) and travels with a settings export. The first read of each launch reconciles the
+/// two, so a theme missing from either side is copied across.
 enum CustomThemeStore {
     static let key = "custom_themes_v1"
 
@@ -29,6 +32,17 @@ enum CustomThemeStore {
         let lock = NSLock()
         var definitions: [String: [CustomThemeDefinition]] = [:]
         var palettes: [CustomThemeDefinition: Palette] = [:]
+        var reconciled = false
+    }
+
+    /// The app's own database, only when running as the app. Tests and previews never reach the
+    /// reader's real database by accident; they pass an in-memory one explicitly.
+    static var appDatabase: VehicleDatabase? {
+        Bundle.main.bundleIdentifier == "io.kheirallah.hisingen" ? VehicleDatabase.shared : nil
+    }
+
+    private static func database(for defaults: UserDefaults) -> VehicleDatabase? {
+        defaults === UserDefaults.standard ? appDatabase : nil
     }
 
     private static let cache = Cache()
@@ -38,6 +52,7 @@ enum CustomThemeStore {
     }
 
     static func all(defaults: UserDefaults = .standard) -> [CustomThemeDefinition] {
+        if defaults === UserDefaults.standard { reconcileOnce() }
         let key = cacheKey(defaults)
         cache.lock.lock()
         defer { cache.lock.unlock() }
@@ -53,7 +68,9 @@ enum CustomThemeStore {
     }
 
     /// Adds the definition, or replaces the one with the same id.
-    static func save(_ definition: CustomThemeDefinition, defaults: UserDefaults = .standard) {
+    static func save(_ definition: CustomThemeDefinition, defaults: UserDefaults = .standard,
+                     database: VehicleDatabase? = nil) {
+        (database ?? Self.database(for: defaults))?.customThemes.upsert(definition)
         var list = all(defaults: defaults)
         if let index = list.firstIndex(where: { $0.id == definition.id }) {
             list[index] = definition
@@ -65,7 +82,8 @@ enum CustomThemeStore {
 
     /// Removes the theme. Anything that pointed at it falls back to the default palette, and the
     /// global selection moves back to Hisingen so the panel never names a missing theme.
-    static func delete(id: String, defaults: UserDefaults = .standard) {
+    static func delete(id: String, defaults: UserDefaults = .standard, database: VehicleDatabase? = nil) {
+        (database ?? Self.database(for: defaults))?.customThemes.delete(id: id)
         write(all(defaults: defaults).filter { $0.id != id }, defaults: defaults)
         let raw = AppTheme.custom(id).rawValue
         if defaults.string(forKey: "app_theme") == raw {
@@ -77,6 +95,45 @@ enum CustomThemeStore {
         if var vehicles = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String] {
             vehicles = vehicles.filter { $0.value != raw }
             defaults.set(vehicles, forKey: "vehicle_themes_v1")
+        }
+    }
+
+    /// Drops the cached lists, after something outside this store rewrote `custom_themes_v1`
+    /// (a settings import). The next read decodes again and writes any new themes to the database.
+    static func invalidate() {
+        cache.lock.lock()
+        cache.definitions = [:]
+        cache.palettes = [:]
+        cache.reconciled = false
+        cache.lock.unlock()
+    }
+
+    private static func reconcileOnce() {
+        cache.lock.lock()
+        let pending = !cache.reconciled
+        cache.reconciled = true
+        cache.lock.unlock()
+        guard pending, let database = appDatabase else { return }
+        reconcile(defaults: .standard, database: database)
+    }
+
+    /// Makes the preferences mirror and the database agree. Themes only in the database come
+    /// back into preferences (an update or reset cleared them); themes only in preferences, or
+    /// newer there, are written to the database (themes made before the table existed).
+    static func reconcile(defaults: UserDefaults, database: VehicleDatabase) {
+        let mirrored = defaults.data(forKey: Self.key)
+            .flatMap { try? JSONDecoder().decode([CustomThemeDefinition].self, from: $0) } ?? []
+        let stored = database.customThemes.all()
+        for definition in mirrored where stored.first(where: { $0.id == definition.id }) != definition {
+            database.customThemes.upsert(definition)
+        }
+        let merged = mirrored + stored.filter { saved in !mirrored.contains { $0.id == saved.id } }
+        if merged != mirrored {
+            write(merged, defaults: defaults)
+        } else {
+            cache.lock.lock()
+            cache.definitions[cacheKey(defaults)] = merged
+            cache.lock.unlock()
         }
     }
 

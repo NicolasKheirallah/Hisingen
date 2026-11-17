@@ -31,9 +31,9 @@ enum VehicleScope: Equatable {
 /// different files.
 @MainActor
 final class LocalDataEraser {
-    /// The maintenance cases – `samples`, `aged` and `compact` – are inherently fleet-wide:
-    /// age-based pruning and SQLite's `PRAGMA` have no per-vehicle form, so they carry no
-    /// `VehicleScope` and never touch a per-VIN tier.
+    /// The maintenance cases, `samples` and `compact`, are inherently fleet-wide: sample pruning
+    /// and SQLite's `PRAGMA` have no per-vehicle form, so they carry no `VehicleScope` and never
+    /// touch a per-VIN tier.
     enum Scope: Equatable {
         /// What a sign-out or an account change drops: the cached snapshot, the mirrors, the
         /// command receipts, the in-memory image tier and the in-memory per-VIN caches. Durable
@@ -47,8 +47,6 @@ final class LocalDataEraser {
         case locations(VehicleScope)
         /// High-volume samples older than the retention window.
         case samples(olderThanDays: Int)
-        /// Age-based pruning across the low-volume history tables.
-        case aged
         /// Reclaim space without deleting rows.
         case compact
         /// Everything, for the scope's VIN or the whole database.
@@ -121,8 +119,6 @@ final class LocalDataEraser {
             try database.clearAllStoredLocationsOrThrow()
         case .samples(let olderThanDays):
             try database.pruneHistoricalSamplesOrThrow(olderThanDays: olderThanDays)
-        case .aged:
-            try database.pruneAgedHistoryOrThrow()
         case .compact:
             try database.vacuumOrThrow()
         case .everything(.vehicle(let vin)):
@@ -155,7 +151,7 @@ final class LocalDataEraser {
             preferences.persistLocationHistory = false
             clearSnapshotMirror(vehicles)
             memoryCaches.dropSnapshots(vehicles)
-        case .samples, .aged, .compact:
+        case .samples, .compact:
             break
         }
     }

@@ -412,7 +412,7 @@ extension InfoTabView {
     var warrantyAndProtectionCard: AnyView {
         let warranty = state.maintenance.warranty
         let userInServiceDate = preferences.warrantyInServiceDate(for: state.identity.vin)
-        let isVolvo = (state.identity.modelName?.lowercased().contains("volvo") == true) || (state.identity.vin.uppercased().hasPrefix("YV"))
+        let isVolvo = (state.identity.modelName?.lowercased().contains("volvo") == true) || state.isVolvo
         let planTitle = warranty?.planName
         let brandColor = isVolvo ? HisingenTheme.volvoBlue : HisingenTheme.polestarAmber
         let brandIcon = "shield.checkmark.fill"

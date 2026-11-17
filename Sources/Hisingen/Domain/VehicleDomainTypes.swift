@@ -1184,9 +1184,6 @@ struct BatteryDiagnostics: Codable, Equatable, Sendable {
     /// Who last set the amperage limit (`AmpLimitValue.source`), raw wire token.
     var limitSource: String? = nil
 
-    var targetSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: targetSource) }
-    var limitSourceKind: ChargeSettingSource? { ChargeSettingSource(wireToken: limitSource) }
-
     init(
         timeToTargetMinutes: Int?,
         timeToMinimumSOCMinutes: Int?,
@@ -1357,6 +1354,11 @@ struct VehicleWeather: Codable, Equatable, Sendable {
     let timestamp: Date?
     /// Forecast air temperature by hour, nil when the hourly request was not made or failed.
     var hourlyTemperatures: [HourlyTemperature]?
+
+    var hasCurrentConditions: Bool {
+        temperatureCelsius != nil || apparentTemperatureCelsius != nil
+            || condition?.isEmpty == false || relativeHumidity != nil
+    }
 
     init(
         temperatureCelsius: Double?,

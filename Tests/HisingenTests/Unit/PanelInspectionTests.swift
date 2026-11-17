@@ -31,6 +31,9 @@ struct PanelInspectionTests {
         var reading = vehicle(
             vin: vin, battery: 72, rangeKm: 308, target: 90, odometerKm: 28416,
             exteriorStatus: ExteriorSnapshot(openings: [], isLocked: true, alarmTriggered: false),
+            weather: VehicleWeather(temperatureCelsius: 3.3, condition: "Overcast",
+                                    apparentTemperatureCelsius: 0.4, relativeHumidity: 98,
+                                    timestamp: now.addingTimeInterval(-1_200)),
             reportedBatteryCapacityKwh: 78, imageData: art, fetchedAt: now, reportedAt: now
         )
         reading.climateStatus = VehicleClimateStatus(
@@ -38,6 +41,7 @@ struct PanelInspectionTests {
             interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil,
             driverSeatHeatingLevel: nil, passengerSeatHeatingLevel: nil, steeringWheelHeatingLevel: nil
         )
+        reading.energy.currentLimitAmps = 16
         reading.climateTimers = [VehicleSchedule(
             kind: .climate, startHour: nil, startMinute: nil, endHour: nil, endMinute: nil,
             isActive: true, oneShotDate: now.addingTimeInterval(12 * 3_600)
@@ -93,7 +97,9 @@ struct PanelInspectionTests {
                 window.appearance = appearance
                 var screens = tabs
                 if size == .standard {
-                    screens += [("now-offline", .vehicle), ("now-active", .vehicle), ("sign-in", .vehicle), ("settings", .settings)]
+                    screens += [("now-offline", .vehicle), ("now-active", .vehicle), ("now-limits", .vehicle), ("sign-in", .vehicle), ("sign-in-volvo", .vehicle), ("sign-in-error", .vehicle), ("settings", .settings)]
+                } else if size == .compact, type == .accessibility5 {
+                    screens += [("sign-in", .vehicle), ("sign-in-volvo", .vehicle)]
                 }
                 for (title, tab) in screens {
                     var state = reading
@@ -102,7 +108,8 @@ struct PanelInspectionTests {
                         state.freshness.fetchedAt = now.addingTimeInterval(-3_600)
                         state.freshness.vehicleReportedAt = now.addingTimeInterval(-7_200)
                     }
-                    if title == "now-active" {
+                    let live = title == "now-active" || title == "now-limits"
+                    if live {
                         state.climateStatus = VehicleClimateStatus(
                             activity: .heating, timeRemainingMinutes: 18, timerTriggered: false,
                             interiorTemperatureCelsius: nil, requestedTemperatureCelsius: nil,
@@ -114,11 +121,15 @@ struct PanelInspectionTests {
                             .battery: now, .range: now, .locks: now, .climateStatus: now, .charging: now
                         ]
                     }
-                    preferences.nowQuickControls = title == "now-active" ? NowQuickControl.allCases : NowQuickControl.defaults
-                    let signedIn = title != "sign-in"
+                    preferences.nowQuickControls = title == "now-active" ? NowQuickControl.allCases
+                        : title == "now-limits" ? [.climate, .chargeLimit, .currentLimit] : NowQuickControl.defaults
+                    let signedIn = !title.hasPrefix("sign-in")
+                    preferences.activeBrand = title == "sign-in-volvo" ? .volvo : .polestar
                     let model = PanelModel(
                         display: PanelDisplay(
-                            state: signedIn ? state : nil, authenticated: signedIn, activeVin: vin, fleet: FleetSnapshot(),
+                            state: signedIn ? state : nil,
+                            error: title == "sign-in-error" ? "Sign in failed. Check your Polestar ID and password." : nil,
+                            authenticated: signedIn, activeVin: vin, fleet: FleetSnapshot(),
                             remoteCommandInProgress: false, commandBrand: .polestar, checkingForUpdates: false,
                             notificationPermission: .authorized, setupMode: false
                         ),
@@ -137,7 +148,7 @@ struct PanelInspectionTests {
                     window.setContentSize(frame.size)
                     host.layoutSubtreeIfNeeded()
                     // Let startup transitions and history/art tasks settle on the AppKit run loop.
-                    try await Task.sleep(for: .milliseconds(420))
+                    try await Task.sleep(for: .milliseconds(title.hasPrefix("now") ? 900 : 420))
                     host.layoutSubtreeIfNeeded()
                     let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: frame))
                     appearance.performAsCurrentDrawingAppearance {
@@ -151,6 +162,32 @@ struct PanelInspectionTests {
             }
         }
         #expect(Set(nowRenders).count == 2, "Both appearances must produce different pixels")
+
+        // Settings, Appearance: the Controls on Now tiles with three chosen and one blocked.
+        preferences.nowQuickControls = [.climate, .locks, .windows]
+        for dark in [false, true] {
+            let appearance = try #require(NSAppearance(named: dark ? .darkAqua : .aqua))
+            window.appearance = appearance
+            let card = SettingsAppearanceCard(
+                state: reading, imageCache: cache,
+                binder: PreferenceBinder(preferences: preferences, notify: { _ in }, bump: {})
+            )
+            .frame(width: 520)
+            .environment(\.preferencesStore, preferences)
+            .environment(\.colorScheme, dark ? .dark : .light)
+            let host = NSHostingView(rootView: card)
+            let size = host.fittingSize
+            let frame = NSRect(origin: .zero, size: size)
+            host.frame = frame
+            window.contentView = host
+            window.setContentSize(size)
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: frame))
+            appearance.performAsCurrentDrawingAppearance { host.cacheDisplay(in: frame, to: bitmap) }
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(to: output.appendingPathComponent("settings-appearance-\(dark ? "dark" : "light").png"))
+        }
 
         // The theme editor, with colours that need adjusting: a mid-grey light background and a
         // yellow accent that vanishes on white.

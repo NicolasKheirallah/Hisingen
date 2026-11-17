@@ -24,6 +24,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case vehicleReceipts = "vehicle-receipts"
     case vehicleAttention = "vehicle-attention"
     case vehicleExceptions = "vehicle-exceptions"
+    case vehicleWeather = "vehicle-weather"
     case vehicleCharging = "vehicle-charging"
     case vehicleChargingPlanner = "vehicle-charging-planner"
     case vehicleFuelEngine = "vehicle-fuel-engine"
@@ -142,7 +143,7 @@ struct TabItem: Identifiable, Hashable, Sendable {
 /// so a tab must render identically to the pre-composition build when nothing is customised.
 enum TabItemCatalog {
     /// Kept as decodeable ids so an existing custom layout still loads, but no longer offered in
-    /// the editor: these five detail cards and their wrapper duplicate sections now owned by Info.
+    /// the editor: these detail cards and their wrapper duplicate sections now owned by Info.
     static let retiredVehicleDetailItems: Set<TabItemID> = [
         .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
         .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
@@ -166,6 +167,9 @@ enum TabItemCatalog {
         TabItem(id: .vehicleExceptions, title: L10n.text("Needs Attention"), symbol: "exclamationmark.circle.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Alarm, open panel, tyre, fluid and software exceptions.", feature: nil),
+        TabItem(id: .vehicleWeather, title: L10n.text("Ambient Conditions"), symbol: "cloud.sun",
+                sourceTab: .vehicle, kind: .card,
+                detail: "Weather at the vehicle's reported position.", feature: .vehicleWeather),
         TabItem(id: .vehicleCharging, title: L10n.text("Charging"), symbol: "bolt.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Charge level, power, connector state and completion time.", feature: .chargingDetails),
@@ -418,7 +422,7 @@ enum TabItemCatalog {
         case .vehicle:
             return [
                 .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-                .vehicleExceptions, .vehicleCharging, .vehicleChargingPlanner,
+                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
                 .vehicleFuelEngine, .vehicleReadiness, .vehicleOpenings, .vehicleTyres,
                 .vehicleLocation, .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
                 .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics

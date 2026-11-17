@@ -403,8 +403,7 @@ struct SettingsDisplayCard: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                TextField("120", text: $gridCarbonIntensity)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField("120", text: $gridCarbonIntensity)
                     .frame(width: 55)
                     .multilineTextAlignment(.trailing)
                     .controlSize(.small)

@@ -3530,6 +3530,94 @@
 "Last known: %@" = "Last known: %@";
 "Limit step" = "Gränssteg";
 "Raise to %@" = "Höj till %@";
+"Lower to %@" = "Sänk till %@";
+"Type a value" = "Skriv ett värde";
+"From %1$@ to %2$@" = "Från %1$@ till %2$@";
 "Maximum" = "Högsta värde";
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
+
+// English fallback values pending translation
+"Hisingen is not connected to Home Assistant yet." = "Hisingen är inte ansluten till Home Assistant ännu.";
+"Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant avvisade den sparade token. Klistra in en ny långlivad token för att ansluta igen.";
+"New access token" = "Ny åtkomsttoken";
+"Save token" = "Spara token";
+
+// English fallback values pending translation
+"Needed to keep charger sessions in Hisingen's local history." = "Behövs för att spara laddarsessioner i Hisingens lokala historik.";
+
+// English fallback values pending translation
+"%@ accepted the command. Waiting for the charger to confirm." = "%@ tog emot kommandot. Väntar på att laddaren bekräftar.";
+"%@ did not accept the saved login" = "%@ godtog inte den sparade inloggningen";
+"%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ godtog inte den sparade inloggningen. Ange kontot och lösenordet igen för att ansluta på nytt.";
+"%@ is delaying the start" = "%@ fördröjer starten";
+"%@ is unreachable" = "%@ går inte att nå";
+"A charging schedule is active on the charger." = "Ett laddschema är aktivt på laddaren.";
+"Account email" = "Kontots e-postadress";
+"Charger connection" = "Anslutning till laddaren";
+"Connected through" = "Ansluten via";
+"Hisingen is not signed in to %@ yet." = "Hisingen är inte inloggad hos %@ ännu.";
+"Last update from %@ %@" = "Senaste uppdatering från %@ %@";
+"Metered by the charger and read from Home Assistant. Last charger reading %@." = "Uppmätt av laddaren och hämtad från Home Assistant. Senaste avläsning från laddaren %@.";
+"Metered by the charger and read from the %@ cloud. Last charger reading %@." = "Uppmätt av laddaren och hämtad från molnet hos %@. Senaste avläsning från laddaren %@.";
+"Optional. Connects a home charger to show its status, control it, and record what it measured. Easee and Zaptec sign in with their own account. Any other charger works through Home Assistant, such as NexBlue." = "Valfritt. Ansluter en hemmaladdare för att visa dess status, styra den och spara vad den har mätt. Easee och Zaptec loggar in med sitt eget konto. Andra laddare fungerar via Home Assistant, till exempel NexBlue.";
+"Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history." = "Planer körs i Home Assistant. Den här laddaren är ansluten direkt och erbjuder därför status, Ladda nu, Pausa och historik.";
+"Sending the pause command to %@" = "Skickar pausa-kommandot till %@";
+"Sending the start command to %@" = "Skickar startkommandot till %@";
+"Sessions are tied to this vehicle only. A car being near the charger is not enough." = "Sessioner kopplas bara till det här fordonet. Att en bil står nära laddaren räcker inte.";
+"Sign in" = "Logga in";
+"Sign in again in Settings." = "Logga in igen i Inställningar.";
+"Sign in and find chargers" = "Logga in och hitta laddare";
+"Sign in to %@ again" = "Logga in hos %@ igen";
+"Sign out" = "Logga ut";
+"Sign-in rejected" = "Inloggningen nekades";
+"Signing in…" = "Loggar in…";
+"The account or password was not accepted." = "Kontot eller lösenordet godtogs inte.";
+"The charger is unavailable in %@" = "Laddaren är inte tillgänglig i %@";
+"The charger service asked Hisingen to slow down. It will try again shortly." = "Laddartjänsten bad Hisingen att ta det lugnare. Den försöker igen om en stund.";
+"The charger service could not be reached." = "Laddartjänsten gick inte att nå.";
+"The charger service does not know that item." = "Laddartjänsten känner inte till det.";
+"The charger service refused the request." = "Laddartjänsten avvisade förfrågan.";
+"The charger service sent an answer Hisingen could not read." = "Laddartjänsten skickade ett svar som Hisingen inte kunde läsa.";
+"The one you use in the %@ app. It is stored in the macOS Keychain and never exported." = "Det du använder i appen %@. Det sparas i macOS Nyckelhanteraren och exporteras aldrig.";
+"This account has no charger that Hisingen can control. Check that it is the owner account in the %@ app." = "Det här kontot har ingen laddare som Hisingen kan styra. Kontrollera att det är ägarkontot i appen %@.";
+"This account may not control that charger." = "Det här kontot får inte styra den laddaren.";
+"Connect a charger to view its status, control charging, and import sessions." = "Anslut en laddare för att se dess status, styra laddningen och importera laddsessioner.";
+"The charger is offline." = "Laddaren är offline.";
+
+"The charger's safety self-test failed." = "Laddarens säkerhetstest misslyckades.";
+"Charging is disabled on this charger." = "Laddning är avstängd på den här laddaren.";
+"Another user is using this charger." = "En annan användare använder laddaren.";
+"Current charger status is required to send this command." = "Kommandot kräver aktuell status från laddaren.";
+"This timer needs a NexBlue charger in Sweden set to normal scheduling mode." = "Timern kräver en NexBlue-laddare i Sverige med normalt schemaläge.";
+"An active schedule is already set in myNexBlue." = "Ett aktivt schema finns redan i myNexBlue.";
+"Both schedule slots are in use. You can manage them in myNexBlue." = "Båda schemaplatserna används. Du kan hantera dem i myNexBlue.";
+"Spot prices for the whole overnight period are not available yet." = "Spotpriser för hela natten är inte tillgängliga än.";
+"No timer window fits tonight. Try a shorter duration." = "Ingen tid passar i natt. Prova en kortare laddtid.";
+"The charger or window changed. Preview the timer again." = "Laddaren eller laddtiden har ändrats. Förhandsvisa timern igen.";
+"The timer could not be verified. Check Schedule in myNexBlue before trying again." = "Timern kunde inte bekräftas. Kontrollera Schemaläggning i myNexBlue innan du försöker igen.";
+"Cheapest overnight charge" = "Billigaste laddningen i natt";
+"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "Hitta ett engångspass mellan 18.00 och 07.00 för ditt valda elområde.";
+"Preview timer" = "Förhandsvisa timer";
+"Save timer" = "Spara timer";
+"Timer verified on the charger. You can manage it in myNexBlue." = "Timern är bekräftad på laddaren. Du kan hantera den i myNexBlue.";
+"Last successful import" = "Senaste slutförda import";
+"Imported date range" = "Importerat datumintervall";
+"Import earlier sessions" = "Importera äldre laddpass";
+"Choose up to one year of completed sessions to import." = "Välj upp till ett års avslutade laddpass att importera.";
+"Through" = "Till och med";
+
+// English fallback values pending translation
+"Connect and find homes" = "Anslut och hitta hem";
+"Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Skapa den på developer.tibber.com. Den sparas i macOS Nyckelhanteraren och exporteras aldrig.";
+"Currency" = "Valuta";
+"Disconnect Tibber" = "Koppla från Tibber";
+"Electricity Supplier" = "Elleverantör";
+"Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant." = "Valfritt. Ansluter Tibber för att prissätta laddsessioner med Tibbers egna 15-minuterspriser, utan Home Assistant.";
+"Prices" = "Priser";
+"Supplier" = "Leverantör";
+"This token has no Tibber home that Hisingen can read." = "Den här token har inget Tibber-hem som Hisingen kan läsa.";
+"Tibber access token" = "Tibber-åtkomsttoken";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger." = "Tibbers pris inkluderar energi, skatter och påslag men inte nätavgiften. Ange nätavgiften på den parkopplade laddaren.";
+"Use this home" = "Använd det här hemmet";
+"Used for charging sessions" = "Används för laddsessioner";

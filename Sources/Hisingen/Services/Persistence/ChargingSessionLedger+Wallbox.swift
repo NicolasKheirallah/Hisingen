@@ -94,6 +94,15 @@ extension ChargingSessionLedger {
         // 2. The same charge under another key: join rather than add.
         if let twin = try wallboxRowOverlapping(chargerID: candidate.chargerID, start: candidate.startedAt, end: candidate.endedAt) {
             let existingRank = twin.keyKind.flatMap(HomeChargingSessionCandidate.KeyKind.init(rawValue:))?.rank ?? 0
+            if candidate.keyKind == .vendorWindow, twin.keyKind == candidate.keyKind.rawValue {
+                guard let measured = twin.measuredAt, candidate.measuredAt >= measured,
+                      twin.start != candidate.startedAt || twin.end != candidate.endedAt ||
+                          !Self.sameFigures(twin, candidate, cost: cost) else {
+                    return WallboxRecordResult(rowID: twin.id, kind: .unchanged)
+                }
+                try writeWallboxColumns(rowID: twin.id, candidate: candidate, cost: cost, attribution: nil)
+                return WallboxRecordResult(rowID: twin.id, kind: .updated)
+            }
             if candidate.keyKind.rank > existingRank {
                 try writeWallboxColumns(rowID: twin.id, candidate: candidate, cost: cost, attribution: nil)
             } else if let measured = twin.measuredAt, candidate.measuredAt > measured {
@@ -108,7 +117,13 @@ extension ChargingSessionLedger {
 
         // 3. A genuinely new charge.
         switch decision {
-        case .enrich(let rowID, _):
+        case .enrich(let rowID, let vin):
+            if candidate.keyKind == .vendorWindow, try hasWallboxSession(rowID: rowID) {
+                // A vehicle can stay in one session while the charger records separate stop/start segments.
+                let id = try insertWallboxRow(candidate, vin: vin, cost: cost, locationName: locationName,
+                                              attribution: WallboxAttribution.overlap)
+                return WallboxRecordResult(rowID: id, kind: .inserted)
+            }
             try writeWallboxColumns(rowID: rowID, candidate: candidate, cost: cost, attribution: WallboxAttribution.overlap)
             return WallboxRecordResult(rowID: rowID, kind: .enriched)
         case .newForVehicle(let vin):
@@ -119,6 +134,14 @@ extension ChargingSessionLedger {
             let label = reason == .overlapsAnotherVehicle ? WallboxAttribution.anotherVehicle : WallboxAttribution.sharedWithoutOverlap
             let id = try insertWallboxRow(candidate, vin: "", cost: cost, locationName: locationName, attribution: label)
             return WallboxRecordResult(rowID: id, kind: .inserted)
+        }
+    }
+
+    private func hasWallboxSession(rowID: String) throws -> Bool {
+        try sql.query(sql: "SELECT 1 FROM charging_sessions WHERE id = ? AND wallbox_session_key IS NOT NULL;") { stmt in
+            try stmt.bindText(rowID, at: 1)
+        } process: { stmt in
+            try stmt.stepOrThrow()
         }
     }
 
@@ -286,6 +309,26 @@ extension ChargingSessionLedger {
             if let chargerID { try stmt.bindText(chargerID, at: index); index += 1 }
             try stmt.bindInt64(Int64(limit), at: index)
         } process: { try Self.sessionRows($0) }) ?? []
+    }
+
+    /// The interval records of a charger's most recent sessions, newest first, for estimating its rate.
+    func recentWallboxIntervals(chargerID: String, limit: Int = 5) -> [[HomeEnergyInterval]] {
+        (try? sql.query(sql: """
+            SELECT wallbox_intervals FROM charging_sessions
+            WHERE wallbox_charger_id = ? AND wallbox_intervals IS NOT NULL
+            ORDER BY started_at DESC LIMIT ?;
+            """) { stmt in
+            try stmt.bindText(chargerID, at: 1)
+            try stmt.bindInt64(Int64(limit), at: 2)
+        } process: { stmt -> [[HomeEnergyInterval]] in
+            var all: [[HomeEnergyInterval]] = []
+            while try stmt.stepOrThrow() {
+                guard let text = stmt.columnText(at: 0), let data = text.data(using: .utf8),
+                      let intervals = try? JSONDecoder.iso.decode([HomeEnergyInterval].self, from: data) else { continue }
+                all.append(intervals)
+            }
+            return all
+        }) ?? []
     }
 
     /// How many rows carry a given wallbox key. Used by tests and by the sync summary.

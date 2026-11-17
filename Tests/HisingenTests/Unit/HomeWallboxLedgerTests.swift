@@ -58,6 +58,29 @@ struct HomeWallboxLedgerTests {
         #expect(ledger.recentChargingSessions(for: vin).count == 1)
     }
 
+    @Test func nexBluePauseAndResumeKeepSeparateMetersUnderOneVehicleSession() throws {
+        let ledger = VehicleDatabase.inMemory().charging
+        ingestVehicleCharge(ledger, vin: vin, from: 0, to: 135)
+        let observed = try #require(ledger.observedVehicleSessions(from: base, to: base.addingTimeInterval(135 * 60)).first)
+        let decision = HomeSessionAttribution.Decision.enrich(rowID: observed.id, vin: vin)
+        let first = candidate(key: "nexblue:first", kind: .vendorWindow, start: 0, end: 50, kwh: 6)
+        let resumed = candidate(key: "nexblue:resumed", kind: .vendorWindow, start: 50, end: 135, kwh: 10)
+        #expect(ledger.recordWallboxSession(first, decision: decision, cost: nil, locationName: "Home")?.kind == .enriched)
+        #expect(ledger.recordWallboxSession(resumed, decision: decision, cost: nil, locationName: "Home")?.kind == .inserted)
+        for session in [first, resumed] {
+            #expect(ledger.recordWallboxSession(session, decision: decision, cost: nil, locationName: "Home")?.kind == .unchanged)
+        }
+        let corrected = candidate(key: "nexblue:corrected", kind: .vendorWindow, start: 50, end: 137, kwh: 11)
+        #expect(ledger.recordWallboxSession(corrected, decision: decision, cost: nil, locationName: "Home")?.kind == .updated)
+        #expect(ledger.recordWallboxSession(resumed, decision: decision, cost: nil, locationName: "Home")?.kind == .unchanged)
+        var revisedEnergy = corrected
+        revisedEnergy.energyKwh = 10.8
+        #expect(ledger.recordWallboxSession(revisedEnergy, decision: decision, cost: nil, locationName: "Home")?.kind == .updated)
+        #expect(ledger.recordWallboxSession(revisedEnergy, decision: decision, cost: nil, locationName: "Home")?.kind == .unchanged)
+        let amounts = ledger.recentChargingSessions(for: vin).compactMap(\.wallbox?.energyKwh)
+        #expect(amounts.sorted() == [6, 10.8])
+    }
+
     @Test("A later sync with fresher figures updates the row in place")
     func refreshedFiguresUpdateInPlace() throws {
         let ledger = VehicleDatabase.inMemory().charging
@@ -203,6 +226,27 @@ struct HomeWallboxLedgerTests {
         #expect(ledger.domainSession(from: row).resolvedCost(policy: .fixed, fallbackPricePerKwh: 2) == nil)
     }
 
+    @Test("The planning rate is the median delivered power of recent sessions, ignoring idle time")
+    func rateFromRecentSessions() throws {
+        func session(_ kwhPerQuarter: [Double]) -> [HomeEnergyInterval] {
+            kwhPerQuarter.enumerated().map {
+                HomeEnergyInterval(start: base.addingTimeInterval(Double($0.offset) * 900),
+                                   end: base.addingTimeInterval(Double($0.offset + 1) * 900), kwh: $0.element)
+            }
+        }
+        // 1.8 kWh per quarter hour is 7.2 kW; the 0.05 kWh quarters are idle (0.2 kW) and do not dilute it.
+        #expect(abs((HomeChargingRate.estimate(fromSessions: [session([1.8, 1.8, 0.05, 1.8])]) ?? 0) - 7.2) < 0.001)
+        let median = HomeChargingRate.estimate(fromSessions: [session([1.8, 1.8]), session([2.75, 2.75]), session([1.4, 1.4])])
+        #expect(abs((median ?? 0) - 7.2) < 0.001)   // 7.2, 11.0 and 5.6 kW: the middle one
+        #expect(HomeChargingRate.estimate(fromSessions: [session([0.02, 0.03])]) == nil)
+        #expect(HomeChargingRate.estimate(fromSessions: []) == nil)
+
+        let ledger = VehicleDatabase.inMemory().charging
+        _ = ledger.recordWallboxSession(candidate(), decision: .newForVehicle(vin: vin), cost: nil, locationName: "Home")
+        let stored = HomeChargingRate.estimate(fromSessions: ledger.recentWallboxIntervals(chargerID: "NX1234567"))
+        #expect(abs((stored ?? 0) - 7.2) < 0.001)   // 16.2 kWh over 135 minutes of charging
+    }
+
     @Test("The interval record survives for later repricing")
     func intervalsAreKept() throws {
         let ledger = VehicleDatabase.inMemory().charging
@@ -252,7 +296,7 @@ struct HomeWallboxMigrationTests {
             PRAGMA user_version = 6;
             """)
         let database = VehicleDatabase(database: sqlite)
-        #expect(database.schemaVersion() == 7)
+        #expect(database.schemaVersion() == VehicleDatabase.latestSchemaVersion)
         let legacy = try #require(database.charging.recentChargingSessions(for: vin).first)
         #expect(legacy.id == "legacy-1")
         #expect(legacy.energyDeliveredKwh == 30.0)

@@ -28,10 +28,6 @@ struct PanelLayout: Equatable {
         min(unclampedHeight, max(Self.minimumHeight, availableHeight - 24))
     }
 
-    /// Width fixed-width views lay out at. Identical to `width` now that nothing scales the tree.
-    var logicalWidth: CGFloat { width }
-    var logicalHeight: CGFloat { height }
-
     /// Compact "430 × 580" style summary for readouts and menu items.
     var dimensionsLabel: String { "\(Int(width)) × \(Int(unclampedHeight))" }
 

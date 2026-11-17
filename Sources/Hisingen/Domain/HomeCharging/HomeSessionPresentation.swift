@@ -11,10 +11,12 @@ struct WallboxSessionPresentation: Equatable {
 
     init(_ wallbox: WallboxMeasurement, currencyFallback: String) {
         energyValue = Format.energyKwh(wallbox.energyKwh)
-        energyInfo = L10n.format(
-            "Metered by the charger and read from Home Assistant. Last charger reading %@.",
-            Format.dateTimeFormatter.string(from: wallbox.measuredAt)
-        )
+        let measuredAt = Format.dateTimeFormatter.string(from: wallbox.measuredAt)
+        if let vendor = Self.vendorName(for: wallbox.energySource) {
+            energyInfo = L10n.format("Metered by the charger and read from the %@ cloud. Last charger reading %@.", vendor, measuredAt)
+        } else {
+            energyInfo = L10n.format("Metered by the charger and read from Home Assistant. Last charger reading %@.", measuredAt)
+        }
         let currency = wallbox.currency ?? currencyFallback
         if let cost = wallbox.cost {
             costValue = Format.currency(cost, symbol: currency)
@@ -35,6 +37,11 @@ struct WallboxSessionPresentation: Equatable {
         costInfo = lines.isEmpty ? nil : lines.joined(separator: " ")
     }
 
+    /// The vendor a session's energy came straight from, or `nil` when it came through Home Assistant.
+    static func vendorName(for energySource: String) -> String? {
+        ChargerSource.allCases.first { $0.isDirect && energySource.hasPrefix("\($0.rawValue)_") }?.providerName
+    }
+
     private static func methodSentence(_ method: HomeSessionCost.Method) -> String {
         switch method {
         case .intervalTibber: return L10n.text("Priced per 15-minute interval from the charger's own readings.")
@@ -42,5 +49,30 @@ struct WallboxSessionPresentation: Equatable {
         case .totalSpotPolicy: return L10n.text("Only the session total was available, so this is an estimate.")
         case .totalFixedTariff: return L10n.text("Only the session total was available, so this is an estimate.")
         }
+    }
+}
+
+/// The charging rate a plan should assume, taken from what the charger actually delivered.
+enum HomeChargingRate {
+    /// Intervals under this are idle time between bursts, not charging.
+    static let activeThresholdKw = 0.5
+
+    /// The median, over recent sessions, of the average power while the charger was delivering.
+    /// `nil` when no session has intervals fine enough to tell.
+    static func estimate(fromSessions sessions: [[HomeEnergyInterval]]) -> Double? {
+        let rates = sessions.compactMap { intervals -> Double? in
+            var hours = 0.0
+            var kwh = 0.0
+            for interval in intervals {
+                let span = interval.end.timeIntervalSince(interval.start) / 3_600
+                guard span > 0, interval.kwh / span >= activeThresholdKw else { continue }
+                hours += span
+                kwh += interval.kwh
+            }
+            return hours > 0 ? kwh / hours : nil
+        }.sorted()
+        guard !rates.isEmpty else { return nil }
+        let middle = rates.count / 2
+        return rates.count % 2 == 1 ? rates[middle] : (rates[middle - 1] + rates[middle]) / 2
     }
 }

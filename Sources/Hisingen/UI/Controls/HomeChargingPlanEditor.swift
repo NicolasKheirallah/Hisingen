@@ -210,7 +210,7 @@ struct HomeChargingPlanEditor: View {
     @ViewBuilder
     private var conflictsSection: some View {
         let conflicts = HomeChargingConflicts.evaluate(
-            vehicle: state.energy, pairing: pairing ?? NexBlueSetupFallback.pairing, telemetry: model.telemetry,
+            vehicle: state.energy, pairing: pairing ?? NoPairingYet.pairing, telemetry: model.telemetry,
             now: model.clock, automations: automations)
         if !conflicts.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
@@ -308,7 +308,7 @@ struct HomeChargingPlanEditor: View {
     }
 
     private func makeRequest() -> HomeChargingPlanRequest {
-        let pairing = pairing ?? NexBlueSetupFallback.pairing
+        let pairing = pairing ?? NoPairingYet.pairing
         return HomeChargingPlanRequest(
             planID: UUID().uuidString, chargerID: pairing.chargerID, entities: pairing.entities,
             target: HomePlanTarget(kind: kind, value: kind == .addKwh ? kwh : percent),
@@ -316,7 +316,7 @@ struct HomeChargingPlanEditor: View {
             vehicleName: state.identity.modelName ?? state.model.brand.displayName,
             usableCapacityKwh: capacityKwh, chargingLossFactor: ChargingPlannerSupport.chargingLossFactor,
             tibberHome: pairing.tibberHome, networkFeeOrePerKwh: pairing.networkFeeOrePerKwh,
-            rateHintKw: preferences.electricityChargerPowerKw)
+            rateHintKw: model.recentChargingRateKw() ?? preferences.electricityChargerPowerKw)
     }
 
     private func refreshPreview() async {
@@ -344,7 +344,7 @@ struct HomeChargingPlanEditor: View {
 }
 
 /// Shown only while the pairing has not loaded yet; never reached once a charger is paired.
-private enum NexBlueSetupFallback {
+private enum NoPairingYet {
     static let pairing = HomeChargingPairing(
         baseURL: "", chargerID: "", chargerName: "", entities: HomeChargerEntityMap(), vin: "", locationID: nil, locationAlias: "")
 }

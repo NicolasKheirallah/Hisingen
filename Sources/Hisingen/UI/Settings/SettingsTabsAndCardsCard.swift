@@ -400,8 +400,7 @@ struct SettingsTabsAndCardsCard: View {
     private func customTabEditor(_ tab: CustomTab) -> some View {
         HStack(spacing: 6) {
             if renamingTabID == tab.id {
-                TextField(L10n.text("Tab name"), text: $renameText)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField(L10n.text("Tab name"), text: $renameText)
                     .controlSize(.small)
                     .onSubmit {
                         var updated = composition
@@ -789,8 +788,7 @@ struct SettingsTabsAndCardsCard: View {
                 .hisType(.caption)
                 .foregroundStyle(.secondary)
 
-            TextField(L10n.text("Tab name"), text: $newTabName)
-                .textFieldStyle(.roundedBorder)
+            HisTextField(L10n.text("Tab name"), text: $newTabName)
                 .onSubmit(createTab)
 
             ScrollView {

@@ -22,6 +22,8 @@ extension NowQuickControl {
             switch control {
             case .locks, .climate: return true
             case .charging: return hasElectricRange
+            case .chargeLimit: return hasElectricRange && profile.permits(.chargeTarget)
+            case .currentLimit: return hasElectricRange && profile.permits(.chargingCurrentLimit)
             case .airCleaning: return profile.permits(.preCleaning)
             case .windows: return profile.permits(.windows)
             case .locate: return profile.permits(.honkAndFlash)

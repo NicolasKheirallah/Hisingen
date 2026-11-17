@@ -77,8 +77,6 @@ extension HisingenTheme {
     /// every display, value and label, Medium only where weight is asked for at caption size or
     /// for emphasis a single weight cannot carry. Monospaced design keeps the system face, which
     /// the plate and code readouts rely on.
-    nonisolated static let houseFamily = "Helvetica Neue"
-
     nonisolated static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
         if design == .monospaced {
             return .system(size: size, weight: weight == .regular ? .regular : .medium, design: .monospaced)

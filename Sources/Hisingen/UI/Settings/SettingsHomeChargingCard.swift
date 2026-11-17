@@ -17,17 +17,26 @@ struct SettingsHomeChargingCard: View {
     @State private var failure: String?
     @State private var selectedCharger = ""
     @State private var map = HomeChargerEntityMap()
-    @State private var vin = ""
-    @State private var locationID = ""
-    @State private var isShared = false
-    @State private var feeText = "0"
+    @State var vin = ""
+    @State var locationID = ""
+    @State var isShared = false
+    @State var feeText = "0"
     @State private var confirmsErase = false
+    @State private var showsNexBlueBackfill = false
+    // The setup extension shares these fields with the connection picker.
+    @State var source: ChargerSource = .homeAssistant
+    @State var account = ""
+    @State var password = ""
+    @State var directChargers: [DirectChargerSummary]?
+    @State var directSelection = ""
+    @State var directFailure: String?
+    @State var isSigningIn = false
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "powerplug", title: L10n.text("Home Charging"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Optional. Connects a charger that Home Assistant manages, such as NexBlue, to show its status, control it, and record what it measured."))
+                Text(L10n.text("Connect a charger to view its status, control charging, and import sessions."))
                     .hisType(.caption)
                     .foregroundStyle(HisingenTheme.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -48,22 +57,44 @@ struct SettingsHomeChargingCard: View {
         } message: {
             Text(L10n.text("The saved token and the charger pairing are deleted. Charging history that was already recorded stays."))
         }
+        .sheet(isPresented: $showsNexBlueBackfill) {
+            if let pairing = model.pairing, pairing.source == .nexBlue {
+                NexBlueHistorySheet(model: model, timeZone: pairing.timeZone)
+            }
+        }
     }
 
     // MARK: - Setup
 
     private var setupView: some View {
         VStack(alignment: .leading, spacing: 10) {
+            field(L10n.text("Charger connection"), detail: nil) {
+                Picker("", selection: $source) {
+                    ForEach(ChargerSource.allCases) { Text($0.providerName).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityLabel(L10n.text("Charger connection"))
+                .disabled(isSigningIn)
+                .onChange(of: source) { _, _ in directFailure = nil; directChargers = nil; failure = nil }
+            }
+            if source == .homeAssistant { homeAssistantSetup } else { directSetupView }
+        }
+    }
+
+    @ViewBuilder
+    private var homeAssistantSetup: some View {
+        VStack(alignment: .leading, spacing: 10) {
             field(L10n.text("Home Assistant address"), detail: L10n.text("For example http://homeassistant.local:8123")) {
                 TextField("", text: $address)
-                    .textFieldStyle(.roundedBorder)
+                    .hisField()
                     .autocorrectionDisabled()
                     .accessibilityLabel(L10n.text("Home Assistant address"))
             }
             field(L10n.text("Long-lived access token"),
                   detail: L10n.text("Create it in your Home Assistant profile under Security. It is stored in the macOS Keychain and never exported.")) {
                 SecureField("", text: $token)
-                    .textFieldStyle(.roundedBorder)
+                    .hisField()
                     .accessibilityLabel(L10n.text("Long-lived access token"))
             }
             HStack(spacing: 8) {
@@ -158,7 +189,7 @@ struct SettingsHomeChargingCard: View {
         field(L10n.text("Network fee, öre per kWh"),
               detail: L10n.text("Tibber's price leaves out the variable grid fee. Add yours here, or leave 0.")) {
             TextField("", text: $feeText)
-                .textFieldStyle(.roundedBorder).frame(width: 90).multilineTextAlignment(.trailing)
+                .hisField().frame(width: 90).multilineTextAlignment(.trailing)
                 .accessibilityLabel(L10n.text("Network fee in öre per kWh"))
         }
         if !map.missingRequired.isEmpty {
@@ -175,7 +206,11 @@ struct SettingsHomeChargingCard: View {
     @ViewBuilder
     private func pairedView(_ pairing: HomeChargingPairing) -> some View {
         VStack(spacing: 4) {
-            KVRow(L10n.text("Home Assistant"), HomeAssistantAddressText.host(pairing.baseURL))
+            if pairing.source.isDirect {
+                KVRow(L10n.text("Connected through"), pairing.source.providerName)
+            } else {
+                KVRow(L10n.text("Home Assistant"), HomeAssistantAddressText.host(pairing.baseURL))
+            }
             KVRow(L10n.text("Connection"), linkText, valueWarning: linkIsProblem)
             if let contact = model.lastContact {
                 KVRow(L10n.text("Last contact"), HomeChargingTime.time(contact, in: pairing.timeZone))
@@ -184,27 +219,73 @@ struct SettingsHomeChargingCard: View {
             KVRow(L10n.text("Vehicle"), vehicleTitle(pairing.vin))
             KVRow(L10n.text("Charge location"), pairing.locationAlias.isEmpty ? L10n.text("None") : pairing.locationAlias)
             KVRow(L10n.text("Shared charger"), pairing.isSharedCharger ? L10n.text("Yes") : L10n.text("No"))
-            KVRow(L10n.text("Hisingen component"), componentText,
-                  info: L10n.text("The component runs plans inside Home Assistant and records finished sessions there, so they survive a closed Mac. Plans need it; status, controls and history do not."))
+            if !pairing.source.isDirect {
+                KVRow(L10n.text("Hisingen component"), componentText,
+                      info: L10n.text("The component runs plans inside Home Assistant and records finished sessions there, so they survive a closed Mac. Plans need it; status, controls and history do not."))
+            }
             KVRow(L10n.text("Session history"), syncText)
+            if pairing.source == .nexBlue, let receipt = model.lastNexBlueImport {
+                KVRow(L10n.text("Last successful import"), HomeChargingTime.dateTime(receipt.importedAt, in: pairing.timeZone))
+                KVRow(L10n.text("Imported date range"), HomeChargingTime.range(receipt.range, in: pairing.timeZone))
+            }
         }
+        // Charger sessions are only kept when the existing history switch is on, so it sits here
+        // beside the row that reports it.
+        toggleRow(L10n.text("Charging Session History"),
+                  detail: L10n.text("Needed to keep charger sessions in Hisingen's local history."),
+                  isOn: binder.toggle(\.storeChargingHistory, .presentation))
         HStack(spacing: 8) {
             Button { Task { await model.syncSessions() } } label: { Text(L10n.text("Import sessions now")).frame(minHeight: 24) }
                 .buttonStyle(.hisSecondary)
+                .disabled(model.syncState == .running)
             Button { model.refreshNow() } label: { Text(L10n.text("Reconnect")).frame(minHeight: 24) }
                 .buttonStyle(.hisSecondary)
         }
+        if pairing.source == .nexBlue {
+            Button(L10n.text("Import earlier sessions")) { showsNexBlueBackfill = true }
+                .buttonStyle(.hisSecondary)
+                .disabled(!model.canBackfillNexBlue)
+        }
+        if model.link == .unauthorized, pairing.source.isDirect {
+            directReloginForm(pairing)
+        } else if model.link == .unauthorized {
+            field(L10n.text("New access token"), detail: L10n.text("Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.")) {
+                HStack(spacing: 8) {
+                    SecureField("", text: $token)
+                        .hisField()
+                        .accessibilityLabel(L10n.text("New access token"))
+                    Button {
+                        do { try model.replaceToken(token); token = ""; failure = nil } catch { failure = error.localizedDescription }
+                    } label: { Text(L10n.text("Save token")).frame(minHeight: 24) }
+                        .buttonStyle(.hisProminent)
+                        .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            if let failure {
+                Text(failure).hisType(.label).foregroundStyle(HisingenTheme.semanticCritical)
+            }
+        }
+        if pairing.source.isDirect && pairing.source != .nexBlue {
+            Text(L10n.text("Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history."))
+                .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
+        }
+        // Tibber's price leaves out the grid fee, whichever way the charger is connected.
         field(L10n.text("Network fee, öre per kWh"), detail: L10n.text("Added to Tibber prices when pricing sessions.")) {
             TextField("", text: $feeText, onCommit: { model.updateNetworkFee(Double(feeText.replacingOccurrences(of: ",", with: ".")) ?? 0) })
-                .textFieldStyle(.roundedBorder).frame(width: 90).multilineTextAlignment(.trailing)
+                .hisField().frame(width: 90).multilineTextAlignment(.trailing)
                 .accessibilityLabel(L10n.text("Network fee in öre per kWh"))
         }
         .onAppear { feeText = String(format: "%g", locale: L10n.displayLocale, pairing.networkFeeOrePerKwh) }
         HStack(spacing: 8) {
-            Button { model.unpair() } label: { Text(L10n.text("Unpair charger")).frame(minHeight: 24) }
+            Button { Task { await model.unpairCancellingPlan(); discovery = nil } } label: { Text(L10n.text("Unpair charger")).frame(minHeight: 24) }
                 .buttonStyle(.hisSecondary)
-            Button { confirmsErase = true } label: { Text(L10n.text("Remove token")).frame(minHeight: 24) }
-                .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
+            if pairing.source.isDirect {
+                Button { model.signOutDirect(); directChargers = nil; password = "" } label: { Text(L10n.text("Sign out")).frame(minHeight: 24) }
+                    .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
+            } else {
+                Button { confirmsErase = true } label: { Text(L10n.text("Remove token")).frame(minHeight: 24) }
+                    .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
+            }
         }
         if case .finished(let summary) = model.syncState, summary.unassigned > 0 {
             Text(L10n.format("%d charger sessions could not be tied to a vehicle and are kept unassigned.", summary.unassigned))
@@ -226,7 +307,7 @@ struct SettingsHomeChargingCard: View {
         case .live: return L10n.text("Connected")
         case .reconnecting: return L10n.text("Reconnecting")
         case .unreachable: return L10n.text("Unreachable")
-        case .unauthorized: return L10n.text("Token rejected")
+        case .unauthorized: return model.pairing?.source.isDirect == true ? L10n.text("Sign-in rejected") : L10n.text("Token rejected")
         }
     }
 
@@ -240,7 +321,7 @@ struct SettingsHomeChargingCard: View {
 
     private var syncText: String {
         switch model.syncState {
-        case .idle: return L10n.text("Not imported yet")
+        case .idle: return model.lastNexBlueImport == nil ? L10n.text("Not imported yet") : L10n.text("Ready")
         case .running: return L10n.text("Importing")
         case .failed(let message): return message
         case .finished(let summary):
@@ -251,12 +332,12 @@ struct SettingsHomeChargingCard: View {
 
     // MARK: - Helpers
 
-    private var savedLocations: [ChargeLocationSnapshot] {
+    var savedLocations: [ChargeLocationSnapshot] {
         let snapshot = vin == state?.identity.vin ? state : fleet.snapshot(for: vin)
         return (snapshot?.energy.locations ?? []).filter { $0.isSavedLocation || !$0.alias.isEmpty }
     }
 
-    private func vehicleTitle(_ vin: String) -> String {
+    func vehicleTitle(_ vin: String) -> String {
         let snapshot = vin == state?.identity.vin ? state : fleet.snapshot(for: vin)
         let name = snapshot?.identity.modelName ?? snapshot?.model.brand.displayName ?? L10n.text("Vehicle")
         return "\(name) \(vin.suffix(4))"
@@ -277,7 +358,7 @@ struct SettingsHomeChargingCard: View {
         }
     }
 
-    private func field<Content: View>(_ title: String, detail: String?, @ViewBuilder content: () -> Content) -> some View {
+    func field<Content: View>(_ title: String, detail: String?, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -292,7 +373,7 @@ struct SettingsHomeChargingCard: View {
         }
     }
 
-    private func toggleRow(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+    func toggleRow(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).hisType(.body, weight: .medium).foregroundStyle(HisingenTheme.ink)
@@ -326,7 +407,7 @@ struct SettingsHomeChargingCard: View {
         }
     }
 
-    private func presenceLocationID() -> String? {
+    func presenceLocationID() -> String? {
         let snapshot = vin == state?.identity.vin ? state : fleet.snapshot(for: vin)
         return snapshot?.chargeLocationPresence?.locationID
     }

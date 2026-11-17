@@ -28,14 +28,6 @@ extension PreferencesStore {
         }
     }
 
-    nonisolated static var currentPolestarConnectionMode: PolestarConnectionMode {
-        guard let raw = UserDefaults.standard.string(forKey: "polestar_connection_mode"),
-              let mode = PolestarConnectionMode(rawValue: raw) else {
-            return .polestarID
-        }
-        return mode
-    }
-
     var email: String {
         get {
             if let cached = cachedEmail { return cached }

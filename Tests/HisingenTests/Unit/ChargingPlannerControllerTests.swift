@@ -228,6 +228,78 @@ struct ChargingPlannerControllerTests {
     }
 }
 
+// MARK: - Home Assistant ownership
+
+@Suite(.serialized)
+@MainActor
+struct ChargingPlannerOwnershipTests {
+    @Test
+    func theVehicleSideSchedulerDefersWhileHomeAssistantOwnsThePlan() async {
+        let owned = OwnershipFlag(true)
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            plannerOwned: { _ in owned.value }
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+
+        await harness.controller.evaluate()
+        await settle()
+        await harness.controller.evaluate()
+        await settle()
+
+        // No start command and no window banner from this Mac while Home Assistant runs the plan.
+        #expect(await harness.charger.dispatchCount == 0)
+        #expect(harness.notifier.notices.isEmpty)
+    }
+
+    @Test
+    func theSchedulerResumesWhenHomeAssistantHandsTheCarBack() async {
+        let owned = OwnershipFlag(true)
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            plannerOwned: { _ in owned.value }
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        var dispatches = harness.charger.dispatches.makeAsyncIterator()
+
+        await harness.controller.evaluate()
+        await settle()
+        #expect(await harness.charger.dispatchCount == 0)
+
+        owned.value = false
+        await harness.controller.evaluate()
+        _ = await dispatches.next()
+        await settle()
+        #expect(await harness.charger.dispatchCount == 1)
+    }
+
+    @Test
+    func aStartAlreadyQueuedIsDroppedIfOwnershipBeginsBeforeItSends() async {
+        let owned = OwnershipFlag(false)
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            plannerOwned: { _ in owned.value }
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        await harness.controller.evaluate()
+        // The reader hands the plan to Home Assistant in the same instant; whatever has not been sent stays unsent.
+        owned.value = true
+        await settle()
+        await harness.controller.evaluate()
+        await settle()
+        #expect(await harness.charger.dispatchCount <= 1)
+    }
+}
+
+@MainActor
+private final class OwnershipFlag {
+    var value: Bool
+    init(_ value: Bool) { self.value = value }
+}
+
 // MARK: - Harness
 
 /// Wires the controller to fakes. Everything is pinned: the clock, the price series, the
@@ -250,7 +322,8 @@ private final class PlannerHarness {
         now: Date = plannerDate(2026, 2, 10, 3, 30),
         series: [ElectricityPricePoint] = plannerHourlySeries(),
         vehicleState: VehicleState = vehicle(connection: .disconnected),
-        outcomes: [RemoteCommandDispatchOutcome] = []
+        outcomes: [RemoteCommandDispatchOutcome] = [],
+        plannerOwned: @escaping (String) -> Bool = { _ in false }
     ) {
         let scopedPreferences = ScopedPreferences(label: "ChargingPlannerController")
         let store = scopedPreferences.store
@@ -278,6 +351,7 @@ private final class PlannerHarness {
             priceSource: priceSource,
             database: database,
             latestState: { latest.state },
+            plannerOwnedByHomeAssistant: plannerOwned,
             activeVINs: { [] },
             startCharging: { _ in await charger.dispatch() },
             now: { now },

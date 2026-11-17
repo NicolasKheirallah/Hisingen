@@ -56,8 +56,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             guard try stmt.stepOrThrow(), let blob = stmt.columnBlob(at: 0) else { return nil }
             guard var state = try? JSONDecoder().decode(VehicleState.self, from: blob) else { return nil }
             if let fetchedAt = stmt.columnDate(at: 1) {
-                // Drop expired snapshots older than 7 days
-                if Date().timeIntervalSince(fetchedAt) > 7 * 24 * 60 * 60 {
+                if Date().timeIntervalSince(fetchedAt) > VehicleDatabase.cacheRetention {
                     snapshotExpired = true
                     return nil
                 }
@@ -66,7 +65,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             return state
         }
         if snapshotExpired {
-            deleteExpiredSnapshot(for: vin, cutoff: Date().addingTimeInterval(-7 * 24 * 60 * 60))
+            deleteExpiredSnapshot(for: vin, cutoff: Date().addingTimeInterval(-VehicleDatabase.cacheRetention))
             return nil
         }
         return state

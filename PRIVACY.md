@@ -325,6 +325,22 @@ Charging energy and cost information displayed by Hisingen may be calculated est
 
 ---
 
+### Home Charging (optional)
+
+If you connect a charger through Home Assistant, Hisingen talks only to the address you entered, on your own network. It reads the charger's status, power and session energy, and can start or stop the charger and submit a charging plan. No charger data goes to any other service.
+
+The Home Assistant access token is stored in the macOS Keychain in its own item. It is not written to settings archives, exports, logs or diagnostics. Removing the token in Settings deletes it, and erasing all data removes it with the pairing. Signing out of a vehicle account does not touch it.
+
+When you choose NexBlue directly, Hisingen sends your myNexBlue email and password to NexBlue to sign in. The macOS Keychain stores the NexBlue refresh token. Hisingen uses it to restore the connection and requests charger status, commands and finished sessions from NexBlue's cloud. When you preview an overnight timer, Hisingen reads the charger's schedule and time zone. Saving sends the chosen start and stop times to NexBlue. Hisingen keeps the time and date range of the last successful session import locally with the pairing. Signing out of NexBlue under Home Charging deletes the locally stored token and import details.
+
+When you choose Easee or Zaptec directly, Hisingen sends your account email and password to that vendor to sign in, then requests charger status, commands and finished sessions from the vendor's cloud. Neither vendor's token lasts more than an hour, so the account and password are stored together in one macOS Keychain item per vendor and used only to sign in again. They are not written to settings archives, exports, logs or diagnostics. Signing out under Home Charging deletes them, and erasing all data removes them with the pairing.
+
+If you connect Tibber, Hisingen sends your Tibber access token to Tibber's API to read your home's name and 15-minute import prices. The token is stored in the macOS Keychain, is not written to settings archives, exports, logs or diagnostics, and is deleted when you disconnect Tibber or erase all data. Only the Tibber home and its currency are kept in preferences. No charging data is sent to Tibber.
+
+Charger sessions are written to the charging history only when **Store charging history** is on. Each keeps the charger's identifier and the energy it measured. Sessions that cannot be tied to one of your vehicles are kept without a vehicle.
+
+---
+
 ## 12. Historical Telemetry
 
 Hisingen can maintain local historical telemetry.

@@ -44,7 +44,6 @@ enum HisingenTheme {
     /// PanelLayout so every consumer agrees. Re-evaluated on each layout pass: changing either
     /// in Settings resizes the open dropdown immediately.
     static var panelLayout: PanelLayout { .resolve(from: .shared) }
-    /// Width that fixed-width views must lay out at. Identical to `width`, because nothing
-    /// scales the tree any more; kept named so call sites do not silently assume the two agree.
-    static var layoutWidth: CGFloat { panelLayout.logicalWidth }
+    /// Width that fixed-width views must lay out at: the panel's own width.
+    static var layoutWidth: CGFloat { panelLayout.width }
 }

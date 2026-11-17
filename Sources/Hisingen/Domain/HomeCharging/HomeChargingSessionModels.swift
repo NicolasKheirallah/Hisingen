@@ -16,6 +16,8 @@ struct HomeChargingSessionCandidate: Codable, Equatable, Sendable {
         /// The charger vendor's own session identifier. The Home Assistant NexBlue integration
         /// exposes none; the slot exists so a future version or another charger can supply one.
         case vendorSessionID = "vendor_session_id"
+        /// The vendor reported a finished session without an ID. Its time window identifies it.
+        case vendorWindow = "vendor_window"
         /// An identifier minted by the durable capture component inside Home Assistant.
         case captureID = "ha_capture_id"
         /// Reconstructed from the recorder history of the charger's own sensors.
@@ -23,8 +25,9 @@ struct HomeChargingSessionCandidate: Codable, Equatable, Sendable {
 
         var rank: Int {
             switch self {
-            case .vendorSessionID: return 3
-            case .captureID: return 2
+            case .vendorSessionID: return 4
+            case .captureID: return 3
+            case .vendorWindow: return 2
             case .history: return 1
             }
         }

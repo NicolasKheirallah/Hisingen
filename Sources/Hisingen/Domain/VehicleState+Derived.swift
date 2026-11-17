@@ -366,7 +366,7 @@ extension VehicleState {
     var model: VehicleModel { VehicleModel(modelName: modelName, vin: vin) }
 
     var isVolvo: Bool {
-        vin.uppercased().hasPrefix("YV")
+        VehicleBrand.isVolvoVIN(vin)
     }
 
     /// Current vehicle-reported range at the present SOC compared with a WLTP reference at the

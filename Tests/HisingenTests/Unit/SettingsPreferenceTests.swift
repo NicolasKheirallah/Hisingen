@@ -104,6 +104,28 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func settingsArchiveImportFiltersHandEditedFeatureList() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let notifications = AppFeature.notifications.rawValue
+        let vehicleImage = AppFeature.vehicleImage.rawValue
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "enabled_features_v2": [
+                    notifications, AppFeature.remoteLocks.rawValue,
+                    "unknown-feature", vehicleImage, notifications
+                ]
+            ],
+            format: .xml,
+            options: 0
+        )
+
+        try preferences.importSettingsPropertyList(data)
+        #expect(defaults.stringArray(forKey: "enabled_features_v2") == [notifications, vehicleImage, notifications])
+    }
+
+    @Test
     func settingsArchiveRejectsIdentityKeys() throws {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }

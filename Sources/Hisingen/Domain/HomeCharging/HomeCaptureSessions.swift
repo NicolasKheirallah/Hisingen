@@ -15,7 +15,9 @@ enum HomeCaptureSessions {
                   let start = object["started_at"]?.stringValue.flatMap(HATimestamp.parse),
                   let end = object["ended_at"]?.stringValue.flatMap(HATimestamp.parse), end > start,
                   let energy = object["energy_kwh"]?.doubleValue, energy > 0 else { return nil }
-            let intervals: [HomeEnergyInterval] = (object["intervals"]?.arrayValue ?? []).compactMap { item in
+            // A rise recorded across a long gap is a total, not a profile: its intervals are not trusted.
+            let coarse = object["coarse"]?.boolValue ?? false
+            let intervals: [HomeEnergyInterval] = coarse ? [] : (object["intervals"]?.arrayValue ?? []).compactMap { item in
                 guard let interval = item.objectValue,
                       let s = interval["start"]?.stringValue.flatMap(HATimestamp.parse),
                       let e = interval["end"]?.stringValue.flatMap(HATimestamp.parse),

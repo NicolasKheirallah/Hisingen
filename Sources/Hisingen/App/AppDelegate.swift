@@ -245,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     }
 
     func render() {
-        let isAuth = vehicleSession.sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
+        let isAuth = vehicleSession.sessionValid
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
         statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback

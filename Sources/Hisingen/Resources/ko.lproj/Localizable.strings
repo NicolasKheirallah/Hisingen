@@ -3513,6 +3513,95 @@
 "Last known: %@" = "Last known: %@";
 "Limit step" = "한도 단계";
 "Raise to %@" = "%@(으)로 올리기";
+"Lower to %@" = "%@(으)로 낮추기";
+"Type a value" = "값 입력";
+"From %1$@ to %2$@" = "%1$@에서 %2$@까지";
 "Maximum" = "최대";
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
+
+// English fallback values pending translation
+"Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
+"Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
+"New access token" = "New access token";
+"Save token" = "Save token";
+
+// English fallback values pending translation
+"Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
+
+// English fallback values pending translation
+"%@ accepted the command. Waiting for the charger to confirm." = "%@ accepted the command. Waiting for the charger to confirm.";
+"%@ did not accept the saved login" = "%@ did not accept the saved login";
+"%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ did not accept the saved login. Enter the account and password again to reconnect.";
+"%@ is delaying the start" = "%@ is delaying the start";
+"%@ is unreachable" = "%@ is unreachable";
+"A charging schedule is active on the charger." = "A charging schedule is active on the charger.";
+"Account email" = "Account email";
+"Charger connection" = "Charger connection";
+"Connected through" = "Connected through";
+"Hisingen is not signed in to %@ yet." = "Hisingen is not signed in to %@ yet.";
+"Last update from %@ %@" = "Last update from %@ %@";
+"Metered by the charger and read from Home Assistant. Last charger reading %@." = "Metered by the charger and read from Home Assistant. Last charger reading %@.";
+"Metered by the charger and read from the %@ cloud. Last charger reading %@." = "Metered by the charger and read from the %@ cloud. Last charger reading %@.";
+"Optional. Connects a home charger to show its status, control it, and record what it measured. Easee and Zaptec sign in with their own account. Any other charger works through Home Assistant, such as NexBlue." = "Optional. Connects a home charger to show its status, control it, and record what it measured. Easee and Zaptec sign in with their own account. Any other charger works through Home Assistant, such as NexBlue.";
+"Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history." = "Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history.";
+"Sending the pause command to %@" = "Sending the pause command to %@";
+"Sending the start command to %@" = "Sending the start command to %@";
+"Sessions are tied to this vehicle only. A car being near the charger is not enough." = "Sessions are tied to this vehicle only. A car being near the charger is not enough.";
+"Sign in" = "Sign in";
+"Sign in again in Settings." = "Sign in again in Settings.";
+"Sign in and find chargers" = "Sign in and find chargers";
+"Sign in to %@ again" = "Sign in to %@ again";
+"Sign out" = "Sign out";
+"Sign-in rejected" = "Sign-in rejected";
+"Signing in…" = "Signing in…";
+"The account or password was not accepted." = "The account or password was not accepted.";
+"The charger is unavailable in %@" = "The charger is unavailable in %@";
+"The charger service asked Hisingen to slow down. It will try again shortly." = "The charger service asked Hisingen to slow down. It will try again shortly.";
+"The charger service could not be reached." = "The charger service could not be reached.";
+"The charger service does not know that item." = "The charger service does not know that item.";
+"The charger service refused the request." = "The charger service refused the request.";
+"The charger service sent an answer Hisingen could not read." = "The charger service sent an answer Hisingen could not read.";
+"The one you use in the %@ app. It is stored in the macOS Keychain and never exported." = "The one you use in the %@ app. It is stored in the macOS Keychain and never exported.";
+"This account has no charger that Hisingen can control. Check that it is the owner account in the %@ app." = "This account has no charger that Hisingen can control. Check that it is the owner account in the %@ app.";
+"This account may not control that charger." = "This account may not control that charger.";
+
+"Connect a charger to view its status, control charging, and import sessions." = "충전기를 연결하면 상태를 확인하고 충전을 제어하며 충전 기록을 가져올 수 있습니다.";
+"The charger is offline." = "충전기가 오프라인입니다.";
+
+"The charger's safety self-test failed." = "충전기의 안전 자가 진단에 실패했습니다.";
+"Charging is disabled on this charger." = "이 충전기에서 충전이 비활성화되어 있습니다.";
+"Another user is using this charger." = "다른 사용자가 이 충전기를 사용 중입니다.";
+"Current charger status is required to send this command." = "이 명령을 보내려면 충전기의 최신 상태가 필요합니다.";
+"This timer needs a NexBlue charger in Sweden set to normal scheduling mode." = "이 타이머는 일반 예약 모드로 설정된 스웨덴 내 NexBlue 충전기에서 사용할 수 있습니다.";
+"An active schedule is already set in myNexBlue." = "myNexBlue에 이미 활성 예약이 있습니다.";
+"Both schedule slots are in use. You can manage them in myNexBlue." = "예약 칸 두 개가 모두 사용 중입니다. myNexBlue에서 관리할 수 있습니다.";
+"Spot prices for the whole overnight period are not available yet." = "밤 시간 전체의 전력 현물 가격이 아직 제공되지 않았습니다.";
+"No timer window fits tonight. Try a shorter duration." = "오늘 밤에는 맞는 시간대가 없습니다. 충전 시간을 줄여 보세요.";
+"The charger or window changed. Preview the timer again." = "충전기 또는 시간대가 변경되었습니다. 타이머를 다시 미리 보세요.";
+"The timer could not be verified. Check Schedule in myNexBlue before trying again." = "타이머를 확인하지 못했습니다. 다시 시도하기 전에 myNexBlue에서 예약을 확인하세요.";
+"Cheapest overnight charge" = "가장 저렴한 야간 충전";
+"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "선택한 전력 가격 지역에서 18:00부터 07:00 사이의 일회성 충전 시간대를 찾습니다.";
+"Preview timer" = "타이머 미리 보기";
+"Save timer" = "타이머 저장";
+"Timer verified on the charger. You can manage it in myNexBlue." = "충전기에서 타이머를 확인했습니다. myNexBlue에서 관리할 수 있습니다.";
+"Last successful import" = "마지막으로 완료한 가져오기";
+"Imported date range" = "가져온 날짜 범위";
+"Import earlier sessions" = "이전 충전 세션 가져오기";
+"Choose up to one year of completed sessions to import." = "가져올 완료된 충전 세션을 최대 1년 범위에서 선택하세요.";
+"Through" = "종료일 포함";
+
+// English fallback values pending translation
+"Connect and find homes" = "Connect and find homes";
+"Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported.";
+"Currency" = "Currency";
+"Disconnect Tibber" = "Disconnect Tibber";
+"Electricity Supplier" = "Electricity Supplier";
+"Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant." = "Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant.";
+"Prices" = "Prices";
+"Supplier" = "Supplier";
+"This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
+"Tibber access token" = "Tibber access token";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger.";
+"Use this home" = "Use this home";
+"Used for charging sessions" = "Used for charging sessions";

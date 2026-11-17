@@ -18,9 +18,7 @@ extension AppDelegate: VehicleSessionControllerContext {
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
         chargingPlannerController.vehicleStateDidUpdate(state)
-        if !state.commandState.receipts.contains(where: {
-            $0.status.isAwaiting && $0.supportsTelemetryConfirmation
-        }) {
+        if !state.commandState.hasAwaitingTelemetryConfirmation {
             fleetStore.retain(state)
         }
     }

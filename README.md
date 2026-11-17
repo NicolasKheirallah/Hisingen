@@ -15,7 +15,7 @@ Built with AppKit and SwiftUI. No Electron, no telemetry middlemen, and no third
 [Download DMG](https://github.com/NicolasKheirallah/Hisingen/releases/latest/download/Hisingen.dmg) · [Changelog](CHANGELOG.md) · [FAQ](#faq) · [Documentation](docs/README.md) · [Contributing](CONTRIBUTING.md)
 
 <p align="center">
-  <img src="assets/vehicle-overview-factory-art.png" width="460" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
+  <img src="assets/screenshots/now.png" width="560" alt="Hisingen Now tab showing a sample Polestar 2 at 72% battery with 308 km of estimated range and cards for locks, climate and charging">
 </p>
 
 > [!IMPORTANT]
@@ -123,28 +123,7 @@ Polestar doesn't currently provide a supported public vehicle API for third-part
 
 The Polestar integration therefore uses interfaces based on the services used by Polestar's own applications and real-world vehicle testing.
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Vehicle overview</strong><br><br>
-<img src="assets/vehicle-overview-factory-art.png" width="420" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
-</td>
-<td width="50%" align="center">
-<strong>Charging history</strong><br><br>
-<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Doors &amp; openings</strong><br><br>
-<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
-</td>
-<td width="50%" align="center">
-<strong>Remote controls</strong><br><br>
-<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
-</td>
-</tr>
-</table>
+See the [product tour](#product-tour) for screenshots with a sample Polestar 2.
 
 ### Volvo
 
@@ -264,16 +243,49 @@ A few more things that follow from the same history:
 
 ### Home charging (optional)
 
-If a charger is managed by Home Assistant, Hisingen can read it and show it beside the car.
-The charging card then adds the charger's own power, session energy and cost, and History rows
-show **Charger Energy** and **Charger Cost**. A charging plan can be handed to Home Assistant,
-which keeps running it when the Mac sleeps or Hisingen is closed.
+#### NexBlue
 
-**Settings → Home Charging** takes the Home Assistant address and a long-lived access token,
-finds the charger (NexBlue first, or map the entities by hand), and pairs it to one vehicle.
-The token is stored in the macOS Keychain, is never exported, and the app talks only to the
-address you entered. Plans need the small Hisingen component installed in Home Assistant;
-status, controls and charger history work without it.
+Open **Settings → Electricity → Home Charging** to pair a charger to a vehicle. Choose
+**NexBlue**, sign in with your myNexBlue account, then select the charger and vehicle.
+The connection works without Home Assistant and saves the NexBlue refresh token in the macOS Keychain.
+The screenshots below use sample charger and vehicle data.
+
+**Charge now and Pause** require a live connection and a fresh charger reading. After NexBlue
+accepts a command, the card waits for the charger to confirm it. Refusals such as disabled
+charging or another user on the charger have their own messages.
+
+<img src="assets/screenshots/3.0.0/nexblue-charger-controls.png" width="464" loading="lazy" alt="NexBlue charger card waiting for the charger to confirm a start command">
+
+**Cheapest overnight charge** previews a one-time window of 1–8 hours between 18:00 and 07:00
+using the selected Swedish spot price area and the charger's time zone. It requires an owner
+account, normal scheduling mode, and a free slot. An active schedule blocks a new timer. Hisingen
+reads the timer back after saving it to the charger, which can run it while the Mac sleeps.
+
+<img src="assets/screenshots/3.0.0/nexblue-overnight-timer.png" width="432" loading="lazy" alt="Three-hour timer preview showing 01:00 to 04:00 in Europe/Stockholm and a Save timer button">
+
+**Import earlier sessions** in Home Charging settings lets you select up to a year at a time when
+charging history is on. The settings show the time and date range of the last successful import.
+Repeating an import keeps one copy of each session, and separate sessions after a pause keep
+their own energy readings.
+
+<img src="assets/screenshots/3.0.0/nexblue-import-range.png" width="432" loading="lazy" alt="Import earlier sessions sheet with start and end date fields">
+
+<img src="assets/screenshots/3.0.0/nexblue-import-summary.png" width="560" loading="lazy" alt="Home Charging settings showing a successful NexBlue session import and the date range checked">
+
+#### Easee, Zaptec and Home Assistant
+
+Choose **Easee** or **Zaptec** to sign in with the account you use in the vendor's app. They
+show status and power, offer **Charge now** and **Pause**, and import finished sessions. Plans
+need Home Assistant. The account and password are stored in the macOS Keychain.
+
+Open **Settings → Electricity → Electricity Supplier** to connect Tibber with an access token.
+Charging sessions are then priced from Tibber's own 15-minute prices, with no Home Assistant
+needed. The token is stored in the macOS Keychain.
+
+Choose **Home Assistant** to connect through its address and access token. The optional
+Hisingen component runs charging plans while the Mac sleeps or Hisingen is closed.
+History can show **Charger Energy** and **Charger Cost**. When Hisingen computes a cost
+from session totals and your electricity settings, it labels the cost as an estimate.
 
 The [Home Charging guide](docs/home-charging.md) covers the component install, entity mapping,
 plans, prices, privacy and troubleshooting.
@@ -594,129 +606,37 @@ If you're using Hisingen with a car or configuration that hasn't been tested bef
 
 ## Product tour
 
-These captures were taken before the 3.0.0 redesign. That release renamed the four tabs to
-Now, Plan, Log and Car and redrew how each one reads. DESIGN.md describes the shipped views, and
-the render test named there writes current snapshots of every surface to a local folder.
+These screenshots use sample data for a Polestar 2.
 
-The screenshots below show the main views of the app.
+### Now
 
-<details open>
-<summary><strong>Vehicle</strong></summary>
+Check the car’s battery, estimated range and lock status. If the car supports remote climate, you can start or stop it from the same panel.
 
-<br>
+<img src="assets/screenshots/now-charging-dark.png" width="620" loading="lazy" alt="Now tab in dark mode with amber cards for active cabin heating and charging">
 
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>Vehicle overview with factory render</strong><br><br>
-<img src="assets/vehicle-overview-factory-art.png" width="460" loading="lazy" alt="Hisingen Vehicle tab with the factory render of a Polestar 2, battery level, estimated range and lock, climate and charge quick actions">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Charging history &amp; session curve</strong><br><br>
-<img src="assets/vehicle-charging-history-expanded.png" width="420" loading="lazy" alt="Hisingen charging history with one session expanded, showing its charging curve, duration, estimated energy, estimate quality, peak power and cost">
-</td>
-<td width="50%" align="center">
-<strong>Charging planner &amp; spot prices</strong><br><br>
-<img src="assets/vehicle-charging-planner.png" width="420" loading="lazy" alt="Hisingen charging planner showing the cheapest window to reach 90% and an hourly spot-price chart">
-</td>
-</tr>
-</table>
+### Plan
 
-</details>
+Check whether charging will finish before departure. Plan also shows cabin climate timers and lets you adjust the charge target or current limit.
 
-<details>
-<summary><strong>Remote Controls</strong></summary>
+<img src="assets/screenshots/plan.png" width="620" loading="lazy" alt="Plan tab showing the departure check, a 24-hour timeline, a cabin climate timer and charging controls">
 
-<br>
+### Log
 
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Controls overview &amp; command confirmation</strong><br><br>
-<img src="assets/controls-overview.png" width="420" loading="lazy" alt="Hisingen Controls tab with climate and charge target readouts, the enabled remote command groups, a lock confirmation and a Start Climate button">
-</td>
-<td width="50%" align="center">
-<strong>Climate &amp; charging controls</strong><br><br>
-<img src="assets/controls-charging.png" width="420" loading="lazy" alt="Hisingen climate and charging controls with target limit and current limit selectors and Charge Now and Resume Schedule buttons">
-</td>
-</tr>
-</table>
+Pick a period to review activity. The charge-level chart shows the battery level at the start and end of each charging session.
 
-</details>
+<img src="assets/screenshots/log.png" width="620" loading="lazy" alt="Log tab showing 30 days of estimated charging energy, four charge-level ranges and a month-to-month comparison">
 
-<details>
-<summary><strong>History &amp; Energy Analytics</strong></summary>
+### Car
 
-<br>
+Find the model year, odometer, battery capacity and charge port type in one place.
 
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>History overview &amp; observed changes</strong><br><br>
-<img src="assets/history-overview.png" width="460" loading="lazy" alt="Hisingen History tab with a 30-day distance chart, trip, driving time, energy and cost totals, and a list of observed lock changes">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Monthly mileage &amp; detected trips</strong><br><br>
-<img src="assets/history-trips-and-charging.png" width="420" loading="lazy" alt="Hisingen monthly mileage report split into business, private and unclassified trips, with a paged list of detected trips">
-</td>
-<td width="50%" align="center">
-<strong>Charging &amp; consumption trends</strong><br><br>
-<img src="assets/history-charging-trends.png" width="420" loading="lazy" alt="Hisingen charging trends summary and a consumption trend chart in kWh per 100 km">
-</td>
-</tr>
-<tr>
-<td width="50%" align="center">
-<strong>Odometer &amp; battery health trends</strong><br><br>
-<img src="assets/history-odometer-and-battery-health.png" width="420" loading="lazy" alt="Hisingen odometer history, average daily distance and a battery health trend with degradation and usable capacity">
-</td>
-<td width="50%" align="center">
-<strong>Usage insights &amp; driving patterns</strong><br><br>
-<img src="assets/history-insights.png" width="420" loading="lazy" alt="Hisingen month-over-month comparison, observed air-cleaning runs, emissions compared with a petrol car and a driving patterns chart">
-</td>
-</tr>
-</table>
+<img src="assets/screenshots/car.png" width="620" loading="lazy" alt="Car tab showing the Polestar 2 profile and specifications above timestamps for battery and range readings">
 
-</details>
+### Settings
 
-<details>
-<summary><strong>Vehicle Info</strong></summary>
+Open **Appearance → Create Theme** to preview your accent and background colours in light and dark mode.
 
-<br>
-
-<table>
-<tr>
-<td width="50%" align="center">
-<strong>Vehicle identity &amp; reading freshness</strong><br><br>
-<img src="assets/info-vehicle-identity.png" width="420" loading="lazy" alt="Hisingen Info tab with vehicle identity, battery capacity, estimated range, charge port type and the time of each reading">
-</td>
-<td width="50%" align="center">
-<strong>Doors, openings &amp; tyre status</strong><br><br>
-<img src="assets/info-doors-tires.png" width="420" loading="lazy" alt="Hisingen doors and openings status with the indirect tyre pressure monitoring status">
-</td>
-</tr>
-</table>
-
-</details>
-
-<details>
-<summary><strong>Preferences &amp; Customization</strong></summary>
-
-<br>
-
-<table>
-<tr>
-<td colspan="2" align="center">
-<strong>Appearance, themes &amp; vehicle perspective</strong><br><br>
-<img src="assets/settings-appearance.png" width="460" loading="lazy" alt="Hisingen Settings window on Appearance, with screenshot privacy mode, light and dark mode, vehicle perspective and the theme gallery">
-</td>
-</tr>
-</table>
-
-</details>
+<img src="assets/screenshots/create-theme.png" width="400" loading="lazy" alt="Create Theme editor with colour pickers and side-by-side battery and heating previews in light and dark mode">
 
 ---
 

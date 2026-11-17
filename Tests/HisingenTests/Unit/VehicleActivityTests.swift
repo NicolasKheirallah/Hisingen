@@ -87,6 +87,19 @@ struct VehicleActivityTests {
         #expect(current.isAwaitingVehicleConfirmation)
     }
 
+    @Test func awaitingTelemetryConfirmationRequiresSupportedPendingReceipt() {
+        let now = Date()
+        let volvoClimate = CommandReceipt(commandIdentifier: RemoteCommand.stopClimate.identifier,
+                                          issuedAt: now, command: .stopClimate, providerBrand: .volvo)
+        let confirmedLock = CommandReceipt(commandIdentifier: RemoteCommand.lock.identifier,
+                                           issuedAt: now, command: .lock, status: .confirmed(at: now))
+        let pendingLock = CommandReceipt(commandIdentifier: RemoteCommand.lock.identifier,
+                                         issuedAt: now, command: .lock)
+        let state = CommandPresentationState(receipts: [volvoClimate, confirmedLock])
+        #expect(!state.hasAwaitingTelemetryConfirmation)
+        #expect(CommandPresentationState(receipts: state.receipts + [pendingLock]).hasAwaitingTelemetryConfirmation)
+    }
+
     @Test func commandConfirmationRequiresMatchingNewVehicleReading() {
         let now = Date()
         let pending = CommandReceipt(commandIdentifier: "lock", issuedAt: now.addingTimeInterval(-10), command: .lock)

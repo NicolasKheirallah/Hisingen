@@ -497,9 +497,7 @@ struct InfoTabView: View {
     // MARK: - Section visibility helpers
 
     var weatherCardHasContent: Bool {
-        guard let w = state.weather else { return false }
-        return w.temperatureCelsius != nil || (w.condition?.isEmpty == false) || w.relativeHumidity != nil
-            || w.apparentTemperatureCelsius != nil
+        state.weather?.hasCurrentConditions == true
     }
 
     private var serviceCardHasContent: Bool {

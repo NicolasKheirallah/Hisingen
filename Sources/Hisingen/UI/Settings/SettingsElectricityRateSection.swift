@@ -250,8 +250,7 @@ struct SettingsElectricityRateSection: View {
             if preferences.nightTariffEnabled {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 4) {
-                        TextField("2.00", text: $nightElectricityPrice)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField("2.00", text: $nightElectricityPrice)
                             .frame(width: 55)
                             .multilineTextAlignment(.trailing)
                             .controlSize(.small)
@@ -304,8 +303,7 @@ struct SettingsElectricityRateSection: View {
                 }
                 Spacer()
                 HStack(spacing: 4) {
-                    TextField("2.00", text: $electricityPrice)
-                        .textFieldStyle(.roundedBorder)
+                    HisTextField("2.00", text: $electricityPrice)
                         .frame(width: 55)
                         .multilineTextAlignment(.trailing)
                         .controlSize(.small)
@@ -317,8 +315,7 @@ struct SettingsElectricityRateSection: View {
                             }
                         }
                     if symbolEditable {
-                        TextField("kr", text: $currencySymbol)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField("kr", text: $currencySymbol)
                             .frame(width: 45)
                             .controlSize(.small)
                             .accessibilityLabel(L10n.text("Currency symbol"))
@@ -382,8 +379,7 @@ struct SettingsElectricityRateSection: View {
                 }
                 Spacer()
                 HStack(spacing: 4) {
-                    TextField("0", text: text)
-                        .textFieldStyle(.roundedBorder)
+                    HisTextField("0", text: text)
                         .frame(width: 55)
                         .multilineTextAlignment(.trailing)
                         .controlSize(.small)

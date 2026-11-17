@@ -230,9 +230,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         // RefreshCoordinator may publish a display projection while a command is pending.
         // It deliberately carries the optimistic value and a receipt; it is not telemetry
         // evidence and must not advance transition baselines or produce notifications.
-        if state.commandState.receipts.contains(where: {
-            $0.status.isAwaiting && $0.supportsTelemetryConfirmation
-        }) {
+        if state.commandState.hasAwaitingTelemetryConfirmation {
             pendingClimateStopReadingDateByVIN[state.identity.vin] = nil
             return
         }

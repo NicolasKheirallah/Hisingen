@@ -1,0 +1,300 @@
+import Foundation
+
+/// NexBlue's owner OpenAPI uses a separate refresh grant for myNexBlue accounts.
+struct NexBlueProvider: DirectChargerProvider {
+    let source = ChargerSource.nexBlue
+    let sessionLookback: TimeInterval = 30 * 86_400
+    private let session: BearerSession
+
+    private static let baseURL = URL(string: "https://api.nexblue.com")!
+    private static let root = "/third_party/openapi"
+
+    init(transport: any HomeAssistantTransport, now: @escaping @Sendable () -> Date = Date.init,
+         initialToken: BearerSession.Token? = nil, authenticate: @escaping BearerSession.Authenticate) {
+        session = BearerSession(baseURL: Self.baseURL, transport: transport, now: now,
+                                initialToken: initialToken, checkResponse: Self.check, authenticate: authenticate)
+    }
+
+    static func signIn(_ credentials: DirectChargerCredentials, transport: any HomeAssistantTransport)
+    async throws -> (chargers: [DirectChargerSummary], refreshToken: String) {
+        let tokens = try await grant("login", fields: ["username": credentials.username.trimmingCharacters(in: .whitespaces),
+                                                       "password": credentials.password, "account_type": 0],
+                                     invalidGrantCode: 1501, transport: transport)
+        guard let refreshToken = tokens.refreshToken, !refreshToken.isEmpty else {
+            throw DirectChargerError.malformedResponse
+        }
+        let provider = NexBlueProvider(transport: transport, initialToken: tokens.bearer) { _ in
+            throw DirectChargerError.unauthorized
+        }
+        return (try await provider.chargers(), refreshToken)
+    }
+
+    static func refresh(_ token: String, transport: any HomeAssistantTransport)
+    async throws -> (bearer: BearerSession.Token, rotatedRefreshToken: String?) {
+        let tokens = try await grant("refresh_token", fields: ["refresh_token": token, "account_type": 0],
+                                     invalidGrantCode: 1502, transport: transport)
+        return (tokens.bearer, tokens.refreshToken.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    func chargers() async throws -> [DirectChargerSummary] {
+        let data = try await session.data("GET", path: Self.root + "/chargers")
+        let list = try Self.decode(List<Charger>.self, from: data)
+        return list.data.filter { !$0.serialNumber.isEmpty }.map {
+            DirectChargerSummary(id: $0.serialNumber, name: L10n.format("NexBlue %@", $0.serialNumber))
+        }
+    }
+
+    func telemetry(chargerID: String, now: Date) async throws -> HomeChargerTelemetry {
+        let data: Data
+        do {
+            data = try await session.data("GET", path: Self.commandPath(chargerID, "status"))
+        } catch DirectChargerError.chargerOffline {
+            return HomeChargerTelemetry(status: .init(value: .unavailable, timestamp: now))
+        }
+        let status = try Self.decode(Status.self, from: data)
+        let state: HomeChargerStatus
+        switch status.chargingState {
+        case 0: state = .unplugged
+        case 1: state = .pluggedIn
+        case 2: state = .charging
+        case 3: state = .finished
+        case 4: state = .error
+        case 5: state = .waitingForPower
+        case 6: state = .delayedStart
+        case 7: state = .waitingForVehicle
+        default: state = .unrecognised(String(status.chargingState))
+        }
+        func reading(_ value: Double?) -> HomeChargerReading<Double>? {
+            guard let value, value.isFinite, value >= 0 else { return nil }
+            return HomeChargerReading(value: value, timestamp: now)
+        }
+        return HomeChargerTelemetry(
+            status: HomeChargerReading(value: state, timestamp: now),
+            powerKw: reading(status.power), sessionEnergyKwh: reading(status.energy),
+            lifetimeEnergyKwh: reading(status.lifetimeEnergy), currentLimitAmps: reading(status.currentLimit),
+            chargingEnabled: HomeChargerReading(value: state.isChargingEnabled && status.isDisable != true, timestamp: now),
+            cableLocked: status.isLock.map { HomeChargerReading(value: $0, timestamp: now) }
+        )
+    }
+
+    func send(_ kind: HomeChargerCommandKind, chargerID: String, telemetry: HomeChargerTelemetry) async throws {
+        let action = kind == .start ? "start_charging" : "stop_charging"
+        let data = try await session.data("POST", path: Self.commandPath(chargerID, action), jsonBody: Data("{}".utf8))
+        let result = try Self.decode(CommandResult.self, from: data).code
+        switch result {
+        case 0: return
+        case 2: throw DirectChargerError.forbidden
+        case 3:
+            throw DirectChargerError.rejected(status: 200, message: L10n.text("The charger's safety self-test failed."))
+        case 4:
+            throw DirectChargerError.rejected(status: 200, message: L10n.text("Charging is disabled on this charger."))
+        case 5:
+            throw DirectChargerError.rejected(status: 200, message: L10n.text("Another user is using this charger."))
+        default: throw DirectChargerError.rejected(status: 200, message: "")
+        }
+    }
+
+    func sessions(chargerID: String, from: Date, to: Date) async throws -> [HomeChargingSessionCandidate] {
+        var start = from
+        var candidates: [HomeChargingSessionCandidate] = []
+        while start < to {
+            let end = min(start.addingTimeInterval(sessionLookback - 86_400), to)
+            let batch = try await sessionBatch(chargerID: chargerID, from: start.addingTimeInterval(-86_400), to: end)
+            candidates += batch.filter { $0.endedAt >= start && (end == to || $0.endedAt < end) }
+            start = end
+        }
+        return candidates
+    }
+
+    private func sessionBatch(chargerID: String, from: Date, to: Date) async throws -> [HomeChargingSessionCandidate] {
+        let path = Self.root + "/sessions/charger/" + Self.pathComponent(chargerID)
+        let query = [
+            URLQueryItem(name: "from_date", value: DirectChargerDates.format(from)),
+            URLQueryItem(name: "to_date", value: DirectChargerDates.format(to))
+        ]
+        let data = try await session.data("GET", path: path, query: query)
+        let list = try Self.decode(List<FinishedSession>.self, from: data)
+        return list.data.compactMap { item in
+            guard let start = Self.timestamp(item.startTimestamp), let end = Self.timestamp(item.endTimestamp),
+                  end > start, end >= from, end <= to,
+                  let energy = item.consumption, energy.isFinite,
+                  energy >= HomeSessionReconstructor.minimumSessionKwh else { return nil }
+            let key = "nexblue:\(chargerID):\(DirectChargerDates.format(start)):\(DirectChargerDates.format(end))"
+            return HomeChargingSessionCandidate(
+                key: key, keyKind: .vendorWindow, chargerID: chargerID, startedAt: start, endedAt: end,
+                energyKwh: energy, energySource: "nexblue_session_api", measuredAt: end
+            )
+        }
+    }
+
+    private static func chargerPath(_ chargerID: String) -> String {
+        root + "/chargers/" + pathComponent(chargerID)
+    }
+
+    private static func commandPath(_ chargerID: String, _ action: String) -> String {
+        chargerPath(chargerID) + "/cmd/" + action
+    }
+
+    private static func pathComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    }
+
+    private static func timestamp(_ value: Int64?) -> Date? {
+        guard let value, value > 0 else { return nil }
+        let seconds = value >= 10_000_000_000 ? Double(value) / 1_000 : Double(value)
+        return Date(timeIntervalSince1970: seconds)
+    }
+
+    private static func grant(_ action: String, fields: [String: Any], invalidGrantCode: Int,
+                              transport: any HomeAssistantTransport) async throws -> TokenResponse {
+        var request = try BearerSession.request(baseURL: baseURL, method: "POST", path: root + "/account/" + action)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: fields)
+        let (data, response) = try await BearerSession.send(request, through: transport)
+        if response.statusCode == 403
+            || (response.statusCode == 400 && (try? decode(APIError.self, from: data).code) == invalidGrantCode) {
+            throw DirectChargerError.unauthorized
+        }
+        try check(response, data)
+        let tokens = try decode(TokenResponse.self, from: data)
+        guard !tokens.accessToken.isEmpty, tokens.expiresIn > 0 else {
+            throw DirectChargerError.malformedResponse
+        }
+        return tokens
+    }
+
+    private static func check(_ response: HTTPURLResponse, _ data: Data) throws {
+        switch response.statusCode {
+        case 200..<300, 401, 403, 404, 429:
+            try BearerSession.check(response, data: data)
+        default:
+            switch try? decode(APIError.self, from: data).code {
+            case 2101: throw DirectChargerError.unreachable
+            case 2103: throw DirectChargerError.forbidden
+            case 2105: throw DirectChargerError.chargerOffline
+            default: throw DirectChargerError.rejected(status: response.statusCode, message: "")
+            }
+        }
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let value = try? decoder.decode(type, from: data) else { throw DirectChargerError.malformedResponse }
+        return value
+    }
+
+    private struct List<Element: Decodable>: Decodable { let data: [Element] }
+    private struct Charger: Decodable { let serialNumber: String }
+    private struct APIError: Decodable { let code: Int }
+
+    private struct TokenResponse: Decodable {
+        let accessToken: String
+        let refreshToken: String?
+        let expiresIn: TimeInterval
+
+        var bearer: BearerSession.Token { .init(value: accessToken, lifetime: expiresIn) }
+    }
+
+    private struct Status: Decodable {
+        let chargingState: Int
+        let power: Double?
+        let energy: Double?
+        let lifetimeEnergy: Double?
+        let currentLimit: Double?
+        let isDisable: Bool?
+        let isLock: Bool?
+    }
+
+    private struct FinishedSession: Decodable {
+        let startTimestamp: Int64?
+        let endTimestamp: Int64?
+        let consumption: Double?
+    }
+
+    func schedule(chargerID: String) async throws -> NexBlueSchedule {
+        let detailData = try await session.data("GET", path: Self.chargerPath(chargerID))
+        let detail = try Self.decode(ChargerDetail.self, from: detailData)
+        guard detail.online else { throw DirectChargerError.chargerOffline }
+        if let role = detail.role, role != 0 { throw DirectChargerError.forbidden }
+        guard detail.placeData.country == "SE", detail.deviceOperatorType != 3,
+              let timeZone = TimeZone(identifier: detail.placeData.tzId) else { throw NexBlueTimerError.unsupported }
+
+        let data = try await session.data("GET", path: Self.commandPath(chargerID, "schedule"))
+        let schedule = try Self.decode(ScheduleDetail.self, from: data)
+        guard schedule.scheduleMode == 2 else { throw NexBlueTimerError.unsupported }
+        return NexBlueSchedule(timeZone: timeZone, items: schedule.chargeSchedules)
+    }
+
+    func saveTimer(_ preview: NexBlueTimerPreview, now: () -> Date,
+                   canWrite: @MainActor () -> Bool) async throws {
+        let current = try await schedule(chargerID: preview.chargerID)
+        try current.checkAvailable()
+        guard current == preview.schedule, await canWrite(),
+              NexBlueTimerPreview.canRepresent(preview.window, in: current.timeZone, after: now().addingTimeInterval(60)) else {
+            throw NexBlueTimerError.changed
+        }
+
+        let path = Self.commandPath(preview.chargerID, "schedule")
+        let item = preview.item
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let body = try encoder.encode(ScheduleUpdate(scheduleItem: item, scheduleIndex: current.items.count))
+        do {
+            let response = try await session.data("PUT", path: path, jsonBody: body)
+            guard try Self.decode(CommandResult.self, from: response).code == 0 else {
+                throw DirectChargerError.rejected(status: 200, message: "")
+            }
+        } catch let error as DirectChargerError {
+            // A timeout or unreadable reply can follow an accepted write. Verify before reporting its outcome.
+            switch error {
+            case .unreachable, .malformedResponse: break
+            case .rejected(let status, _) where status == 408 || status >= 500: break
+            default: throw error
+            }
+        }
+
+        guard let saved = try? await schedule(chargerID: preview.chargerID), saved.timeZone == current.timeZone,
+              saved.items.count == current.items.count + 1, Array(saved.items.dropLast()) == current.items,
+              let last = saved.items.last, item.matches(last) else { throw NexBlueTimerError.unconfirmed }
+    }
+
+    private struct ChargerDetail: Decodable {
+        struct Place: Decodable {
+            let country: String
+            let tzId: String
+        }
+        let placeData: Place
+        let online: Bool
+        let role: Int?
+        let deviceOperatorType: Int
+    }
+
+    private struct ScheduleDetail: Decodable {
+        let scheduleMode: Int
+        let chargeSchedules: [NexBlueScheduleItem]
+    }
+
+    private struct ScheduleUpdate: Encodable {
+        let scheduleItem: NexBlueScheduleItem
+        let scheduleIndex: Int
+    }
+
+    private struct CommandResult: Decodable {
+        let code: Int
+
+        init(from decoder: Decoder) throws {
+            enum Field: String, CodingKey { case result }
+            let fields = try decoder.container(keyedBy: Field.self)
+            if let number = try? fields.decode(Int.self, forKey: .result) {
+                code = number
+            } else if try fields.decode(String.self, forKey: .result) == "success" {
+                code = 0
+            } else {
+                throw DirectChargerError.malformedResponse
+            }
+        }
+    }
+}

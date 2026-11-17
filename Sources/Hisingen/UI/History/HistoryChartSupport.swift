@@ -135,18 +135,13 @@ enum HistoryExport {
         operation.run()
     }
 
-    // The two series a user most often wants clipped to the visible period. Column order
-    // mirrors `VehicleHistoryLedger.exportTripsCSV` / `ChargingSessionLedger.exportChargingSessionsCSV`
-    // so a period export and a full export open the same way.
-
     private static func opt(_ value: Double?, _ places: Int) -> String {
         value.map { String(format: "%.\(places)f", locale: L10n.displayLocale, $0) } ?? ""
     }
 
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
-        let header = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude"
         func coord(_ value: Double?) -> String { value.map { String($0) } ?? "" }
-        var rows: [String] = [header]
+        var rows = [CSV.tripHistoryHeader]
         for trip in trips {
             let fields: [String] = [
                 CSV.field(trip.id), CSV.field(trip.vin),
@@ -165,8 +160,7 @@ enum HistoryExport {
     }
 
     static func chargingSessionsCSV(_ sessions: [HistoricalChargingSession]) -> String {
-        let header = "Session ID,VIN,Started At,Ended At,Start SoC (%),End SoC (%),Estimated Energy Added (kWh),Observed Peak Power (kW),Sample Average Power (kW),Location,Lifecycle,Completion Reason,Energy Source,Confidence,Sample Coverage,Usable Capacity (kWh),Day Tariff,Night Tariff Enabled,Night Tariff,Night Start Hour,Night End Hour,Estimated Cost,Currency,Target SoC,Summary Version,\(WallboxCSV.header.joined(separator: ","))"
-        var rows: [String] = [header]
+        var rows = [CSV.chargingHistoryHeader]
         for s in sessions {
             let fields: [String] = [
                 s.id, s.vin,

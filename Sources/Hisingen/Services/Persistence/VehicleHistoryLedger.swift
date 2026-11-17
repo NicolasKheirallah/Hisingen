@@ -434,7 +434,7 @@ final class VehicleHistoryLedger: Sendable {
     func exportTripsCSV(for vin: String, limit: Int = 5_000) -> String {
         let trips = derivedTrips(for: vin, limit: limit)
         let formatter = ISO8601DateFormatter()
-        var csv = "Trip ID,VIN,Started At,Ended At,Duration (min),Distance (km),Average Consumption,Ambient Temperature (C),Start Latitude,Start Longitude,End Latitude,End Longitude\n"
+        var csv = CSV.tripHistoryHeader + "\n"
         for trip in trips {
             let values = [
                 trip.id, trip.vin, formatter.string(from: trip.startedAt), formatter.string(from: trip.endedAt),
