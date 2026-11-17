@@ -208,6 +208,12 @@ struct HomeSessionPricingTests {
         }
     }
 
+    /// Typed comparison helper: `abs((x ?? 0) - a * (b + c)) < e` inside `#expect` is more than
+    /// the pinned Xcode can type-check in reasonable time.
+    private func near(_ value: Double?, _ expected: Double) -> Bool {
+        abs((value ?? 0) - expected) < 0.0001
+    }
+
     private let fallback = HomeSessionPricer.Fallback(fixedPricePerKwh: 2.0, policy: .fixed, spotPrices: [], currency: "kr")
 
     @Test("Measured energy is priced per 15-minute interval against Tibber")
@@ -215,7 +221,7 @@ struct HomeSessionPricingTests {
         let session = session(intervals: [(0, 15, 1.8), (15, 30, 1.8), (30, 45, 1.8)])
         let cost = HomeSessionPricer.price(session, tibber: slots([0.60, 0.40, 0.20]), networkFeeOrePerKwh: 0, fallback: fallback)
         #expect(cost.method == .intervalTibber)
-        #expect(abs((cost.amount ?? 0) - 1.8 * (0.60 + 0.40 + 0.20)) < 0.0001)
+        #expect(near(cost.amount, 1.8 * (0.60 + 0.40 + 0.20)))
         #expect(!cost.isEstimate)
         #expect(cost.missingKwh < 0.0001)
         #expect(cost.priceSource.contains("Tibber"))
@@ -226,7 +232,7 @@ struct HomeSessionPricingTests {
         let session = session(intervals: [(10, 20, 1.2)])
         let cost = HomeSessionPricer.price(session, tibber: slots([0.50, 0.30]), networkFeeOrePerKwh: 0, fallback: fallback)
         // 5 of 10 minutes in each slot: 0.6 kWh at 0.50 and 0.6 kWh at 0.30.
-        #expect(abs((cost.amount ?? 0) - (0.6 * 0.50 + 0.6 * 0.30)) < 0.0001)
+        #expect(near(cost.amount, 0.6 * 0.50 + 0.6 * 0.30))
     }
 
     @Test("Missing price intervals are missing data: no total, and the gap is stated")
@@ -237,7 +243,7 @@ struct HomeSessionPricingTests {
         #expect(cost.isIncomplete)
         #expect(abs(cost.missingKwh - 1.8) < 0.0001)
         #expect(abs(cost.pricedKwh - 3.6) < 0.0001)
-        #expect(abs((cost.partialAmount ?? 0) - 1.8 * (0.60 + 0.40)) < 0.0001)
+        #expect(near(cost.partialAmount, 1.8 * (0.60 + 0.40)))
         #expect(cost.method == .intervalTibber)
     }
 
@@ -248,10 +254,10 @@ struct HomeSessionPricingTests {
                                            markupOrePerKwh: 10, otherChargesOrePerKwh: 50, includesVAT: true)
         let withPolicy = HomeSessionPricer.Fallback(fixedPricePerKwh: 2, policy: policy, spotPrices: [], currency: "kr")
         let plain = HomeSessionPricer.price(session, tibber: slots([0.50]), networkFeeOrePerKwh: 0, fallback: withPolicy)
-        #expect(abs((plain.amount ?? 0) - 1.0) < 0.0001)
+        #expect(near(plain.amount, 1.0))
         #expect(plain.assumptions.contains { $0.contains("No variable network fee") })
         let fee = HomeSessionPricer.price(session, tibber: slots([0.50]), networkFeeOrePerKwh: 25, fallback: withPolicy)
-        #expect(abs((fee.amount ?? 0) - 2.0 * (0.50 + 0.25)) < 0.0001)
+        #expect(near(fee.amount, 2.0 * (0.50 + 0.25)))
         #expect(fee.assumptions.contains { $0.contains("25.0") })
     }
 
@@ -262,12 +268,12 @@ struct HomeSessionPricingTests {
         let tibber = HomeSessionPricer.price(coarse, tibber: slots([0.60, 0.30, 0.30]), networkFeeOrePerKwh: 0, fallback: fallback)
         #expect(tibber.method == .totalTibberAverage)
         #expect(tibber.isEstimate)
-        #expect(abs((tibber.amount ?? 0) - 9.0 * 0.40) < 0.0001)
+        #expect(near(tibber.amount, 9.0 * 0.40))
 
         // No Tibber slots: the typed-in tariff, recorded as such.
         let fixed = HomeSessionPricer.price(coarse, tibber: [], networkFeeOrePerKwh: 0, fallback: fallback)
         #expect(fixed.method == .totalFixedTariff)
-        #expect(abs((fixed.amount ?? 0) - 18.0) < 0.0001)
+        #expect(near(fixed.amount, 18.0))
         #expect(fixed.priceSource == HomeSessionPricer.tariffSource)
 
         // Automatic mode with spot prices: market price plus the Hisingen markup, charges and VAT.
@@ -280,7 +286,7 @@ struct HomeSessionPricingTests {
         let automatic = HomeSessionPricer.Fallback(fixedPricePerKwh: 2, policy: policy, spotPrices: spot, currency: "kr")
         let policyCost = HomeSessionPricer.price(coarse, tibber: [], networkFeeOrePerKwh: 0, fallback: automatic)
         #expect(policyCost.method == .totalSpotPolicy)
-        #expect(abs((policyCost.amount ?? 0) - 9.0 * (0.40 + 0.50) * 1.25) < 0.0001)
+        #expect(near(policyCost.amount, 9.0 * (0.40 + 0.50) * 1.25))
         coarse.intervals = []
         #expect(HomeSessionPricer.price(coarse, tibber: slots([0.4, 0.4, 0.4]), networkFeeOrePerKwh: 0, fallback: fallback).method == .totalTibberAverage)
     }
