@@ -146,7 +146,9 @@ package-dmg:
 	cp -R $(APP) $(DMG_STAGING)/
 	ln -s /Applications $(DMG_STAGING)/Applications
 	@# Hosted runners can report "Resource busy" while disk arbitration settles.
-	@if diskutil help image create from >/dev/null 2>&1; then \
+	@# macOS 27 deprecates `hdiutil create` for `diskutil image create`, but macOS 15 and 26 ship a
+	@# `diskutil image create` without --volumeName. Use it only where it advertises that option.
+	@if diskutil image create from --help 2>&1 | grep -q -e '--volumeName'; then \
 		image_creator=diskutil; \
 	else \
 		image_creator=hdiutil; \
