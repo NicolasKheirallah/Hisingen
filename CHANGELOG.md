@@ -3,6 +3,154 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-11-16
+
+### Added
+
+- Redraw the panel around four reading surfaces. Now answers what the car last reported and what
+  you can do next, with quick controls for locks, climate and charging under the car. Plan opens
+  with the departure time and a 24-hour ruler of charge windows and climate timers. Log opens with
+  the period and a trace of recorded charging. Car reads as a type plate.
+- Now shows the outside temperature and a weather icon beside the vehicle name. Click it to see
+  the condition, feels-like temperature, humidity and observation time. The weather card labels
+  cached data “Last known readings”.
+- Choose which control cards sit under the car on Now, and in what order, in Settings →
+  Appearance: locks, climate, charging, charge limit, current limit, air cleaning, windows, honk and
+  flash, and tailgate. Each choice is a tile shaped like its card, numbered by its place on Now, and
+  a tile that cannot draw says why. A card draws only when its remote feature is on and the car
+  reports the capability.
+- Charge Limit and Current Limit cards on Now. Each press raises the limit one step and the card
+  names the result, for example "Raise to 85%". Choose a 5% or 10% step in Settings → Appearance →
+  Controls on Now → Limit step. The step is a share of the highest value your car allows, so 5 or
+  10 points of charge target and about 2 or 3 A of a 32 A cap. A press builds on a limit the car has
+  not applied yet, and the card says so until it does. At the maximum the next press restarts the
+  limit at 40% of the highest value your car allows, so you can work your way up again, and a pencil
+  on each card opens a field to type the value.
+- Type the current limit in Plan, and set a saved charge location's amp limit by typing it or by
+  stepping it with the same restart at 40% after the maximum.
+- The Climate card counts down the time the car reported, redrawn once a minute, until the next
+  reading arrives.
+- Motion on every Now card: the cards arrive in order, changing values roll, the fan turns while
+  climate runs, the symbol breathes while the car charges or the air is cleaned, and a card's symbol
+  pulses while a command waits for the car. Reduce Motion turns the continuous motion off.
+- Make a theme from an accent and a light and a dark background. Hisingen moves the picked colours
+  only as far as they need to go for text to stay readable in both appearances, previews the
+  result, and offers the theme beside the shipped ones, including per-brand and per-vehicle
+  choices. Themes are kept in the local database, so they survive app updates, a reinstalled app
+  and reset preferences, and they travel with database backups and settings exports.
+- Connect Tibber in Settings → Electricity → Electricity Supplier with an access token, and
+  Hisingen prices charger sessions from Tibber's own 15-minute prices with no Home Assistant. A
+  missing price slot is shown as missing, the network fee is the only addition to Tibber's all-in
+  price, and a Tibber failure falls back to your electricity settings without stopping the import.
+  The token is kept in the macOS Keychain only.
+- Connect an Easee or Zaptec charger directly, with the account you use in the vendor's app and
+  no Home Assistant. The charging card shows status, wall power and delivered energy, Charge now
+  and Pause stay pending until a charger reading confirms them, and finished sessions come from
+  the vendor's own list into History with the charger-measured kWh. Plans, Edit plan and the
+  Hisingen component stay with Home Assistant, so a direct charger offers status, controls and
+  history. The account and password are kept in the macOS Keychain only and are deleted when you
+  sign out or erase data.
+- Connect NexBlue directly from **Settings → Electricity → Home Charging** with your myNexBlue
+  account. Hisingen keeps the refresh token in the macOS Keychain.
+  - **Charge now** and **Pause** require fresh charger status. Accepted commands wait for
+    charger confirmation, and refusals such as disabled charging have specific messages.
+  - **Cheapest overnight charge** previews a one-time window using Swedish spot prices and the
+    charger's time zone. Save it to an eligible charger with an owner account and an open schedule
+    slot. Hisingen reads the timer back after saving.
+  - **Import earlier sessions** checks a date range of up to one year. Settings shows the last
+    successful import time and range. Repeat imports keep one copy of each session, including
+    separate sessions reported before and after a pause.
+- Connect a charger that Home Assistant manages, such as NexBlue, to see what it reports beside
+  the car's own charging state, run its charging plan, and record the energy and cost it measured
+  with each session. Charger figures appear in History rows, the CSV exports and the handover
+  pack. The long-lived token stays in the Keychain and is never exported.
+- Home Charging in Settings → Electricity: enter the Home Assistant address and token, let Hisingen
+  find a NexBlue charger or map its entities by hand, and pair it with one car and one saved
+  location. Pairing is always your choice. A shared charger, or a car that is merely nearby, is
+  never treated as proof. Home Charging is optional and nothing changes away from home. Hisingen
+  still opens when Home Assistant is unreachable and shows the last reading with its age, then
+  refreshes when the Mac wakes. macOS asks once to allow access to the local network.
+- The home charger card shows battery, target, charger status, wall power and the energy of the
+  session. It says whether the cable is confirmed by the charger or inferred from the car, shows
+  "Waiting for available power" when a load balancer holds the charger back, and flags a charger
+  that is enabled but delivering no power. Charge now and Pause stay pending until a charger
+  reading taken after the command confirms them, and the card reports a rejection or a result it
+  could not confirm.
+- Plan home charging with Add X kWh by a time, or Reach X% by a time when a fresh battery sensor
+  exists that does not come from the charger. The plan picks the cheapest 15-minute Tibber windows,
+  prefers one unbroken stretch, learns your charging rate from recent sessions, plans again from the
+  energy delivered, and says when the target is unlikely. Deadlines show in your home time zone.
+  Plans live in a small Home Assistant component, `hisingen_home_charging`, so they survive a
+  Home Assistant restart. Charge now overrides a plan,
+  Pause holds it until you resume, and the car's own limit stays the ceiling. While Home Assistant
+  owns a plan, Hisingen's own scheduler stands down, and the editor lists what else may compete: car
+  schedules, optimised charging, a charger delayed start and automations that use the charger.
+- Charger-measured energy sits on the same History row as the car's record, with its source and
+  time, apart from the battery-based estimate. Repeated syncs, reconnects and Mac sleep add no
+  rows, a session is matched to a car by the charger and the time it overlaps, and a session that
+  could belong to more than one car stays unassigned. The component records sessions that finish
+  while Hisingen is closed. Cost uses Tibber 15-minute prices when they exist and otherwise an
+  estimate that names its method. A missing interval is shown as missing, and the network fee is
+  added only where the price source leaves it out. This follows Settings → Privacy → Store charging
+  history, which is off until you turn it on.
+
+### Changed
+
+- Replace the translucent card surfaces with an opaque canvas, studio fills and hairline rules,
+  and give the Hisingen theme neutral grey in both appearances with a functional orange signal
+  colour.
+- Fill an active control card (running climate or air cleaning, a charge in progress) and the
+  charge line with the theme's own accent, written in the canvas colour for contrast. Monochrome
+  Precision, whose accent is ink, uses a warm amber.
+- Move lock, window and locate, and software install controls from Plan to Car, beside parking
+  location and software. Start Climate lives on Now, which now starts climate with the
+  temperature, seat and steering-wheel settings saved on Plan. A control you placed on Plan
+  yourself, or one your Car layout does not show, stays on Plan.
+- Show the last check below the vehicle name on Now, with a shared reading age when the
+  readings agree.
+- On Car, give Lock and Unlock a solid button and group window controls separately from the
+  light and horn commands. The groups stack when space is tight, and the reported lock and
+  window states stay readable while a command is sending.
+- Put the street address first in Parking Location and show a menu indicator on Open in Maps.
+  Software release notes now read across the full width, and installation messages use body text.
+- Include the Now control choice and your own themes in settings exports.
+- Show the current-limit and charge-target presets in Plan as underlined choices with the reported
+  limit marked, in place of the small outlined buttons, and drop the warning colour from the
+  charging sliders.
+- Rename two themes to Charcoal Gold and Circuit Blue and update their descriptions. Colours are
+  unchanged, and a theme you already chose carries over, including from a settings archive
+  exported before the rename.
+
+### Fixed
+
+- Stop offering Charge Now on a car that is already charging on its own schedule, or whose cable
+  is disconnected. During a charge-now override the card offers Resume Schedule.
+- Show Windows Closed only when the vehicle reports every side window closed.
+
+### Screenshots
+
+Screenshots use sample vehicle data.
+
+![Full Now panel with a Polestar 2, its last check, weather, battery, estimated range and quick controls](assets/screenshots/3.0.0/now-full-panel.png)
+
+![Now header with the last check below the vehicle name and the weather control at the top right](assets/screenshots/3.0.0/now-header.png)
+
+![Ambient Conditions popover with the observation time, outside temperature, condition, feels-like temperature and humidity](assets/screenshots/3.0.0/now-weather.png)
+
+![Car tab showing software release notes, parking location, the primary Unlock button and separate window and vehicle locator controls](assets/screenshots/3.0.0/car-controls.png)
+
+#### NexBlue
+
+These screenshots use a sample NexBlue charger.
+
+![NexBlue charger card waiting for confirmation after Charge now](assets/screenshots/3.0.0/nexblue-charger-controls.png)
+
+![One-time overnight charge preview with a three-hour window](assets/screenshots/3.0.0/nexblue-overnight-timer.png)
+
+![Date range picker for importing earlier NexBlue sessions](assets/screenshots/3.0.0/nexblue-import-range.png)
+
+![Home Charging settings showing the last successful NexBlue import and date range](assets/screenshots/3.0.0/nexblue-import-summary.png)
+
 ## [2.0.14] - 2026-11-09
 
 ### Added

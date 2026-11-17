@@ -62,6 +62,14 @@ struct DomainTypeEnumsTests {
     // MARK: Charge setting source
 
     @Test
+    func volvoVINRuleIsThePrefixAlone() {
+        #expect(VehicleBrand.isVolvoVIN("YV1ABCDEF12345678"))
+        #expect(VehicleBrand.isVolvoVIN("yv1abcdef12345678"))
+        #expect(!VehicleBrand.isVolvoVIN("YSMABCDEF12345678"))
+        #expect(!VehicleBrand.isVolvoVIN(""))
+    }
+
+    @Test
     func chargeSourceTokensMapToSources() {
         #expect(ChargeSettingSource(wireToken: "RCS") == .remote)
         #expect(ChargeSettingSource(wireToken: "rcs") == .remote)

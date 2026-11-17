@@ -20,6 +20,7 @@ enum ComposableCards {
         .vehicleTyres,
         .vehicleReadiness,
         .vehicleLocation,
+        .vehicleWeather,
         .vehicleReceipts,
         .vehicleAttention,
         .controlsClimate,
@@ -76,6 +77,9 @@ enum ComposableCards {
 
             case .vehicleLocation:
                 ComposableLocationCard(state: state, reverseGeocoder: reverseGeocoder)
+
+            case .vehicleWeather:
+                NowWeatherReadout(state: state)
 
             case .vehicleReceipts:
                 ComposableReceiptsCard(state: state, onDismiss: onDismissCommandReceipt,
@@ -368,7 +372,7 @@ struct TabCardStack: View {
                         Image(systemName: TabItemCatalog.symbol(item)).hisType(.micro).foregroundStyle(.tertiary)
                         Text(TabItemCatalog.title(item)).hisType(.micro).foregroundStyle(.secondary)
                         if let source = TabItemCatalog.item(item)?.sourceTab {
-                            Text(source.title).hisType(.nano).foregroundStyle(.tertiary)
+                            Text(source.title).hisType(.nano).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -490,7 +494,7 @@ private struct ComposableLocationCard: View {
         } else {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
+                    CardHeader(symbol: "location", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
                     Text(state.isVolvo
                          ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.")
                          : L10n.text("Parking position unavailable."))
@@ -566,18 +570,18 @@ private struct GarageChipStrip: View {
                         let selected = car.vin == currentVin
                         Button { onSelectCar(car.vin) } label: {
                             HStack(spacing: 5) {
-                                Image(systemName: brand == .polestar ? "bolt.car.fill" : "car.fill")
+                                Image(systemName: brand == .polestar ? "bolt.car" : "car")
                                     .hisType(.caption)
                                 Text(car.title).hisType(.label, weight: selected ? .bold : .medium)
                             }
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background {
                                 if selected {
-                                    Capsule()
+                                    RoundedRectangle(cornerRadius: 0)
                                         .fill(HisingenTheme.accent.opacity(0.12))
                                         .matchedGeometryEffect(id: "garageChipSelection", in: namespace)
                                 } else {
-                                    HoverChipFill(shape: Capsule(), resting: 0.04)
+                                    HoverChipFill(shape: RoundedRectangle(cornerRadius: 0), resting: 0.04)
                                 }
                             }
                         }

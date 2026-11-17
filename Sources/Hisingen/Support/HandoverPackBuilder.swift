@@ -287,6 +287,7 @@ enum HandoverPackBuilder {
     private static func chargingSessionsCSV(_ input: HandoverPackInput) -> String {
         var header = ["Session ID", "Started At", "Ended At", "Duration (min)", "Start SoC (%)", "End SoC (%)",
                       "Energy Added (kWh)", "Peak Power (kW)", "Estimated Cost", "Currency", "Energy Source", "Confidence"]
+            + WallboxCSV.handoverHeader
         if input.includesIdentifiers { header.insert("VIN", at: 0) }
         var lines = [header.joined(separator: ",")]
         for session in input.chargingSessions {
@@ -295,15 +296,15 @@ enum HandoverPackBuilder {
                 Format.iso8601.string(from: session.startDate),
                 Format.iso8601.string(from: session.endDate),
                 "\(session.durationMinutes)",
-                String(format: "%.1f", session.startBatteryPercentage),
-                String(format: "%.1f", session.endBatteryPercentage),
+                session.hasBatteryReading ? String(format: "%.1f", session.startBatteryPercentage) : "",
+                session.hasBatteryReading ? String(format: "%.1f", session.endBatteryPercentage) : "",
                 String(format: "%.2f", session.kwhDelivered),
                 session.peakPowerWatts.map { String(format: "%.1f", Double($0) / 1000) } ?? "",
                 session.cost.map { String(format: "%.2f", $0) } ?? "",
                 session.currencySymbol ?? "",
                 session.energySource.rawValue,
                 session.confidence.rawValue
-            ]
+            ] + WallboxCSV.handoverFields(session.wallbox)
             if input.includesIdentifiers { fields.insert(session.vin, at: 0) }
             lines.append(fields.map { CSV.field($0) }.joined(separator: ","))
         }

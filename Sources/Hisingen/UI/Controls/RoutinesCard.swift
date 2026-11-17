@@ -40,7 +40,7 @@ struct RoutinesCard: View {
                         editingRoutine = nil
                         showEditor = true
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .disabled(stepChoices.isEmpty)
                 }
@@ -105,7 +105,7 @@ struct RoutinesCard: View {
                     Text(L10n.text("Run"))
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .frame(minWidth: 44)
             .disabled(isBusy || runningRoutineID != nil)
@@ -225,8 +225,7 @@ struct RoutineEditorSheet: View {
                         Text(L10n.text("Name"))
                             .hisType(.label, weight: .semibold)
                             .foregroundStyle(.secondary)
-                        TextField(L10n.text("Leave work"), text: $name)
-                            .textFieldStyle(.roundedBorder)
+                        HisTextField(L10n.text("Leave work"), text: $name)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -236,7 +235,7 @@ struct RoutineEditorSheet: View {
                         if steps.isEmpty {
                             Text(L10n.text("No steps yet. Add a step to send it in order."))
                                 .hisType(.label)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         } else {
                             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                                 stepRow(index: index, step: step)
@@ -337,14 +336,14 @@ struct RoutineEditorSheet: View {
                     onDelete(initial)
                     dismiss()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
             }
             Spacer()
             Button(L10n.text("Cancel")) {
                 dismiss()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .keyboardShortcut(.cancelAction)
 
@@ -352,9 +351,7 @@ struct RoutineEditorSheet: View {
                 onSave(CommandRoutine(id: initial?.id ?? UUID(), name: trimmedName, steps: steps))
                 dismiss()
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.accent)
-            .foregroundStyle(HisingenTheme.accentOn)
+            .buttonStyle(.hisProminent(HisingenTheme.accent))
             .controlSize(.small)
             .keyboardShortcut(.defaultAction)
             .disabled(!canSave)

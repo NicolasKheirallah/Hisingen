@@ -170,7 +170,7 @@ struct SettingsTabsAndCardsCard: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.pressable)
-                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
                 .help(L10n.text("New tab"))
                 .accessibilityLabel(L10n.text("New tab"))
 
@@ -187,7 +187,7 @@ struct SettingsTabsAndCardsCard: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.pressable)
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
                     .help(L10n.text("Restore Tab Order"))
                     .accessibilityLabel(L10n.text("Restore Tab Order"))
                 }
@@ -228,7 +228,7 @@ struct SettingsTabsAndCardsCard: View {
         .foregroundStyle(selected ? HisingenTheme.accent : .secondary)
         .background(
             selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            in: RoundedRectangle(cornerRadius: 0, style: .continuous)
         )
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu { tabContextMenu(tab) }
@@ -335,7 +335,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Add Cards…"), systemImage: "plus.circle")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
 
                 Button {
@@ -347,7 +347,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Show All"), systemImage: "eye")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
 
                 Button {
@@ -358,7 +358,7 @@ struct SettingsTabsAndCardsCard: View {
                     Label(L10n.text("Hide All"), systemImage: "eye.slash")
                         .hisType(.micro, weight: .medium)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(visibleCount == 0)
 
@@ -376,7 +376,7 @@ struct SettingsTabsAndCardsCard: View {
                         Label(L10n.text("Reset Tab"), systemImage: "arrow.uturn.backward")
                             .hisType(.micro, weight: .medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .help(L10n.text("Restores this tab's original cards and order."))
                 } else {
@@ -386,7 +386,7 @@ struct SettingsTabsAndCardsCard: View {
                         Label(L10n.text("Delete Tab"), systemImage: "trash")
                             .hisType(.micro, weight: .medium)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                 }
             }
@@ -400,8 +400,7 @@ struct SettingsTabsAndCardsCard: View {
     private func customTabEditor(_ tab: CustomTab) -> some View {
         HStack(spacing: 6) {
             if renamingTabID == tab.id {
-                TextField(L10n.text("Tab name"), text: $renameText)
-                    .textFieldStyle(.roundedBorder)
+                HisTextField(L10n.text("Tab name"), text: $renameText)
                     .controlSize(.small)
                     .onSubmit {
                         var updated = composition
@@ -438,23 +437,24 @@ struct SettingsTabsAndCardsCard: View {
         case "square.grid.2x2": return L10n.text("Tab icon: Grid")
         case "bolt.car": return L10n.text("Tab icon: Electric car")
         case "car.side": return L10n.text("Tab icon: Car")
-        case "bolt.fill": return L10n.text("Tab icon: Lightning bolt")
+        case "bolt": return L10n.text("Tab icon: Lightning bolt")
         case "batteryblock": return L10n.text("Tab icon: Battery")
         case "thermometer.medium": return L10n.text("Tab icon: Thermometer")
-        case "location.fill": return L10n.text("Tab icon: Location arrow")
+        case "location": return L10n.text("Tab icon: Location arrow")
         case "chart.xyaxis.line": return L10n.text("Tab icon: Line chart")
-        case "chart.pie.fill": return L10n.text("Tab icon: Pie chart")
-        case "powerplug.fill": return L10n.text("Tab icon: Power plug")
-        case "lock.fill": return L10n.text("Tab icon: Lock")
+        case "chart.pie": return L10n.text("Tab icon: Pie chart")
+        case "powerplug": return L10n.text("Tab icon: Power plug")
+        case "lock": return L10n.text("Tab icon: Lock")
         case "fan": return L10n.text("Tab icon: Fan")
         case "wind": return L10n.text("Tab icon: Wind")
         case "road.lanes": return L10n.text("Tab icon: Road")
         case "gauge.with.needle": return L10n.text("Tab icon: Gauge")
         case "wrench.and.screwdriver": return L10n.text("Tab icon: Tools")
+        // No longer offered in the picker, but a tab saved with it still needs a spoken name.
         case "sparkles": return L10n.text("Tab icon: Sparkles")
         case "shield.lefthalf.filled": return L10n.text("Tab icon: Shield")
-        case "star.fill": return L10n.text("Tab icon: Star")
-        case "leaf.fill": return L10n.text("Tab icon: Leaf")
+        case "star": return L10n.text("Tab icon: Star")
+        case "leaf": return L10n.text("Tab icon: Leaf")
         case "speedometer": return L10n.text("Tab icon: Speedometer")
         case "calendar": return L10n.text("Tab icon: Calendar")
         case "clock": return L10n.text("Tab icon: Clock")
@@ -500,7 +500,7 @@ struct SettingsTabsAndCardsCard: View {
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
-        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
     }
 
     // MARK: - Rows
@@ -567,6 +567,10 @@ struct SettingsTabsAndCardsCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                if item.defaultHistoryPageSize != nil {
+                    historyPageSizePicker(for: item)
+                        .padding(.top, 3)
+                }
             }
 
             Spacer(minLength: 6)
@@ -646,6 +650,25 @@ struct SettingsTabsAndCardsCard: View {
         }
     }
 
+    private func historyPageSizePicker(for item: TabItemID) -> some View {
+        Picker(L10n.text("Rows per page"), selection: Binding(
+            get: { prefs.historyPageSize(for: item) },
+            set: { size in
+                prefs.setHistoryPageSize(size, for: item)
+                binder.bump()
+                binder.notify(.panelLayout)
+            }
+        )) {
+            ForEach(TabItemID.historyPageSizes, id: \.self) { size in
+                Text(Format.count(size)).tag(size)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .hisType(.label)
+        .accessibilityLabel(L10n.format("%@ · %@", TabItemCatalog.title(item), L10n.text("Rows per page")))
+    }
+
     private func reorderControls(item: TabItemID) -> some View {
         HStack(spacing: 1) {
             Button { moveBy(item, -1) } label: {
@@ -674,7 +697,7 @@ struct SettingsTabsAndCardsCard: View {
             .padding(.vertical, 1)
             .background(
                 (warning ? HisingenTheme.semanticWarning : Color.primary).opacity(warning ? 0.14 : 0.06),
-                in: RoundedRectangle(cornerRadius: 3)
+                in: RoundedRectangle(cornerRadius: 0)
             )
             .foregroundStyle(warning ? HisingenTheme.semanticWarning : Color.secondary)
     }
@@ -765,8 +788,7 @@ struct SettingsTabsAndCardsCard: View {
                 .hisType(.caption)
                 .foregroundStyle(.secondary)
 
-            TextField(L10n.text("Tab name"), text: $newTabName)
-                .textFieldStyle(.roundedBorder)
+            HisTextField(L10n.text("Tab name"), text: $newTabName)
                 .onSubmit(createTab)
 
             ScrollView {
@@ -784,7 +806,7 @@ struct SettingsTabsAndCardsCard: View {
                         .foregroundStyle(newTabSymbol == symbol ? HisingenTheme.accent : .secondary)
                         .background(
                             newTabSymbol == symbol ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 0, style: .continuous)
                         )
                         .accessibilityLabel(symbolLabel(symbol))
                         .accessibilityAddTraits(newTabSymbol == symbol ? .isSelected : [])
@@ -798,7 +820,7 @@ struct SettingsTabsAndCardsCard: View {
                 Spacer()
                 Button(L10n.text("Cancel"), role: .cancel) { showNewTabSheet = false }
                 Button(L10n.text("Create")) { createTab() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
                     .disabled(newTabName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

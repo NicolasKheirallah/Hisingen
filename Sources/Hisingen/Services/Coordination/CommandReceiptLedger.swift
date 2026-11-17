@@ -145,14 +145,6 @@ final class CommandReceiptLedger {
         return true
     }
 
-    @discardableResult
-    func dismiss(issuedAt: Date, vin: String?) -> Bool {
-        guard let id = records.first(where: { $0.receipt.issuedAt == issuedAt })?.receipt.id else {
-            return false
-        }
-        return dismiss(id: id, vin: vin)
-    }
-
     /// Moves awaiting receipts to confirmed when this state shows the command's effect, first
     /// closing out any window that lapsed. Persists under `vin` when anything changed. Returns
     /// whether any receipt confirmed during this pass.

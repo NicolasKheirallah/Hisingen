@@ -1,0 +1,27 @@
+{
+  "entity_id": "sensor.hisingen_home_charging_plan_nx1234567",
+  "state": "scheduled",
+  "attributes": {
+    "plan_id": "plan-7f3a",
+    "charger_id": "NX1234567",
+    "target": {"type": "add_kwh", "value": 18.0},
+    "deadline": "2026-11-17T06:00:00+00:00",
+    "time_zone": "Europe/Stockholm",
+    "windows": [
+      {"start": "2026-11-17T01:15:00+00:00", "end": "2026-11-17T03:45:00+00:00", "avg_price": 0.43}
+    ],
+    "delivered_kwh": 0.0,
+    "remaining_kwh": 18.0,
+    "rate_kw": 7.2,
+    "expected_finish": "2026-11-17T03:45:00+00:00",
+    "estimated_cost": 7.74,
+    "currency": "SEK",
+    "price_source": "tibber.get_prices",
+    "hold": false,
+    "override": false,
+    "warnings": ["prices_missing"],
+    "updated_at": "2026-11-16T17:00:03+00:00"
+  },
+  "last_changed": "2026-11-16T17:00:03+00:00",
+  "last_updated": "2026-11-16T17:00:03+00:00"
+}

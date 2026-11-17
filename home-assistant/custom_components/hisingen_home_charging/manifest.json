@@ -1,0 +1,13 @@
+{
+  "domain": "hisingen_home_charging",
+  "name": "Hisingen Home Charging",
+  "version": "1.0.0",
+  "documentation": "https://github.com/NicolasKheirallah/Hisingen/blob/main/docs/home-charging.md",
+  "issue_tracker": "https://github.com/NicolasKheirallah/Hisingen/issues",
+  "codeowners": [],
+  "dependencies": [],
+  "after_dependencies": ["tibber", "recorder"],
+  "requirements": [],
+  "iot_class": "calculated",
+  "integration_type": "service"
+}

@@ -11,15 +11,17 @@ struct OTAControlsCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Card {
+        Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(
-                    symbol: "shippingbox.fill",
+                    symbol: "shippingbox",
                     title: L10n.text("Vehicle Software & OTA"),
                     color: HisingenTheme.semanticActive
                 )
-                gate.dimReason(gate.liveAvailability([.installOTANow]))
                 if let software = state.softwareInfo {
+                    if [.downloaded, .deferred, .scheduled].contains(software.state) {
+                        gate.dimReason(gate.liveAvailability([.installOTANow]))
+                    }
                     // One keyed animation drives the whole status morph: symbol
                     // replace-crossfade, progress line and action groups in/out.
                     Group {
@@ -30,15 +32,13 @@ struct OTAControlsCard: View {
                     .hisAnimation(Motion.stateChange, value: software.state)
                 } else {
                     otaStatusRow(
-                        symbol: "questionmark.circle.fill",
+                        symbol: "questionmark.circle",
                         tint: HisingenTheme.inkMuted,
                         text: L10n.text("Software status is unavailable for this vehicle.")
                     )
                 }
             }
         }
-        .opacity(gate.liveOpacity([.installOTANow]))
-        .hisAnimation(Motion.stateChange, value: gate.liveAvailability([.installOTANow]))
     }
 
     @ViewBuilder
@@ -58,7 +58,7 @@ struct OTAControlsCard: View {
             )
         case .downloaded, .deferred:
             otaStatusRow(
-                symbol: "arrow.down.circle.fill",
+                symbol: "arrow.down.circle",
                 tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Software update %@ is ready to install.", $0) }
                     ?? L10n.text("A software update is ready to install.")
@@ -72,7 +72,7 @@ struct OTAControlsCard: View {
             )
         case .installing:
             otaStatusRow(
-                symbol: "gearshape.2.fill",
+                symbol: "gearshape.2",
                 tint: HisingenTheme.semanticActive,
                 text: pending.map { L10n.format("Installing software update %@…", $0) }
                     ?? L10n.text("Installing a software update…")
@@ -102,7 +102,7 @@ struct OTAControlsCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .help(L10n.text("Checks the vehicle again for the current software status."))
             .transition(.opacity)
@@ -152,7 +152,7 @@ struct OTAControlsCard: View {
             VStack(spacing: 6) {
                 otaButton(
                     title: L10n.text("Install Update Now"),
-                    symbol: "arrow.down.circle.fill",
+                    symbol: "arrow.down.circle",
                     command: .installOTANow,
                     prominent: true
                 )
@@ -163,7 +163,7 @@ struct OTAControlsCard: View {
             VStack(spacing: 6) {
                 otaButton(
                     title: L10n.text("Install Update Now"),
-                    symbol: "arrow.down.circle.fill",
+                    symbol: "arrow.down.circle",
                     command: .installOTANow,
                     prominent: true
                 )
@@ -200,20 +200,23 @@ struct OTAControlsCard: View {
                     Text(L10n.text("Schedule")).hisType(.caption, weight: .medium)
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
             .disabled(gate.isDisabled(.scheduleOTA(delayMinutes: otaScheduleDelayMinutes)))
         }
     }
 
     private func otaStatusRow(symbol: String, tint: Color, text: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: symbol)
+                .hisType(.body)
                 .foregroundStyle(tint)
                 .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .accessibilityHidden(true)
             Text(text)
-                .hisType(.label, weight: .medium)
+                .hisType(.body)
                 .foregroundStyle(HisingenTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }
@@ -234,13 +237,12 @@ struct OTAControlsCard: View {
 
         if prominent {
             Button { gate.send(command) } label: { label }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticActive)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticActive))
                 .controlSize(.regular)
                 .disabled(gate.isDisabled(command))
         } else {
             Button { gate.send(command) } label: { label }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.regular)
                 .disabled(gate.isDisabled(command))
         }

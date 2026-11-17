@@ -5,6 +5,9 @@ struct ClimateControlCard: View {
     let state: VehicleState
     let gate: ControlsCommandGate
     let onShowSchedule: (ScheduleKind) -> Void
+    /// Plan shows this card as the climate settings timers and the Now card use; starting climate
+    /// lives on Now there, and timers are added from the schedule list.
+    var settingsOnly = false
 
     @State private var targetTemperature: Double = 21
     @State private var driverSeat: HeatingLevel = .unspecified
@@ -36,7 +39,7 @@ struct ClimateControlCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     CardHeader(
-                        symbol: "fan.fill",
+                        symbol: "fan",
                         title: L10n.text("Climate & Conditioning"),
                         color: climateActive ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted,
                         isSemantic: true,
@@ -50,7 +53,7 @@ struct ClimateControlCard: View {
                         Pill(
                             text: state.climateStatus?.activity.displayName ?? L10n.text("Active"),
                             color: HisingenTheme.semanticWarning,
-                            symbol: "fan.fill"
+                            symbol: "fan"
                         )
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
                     }
@@ -72,7 +75,7 @@ struct ClimateControlCard: View {
                     if let climatizationNote {
                         Text(climatizationNote)
                             .hisType(.micro)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -81,7 +84,7 @@ struct ClimateControlCard: View {
                     if state.otaCapabilities?.supportsAutomaticSeatAndWheelHeating == true {
                         Text(L10n.text("May heat seats and steering wheel automatically"))
                             .hisType(.micro)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -98,10 +101,12 @@ struct ClimateControlCard: View {
 
                     rearSeatHeatingStatus
 
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-                    climateStartStopButtons
+                    if !settingsOnly {
+                        Divider().opacity(HisingenTheme.dividerOpacity)
+                        climateStartStopButtons
+                    }
 
-                    if features.contains(.remoteSchedules) && profile.permits(.climateTimers) {
+                    if !settingsOnly && features.contains(.remoteSchedules) && profile.permits(.climateTimers) {
                         Button {
                             onShowSchedule(.climate)
                         } label: {
@@ -112,7 +117,7 @@ struct ClimateControlCard: View {
                             }
                             .frame(maxWidth: .infinity, minHeight: 26)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.small)
                         if (state.energy.pendingClimateTimerCount ?? 0) > 0
                             || (state.energy.pendingClimateTimerDeletionCount ?? 0) > 0
@@ -149,7 +154,7 @@ struct ClimateControlCard: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 30)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.small)
                     .disabled(gate.isDisabled(actionCommand))
                 }
@@ -224,7 +229,7 @@ struct ClimateControlCard: View {
                         .foregroundStyle(HisingenTheme.temperatureColor(celsius: interior))
                     if let requested = state.climateStatus?.requestedTemperatureCelsius {
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                         Text(L10n.text("Target"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
@@ -235,7 +240,7 @@ struct ClimateControlCard: View {
                     }
                     if let exterior = state.weather?.temperatureCelsius {
                         Text("·")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                         Text(L10n.text("Outside:"))
                             .hisType(.caption, weight: .medium)
                             .foregroundStyle(.secondary)
@@ -247,7 +252,7 @@ struct ClimateControlCard: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0, style: .continuous))
             }
 
             HStack {
@@ -260,9 +265,8 @@ struct ClimateControlCard: View {
                         gate.sendingOverlay(maxHeatCommand)
                     }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary(HisingenTheme.semanticWarning))
                 .controlSize(.small)
-                .tint(HisingenTheme.semanticWarning)
                 .disabled(gate.isDisabled(maxHeatCommand))
                 .help(L10n.text("Sends 30 °C with every heater at maximum. Does not change your saved settings."))
                 Spacer()
@@ -272,7 +276,7 @@ struct ClimateControlCard: View {
                         .foregroundStyle(.secondary)
                     Text(L10n.text("Saved command setting; not live cabin telemetry"))
                         .hisType(.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                     if let remaining = state.climateStatus?.timeRemainingMinutes, climateActive, remaining > 0 {
                         Text(L10n.format("%d min remaining", remaining))
                             .hisType(.caption, weight: .medium)
@@ -301,7 +305,7 @@ struct ClimateControlCard: View {
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(targetTemperature <= climateTemperatureRange.lowerBound)
                 // It hard-stopped at the vehicle's limit with nothing saying why, so the control
@@ -324,10 +328,10 @@ struct ClimateControlCard: View {
                                 .frame(maxWidth: .infinity)
                                 .background {
                                     if isSelected {
-                                        RoundedRectangle(cornerRadius: 6)
+                                        RoundedRectangle(cornerRadius: 0)
                                             .fill(HisingenTheme.semanticWarning.opacity(0.18))
                                     } else {
-                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 6))
+                                        HoverChipFill(shape: RoundedRectangle(cornerRadius: 0))
                                     }
                                 }
                                 .foregroundStyle(isSelected ? HisingenTheme.semanticWarning : .secondary)
@@ -350,7 +354,7 @@ struct ClimateControlCard: View {
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .disabled(targetTemperature >= climateTemperatureRange.upperBound)
                 .accessibilityLabel(L10n.text("Increase target temperature"))
@@ -432,7 +436,7 @@ struct ClimateControlCard: View {
                 }
             }
             .padding(9)
-            .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
             .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
         } else {
             HStack {
@@ -457,14 +461,14 @@ struct ClimateControlCard: View {
                 if profile.hasSelectableSeatHeating
                     && state.otaCapabilities?.controlSettings?.frontSeatSettings != false {
                     HeatingLevelControl(
-                        title: L10n.text("Driver"), symbol: "carseat.left.fill", level: $driverSeat
+                        title: L10n.text("Driver"), symbol: "carseat.left", level: $driverSeat
                     ) {
                         preferences.remoteDriverSeatHeating = $0
                     }
                     .disabled(gate.isDisabled(Self.probe))
 
                     HeatingLevelControl(
-                        title: L10n.text("Passenger"), symbol: "carseat.right.fill", level: $passengerSeat
+                        title: L10n.text("Passenger"), symbol: "carseat.right", level: $passengerSeat
                     ) {
                         preferences.remoteFrontRightSeatHeating = $0
                     }
@@ -488,14 +492,14 @@ struct ClimateControlCard: View {
                 if showRearSeats {
                     HStack(spacing: 8) {
                         HeatingLevelControl(
-                            title: L10n.text("Rear left"), symbol: "carseat.left.fill",
+                            title: L10n.text("Rear left"), symbol: "carseat.left",
                             level: $rearLeftSeat
                         ) {
                             preferences.remoteRearLeftSeatHeating = $0
                         }
                         .disabled(gate.isDisabled(Self.probe))
                         HeatingLevelControl(
-                            title: L10n.text("Rear right"), symbol: "carseat.right.fill",
+                            title: L10n.text("Rear right"), symbol: "carseat.right",
                             level: $rearRightSeat
                         ) {
                             preferences.remoteRearRightSeatHeating = $0
@@ -552,7 +556,7 @@ struct ClimateControlCard: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0, style: .continuous))
             .hisAnimation(Motion.stateChange, value: state.climateStatus?.rearLeftSeatHeatingLevel)
             .hisAnimation(Motion.stateChange, value: state.climateStatus?.rearRightSeatHeatingLevel)
         }
@@ -583,10 +587,10 @@ struct ClimateControlCard: View {
             HStack(spacing: 6) {
                 ZStack {
                     if climateActive {
-                        SpinningFanView(isSpinning: !reduceMotion, size: 13, color: .white)
+                        SpinningFanView(isSpinning: !reduceMotion, size: 13, color: HisingenTheme.canvas)
                             .transition(.opacity)
                     } else {
-                        Image(systemName: "fan.fill")
+                        Image(systemName: "fan")
                             .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                             .transition(.opacity)
                     }
@@ -598,8 +602,7 @@ struct ClimateControlCard: View {
             }
             .frame(maxWidth: .infinity, minHeight: 34)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.accent)
+        .buttonStyle(.hisProminent(climateActive ? HisingenTheme.semanticCritical : HisingenTheme.accent))
         .disabled(gate.isDisabled(climateActive ? .stopClimate : startClimateCommand))
         .accessibilityHint(
             climateActive

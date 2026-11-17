@@ -16,7 +16,7 @@ struct LocalizationAuditFixTests {
 
     @Test
     func hiddenTripDisclosureHasMeaningfulLabelsAndCountsInEveryLanguage() {
-        for language in ["da", "de", "es", "fi", "fr", "it", "ko", "nb", "nl", "nn", "no", "pl", "pt", "sv", "zh"] {
+        for language in ["da", "de", "es", "fi", "fr", "it", "ko", "nb", "nl", "nn", "pl", "pt", "sv", "zh"] {
             let label = L10n.format("Hidden trips (%d)", languageCode: language, 37)
             #expect(label.contains("37"), "Missing trip count for \(language)")
             #expect(label.count > 5, "Missing disclosure name for \(language)")

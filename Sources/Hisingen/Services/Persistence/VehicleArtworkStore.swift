@@ -33,6 +33,7 @@ final class VehicleArtworkStore {
         let source: String
         let byteCount: Int
         let pixelBudget: Int
+        var trimsTransparentMargins = false
     }
 
     /// Six exterior angles plus the cabin, at ~2.4 MB each once decoded.
@@ -81,9 +82,11 @@ final class VehicleArtworkStore {
         source: String,
         data: Data,
         pixelBudget: Int,
+        trimsTransparentMargins: Bool = false,
         completion: @escaping (Artwork?) -> Void
     ) {
-        let key = Key(source: source, byteCount: data.count, pixelBudget: pixelBudget)
+        let key = Key(source: source, byteCount: data.count, pixelBudget: pixelBudget,
+                      trimsTransparentMargins: trimsTransparentMargins)
         if let artwork = cache[key] {
             touch(key)
             completion(artwork)
@@ -95,7 +98,8 @@ final class VehicleArtworkStore {
         }
         pending[key] = [completion]
         queue.async {
-            let artwork = Self.decode(data: data, pixelBudget: pixelBudget)
+            let artwork = Self.decode(data: data, pixelBudget: pixelBudget,
+                                      trimsTransparentMargins: trimsTransparentMargins)
             Task { @MainActor in
                 self.finish(key: key, artwork: artwork)
             }
@@ -103,9 +107,10 @@ final class VehicleArtworkStore {
     }
 
     /// `load` for callers that can await it.
-    func artwork(source: String, data: Data, pixelBudget: Int) async -> Artwork? {
+    func artwork(source: String, data: Data, pixelBudget: Int, trimsTransparentMargins: Bool = false) async -> Artwork? {
         await withCheckedContinuation { continuation in
-            load(source: source, data: data, pixelBudget: pixelBudget) { continuation.resume(returning: $0) }
+            load(source: source, data: data, pixelBudget: pixelBudget,
+                 trimsTransparentMargins: trimsTransparentMargins) { continuation.resume(returning: $0) }
         }
     }
 
@@ -162,7 +167,9 @@ final class VehicleArtworkStore {
         recency.append(key)
     }
 
-    private nonisolated static func decode(data: Data, pixelBudget: Int) -> Artwork? {
+    private nonisolated static func decode(
+        data: Data, pixelBudget: Int, trimsTransparentMargins: Bool = false
+    ) -> Artwork? {
         guard !data.isEmpty,
               let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
 
@@ -175,6 +182,9 @@ final class VehicleArtworkStore {
             kCGImageSourceThumbnailMaxPixelSize: pixelBudget
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        if trimsTransparentMargins, let crop = visibleExterior(in: image) {
+            return Artwork(image: crop, sourcePixelSize: CGSize(width: crop.width, height: crop.height))
+        }
 
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let width = (properties?[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue ?? Double(image.width)
@@ -182,5 +192,36 @@ final class VehicleArtworkStore {
         guard width > 0, height > 0 else { return nil }
 
         return Artwork(image: image, sourcePixelSize: CGSize(width: width, height: height))
+    }
+
+    private nonisolated static func visibleExterior(in image: CGImage) -> CGImage? {
+        switch image.alphaInfo {
+        case .first, .last, .premultipliedFirst, .premultipliedLast: break
+        default: return nil
+        }
+        let width = image.width
+        let height = image.height
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let alpha = data.assumingMemoryBound(to: UInt8.self)
+        var left = width, top = height, right = -1, bottom = -1
+        for y in 0..<height {
+            for x in 0..<width where alpha[(y * width + x) * 4 + 3] >= 12 {
+                left = min(left, x)
+                top = min(top, y)
+                right = max(right, x)
+                bottom = max(bottom, y)
+            }
+        }
+        guard left <= right, top <= bottom else { return nil }
+        let padding = CGFloat(max(2, width / 40))
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        let crop = CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
+            .insetBy(dx: -padding, dy: -padding)
+            .intersection(bounds)
+        return crop == bounds ? nil : image.cropping(to: crop)
     }
 }

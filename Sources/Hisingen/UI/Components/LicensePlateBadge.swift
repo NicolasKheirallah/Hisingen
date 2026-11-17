@@ -16,7 +16,7 @@ struct LicensePlateBadge: View {
             .padding(.vertical, 2)
             .background(
                 Color.primary.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 0, style: .continuous)
             )
         case .belowGreeting, .inlineHeader:
             // `Text.monospaced()` monospaces digits only, so "ABC 123" kept proportional letters
@@ -30,7 +30,7 @@ struct LicensePlateBadge: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4.5)
-            .background(HisingenTheme.chipFill, in: Capsule())
+            .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
         case .hidden:
             EmptyView()
         }

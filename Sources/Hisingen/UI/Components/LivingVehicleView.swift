@@ -157,7 +157,7 @@ private struct ChargeRail: View {
         VStack(spacing: 6) {
             Spacer(minLength: 0)
             ZStack(alignment: .trailing) {
-                Capsule()
+                RoundedRectangle(cornerRadius: 0)
                     .fill(Color.clear)
                     .frame(height: 6)
                     .overlay {
@@ -165,9 +165,9 @@ private struct ChargeRail: View {
                             tint: HisingenTheme.accent,
                             isActive: true
                         )
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: 0))
                     }
-                Image(systemName: "bolt.fill")
+                Image(systemName: "bolt")
                     .hisType(.micro)
                     .foregroundStyle(HisingenTheme.accent)
             }

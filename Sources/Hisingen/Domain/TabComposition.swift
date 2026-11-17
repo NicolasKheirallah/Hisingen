@@ -3,16 +3,19 @@ import Foundation
 /// The tabs Hisingen ships with. Settings is deliberately not composable — it is the surface
 /// where composition is managed, so a reader who hid it would have no way back.
 enum BuiltInTab: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
-    case vehicle, info, history, controls, settings
+    // Case order is the default tab order (2026-11-16 redesign): what the car is doing now,
+    // what it will do next, what it did, and what it is. Raw values are unchanged, so saved
+    // compositions decode exactly as before.
+    case vehicle, controls, history, info, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .vehicle: return L10n.text("Vehicle")
-        case .info: return L10n.text("Info")
-        case .history: return L10n.text("History")
-        case .controls: return L10n.text("Controls")
+        case .vehicle: return L10n.text("Now")
+        case .controls: return L10n.text("Plan")
+        case .history: return L10n.text("Log")
+        case .info: return L10n.text("Car")
         case .settings: return L10n.text("Settings")
         }
     }
@@ -20,16 +23,16 @@ enum BuiltInTab: String, CaseIterable, Codable, Hashable, Sendable, Identifiable
     var symbol: String {
         switch self {
         case .vehicle: return "bolt.car"
-        case .info: return "info.circle"
+        case .controls: return "calendar.day.timeline.left"
         case .history: return "chart.xyaxis.line"
-        case .controls: return "slider.horizontal.3"
+        case .info: return "car.side"
         case .settings: return "gearshape"
         }
     }
 
     /// Tabs a reader may hide. Settings cannot be hidden, and hiding the last visible tab
     /// would leave an empty panel with no way to navigate.
-    static var hideableCases: [BuiltInTab] { [.vehicle, .info, .history, .controls] }
+    static var hideableCases: [BuiltInTab] { [.vehicle, .controls, .history, .info] }
 
     var isHideable: Bool { Self.hideableCases.contains(self) }
 }
@@ -88,7 +91,7 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
         "square.grid.2x2", "bolt.car", "car.side", "bolt.fill", "batteryblock",
         "thermometer.medium", "location.fill", "chart.xyaxis.line", "chart.pie.fill",
         "powerplug.fill", "lock.fill", "fan", "wind", "road.lanes", "gauge.with.needle",
-        "wrench.and.screwdriver", "sparkles", "shield.lefthalf.filled", "star.fill",
+        "wrench.and.screwdriver", "shield.lefthalf.filled", "star.fill",
         "leaf.fill", "speedometer", "calendar", "clock", "mappin.and.ellipse"
     ]
 }
@@ -101,7 +104,7 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
 struct TabComposition: Equatable, Sendable {
     /// Layout version, so a future shape change can migrate rather than silently reset a
     /// reader's tabs.
-    var version: Int = 1
+    var version: Int = 2
 
     /// Tabs whose contents differ from the shipped layout, keyed by `TabRef.storageKey`.
     /// A built-in tab is absent until the reader changes something about it, which is what
@@ -417,6 +420,14 @@ struct TabComposition: Equatable, Sendable {
     /// longer exists — which would render as an empty slot with no way to remove it.
     func normalized() -> TabComposition {
         var result = self
+        if result.version < 2 {
+            // These two Log cards used to appear even in layouts that didn't list them.
+            let key = TabRef.history.storageKey
+            if let items = result.tabContents[key] {
+                result.tabContents[key] = items + [.historyWarnings, .historyTyrePressure].filter { !items.contains($0) }
+            }
+            result.version = 2
+        }
         let known = Set(TabItemID.allCases)
         // Settings is never hideable, whatever a stored file claims.
         result.hiddenTabs.subtract([.settings])
@@ -524,6 +535,10 @@ struct TabLayout: Equatable, Sendable {
     /// A tab the reader never rearranged draws an item it has never heard of, so a card shipped
     /// in a later version appears instead of going silently missing from their panel. Once they
     /// have arranged a tab themselves, that list is the whole truth about it.
+    /// Whether the layout names this item itself, as opposed to drawing it only because the tab
+    /// accepts new items.
+    func places(_ item: TabItemID) -> Bool { rank[item] != nil }
+
     func draws(_ item: TabItemID) -> Bool {
         if rank[item] != nil { return true }
         // The reader switched it off, wherever it used to live.

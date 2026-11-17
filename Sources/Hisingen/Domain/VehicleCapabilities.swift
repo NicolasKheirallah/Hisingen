@@ -50,6 +50,19 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             return
         }
 
+        // A Volvo name or VIN must not fall through to the Polestar number heuristics
+        // below: "Volvo 240" contains " 2", and the first-digit fallback would make it
+        // a Polestar 2.
+        if normalized.contains("volvo") {
+            self = .volvoUnknown(modelName)
+            return
+        }
+        if let vin = vin?.uppercased(),
+           vin.hasPrefix("YV1") || vin.hasPrefix("YV4") || vin.hasPrefix("LVY") {
+            self = .volvoUnknown(modelName)
+            return
+        }
+
         if normalized.contains("polestar 2") || normalized.contains("ps2") || normalized.contains(" 2") || normalized.contains("two") {
             self = .polestar2
             return
@@ -93,11 +106,7 @@ enum VehicleModelFamily: Codable, Hashable, Sendable {
             case "five": self = .polestar5
             case "six": self = .polestar6
             default:
-                if let vin = vin?.uppercased(), (vin.hasPrefix("YV1") || vin.hasPrefix("YV4") || vin.hasPrefix("LVY")) {
-                    self = .volvoUnknown(modelName)
-                } else {
-                    self = .unknown(modelName)
-                }
+                self = .unknown(modelName)
             }
         }
     }
@@ -503,7 +512,11 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             switch capability {
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .vehicleManaged
-            case .honkAndFlash, .reducedGuardLock:
+            // Honk and flash used to be marked unavailable here because a MY2023 car reported
+            // mode 1 (none). Polestar's own app offers it after the 2026 app update, and each
+            // car still reports its authoritative mode in GetMyCars, which the command gate
+            // checks per command. The model table no longer hides a control the car may allow.
+            case .reducedGuardLock:
                 return .unavailable
             case .softwareInstallControl:
                 return .backendDependent

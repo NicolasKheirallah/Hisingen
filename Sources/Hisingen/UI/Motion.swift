@@ -318,7 +318,7 @@ struct PressableButtonBody: View {
             .onHover { hovered = $0 }
             // Keep keyboard focus visible without wrapping the whole control in a prominent ring.
             .overlay(alignment: .bottom) {
-                Capsule()
+                RoundedRectangle(cornerRadius: 0)
                     .fill(HisingenTheme.focusIndicator)
                     .frame(
                         width: HisingenTheme.focusIndicatorWidth,

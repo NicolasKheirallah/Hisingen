@@ -38,6 +38,7 @@ extension AppDelegate {
             }
         )
         .environment(\.preferencesStore, preferences)
+        .environment(\.homeCharging, homeCharging)
 
         let host = NSHostingController(rootView: settings)
         let isNewWindow = settingsWindow == nil
@@ -129,6 +130,8 @@ extension AppDelegate {
         case .presentation:
             preferences.applyAppearance()
             vehicleSession.reloadVehicleMetadata()
+        case .panelLayout:
+            break
         case .launchAtLogin:
             launchAtLoginController.reconcile(userInitiated: true)
         case .updater:

@@ -24,7 +24,7 @@ struct ExceptionsCard: View {
         // A triggered alarm is the one row here that means someone may be tampering with the car,
         // so it leads and it is the only row that gets the critical treatment.
         if features.contains(.exteriorStatus), state.exteriorStatus?.alarmTriggered == true {
-            rows.append(KVRow(L10n.text("Vehicle Alarm Triggered"), L10n.text("Active Alarm"), symbol: "speaker.wave.3.fill", critical: true))
+            rows.append(KVRow(L10n.text("Vehicle Alarm Triggered"), L10n.text("Active Alarm"), symbol: "speaker.wave.3", critical: true))
         }
         if features.contains(.vehicleAvailability), state.identity.availability != .unknown, state.identity.availability != .available {
             rows.append(KVRow(L10n.text("Cloud Connectivity"), state.identity.availability.displayName, symbol: "antenna.radiowaves.left.and.right", valueWarning: true))
@@ -39,7 +39,8 @@ struct ExceptionsCard: View {
         }
         if features.contains(.exteriorStatus), let exterior = state.exteriorStatus {
             for opening in exterior.itemsNeedingAttention {
-                rows.append(KVRow(L10n.format("%@ Open", opening.displayName), L10n.text("Warning"), symbol: "exclamationmark.circle.fill", warning: true))
+                let symbol = opening == .tailgate ? "car.side.rear.open" : "exclamationmark.circle.fill"
+                rows.append(KVRow(L10n.format("%@ Open", opening.displayName), L10n.text("Warning"), symbol: symbol, warning: true))
             }
         }
         if features.contains(.tyreAndWarnings), let tyres = state.maintenance.details?.tyres {
@@ -49,7 +50,14 @@ struct ExceptionsCard: View {
             }
         }
         if features.contains(.tyreAndWarnings) || features.contains(.vehicleHealth), let health = state.maintenance.details {
+            // The service flag and the tyre count above already speak for these two categories;
+            // repeating them here counted one fault as two in the header.
+            let serviceRowShown = features.contains(.vehicleHealth) && state.maintenance.service.serviceWarning
+            let tyreRowShown = features.contains(.tyreAndWarnings)
+                && health.tyres.contains { $0.warning.needsAttention }
             for warning in health.warnings {
+                if warning == .service, serviceRowShown { continue }
+                if warning == .tyrePressure, tyreRowShown { continue }
                 rows.append(KVRow(warning.displayName, L10n.text("Warning"), symbol: "exclamationmark.triangle.fill", warning: true))
             }
         }

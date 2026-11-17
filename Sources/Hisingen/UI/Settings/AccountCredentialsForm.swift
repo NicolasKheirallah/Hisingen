@@ -68,10 +68,14 @@ struct AccountCredentialsForm: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style == .welcoming ? 14 : 10) {
+        VStack(alignment: .leading, spacing: style == .welcoming ? 16 : 10) {
             brandPicker
 
-            accountStatusBanner
+            // First sign-in already says it is not connected: the header is the whole message.
+            // A renewal or a mismatch is news, so those states keep their notice.
+            if style != .welcoming || connectionHealth != .notConnected {
+                accountStatusBanner
+            }
 
             if style == .welcoming || connectionHealth == .notConnected || showUpdateFields {
                 if selectedBrand == .polestar {
@@ -90,62 +94,20 @@ struct AccountCredentialsForm: View {
         }
     }
 
-    @ViewBuilder
     private var brandPicker: some View {
-        if style == .welcoming {
-            HStack(spacing: 8) {
-                ForEach(VehicleBrand.allCases, id: \.self) { brand in
-                    brandCard(brand)
-                }
-            }
-        } else {
-            Picker("", selection: $selectedBrand) {
-                ForEach(VehicleBrand.allCases, id: \.self) { brand in
-                    Text(brand.displayName).tag(brand)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .onChange(of: selectedBrand) { _, _ in
-                withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                    testConnectionResult = nil
-                    keychainError = nil
-                    polestarFallbackKind = nil
-                    showUpdateFields = false
-                }
-            }
-        }
-    }
-
-    private func brandCard(_ brand: VehicleBrand) -> some View {
-        let isSelected = selectedBrand == brand
-        let radius = HisingenTheme.bannerRadius
-        return Button {
-            withAnimation(reduceMotion ? nil : Motion.interaction) {
-                selectedBrand = brand
+        UnderlineSegments(
+            options: VehicleBrand.allCases.map { ($0, $0.displayName) },
+            selection: $selectedBrand,
+            accessibilityLabel: L10n.text("Brand")
+        )
+        .onChange(of: selectedBrand) { _, _ in
+            withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                 testConnectionResult = nil
                 keychainError = nil
                 polestarFallbackKind = nil
+                showUpdateFields = false
             }
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: brand == .polestar ? "bolt.car.fill" : "car.fill")
-                    .hisSymbolSize(20)
-                    .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.inkMuted)
-                Text(brand.displayName)
-                    .hisType(.body, weight: isSelected ? .semibold : .medium)
-                    .foregroundStyle(isSelected ? HisingenTheme.ink : HisingenTheme.inkMuted)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.pressable)
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 
     private var isActiveBrand: Bool {
@@ -181,10 +143,8 @@ struct AccountCredentialsForm: View {
                         .frame(width: 10, height: 10)
                         .transition(.opacity)
                 } else {
-                    Circle().fill(statusColor)
-                        .frame(width: 8, height: 8)
-                        .frame(width: 10, height: 10)
-                        .transition(.opacity)
+                    // The notice's coloured edge carries the state; no dot beside it.
+                    EmptyView()
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -220,7 +180,7 @@ struct AccountCredentialsForm: View {
                         }
                         .hisType(.caption, weight: .semibold)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.hisProminent)
                     .controlSize(.mini)
                 }
             }
@@ -238,8 +198,8 @@ struct AccountCredentialsForm: View {
                             Image(systemName: showUpdateFields ? "chevron.up" : "pencil")
                             Text(showUpdateFields ? L10n.text("Done") : L10n.text("Edit Credentials"))
                         }
-                        .hisType(.caption, weight: .medium)
                     }
+                    .buttonStyle(.hisSecondary)
                     .controlSize(.mini)
 
                     if model.isConnected(selectedBrand) {
@@ -247,8 +207,8 @@ struct AccountCredentialsForm: View {
                             testCurrentConnection()
                         } label: {
                             Text(L10n.text("Test"))
-                                .hisType(.caption, weight: .medium)
                         }
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.mini)
                         .disabled(isTestingConnection)
                     }
@@ -271,9 +231,10 @@ struct AccountCredentialsForm: View {
             }
         }
         .padding(10)
-        .background(statusColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.leading, 2)
+        .hisNotice(statusColor)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 0)
                 .stroke(statusColor.opacity(0.25), lineWidth: 0.5)
         )
         // The Test flow mutates state from a Task continuation with no surrounding
@@ -291,12 +252,11 @@ struct AccountCredentialsForm: View {
 
         if prominent {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
-                .buttonStyle(.borderedProminent)
-                .tint(HisingenTheme.semanticWarning)
+                .buttonStyle(.hisProminent(HisingenTheme.semanticWarning))
                 .controlSize(.mini)
         } else {
             Button { onSettingsChanged(.reauthenticate(selectedBrand)) } label: { label }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.mini)
         }
     }
@@ -318,8 +278,8 @@ struct AccountCredentialsForm: View {
     func labeledField<Content: View>(_ label: String, @ViewBuilder field: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .hisType(.label, weight: .medium)
-                .foregroundStyle(.secondary)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
             field()
         }
     }

@@ -121,58 +121,6 @@ struct DegradedStateResilienceTests {
         #expect(restored.location == nil)
     }
 
-    @Test
-    func testLegacySnapshotMigratesOnActivationAndRedactsSensitiveFields() throws {
-        let suiteName = "HisingenTests.legacy-cache.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let database = VehicleDatabase.inMemory()
-        let live = stateWithFullTelemetry()
-        let encoded = try JSONEncoder().encode(live)
-        var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-
-        // Recreate the pre-clustered persisted layout: older releases wrote these flat
-        // keys, whereas current snapshots group them under fuel/service/trip objects. The schema
-        // marker goes with them, because its absence is what makes this a pre-marker payload.
-        legacy.removeValue(forKey: "schemaVersion")
-        legacy.removeValue(forKey: "fuelSystem")
-        legacy.removeValue(forKey: "serviceInfo")
-        legacy.removeValue(forKey: "tripComputer")
-        legacy["fuelLevelPercent"] = 55.0
-        legacy["fuelRangeKm"] = 320
-        legacy["daysToService"] = 200
-        legacy["distanceToServiceKm"] = 8_000
-        legacy["serviceWarning"] = false
-        legacy["fluidWarnings"] = []
-        legacy["tripMeterManualKm"] = 12.5
-        legacy["tripMeterAutomaticKm"] = 48.0
-        let cached = try JSONSerialization.data(withJSONObject: [live.identity.vin: legacy])
-        defaults.set(cached, forKey: "cached_vehicle_snapshots_v1")
-
-        let store = VehicleStateStore(defaults: defaults, database: database)
-
-        // The read is pure. Before the launch pass there is nothing in SQLite, and reading must
-        // not migrate the entry or erase the vehicle's tiers on the way – a read that writes is
-        // what made this file impossible to reason about.
-        #expect(store.snapshot(for: live.identity.vin) == nil)
-        #expect(defaults.data(forKey: "cached_vehicle_snapshots_v1") != nil)
-
-        store.activate()
-        let migrated = try #require(store.snapshot(for: live.identity.vin))
-        #expect(migrated.freshness.isCached)
-        #expect(migrated.fuelSystem.levelPercent == 55.0)
-        #expect(migrated.maintenance.service.daysToService == 200)
-        #expect(migrated.tripComputer.manualTripKm == 12.5)
-        #expect(migrated.location == nil)
-        #expect(migrated.identity.ownerFirstName == nil)
-        #expect(migrated.identity.registrationNo == nil)
-
-        // The migration's last act is to drop the legacy blob rather than leave an empty one
-        // behind, so there is nothing stale left in the plist for a later launch to re-read.
-        #expect(defaults.data(forKey: "cached_vehicle_snapshots_v1") == nil)
-        #expect(database.snapshots.loadSnapshot(for: live.identity.vin)?.location == nil)
-    }
-
     // MARK: - Helpers
 
     private func graphQLError(message: String, path: [String], code: String? = nil) -> GraphQLErrorDTO {

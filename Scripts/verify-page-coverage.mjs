@@ -19,10 +19,10 @@ const surfaces = [
 const failures = [];
 
 const productionFocals = [
-  ["Vehicle instrument", "Sources/Hisingen/UI/Vehicle/AwardVehicleInstrument.swift", "struct AwardVehicleInstrument"],
+  ["Vehicle instrument", "Sources/Hisingen/UI/Vehicle/NowInstrument.swift", "struct NowInstrument"],
   ["Info passport", "Sources/Hisingen/UI/Info/InfoTabView+AwardPassport.swift", "awardVehiclePassport"],
   ["History instrument", "Sources/Hisingen/UI/History/HistoryDashboardView+AwardOverview.swift", "awardHistoryOverview"],
-  ["Controls map", "Sources/Hisingen/UI/Controls/AwardControlMap.swift", "struct AwardControlMap"],
+  ["Controls schedule", "Sources/Hisingen/UI/Controls/PlanTimeline.swift", "struct PlanTimeline"],
 ];
 
 const swiftFiles = (directory) => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

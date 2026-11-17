@@ -10,7 +10,8 @@ extension HistoryDashboardView {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "exclamationmark.triangle", title: L10n.text("Warning Timeline"), color: HisingenTheme.semanticWarning)
-                PaginatedSection(items: warningEvents, pageSize: 10, resetKeys: [periodLoadKey],
+                PaginatedSection(items: warningEvents, pageSize: preferences.historyPageSize(for: .historyWarnings),
+                                 resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No warnings were reported in this period.")) { visible, footer in
                     ForEach(visible) { event in
                         VStack(alignment: .leading, spacing: 2) {

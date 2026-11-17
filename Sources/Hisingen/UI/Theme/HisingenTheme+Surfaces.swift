@@ -59,7 +59,7 @@ extension HisingenTheme {
     ///
     /// A banner is a slight concentric inset of the section carrying it, which is why it is 10
     /// rather than the card's 12.
-    static var bannerRadius: CGFloat { 10 }
+    static var bannerRadius: CGFloat { 0 }
 
     /// A compact, neutral marker for keyboard focus on custom pressable buttons.
     /// It deliberately uses the foreground ink instead of the theme accent so focus never becomes
@@ -76,50 +76,35 @@ extension HisingenTheme {
     /// ``StateSummaryChip`` render side by side in the vehicle hero. One value now, and a low one:
     /// a chip is far smaller than its section, so a literal concentric inset of the card's 12 would
     /// read as a rounded rectangle rather than a label.
-    static var statusChipRadius: CGFloat { 4 }
+    static var statusChipRadius: CGFloat { 0 }
 
     // MARK: - Popover Surface
 
     /// Full-bleed popover surface: the panel's own material, over the standard `NSPopover`
     /// backing.
     ///
-    /// `.regularMaterial` at full opacity, over AppKit's own popover backing, with the popover's
-    /// corners, arrow and shadow intact. It stays the one translucent surface in any stack: in the
-    /// 2026 language the material is also what the glass layer samples, so a second blur anywhere
-    /// under a glass control would be two blurs compositing toward grey.
+    /// The theme canvas, opaque, over AppKit's own popover backing, with the popover's corners,
+    /// arrow and shadow intact.
     @ViewBuilder
     static var popoverSurface: some View {
         PopoverSurface()
     }
 }
 
-/// The popover's own surface, as a view rather than a token, because the decision
-/// depends on the environment: Reduce Transparency and Increase Contrast both ask for
-/// an opaque surface, and a static token cannot see either.
+/// The popover's own surface. Opaque since the 2026-11-16 redesign: the panel is the theme's
+/// canvas, so every contrast figure the gate checks is the figure the reader sees, whatever
+/// window sits behind the panel. The translucent panel let a dark window drag light-mode text to
+/// 1.6:1. Increase Contrast still drops to ``panelFill``, a neutral a step darker than any
+/// canvas, so lifted fills keep separating from it.
 @MainActor
 struct PopoverSurface: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.colorScheme) private var colorScheme
-
-    /// Under either setting the blur is dropped entirely and ``panelFill`` — a neutral, darker than
-    /// any canvas — supplies the panel, so the lifted card still separates from it. In light
-    /// appearance, `.thinMaterial` reveals more of the desktop through the panel; dark appearance
-    /// keeps `.regularMaterial` for a steadier text surface.
-    private var prefersOpaqueSurface: Bool {
-        reduceTransparency || contrast == .increased
-    }
 
     var body: some View {
-        if prefersOpaqueSurface {
-            // The panel goes *down*, not the cards going up: an opaque card on an opaque canvas
-            // panel would have been invisible, which is exactly the defect the lifted `cardFill`
-            // exists to fix, arriving by a different route.
+        if contrast == .increased {
             Rectangle().fill(HisingenTheme.panelFill)
-        } else if colorScheme == .light {
-            Rectangle().fill(.thinMaterial)
         } else {
-            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(HisingenTheme.canvas)
         }
     }
 }
@@ -144,7 +129,7 @@ extension HisingenTheme {
     /// Contrast drops the blur the panel becomes opaque, and the card is lifted toward white rather
     /// than being the canvas — so the panel has to go down for the card to separate at all. Using
     /// the theme canvas here, as an earlier comment claimed it did, would leave a light theme whose
-    /// canvas is already near-white (Swedish Gold, Sand Dune) with a card 2 % lighter than its own
+    /// canvas is already near-white (Charcoal Gold, Sand Dune) with a card 2 % lighter than its own
     /// panel.
     static var panelFill: Color {
         Color(
@@ -179,41 +164,32 @@ extension View {
             background(fallback, in: shape)
         }
     }
+}
 
-    /// Window-level glass for the one surface that floats over the desktop: the charging mini
-    /// panel. The window itself supplies the shadow; the glass supplies the material, sampling
-    /// whatever is behind it. On macOS 15 it falls back to the panel material, and under Reduce
-    /// Transparency or Increase Contrast both paths go opaque with ``HisingenTheme/panelFill``,
-    /// the same contract ``PopoverSurface`` keeps for the main panel.
-    @ViewBuilder
-    func hisFloatingGlass<S: Shape>(in shape: S) -> some View {
-        modifier(FloatingGlassModifier(shape: shape))
+// MARK: - Notice surface
+
+/// A notice: the studio fill with a 2pt edge in the notice's colour, its text in ink. The edge
+/// carries the meaning, so the wash behind the words stays neutral and every text colour keeps
+/// its measured contrast. Under Increase Contrast the edge doubles.
+struct HisNoticeSurface: ViewModifier {
+    let tint: Color
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content
+            .background(HisingenTheme.palette.studioFill)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(tint)
+                    .frame(width: contrast == .increased ? 4 : 2)
+                    .accessibilityHidden(true)
+            }
     }
 }
 
-/// The body of ``View/hisFloatingGlass(in:)``, split out so the fallback can read the
-/// accessibility environment; a plain `View` extension cannot.
-private struct FloatingGlassModifier<S: Shape>: ViewModifier {
-    let shape: S
-
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            // The system adapts glass to the appearance, but Reduce Transparency and Increase
-            // Contrast are app-honored promises here: the mini panel goes opaque like the
-            // macOS 15 path below instead of staying translucent.
-            if reduceTransparency || contrast == .increased {
-                content.background(HisingenTheme.panelFill, in: shape)
-            } else {
-                content.glassEffect(.regular, in: shape)
-            }
-        } else if reduceTransparency || contrast == .increased {
-            content.background(HisingenTheme.panelFill, in: shape)
-        } else {
-            content.background(.regularMaterial, in: shape)
-        }
+extension View {
+    @MainActor
+    func hisNotice(_ tint: Color) -> some View {
+        modifier(HisNoticeSurface(tint: tint))
     }
 }

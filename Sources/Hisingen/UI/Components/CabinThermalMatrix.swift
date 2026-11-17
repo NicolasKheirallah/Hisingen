@@ -37,7 +37,7 @@ struct CabinThermalMatrix: View {
                     .monospacedDigit()
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(activityBadgeColor.opacity(0.12), in: Capsule())
+                    .background(activityBadgeColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
                     .foregroundStyle(activityBadgeColor)
                     .hisAnimation(Motion.stateChange, value: activity)
             }
@@ -142,7 +142,7 @@ struct CabinThermalMatrix: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
         .background(active ? HisingenTheme.semanticWarning.opacity(0.12) : HisingenTheme.chipFill,
-                    in: RoundedRectangle(cornerRadius: 6))
+                    in: RoundedRectangle(cornerRadius: 0))
         .hisAnimation(Motion.stateChange, value: level)
     }
 }

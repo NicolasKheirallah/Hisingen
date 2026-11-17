@@ -17,6 +17,8 @@ app. This file lists what that covers, where each part came from, and under whic
 | 20 gRPC Swift, SwiftNIO and Swift packages | Linked libraries | Apache 2.0; BoringSSL inside swift-nio-ssl and swift-crypto is ISC and OpenSSL | Polestar gRPC connections |
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
+| Tibber | Home name and 15-minute import prices at runtime | Tibber developer terms | Optional Tibber prices in Home Charging |
+| Home Assistant | Charger status and plans at runtime, through the reader's own instance | Apache 2.0 | Optional Home Charging |
 | Volvo Cars APIs | Vehicle data at runtime | Volvo Cars developer terms | Volvo support |
 | Polestar interfaces | Vehicle data at runtime | Polestar's terms | Polestar support |
 
@@ -86,6 +88,17 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Runtime services
+
+### Home Assistant
+
+Hisingen's optional Home Charging integration talks to a Home Assistant instance the reader
+runs, over its REST and WebSocket APIs at the address the reader enters, for example
+`http://homeassistant.local:8123`. Home Assistant is Apache License 2.0. The component in
+[home-assistant/custom_components/hisingen_home_charging](home-assistant/custom_components/hisingen_home_charging)
+is Hisingen's own code, installed by the reader into Home Assistant; no Home Assistant source is
+copied into the app. The integration is optional and off until a charger is paired.
 
 ## Software bundled with the app
 
@@ -2215,6 +2228,13 @@ Called at runtime. No code from them ships in Hisingen.
   planner, from `www.elprisetjustnu.se`. Prices are provided by Elpriset just nu.se, which asks
   for a credit when its data is shown publicly. The charging planner names it next to the
   prices.
+* **Direct charger clouds:** optional Home Charging uses the selected vendor's API for sign-in,
+  status, commands and session history. Hosts are `api.easee.com`, `api.zaptec.com` and
+  `api.nexblue.com`. [NexBlue OpenAPI](https://prod-management.nexblue.com/swagger/dist/index.html)
+* **[Tibber](https://developer.tibber.com/):** optional Home Charging reads the reader's home name
+  and 15-minute import prices from `api.tibber.com`, with the reader's own access token. The
+  token stays in the macOS Keychain; see [PRIVACY.md](PRIVACY.md). Used under the
+  [Tibber developer terms](https://developer.tibber.com/).
 * **Map links:** the location buttons open Apple Maps (`maps.apple.com`) or Google Maps
   (`maps.google.com`, `www.google.com/maps`) with the vehicle's coordinates in the link. Nothing
   is sent to either until the user clicks.

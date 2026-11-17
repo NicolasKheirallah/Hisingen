@@ -6,7 +6,7 @@ extension HisingenTheme {
 
     // MARK: - Brand Core Colors
 
-    /// Polestar signature Swedish Gold & Amber highlight (#E56E23).
+    /// Amber highlight of the Monochrome Precision theme (#E56E23).
     ///
     /// Dual-appearance like `volvoBlue` and `volvoNavy` below it, and for a measured reason: this
     /// amber is only 2.8:1 on the Polestar light canvas, yet it is used as a text colour (the
@@ -58,7 +58,7 @@ extension HisingenTheme {
     static var accent: Color { palette.accent }
 
     /// High-contrast foreground colour designed to be rendered on top of `accent`.
-    /// Returns black for light accents (Swedish Gold, Aurora, Sand Dune) and white for dark accents.
+    /// Returns black for light accents (Charcoal Gold, Aurora, Sand Dune) and white for dark accents.
     static var accentOn: Color { palette.accentOn }
 
     /// The accent for a specific theme rather than the active one.

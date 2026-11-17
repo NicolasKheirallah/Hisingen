@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var persistLocationHistory = false
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
+    @Environment(\.homeCharging) private var homeCharging
 
     /// Native text fields and segmented controls must not join an implicit section transition.
     /// AppKit rounds interpolated fitting widths independently, which can briefly invert
@@ -65,6 +66,7 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: showsHeaderBar ? HisingenTheme.layoutWidth : .infinity, maxHeight: .infinity)
+        .background(HisingenTheme.canvas)
         .onAppear {
             persistLocationHistory = preferences.persistLocationHistory
         }
@@ -89,7 +91,7 @@ struct SettingsView: View {
     }
 
     private var settingsContent: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) {
                         Group {
@@ -123,6 +125,10 @@ struct SettingsView: View {
                             SettingsElectricityCard(binder: binder)
                             if preferences.marketCountry.offersMarketPricing {
                                 SettingsChargingPlannerCard(binder: binder, state: state)
+                            }
+                            if let homeCharging {
+                                SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
+                                SettingsTibberCard(model: homeCharging)
                             }
                         }
                         .transition(Self.sectionSwapTransition)
@@ -217,7 +223,7 @@ struct SettingsView: View {
                 }
                 .hisType(.label, weight: .semibold)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
             Spacer()
@@ -306,9 +312,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .semibold)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HisingenTheme.accent)
-            .foregroundStyle(HisingenTheme.accentOn)
+            .buttonStyle(.hisProminent(HisingenTheme.accent))
             .controlSize(.small)
 
             Button {
@@ -324,7 +328,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
             Button {
@@ -337,7 +341,7 @@ struct SettingsView: View {
                 .hisType(.label, weight: .medium)
                 .frame(maxWidth: .infinity, minHeight: 26)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.hisSecondary)
             .controlSize(.small)
         }
     }

@@ -11,6 +11,13 @@ enum VehicleBrand: String, Codable, Sendable, CaseIterable {
         case .volvo: return "Volvo"
         }
     }
+
+    /// The one VIN rule for "this is a Volvo": the `YV` manufacturer prefix. Callers keep their
+    /// own answer for a VIN that is not one, because that answer differs by caller (the active
+    /// brand, Polestar, or "not Volvo").
+    static func isVolvoVIN(_ vin: String) -> Bool {
+        vin.uppercased().hasPrefix("YV")
+    }
 }
 
 

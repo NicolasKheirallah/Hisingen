@@ -814,7 +814,7 @@ private final class CommandContextMock: CommandExecutionContext {
     func commandInProgressDidChange() {}
     func presentResult(
         title: String, message: String, success: Bool, target: RemoteCommandTarget?,
-        remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
+        command: RemoteCommand, remedy: RemoteCommandRemedy?, followUp: RemoteCommandFollowUp?
     ) {}
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,

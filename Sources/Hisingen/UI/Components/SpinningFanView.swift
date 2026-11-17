@@ -12,7 +12,7 @@ struct SpinningFanView: View {
     private var shouldSpin: Bool { isSpinning && !reduceMotion && ambientMotionAllowed }
 
     var body: some View {
-        Image(systemName: "fan.fill")
+        Image(systemName: "fan")
             .font(.system(size: size))
             .foregroundStyle(color)
             .rotationEffect(.degrees(angle))

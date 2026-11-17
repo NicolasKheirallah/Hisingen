@@ -15,7 +15,7 @@ The card, the glow behind the car, the angle strip and every label stay in Swift
 | `UI/VehicleStageView.swift` | The layer-backed `NSView` the render lives on, its resting geometry, and the `NSViewRepresentable` (`VehiclePresentationView`) that drops it into SwiftUI. |
 | `Services/Persistence/VehicleArtworkStore.swift` | Decoded, display-sized artwork. Keeps a ~65 ms PNG decode off the main thread and out of the render pass. |
 
-Both hero cards use it: `HisingenContentView.heroCard` (Vehicle tab) and `InfoTabView.heroVisualSection` (Info tab, with the angle strip).
+Both hero cards use it: `HisingenContentView.heroCard` (Now tab) and `InfoTabView.heroVisualSection` (Car tab, with the angle strip).
 
 ```mermaid
 graph TD
@@ -57,7 +57,7 @@ Hisingen is a menu bar app. Clicking the status item builds a fresh `NSHostingCo
 | 2.5 s – 10 min | `.abbreviated`: 400 ms, 44 pt |
 | Under 2.5 s | `.instant`: no animation |
 
-A mis-click, or a hop to the Info tab and back, is one continuous glance at the car and gets nothing. Coming back later reads as a fresh visit and earns the full roll-in. Only presenting the car writes to the ledger; telemetry never reaches it.
+A mis-click, or a hop to the Car tab and back, is one continuous glance at the car and gets nothing. Coming back later reads as a fresh visit and earns the full roll-in. Only presenting the car writes to the ledger; telemetry never reaches it.
 
 **Which side it enters from.** Not simply "the right". The studio turntable holds the car nose-right in the side profile, so it stays right-ish through the front three-quarter and the overhead frame and swings away to the left in the rear three-quarter; the dead-on front and rear frames have no horizontal axis at all. `VehiclePresentationIdentity.facing` records that, and `entrySide` turns it into the side the car must start on to be **driving forwards**: opposite the way it points.
 

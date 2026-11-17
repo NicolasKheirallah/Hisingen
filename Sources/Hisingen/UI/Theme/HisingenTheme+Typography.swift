@@ -8,7 +8,7 @@ extension HisingenTheme {
     /// Frozen alongside geometry so that choosing a palette alters colour only, and never
     /// re-proportions the app's type hierarchy.
     private static var weightLadder: (heading: Font.Weight, value: Font.Weight, caption: Font.Weight) {
-        (.semibold, .bold, .semibold)
+        (.regular, .regular, .medium)
     }
 
     static var headingWeight: Font.Weight { weightLadder.heading }
@@ -24,9 +24,14 @@ extension HisingenTheme {
     /// degrades. Above 12pt this returns 0; the display tiers use ``displayTracking(forSize:)``,
     /// which is negative for the same reason.
     static func tracking(forSize size: CGFloat) -> CGFloat {
-        guard size < 12 else { return 0 }
-        return (12 - size) * 0.04
+        // Polestar sets 16pt running text at -0.3pt. Helvetica Neue needs that air back below
+        // 11pt, where the negative value starts closing counters.
+        guard size >= 11 else { return (11 - size) * 0.03 }
+        return size * textTrackingRatio
     }
+
+    /// Running-text tracking as a ratio of size: polestar.com's -0.3pt at 16pt.
+    static var textTrackingRatio: CGFloat { -0.019 }
 
     /// Extra leading for text that wraps.
     ///
@@ -44,13 +49,13 @@ extension HisingenTheme {
     static var captionWeight: Font.Weight { weightLadder.caption }
 
     /// Global display weight for large figures and titles.
-    static var displayWeight: Font.Weight { .bold }
+    static var displayWeight: Font.Weight { .regular }
 
     /// Display tracking, expressed as a ratio of the type size.
     ///
     /// A ratio keeps the optical relationship constant: `size * ratio` is a fixed em value, so a
     /// 34pt figure tracks 15% tighter in points than a 40pt one and identically in proportion.
-    static var displayTrackingRatio: CGFloat { -0.011 }
+    static var displayTrackingRatio: CGFloat { -0.036 }
 
     /// Tracking in points for a given size. Use this rather than a raw value so the relationship
     /// to size cannot be lost at the call site.
@@ -65,6 +70,20 @@ extension HisingenTheme {
     /// face and weight live here.
     static func plateFont(size: CGFloat) -> Font {
         .system(size: size, weight: .bold, design: .monospaced)
+    }
+
+    /// The house face. Polestar sets everything in one weight of Unica77 and names Helvetica Neue
+    /// as its own fallback, which ships with macOS. Two cuts stand in for the ladder: Roman for
+    /// every display, value and label, Medium only where weight is asked for at caption size or
+    /// for emphasis a single weight cannot carry. Monospaced design keeps the system face, which
+    /// the plate and code readouts rely on.
+    nonisolated static func font(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        if design == .monospaced {
+            return .system(size: size, weight: weight == .regular ? .regular : .medium, design: .monospaced)
+        }
+        let emphasised = weight == .semibold || weight == .bold || weight == .heavy || weight == .black
+            || (weight == .medium && size < 11)
+        return .custom(emphasised ? "HelveticaNeue-Medium" : "HelveticaNeue", fixedSize: size)
     }
 
     // MARK: - Shared-layer type ramp
@@ -165,7 +184,7 @@ struct HisingenScaledType: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(.system(size: renderedSize, weight: weight, design: design))
+            .font(HisingenTheme.font(size: renderedSize, weight: weight, design: design))
             // Tracking follows the *rendered* size, so a reader who enlarges their text gets the
             // same optical relationship the fixed sizes were tuned for instead of a 9pt tracking
             // value applied to 13pt type. From displaySmall up the text is display type, so the
@@ -228,6 +247,6 @@ struct HisingenScaledSymbol: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.font(.system(size: size, weight: weight))
+        content.font(.system(size: size, weight: weight == .regular ? .light : .regular))
     }
 }

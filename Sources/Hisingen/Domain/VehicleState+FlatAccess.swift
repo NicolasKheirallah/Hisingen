@@ -14,14 +14,12 @@ extension VehicleState {
     var rangeKm: Int? { energy.rangeKm }
     var chargingState: ChargingState { energy.chargingState }
     var estimatedChargingTimeToFullMinutes: Int? { energy.estimatedTimeToFullMinutes }
-    var estimatedChargingTimeToTargetMinutes: Int? { energy.estimatedTimeToTargetMinutes }
     var chargeTargetPercentage: Int? { energy.targetPercentage }
     var chargingPowerWatts: Int? { energy.powerWatts }
     var chargingCurrentAmps: Int? { energy.currentAmps }
     var chargingVoltageVolts: Int? { energy.voltageVolts }
     var chargingType: ChargingType { energy.type }
     var chargerConnection: ChargerConnection { energy.connection }
-    var chargingCurrentLimitAmps: Int? { energy.currentLimitAmps }
     var reportedBatteryCapacityKwh: Double? { energy.reportedBatteryCapacityKwh }
     var batteryDiagnostics: BatteryDiagnostics? { energy.diagnostics }
     var chargingSchedules: [VehicleSchedule] { energy.schedules }
@@ -49,7 +47,6 @@ extension VehicleState {
     var odometerKm: Int? { maintenance.odometerKm }
     var healthDetails: VehicleHealthDetails? { maintenance.details }
     var serviceInfo: ServiceSnapshot { maintenance.service }
-    var warrantyInfo: VehicleWarrantyInfo? { maintenance.warranty }
     var frontBrakePadStatus: String? { maintenance.frontBrakePadStatus }
     var rearBrakePadStatus: String? { maintenance.rearBrakePadStatus }
 
@@ -70,21 +67,17 @@ extension VehicleState {
     var fluidWarnings: [String] { serviceInfo.fluidWarnings }
     var engineHoursToService: Int? { serviceInfo.engineHoursToService }
     var serviceTrigger: String? { serviceInfo.trigger }
-    var preferredWorkshopId: String? { serviceInfo.preferredWorkshopID }
     var preferredWorkshopName: String? { serviceInfo.preferredWorkshopName }
 
     var tripMeterManualKm: Double? { tripComputer.manualTripKm }
     var tripMeterAutomaticKm: Double? { tripComputer.automaticTripKm }
     var averageSpeedKmH: Double? { tripComputer.averageSpeedKmH }
-    var tripComputerElectricRangeKm: Int? { tripComputer.electricRangeKm }
     var electricDistanceKm: Double? { tripComputer.electricDistanceKm }
     var fuelDistanceKm: Double? { tripComputer.fuelDistanceKm }
     var regeneratedEnergyKwh: Double? { tripComputer.regeneratedEnergyKwh }
 
     var fuelLevelPercent: Double? { fuelSystem.levelPercent }
     var fuelRangeKm: Int? { fuelSystem.rangeKm }
-    var fuelAmountLiters: Double? { fuelSystem.amountLiters }
-    var averageFuelConsumptionLPer100Km: Double? { fuelSystem.averageConsumptionLPer100Km }
     var isEngineRunning: Bool? { fuelSystem.isEngineRunning }
     var fuelType: String? { fuelSystem.type }
 }

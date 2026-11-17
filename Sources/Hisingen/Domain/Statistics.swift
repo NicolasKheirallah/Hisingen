@@ -72,16 +72,6 @@ enum Statistics {
         return median(slopes)
     }
 
-    /// Robust line: Theil-Sen slope anchored at the median point, so one bad milestone
-    /// cannot tilt the intercept either. Falls back to OLS when Theil-Sen has no spread.
-    static func robustLinearRegression(_ points: [(x: Double, y: Double)]) -> LinearFit? {
-        guard points.count >= 2,
-              let slope = theilSenSlope(points) ?? linearRegression(points)?.slope,
-              let medianX = median(points.map(\.x)),
-              let medianY = median(points.map(\.y)) else { return nil }
-        return LinearFit(slope: slope, intercept: medianY - slope * medianX)
-    }
-
     /// Pearson correlation coefficient of `pairs`, in -1...1. `nil` when there isn't enough
     /// spread in either axis to define one (e.g. every x value identical).
     static func pearsonCorrelation(_ pairs: [(Double, Double)]) -> Double? {

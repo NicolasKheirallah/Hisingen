@@ -45,7 +45,7 @@ struct SegmentedPresetRow<Option: PresetOptionDisplaying>: View {
                     .padding(.vertical, 6)
                     .background(
                         isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        in: RoundedRectangle(cornerRadius: 0, style: .continuous)
                     )
                     .foregroundStyle(isSelected ? HisingenTheme.accent : HisingenTheme.ink)
                 }
@@ -77,14 +77,14 @@ struct PanelProportionPreview: View {
 
         return ZStack {
             // Ghost of the Standard preset for comparison.
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .stroke(Color.secondary.opacity(0.30), lineWidth: 0.8)
                 .frame(width: ghost.width, height: ghost.height)
             // Current resolution (custom overrides included).
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .fill(HisingenTheme.accent.opacity(0.16))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
                         .stroke(HisingenTheme.accent.opacity(0.55), lineWidth: 1)
                 )
                 .frame(width: actual.width, height: actual.height)

@@ -27,4 +27,21 @@ extension PreferencesStore {
         }
         d.set(true, forKey: flagKey)
     }
+
+    static let renamedThemeIdentifiers = [
+        "swedishGold": "charcoalGold",
+        "cyanRacing": "circuitBlue"
+    ]
+    func migrateRenamedThemeIdentifiers() {
+        let renames = Self.renamedThemeIdentifiers
+        for key in d.dictionaryRepresentation().keys where key == "app_theme" || key.hasPrefix("theme_for_") {
+            if let stored = d.string(forKey: key), let renamed = renames[stored] {
+                d.set(renamed, forKey: key)
+            }
+        }
+        if let perVehicle = d.dictionary(forKey: "vehicle_themes_v1") as? [String: String],
+           perVehicle.values.contains(where: { renames[$0] != nil }) {
+            d.set(perVehicle.mapValues { renames[$0] ?? $0 }, forKey: "vehicle_themes_v1")
+        }
+    }
 }

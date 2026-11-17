@@ -49,6 +49,9 @@ docs/research/feature-roadmap.md
 # Local acceptance-gate ledgers
 GATES*.md
 
+# Internal design research and provenance behind DESIGN.md. Local only.
+Internal_Design.md
+
 # Python bytecode from the docs/QA checkers
 __pycache__/
 api_dump.json

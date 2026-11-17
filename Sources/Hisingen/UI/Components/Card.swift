@@ -18,13 +18,20 @@ import SwiftUI
 @MainActor
 struct Card<Content: View>: View {
     let content: Content
-    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    private let compact: Bool
+
+    init(compact: Bool = false, @ViewBuilder content: () -> Content) {
+        self.compact = compact
+        self.content = content()
+    }
 
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
+        let padding = HisingenTheme.cardPadding
         content
-            .padding(HisingenTheme.cardPadding)
+            .padding(.horizontal, padding)
+            .padding(.vertical, compact ? padding / 2 : padding)
             .overlay {
                 HisingenTheme.cardBoundary(increasedContrast: contrast == .increased)
             }
@@ -49,17 +56,17 @@ struct CardHeader: View {
     @State private var pulse = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             if let glyph {
                 glyph
                     .accessibilityHidden(true)
-            } else {
+            } else if isSemantic || isPulsing {
+                // Polestar headings are words alone; a symbol stays only when it carries state.
                 Image(systemName: symbol)
-                    .foregroundStyle(isSemantic ? color : HisingenTheme.decorativeTint(color))
-                    .hisType(.heading, weight: HisingenTheme.headingWeight)
+                    .foregroundStyle(isSemantic || isPulsing ? color : HisingenTheme.inkMuted)
+                    .hisType(.body)
                     // A quiet breath, not a throb: a ~6 % swell on a slow cycle.
                     .scaleEffect(isPulsing && pulse ? 1.06 : 1.0)
-                    .shadow(color: isPulsing && pulse ? color.opacity(0.45) : .clear, radius: 3)
                     .animation(
                         Motion.resolve(isPulsing ? Motion.breath : nil),
                         value: pulse
@@ -71,7 +78,7 @@ struct CardHeader: View {
                     }
             }
             Text(title)
-                .hisType(.heading, weight: HisingenTheme.headingWeight)
+                .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
                 .foregroundStyle(HisingenTheme.ink)
             if let detail {
                 Text(detail)
@@ -89,5 +96,23 @@ struct CardHeader: View {
         // the reading order is construction order, which put a footnote before a headline in the
         // composite cards that build their rows conditionally.
         .accessibilitySortPriority(2)
+    }
+}
+
+struct CardHeaderWithAccessory<Accessory: View>: View {
+    let heading: CardHeader
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                heading
+                accessory
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                heading
+                accessory
+            }
+        }
     }
 }

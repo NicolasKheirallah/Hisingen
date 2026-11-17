@@ -444,7 +444,7 @@ struct RefreshCoordinatorStreamTests {
         #expect(diagnostics.commandReceiptVisible)
         #expect(persistedReceipts.commandReceipts(for: StreamingMockProvider.vinA).last?.receipt == receipt)
 
-        coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
+        coordinator.dismissCommandReceipt(id: receipt.id)
         #expect(events.states.last?.commandState.receipt == nil)
         #expect(events.snapshots.last?.commandReceiptVisible == false)
         #expect(persistedReceipts.commandReceipts(for: StreamingMockProvider.vinA).last == nil)
@@ -1273,9 +1273,12 @@ struct RefreshCoordinatorStreamTests {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let events = DiagnosticsRecorder()
+        let database = VehicleDatabase.inMemory()
+        let store = VehicleStateStore(defaults: defaults, database: database)
         let coordinator = makeCoordinator(
             provider: StreamingMockProvider(script: [], recorder: StreamRecorder()),
             defaults: defaults,
+            database: database,
             commandWindow: 0.1,
             commandInitialPollDelay: 5,
             commandPollInterval: 5
@@ -1289,10 +1292,10 @@ struct RefreshCoordinatorStreamTests {
             command: .stopClimate
         )
         coordinator.beginCommandConfirmation(receipt)
-        coordinator.dismissCommandReceipt(issuedAt: receipt.issuedAt)
+        #expect(store.commandReceipts(for: StreamingMockProvider.vinA).last?.receipt == receipt)
+        coordinator.dismissCommandReceipt(id: receipt.id)
         _ = try #require(await waitUntil(events) { $0.commandConfirmationStatus?.isTerminal == true })
 
-        let store = VehicleStateStore(defaults: defaults, database: .inMemory())
         #expect(store.commandReceipts(for: StreamingMockProvider.vinA).last == nil)
         #expect(events.snapshots.last?.commandReceiptVisible == false)
         coordinator.stop()

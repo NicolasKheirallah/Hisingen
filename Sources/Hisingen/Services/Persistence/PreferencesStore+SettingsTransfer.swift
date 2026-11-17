@@ -20,6 +20,7 @@ extension PreferencesStore {
             "content_density", "custom_panel_size_enabled", "custom_panel_width",
             "custom_panel_height", "wide_card_layout", "panel_close_behavior",
             "car_render_angle", "vehicle_model_badge_position", "registration_badge_position",
+            "now_readings_position", "now_first_reading", "now_quick_controls", "now_limit_step", "custom_themes_v1",
             "vehicle_label_format", "distance_unit", "temperature_unit", "pressure_unit",
             "fuel_volume_unit", "fuel_economy_unit", "energy_consumption_unit",
             "history_sample_retention_days", "interface_language", "tint_menu_bar_icon",
@@ -28,18 +29,20 @@ extension PreferencesStore {
             "low_battery_threshold",
             "automatically_check_for_updates", "automatically_download_updates",
             "update_check_interval",
-            "show_warning_badge", "grid_carbon_intensity_g_per_kwh", "tab_composition_v1"
+            "show_warning_badge", "grid_carbon_intensity_g_per_kwh", "tab_composition_v1", historyPageSizesKey
         ]
         return exact.contains(key)
             || ["notify_", "remote_", "night_", "electricity_", "theme_for_"].contains(where: key.hasPrefix)
     }
 
+    private static func transferableFeatures(_ rawFeatures: [String]) -> [String] {
+        rawFeatures.filter { AppFeature(rawValue: $0)?.isRemoteControl == false }
+    }
+
     func exportSettingsPropertyList() throws -> Data {
         var values = d.dictionaryRepresentation().filter { Self.isTransferableSettingsKey($0.key) }
         if let rawFeatures = values["enabled_features_v2"] as? [String] {
-            values["enabled_features_v2"] = rawFeatures.filter {
-                AppFeature(rawValue: $0)?.isRemoteControl == false
-            }
+            values["enabled_features_v2"] = Self.transferableFeatures(rawFeatures)
         }
         return try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0)
     }
@@ -56,15 +59,14 @@ extension PreferencesStore {
         for (key, value) in archive {
             if key == "enabled_features_v2", let rawFeatures = value as? [String] {
                 // Importing a convenience profile must not grant remote-command access.
-                let safe = rawFeatures.filter { raw in
-                    guard let feature = AppFeature(rawValue: raw) else { return false }
-                    return !feature.isRemoteControl
-                }
-                d.set(safe, forKey: key)
+                d.set(Self.transferableFeatures(rawFeatures), forKey: key)
             } else {
                 d.set(value, forKey: key)
             }
         }
+        // An archive exported before a theme was renamed still carries the old identifier.
+        migrateRenamedThemeIdentifiers()
+        CustomThemeStore.invalidate()
     }
 
     func resetTransferableSettings() {

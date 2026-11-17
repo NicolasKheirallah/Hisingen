@@ -1454,14 +1454,12 @@ struct PolestarDataPortalTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
 
-        let keychain = KeychainStore(service: "io.kheirallah.hisingen.augmented-keychain.\(UUID().uuidString)")
-        try? keychain.deletePolestarDataPortalCredentials()
-        try? keychain.deletePolestarDataPortalToken()
-        try? keychain.deleteSessionToken()
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.augmented-keychain.\(UUID().uuidString)")
+        let flag = "has_polestar_dataportal_credentials"
+        let previousFlag = UserDefaults.standard.object(forKey: flag)
         defer {
             try? keychain.deletePolestarDataPortalCredentials()
-            try? keychain.deletePolestarDataPortalToken()
-            try? keychain.deleteSessionToken()
+            UserDefaults.standard.set(previousFlag, forKey: flag)
         }
 
         let preferences = PreferencesStore(defaults: defaults, keychain: keychain)

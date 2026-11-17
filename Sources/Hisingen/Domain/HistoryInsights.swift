@@ -445,20 +445,6 @@ enum HistoryInsights {
         BatteryHealthEstimator.stableMedianSoH(from: records, limit: limit)
     }
 
-    /// Capacity implied by one session, without a reference pack. Shared with
-    /// the estimator so UI previews and persistence agree on the same math.
-    static func sessionImpliedUsableKwh(from session: HistoricalChargingSession) -> Double? {
-        guard let endSoc = session.endSoc, endSoc > session.startSoc,
-              session.energyDeliveredKwh > 0 else { return nil }
-        let delta = endSoc - session.startSoc
-        guard delta >= BatteryHealthEstimator.minimumSessionDeltaSoc else { return nil }
-        let efficiency = session.peakPowerKw > BatteryHealthEstimator.dcPowerThresholdKw
-            ? BatteryHealthEstimator.dcChargingEfficiency
-            : BatteryHealthEstimator.acChargingEfficiency
-        let usable = session.energyDeliveredKwh * efficiency / (delta / 100)
-        return usable.isFinite && usable > 0 ? usable : nil
-    }
-
     /// Projects state of health at a future odometer reading from the fitted trend. `nil` when
     /// there isn't enough history to fit a trend, or the projection lands outside a physically
     /// sane 0...100% range (a fabricated-looking number is worse than no number).

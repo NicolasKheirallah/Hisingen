@@ -7,11 +7,24 @@ import Foundation
 /// place a reader could turn any of them off, and no place a new card could be added without
 /// editing a second list (a jump menu) to keep up.
 enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
+    static let historyPageSizes = [3, 5, 8, 10, 12, 15, 20, 25]
+
+    var defaultHistoryPageSize: Int? {
+        switch self {
+        case .historyActivity, .historyTrips: return 5
+        case .historyChargingSessions, .historyRecentFills: return 8
+        case .historyAirCleaning, .historyWarnings: return 10
+        case .historyAutomations: return 12
+        default: return nil
+        }
+    }
+
     // Vehicle
     case vehicleHero = "vehicle-hero"
     case vehicleReceipts = "vehicle-receipts"
     case vehicleAttention = "vehicle-attention"
     case vehicleExceptions = "vehicle-exceptions"
+    case vehicleWeather = "vehicle-weather"
     case vehicleCharging = "vehicle-charging"
     case vehicleChargingPlanner = "vehicle-charging-planner"
     case vehicleFuelEngine = "vehicle-fuel-engine"
@@ -53,6 +66,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     // History
     case historyOverview = "history-overview"
     case historyActivity = "history-activity"
+    case historyWarnings = "history-warnings"
     case historyMonth = "history-month"
     case historyAirCleaning = "history-air-cleaning"
     case historyEmissions = "history-emissions"
@@ -71,6 +85,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case historyConsumption = "history-consumption"
     case historyOdometer = "history-odometer"
     case historyBatteryHealth = "history-battery-health"
+    case historyTyrePressure = "history-tyre-pressure"
     case historyAirQuality = "history-air-quality"
     case historyCabinClimate = "history-cabin-climate"
     case historyAutomations = "history-automations"
@@ -128,7 +143,7 @@ struct TabItem: Identifiable, Hashable, Sendable {
 /// so a tab must render identically to the pre-composition build when nothing is customised.
 enum TabItemCatalog {
     /// Kept as decodeable ids so an existing custom layout still loads, but no longer offered in
-    /// the editor: these five detail cards and their wrapper duplicate sections now owned by Info.
+    /// the editor: these detail cards and their wrapper duplicate sections now owned by Info.
     static let retiredVehicleDetailItems: Set<TabItemID> = [
         .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
         .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
@@ -152,6 +167,9 @@ enum TabItemCatalog {
         TabItem(id: .vehicleExceptions, title: L10n.text("Needs Attention"), symbol: "exclamationmark.circle.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Alarm, open panel, tyre, fluid and software exceptions.", feature: nil),
+        TabItem(id: .vehicleWeather, title: L10n.text("Ambient Conditions"), symbol: "cloud.sun",
+                sourceTab: .vehicle, kind: .card,
+                detail: "Weather at the vehicle's reported position.", feature: .vehicleWeather),
         TabItem(id: .vehicleCharging, title: L10n.text("Charging"), symbol: "bolt.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Charge level, power, connector state and completion time.", feature: .chargingDetails),
@@ -264,13 +282,16 @@ enum TabItemCatalog {
         TabItem(id: .historyOverview, title: L10n.text("Overview"), symbol: "chart.pie.fill",
                 sourceTab: .history, kind: .card,
                 detail: "Period totals for distance, energy and cost.", feature: nil),
-        TabItem(id: .historyActivity, title: L10n.text("Activity"), symbol: "clock.arrow.circlepath",
+        TabItem(id: .historyActivity, title: L10n.text("Observed Changes"), symbol: "clock.arrow.circlepath",
                 sourceTab: .history, kind: .card,
                 detail: "Observed changes recorded in this period.", feature: nil),
+        TabItem(id: .historyWarnings, title: L10n.text("Warning Timeline"), symbol: "exclamationmark.triangle",
+                sourceTab: .history, kind: .card,
+                detail: "Vehicle warnings recorded in this period.", feature: nil),
         TabItem(id: .historyMonth, title: L10n.text("Month Comparison"), symbol: "calendar",
                 sourceTab: .history, kind: .card,
                 detail: "This month against the previous one.", feature: nil),
-        TabItem(id: .historyAirCleaning, title: L10n.text("Air Cleaning"), symbol: "sparkles",
+        TabItem(id: .historyAirCleaning, title: L10n.text("Air Cleaning"), symbol: "aqi.medium",
                 sourceTab: .history, kind: .card,
                 detail: "Cabin cleaning cycles and their runtime.", feature: nil),
         TabItem(id: .historyEmissions, title: L10n.text("Emissions"), symbol: "leaf.fill",
@@ -321,6 +342,9 @@ enum TabItemCatalog {
         TabItem(id: .historyBatteryHealth, title: L10n.text("Battery Health"), symbol: "batteryblock",
                 sourceTab: .history, kind: .card,
                 detail: "State of health over time.", feature: nil),
+        TabItem(id: .historyTyrePressure, title: L10n.text("Tyre Pressure"), symbol: "circle.grid.2x2",
+                sourceTab: .history, kind: .card,
+                detail: "Tyre pressure readings over time.", feature: nil),
         TabItem(id: .historyAirQuality, title: L10n.text("Air Quality"), symbol: "wind",
                 sourceTab: .history, kind: .card,
                 detail: "Cabin and outside particulate matter over time.", feature: nil),
@@ -351,13 +375,13 @@ enum TabItemCatalog {
                 sourceTab: .controls, kind: .card,
                 detail: "The departure-aware charging plan for this vehicle.", feature: .smartChargingPlanner),
         TabItem(id: .controlsAccess, title: L10n.text("Lock controls"), symbol: "lock.fill",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Lock, unlock and tailgate control.", feature: .remoteLocks),
         TabItem(id: .controlsWindowsLocate, title: L10n.text("Windows, honk & flash"), symbol: "car.window.left",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Window closing, honk and flash to locate.", feature: .remoteWindows),
         TabItem(id: .controlsOTA, title: L10n.text("Vehicle software controls"), symbol: "arrow.down.circle.fill",
-                sourceTab: .controls, kind: .card,
+                sourceTab: .info, kind: .card,
                 detail: "Install an available software update now.", feature: .remoteOTA),
 
         // MARK: Shared headers
@@ -398,7 +422,7 @@ enum TabItemCatalog {
         case .vehicle:
             return [
                 .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-                .vehicleExceptions, .vehicleCharging, .vehicleChargingPlanner,
+                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
                 .vehicleFuelEngine, .vehicleReadiness, .vehicleOpenings, .vehicleTyres,
                 .vehicleLocation, .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
                 .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
@@ -406,26 +430,26 @@ enum TabItemCatalog {
         case .info:
             return [
                 .infoNavBar, .infoOverview, .infoFreshness, .infoDoors, .infoTyres,
-                .infoFluids, .infoSoftware, .infoLocation, .infoWeather, .infoTrip,
+                .infoFluids, .infoSoftware, .controlsOTA, .infoLocation, .controlsAccess,
+                .controlsWindowsLocate, .infoWeather, .infoTrip,
                 .infoPowertrain, .infoBatteryHealth, .infoBatteryDiagnostics, .infoAirQuality,
                 .infoConnectivity, .infoService, .infoWarranty, .infoExterior, .infoInterior,
                 .infoChargeLocations, .infoFactoryBuild, .infoCapabilities, .infoActivity
             ]
         case .history:
             return [
-                .historyPeriodPicker, .historyOverview, .historyActivity, .historyMonth,
+                .historyPeriodPicker, .historyOverview, .historyActivity, .historyWarnings, .historyMonth,
                 .historyAirCleaning, .historyEmissions, .historyDrivingPatterns, .historyDistance,
                 .historyMonthlyMileage, .historyTrips, .historyChargingSessions,
                 .historyChargingCurve, .historyMonthlyCharging, .historyChargeLocations,
                 .historyChargingHistory, .historyFuelEconomy, .historyRecentFills,
                 .historyEfficiency, .historyConsumption, .historyOdometer, .historyBatteryHealth,
-                .historyAirQuality, .historyCabinClimate, .historyAutomations
+                .historyTyrePressure, .historyAirQuality, .historyCabinClimate, .historyAutomations
             ]
         case .controls:
             return [
-                .controlsBanners, .controlsReceipts, .controlsClimate, .controlsEngine,
-                .controlsCharging, .controlsChargingPlanner, .controlsAccess,
-                .controlsWindowsLocate, .controlsOTA
+                .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
+                .controlsClimate, .controlsEngine
             ]
         case .settings:
             // Settings is its own surface, managed by the settings sections rather than by

@@ -5,58 +5,43 @@ import Testing
 @MainActor
 struct PersistenceAuditFixTests {
     @Test
-    func failedMigrationsKeepLegacyDataAndRollBack() throws {
-        let suite = "HisingenTests.MigrationFailure.\(UUID())"
+    func activationDeletesLegacyPlistCachesWithoutImportingThem() throws {
+        let suite = "HisingenTests.LegacyMirrors.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let first = "YSM-MIGRATION-A"
-        let second = "YSM-MIGRATION-B"
+        let vin = "YSM-LEGACY-A"
         let snapshotKey = "cached_vehicle_snapshots_v1"
         let baselineKey = "charging_baselines_v1"
         let receiptKey = "command_receipts_v1"
-        let baseline: (String, Double) -> ChargingBaseline = { vin, battery in
-            ChargingBaseline(vin: vin, state: .charging, connection: .connected,
-                batteryPercentage: battery, targetPercentage: 80, vehicleReportedAt: Date(),
-                sampledAt: Date(), chargingSessionActive: true, interruptionSamples: 0, lowBatteryNotified: false)
-        }
         let receipt = StoredCommandReceipts(records: [StoredCommandReceipt(
             receipt: CommandReceipt(commandIdentifier: "lock", issuedAt: Date()), confirmationDeadline: nil)])
-        let legacyState = vehicle(vin: first, battery: 42, brand: .polestar)
-        let secondState = vehicle(vin: second, battery: 42, brand: .polestar)
-        defaults.set(try JSONEncoder().encode([first: legacyState, second: secondState]), forKey: snapshotKey)
-        defaults.set(try JSONEncoder().encode([first: baseline(first, 42), second: baseline(second, 42)]), forKey: baselineKey)
-        defaults.set(try JSONEncoder().encode([first: receipt, second: receipt]), forKey: receiptKey)
-        let unavailable = VehicleDatabase(database: .unavailable(path: ":unavailable:"))
-        VehicleStateStore(defaults: defaults, database: unavailable).activate()
-        for key in [snapshotKey, baselineKey, receiptKey] { #expect(defaults.data(forKey: key) != nil) }
+        defaults.set(try JSONEncoder().encode([vin: vehicle(vin: vin, battery: 42, brand: .polestar)]), forKey: snapshotKey)
+        defaults.set(try JSONEncoder().encode([vin: receipt]), forKey: receiptKey)
+        // An unreadable payload must go too: a snapshot can hold a location or an owner name.
+        defaults.set(Data("not json".utf8), forKey: baselineKey)
 
         let db = VehicleDatabase.inMemory()
-        let currentState = vehicle(vin: first, battery: 91, brand: .polestar)
-        db.snapshots.saveSnapshot(currentState)
-        db.baselines.saveBaseline(baseline(first, 91))
-        let currentReceipt = StoredCommandReceipts(records: [StoredCommandReceipt(
-            receipt: CommandReceipt(commandIdentifier: "unlock", issuedAt: Date()), confirmationDeadline: nil)])
-        db.commandReceipts.saveCommandReceipts(currentReceipt, for: first)
-        for table in ["vehicle_snapshots", "charging_baselines", "command_receipts"] {
-            try db.db.execute(sql: "CREATE TRIGGER fail_\(table) BEFORE INSERT ON \(table) WHEN NEW.vin = 'YSM-MIGRATION-B' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;")
-        }
         let store = VehicleStateStore(defaults: defaults, database: db)
         store.activate()
-        for key in [snapshotKey, baselineKey, receiptKey] { #expect(defaults.data(forKey: key) != nil) }
-        #expect(db.snapshots.loadSnapshot(for: second) == nil)
-        #expect(db.baselines.loadBaseline(for: second) == nil)
-        #expect(db.commandReceipts.loadCommandReceipts(for: second) == nil)
-        for table in ["vehicle_snapshots", "charging_baselines", "command_receipts"] {
-            try db.db.execute(sql: "DROP TRIGGER fail_\(table);")
-        }
-        store.activate()
+
         for key in [snapshotKey, baselineKey, receiptKey] { #expect(defaults.data(forKey: key) == nil) }
-        #expect(store.snapshot(for: first)?.energy.batteryPercentage == 91)
-        #expect(store.baseline(for: first)?.batteryPercentage == 91)
-        #expect(db.commandReceipts.loadCommandReceipts(for: first) == currentReceipt)
-        #expect(store.snapshot(for: second) != nil)
-        #expect(store.baseline(for: second) != nil)
-        #expect(db.commandReceipts.loadCommandReceipts(for: second) == receipt)
+        #expect(store.snapshot(for: vin) == nil)
+        #expect(store.baseline(for: vin) == nil)
+        #expect(db.commandReceipts.loadCommandReceipts(for: vin) == nil)
+    }
+
+    @Test
+    func cachedSnapshotAnswersUntilTheRetentionHorizon() throws {
+        let db = VehicleDatabase.inMemory()
+        var young = vehicle(vin: "YSM-AGE-YOUNG", battery: 50, brand: .polestar)
+        young.freshness.fetchedAt = Date().addingTimeInterval(-(VehicleDatabase.cacheRetention - 60))
+        var old = vehicle(vin: "YSM-AGE-OLD", battery: 50, brand: .polestar)
+        old.freshness.fetchedAt = Date().addingTimeInterval(-(VehicleDatabase.cacheRetention + 60))
+        db.snapshots.saveSnapshot(young)
+        db.snapshots.saveSnapshot(old)
+
+        #expect(db.snapshots.loadSnapshot(for: "YSM-AGE-YOUNG") != nil)
+        #expect(db.snapshots.loadSnapshot(for: "YSM-AGE-OLD") == nil)
     }
 
     @Test

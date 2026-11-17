@@ -15,6 +15,11 @@ struct SettingsAppearanceCard: View {
     @State private var customWidth: Double = 0
     @State private var customHeight: Double = 0
     @State private var selectedThemeCategory: ThemeCategory = .all
+    /// The reader's own themes, reloaded after every save or delete.
+    @State private var customThemes: [CustomThemeDefinition] = []
+    /// The theme being created or edited, and whether it is new.
+    @State private var editingTheme: CustomThemeDefinition?
+    @State private var editingIsNew = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var preferences: PreferencesStore { binder.preferences }
@@ -36,11 +41,16 @@ struct SettingsAppearanceCard: View {
         }
     }
 
+    /// Shipped themes first, then the reader's own.
+    private var everyTheme: [AppTheme] {
+        AppTheme.allCases + customThemes.map(\.theme)
+    }
+
     private var filteredThemes: [AppTheme] {
         if selectedThemeCategory == .all {
-            return AppTheme.allCases
+            return everyTheme
         }
-        return AppTheme.allCases.filter { $0.category == selectedThemeCategory }
+        return everyTheme.filter { $0.category == selectedThemeCategory }
     }
 
     /// Two equal flexible columns; LazyVGrid replaces the old stride-chunked row
@@ -51,8 +61,8 @@ struct SettingsAppearanceCard: View {
     ]
 
     private func themeCategoryCount(_ category: ThemeCategory) -> Int {
-        if category == .all { return AppTheme.allCases.count }
-        return AppTheme.allCases.filter { $0.category == category }.count
+        if category == .all { return everyTheme.count }
+        return everyTheme.filter { $0.category == category }.count
     }
 
     private func resetPanelGeometry() {
@@ -98,6 +108,8 @@ struct SettingsAppearanceCard: View {
 
                 vehicleImageSection(availableAngles: availableAngles, supportsMultipleAngles: supportsMultipleAngles)
 
+                nowReadingsSection
+
                 Divider().opacity(HisingenTheme.dividerOpacity)
 
                 Text(L10n.format("Active for %@. Each vehicle saves its own theme preference.", vehicleLabel))
@@ -121,7 +133,28 @@ struct SettingsAppearanceCard: View {
         .onChange(of: contentDensity) { _, newDensity in
             applyContentDensity(newDensity)
         }
+        .sheet(item: $editingTheme) { definition in
+            CustomThemeEditor(
+                definition: definition,
+                isNew: editingIsNew,
+                onSave: { saved in
+                    CustomThemeStore.save(saved)
+                    customThemes = CustomThemeStore.all()
+                    editingTheme = nil
+                    select(saved.theme)
+                },
+                onDelete: editingIsNew ? nil : {
+                    CustomThemeStore.delete(id: definition.id)
+                    customThemes = CustomThemeStore.all()
+                    editingTheme = nil
+                    appTheme = preferences.appTheme
+                    binder.notify(.presentation)
+                },
+                onCancel: { editingTheme = nil }
+            )
+        }
         .onAppear {
+            customThemes = CustomThemeStore.all()
             appTheme = preferences.appTheme
             appearanceMode = preferences.appearanceMode
             carRenderAngle = preferences.carRenderAngle
@@ -147,13 +180,13 @@ struct SettingsAppearanceCard: View {
     @ViewBuilder
     private var headerSection: some View {
         HStack {
-            CardHeader(symbol: "paintpalette.fill", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
+            CardHeader(symbol: "paintpalette", title: L10n.text("Appearance & Themes"), color: HisingenTheme.accent)
             Spacer()
-            Text(L10n.format("%d Themes", AppTheme.allCases.count))
+            Text(L10n.format("%d Themes", everyTheme.count))
                 .hisType(.caption, weight: .bold)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2.5)
-                .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
                 .foregroundStyle(HisingenTheme.accent)
         }
     }
@@ -225,10 +258,10 @@ struct SettingsAppearanceCard: View {
                         .padding(.vertical, 6)
                         .background(
                             isModeSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            in: RoundedRectangle(cornerRadius: 0, style: .continuous)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            RoundedRectangle(cornerRadius: 0, style: .continuous)
                                 .stroke(isModeSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
                         )
                         .foregroundStyle(isModeSelected ? HisingenTheme.accent : HisingenTheme.ink)
@@ -287,10 +320,10 @@ struct SettingsAppearanceCard: View {
                             .padding(.horizontal, 4)
                             .background(
                                 isAngleSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 0, style: .continuous)
                             )
                             .overlay(
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                RoundedRectangle(cornerRadius: 0, style: .continuous)
                                     .stroke(isAngleSelected ? HisingenTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1)
                             )
                             .foregroundStyle(isAngleSelected ? HisingenTheme.accent : HisingenTheme.ink)
@@ -301,6 +334,155 @@ struct SettingsAppearanceCard: View {
                 }
             }
         }
+    }
+
+    private var nowReadingsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("Battery and Range"))
+                .hisType(.label, weight: .semibold)
+                .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+
+            Picker(L10n.text("Position relative to car"), selection: binder(\.nowReadingsPosition, .panelLayout)) {
+                ForEach(NowReadingsPosition.allCases, id: \.self) { position in
+                    Text(position.title).tag(position)
+                }
+            }
+
+            Picker(L10n.text("First reading"), selection: binder(\.nowFirstReading, .panelLayout)) {
+                ForEach(NowFirstReading.allCases, id: \.self) { reading in
+                    Text(reading.title).tag(reading)
+                }
+            }
+
+            nowControlsSection
+                .padding(.top, 8)
+        }
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .hisType(.body)
+    }
+
+    /// Which control cards sit under the car on Now, drawn as the cards themselves. A chosen tile
+    /// carries its position on Now; the order is the order the reader picked them in.
+    private var nowControlsSection: some View {
+        let chosen = preferences.nowQuickControls
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.text("Controls on Now"))
+                .hisType(.label, weight: .semibold)
+                .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text(L10n.text("Choose the control cards shown under the car. Each still needs its remote feature turned on."))
+                .hisType(.caption)
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8, alignment: .top)],
+                      alignment: .leading, spacing: 8) {
+                ForEach(NowQuickControl.allCases, id: \.self) { control in
+                    nowControlTile(control, position: chosen.firstIndex(of: control).map { $0 + 1 })
+                }
+            }
+            Picker(L10n.text("Limit step"), selection: binder(\.nowLimitStep, .panelLayout)) {
+                ForEach(LimitStep.allCases, id: \.self) { step in
+                    Text(step.title).tag(step)
+                }
+            }
+            .padding(.top, 4)
+            Text(L10n.text("Each press raises a limit by this share of the highest value your car allows."))
+                .hisType(.caption)
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func toggleNowControl(_ control: NowQuickControl) {
+        var chosen = preferences.nowQuickControls
+        if let index = chosen.firstIndex(of: control) {
+            chosen.remove(at: index)
+        } else {
+            chosen.append(control)
+        }
+        withAnimation(reduceMotion ? nil : Motion.selection) {
+            preferences.nowQuickControls = chosen
+        }
+        binder.bump()
+        binder.notify(.panelLayout)
+    }
+
+    /// Why a chosen control will not draw on this car, or nil when it will.
+    private func nowControlBlocker(_ control: NowQuickControl) -> String? {
+        let features = preferences.features.enabled
+        if !features.contains(control.feature), control != .locks, control != .climate, control != .charging {
+            return L10n.format("%@ · %@", control.feature.title, L10n.text("Off"))
+        }
+        guard let state else { return nil }
+        let drawn = NowQuickControl.applicable(
+            [control], features: features,
+            hasElectricRange: state.powertrain.hasElectricRange,
+            profile: state.capabilityProfile,
+            supportsTrunkControl: state.otaCapabilities?.supportsTrunkControl == true
+        )
+        return drawn.isEmpty ? L10n.text("Unavailable") : nil
+    }
+
+    private func nowControlSymbol(_ control: NowQuickControl) -> String {
+        switch control {
+        case .locks: return "lock"
+        case .climate: return "fan"
+        case .charging: return "bolt"
+        case .chargeLimit: return "battery.75percent"
+        case .currentLimit: return "gauge.with.dots.needle.bottom.100percent"
+        case .airCleaning: return "aqi.medium"
+        case .windows: return "car.window.left"
+        case .locate: return "light.beacon.max"
+        case .tailgate: return "car.side.rear.open"
+        }
+    }
+
+    private func nowControlTile(_ control: NowQuickControl, position: Int?) -> some View {
+        let selected = position != nil
+        let blocker = nowControlBlocker(control)
+        return Button { toggleNowControl(control) } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top) {
+                    Text(position.map { "\($0)" } ?? " ")
+                        .hisType(.label)
+                        .monospacedDigit()
+                        .foregroundStyle(HisingenTheme.ink)
+                        .accessibilityHidden(true)
+                    Spacer()
+                    Image(systemName: nowControlSymbol(control))
+                        .hisSymbolSize(13)
+                        .foregroundStyle(selected ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                        .accessibilityHidden(true)
+                }
+                Text(control.title)
+                    .hisType(.subhead)
+                    .foregroundStyle(selected ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                if let blocker {
+                    Text(blocker)
+                        .hisType(.micro)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+            .background(selected ? HisingenTheme.palette.studioFill : HisingenTheme.canvas)
+            .overlay(
+                Rectangle().strokeBorder(selected ? HisingenTheme.ink : HisingenTheme.hairline,
+                                         lineWidth: selected ? 2 : 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(control.title)
+        .accessibilityValue([position.map { L10n.format("%d of %d cards", $0, preferences.nowQuickControls.count) }, blocker]
+            .compactMap { $0 }.joined(separator: ", "))
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 
     @ViewBuilder
@@ -322,6 +504,9 @@ struct SettingsAppearanceCard: View {
         LazyVGrid(columns: Self.twoFlexibleColumns, spacing: 8) {
             ForEach(filteredThemes, id: \.self) { theme in
                 themeTile(theme)
+            }
+            if selectedThemeCategory == .all || selectedThemeCategory == .custom {
+                createThemeTile
             }
         }
 
@@ -347,7 +532,7 @@ struct SettingsAppearanceCard: View {
                                 .hisType(.micro, weight: .bold)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1.5)
-                                .background(HisingenTheme.accent.opacity(0.12), in: Capsule())
+                                .background(HisingenTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 0))
                                 .foregroundStyle(HisingenTheme.accent)
                         }
                     }
@@ -402,7 +587,7 @@ struct SettingsAppearanceCard: View {
                     Text(L10n.text("Reset Sizes"))
                         .hisType(.caption, weight: .semibold)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .help(L10n.text("Back to Standard panel and density"))
             }
@@ -417,7 +602,7 @@ struct SettingsAppearanceCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(L10n.text("Content Density"))
                         .hisType(.body, weight: .medium)
-                    Text(L10n.text("Zoom content independently of panel size: compact shows more before scrolling"))
+                    Text(L10n.text("Type size and spacing, independently of the panel size"))
                         .hisType(.caption)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
@@ -439,13 +624,10 @@ struct SettingsAppearanceCard: View {
                     .hisType(.label, weight: .medium)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    Image(systemName: contentDensity.symbol)
                         .hisType(.caption)
                         .foregroundStyle(HisingenTheme.accent)
-                    Text(String(format: "%.0f%%", locale: L10n.displayLocale, contentDensity.scale * 100))
-                        .hisType(.label, weight: .semibold)
-                        .monospacedDigit()
-                    Text("· " + contentDensity.subtitle)
+                    Text(contentDensity.subtitle)
                         .hisType(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -453,7 +635,7 @@ struct SettingsAppearanceCard: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 0))
                 Spacer()
             }
             .padding(.vertical, 2)
@@ -481,9 +663,54 @@ struct SettingsAppearanceCard: View {
             .padding(.vertical, 4)
             .background(
                 isSelected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.05),
-                in: Capsule()
+                in: RoundedRectangle(cornerRadius: 0)
             )
             .foregroundStyle(isSelected ? HisingenTheme.accent : Color.primary)
+        }
+        .buttonStyle(.pressable)
+    }
+
+    private func select(_ theme: AppTheme) {
+        withAnimation(reduceMotion ? nil : Motion.interaction) {
+            appTheme = theme
+            preferences.appTheme = theme
+        }
+        binder.notify(.presentation)
+    }
+
+    private func beginEditing(_ id: String) {
+        guard let definition = CustomThemeStore.definition(id: id) else { return }
+        editingIsNew = false
+        editingTheme = definition
+    }
+
+    /// Starts a new theme from the active one's colours, so the first preview already looks like
+    /// the panel the reader is used to.
+    private var createThemeTile: some View {
+        Button {
+            let current = HisingenTheme.palette(for: appTheme)
+            var definition = CustomThemeDefinition.blank(named: L10n.text("My Theme"))
+            definition.accentHex = current.accentHex
+            definition.lightBackgroundHex = ThemeRGB(r: current.canvasLightRGB.r, g: current.canvasLightRGB.g,
+                                                     b: current.canvasLightRGB.b).hex
+            definition.darkBackgroundHex = ThemeRGB(r: current.canvasDarkRGB.r, g: current.canvasDarkRGB.g,
+                                                    b: current.canvasDarkRGB.b).hex
+            editingIsNew = true
+            editingTheme = definition
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .hisSymbolSize(12)
+                    .accessibilityHidden(true)
+                Text(L10n.text("Create Theme"))
+                    .hisType(.subhead)
+                Spacer()
+            }
+            .foregroundStyle(HisingenTheme.ink)
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+            .overlay(Rectangle().strokeBorder(HisingenTheme.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
     }
@@ -495,11 +722,7 @@ struct SettingsAppearanceCard: View {
         let accentColor = HisingenTheme.accent(for: theme)
         return Button {
             guard appTheme != theme else { return }
-            withAnimation(reduceMotion ? nil : Motion.interaction) {
-                appTheme = theme
-                preferences.appTheme = theme
-            }
-            binder.notify(.presentation)
+            select(theme)
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 4) {
@@ -538,7 +761,7 @@ struct SettingsAppearanceCard: View {
             .padding(9)
             .frame(maxWidth: .infinity, minHeight: 70, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 0, style: .continuous)
                     .fill(isSelected ? accentColor.opacity(0.12) : Color.primary.opacity(0.04))
             )
             .contentShape(Rectangle())
@@ -547,6 +770,29 @@ struct SettingsAppearanceCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(theme.title): \(theme.subtitle)")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .overlay(alignment: .bottomTrailing) {
+            if let id = theme.customID {
+                Button { beginEditing(id) } label: {
+                    HStack(spacing: 4) {
+                        Text(L10n.text("Edit"))
+                            .hisType(.label)
+                        Image(systemName: "arrow.right")
+                            .hisSymbolSize(9)
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(HisingenTheme.ink)
+                    .padding(9)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel(L10n.format("Edit %@", theme.title))
+            }
+        }
+        .contextMenu {
+            if let id = theme.customID {
+                Button(L10n.text("Edit Theme")) { beginEditing(id) }
+            }
+        }
     }
 
     /// Swatch colour for a `Palette` preview hex. Those values are compile-time literals, so a
@@ -592,10 +838,10 @@ struct SettingsStudioRenderPreview: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 165)
-        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 0, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 0, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .hisAnimation(Motion.theme, value: angle)

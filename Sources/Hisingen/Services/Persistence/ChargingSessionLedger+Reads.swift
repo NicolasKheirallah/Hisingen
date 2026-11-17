@@ -32,7 +32,7 @@ extension ChargingSessionLedger {
           \(dateClause)
           AND lifecycle_state IN ('completed', 'interrupted')
           AND (
-            end_soc > start_soc OR energy_delivered_kwh > 0 OR EXISTS (
+            end_soc > start_soc OR energy_delivered_kwh > 0 OR wallbox_energy_kwh > 0 OR EXISTS (
               SELECT 1 FROM charging_samples
               WHERE charging_samples.session_id = charging_sessions.id
                 AND charging_samples.soc > charging_sessions.start_soc
@@ -44,19 +44,7 @@ extension ChargingSessionLedger {
             try stmt.bindText(vin, at: 1)
             if let since { try stmt.bindDate(since, at: 2) }
             try stmt.bindInt64(Int64(limit), at: since == nil ? 2 : 3)
-        } process: { stmt -> [HistoricalChargingSession] in
-            var list: [HistoricalChargingSession] = []
-            while try stmt.stepOrThrow() {
-                guard let session = Self.sessionRow(from: stmt, endedAt: stmt.columnDate(at: 3),
-                                                    endSoc: stmt.columnDouble(at: 5),
-                                                    energy: stmt.columnDouble(at: 6),
-                                                    peak: stmt.columnDouble(at: 7),
-                                                    average: stmt.columnDouble(at: 8),
-                                                    location: stmt.columnText(at: 9)) else { continue }
-                list.append(session)
-            }
-            return list
-        }) ?? []
+        } process: { try Self.sessionRows($0) }) ?? []
     }
 
     func chargingSamples(for sessionId: String) -> [HistoricalChargingSample] {

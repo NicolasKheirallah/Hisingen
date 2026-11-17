@@ -35,10 +35,10 @@ struct OpeningChipView: View {
         case .frontRightDoor, .rearRightDoor: return isOpen ? "door.right.hand.open" : "door.right.hand.closed"
         case .frontLeftWindow, .frontRightWindow, .rearLeftWindow, .rearRightWindow: return "window.vertical.closed"
         case .hood: return "car.front.waves.up"
-        case .tailgate: return "car.rear.and.tire.marks"
-        case .chargeLid: return "powerplug.fill"
-        case .fuelFlap: return "fuelpump.fill"
-        case .sunroof: return "sun.max.fill"
+        case .tailgate: return isOpen ? "car.side.rear.open" : "car.side"
+        case .chargeLid: return "powerplug"
+        case .fuelFlap: return "fuelpump"
+        case .sunroof: return "sun.max"
         }
     }
 
@@ -164,7 +164,7 @@ struct DoorsAndOpeningsCardView: View {
                         Pill(
                             text: isLocked ? L10n.text("All Closed & Locked") : L10n.text("All Closed"),
                             color: isLocked ? HisingenTheme.semanticGood : .secondary,
-                            symbol: isLocked ? "lock.fill" : "lock.open.fill"
+                            symbol: isLocked ? "lock" : "lock.open"
                         )
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .transition(pillTransition)
@@ -173,7 +173,7 @@ struct DoorsAndOpeningsCardView: View {
                         Pill(
                             text: isTailgateLocked ? L10n.text("Tailgate locked") : L10n.text("Tailgate unlocked"),
                             color: isTailgateLocked ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning,
-                            symbol: isTailgateLocked ? "lock.fill" : "lock.open.fill"
+                            symbol: isTailgateLocked ? "lock" : "lock.open"
                         )
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .transition(pillTransition)
@@ -537,26 +537,26 @@ struct LocationCardView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
+                    CardHeader(symbol: "location", title: L10n.text("Vehicle Location"), color: HisingenTheme.semanticCritical)
                     Spacer()
                     if let parkingBrake, parkingBrake {
                         Pill(
                             text: L10n.text("Brake Set"),
                             color: HisingenTheme.semanticWarning,
-                            symbol: "parkingsign.circle.fill"
+                            symbol: "parkingsign.circle"
                         )
                     }
                     if let gear, !gear.isEmpty {
                         Pill(
                             text: gear,
                             color: HisingenTheme.accent,
-                            symbol: "gearshape.fill"
+                            symbol: "gearshape"
                         )
                     }
                     Pill(
                         text: isMoving ? L10n.text("Moving") : L10n.text("Parked"),
                         color: isMoving ? HisingenTheme.semanticActive : .secondary,
-                        symbol: isMoving ? "arrow.up.right.circle.fill" : "parkingsign.circle"
+                        symbol: isMoving ? "arrow.up.right.circle" : "parkingsign.circle"
                     )
                 }
 
@@ -627,7 +627,7 @@ struct LocationCardView: View {
 
                         if let weather, let temp = weather.temperatureCelsius {
                             HStack(spacing: 4) {
-                                Image(systemName: "cloud.sun.fill")
+                                Image(systemName: "cloud.sun")
                                     .hisType(.micro)
                                     .foregroundStyle(HisingenTheme.semanticWarning)
                                 Text(Format.temperature(celsius: temp, unit: preferences.temperatureUnit))
@@ -641,7 +641,7 @@ struct LocationCardView: View {
                                 if let hum = weather.relativeHumidity {
                                     Text("· \(hum)%")
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                             .padding(.top, 2)
@@ -655,7 +655,7 @@ struct LocationCardView: View {
                                 if let heading {
                                     Text("· \(Int(heading))°")
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -670,7 +670,7 @@ struct LocationCardView: View {
                                 if let accuracy {
                                     Text(String(format: "±%.1f m", locale: L10n.displayLocale, accuracy))
                                         .hisType(.micro)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -691,12 +691,12 @@ struct LocationCardView: View {
                             }
                         } label: {
                             HStack(spacing: 4) {
-                                Image(systemName: "map.fill")
+                                Image(systemName: "map")
                                 Text(L10n.text("Open in Maps"))
                             }
                             .hisType(.label, weight: .medium)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.hisProminent)
                         .controlSize(.small)
 
                         Button {
@@ -711,7 +711,7 @@ struct LocationCardView: View {
                             }
                             .hisType(.caption, weight: .medium)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.mini)
                     }
                 }

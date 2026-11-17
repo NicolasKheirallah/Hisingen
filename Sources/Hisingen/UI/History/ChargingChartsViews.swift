@@ -418,7 +418,7 @@ struct ChargingCurveView: View {
                         VStack(alignment: .center, spacing: 1) {
                             Text(L10n.text("PEAK POWER"))
                                 .hisType(.nano, weight: .semibold)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                             Text(Format.kilowatts(watts: peakWatts))
                                 .hisType(.label, weight: .bold)
                                 .foregroundStyle(HisingenTheme.chartPositive)
@@ -445,7 +445,7 @@ struct ChargingCurveView: View {
                 }
             }
             .padding(9)
-            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 0))
         }
     }
 
@@ -468,7 +468,7 @@ struct ChargingCurveView: View {
                 Text(title)
                     .textCase(.uppercase)
                     .hisType(.nano, weight: .semibold)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             Text(String(format: "%.0f%%", locale: L10n.displayLocale, pct))
                 .hisType(.body, weight: emphasized ? .bold : .semibold)
@@ -479,7 +479,7 @@ struct ChargingCurveView: View {
                 Text(Format.shortTime(date: date))
                     .hisType(.micro)
                     .monospacedDigit()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -511,7 +511,7 @@ struct ChargingCurveView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1.5)
-                    .background(HisingenTheme.chipFill, in: Capsule())
+                    .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                     // Live sessions project toward the target at the chart's right edge, right
                     // where this capsule sits, and the dashed line read through the label. A
                     // live curve spends its left half empty, so the capsule lives there while
@@ -691,7 +691,7 @@ struct ChargingCurveView: View {
             Text("· " + Format.shortTime(date: info.date))
                 .hisType(.nano)
                 .monospacedDigit()
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             if info.isProjected {
                 Text("(\(L10n.text("Projected")))")
                     .hisType(.nano, weight: .medium)
@@ -700,8 +700,8 @@ struct ChargingCurveView: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .background(HisingenTheme.chipFill, in: Capsule())
-        .overlay(Capsule().stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
+        .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
+        .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color.primary.opacity(0.12), lineWidth: 0.5))
         .shadow(color: HisingenTheme.shadowTint(0.18), radius: 3, y: 1)
         .position(
             x: min(max(info.point.x, 60), width - 60),

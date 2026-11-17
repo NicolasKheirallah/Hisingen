@@ -66,12 +66,9 @@ These files should all be treated as parts of the same local database.
 
 Hisingen stores a reduced `VehicleState` snapshot for each VIN.
 
-The snapshot is written to:
-
-- SQLite `vehicle_snapshots`; and
-- the `cached_vehicle_snapshots_v1` `UserDefaults` fallback.
-
-The SQLite snapshot is preferred when loading.
+The snapshot is written to SQLite `vehicle_snapshots`. The `cached_vehicle_snapshots_v1`,
+`charging_baselines_v1` and `command_receipts_v1` `UserDefaults` caches that releases up to 2.0.1
+wrote are deleted at launch and never read.
 
 A snapshot older than seven days is considered expired.
 

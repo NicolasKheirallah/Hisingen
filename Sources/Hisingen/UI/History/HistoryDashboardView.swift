@@ -29,6 +29,9 @@ struct HistoryDashboardView: View {
     @Environment(\.accessibilityDifferentiateWithoutColor) var differentiateWithoutColor
 
     @State var period: HistoryPeriod = .month
+    /// Which group of sections the tab shows. All by default, so a jump from another tab always
+    /// lands on its section.
+    @State var sectionGroup: HistorySectionGroup = .all
 
     @State var selectedSessionID: String?
 
@@ -259,7 +262,8 @@ struct HistoryDashboardView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: HisingenTheme.chartInfo)
-                PaginatedSection(items: snapshot.activities, pageSize: 15, resetKeys: [periodLoadKey],
+                PaginatedSection(items: snapshot.activities, pageSize: preferences.historyPageSize(for: .historyActivity),
+                                 resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No activity was recorded in this period.")) { visible, footer in
                     VehicleActivityList(events: Array(visible))
                     footer
@@ -276,16 +280,50 @@ struct HistoryDashboardView: View {
     /// no way to reach a card except by scrolling past every one before it, while Info solved the
     /// identical problem with its own jump menu. The list is the single source for both the cards
     /// and the menu, so a card cannot be reachable from one and invisible to the other.
+    /// The groups the Log filter offers. Overview stays in every group: it is the period's answer.
+    enum HistorySectionGroup: String, CaseIterable, Hashable {
+        case all, charging, driving, climate, status
+
+        var title: String {
+            switch self {
+            case .all: return L10n.text("All")
+            case .charging: return L10n.text("Charging")
+            case .driving: return L10n.text("Driving")
+            case .climate: return L10n.text("Climate")
+            case .status: return L10n.text("Status")
+            }
+        }
+
+        func contains(_ sectionID: String) -> Bool {
+            if self == .all || sectionID == "overview" { return true }
+            switch self {
+            case .all: return true
+            case .charging:
+                return ["charging-sessions", "charging-curve", "monthly-charging", "charge-locations",
+                        "charging-history", "month"].contains(sectionID)
+            case .driving:
+                return ["driving-patterns", "distance", "monthly-mileage", "trips", "efficiency", "consumption",
+                        "odometer", "fuel-economy", "recent-fills", "emissions", "month"].contains(sectionID)
+            case .climate:
+                return ["air-cleaning", "air-quality", "cabin-climate"].contains(sectionID)
+            case .status:
+                return ["activity", "warnings", "battery-health", "tyre-pressure", "automations"].contains(sectionID)
+            }
+        }
+    }
+
     struct HistorySection: Identifiable {
         let id: String
         let title: String
         let isVisible: Bool
+
+        var item: TabItemID? { TabItemID(rawValue: "history-\(id)") }
     }
 
     var historySections: [HistorySection] {
         [
             HistorySection(id: "overview", title: L10n.text("Overview"), isVisible: true),
-            HistorySection(id: "activity", title: L10n.text("Activity"), isVisible: !snapshot.activities.isEmpty),
+            HistorySection(id: "activity", title: L10n.text("Observed Changes"), isVisible: !snapshot.activities.isEmpty),
             HistorySection(id: "warnings", title: L10n.text("Warning Timeline"), isVisible: !warningEvents.isEmpty),
             HistorySection(id: "month", title: L10n.text("Month Comparison"), isVisible: true),
             HistorySection(id: "air-cleaning", title: L10n.text("Air Cleaning"),
@@ -338,15 +376,14 @@ struct HistoryDashboardView: View {
             guard section.isVisible else { return false }
             // The terminal states are never composable: a reader who emptied the tab still
             // needs to be told the store could not be read, or that nothing was recorded.
-            guard let item = TabItemID(rawValue: section.id) else { return true }
+            guard let item = section.item else { return true }
             return draws(item)
         }
         // The reader's order, with the terminal states left where they are: they describe the
         // data, not the layout, and belong at the end whichever way the cards are arranged.
-        let cards = ordered(drawn.filter { TabItemID(rawValue: $0.id) != nil },
-                            by: { TabItemID(rawValue: $0.id) ?? .historyOverview })
-        let tail = drawn.filter { TabItemID(rawValue: $0.id) == nil }
-        return cards + tail
+        let grouped = drawn.filter { $0.item == nil || sectionGroup.contains($0.id) }
+        let cards = grouped.compactMap { section in section.item.map { (section: section, item: $0) } }
+        return ordered(cards, by: \.item).map(\.section) + grouped.filter { $0.item == nil }
     }
 
     /// key flips (that precedes the async query).
@@ -364,7 +401,11 @@ struct HistoryDashboardView: View {
     private func historySectionContent(_ id: String) -> some View {
         switch id {
         case "overview":
-            if HisingenTheme.layoutWidth >= 580 { awardHistoryOverview } else { overviewCard }
+            if HisingenTheme.layoutWidth >= 580 && !state.powertrain.hasCombustionEngine {
+                awardHistoryOverview
+            } else {
+                overviewCard
+            }
         case "activity": observedChangesCard
         case "month": monthComparisonCard
         case "air-cleaning": airCleaningCyclesCard
@@ -436,10 +477,10 @@ struct HistoryDashboardView: View {
             .task(id: didInitialLoad) {
                 guard didInitialLoad, let initialSection else { return }
                 await Task.yield()
-                let destination = historySections.first {
-                    $0.id == initialSection && $0.isVisible
-                }?.id ?? "overview"
-                proxy.scrollTo(destination, anchor: .top)
+                let sections = visibleHistorySections
+                if let destination = sections.first(where: { $0.id == initialSection }) ?? sections.first {
+                    proxy.scrollTo(destination.id, anchor: .top)
+                }
             }
         }
 
@@ -493,7 +534,7 @@ struct HistoryDashboardView: View {
                 .hisType(.caption, weight: .semibold)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(HisingenTheme.chipFill, in: Capsule())
+                .background(HisingenTheme.chipFill, in: RoundedRectangle(cornerRadius: 0))
                 .transition(.opacity)
                 .padding(.bottom, 12)
                 .accessibilityElement(children: .combine)
@@ -680,8 +721,8 @@ struct HistoryDashboardView: View {
                             CardHeader(symbol: "chart.xyaxis.line", title: " ", color: HisingenTheme.chartInfo)
                                 .accessibilityHidden(true)
                         }
-                        RoundedRectangle(cornerRadius: 6).frame(height: chartHeight)
-                        HStack { ForEach(0..<3, id: \.self) { _ in RoundedRectangle(cornerRadius: 6).frame(height: 34) } }
+                        RoundedRectangle(cornerRadius: 0).frame(height: chartHeight)
+                        HStack { ForEach(0..<3, id: \.self) { _ in RoundedRectangle(cornerRadius: 0).frame(height: 34) } }
                     }
                 }
                 .redacted(reason: .placeholder)
@@ -697,7 +738,7 @@ struct HistoryDashboardView: View {
             Text(text).hisType(.micro).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.secondary)
     }
 
     func sessionLabel(_ session: HistoricalChargingSession) -> String {
@@ -787,13 +828,13 @@ struct HistoryDashboardView: View {
             TextField(prompt, text: text)
                 .textFieldStyle(.plain).hisType(.micro)
             if !text.wrappedValue.isEmpty {
-                Text("\(count)/\(total)").hisType(.nano).foregroundStyle(.tertiary)
+                Text("\(count)/\(total)").hisType(.nano).foregroundStyle(.secondary)
                 Button { text.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").hisType(.micro) }
                     .buttonStyle(.pressable).accessibilityLabel(L10n.text("Clear search"))
             }
         }
         .padding(5)
-        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.03, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 5))
+        .background(Color.primary.opacity(HisingenTheme.tintedWashOpacity(0.03, increasedContrast: contrast == .increased)), in: RoundedRectangle(cornerRadius: 0))
     }
 
     struct LabeledField: View {
@@ -804,7 +845,7 @@ struct HistoryDashboardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).hisType(.caption).foregroundStyle(.secondary)
                 TextField("", text: $text)
-                    .textFieldStyle(.roundedBorder)
+                    .hisField()
                     .hisType(.body)
                 if let reason {
                     Text(reason)

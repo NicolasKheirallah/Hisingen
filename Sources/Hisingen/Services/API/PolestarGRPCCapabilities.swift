@@ -1471,14 +1471,6 @@ extension PolestarGRPC {
     }
 
 
-    private static func timestampMilliseconds(seconds: UInt64, nanoseconds: UInt64) -> UInt64? {
-        guard nanoseconds < 1_000_000_000 else { return nil }
-        let (millis, overflow) = seconds.multipliedReportingOverflow(by: 1_000)
-        guard !overflow else { return nil }
-        let (result, additionOverflow) = millis.addingReportingOverflow(nanoseconds / 1_000_000)
-        return additionOverflow ? nil : result
-    }
-
     static func parseLocation(_ data: Data) -> VehicleLocation? {
         PolestarLocationWeatherCodec.location(data)
     }

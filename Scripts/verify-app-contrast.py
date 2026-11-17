@@ -56,8 +56,8 @@ THEMES = [
     "hisingen",
     "nordicNight",
     "aurora",
-    "swedishGold",
-    "cyanRacing",
+    "charcoalGold",
+    "circuitBlue",
     "forest",
     "sandDune",
 ]

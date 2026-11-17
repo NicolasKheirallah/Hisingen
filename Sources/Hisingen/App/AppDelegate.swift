@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var commandCoordinator: CommandCoordinator!
     var calendarPreconditioning: CalendarPreconditioningController!
     var chargingPlannerController: ChargingPlannerController!
+    /// Optional Home Assistant integration for a home charger. Inert until the reader pairs one.
+    lazy var homeCharging = HomeChargingModel(preferences: preferences, database: vehicleDatabase)
     var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -64,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             object: nil
         )
         preferences.migrateLegacyDefaults()
+        preferences.migrateRenamedThemeIdentifiers()
         preferences.migrateLegacyPassword()
         // Applied after the legacy-defaults migration: on the one launch that carries the
         // old domain's keys over, the migrated appearance is the one that must take effect.
@@ -78,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
              reverseGeocoder: reverseGeocoder, imageCache: imageCache,
              preferences: preferences, fleetStore: fleetStore
         )
+        statusController.homeCharging = homeCharging
         statusController.onSelectCar = { [weak self] vin in self?.selectVehicle(vin: vin) }
         statusController.onCommandBrand = { [weak self] in
             guard let self else { return .polestar }
@@ -139,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             priceService: .shared,
             database: vehicleDatabase,
             latestState: { [weak self] in self?.vehicleSession.latest },
+            // While Home Assistant runs a plan for the car, the vehicle-side scheduler waits.
+            plannerOwnedByHomeAssistant: { [weak self] vin in self?.homeCharging.ownsPlan(for: vin) ?? false },
             activeVINs: { [preferences] in
                 [preferences.vin, preferences.vin(for: .polestar), preferences.vin(for: .volvo)]
                     .filter { !$0.isEmpty }
@@ -185,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         urlRouter.startHandlingAppleEvents()
         calendarPreconditioning.start()
         chargingPlannerController.start()
+        homeCharging.start()
         if !initiallyAuthenticated {
             statusController.openPopover()
         }
@@ -238,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     }
 
     func render() {
-        let isAuth = vehicleSession.sessionValid || preferences.hasResumableSession(for: preferences.activeBrand)
+        let isAuth = vehicleSession.sessionValid
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
         statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback

@@ -7,6 +7,10 @@ struct CommandPresentationState: Codable, Equatable, Sendable {
     var optimisticLockUntil: Date?
     var receipts: [CommandReceipt]
 
+    var hasAwaitingTelemetryConfirmation: Bool {
+        receipts.contains { $0.status.isAwaiting && $0.supportsTelemetryConfirmation }
+    }
+
     /// Compatibility view for call sites that only need the newest status.
     var receipt: CommandReceipt? {
         get { receipts.last }
@@ -19,30 +23,19 @@ struct CommandPresentationState: Codable, Equatable, Sendable {
         }
     }
 
-    init(
-        optimisticLockUntil: Date? = nil,
-        receipts: [CommandReceipt] = [],
-        receipt: CommandReceipt? = nil
-    ) {
+    init(optimisticLockUntil: Date? = nil, receipts: [CommandReceipt] = []) {
         self.optimisticLockUntil = optimisticLockUntil
-        self.receipts = receipts.isEmpty ? receipt.map { [$0] } ?? [] : receipts
+        self.receipts = receipts
     }
 
     private enum CodingKeys: String, CodingKey {
-        case optimisticLockUntil, receipts, receipt, pending
+        case optimisticLockUntil, receipts
     }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         optimisticLockUntil = try values.decodeIfPresent(Date.self, forKey: .optimisticLockUntil)
-        if let decoded = try values.decodeIfPresent([CommandReceipt].self, forKey: .receipts) {
-            receipts = decoded
-        } else if let legacy = try values.decodeIfPresent(CommandReceipt.self, forKey: .receipt)
-            ?? values.decodeIfPresent(CommandReceipt.self, forKey: .pending) {
-            receipts = [legacy]
-        } else {
-            receipts = []
-        }
+        receipts = try values.decodeIfPresent([CommandReceipt].self, forKey: .receipts) ?? []
     }
 
     func encode(to encoder: Encoder) throws {

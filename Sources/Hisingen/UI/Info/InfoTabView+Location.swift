@@ -124,7 +124,7 @@ extension InfoTabView {
                 }
                 Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -147,7 +147,7 @@ extension InfoTabView {
                                     .hisType(.label, weight: .semibold)
                                 Spacer()
                                 if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
-                                    Pill(text: mode, color: HisingenTheme.accent, symbol: "leaf.fill")
+                                    Pill(text: mode, color: HisingenTheme.accent, symbol: "leaf")
                                 }
                             }
                             if location.ampLimit > 0 {
@@ -157,7 +157,7 @@ extension InfoTabView {
                                 KVRow(L10n.text("Minimum Charge"), "\(location.minimumSoc)%", symbol: "battery.25")
                             }
                             ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
-                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "bolt.fill")
+                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "bolt")
                             }
                             ForEach(location.departureTimes, id: \.rowIdentity) { schedule in
                                 KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "calendar.badge.clock")
@@ -177,7 +177,7 @@ extension InfoTabView {
                 }
                 Text(L10n.text("Saved in the vehicle's charging backend. Managed from the Controls tab."))
                     .hisType(.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         })
     }
@@ -193,11 +193,11 @@ extension InfoTabView {
         let lonStr = String(format: "%.4f° %@", locale: L10n.displayLocale, abs(lon), lon >= 0 ? L10n.text("E") : L10n.text("W"))
         let modelTitle = state.identity.modelName ?? L10n.text("Vehicle")
 
-        return AnyView(Card {
+        return AnyView(Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "location.fill", title: L10n.text("Parking Location & Navigation"), color: HisingenTheme.semanticActive)
-                    Spacer()
+                CardHeaderWithAccessory(
+                    heading: CardHeader(symbol: "location", title: L10n.text("Parking Location"), color: HisingenTheme.semanticActive)
+                ) {
                     Menu {
                         Button {
                             if let url = MapLinks.appleMapsPin(latitude: lat, longitude: lon,
@@ -205,7 +205,7 @@ extension InfoTabView {
                                 NSWorkspace.shared.open(url)
                             }
                         } label: {
-                            Label(L10n.text("Open in Apple Maps"), systemImage: "map.fill")
+                            Label(L10n.text("Open in Apple Maps"), systemImage: "map")
                         }
                         Button {
                             if let url = URL(string: "https://www.google.com/maps/search/?api=1&query=\(lat),\(lon)") {
@@ -221,64 +221,52 @@ extension InfoTabView {
                             Label(L10n.text("Copy Coordinates"), systemImage: "doc.on.doc")
                         }
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "map.fill")
-                                .hisType(.caption)
-                            Text(L10n.text("Open in Maps"))
-                                .hisType(.caption, weight: .semibold)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(HisingenTheme.semanticActive.opacity(0.12), in: Capsule())
-                        .foregroundStyle(HisingenTheme.semanticActive)
+                        Text(L10n.text("Open in Maps"))
+                            .hisType(.body, weight: .semibold)
+                            .foregroundStyle(HisingenTheme.ink)
                     }
                     .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
+                    .menuIndicator(.visible)
                     .fixedSize(horizontal: false, vertical: true)
                 }
 
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
+                        .hisType(.title)
+                        .foregroundStyle(addressText == nil ? HisingenTheme.inkMuted : HisingenTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(reduceMotion ? .identity : .opacity)
+                        .hisAnimation(Motion.theme, value: addressText)
+                    Text(L10n.text("Address"))
+                        .hisType(.label)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.text("Address"))
+                .accessibilityValue(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
+                .privacySensitive()
+
                 VStack(spacing: 6) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Image(systemName: "mappin.and.ellipse")
-                                .hisType(.label)
-                                .foregroundStyle(HisingenTheme.accent)
-                                .frame(width: 14)
-                            Text(L10n.text("Address"))
-                                .hisType(.label, weight: .medium)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(addressText ?? L10n.text(addressResolved ? "Unavailable" : "Resolving…"))
-                            .hisType(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.trailing)
-                            .privacySensitive()
-                            .contentTransition(reduceMotion ? .identity : .opacity)
-                            .hisAnimation(Motion.theme, value: addressText)
-                    }
-                    .padding(.vertical, 1)
-                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)", symbol: "mappin.circle.fill")
+                    KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)")
                         .privacySensitive()
                     if let speed = location.speed, speed > 0 {
                         KVRow(L10n.text("Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer")
                     }
                     if let alt = location.altitudeMeters {
-                        KVRow(L10n.text("Altitude"), L10n.format("%d m", Int(alt.rounded())), symbol: "mountain.2.fill")
+                        KVRow(L10n.text("Altitude"), L10n.format("%d m", Int(alt.rounded())), symbol: "mountain.2")
                     }
                     if let accuracy = location.accuracyMeters, accuracy > 0 {
                         KVRow(L10n.text("GPS Accuracy"), L10n.format("±%d m", Int(accuracy.rounded())), symbol: "scope")
                     }
                     if let heading = location.heading {
                         let cardinal = headingToCardinal(heading)
-                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", locale: L10n.displayLocale, heading)))", symbol: "safari.fill")
+                        KVRow(L10n.text("Vehicle Heading"), "\(cardinal) (\(String(format: "%.0f°", locale: L10n.displayLocale, heading)))", symbol: "safari")
                     }
                     if let brake = location.parkingBrakeEngaged {
-                        KVRow(L10n.text("Parking Brake"), brake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle.fill", valueWarning: !brake)
+                        KVRow(L10n.text("Parking Brake"), brake ? L10n.text("Engaged") : L10n.text("Released"), symbol: "parkingsign.circle", valueWarning: !brake)
                     }
                     if let gear = location.gear, !gear.isEmpty {
-                        KVRow(L10n.text("Gear Selector"), gear.uppercased(), symbol: "gearshape.fill")
+                        KVRow(L10n.text("Gear Selector"), gear.uppercased(), symbol: "gearshape")
                     }
                 }
             }
@@ -342,7 +330,7 @@ extension InfoTabView {
                         KVRow(L10n.text("Cabin PM10"), formattedPM10, symbol: "aqi.high")
                     }
                     if let outdoorPM = air.externalParticulateMatter25 {
-                        KVRow(L10n.text("Outdoor PM2.5"), L10n.format("%d µg/m³", outdoorPM), symbol: "sun.haze.fill")
+                        KVRow(L10n.text("Outdoor PM2.5"), L10n.format("%d µg/m³", outdoorPM), symbol: "sun.haze")
                         if let cabinPM = air.particulateMatter25 {
                             let delta = max(0, outdoorPM - cabinPM)
                             KVRow(L10n.text("Purifier Effect"),
@@ -439,7 +427,7 @@ extension InfoTabView {
                             .hisType(.label, weight: .medium)
                             .frame(maxWidth: .infinity, minHeight: 28)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.hisSecondary)
                         .controlSize(.small)
                         .padding(.top, 2)
                         .accessibilityLabel(air.cleaningState == .on

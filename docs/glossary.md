@@ -20,7 +20,7 @@ reconfirmed; see [ADR-0006](adr/0006-runtime-capability-probing.md).
 software distributed outside the Mac App Store. Required for notarization.
 
 **Remote Command dispatch**: the awaited seam every Remote Command entry
-point (Controls tab, `hisingen://` deep links, Shortcuts intents) crosses once
+point (Plan tab, `hisingen://` deep links, Shortcuts intents) crosses once
 the app shell is wired: vehicle selection plus one dispatch that returns the
 outcome. Brand policy lives in `CapabilityGate` and the provider command
 catalog, never in an entry point; see
@@ -59,7 +59,7 @@ and its gap-tolerance policies live. See
 **Vehicle History ledger**: the read interface over the remaining local
 history tables (battery health, air quality, telemetry, trips, Remote Command
 outcomes, connectivity, cabin climate, fuel entries): one typed surface that
-assembles the History dashboard and Info tab bundles and owns the row-cap and
+assembles the Log dashboard and Car tab bundles and owns the row-cap and
 freshness policy those consumers used to re-derive at every call site. See
 `Services/Persistence/VehicleHistoryLedger.swift`.
 
@@ -114,11 +114,10 @@ will not be probed and why (a market restriction, a not-exposed resource, a clie
 when the stand-down is per-vehicle. A session erase drops the vehicle-scoped ones; a fleet-wide
 erase drops all of them. See `Services/Persistence/ProviderBackoffStore.swift`.
 
-**Snapshot schema version**: the marker every encoded Vehicle State snapshot carries. A payload that has it
-decodes its clusters strictly — the flat member keys are not consulted and a missing cluster is a
-corrupt snapshot rather than an old one — so only a payload written before the marker may be
-rescued by the legacy flat keys. That absence is what makes those keys a migration with a defined
-end rather than a permanent compatibility layer.
+**Snapshot schema version**: the marker every encoded Vehicle State snapshot carries. Every payload decodes
+its clusters strictly, and a missing cluster is a corrupt snapshot. The marker is written so a build rolled
+back to one that still reads the flat layout can tell the payload is not flat; this build does not read it.
+Payloads from 2.0.1 and earlier are not decoded: they are older than the seven-day cache.
 
 **Stapling**: attaching Apple's notarization ticket directly to a signed
 app or DMG (`xcrun stapler staple`) so Gatekeeper can verify it was
