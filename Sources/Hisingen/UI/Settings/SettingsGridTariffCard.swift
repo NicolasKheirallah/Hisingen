@@ -30,6 +30,7 @@ struct SettingsGridTariffCard: View {
                     if !tariff.region.hasPublishedRates { noRatesNotice }
                     kindPicker
                     if tariff.isPreset { presetRows }
+                    if tariff.isPreset, !tariff.belongsToGridCompany(model.tibberHome?.gridCompany) { operatorNotice }
                     if tariff.kind == .flat { flatRow }
                     if tariff.kind == .custom { customRows }
                     if tariff.kind != .none { fixedFeeRow }
@@ -84,6 +85,17 @@ struct SettingsGridTariffCard: View {
     /// The fuse the reader picked, else the one Tibber reports for the home, else the usual default.
     private var defaultFuseAmps: Int {
         tariff.fuseAmps ?? model.tibberHome?.mainFuseSize ?? 25
+    }
+
+    /// A preset is one company's price list. Applying it to another operator's meter is a wrong
+    /// number in every cost the app shows, so it says so instead of staying quiet.
+    private var operatorNotice: some View {
+        Text(L10n.format("These prices are %@'s, but your grid company is %@. Check them against your invoice, or enter your own as a custom tariff.",
+                         tariff.presetOperatorName ?? "", model.tibberHome?.gridCompany ?? ""))
+            .hisType(.label).foregroundStyle(HisingenTheme.ink)
+            .padding(9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .hisNotice(HisingenTheme.semanticWarning)
     }
 
     private var noRatesNotice: some View {

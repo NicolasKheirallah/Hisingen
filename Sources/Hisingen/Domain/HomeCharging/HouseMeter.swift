@@ -35,6 +35,18 @@ struct HouseMeterReading: Equatable, Sendable {
     /// Cumulative registers from the minute packet, in kWh. They only ever rise.
     var importedKwh: Double?
     var exportedKwh: Double?
+    /// When the minute packet took the registers. It trails `observedAt` by up to a minute.
+    var registersAt: Date?
+    /// The same registers at the end of the last completed day, which is local midnight. Today is
+    /// this pair subtracted from the minute pair, so no history request is needed for it.
+    var dayRegister: DayRegister?
+
+    struct DayRegister: Equatable, Sendable {
+        /// When that day started, from its own packet: local midnight of yesterday.
+        var startedAt: Date
+        var importedKwh: Double
+        var exportedKwh: Double
+    }
 
     /// Current times voltage, summed over the phases. That is apparent power: with a poor power
     /// factor it reads a little above the energy the meter bills.
@@ -81,6 +93,25 @@ enum HouseMeterHistory {
         return HouseMeterSpan(from: first.at, to: last.at,
                               importedKwh: last.importedKwh - first.importedKwh,
                               exportedKwh: last.exportedKwh - first.exportedKwh)
+    }
+
+    /// Today's energy from the live packets rather than the history: the day packet carries the
+    /// registers at the end of the last completed day, which is local midnight, and the minute
+    /// packet carries them now. `nil` when a packet is missing, or when the day packet does not
+    /// cover the day that just ended, because then the difference spans more than today.
+    static func today(_ reading: HouseMeterReading, in timeZone: TimeZone) -> HouseMeterSpan? {
+        guard let at = reading.registersAt,
+              let imported = reading.importedKwh, let exported = reading.exportedKwh,
+              let day = reading.dayRegister else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let midnight = calendar.startOfDay(for: at)
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: midnight),
+              calendar.isDate(day.startedAt, inSameDayAs: yesterday) else { return nil }
+        return span([
+            HouseMeterRegisterPoint(at: midnight, importedKwh: day.importedKwh, exportedKwh: day.exportedKwh),
+            HouseMeterRegisterPoint(at: at, importedKwh: imported, exportedKwh: exported)
+        ])
     }
 
     /// Whole-house hours of grid import, from register readings taken on the hour. An hour needs

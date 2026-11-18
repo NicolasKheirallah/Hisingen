@@ -233,7 +233,7 @@ struct TabCardStack: View {
                 .accessibilityAction(named: L10n.text("Move Down")) { moveItem(item, slots: 1) }
             }
 
-            if placed.isEmpty { emptyCard }
+            if placed.isEmpty && tabOwned.isEmpty { emptyCard }
             if !tabOwned.isEmpty { tabOwnedCard }
         }
         .hisAnimation(Motion.cardChange, value: placed)

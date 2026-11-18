@@ -332,7 +332,6 @@ struct GridTariffRegionTests {
         #expect(GridTariffRegion.germany.feeUnitWord == "ct")
         #expect(GridTariffRegion.sweden.currencySymbol == "kr")
         #expect(GridTariffRegion.netherlands.currencySymbol == "€")
-        #expect(GridTariffRegion.germany.currencyCode == "EUR")
     }
 
     @Test("A Vattenfall preset is a preset in Sweden only, so the same rates carried elsewhere are edited as custom")
@@ -343,6 +342,25 @@ struct GridTariffRegionTests {
         #expect(!moved.isPreset)
         // The figures stay put; only their standing changes, so nothing silently reprices.
         #expect(moved.peakOrePerKwh == 76.5)
+    }
+
+    @Test("A preset belongs to its own operator, and a grid company nobody named is not a mismatch")
+    func presetBelongsToItsOperator() {
+        let preset = GridTariff.vattenfall(.vattenfallTime)
+        #expect(preset.presetOperatorName == "Vattenfall Eldistribution AB")
+        // The brand word is what counts, so the short and long names agree.
+        #expect(preset.belongsToGridCompany("Vattenfall Eldistribution AB"))
+        #expect(preset.belongsToGridCompany("Vattenfall AB"))
+        // Another operator's meter is where the wrong number would land.
+        #expect(!preset.belongsToGridCompany("Ellevio AB"))
+        #expect(!preset.belongsToGridCompany("E.ON Energidistribution AB"))
+        // No answer is not evidence of a mismatch.
+        #expect(preset.belongsToGridCompany(nil))
+        #expect(preset.belongsToGridCompany(""))
+        // The reader's own figures belong to nobody in particular.
+        let custom = GridTariff.flat(orePerKwh: 30)
+        #expect(custom.presetOperatorName == nil)
+        #expect(custom.belongsToGridCompany("Ellevio AB"))
     }
 
     @Test("A tariff stored before the country picker existed keeps its rates and reads as Sweden")

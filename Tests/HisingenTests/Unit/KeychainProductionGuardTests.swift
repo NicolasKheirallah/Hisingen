@@ -4,6 +4,7 @@ import Testing
 
 /// A test that builds a store on the default Keychain once overwrote the developer's real
 /// Polestar email with `test@example.invalid`. The production items are off limits to tests.
+@MainActor
 struct KeychainProductionGuardTests {
     @Test func testsCannotWriteTheProductionKeychainItems() {
         let production = KeychainStore.app

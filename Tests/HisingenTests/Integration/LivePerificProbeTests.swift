@@ -44,6 +44,14 @@ struct LivePerificProbeTests {
         let span = try #require(HouseMeterHistory.span(today), "no register span for today (\(today.count) points)")
         print("PROBE today points:", today.count, "imported kWh:", span.importedKwh, "exported kWh:", span.exportedKwh)
         #expect(span.importedKwh >= 0)
+        // The live packets carry the day register too. It has to agree with the history within the
+        // couple of minutes the history window reaches back before midnight, or the card's figure
+        // is measuring from the wrong midnight.
+        let fromDayPacket = try #require(HouseMeterHistory.today(reading, in: meter.timeZone),
+                                         "the day packet did not read as local midnight")
+        print("PROBE today from day packet:", fromDayPacket.importedKwh, "from history:", span.importedKwh)
+        #expect(abs(fromDayPacket.importedKwh - span.importedKwh) < 0.5,
+                "day packet and history differ by \(fromDayPacket.importedKwh - span.importedKwh) kWh")
         // The newest history point is the minute just gone, in local time converted to the right instant.
         let newest = try #require(today.last)
         #expect(abs(newest.at.timeIntervalSince(now)) < 600, "history labels are off by \(Int(newest.at.timeIntervalSince(now))) s")

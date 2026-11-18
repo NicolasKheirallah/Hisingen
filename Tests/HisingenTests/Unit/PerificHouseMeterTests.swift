@@ -33,19 +33,24 @@ private let overview = """
 """
 
 /// `ts` is Unix milliseconds in packets. Real time carries current and voltage; the minute packet adds the registers.
+/// The day packet adds the register at the end of the last completed day, which is local midnight.
 private func packets(realTime: Date?, minute: Date, amps: [Double] = [4.8, 5.4, 4.6], volts: [Double]? = [227.3, 229, 229.3],
-                     hwi: Double = 62_227.598, hwo: Double = 0, item: String = meterID) -> String {
+                     hwi: Double = 62_227.598, hwo: Double = 0, item: String = meterID,
+                     day: (started: Date, imported: Double, exported: Double)? = nil) -> String {
     func ms(_ date: Date) -> Int { Int(date.timeIntervalSince1970 * 1_000) }
     func list(_ values: [Double]) -> String { "[" + values.map { String($0) }.joined(separator: ",") + "]" }
     let voltage = volts.map { #","huavg":\#(list($0))"# } ?? ""
     let real = realTime.map {
         #"{"hdr":1,"iid":\#(item),"ts":\#(ms($0)),"pv":3,"fw":"4.5.15","data":{"dv":2,"hiavg":\#(list(amps))\#(voltage)}}"#
     } ?? "null"
+    let dayPacket = day.map {
+        #"{"hdr":1006,"iid":\#(item),"ts":\#(ms($0.started)),"pv":3,"data":{"dv":2,"hiavg":[0,0,0],"huavg":[230,230,230],"hwi":\#($0.imported),"hwo":\#($0.exported)}}"#
+    } ?? "null"
     return #"""
     [{"ItemId":\#(item),"LatestPackets":{
       "PhaseRealTime":\#(real),
       "PhaseMinute":{"hdr":1,"iid":\#(item),"ts":\#(ms(minute)),"pv":3,"data":{"dv":2,"hiavg":\#(list(amps))\#(voltage),"hwi":\#(hwi),"hwo":\#(hwo)}},
-      "PhaseHour":null,"PhaseDay":null}}]
+      "PhaseHour":null,"PhaseDay":\#(dayPacket)}}]
     """#
 }
 
@@ -148,6 +153,41 @@ struct PerificClientTests {
         transport.route("PUT", "/getlatestpackets", .json(packets(realTime: nil, minute: minute)))
         let reading = try #require(try await client(transport).latest(meterID: meterID))
         #expect(reading.observedAt == minute)
+    }
+
+    @Test("The day packet gives the register at local midnight and the time that day started")
+    func dayRegister() async throws {
+        let transport = MockHomeAssistantTransport()
+        login(transport)
+        // 28 May 2026 in Stockholm. Today began at 00:00 local on the 28th, and the last completed
+        // day is the 27th, so its packet is stamped with the 27th's own midnight.
+        let midnight = ISO8601DateFormatter().date(from: "2026-05-27T22:00:00Z")!
+        let started = midnight.addingTimeInterval(-86_400)
+        let minute = t0.addingTimeInterval(-40)
+        transport.route("PUT", "/getlatestpackets", .json(packets(
+            realTime: t0, minute: minute, day: (started, 62_220.0, 1.5))))
+        let reading = try #require(try await client(transport).latest(meterID: meterID))
+        #expect(reading.registersAt == minute)
+        let day = try #require(reading.dayRegister)
+        #expect(day.startedAt == started)
+        #expect(day.importedKwh == 62_220.0)
+        #expect(day.exportedKwh == 1.5)
+    }
+
+    @Test("A day packet missing one register is no baseline, and the reading says so")
+    func incompleteDayRegister() async throws {
+        let transport = MockHomeAssistantTransport()
+        login(transport)
+        let json = #"""
+        [{"ItemId":\#(meterID),"LatestPackets":{
+          "PhaseRealTime":{"ts":\#(Int(t0.timeIntervalSince1970 * 1_000)),"data":{"hiavg":[1,1,1],"huavg":[230,230,230]}},
+          "PhaseMinute":{"ts":\#(Int(t0.timeIntervalSince1970 * 1_000)),"data":{"hiavg":[1,1,1],"huavg":[230,230,230],"hwi":10,"hwo":0}},
+          "PhaseDay":{"ts":\#(Int(t0.addingTimeInterval(-86_400).timeIntervalSince1970 * 1_000)),"data":{"hwi":5}}}}]
+        """#
+        transport.route("PUT", "/getlatestpackets", .json(json))
+        let reading = try #require(try await client(transport).latest(meterID: meterID))
+        #expect(reading.dayRegister == nil)
+        #expect(reading.importedKwh == 10)
     }
 
     @Test("A clamp-sensor packet without voltage assumes 230 V and says so")
@@ -265,6 +305,57 @@ struct HouseMeterDomainTests {
         #expect(HouseMeterHistory.span([point(0, 100), point(60, 3)]) == nil)
     }
 
+    private func reading(dayStarted: Date, imported: Double = 62_227.598, exported: Double = 1.5,
+                         dayImported: Double = 62_220, dayExported: Double = 1.4) -> HouseMeterReading {
+        HouseMeterReading(observedAt: t0.addingTimeInterval(-10), phases: [], importedKwh: imported,
+                          exportedKwh: exported, registersAt: t0,
+                          dayRegister: .init(startedAt: dayStarted, importedKwh: dayImported,
+                                             exportedKwh: dayExported))
+    }
+
+    @Test("Today is the minute register minus the day register, counted from local midnight")
+    func todayFromDayRegister() throws {
+        let midnight = ISO8601DateFormatter().date(from: "2026-05-27T22:00:00Z")!
+        let today = try #require(HouseMeterHistory.today(reading(dayStarted: midnight.addingTimeInterval(-86_400)),
+                                                          in: stockholm))
+        #expect(today.from == midnight)
+        #expect(today.to == t0)
+        #expect(abs(today.importedKwh - 7.598) < 0.0001)
+        #expect(abs(today.exportedKwh - 0.1) < 0.0001)
+    }
+
+    @Test("A day packet that does not end at midnight, or a register that fell, leaves today to the history")
+    func todayRejectsDoubts() {
+        let midnight = ISO8601DateFormatter().date(from: "2026-05-27T22:00:00Z")!
+        // Two days back, as when the cloud has not rolled the day packet after midnight.
+        #expect(HouseMeterHistory.today(reading(dayStarted: midnight.addingTimeInterval(-2 * 86_400)),
+                                        in: stockholm) == nil)
+        // A register that fell is a reset, not a day of export.
+        #expect(HouseMeterHistory.today(reading(dayStarted: midnight.addingTimeInterval(-86_400),
+                                                dayImported: 62_230), in: stockholm) == nil)
+        // Without a day packet, or the time the registers were taken, there is nothing to subtract.
+        var missing = reading(dayStarted: midnight.addingTimeInterval(-86_400))
+        missing.dayRegister = nil
+        #expect(HouseMeterHistory.today(missing, in: stockholm) == nil)
+        missing = reading(dayStarted: midnight.addingTimeInterval(-86_400))
+        missing.registersAt = nil
+        #expect(HouseMeterHistory.today(missing, in: stockholm) == nil)
+    }
+
+    @Test("The calendar decides yesterday, so a day across a clock change still counts")
+    func todayAcrossClockChange() throws {
+        // 30 March 2026, the day after Stockholm moved to summer time: the completed day began at
+        // 00:00 CET, which is 23 hours before today's 00:00 CEST rather than 24.
+        let at = ISO8601DateFormatter().date(from: "2026-03-30T08:00:00Z")!
+        let started = ISO8601DateFormatter().date(from: "2026-03-28T23:00:00Z")!
+        let acrossChange = HouseMeterReading(observedAt: at, phases: [], importedKwh: 101, exportedKwh: 0,
+                                             registersAt: at, dayRegister: .init(startedAt: started, importedKwh: 100,
+                                                                                exportedKwh: 0))
+        let today = try #require(HouseMeterHistory.today(acrossChange, in: stockholm))
+        #expect(today.from == ISO8601DateFormatter().date(from: "2026-03-29T22:00:00Z")!)
+        #expect(today.importedKwh == 1)
+    }
+
     @Test("Hourly import needs both edges of the hour, and skips a gap or a fall")
     func hourlyImport() {
         let hours = HouseMeterHistory.hourlyImport([
@@ -375,18 +466,33 @@ private func eventually(timeout: TimeInterval = 4, _ condition: @MainActor () ->
     while !condition(), Date() < deadline { try? await Task.sleep(for: .milliseconds(10)) }
 }
 
+/// A clock the test moves forward, so cache expiry can be observed without waiting.
+private final class WallClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var date: Date
+
+    init(_ date: Date) { self.date = date }
+
+    var now: Date {
+        get { lock.withLock { date } }
+        set { lock.withLock { date = newValue } }
+    }
+}
+
 @MainActor
 private final class MeterHarness {
     let scoped = ScopedPreferences(label: "house-meter")
     let cloud = Cloud(now: t0)
+    let clock = WallClock(t0)
     let model: HouseMeterModel
 
     init() {
         let cloud = cloud
+        let clock = clock
         model = HouseMeterModel(
             preferences: scoped.store,
             dependencies: HomeChargingModel.Dependencies(
-                transport: cloud.transport, socketConnector: nil, now: { t0 },
+                transport: cloud.transport, socketConnector: nil, now: { clock.now },
                 wait: { _ in try await Task.sleep(for: .seconds(3_600)) }, observesWake: false))
     }
 }
@@ -426,6 +532,24 @@ struct HouseMeterModelTests {
         // Read only: no write-style endpoint is ever called, and the load balancer is never touched.
         let paths = Set(harness.cloud.transport.requests.compactMap { $0.url?.path })
         #expect(paths.isSubset(of: ["/createtoken", "/getaccountoverview", "/getlatestpackets", "/getphasedata"]))
+        harness.model.stop()
+    }
+
+    @Test("The day packet answers today, so no history request is made for it")
+    func todayFromDayPacket() async throws {
+        let harness = MeterHarness()
+        // 28 May 2026 in Stockholm: today began at 00:00 local, and the day before it just ended.
+        let midnight = ISO8601DateFormatter().date(from: "2026-05-27T22:00:00Z")!
+        harness.cloud.set(latest: packets(realTime: t0.addingTimeInterval(-10), minute: t0.addingTimeInterval(-40),
+                                          hwi: 62_227.598, hwo: 1.5,
+                                          day: (midnight.addingTimeInterval(-86_400), 62_220.0, 1.4)))
+        harness.model.select(try #require(try await harness.model.connect(credentials: credentials).first))
+        await eventually { harness.model.link == .live && harness.model.today != nil }
+        let today = try #require(harness.model.today)
+        #expect(today.from == midnight)
+        #expect(abs(today.importedKwh - 7.598) < 0.001)
+        #expect(abs(today.exportedKwh - 0.1) < 0.001)
+        #expect(harness.cloud.transport.requests(path: "/getphasedata").isEmpty)
         harness.model.stop()
     }
 
@@ -498,6 +622,36 @@ struct HouseMeterModelTests {
         let requests = harness.cloud.transport.requests(path: "/getphasedata").count
         _ = await harness.model.hourlyImport(from: from, to: t0)
         #expect(harness.cloud.transport.requests(path: "/getphasedata").count == requests)
+    }
+
+    @Test("An hourly answer is reused until the next hour has been published")
+    func hourlyCacheExpiry() {
+        let expiry = HouseMeterModel.hourlyCacheExpiry(after: t0, in: stockholm)
+        // t0 is 22:26 in Stockholm, so the answer lasts until the 23:00 point exists.
+        #expect(expiry == ISO8601DateFormatter().date(from: "2026-05-28T21:02:00Z")!)
+    }
+
+    @Test("Hourly import is read again once the hour has turned over")
+    func hourlyCacheExpires() async throws {
+        let harness = MeterHarness()
+        let calls = CallCounter()
+        harness.cloud.transport.route({ $0.url?.path == "/getphasedata" }) { _ in
+            calls.increment() == 1
+                ? .json(phaseData([("2026-05-28T20:00:00", 100.0, 0), ("2026-05-28T21:00:00", 101.5, 0)]))
+                : .json(phaseData([("2026-05-28T21:00:00", 101.5, 0), ("2026-05-28T22:00:00", 103.0, 0)]))
+        }
+        harness.model.select(try #require(try await harness.model.connect(credentials: credentials).first))
+        harness.model.stop()
+        let from = t0.addingTimeInterval(-7 * 86_400)
+        _ = await harness.model.hourlyImport(from: from, to: t0)
+        #expect(harness.cloud.transport.requests(path: "/getphasedata").count == 1)
+        // Inside the same hour the cached answer is enough.
+        _ = await harness.model.hourlyImport(from: from, to: t0)
+        #expect(harness.cloud.transport.requests(path: "/getphasedata").count == 1)
+        harness.clock.now = t0.addingTimeInterval(3_600)
+        let hours = try #require(await harness.model.hourlyImport(from: from, to: t0.addingTimeInterval(3_600)))
+        #expect(harness.cloud.transport.requests(path: "/getphasedata").count == 2)
+        #expect(hours.map(\.kwh) == [1.5])
     }
 
     @Test("Erasing Home Charging removes the Perific login too")

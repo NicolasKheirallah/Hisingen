@@ -15,7 +15,9 @@ import Foundation
 /// - Login is `PUT /createtoken` with the account and password. The token lasts a year and is sent
 ///   as the bare value in `X-Authorization`, not as a bearer token.
 /// - `GET /getaccountoverview` lists the account's devices; the meter is the item of type `Phase`.
-/// - `PUT /getlatestpackets` returns the newest real-time (about 10 s) and per-minute packets.
+/// - `PUT /getlatestpackets` returns the newest real-time (about 10 s), per-minute and day packets.
+///   The day packet is the register read at the end of the last completed day, so today's energy is
+///   its subtraction from the minute packet and needs no history request.
 /// - `PUT /getphasedata` returns one point per minute between two times. The request times are read
 ///   as UTC but the answer is labelled in the device's own time zone, without an offset.
 struct PerificClient: Sendable {
@@ -110,13 +112,20 @@ struct PerificClient: Sendable {
 
         let realTime = packet(packets["PhaseRealTime"])
         let minute = packet(packets["PhaseMinute"])
+        let day = packet(packets["PhaseDay"])
         // Real time is about ten seconds old; the minute packet is the fallback and carries the registers.
         guard let live = [realTime, minute].compactMap({ $0 }).first(where: { measurement(in: $0) != nil }),
               let measured = measurement(in: live) else { return nil }
         var reading = HouseMeterReading(observedAt: live.at, phases: measured.phases, voltageAssumed: measured.assumed)
         if let minute {
+            reading.registersAt = minute.at
             reading.importedKwh = register(minute.data["hwi"])
             reading.exportedKwh = register(minute.data["hwo"])
+        }
+        // Only both registers make a day baseline; one of them cannot be subtracted from.
+        if let day, let imported = register(day.data["hwi"]), let exported = register(day.data["hwo"]) {
+            reading.dayRegister = HouseMeterReading.DayRegister(startedAt: day.at, importedKwh: imported,
+                                                               exportedKwh: exported)
         }
         return reading
     }

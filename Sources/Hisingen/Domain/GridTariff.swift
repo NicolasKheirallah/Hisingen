@@ -93,6 +93,24 @@ struct GridTariff: Codable, Equatable, Sendable {
         return next
     }
 
+    /// The grid operator whose published price list a preset is, or `nil` when the figures were
+    /// entered by the reader.
+    var presetOperatorName: String? {
+        isPreset ? "Vattenfall Eldistribution AB" : nil
+    }
+
+    /// Whether the home's grid company is the operator this preset belongs to. A company nobody
+    /// told us about matches, because a missing answer is not evidence of a mismatch.
+    ///
+    /// The brand word is compared rather than the whole name, so "Vattenfall AB" and
+    /// "Vattenfall Eldistribution AB" agree while "Ellevio AB" does not.
+    func belongsToGridCompany(_ company: String?) -> Bool {
+        guard let name = presetOperatorName else { return true }
+        guard let company, !company.isEmpty else { return true }
+        let brand = name.split(separator: " ").first.map(String.init) ?? name
+        return company.localizedCaseInsensitiveContains(brand)
+    }
+
     /// The same tariff read in another market. The window, the months and the weekday rule are kept,
     /// because they are the part that costs effort to re-enter. The rates and the fixed fee are cleared,
     /// because they are written in the market's own currency and would otherwise be read as a different

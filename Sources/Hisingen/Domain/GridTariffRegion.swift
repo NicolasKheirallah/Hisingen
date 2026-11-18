@@ -60,15 +60,6 @@ enum GridTariffRegion: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    var currencyCode: String {
-        switch self {
-        case .sweden: return "SEK"
-        case .norway: return "NOK"
-        case .denmark: return "DKK"
-        case .germany, .netherlands: return "EUR"
-        }
-    }
-
     var currencySymbol: String {
         switch self {
         case .sweden, .norway, .denmark: return "kr"

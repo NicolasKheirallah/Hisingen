@@ -119,13 +119,15 @@ struct PlannerPriceProviderTests {
     @Test
     func aTimeOfUseTariffChangesTheFeeSlotBySlot() async {
         // Every month, 06:00 to 22:00, every day: so the result does not depend on the date the test runs.
-        var tariff = GridTariff.vattenfall(.vattenfallTime)
-        tariff.kind = .custom
-        tariff.priceYear = nil
-        tariff.peakMonths = Set(1...12)
-        tariff.peakWeekdaysOnly = false
-        tariff.peakOrePerKwh = 100
-        tariff.offPeakOrePerKwh = 20
+        var configuration = GridTariff.vattenfall(.vattenfallTime)
+        configuration.kind = .custom
+        configuration.priceYear = nil
+        configuration.peakMonths = Set(1...12)
+        configuration.peakWeekdaysOnly = false
+        configuration.peakOrePerKwh = 100
+        configuration.offPeakOrePerKwh = 20
+        // A `let` so the source closure below captures a value rather than a mutable var.
+        let tariff = configuration
         let tibber = Tibber(series: Self.tibberSeries(price: 1.80))
         let provider = PlannerPriceProvider(spot: Spot(series: Self.spotSeries(price: 0.50), fetched: Self.morning), now: { Self.morning })
         provider.setTibberSource {

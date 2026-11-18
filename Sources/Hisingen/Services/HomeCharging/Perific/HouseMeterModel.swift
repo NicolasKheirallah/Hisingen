@@ -34,15 +34,14 @@ final class HouseMeterModel: ObservableObject {
     private var loopTask: Task<Void, Never>?
     private var generation = 0
     private var lastTodayRead: Date?
-    private var hourlyCache: (meterID: String, from: Date, fetchedAt: Date, hours: [TibberConsumptionHour])?
+    private var hourlyCache: (meterID: String, from: Date, expiresAt: Date, hours: [TibberConsumptionHour])?
     private var eraseObserver: (any NSObjectProtocol)?
 
     /// The meter reports about every ten seconds. Three reads a minute would add nothing the
     /// reader can see, and the cloud's rate limit is not published.
     static let pollInterval: TimeInterval = 30
-    /// Today's import moves slowly and costs a history request, so it is read this often.
+    /// The day register usually answers today, and only its absence costs a history request.
     static let todayInterval: TimeInterval = 300
-    static let hourlyCacheLifetime: TimeInterval = 30 * 60
 
     init(preferences: PreferencesStore, dependencies: HomeChargingModel.Dependencies) {
         self.dependencies = dependencies
@@ -206,14 +205,20 @@ final class HouseMeterModel: ObservableObject {
         reading = fresh
         lastContact = now
         link = .live
+        // The day packet makes today's figure free: it is the register at local midnight. Only a
+        // meter without one, such as on its first day, falls back to the history.
+        if let measured = HouseMeterHistory.today(fresh, in: meter.timeZone) {
+            today = measured
+            return
+        }
         if lastTodayRead == nil || now.timeIntervalSince(lastTodayRead ?? now) >= Self.todayInterval {
             lastTodayRead = now
             await refreshToday(client: client, meter: meter, now: now)
         }
     }
 
-    /// Today's import, from the first register reading after local midnight to the newest. A failure
-    /// here leaves yesterday's figure for the next read and does not fail the live reading.
+    /// Today's import from the history, for a meter whose day packet is missing. A failure here
+    /// leaves yesterday's figure for the next read and does not fail the live reading.
     private func refreshToday(client: PerificClient, meter: HouseMeter, now: Date) async {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = meter.timeZone
@@ -232,19 +237,30 @@ final class HouseMeterModel: ObservableObject {
     // MARK: History
 
     /// Whole-house hourly import for `[from, to]`, or `nil` when no meter is connected or Perific does
-    /// not answer. The history moves a minute at a time, so one answer is reused for half an hour.
+    /// not answer. Completed hours never change, so one answer is reused until the next hour has had
+    /// time to be published.
     func hourlyImport(from: Date, to: Date) async -> [TibberConsumptionHour]? {
         guard let meter, let client = client ?? makeClient() else { return nil }
         let now = dependencies.now()
         if let cache = hourlyCache, cache.meterID == meter.id, cache.from <= from,
-           now.timeIntervalSince(cache.fetchedAt) < Self.hourlyCacheLifetime {
+           now < cache.expiresAt {
             return cache.hours.filter { $0.end > from && $0.start < to }
         }
         guard let points = try? await client.hourlyRegisters(meterID: meter.id, timeZone: meter.timeZone,
                                                              from: from, to: min(to, now)),
               self.meter?.id == meter.id else { return nil }
         let hours = HouseMeterHistory.hourlyImport(points)
-        hourlyCache = (meter.id, from, now, hours)
+        hourlyCache = (meter.id, from, Self.hourlyCacheExpiry(after: now, in: meter.timeZone), hours)
         return hours.filter { $0.end > from && $0.start < to }
+    }
+
+    /// When an answer read at `date` stops being useful: the next hour boundary plus two minutes
+    /// for the cloud to publish the first minute of the new hour. Expiring at the boundary itself
+    /// would reuse an answer that cannot yet hold the hour that just ended.
+    static func hourlyCacheExpiry(after date: Date, in timeZone: TimeZone) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard let hour = calendar.dateInterval(of: .hour, for: date) else { return date.addingTimeInterval(60) }
+        return hour.end.addingTimeInterval(120)
     }
 }
