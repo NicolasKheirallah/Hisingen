@@ -276,7 +276,7 @@ struct GridTariffCalculationTests {
         // The car drew 2 kWh in each of the first two hours, both high-load.
         #expect(abs((withFee.carCost ?? 0) - (4 + 4 * 0.765)) < 1e-9)
         // A tariff with no fee changes nothing.
-        let none = try #require(HouseLoad.share(hours: hours, sessions: [session], gridTariff: .none))
+        let none = try #require(HouseLoad.share(hours: hours, sessions: [session], gridTariff: GridTariff.none))
         #expect(none.includesGridFee == false && abs((none.houseCost ?? 0) - 8) < 1e-9)
     }
 
