@@ -222,7 +222,9 @@ struct GridTariffCalculationTests {
         let cost = HomeSessionPricer.price(session(from: start, to: end, kwh: 4, intervals: true), tibber: slots,
                                            gridTariff: time, fallback: fallback)
         // 2 kWh before 22:00 at 1.0 + 0.765, 2 kWh after at 1.0 + 0.305.
-        #expect(abs((cost.amount ?? 0) - (2 * 1.765 + 2 * 1.305)) < 1e-9)
+        let billed: Double = cost.amount ?? 0
+        let expectedBill: Double = 2 * 1.765 + 2 * 1.305
+        #expect(abs(billed - expectedBill) < 1e-9)
         #expect(cost.assumptions.contains { $0.contains("time of day") })
     }
 
@@ -233,7 +235,9 @@ struct GridTariffCalculationTests {
         let cost = HomeSessionPricer.price(session(from: start, to: end, kwh: 4, intervals: false), tibber: slots,
                                            gridTariff: time, fallback: fallback)
         #expect(cost.method == .totalTibberAverage)
-        #expect(abs((cost.amount ?? 0) - 4 * (1.0 + 0.535)) < 1e-9)
+        let billedAgain: Double = cost.amount ?? 0
+        let expectedFlat: Double = 4 * (1.0 + 0.535)
+        #expect(abs(billedAgain - expectedFlat) < 1e-9)
     }
 
     @Test("A flat tariff and the old flat fee give the same cost")
@@ -267,17 +271,28 @@ struct GridTariffCalculationTests {
 
         let plain = try #require(HouseLoad.share(hours: hours, sessions: [session]))
         #expect(plain.includesGridFee == false)
-        #expect(abs((plain.houseCost ?? 0) - 8) < 1e-9)
+        let plainCost: Double = plain.houseCost ?? 0
+        #expect(abs(plainCost - 8) < 1e-9)
 
         let withFee = try #require(HouseLoad.share(hours: hours, sessions: [session], gridTariff: time))
         #expect(withFee.includesGridFee)
         // Hours 20:00 and 21:00 are high-load, 22:00 and 23:00 are not. 2 kWh each, billed 1 kr per kWh.
-        #expect(abs((withFee.houseCost ?? 0) - (8 + 2 * 0.765 * 2 + 2 * 0.305 * 2)) < 1e-9)
+        // Written as separate figures: one dense expression here exhausted the CI toolchain's
+        // type-checking budget before it could infer the arithmetic.
+        let peakHours: Double = 2
+        let otherHours: Double = 2
+        let expectedHouse: Double = 8 + peakHours * 0.765 * 2 + otherHours * 0.305 * 2
+        let houseCost: Double = withFee.houseCost ?? 0
+        #expect(abs(houseCost - expectedHouse) < 1e-9)
         // The car drew 2 kWh in each of the first two hours, both high-load.
-        #expect(abs((withFee.carCost ?? 0) - (4 + 4 * 0.765)) < 1e-9)
+        let expectedCar: Double = 4 + 4 * 0.765
+        let carCost: Double = withFee.carCost ?? 0
+        #expect(abs(carCost - expectedCar) < 1e-9)
         // A tariff with no fee changes nothing.
         let none = try #require(HouseLoad.share(hours: hours, sessions: [session], gridTariff: GridTariff.none))
-        #expect(none.includesGridFee == false && abs((none.houseCost ?? 0) - 8) < 1e-9)
+        #expect(none.includesGridFee == false)
+        let noneCost: Double = none.houseCost ?? 0
+        #expect(abs(noneCost - 8) < 1e-9)
     }
 
     @Test("The tariff comparison counts the time tariff's high-load share and costs both tariffs on the same hours")
