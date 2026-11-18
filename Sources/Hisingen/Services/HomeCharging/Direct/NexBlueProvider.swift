@@ -39,9 +39,36 @@ struct NexBlueProvider: DirectChargerProvider {
     func chargers() async throws -> [DirectChargerSummary] {
         let data = try await session.data("GET", path: Self.root + "/chargers")
         let list = try Self.decode(List<Charger>.self, from: data)
-        return list.data.filter { !$0.serialNumber.isEmpty }.map {
-            DirectChargerSummary(id: $0.serialNumber, name: L10n.format("NexBlue %@", $0.serialNumber))
+        var summaries: [DirectChargerSummary] = []
+        for item in list.data where !item.serialNumber.isEmpty {
+            try Task.checkCancellation()
+            let fallback = L10n.format("NexBlue %@", item.serialNumber)
+            let model: String?
+            do {
+                model = try await productName(chargerID: item.serialNumber)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                model = nil
+            }
+            summaries.append(DirectChargerSummary(id: item.serialNumber, name: model ?? fallback, role: item.role))
         }
+        // Two chargers of one model would otherwise read the same in the pairing list. The serial
+        // is already the identity; a short tail is enough to tell them apart.
+        let counts = Dictionary(grouping: summaries, by: \.name).mapValues { $0.count }
+        for index in summaries.indices where (counts[summaries[index].name] ?? 0) > 1 {
+            summaries[index].name += " · " + String(summaries[index].id.suffix(4))
+        }
+        return summaries
+    }
+
+    /// The model name, read from the charger detail. Best effort: a detail the account cannot read
+    /// leaves the serial in the label rather than failing the sign-in.
+    private func productName(chargerID: String) async throws -> String? {
+        let data = try await session.data("GET", path: Self.chargerPath(chargerID))
+        guard let detail = try? Self.decode(ChargerProfile.self, from: data) else { return nil }
+        let name = detail.productName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name?.isEmpty == false ? name : nil
     }
 
     func telemetry(chargerID: String, now: Date) async throws -> HomeChargerTelemetry {
@@ -73,6 +100,7 @@ struct NexBlueProvider: DirectChargerProvider {
             powerKw: reading(status.power), sessionEnergyKwh: reading(status.energy),
             lifetimeEnergyKwh: reading(status.lifetimeEnergy), currentLimitAmps: reading(status.currentLimit),
             chargingEnabled: HomeChargerReading(value: state.isChargingEnabled && status.isDisable != true, timestamp: now),
+            isDisabled: status.isDisable.map { HomeChargerReading(value: $0, timestamp: now) },
             cableLocked: status.isLock.map { HomeChargerReading(value: $0, timestamp: now) },
             phases: Self.phases(status, now: now),
             cableLimitAmps: reading(status.cableCurrentLimit.map(Double.init)).flatMap { $0.value > 0 ? $0 : nil },
@@ -222,7 +250,11 @@ struct NexBlueProvider: DirectChargerProvider {
     }
 
     private struct List<Element: Decodable>: Decodable { let data: [Element] }
-    private struct Charger: Decodable { let serialNumber: String }
+    private struct Charger: Decodable {
+        let serialNumber: String
+        let role: Int?
+    }
+    private struct ChargerProfile: Decodable { let productName: String? }
     private struct APIError: Decodable { let code: Int }
 
     private struct TokenResponse: Decodable {

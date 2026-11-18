@@ -49,6 +49,9 @@ struct DirectChargerSummary: Equatable, Identifiable, Sendable {
     /// The site or installation the vendor files it under, when there is one.
     var siteName: String?
     var isOnline: Bool?
+    /// The vendor's role for this account. NexBlue uses -1 installer, 0 owner, 1 user, 2 admin;
+    /// its schedule reads and writes are owner-only. `nil` when the vendor does not say.
+    var role: Int? = nil
 
     var displayName: String {
         let base = name.isEmpty ? id : name

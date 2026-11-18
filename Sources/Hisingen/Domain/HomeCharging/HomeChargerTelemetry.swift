@@ -198,6 +198,9 @@ struct HomeChargerTelemetry: Equatable, Sendable {
     var lifetimeEnergyKwh: HomeChargerReading<Double>?
     var currentLimitAmps: HomeChargerReading<Double>?
     var chargingEnabled: HomeChargerReading<Bool>?
+    /// The charger's own switch is off, so a start command would be refused. Separate from
+    /// `chargingEnabled`, which says whether energy is moving now, not whether it may start.
+    var isDisabled: HomeChargerReading<Bool>?
     var cableLocked: HomeChargerReading<Bool>?
     var vehicleBatteryPercent: HomeChargerReading<Double>?
     /// Per-phase voltage and current. Only direct chargers that report them fill these four.
@@ -215,6 +218,7 @@ struct HomeChargerTelemetry: Equatable, Sendable {
          lifetimeEnergyKwh: HomeChargerReading<Double>? = nil,
          currentLimitAmps: HomeChargerReading<Double>? = nil,
          chargingEnabled: HomeChargerReading<Bool>? = nil,
+         isDisabled: HomeChargerReading<Bool>? = nil,
          cableLocked: HomeChargerReading<Bool>? = nil,
          vehicleBatteryPercent: HomeChargerReading<Double>? = nil,
          unavailableEntities: Set<String> = [],
@@ -234,6 +238,7 @@ struct HomeChargerTelemetry: Equatable, Sendable {
         self.lifetimeEnergyKwh = lifetimeEnergyKwh
         self.currentLimitAmps = currentLimitAmps
         self.chargingEnabled = chargingEnabled
+        self.isDisabled = isDisabled
         self.cableLocked = cableLocked
         self.vehicleBatteryPercent = vehicleBatteryPercent
         self.unavailableEntities = unavailableEntities

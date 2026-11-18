@@ -473,10 +473,16 @@ struct KeychainStore: Sendable {
     private var wouldWriteProductionItemsFromTests: Bool {
         guard !isTestService, security is SystemKeychainSecurity else { return false }
         let env = ProcessInfo.processInfo.environment
-        return env["XCTestConfigurationFilePath"] != nil
+        if env["XCTestConfigurationFilePath"] != nil
             || env["XCTestBundlePath"] != nil
             || env["SWIFT_TESTING_ENABLED"] != nil
-            || NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("XCTestCase") != nil { return true }
+        // `swift test` with Swift Testing sets none of the above: no XCTest class is loaded, the
+        // environment carries no XCTest keys, and the host process is SwiftPM's own helper. Without
+        // this the guard let a test write into the login Keychain.
+        let processName = ProcessInfo.processInfo.processName
+        if processName.hasPrefix("swiftpm-testing") || processName == "xctest" { return true }
+        return Bundle.main.bundlePath.hasSuffix(".xctest")
     }
 
     private func cacheKey(account: String) -> String {

@@ -185,7 +185,8 @@ extension SettingsHomeChargingCard {
             entities: HomeChargerEntityMap(), vin: vin,
             locationID: locationID.isEmpty ? nil : locationID, locationAlias: location?.alias ?? L10n.text("Home"),
             isSharedCharger: isShared, timeZoneIdentifier: TimeZone.current.identifier,
-            networkFeeOrePerKwh: max(0, Double(feeText.replacingOccurrences(of: ",", with: ".")) ?? 0), source: source)
+            networkFeeOrePerKwh: max(0, Double(feeText.replacingOccurrences(of: ",", with: ".")) ?? 0), source: source,
+            chargerRole: charger.role)
         model.pair(pairing)
         directChargers = nil
     }

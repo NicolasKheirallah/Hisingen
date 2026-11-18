@@ -90,7 +90,7 @@ struct HomeChargerSection: View {
             }
             .padding(.top, 2)
         }
-        if input.pairing.source == .nexBlue {
+        if input.pairing.source == .nexBlue, input.pairing.canControlSchedule {
             Button(L10n.text("Cheapest overnight charge")) { showsNexBlueTimer = true }
                 .buttonStyle(.hisSecondary)
                 .disabled(input.link != .live)

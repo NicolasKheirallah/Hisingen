@@ -7,6 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- Show a NexBlue charger by its model, such as "NexBlue Edge 2", in the pairing list and Settings
+  instead of its serial number. Two chargers of the same model keep a short serial suffix. The
+  overnight timer is hidden for a charger another account shares with you, because NexBlue allows
+  only the owner to read or write a schedule.
+- When a charger reports that charging is disabled, the charger card says so and **Charge now**
+  stays disabled instead of sending a command the charger would refuse. A reading older than the
+  usual ten minutes is not trusted for this.
+
 - Connect a Perific house meter in Settings → Electricity → House Meter. Sign in with your Perific
   account and the charger card shows what the whole house draws; while the car charges it splits
   that into the car and the rest of the house. A House Meter list gives voltage and current in each

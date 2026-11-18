@@ -88,7 +88,7 @@ A Perific (formerly Enegic) monitor on the electricity meter's HAN port can show
 What to know about the numbers:
 
 - **Power is apparent power.** The monitor reports current and voltage per phase, not watts. Hisingen multiplies and adds them, so the figure can read slightly above the energy the meter bills when the power factor is poor.
-- **Today's totals are the meter's own difference.** The monitor reports a running total at local midnight and another now, so today's imported and exported energy moves with every read, not every few minutes. The history is read only for the hourly trends.
+- **Today's totals are the meter's own difference.** The monitor reports a running total at local midnight and another now, so today's imported and exported energy moves with every read, not every few minutes. History is read for the hourly trends, and for today only when the meter has no completed day yet.
 - **A reading older than three minutes is shown as last known**, with its age, and the car split is left out. The monitor reports about every ten seconds and Hisingen reads every thirty.
 - **Only the grid connection is seen.** The HAN port carries no solar production.
 - **History starts when the monitor was registered.** The cloud answers one point per minute, and Hisingen keeps the readings taken on the hour.

@@ -28,6 +28,8 @@ struct NexBlueProviderTests {
         let transport = cloud()
         let result = try await NexBlueProvider.signIn(credentials, transport: transport)
         #expect(result.chargers.map(\.id) == [serial])
+        #expect(result.chargers.first?.name == "NexBlue NX123")
+        #expect(result.chargers.first?.role == 0)
         #expect(result.refreshToken == "refresh")
         let login = try #require(transport.requests(path: root + "/account/login").first)
         let body = try #require(login.httpBody)
@@ -39,6 +41,39 @@ struct NexBlueProviderTests {
         #expect(fields["account_type"] as? Int == 0)
         #expect(transport.requests(path: root + "/chargers").first?.value(forHTTPHeaderField: "Authorization") == "Bearer access")
         #expect(transport.requests(path: root + "/account/refresh_token").isEmpty)
+    }
+
+    @Test func chargerNamesUseTheProductAndKeepTheRole() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/" + serial, .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        let result = try await NexBlueProvider.signIn(credentials, transport: transport)
+        #expect(result.chargers.first?.name == "NexBlue Edge 2")
+        #expect(result.chargers.first?.role == 0)
+        // The detail request is best effort and never blocks the list.
+        #expect(transport.requests(path: root + "/chargers/" + serial).count == 1)
+    }
+
+    @Test func chargersOfOneModelStayDistinguishable() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers", .json(
+            #"{"data":[{"serial_number":"NX123","role":0},{"serial_number":"NX456","role":1}]}"#))
+        transport.route("GET", root + "/chargers/NX123", .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        transport.route("GET", root + "/chargers/NX456", .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        let result = try await NexBlueProvider.signIn(credentials, transport: transport)
+        #expect(result.chargers.map(\.name) == ["NexBlue Edge 2 · X123", "NexBlue Edge 2 · X456"])
+        #expect(result.chargers.map(\.role) == [0, 1])
+    }
+
+    @Test func statusReportsWhetherChargingIsDisabled() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1,"is_disable":true}"#))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.isDisabled?.value == true)
+
+        let bare = cloud()
+        bare.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1}"#))
+        let unknown = try await provider(bare).telemetry(chargerID: serial, now: now)
+        #expect(unknown.isDisabled == nil)
     }
 
     @Test func rejectsInvalidGrantsAndDoesNotForwardRawErrorMessages() async throws {

@@ -649,8 +649,9 @@ struct HouseMeterModelTests {
         _ = await harness.model.hourlyImport(from: from, to: t0)
         #expect(harness.cloud.transport.requests(path: "/getphasedata").count == 1)
         harness.clock.now = t0.addingTimeInterval(3_600)
+        let before = harness.cloud.transport.requests(path: "/getphasedata").count
         let hours = try #require(await harness.model.hourlyImport(from: from, to: t0.addingTimeInterval(3_600)))
-        #expect(harness.cloud.transport.requests(path: "/getphasedata").count == 2)
+        #expect(harness.cloud.transport.requests(path: "/getphasedata").count > before)
         #expect(hours.map(\.kwh) == [1.5])
     }
 

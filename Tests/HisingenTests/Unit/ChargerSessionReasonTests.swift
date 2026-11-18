@@ -209,4 +209,22 @@ struct HomeChargerElectricalCardTests {
         #expect(labels == ["Voltage", "Current per Phase", "Current Limit", "Cable Rating", "Circuit Fuse", "Phase Mode", "Network"]
             .map { L10n.text($0) })
     }
+
+    @Test("A disabled charger says so and will not start")
+    func disabledCharger() {
+        var disabled = telemetry(status: .pluggedIn, power: 0)
+        disabled.isDisabled = .init(value: true, timestamp: now)
+        let model = card(disabled)
+        #expect(model.notice?.text == L10n.text("Charging is disabled on this charger."))
+        #expect(model.actions.first { $0.kind == .chargeNow }?.isEnabled == false)
+    }
+
+    @Test("A stale disabled reading does not block a start")
+    func staleDisabledReading() {
+        var disabled = telemetry(status: .pluggedIn, power: 0)
+        disabled.isDisabled = .init(value: true, timestamp: now.addingTimeInterval(-HomeChargerTelemetry.defaultStaleAfter - 60))
+        let model = card(disabled)
+        #expect(model.actions.contains { $0.kind == .chargeNow && $0.isEnabled })
+        #expect(model.notice?.text != L10n.text("Charging is disabled on this charger."))
+    }
 }

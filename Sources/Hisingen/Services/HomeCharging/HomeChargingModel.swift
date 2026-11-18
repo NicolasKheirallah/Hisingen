@@ -878,6 +878,13 @@ final class HomeChargingModel: ObservableObject {
     }
 
     private func sendDirect(_ kind: HomeChargerCommandKind, pairing: HomeChargingPairing, now: Date) async {
+        if kind == .start, telemetry.isDisabled?.value == true,
+           telemetry.isFresh(telemetry.isDisabled, now: now) {
+            command.begin(kind, now: now)
+            command.rejected(reason: L10n.text("Charging is disabled on this charger."), now: now)
+            objectWillChange.send()
+            return
+        }
         if pairing.source == .nexBlue,
            !HomeChargingCardInput.nexBlueControlsAvailable(link: link, telemetry: telemetry, now: now) {
             command.begin(kind, now: now)

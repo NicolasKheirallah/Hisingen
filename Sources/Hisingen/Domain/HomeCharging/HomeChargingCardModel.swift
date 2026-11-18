@@ -349,6 +349,11 @@ struct HomeChargingCardModel: Equatable {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    private static func isDisabled(_ input: HomeChargingCardInput) -> Bool {
+        guard let reading = input.telemetry.isDisabled, reading.value else { return false }
+        return input.telemetry.isFresh(reading, now: input.now)
+    }
+
     private static func noticeFor(_ input: HomeChargingCardInput, activity: HomeChargerActivity,
                                   plan: HomeChargingPlanStatus?) -> Notice? {
         let direct = input.pairing.source.isDirect
@@ -388,6 +393,10 @@ struct HomeChargingCardModel: Equatable {
                           detail: L10n.text("Readings are the last values received and may be out of date."))
         default:
             break
+        }
+
+        if isDisabled(input), activity == .pluggedIn || activity == .finished || activity == .delayedStart {
+            return Notice(level: .warning, text: L10n.text("Charging is disabled on this charger."))
         }
 
         switch activity {
@@ -471,6 +480,7 @@ struct HomeChargingCardModel: Equatable {
         let pending = input.command.isPendingPhase
         let canSend = !pending && (input.pairing.source != .nexBlue ||
             HomeChargingCardInput.nexBlueControlsAvailable(link: input.link, telemetry: input.telemetry, now: input.now))
+        let canStart = canSend && !isDisabled(input)
         var actions: [Action] = []
         switch activity {
         case .charging, .waitingForPower, .waitingForVehicle, .enabledNoDraw:
@@ -480,7 +490,7 @@ struct HomeChargingCardModel: Equatable {
             if let plan, plan.isHeld {
                 actions.append(Action(kind: .resume, title: L10n.text("Resume"), isProminent: true, isEnabled: !pending, pendingTitle: nil))
             }
-            actions.append(Action(kind: .chargeNow, title: L10n.text("Charge now"), isProminent: plan?.isHeld != true, isEnabled: canSend,
+            actions.append(Action(kind: .chargeNow, title: L10n.text("Charge now"), isProminent: plan?.isHeld != true, isEnabled: canStart,
                                   pendingTitle: input.command.kindIs(.start) && pending ? L10n.text("Starting…") : nil))
         case .noCable, .unavailable, .stale, .fault:
             break

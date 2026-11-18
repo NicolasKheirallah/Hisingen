@@ -11,6 +11,10 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
     /// The charger's stable identity in Home Assistant (for NexBlue, the device serial number).
     var chargerID: String
     var chargerName: String
+    /// The vendor's role for this account at pairing time. NexBlue allows only the owner to read
+    /// or write a schedule; `nil` on pairings saved before the role was stored, and for vendors
+    /// that do not report one.
+    var chargerRole: Int?
     var entities: HomeChargerEntityMap
     var vin: String
     /// The saved Hisingen charge location this charger stands at, when the vehicle has one.
@@ -38,11 +42,13 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
     init(baseURL: String, chargerID: String, chargerName: String, entities: HomeChargerEntityMap,
          vin: String, locationID: String?, locationAlias: String, isSharedCharger: Bool = false,
          timeZoneIdentifier: String = TimeZone.current.identifier, tibberHome: String? = nil,
-         networkFeeOrePerKwh: Double = 0, pairedAt: Date = Date(), source: ChargerSource = .homeAssistant) {
+         networkFeeOrePerKwh: Double = 0, pairedAt: Date = Date(), source: ChargerSource = .homeAssistant,
+         chargerRole: Int? = nil) {
         self.chargerSource = source == .homeAssistant ? nil : source
         self.baseURL = baseURL
         self.chargerID = chargerID
         self.chargerName = chargerName
+        self.chargerRole = chargerRole
         self.entities = entities
         self.vin = vin
         self.locationID = locationID
@@ -55,6 +61,11 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
     }
 
     var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? .current }
+
+    /// Whether the account may read or write this charger's schedule. NexBlue allows only the
+    /// owner. A pairing saved before the role was stored carries no role and keeps the control;
+    /// the provider still refuses a non-owner when the schedule is read.
+    var canControlSchedule: Bool { chargerRole.map { $0 == 0 } ?? true }
 
     func isPaired(toVehicle otherVIN: String) -> Bool {
         !vin.isEmpty && vin.caseInsensitiveCompare(otherVIN) == .orderedSame
