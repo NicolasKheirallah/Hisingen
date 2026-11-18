@@ -175,25 +175,4 @@ struct VehicleHistoryLedgerTests {
             vin: vin, range: nil, rowCap: 1, tripLimit: 100, chargingCapacity: 79)
         #expect(capped.truncated)
     }
-
-    @Test("The Info bundle returns the recent record set including domain charging sessions")
-    func recentBundle() throws {
-        let handle = makeDatabase()
-        let sessionID = handle.database.charging.startChargingSession(
-            vin: vin, startSoc: 40, location: "Home", startedAt: start,
-            usableCapacityKwh: 79)
-        handle.database.charging.recordChargingSample(
-            sessionId: sessionID, vin: vin, soc: 55, powerKw: 11,
-            voltage: nil, current: nil, timestamp: start.addingTimeInterval(600))
-        handle.database.charging.completeChargingSession(
-            id: sessionID, endSoc: 55, energyDeliveredKwh: 7.9,
-            peakPowerKw: 11, averagePowerKw: 11,
-            endedAt: start.addingTimeInterval(600), completionReason: .stopped)
-
-        let bundle = handle.database.history.recent(vin: vin, chargingCapacityKwh: 79)
-        #expect(bundle.recentCommands.isEmpty)
-        #expect(bundle.chargingSessions.count == 1)
-        #expect(bundle.chargingSessions.first?.kwhDelivered == 7.9)
-        #expect(bundle.batteryHealthHistory.isEmpty)
-    }
 }

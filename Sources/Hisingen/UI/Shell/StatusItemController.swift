@@ -10,8 +10,6 @@ final class StatusItemController: NSObject {
         case refresh
     }
 
-    static let coreContextActions = CoreContextAction.allCases
-
     static func lockCommand(for state: VehicleState?) -> RemoteCommand {
         state?.exteriorStatus?.isLocked == true ? .unlock : .lock
     }
@@ -455,15 +453,6 @@ final class StatusItemController: NSObject {
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
             remoteSection.submenu = controlsMenu
-
-            if !state.energy.sessions.isEmpty {
-                let exportItem = menu.addItem(
-                    withTitle: L10n.text("Export Charging History (CSV)…"),
-                    action: #selector(contextExportChargingCSV),
-                    keyEquivalent: ""
-                )
-                exportItem.target = self
-            }
         }
 
         // Quick panel geometry switching without a trip into Settings → General.
@@ -690,19 +679,6 @@ final class StatusItemController: NSObject {
     @objc private func contextHonkAndFlash() {
         guard onCommandBrand() == .volvo else { return }
         onRemoteCommand(.honkAndFlash)
-    }
-
-    @objc private func contextExportChargingCSV() {
-        guard let state = latestState, !state.energy.sessions.isEmpty else { return }
-        // Reuses the shared export's panel + write path so a failed write surfaces an
-        // NSAlert with the underlying error instead of being swallowed by `try?`.
-        ChargingHistoryExport.saveCSV(
-            sessions: state.energy.sessions,
-            vin: state.identity.vin,
-            tariffPricePerKwh: preferences.electricityPricePerKwh,
-            currencySymbol: preferences.currencySymbol,
-            ratePolicy: preferences.electricityRatePolicy
-        )
     }
 
     /// The stored tab is what decides the surface, so every Settings entry point has to move it:

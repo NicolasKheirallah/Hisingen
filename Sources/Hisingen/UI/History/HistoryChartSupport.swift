@@ -135,26 +135,11 @@ enum HistoryExport {
         operation.run()
     }
 
-    private static func opt(_ value: Double?, _ places: Int) -> String {
-        value.map { String(format: "%.\(places)f", locale: L10n.displayLocale, $0) } ?? ""
-    }
-
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
-        func coord(_ value: Double?) -> String { value.map { String($0) } ?? "" }
         var rows = [CSV.tripHistoryHeader]
         for trip in trips {
-            let fields: [String] = [
-                CSV.field(trip.id), CSV.field(trip.vin),
-                Format.iso8601.string(from: trip.startedAt),
-                Format.iso8601.string(from: trip.endedAt),
-                String(format: "%.1f", locale: L10n.displayLocale, trip.duration / 60),
-                String(format: "%.2f", locale: L10n.displayLocale, trip.distanceKm),
-                opt(trip.averageConsumption, 2),
-                opt(trip.ambientTemperatureCelsius, 1),
-                coord(trip.startLatitude), coord(trip.startLongitude),
-                coord(trip.endLatitude), coord(trip.endLongitude)
-            ]
-            rows.append(fields.map(CSV.field).joined(separator: ","))
+            rows.append(HistoryCSVRows.trip(trip, number: HistoryCSVRows.localized)
+                .map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }
@@ -162,44 +147,8 @@ enum HistoryExport {
     static func chargingSessionsCSV(_ sessions: [HistoricalChargingSession]) -> String {
         var rows = [CSV.chargingHistoryHeader]
         for s in sessions {
-            // Built in small typed groups: one 25-element literal plus a concatenation is more
-            // than the pinned Xcode can type-check in reasonable time.
-            let endedAt: String = s.endedAt.map { Format.iso8601.string(from: $0) } ?? ""
-            let startSoc: String = s.startSoc < 0
-                ? "" : String(format: "%.1f", locale: L10n.displayLocale, s.startSoc)
-            let nightStart: String = s.nightTariffStartHour.map(String.init) ?? ""
-            let nightEnd: String = s.nightTariffEndHour.map(String.init) ?? ""
-            var fields: [String] = []
-            fields += [s.id, s.vin, Format.iso8601.string(from: s.startedAt), endedAt, startSoc]
-            fields += [
-                opt(s.endSoc, 1),
-                String(format: "%.2f", locale: L10n.displayLocale, s.energyDeliveredKwh),
-                String(format: "%.1f", locale: L10n.displayLocale, s.peakPowerKw),
-                String(format: "%.1f", locale: L10n.displayLocale, s.averagePowerKw)
-            ]
-            fields += [
-                s.locationName ?? "",
-                s.lifecycleState.rawValue,
-                s.completionReason?.rawValue ?? "",
-                s.energySource.rawValue,
-                s.confidence.rawValue
-            ]
-            fields += [
-                opt(s.sampleCoverage, 3),
-                opt(s.usableCapacityKwh, 2),
-                opt(s.tariffPricePerKwh, 4),
-                String(s.nightTariffEnabled),
-                opt(s.nightTariffPricePerKwh, 4),
-                nightStart,
-                nightEnd
-            ]
-            fields += [
-                opt(s.estimatedCost, 2),
-                s.currencySymbol ?? "",
-                opt(s.targetSoc, 1),
-                String(s.summaryVersion)
-            ]
-            fields += WallboxCSV.fields(s.wallbox)
+            let fields = HistoryCSVRows.chargingSession(s, number: HistoryCSVRows.localized, location: { $0 })
+                + WallboxCSV.fields(s.wallbox)
             rows.append(fields.map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"

@@ -34,18 +34,19 @@ struct TabItemPickerSheet: View {
         }
     }
 
-    private var placed: Set<TabItemID> { Set(composition.items(for: tab)) }
+    private var placed: Set<TabItemID> { Set(composition.renderableItems(for: tab)) }
 
     private var matches: [TabItem] {
         let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return TabItemCatalog.all.filter { entry in
-            // On a tab of the reader's own, only free-standing cards are offered. The tab-owned
-            // ones are listed with the reason, so the gap is stated rather than hidden.
-            if isCustomTab, entry.isCard, !ComposableCards.isReusable(entry.id) { return false }
+            // A shipped tab draws only the cards it was built from. A tab of the reader's own
+            // takes the items that can stand alone; the rest need the tab that gives them state.
+            guard TabItemCatalog.canRender(entry.id, on: tab) else { return false }
+            if isCustomTab, !TabItemCatalog.isStandalone(entry.id) { return false }
             switch filter {
             case .everything: break
             case .notOnThisTab: if placed.contains(entry.id) { return false }
-            case .hidden: if !composition.isHidden(entry.id) { return false }
+            case .hidden: if !composition.isHidden(entry.id, on: tab) { return false }
             }
             guard !needle.isEmpty else { return true }
             return entry.title.lowercased().contains(needle) || entry.detail.lowercased().contains(needle)
@@ -142,7 +143,7 @@ struct TabItemPickerSheet: View {
 
     private func row(_ entry: TabItem) -> some View {
         let isPlaced = placed.contains(entry.id)
-        let isHidden = composition.isHidden(entry.id)
+        let isHidden = composition.isHidden(entry.id, on: tab)
         return Button {
             if selected.contains(entry.id) { selected.remove(entry.id) } else { selected.insert(entry.id) }
         } label: {

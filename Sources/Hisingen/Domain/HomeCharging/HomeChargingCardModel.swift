@@ -101,6 +101,15 @@ struct HomeChargingCardModel: Equatable {
         var id: String { "\(kind)" }
     }
 
+    /// One spec row in the charger's detail list.
+    struct Detail: Equatable, Identifiable {
+        var label: String
+        var value: String
+        var info: String?
+        var needsAttention = false
+        var id: String { label }
+    }
+
     struct Notice: Equatable {
         enum Level: Equatable { case info, warning, error }
         var level: Level
@@ -115,6 +124,11 @@ struct HomeChargingCardModel: Equatable {
     var sessionLine: String?
     /// False when the session line shows the last readings received rather than live ones.
     var sessionIsLive = true
+    /// While charging: the current in each phase against the limit that applies.
+    var phaseLine: String?
+    /// Voltage, current, limits and connection as the charger reports them. Empty for chargers
+    /// that report none of these, such as a Home Assistant pairing.
+    var details: [Detail] = []
     var planLine: String?
     var costLine: String?
     var notice: Notice?
@@ -169,6 +183,9 @@ struct HomeChargingCardModel: Equatable {
             break
         }
 
+        let phaseLine = activity.isDrawingPower ? Self.phaseText(telemetry, now: now) : nil
+        let details = Self.detailRows(telemetry, now: now)
+
         // Plan line.
         let plan = input.plan.flatMap { $0.phase.isTerminal ? nil : $0 }
         let planLine = plan.flatMap { planText($0, zone: zone, now: now) }
@@ -191,11 +208,12 @@ struct HomeChargingCardModel: Equatable {
         default: tone = plan != nil && connected == true ? .scheduled : .connected
         }
 
-        let freshness = freshnessLine(input, activity: activity, zone: zone)
+        let freshness = freshnessLine(input, zone: zone)
         let actions = actionsFor(input, activity: activity, plan: plan)
-        let summary = [title, vehicleLine, sessionLine, planLine, notice?.text, costLine].compactMap { $0 }.joined(separator: ". ")
+        let summary = [title, vehicleLine, sessionLine, phaseLine, planLine, notice?.text, costLine].compactMap { $0 }.joined(separator: ". ")
         return HomeChargingCardModel(tone: tone, title: title, vehicleLine: vehicleLine, sessionLine: sessionLine,
-                                     sessionIsLive: sessionIsLive, planLine: planLine, costLine: costLine, notice: notice,
+                                     sessionIsLive: sessionIsLive, phaseLine: phaseLine, details: details,
+                                     planLine: planLine, costLine: costLine, notice: notice,
                                      freshnessLine: freshness, actions: actions, accessibilitySummary: summary)
     }
 
@@ -228,6 +246,88 @@ struct HomeChargingCardModel: Equatable {
             parts.append(L10n.format("Ready about %@", HomeChargingTime.time(finish, in: zone)))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func wholeAmps(_ value: Double) -> String {
+        Format.amps(Int(value.rounded()))
+    }
+
+    private static func ampsList(_ phases: [HomeChargerPhase]) -> String {
+        L10n.format("%@\u{00A0}A", phases.map { Format.number($0.amps, decimals: 1) }.joined(separator: " · "))
+    }
+
+    private static func voltsList(_ phases: [HomeChargerPhase]) -> String {
+        phases.map { Format.number($0.volts, decimals: 0) }.joined(separator: " · ") + "\u{00A0}V"
+    }
+
+    /// `10.2 · 10.1 · 10.2 A per phase, limit 16 A`. Only readings that are still current: a stale
+    /// current would read as what the charger is delivering now.
+    private static func phaseText(_ telemetry: HomeChargerTelemetry, now: Date) -> String? {
+        guard telemetry.isFresh(telemetry.phases, now: now) else { return nil }
+        let phases = telemetry.energisedPhases
+        guard !phases.isEmpty else { return nil }
+        let currents = ampsList(phases)
+        guard let limit = telemetry.limits?.effectiveAmps else { return L10n.format("%@ per phase", currents) }
+        return L10n.format("%@ per phase, limit %@", currents, wholeAmps(limit))
+    }
+
+    private static func detailRows(_ telemetry: HomeChargerTelemetry, now: Date) -> [Detail] {
+        var rows: [Detail] = []
+        let phases = telemetry.isFresh(telemetry.phases, now: now) ? telemetry.energisedPhases : []
+        if !phases.isEmpty {
+            rows.append(Detail(label: L10n.text("Voltage"), value: voltsList(phases)))
+            rows.append(Detail(label: L10n.text("Current per Phase"), value: ampsList(phases)))
+        }
+        // The limit alone is the Current Limit card's job. This row earns its place by setting it
+        // against the cable and the fuse.
+        if let limits = telemetry.limits, limits.cableAmps != nil || limits.circuitFuseAmps != nil {
+            rows.append(limitRow(limits))
+        }
+        if let cable = telemetry.cableLimitAmps?.value {
+            rows.append(Detail(label: L10n.text("Cable Rating"), value: wholeAmps(cable)))
+        }
+        if let fuse = telemetry.circuitFuseAmps?.value {
+            rows.append(Detail(label: L10n.text("Circuit Fuse"), value: wholeAmps(fuse)))
+        }
+        if let mode = telemetry.phaseMode?.value {
+            rows.append(Detail(label: L10n.text("Phase Mode"), value: phaseModeText(mode)))
+        }
+        if let network = telemetry.network?.value {
+            rows.append(Detail(label: L10n.text("Network"), value: networkText(network)))
+        }
+        return rows
+    }
+
+    private static func limitRow(_ limits: HomeChargerLimits) -> Detail {
+        var value = wholeAmps(limits.effectiveAmps)
+        switch limits.binding {
+        case .setting: break
+        case .cable: value = L10n.format("%@, limited by the cable", value)
+        case .circuitFuse: value = L10n.format("%@, limited by the circuit fuse", value)
+        }
+        var parts = [L10n.format("The limit is set to %@.", wholeAmps(limits.settingAmps))]
+        if let cable = limits.cableAmps { parts.append(L10n.format("The cable allows %@.", wholeAmps(cable))) }
+        if let fuse = limits.circuitFuseAmps { parts.append(L10n.format("The circuit fuse is %@.", wholeAmps(fuse))) }
+        parts.append(L10n.text("Charging uses the lowest. The car and load balancing can ask for less."))
+        return Detail(label: L10n.text("Current Limit"), value: value, info: parts.joined(separator: " "),
+                      needsAttention: limits.binding != .setting)
+    }
+
+    private static func phaseModeText(_ mode: HomeChargerPhaseMode) -> String {
+        switch mode {
+        case .adaptive: return L10n.text("Adaptive")
+        case .singlePhase: return L10n.text("Single phase")
+        case .threePhase: return L10n.text("Three phase")
+        }
+    }
+
+    private static func networkText(_ network: HomeChargerNetwork) -> String {
+        switch network {
+        case .none: return L10n.text("Not connected")
+        case .wifi: return L10n.text("Wi-Fi")
+        case .mobile: return L10n.text("Mobile data")
+        case .ethernet: return L10n.text("Ethernet")
+        }
     }
 
     private static func planText(_ plan: HomeChargingPlanStatus, zone: TimeZone, now: Date) -> String? {
@@ -349,7 +449,7 @@ struct HomeChargingCardModel: Equatable {
         }
     }
 
-    private static func freshnessLine(_ input: HomeChargingCardInput, activity: HomeChargerActivity, zone: TimeZone) -> String? {
+    private static func freshnessLine(_ input: HomeChargingCardInput, zone: TimeZone) -> String? {
         switch input.link {
         case .unreachable, .reconnecting, .unauthorized:
             guard let contact = input.lastContact else { return nil }
@@ -462,5 +562,13 @@ enum HomeChargingConflicts {
                 detail: L10n.text("This Home Assistant automation uses the charger and may start or stop it.")))
         }
         return found
+    }
+}
+
+
+private extension HomeChargerActivity {
+    var isDrawingPower: Bool {
+        if case .charging = self { return true }
+        return false
     }
 }

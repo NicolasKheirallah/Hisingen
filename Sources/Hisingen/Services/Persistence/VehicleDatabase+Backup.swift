@@ -9,25 +9,17 @@ extension VehicleDatabase {
     func exportBackupJSON(includeCoordinates: Bool) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         var payload: [String: Any] = [
             "schema": "hisingen-backup-v1",
-            "exportedAt": ISO8601DateFormatter().string(from: Date()),
+            "exportedAt": Format.iso8601.string(from: Date()),
             "includesCoordinates": includeCoordinates,
         ]
 
-        if includeCoordinates {
-            payload["chargingSessions"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupChargingSessions(includeCoordinates: true)))
-            payload["telemetry"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupTelemetry(includeCoordinates: true)))
-        } else {
-            payload["chargingSessions"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupChargingSessions(includeCoordinates: false)))
-            payload["telemetry"] = try JSONSerialization.jsonObject(
-                with: encoder.encode(backupTelemetry(includeCoordinates: false)))
-        }
+        payload["chargingSessions"] = try JSONSerialization.jsonObject(
+            with: encoder.encode(backupChargingSessions(includeCoordinates: includeCoordinates)))
+        payload["telemetry"] = try JSONSerialization.jsonObject(
+            with: encoder.encode(backupTelemetry(includeCoordinates: includeCoordinates)))
         payload["chargingSamples"] = try JSONSerialization.jsonObject(
             with: encoder.encode(chargingSamplesAll()))
         payload["batteryHealth"] = try JSONSerialization.jsonObject(
@@ -97,7 +89,7 @@ extension VehicleDatabase {
                wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source
         FROM charging_sessions ORDER BY started_at DESC;
         """
-        let df = ISO8601DateFormatter()
+        let df = Format.iso8601
         return try db.query(sql: sql) { _ in } process: { stmt -> [BackupSession] in
             var out: [BackupSession] = []
             while try stmt.stepOrThrow() {
@@ -157,7 +149,7 @@ extension VehicleDatabase {
         SELECT \(HistoryRowDecoder.Columns.telemetry)
         FROM telemetry_logs ORDER BY timestamp DESC;
         """
-        let df = ISO8601DateFormatter()
+        let df = Format.iso8601
         return try db.query(sql: sql) { _ in } process: { stmt in
             try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.telemetry).map { row in
                 // Coordinates are dropped here rather than at the query, which is where the
@@ -282,7 +274,7 @@ extension VehicleDatabase {
         SELECT \(HistoryRowDecoder.Columns.airQuality)
         FROM air_quality_history ORDER BY timestamp DESC;
         """
-        let df = ISO8601DateFormatter()
+        let df = Format.iso8601
         return try db.query(sql: sql) { _ in } process: { stmt in
             try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.airQuality).map { row in
                 BackupAirQuality(
@@ -307,7 +299,7 @@ extension VehicleDatabase {
         SELECT \(HistoryRowDecoder.Columns.commandAudit)
         FROM remote_commands_log ORDER BY executed_at DESC;
         """
-        let iso = ISO8601DateFormatter()
+        let iso = Format.iso8601
         return try db.query(sql: sql) { _ in } process: { stmt in
             try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.commandAudit).map { row in
                 BackupCommandAudit(

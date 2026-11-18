@@ -1,135 +1,275 @@
 import SwiftUI
 import Charts
 
-/// Compact 48-hour spot-price bar chart for the Charging Planner card. Bars inside the
-/// planned charging window carry the semantic good colour; the rest shade from neutral
-/// (cheap) toward warning (expensive) so the shape of the day reads at a glance without
-/// axis clutter.
+/// One hour of the spot-price outlook. Quarter-hour slots are averaged into the hour they sit in,
+/// weighted by how long each lasted, so 48 hours read as 48 bars whatever granularity the source
+/// published.
+struct PriceHour: Identifiable, Equatable, Sendable {
+    var start: Date
+    var end: Date
+    var price: Double
+
+    var id: Date { start }
+}
+
+/// The arithmetic behind the price chart, kept apart from the view so it can be tested.
+enum PriceOutlook {
+    private static let hour: TimeInterval = 3_600
+
+    /// Hourly averages for every hour that has not ended yet. Hour boundaries follow the epoch,
+    /// which lines up with local hours in every zone whose offset is a whole number of hours.
+    nonisolated static func hourly(_ points: [ElectricityPricePoint], after now: Date) -> [PriceHour] {
+        var buckets: [TimeInterval: (weighted: Double, seconds: Double)] = [:]
+        for point in points where point.endDate > now && point.endDate > point.startDate && point.sekPerKwh.isFinite {
+            var cursor = point.startDate.timeIntervalSince1970
+            let end = point.endDate.timeIntervalSince1970
+            while cursor < end {
+                let bucket = (cursor / hour).rounded(.down) * hour
+                let sliceEnd = min(end, bucket + hour)
+                let overlap = sliceEnd - cursor
+                var running = buckets[bucket] ?? (0, 0)
+                running.weighted += overlap * point.sekPerKwh
+                running.seconds += overlap
+                buckets[bucket] = running
+                cursor = sliceEnd
+            }
+        }
+        return buckets.keys.sorted().compactMap { key in
+            guard let total = buckets[key], total.seconds > 0 else { return nil }
+            let start = Date(timeIntervalSince1970: key)
+            let end = start.addingTimeInterval(hour)
+            return end > now ? PriceHour(start: start, end: end, price: total.weighted / total.seconds) : nil
+        }
+    }
+
+    /// Value-axis range and gridlines. The bars always start at zero so their heights compare
+    /// honestly, a negative spot price extends below it, and the gridline step is the smallest
+    /// round number that keeps the count at four or fewer.
+    nonisolated static func priceAxis(minimum: Double, maximum: Double) -> (domain: ClosedRange<Double>, ticks: [Double], step: Double) {
+        let lower = min(0, minimum)
+        let upper = max(maximum, 0)
+        let range = upper - lower
+        guard range > 0 else { return (0...1, [0, 0.5, 1], 0.5) }
+        let step = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 50]
+            .first { range / $0 <= 4 } ?? 100
+        let domain = (lower < 0 ? lower * 1.06 : 0)...(upper * 1.06)
+        var ticks: [Double] = []
+        var value = (domain.lowerBound / step).rounded(.up) * step
+        while value <= domain.upperBound + step * 1e-9 {
+            ticks.append((value / step).rounded() * step)
+            value += step
+        }
+        return (domain, ticks, step)
+    }
+
+    /// Decimals that show every gridline value exactly: none for whole kronor, one for tenths.
+    nonisolated static func decimals(forStep step: Double) -> Int {
+        if step >= 1 { return 0 }
+        return abs(step * 10 - (step * 10).rounded()) < 1e-9 ? 1 : 2
+    }
+
+    /// Time-axis ticks on whole local hours, spaced so the labels never touch: every six hours
+    /// across a full outlook, every three or two as it shortens. A tick closer than half a
+    /// stride to either end is left out, because its label would be clipped by the chart edge.
+    nonisolated static func timeTicks(from start: Date, to end: Date, hourCount: Int, calendar: Calendar = .current) -> [Date] {
+        let stride = hourCount > 26 ? 6 : (hourCount > 12 ? 3 : 2)
+        let margin = Double(stride) / 2 * hour
+        var ticks: [Date] = []
+        var cursor = start
+        while cursor <= end {
+            let parts = calendar.dateComponents([.hour, .minute], from: cursor)
+            if parts.minute == 0, let clock = parts.hour, clock % stride == 0,
+               cursor.timeIntervalSince(start) >= margin, end.timeIntervalSince(cursor) >= margin {
+                ticks.append(cursor)
+            }
+            cursor = cursor.addingTimeInterval(hour)
+        }
+        return ticks
+    }
+}
+
+/// The spot-price outlook for the Charging Planner. Height is the only encoding of price, and
+/// the gridlines carry real kronor values, so a bar can be read off the axis. The planned hours
+/// take the live colour on a faint band of the same colour; everything else is one grey.
 @MainActor
 struct PriceCurveView: View {
     let points: [ElectricityPricePoint]
     let plan: ChargingPlan?
+    /// The instant the series should reach by now (end of tomorrow once tomorrow's prices are due).
+    /// Where the series stops short of it, the chart keeps the room and says the prices are missing,
+    /// so a short outlook reads as "not published yet" and not as a plan with no later hours.
+    var expectedEnd: Date?
     var now: Date = Date()
     @State private var scrubDate: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var futurePoints: [ElectricityPricePoint] {
-        points.filter { $0.endDate > now }.sorted { $0.startDate < $1.startDate }
-    }
+    /// A gap between neighbouring bars, split across both sides of each.
+    private static let barInset: TimeInterval = 5 * 60
 
     var body: some View {
-        let series = futurePoints
-        guard series.count >= 2,
-              let minimum = series.map(\.sekPerKwh).min(),
-              let maximum = series.map(\.sekPerKwh).max(), maximum > minimum else {
-            return AnyView(EmptyView())
+        let hours = PriceOutlook.hourly(points, after: now)
+        if let first = hours.first, let last = hours.last,
+           let low = hours.map(\.price).min(), let high = hours.map(\.price).max() {
+            chart(hours: hours, domainStart: first.start, dataEnd: last.end,
+                  domainEnd: max(last.end, expectedEnd ?? last.end), low: low, high: high)
         }
-        let span = maximum - minimum
-        let selected = scrubDate.flatMap { HistoryInsights.nearest(to: $0, in: series, timestamp: \.startDate) }
-        return AnyView(
-            VStack(alignment: .leading, spacing: 4) {
-                // The readout has its own line, so the chart does not move when a bar is picked
-                // and the readout never clips against the card above a 56 point plot.
-                HStack(spacing: 0) {
-                    if let selected {
-                        let text = readout(for: selected)
-                        Text(text)
-                            .hisTelemetryValue(text, reduceMotion: reduceMotion)
-                            .historyScrubCallout()
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                Chart {
-                    ForEach(series, id: \.startDate) { point in
-                        BarMark(
-                            x: .value("Time", point.startDate),
-                            y: .value("Price", point.sekPerKwh),
-                            width: .fixed(2)
-                        )
-                        .foregroundStyle(barColor(for: point, minimum: minimum, span: span))
-                    }
-                    if let selected {
-                        RuleMark(x: .value("Time", selected.startDate))
-                            .foregroundStyle(Color.primary.opacity(0.25))
-                    }
-                }
-                .chartXSelection(value: $scrubDate)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .hour, count: 6)) { (value: AxisValue) in
-                        AxisValueLabel {
-                            if let date = value.as(Date.self) {
-                                Text(date, format: Date.FormatStyle.dateTime.hour().locale(L10n.displayLocale))
-                                    .hisType(.micro, weight: .medium)
-                                    .monospacedDigit()
-                            }
-                        }
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { (value: AxisValue) in
-                        AxisValueLabel {
-                            if let price = value.as(Double.self) {
-                                // The y axis carries the only measurable information on the chart, so
-                                // it is no longer the smallest type on it, and it names its unit.
-                                Text(L10n.format("%@ kr", String(format: "%.1f", locale: L10n.displayLocale, price)))
-                                    .hisType(.micro, weight: .medium)
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        AxisGridLine()
-                    }
-                }
-                .frame(height: 56)
-                // The chart had no unit and no way to read an individual hour: the bars carried the
-                // information and nothing could be asked of them.
-                .chartYAxisLabel(L10n.text("kr per kWh"))
-                .accessibilityLabel(L10n.text("Electricity price outlook"))
-                .accessibilityValue(accessibilitySummary(minimum: minimum, maximum: maximum))
-            }
-        )
     }
 
-    /// The hour and price of one bar, in the unit the axis already names. Says so when the bar
-    /// falls inside the planned window, the same test that colours it.
-    private func readout(for point: ElectricityPricePoint) -> String {
-        let time = Format.shortTime(date: point.startDate)
-        let price = Format.number(point.sekPerKwh, decimals: 2)
-        guard let plan, point.startDate >= plan.start, point.endDate <= plan.end else {
+    private func chart(hours: [PriceHour], domainStart: Date, dataEnd: Date, domainEnd: Date, low: Double, high: Double) -> some View {
+        let axis = PriceOutlook.priceAxis(minimum: low, maximum: high)
+        let hourCount = Int((domainEnd.timeIntervalSince(domainStart) / 3_600).rounded())
+        let ticks = PriceOutlook.timeTicks(from: domainStart, to: domainEnd, hourCount: hourCount)
+        let missing = domainEnd.timeIntervalSince(dataEnd) >= 3_600
+        let selected = scrubDate.flatMap { HistoryInsights.nearest(to: $0, in: hours, timestamp: \.start) }
+        let calendar = Calendar.current
+        return VStack(alignment: .leading, spacing: 6) {
+            // The caption and the readout share one line, so the chart does not move when a bar
+            // is picked and the readout never clips against the card above the plot.
+            Group {
+                if let selected {
+                    let text = readout(for: selected)
+                    Text(text)
+                        .hisTelemetryValue(text, reduceMotion: reduceMotion)
+                        .historyScrubCallout()
+                } else {
+                    Text(L10n.format("%@ · %@", L10n.text("Hourly price"), L10n.text("kr per kWh")))
+                        .hisType(.caption)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+
+            Chart {
+                if let plan {
+                    RectangleMark(
+                        xStart: .value("Window start", max(plan.start, domainStart)),
+                        xEnd: .value("Window end", min(plan.end, domainEnd)),
+                        yStart: .value("Floor", axis.domain.lowerBound),
+                        yEnd: .value("Ceiling", axis.domain.upperBound)
+                    )
+                    .foregroundStyle(HisingenTheme.liveSignal.opacity(0.14))
+                }
+                if missing {
+                    RectangleMark(
+                        xStart: .value("Missing from", dataEnd),
+                        xEnd: .value("Missing to", domainEnd),
+                        yStart: .value("Floor", axis.domain.lowerBound),
+                        yEnd: .value("Ceiling", axis.domain.upperBound)
+                    )
+                    .foregroundStyle(HisingenTheme.inkMuted.opacity(0.08))
+                    .annotation(position: .overlay, alignment: .center) {
+                        Text(L10n.text("Not published yet"))
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                }
+                ForEach(hours) { hour in
+                    RectangleMark(
+                        xStart: .value("Hour start", hour.start.addingTimeInterval(Self.barInset)),
+                        xEnd: .value("Hour end", hour.end.addingTimeInterval(-Self.barInset)),
+                        yStart: .value("Zero", 0),
+                        yEnd: .value("Price", hour.price)
+                    )
+                    .foregroundStyle(barColor(for: hour, selected: selected))
+                }
+                if now > domainStart && now < domainEnd {
+                    RuleMark(x: .value("Now", now))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .foregroundStyle(HisingenTheme.ink)
+                }
+            }
+            .chartXScale(domain: domainStart...domainEnd)
+            .chartYScale(domain: axis.domain)
+            .chartXSelection(value: $scrubDate)
+            .chartXAxis {
+                AxisMarks(values: ticks) { value in
+                    if let date = value.as(Date.self), calendar.component(.hour, from: date) == 0 {
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(HisingenTheme.hairline)
+                    }
+                    AxisValueLabel(anchor: .top) {
+                        if let date = value.as(Date.self) {
+                            Text(timeLabel(for: date, calendar: calendar))
+                                .hisType(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: axis.ticks) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(HisingenTheme.hairline)
+                    AxisValueLabel(anchor: .trailing) {
+                        if let price = value.as(Double.self) {
+                            Text(Format.number(price, decimals: PriceOutlook.decimals(forStep: axis.step)))
+                                .hisType(.caption)
+                                .monospacedDigit()
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                    }
+                }
+            }
+            .frame(height: 112)
+            .accessibilityLabel(L10n.text("Electricity price outlook"))
+            .accessibilityValue(accessibilitySummary(minimum: low, maximum: high)
+                + (missing ? " " + L10n.text("Later prices are not published yet.") : ""))
+
+            legend
+        }
+    }
+
+    private var legend: some View {
+        HStack(spacing: 14) {
+            if plan != nil {
+                legendItem(HisingenTheme.liveSignal, title: L10n.text("Charging Window"), width: 10, height: 8)
+            }
+            legendItem(HisingenTheme.ink, title: L10n.text("Now"), width: 1, height: 12)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func legendItem(_ color: Color, title: String, width: CGFloat, height: CGFloat) -> some View {
+        HStack(spacing: 5) {
+            Rectangle().fill(color).frame(width: width, height: height)
+            Text(title)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
+        }
+    }
+
+    private func inWindow(_ hour: PriceHour) -> Bool {
+        guard let plan else { return false }
+        return hour.start < plan.end && hour.end > plan.start
+    }
+
+    private func barColor(for hour: PriceHour, selected: PriceHour?) -> Color {
+        if hour == selected { return HisingenTheme.ink }
+        return inWindow(hour) ? HisingenTheme.liveSignal : HisingenTheme.inkMuted
+    }
+
+    /// Hour labels use the reader's clock style; the label at midnight names the weekday that
+    /// starts there, which is what marks the change of day.
+    private func timeLabel(for date: Date, calendar: Calendar) -> String {
+        if calendar.component(.hour, from: date) == 0 {
+            return date.formatted(Date.FormatStyle().weekday(.abbreviated).locale(L10n.displayLocale))
+        }
+        let formatter = DateFormatter()
+        formatter.locale = L10n.displayLocale
+        formatter.setLocalizedDateFormatFromTemplate("j")
+        return formatter.string(from: date)
+    }
+
+    /// The hour and price of one bar, in the unit the caption already names. Says so when the
+    /// bar falls inside the planned window, the same test that colours it.
+    private func readout(for hour: PriceHour) -> String {
+        let time = Format.shortTime(date: hour.start)
+        let price = Format.number(hour.price, decimals: 2)
+        guard inWindow(hour) else {
             return L10n.format("%@ · %@ kr per kWh", time, price)
         }
         return L10n.format("%@ · %@ kr per kWh · planned charging", time, price)
-    }
-
-    /// Hue stays absolute: the Swedish spot-price bands are what a reader plans around, so
-    /// the same hour must read the same whichever period is on screen (a purely relative
-    /// scale once rendered 1.20 kr/kWh red on a flat day and grey on a volatile one).
-    /// Intensity comes from the visible window's `minimum`/`span` instead, so a window stuck
-    /// inside one band, a cheap summer night or an extreme-price day, still shows its shape
-    /// instead of rendering every bar identical.
-    private func barColor(for point: ElectricityPricePoint, minimum: Double, span: Double) -> Color {
-        if let plan, point.startDate >= plan.start && point.endDate <= plan.end {
-            return HisingenTheme.semanticGood
-        }
-        let alpha = Self.barAlpha(price: point.sekPerKwh, minimum: minimum, span: span)
-        return point.sekPerKwh < 1.0
-            ? Color.secondary.opacity(alpha)
-            : HisingenTheme.semanticWarning.opacity(alpha)
-    }
-
-    /// Alpha for a price bar: absolute bands pick the formula, the window position
-    /// (`(price - minimum) / span`, clamped) picks the intensity within it. Each band's
-    /// floor sits at its old flat alpha and ends at or above where the next begins, so
-    /// crossing a threshold upward never reads as a cheaper bar. Exposed for tests that pin
-    /// the ordering rules.
-    nonisolated static func barAlpha(price: Double, minimum: Double, span: Double) -> Double {
-        let position = span > 0 ? min(max((price - minimum) / span, 0), 1) : 0
-        switch price {
-        case ..<1.0: return 0.4 + 0.25 * position
-        case ..<2.0: return 0.45 + 0.2 * position
-        default: return 0.7 + 0.1 * position
-        }
     }
 
     private func accessibilitySummary(minimum: Double, maximum: Double) -> String {

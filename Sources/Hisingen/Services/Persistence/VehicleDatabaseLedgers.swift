@@ -18,7 +18,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
         catch { logger.error("Could not persist vehicle snapshot: \(error, privacy: .public)") }
     }
 
-    func saveSnapshotOrThrow(_ state: VehicleState, preserveExisting: Bool = false) throws {
+    private func saveSnapshotOrThrow(_ state: VehicleState) throws {
         let data = try JSONEncoder().encode(state.cacheableCopy)
         let brandName = state.isVolvo ? "volvo" : "polestar"
         let sql = """
@@ -30,8 +30,7 @@ final class VehicleSnapshotLedger: @unchecked Sendable {
             fetched_at=excluded.fetched_at,
             vehicle_reported_at=excluded.vehicle_reported_at,
             is_cached_snapshot=1,
-            payload=excluded.payload
-        WHERE \(preserveExisting ? "0" : "1");
+            payload=excluded.payload;
         """
         try db.query(sql: sql) { stmt in
             try stmt.bindText(state.identity.vin, at: 1)
@@ -102,7 +101,7 @@ final class ChargingBaselineLedger: @unchecked Sendable {
         catch { logger.error("Could not persist charging baseline: \(error, privacy: .public)") }
     }
 
-    func saveBaselineOrThrow(_ baseline: ChargingBaseline, preserveExisting: Bool = false) throws {
+    private func saveBaselineOrThrow(_ baseline: ChargingBaseline) throws {
         let payload = try JSONEncoder().encode(baseline)
         let sql = """
         INSERT INTO charging_baselines (vin, sampled_at, vehicle_reported_at, payload)
@@ -110,8 +109,7 @@ final class ChargingBaselineLedger: @unchecked Sendable {
         ON CONFLICT(vin) DO UPDATE SET
             sampled_at=excluded.sampled_at,
             vehicle_reported_at=excluded.vehicle_reported_at,
-            payload=excluded.payload
-        WHERE \(preserveExisting ? "0" : "1");
+            payload=excluded.payload;
         """
         try db.query(sql: sql) { stmt in
             try stmt.bindText(baseline.vin, at: 1)
@@ -153,7 +151,7 @@ final class VehicleImageLedger: @unchecked Sendable {
         vin: String, angle: Int, data: Data,
         thumbnailData: Data? = nil, pixelBudget: Int? = nil
     ) -> Bool {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty, !data.isEmpty else { return false }
         let sql = """
         INSERT INTO vehicle_images (vin, angle, image_data, thumbnail_data, pixel_budget, updated_at)
@@ -177,7 +175,7 @@ final class VehicleImageLedger: @unchecked Sendable {
     }
 
     func loadVehicleImage(for vin: String, angle: Int) -> (data: Data, thumbnailData: Data?)? {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty else { return nil }
         let sql = "SELECT image_data, thumbnail_data FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;"
         return try? db.readQuery(sql: sql) { stmt in
@@ -193,7 +191,7 @@ final class VehicleImageLedger: @unchecked Sendable {
     /// Drops every cached angle for one VIN. Returns false when the write failed, so the
     /// erase path can report that the image tier may still contain data.
     func deleteVehicleImages(for vin: String) -> Bool {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty else { return true }
         let deleted: Void? = try? db.query(sql: "DELETE FROM vehicle_images WHERE vin = ?;") { stmt in
             try stmt.bindText(cleanVIN, at: 1)
@@ -210,7 +208,7 @@ final class VehicleImageLedger: @unchecked Sendable {
     }
 
     func hasVehicleImage(for vin: String, angle: Int) -> Bool {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty else { return false }
         return (try? db.readQuery(
             sql: "SELECT 1 FROM vehicle_images WHERE vin = ? AND angle = ? LIMIT 1;",
@@ -238,9 +236,8 @@ final class CommandReceiptStore: @unchecked Sendable {
         catch { logger.error("Could not persist command receipts: \(error, privacy: .public)") }
     }
 
-    func saveCommandReceiptsOrThrow(_ receipts: StoredCommandReceipts, for vin: String, preserveExisting: Bool = false) throws {
+    private func saveCommandReceiptsOrThrow(_ receipts: StoredCommandReceipts, for vin: String) throws {
         guard !receipts.records.isEmpty else {
-            if preserveExisting { return }
             try db.query(sql: "DELETE FROM command_receipts WHERE vin = ?;") { stmt in
                 try stmt.bindText(vin, at: 1)
                 try stmt.executeUpdate()
@@ -251,7 +248,7 @@ final class CommandReceiptStore: @unchecked Sendable {
         let sql = """
         INSERT INTO command_receipts (vin, payload)
         VALUES (?, ?)
-        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload WHERE \(preserveExisting ? "0" : "1");
+        ON CONFLICT(vin) DO UPDATE SET payload=excluded.payload;
         """
         try db.query(sql: sql) { stmt in
             try stmt.bindText(vin, at: 1)

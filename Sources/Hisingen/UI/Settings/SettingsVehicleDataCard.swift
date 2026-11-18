@@ -188,6 +188,7 @@ struct SettingsVehicleDataCard: View {
                 VStack(spacing: 4) {
                     row(.chargingDetails, symbol: "powerplug", title: "Charging Telemetry", detail: "Power, voltage, current & completion time")
                     row(.chargingSchedule, symbol: "calendar.badge.clock", title: "Charging Schedules", detail: "Show charging windows and departure times", isSupported: !isVolvo, badgeText: isVolvo ? "Deprecated in API v2" : nil)
+                    row(.chargeLocations, symbol: "mappin.and.ellipse", title: "Saved Charge Locations", detail: "Places saved on the car, with their schedules and current limits", isSupported: !isVolvo, badgeText: isVolvo ? "N/A on Volvo" : nil)
                     row(.batteryDiagnostics, symbol: "batteryblock", title: "Battery Diagnostics", detail: "Battery state, module health & energy usage")
                 }
 

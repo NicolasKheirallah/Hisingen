@@ -92,7 +92,10 @@ struct SettingsView: View {
 
     private var settingsContent: some View {
         ScrollView(.vertical) {
-            VStack(spacing: HisingenTheme.sectionSpacing) {
+            // Lazy: "All" holds a dozen long cards, and a plain stack kept every picker, switch
+            // and text field of all of them alive while scrolling. Only the cards near the
+            // viewport exist now.
+            LazyVStack(spacing: HisingenTheme.sectionSpacing) {
                     if shows(.accounts) {
                         Group {
                             accountCard
@@ -128,7 +131,9 @@ struct SettingsView: View {
                             }
                             if let homeCharging {
                                 SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
-                                SettingsTibberCard(model: homeCharging)
+                                SettingsTibberCard(model: homeCharging, binder: binder)
+                                SettingsGridTariffCard(model: homeCharging)
+                                SettingsHouseMeterCard(meter: homeCharging.houseMeter)
                             }
                         }
                         .transition(Self.sectionSwapTransition)

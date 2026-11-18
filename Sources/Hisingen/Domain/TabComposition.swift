@@ -69,6 +69,21 @@ enum TabRef: Hashable, Codable, Sendable, Identifiable {
         if case .custom(let id) = self { return id }
         return nil
     }
+
+    /// The inverse of `storageKey`, for reading a stored layout back into the tab it names.
+    /// Returns nil for a key this build does not know rather than guessing a destination.
+    init?(storageKey: String) {
+        if storageKey.hasPrefix("builtin:") {
+            guard let tab = BuiltInTab(rawValue: String(storageKey.dropFirst("builtin:".count))) else {
+                return nil
+            }
+            self = .builtIn(tab)
+        } else if storageKey.hasPrefix("custom:") {
+            self = .custom(String(storageKey.dropFirst("custom:".count)))
+        } else {
+            return nil
+        }
+    }
 }
 
 /// A tab the reader built: a name, a glyph, and whichever cards they chose from any tab.
@@ -103,8 +118,9 @@ struct CustomTab: Identifiable, Hashable, Codable, Sendable {
 /// the last card that needs a reading also stops the request that fetched it.
 struct TabComposition: Equatable, Sendable {
     /// Layout version, so a future shape change can migrate rather than silently reset a
-    /// reader's tabs.
-    var version: Int = 2
+    /// reader's tabs. Version 3 is the one that removed the six retired Now cards and moved
+    /// the lock, windows and software controls to Car.
+    var version: Int = 3
 
     /// Tabs whose contents differ from the shipped layout, keyed by `TabRef.storageKey`.
     /// A built-in tab is absent until the reader changes something about it, which is what
@@ -114,6 +130,12 @@ struct TabComposition: Equatable, Sendable {
     /// Items the reader switched off where they live. Hiding is separate from removal: a
     /// hidden card keeps its position, so switching it back on puts it back where it was.
     var hiddenItems: Set<TabItemID> = []
+
+    /// Items switched off as a placement, keyed by that tab's storage key. A card in its own
+    /// tab's shipped layout uses `hiddenItems` because it lives there. A card placed on another
+    /// tab, and every placement on a tab of the reader's own, is separate: switching it off
+    /// there does not take it off the tab it came from.
+    var hiddenPlacements: [String: Set<TabItemID>] = [:]
 
     /// Built-in tabs the reader hid. Settings is excluded — see `BuiltInTab.isHideable`.
     var hiddenTabs: Set<BuiltInTab> = []
@@ -146,6 +168,29 @@ struct TabComposition: Equatable, Sendable {
     func shows(_ item: TabItemID) -> Bool { !hiddenItems.contains(item) }
 
     func isHidden(_ item: TabItemID) -> Bool { hiddenItems.contains(item) }
+
+    /// Whether `item` is switched off on `tab`.
+    ///
+    /// The card's own switch applies on the tab that owns it; a card placed elsewhere is
+    /// governed by that placement only. So hiding a card on Now does not take it off a tab of
+    /// the reader's own, and hiding it there does not take it off Now.
+    func isHidden(_ item: TabItemID, on tab: TabRef) -> Bool {
+        if let builtIn = tab.builtIn, TabItemCatalog.defaultItems(for: builtIn).contains(item) {
+            return hiddenItems.contains(item)
+        }
+        return hiddenPlacements[tab.storageKey]?.contains(item) == true
+    }
+
+    func shows(_ item: TabItemID, on tab: TabRef) -> Bool {
+        !isHidden(item, on: tab)
+    }
+
+    /// Every switch that applies to `tab`: the switches on the cards it owns, plus this tab's
+    /// placement switches.
+    func hiddenItems(for tab: TabRef) -> Set<TabItemID> {
+        let owned = tab.builtIn.map { Set(TabItemCatalog.defaultItems(for: $0)) } ?? []
+        return hiddenItems.intersection(owned).union(hiddenPlacements[tab.storageKey] ?? [])
+    }
 
     func customTab(_ id: String) -> CustomTab? { customTabs.first { $0.id == id } }
 
@@ -267,7 +312,16 @@ struct TabComposition: Equatable, Sendable {
     /// draws. The arrangement is kept, so showing the tab again restores it untouched.
     func visibleItems(for tab: TabRef) -> [TabItemID] {
         guard isVisible(tab) else { return [] }
-        return items(for: tab).filter { shows($0) }
+        return renderableItems(for: tab).filter { shows($0, on: tab) }
+    }
+
+    /// The reader's placement, filtered to what this tab can actually draw.
+    ///
+    /// The pane, the picker and the tab views all read this, so a card this build cannot render
+    /// on a tab is never listed there as if it could. A tab of the reader's own can name any
+    /// card; `TabCardStack` draws the standalone ones and names the rest.
+    func renderableItems(for tab: TabRef) -> [TabItemID] {
+        items(for: tab).filter { TabItemCatalog.canRender($0, on: tab) }
     }
 
     func visibleCards(for tab: TabRef) -> [TabItemID] {
@@ -280,6 +334,29 @@ struct TabComposition: Equatable, Sendable {
         if shown { hiddenItems.remove(item) } else { hiddenItems.insert(item) }
     }
 
+    /// Shows or hides an item on one tab.
+    ///
+    /// A card in its own tab's shipped layout lives there, so this is its own switch. A card
+    /// placed on another tab, and every placement on a tab of the reader's own, is a placement:
+    /// switching it off there must not take the card off the tab it came from.
+    mutating func setItem(_ item: TabItemID, shown: Bool, on tab: TabRef) {
+        if let builtIn = tab.builtIn, TabItemCatalog.defaultItems(for: builtIn).contains(item) {
+            setItem(item, shown: shown)
+            return
+        }
+        var hidden = hiddenPlacements[tab.storageKey] ?? []
+        if shown {
+            hidden.remove(item)
+        } else {
+            hidden.insert(item)
+        }
+        if hidden.isEmpty {
+            hiddenPlacements.removeValue(forKey: tab.storageKey)
+        } else {
+            hiddenPlacements[tab.storageKey] = hidden
+        }
+    }
+
     mutating func setTab(_ tab: BuiltInTab, shown: Bool) {
         guard tab.isHideable else { return }
         if shown { hiddenTabs.remove(tab) } else { hiddenTabs.insert(tab) }
@@ -290,12 +367,20 @@ struct TabComposition: Equatable, Sendable {
     /// rather than a replacement of it.
     mutating func setItems(_ items: [TabItemID], for tab: TabRef) {
         var seen: Set<TabItemID> = []
-        let deduplicated = items.filter { seen.insert($0).inserted }
-        if let builtIn = tab.builtIn, deduplicated == TabItemCatalog.defaultItems(for: builtIn) {
-            // Back to the shipped layout: drop the override so the tab tracks future default
-            // changes instead of freezing today's list.
-            tabContents.removeValue(forKey: tab.storageKey)
-            return
+        var deduplicated = items.filter { seen.insert($0).inserted }
+        if let builtIn = tab.builtIn {
+            // A shipped tab draws its own cards first and the cards placed from other tabs
+            // below them, so the stored order keeps that shape. A position among the own cards
+            // is not a position the tab can draw a borrowed card in.
+            let own = Set(TabItemCatalog.defaultItems(for: builtIn))
+            deduplicated = deduplicated.filter { own.contains($0) }
+                + deduplicated.filter { !own.contains($0) }
+            if deduplicated == TabItemCatalog.defaultItems(for: builtIn) {
+                // Back to the shipped layout: drop the override so the tab tracks future default
+                // changes instead of freezing today's list.
+                tabContents.removeValue(forKey: tab.storageKey)
+                return
+            }
         }
         tabContents[tab.storageKey] = deduplicated
     }
@@ -304,7 +389,8 @@ struct TabComposition: Equatable, Sendable {
         var current = items(for: tab)
         guard let index = current.firstIndex(of: item) else { return }
         let destination = index + offset
-        guard current.indices.contains(destination) else { return }
+        guard current.indices.contains(destination),
+              canMove(item, in: tab, by: offset) else { return }
         current.swapAt(index, destination)
         setItems(current, for: tab)
     }
@@ -329,13 +415,21 @@ struct TabComposition: Equatable, Sendable {
     func canMove(_ item: TabItemID, in tab: TabRef, by offset: Int) -> Bool {
         let current = items(for: tab)
         guard let index = current.firstIndex(of: item) else { return false }
-        return current.indices.contains(index + offset)
+        let destination = index + offset
+        guard current.indices.contains(destination) else { return false }
+        guard let builtIn = tab.builtIn else { return true }
+        // A borrowed card lives below the tab's own cards; it has no place among them.
+        let own = Set(TabItemCatalog.defaultItems(for: builtIn))
+        return own.contains(item) && own.contains(current[destination])
     }
 
     /// Puts an item on a tab, shown, in the position its kind calls for: headers first, cards
     /// below them, matching every shipped tab's shape.
     mutating func addItem(_ item: TabItemID, to tab: TabRef) {
-        setItem(item, shown: true)
+        // A tab with no renderer for the card would get a row in Settings with nothing behind
+        // it on the tab.
+        guard TabItemCatalog.canRender(item, on: tab) else { return }
+        setItem(item, shown: true, on: tab)
         var current = items(for: tab)
         guard !current.contains(item), let entry = TabItemCatalog.item(item) else { return }
         if entry.isCard {
@@ -349,16 +443,28 @@ struct TabComposition: Equatable, Sendable {
     }
 
     mutating func removeItem(_ item: TabItemID, from tab: TabRef) {
-        // A hidden item that is not on the tab is already gone from the reader's point of
-        // view; keep it hidden so a later "add" does not quietly re-enable it.
+        let ownsCard = tab.builtIn.map {
+            TabItemCatalog.defaultItems(for: $0).contains(item)
+        } ?? false
         var current = items(for: tab)
         guard current.contains(item) else {
-            hiddenItems.insert(item)
+            // A hidden item that is not on the tab is already gone from the reader's point of
+            // view; keep it hidden so a later "add" does not quietly re-enable it. Only the
+            // tab that owns the card can say that.
+            if ownsCard { hiddenItems.insert(item) }
             return
         }
         current.removeAll { $0 == item }
         setItems(current, for: tab)
-        hiddenItems.insert(item)
+        if ownsCard {
+            hiddenItems.insert(item)
+        } else {
+            // Removing a placement says nothing about the card where it lives.
+            hiddenPlacements[tab.storageKey]?.remove(item)
+            if hiddenPlacements[tab.storageKey]?.isEmpty == true {
+                hiddenPlacements.removeValue(forKey: tab.storageKey)
+            }
+        }
     }
 
     // MARK: - Custom tabs
@@ -386,6 +492,7 @@ struct TabComposition: Equatable, Sendable {
         let reference = TabRef.custom(id)
         customTabs.removeAll { $0.id == id }
         tabContents.removeValue(forKey: reference.storageKey)
+        hiddenPlacements.removeValue(forKey: reference.storageKey)
         tabOrder.removeAll { $0 == reference.storageKey }
         // Removing the tab can leave the stored order equal to the shipped one. Re-canonicalise
         // so that state is stored as "no override": otherwise Restore stays offered with nothing
@@ -428,23 +535,63 @@ struct TabComposition: Equatable, Sendable {
             }
             result.version = 2
         }
-        let known = Set(TabItemID.allCases)
+        if result.version < 3 {
+            // 3.0 moved the lock, windows/locate and software controls from Plan to Car. A
+            // layout arranged before that move does not name them on Car, and Plan no longer
+            // draws what Car owns, so put them where they now live. A card the reader had
+            // switched off stays off.
+            let moved: [TabItemID] = [.controlsAccess, .controlsWindowsLocate, .controlsOTA]
+            let carKey = TabRef.info.storageKey
+            if var items = result.tabContents[carKey] {
+                for id in moved where !items.contains(id) && !result.hiddenItems.contains(id) {
+                    items.append(id)
+                }
+                result.tabContents[carKey] = items
+            }
+            let planKey = TabRef.controls.storageKey
+            if let items = result.tabContents[planKey] {
+                result.tabContents[planKey] = items.filter { !moved.contains($0) }
+            }
+            result.version = 3
+        }
         // Settings is never hideable, whatever a stored file claims.
         result.hiddenTabs.subtract([.settings])
 
         let customIDs = Set(result.customTabs.map(\.id))
-        result.tabContents = result.tabContents.compactMapValues { items in
-            // Deduplicated as well as filtered: a card listed twice would draw twice, and a
-            // hand-edited defaults file is not a reason to render a tab that way.
-            var seen: Set<TabItemID> = []
-            let filtered = items.filter { known.contains($0) && seen.insert($0).inserted }
-            return filtered.isEmpty ? nil : filtered
-        }
-        result.tabContents = result.tabContents.filter { key, _ in
-            if key.hasPrefix("custom:") {
-                return customIDs.contains(String(key.dropFirst("custom:".count)))
+        let known = Set(TabItemCatalog.all.map(\.id))
+        result.tabContents = result.tabContents.reduce(into: [String: [TabItemID]]()) { kept, entry in
+            let (key, items) = entry
+            guard let tab = TabRef(storageKey: key) else { return }
+            if key.hasPrefix("custom:"), !customIDs.contains(String(key.dropFirst("custom:".count))) {
+                return
             }
-            return true
+            // Deduplicated as well as filtered: a card listed twice would draw twice, and a
+            // hand-edited defaults file is not a reason to render a tab that way. A card this
+            // build cannot render on this tab is dropped for the same reason: Settings would
+            // list it, and the tab would have nothing to draw.
+            var seen: Set<TabItemID> = []
+            let filtered = items.filter {
+                known.contains($0)
+                    && !TabItemCatalog.retiredVehicleDetailItems.contains($0)
+                    && TabItemCatalog.canRender($0, on: tab)
+                    && seen.insert($0).inserted
+            }
+            guard !filtered.isEmpty else { return }
+            // A built-in tab whose stored order is the shipped one keeps following the shipped
+            // layout instead of freezing today's list.
+            if let builtIn = tab.builtIn, filtered == TabItemCatalog.defaultItems(for: builtIn) {
+                return
+            }
+            kept[key] = filtered
+        }
+        // A placement switch is only meaningful while the card is still placed on that tab of
+        // the reader's own. Pruning here keeps a removed placement from resurfacing when the
+        // same card is added back.
+        result.hiddenPlacements = result.hiddenPlacements.reduce(into: [String: Set<TabItemID>]()) { kept, entry in
+            let (key, hidden) = entry
+            guard TabRef(storageKey: key) != nil else { return }
+            let filtered = hidden.intersection(Set(result.tabContents[key] ?? []))
+            if !filtered.isEmpty { kept[key] = filtered }
         }
         // The stored order is a preference, not a roster: a key that no longer names a tab and
         // a key named twice would both make `orderedTabs` skip or repeat a place. Dropping them
@@ -474,6 +621,7 @@ extension TabComposition: Codable {
         case version
         case tabContents
         case hiddenItems
+        case hiddenPlacements
         case hiddenTabs
         case customTabs
         case tabOrder
@@ -484,6 +632,7 @@ extension TabComposition: Codable {
         version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
         tabContents = try container.decodeIfPresent([String: [TabItemID]].self, forKey: .tabContents) ?? [:]
         hiddenItems = try container.decodeIfPresent(Set<TabItemID>.self, forKey: .hiddenItems) ?? []
+        hiddenPlacements = try container.decodeIfPresent([String: Set<TabItemID>].self, forKey: .hiddenPlacements) ?? [:]
         hiddenTabs = try container.decodeIfPresent(Set<BuiltInTab>.self, forKey: .hiddenTabs) ?? []
         customTabs = try container.decodeIfPresent([CustomTab].self, forKey: .customTabs) ?? []
         tabOrder = try container.decodeIfPresent([String].self, forKey: .tabOrder) ?? []
@@ -501,21 +650,26 @@ extension TabComposition: Codable {
 struct TabLayout: Equatable, Sendable {
     /// The items to draw, in order.
     let items: [TabItemID]
-    /// Items the reader switched off where they live.
+    /// Items the reader switched off on this tab, including the global switches.
     let hidden: Set<TabItemID>
     /// Whether an item the layout has never heard of should still be drawn. True only for a tab
     /// the reader has never rearranged, where "not in the layout" means "added since".
     let includesNewItems: Bool
+    /// Everything this tab has a renderer for. An item outside it is never drawn, however the
+    /// layout reads; nil keeps the older "draw anything" behaviour for a layout built by hand.
+    let roster: Set<TabItemID>?
 
     private let rank: [TabItemID: Int]
 
     /// A tab the reader has not customised: everything, exactly as designed.
     static let everything = TabLayout(items: [], hidden: [], includesNewItems: true)
 
-    init(items: [TabItemID], hidden: Set<TabItemID> = [], includesNewItems: Bool = false) {
+    init(items: [TabItemID], hidden: Set<TabItemID> = [], includesNewItems: Bool = false,
+         roster: Set<TabItemID>? = nil) {
         self.items = items
         self.hidden = hidden
         self.includesNewItems = includesNewItems
+        self.roster = roster
         self.rank = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($1, $0) })
     }
 
@@ -523,28 +677,29 @@ struct TabLayout: Equatable, Sendable {
     static func resolve(_ composition: TabComposition, for tab: TabRef) -> TabLayout {
         TabLayout(
             items: composition.visibleItems(for: tab),
-            hidden: composition.hiddenItems,
-            includesNewItems: composition.isShipped(for: tab)
+            hidden: composition.hiddenItems(for: tab),
+            // A hidden tab draws nothing, so it must not accept an item it never hears of
+            // either. `isShipped` alone is true for a hidden, never-arranged tab.
+            includesNewItems: composition.isShipped(for: tab) && composition.isVisible(tab),
+            roster: TabItemCatalog.roster(for: tab)
         )
     }
 
     var isDefault: Bool { includesNewItems && items.isEmpty }
 
-    /// Whether the reader's layout draws this item.
-    ///
-    /// A tab the reader never rearranged draws an item it has never heard of, so a card shipped
-    /// in a later version appears instead of going silently missing from their panel. Once they
-    /// have arranged a tab themselves, that list is the whole truth about it.
     /// Whether the layout names this item itself, as opposed to drawing it only because the tab
     /// accepts new items.
     func places(_ item: TabItemID) -> Bool { rank[item] != nil }
 
+    /// Whether this tab draws the item.
+    ///
+    /// The tab's roster answers first: a card with no view there is not drawn, whether the
+    /// layout names it or not. After that, a placed item is drawn, a switched-off item is not,
+    /// and a tab the reader never rearranged draws a card shipped after their layout.
     func draws(_ item: TabItemID) -> Bool {
+        if let roster, !roster.contains(item) { return false }
         if rank[item] != nil { return true }
-        // The reader switched it off, wherever it used to live.
         guard !hidden.contains(item) else { return false }
-        // Not placed and not switched off. On a tab they never rearranged that means "added
-        // since", which is drawn; on a tab they arranged themselves it means it is not theirs.
         return includesNewItems
     }
 

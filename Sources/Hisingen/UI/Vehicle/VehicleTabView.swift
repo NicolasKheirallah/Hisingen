@@ -90,22 +90,12 @@ struct VehicleTabView: View {
 
     /// The rows this tab draws, in the reader's order when they have one.
     ///
+    /// The roster is the catalogue's shipped layout, the same list Settings shows. Deriving it
+    /// here is what stopped the pane and the tab from disagreeing about what is on Now.
     /// Two of the shipped rows hold a pair of cards side by side on a wide panel, so the filter
     /// runs before the pairing and a hidden card takes its partner's column with it.
     private var rowItems: [TabItemID] {
-        let shipped: [TabItemID] = [
-            .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-            .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
-            .vehicleFuelEngine, .vehicleOpenings, .vehicleTyres, .vehicleLocation, .vehicleReadiness
-        ]
-        // Retired ids used to form Vehicle's "More" disclosure. Their content now lives in Info,
-        // so old saved layouts must not re-introduce duplicate detail cards.
-        let unmatched = TabItemCatalog.defaultItems(for: .vehicle).filter { item in
-            !shipped.contains(item)
-                && !TabItemCatalog.isRetired(item)
-                && TabItemCatalog.item(item)?.kind == .card
-        }
-        return ordered(shipped + unmatched, by: { $0 }).filter { draws($0) }
+        ordered(TabItemCatalog.defaultItems(for: .vehicle), by: { $0 }).filter { draws($0) }
     }
 
     /// One row. The two paired rows fall back to a single column when the reader moved one of

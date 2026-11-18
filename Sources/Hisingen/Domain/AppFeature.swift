@@ -11,6 +11,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
     case tyreAndWarnings = "tyre-and-warnings"
     case softwareUpdates = "software-updates"
     case chargingSchedule = "charging-schedule"
+    case chargeLocations = "charge-locations"
     case climateStatus = "climate-status"
     case tripMeters = "trip-meters"
     case connectivityDiagnostics = "connectivity-diagnostics"
@@ -44,6 +45,7 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         case .tyreAndWarnings: return L10n.text("Tyres & warnings")
         case .softwareUpdates: return L10n.text("Vehicle software")
         case .chargingSchedule: return L10n.text("Charging schedules")
+        case .chargeLocations: return L10n.text("Saved Charge Locations")
         case .climateStatus: return L10n.text("Climate & timers")
         case .tripMeters: return L10n.text("Trip meters")
         case .connectivityDiagnostics: return L10n.text("Connectivity diagnostics")
@@ -83,7 +85,8 @@ enum AppFeature: String, CaseIterable, Codable, Hashable, Sendable {
         userSelectableCases.filter { !$0.isRemoteControl }
     }
 
-    static var permittedFeatures: Set<AppFeature> { Set(allCases) }
+    /// Built once: this is read on every preference read, and it never changes at runtime.
+    static let permittedFeatures: Set<AppFeature> = Set(allCases)
 
     var isRemoteControl: Bool { Self.remoteFeatures.contains(self) }
 }

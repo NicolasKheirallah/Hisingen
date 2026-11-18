@@ -4,23 +4,14 @@ extension SettingsHomeChargingCard {
     @ViewBuilder
     var directSetupView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            field(L10n.text("Account email"),
-                  detail: source == .nexBlue ? nil : L10n.format("The one you use in the %@ app. It is stored in the macOS Keychain and never exported.", source.providerName)) {
-                TextField("", text: $account)
-                    .hisField()
-                    .autocorrectionDisabled()
-                    .accessibilityLabel(L10n.text("Account email"))
+            if isResuming {
+                Text(L10n.text("Reading chargers…"))
+                    .hisType(.label).foregroundStyle(HisingenTheme.inkMuted)
+            } else if directChargers != nil, model.hasSavedCredentials(for: source) {
+                signedInRow
+            } else {
+                signInFields
             }
-            field(L10n.text("Password"), detail: nil) {
-                SecureField("", text: $password)
-                    .hisField()
-                    .accessibilityLabel(L10n.text("Password"))
-            }
-            Button { Task { await signIn() } } label: {
-                Text(isSigningIn ? L10n.text("Signing in…") : L10n.text("Sign in and find chargers")).frame(minHeight: 24)
-            }
-            .buttonStyle(.hisProminent)
-            .disabled(isSigningIn || !DirectChargerCredentials(username: account, password: password).isComplete)
             if let directFailure {
                 Text(directFailure)
                     .hisType(.label).foregroundStyle(HisingenTheme.ink)
@@ -37,6 +28,44 @@ extension SettingsHomeChargingCard {
             account = model.savedUsername(for: newValue) ?? ""
             password = ""
         }
+        .task(id: source) { await resumeSavedLogin() }
+    }
+
+    private var signedInRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(L10n.format("Signed in to %@", source.providerName))
+                .hisType(.body, weight: .medium)
+                .foregroundStyle(HisingenTheme.ink)
+            Spacer(minLength: 0)
+            Button(L10n.text("Sign out")) {
+                model.forgetDirectLogin(source)
+                directChargers = nil
+                directFailure = nil
+                password = ""
+            }
+            .buttonStyle(.hisSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var signInFields: some View {
+        field(L10n.text("Account email"),
+              detail: source == .nexBlue ? nil : L10n.format("The one you use in the %@ app. It is stored in the macOS Keychain and never exported.", source.providerName)) {
+            TextField("", text: $account)
+                .hisField()
+                .autocorrectionDisabled()
+                .accessibilityLabel(L10n.text("Account email"))
+        }
+        field(L10n.text("Password"), detail: nil) {
+            SecureField("", text: $password)
+                .hisField()
+                .accessibilityLabel(L10n.text("Password"))
+        }
+        Button { Task { await signIn() } } label: {
+            Text(isSigningIn ? L10n.text("Signing in…") : L10n.text("Sign in and find chargers")).frame(minHeight: 24)
+        }
+        .buttonStyle(.hisProminent)
+        .disabled(isSigningIn || !DirectChargerCredentials(username: account, password: password).isComplete)
     }
 
     @ViewBuilder
@@ -53,24 +82,7 @@ extension SettingsHomeChargingCard {
                 .labelsHidden()
                 .accessibilityLabel(L10n.text("Charger"))
             }
-            field(L10n.text("Vehicle"), detail: L10n.text("Sessions are tied to this vehicle only. A car being near the charger is not enough.")) {
-                Picker("", selection: $vin) {
-                    ForEach(fleet.vehicles, id: \.self) { Text(vehicleTitle($0)).tag($0) }
-                }
-                .labelsHidden()
-                .accessibilityLabel(L10n.text("Vehicle"))
-            }
-            field(L10n.text("Charge location"), detail: L10n.text("The saved location in the car where this charger stands.")) {
-                Picker("", selection: $locationID) {
-                    Text(L10n.text("None")).tag("")
-                    ForEach(savedLocations) { Text($0.alias.isEmpty ? L10n.text("Unnamed location") : $0.alias).tag($0.id) }
-                }
-                .labelsHidden()
-                .accessibilityLabel(L10n.text("Charge location"))
-            }
-            toggleRow(L10n.text("Other cars also use this charger"),
-                      detail: L10n.text("A shared charger only records a session for this vehicle when the car's own charging overlaps it."),
-                      isOn: $isShared)
+            pairingFields(vehicleDetail: L10n.text("Sessions are tied to this vehicle only. A car being near the charger is not enough."))
             if source != .nexBlue {
                 Text(L10n.text("Plans run inside Home Assistant. This charger is connected directly, so it offers status, Charge now, Pause and history."))
                     .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
@@ -130,6 +142,24 @@ extension SettingsHomeChargingCard {
         } catch {
             directFailure = error.localizedDescription
             directChargers = nil
+        }
+    }
+
+    /// Picks up an account that signed in earlier, so leaving Settings before pairing does not cost the login.
+    private func resumeSavedLogin() async {
+        guard directChargers == nil, !isSigningIn, !isResuming, model.hasSavedCredentials(for: source) else { return }
+        isResuming = true
+        directFailure = nil
+        defer { isResuming = false }
+        do {
+            guard let chargers = try await model.resumeDirect(source) else { return }
+            directChargers = chargers
+            directSelection = chargers.first?.id ?? ""
+            locationID = presenceLocationID() ?? ""
+        } catch is CancellationError {
+            return
+        } catch {
+            directFailure = error.localizedDescription
         }
     }
 

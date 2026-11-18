@@ -641,7 +641,29 @@ extension HistoryDashboardView {
                     KVRow(L10n.text("Estimated Cost"), L10n.text("Mixed currencies"), symbol: "creditcard",
                           info: L10n.text("Costs in different currencies are kept separate and are not added together."))
                 }
+                if let houseLoad { HouseLoadRows(share: houseLoad) }
             }
+            .task(id: houseLoadKey) { await loadHouseLoad() }
         }
+    }
+
+    /// Changes when the period or the sessions inside it do, which is when the share is worth reading again.
+    private var houseLoadKey: String {
+        "\(state.identity.vin)_\(periodDataKey)_\(chargingSessions.count)_\(homeCharging?.tibberHome?.id ?? "")_\(homeCharging?.houseMeter.meter?.id ?? "")"
+    }
+
+    private func loadHouseLoad() async {
+        guard let homeCharging, homeCharging.hasHouseMeterSource,
+              chargingSessions.contains(where: { $0.wallbox != nil }) else {
+            houseLoad = nil
+            return
+        }
+        let now = Date()
+        let range = activeRange
+        let from = range?.lowerBound ?? now.addingTimeInterval(-62 * 86_400)
+        let to = min(range?.upperBound ?? now, now)
+        let share = await homeCharging.houseLoadShare(from: from, to: to, sessions: chargingSessions)
+        guard !Task.isCancelled else { return }
+        houseLoad = share
     }
 }

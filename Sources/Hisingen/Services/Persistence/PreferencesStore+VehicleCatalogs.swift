@@ -24,7 +24,7 @@ extension PreferencesStore {
     /// legacy payload is left in place rather than removed, because removing it would take every
     /// other vehicle's entries with it.
     func clearLocalVehicleDefaults(for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         // An empty VIN names no vehicle; it never stands for all of them.
         guard !key.isEmpty else { return }
         for store in Self.perVehicleStores {
@@ -57,7 +57,7 @@ extension PreferencesStore {
     /// asked for "everything except these two" silently widened into the nickname, the theme and
     /// the rest the moment the table grew.
     func clearSnapshotMirror(for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         // An empty VIN names no vehicle; it never stands for all of them.
         guard !key.isEmpty else { return }
         Self.removeSnapshotMirrorEntry(d, Self.snapshotMirrorKey, key)
@@ -105,13 +105,13 @@ extension PreferencesStore {
     }
 
     func vehicleNickname(for vin: String) -> String {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); guard !key.isEmpty else { return "" }
+        let key = vin.normalizedVIN; guard !key.isEmpty else { return "" }
         if let values = d.dictionary(forKey: "polestar_vehicle_nicknames_v1") as? [String: String], let value = values[key] { return value }
         guard key == self.vin.uppercased() else { return "" }
         return d.string(forKey: "polestar_vehicle_nickname") ?? ""
     }
     func setVehicleNickname(_ nickname: String, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(); guard !key.isEmpty else { return }
+        let key = vin.normalizedVIN; guard !key.isEmpty else { return }
         var values = d.dictionary(forKey: "polestar_vehicle_nicknames_v1") as? [String: String] ?? [:]
         let value = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.isEmpty { values.removeValue(forKey: key) } else { values[key] = value }
@@ -122,13 +122,13 @@ extension PreferencesStore {
     /// The charging session the History tab last had open, per vehicle, so switching tabs or
     /// periods doesn't snap the curve back to the newest session every time.
     func selectedHistorySession(for vin: String) -> String? {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return nil }
         return (d.dictionary(forKey: "history_selected_session_v1") as? [String: String])?[key]
     }
 
     func setSelectedHistorySession(_ sessionID: String?, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var values = (d.dictionary(forKey: "history_selected_session_v1") as? [String: String]) ?? [:]
         if let sessionID { values[key] = sessionID } else { values.removeValue(forKey: key) }
@@ -138,14 +138,14 @@ extension PreferencesStore {
     /// Derived trips the user has chosen to hide because segmentation combined or invented
     /// them. Stored per vehicle as trip-id strings; the dashboard filters these out.
     func hiddenTripIDs(for vin: String) -> Set<String> {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty,
               let all = d.dictionary(forKey: "history_hidden_trips_v1") as? [String: [String]] else { return [] }
         return Set(all[key] ?? [])
     }
 
     func setTripHidden(_ hidden: Bool, id: String, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var all = (d.dictionary(forKey: "history_hidden_trips_v1") as? [String: [String]]) ?? [:]
         var ids = Set(all[key] ?? [])
@@ -155,7 +155,7 @@ extension PreferencesStore {
     }
 
     func warrantyInServiceDate(for vin: String) -> Date? {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty,
               let value = d.dictionary(forKey: "vehicle_in_service_dates_v1")?[key] else { return nil }
         let interval: Double
@@ -166,7 +166,7 @@ extension PreferencesStore {
     }
 
     func setWarrantyInServiceDate(_ date: Date?, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var values = d.dictionary(forKey: "vehicle_in_service_dates_v1") ?? [:]
         if let date { values[key] = date.timeIntervalSince1970 } else { values.removeValue(forKey: key) }
@@ -174,7 +174,7 @@ extension PreferencesStore {
     }
 
     func vehicleSpecificationOverride(for vin: String) -> VehicleSpecificationOverride? {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty,
               let all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data],
               let data = all[key],
@@ -184,7 +184,7 @@ extension PreferencesStore {
     }
 
     func setVehicleSpecificationOverride(_ value: VehicleSpecificationOverride?, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var all = d.dictionary(forKey: "vehicle_specification_overrides_v1") as? [String: Data] ?? [:]
         if let value, !value.isEmpty, let data = try? JSONEncoder().encode(value) {
@@ -196,13 +196,13 @@ extension PreferencesStore {
     }
 
     func dismissedSoftwareEventIdentifier(for vin: String) -> String? {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return nil }
         return (d.dictionary(forKey: "dismissed_software_events_v1") as? [String: String])?[key]
     }
 
     func setDismissedSoftwareEventIdentifier(_ identifier: String?, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var values = d.dictionary(forKey: "dismissed_software_events_v1") as? [String: String] ?? [:]
         if let identifier { values[key] = identifier } else { values.removeValue(forKey: key) }

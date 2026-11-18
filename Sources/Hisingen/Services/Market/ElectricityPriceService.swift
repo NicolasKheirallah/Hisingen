@@ -240,9 +240,7 @@ actor ElectricityPriceService {
         guard let http = response as? HTTPURLResponse else { throw PriceFetchError.badResponse }
         switch http.statusCode {
         case 200:
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode([ElectricityPricePoint].self, from: data)
+            return try JSONDecoder.iso.decode([ElectricityPricePoint].self, from: data)
         case 404, 410:
             throw PriceFetchError.notPublished
         case let code:

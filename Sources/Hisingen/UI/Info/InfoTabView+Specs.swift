@@ -352,15 +352,13 @@ extension InfoTabView {
                 HStack {
                     Spacer()
                     Button {
-                        let panel = NSSavePanel()
-                        panel.allowedContentTypes = [.commaSeparatedText]
-                        panel.nameFieldStringValue = "Hisingen-Factory-Passport-\(state.identity.vin.suffix(6)).csv"
-                        guard panel.runModal() == .OK, let url = panel.url else { return }
-                        do {
-                            try Self.factoryPassportCSV(state: state, preferences: preferences)
-                                .write(to: url, atomically: true, encoding: .utf8)
-                        } catch {
-                            reportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+                        FileExport.save(Self.factoryPassportCSV(state: state, preferences: preferences),
+                                        type: .commaSeparatedText,
+                                        filename: "Hisingen-Factory-Passport-\(state.identity.vin.suffix(6)).csv",
+                                        modal: true) { url, error in
+                            if let error {
+                                reportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+                            }
                         }
                     } label: {
                         Label(L10n.text("Export Factory Passport (CSV)"), systemImage: "square.and.arrow.down")

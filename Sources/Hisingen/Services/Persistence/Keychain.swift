@@ -11,6 +11,10 @@ enum KeychainError: Error, LocalizedError {
     /// launch, so callers must not treat this as "credential gone" and must not retry in a
     /// loop: each retry can block its thread on the pending prompt.
     case interactionRequired
+    /// A test process tried to write the production Keychain items. Tests must hand the store
+    /// an isolated `io.kheirallah.hisingen.tests.` service; a default-constructed one would
+    /// overwrite the developer's real sign-in.
+    case productionItemsFromTests
 
     /// macOS reports a pending ACL consent with errSecInteractionRequired.
     var isInteractionRequired: Bool {
@@ -29,6 +33,8 @@ enum KeychainError: Error, LocalizedError {
             return L10n.format("Keychain error: %@", msg)
         case .interactionRequired:
             return L10n.text("Hisingen is waiting for Keychain access to be approved.")
+        case .productionItemsFromTests:
+            return "A test tried to modify the production Keychain items."
         }
     }
 }
@@ -462,6 +468,17 @@ struct KeychainStore: Sendable {
 
     private static let testStore = TestSecretStore()
 
+    /// True when this store would hit the real login Keychain from inside a test run. An
+    /// injected `security` double never reaches it, so only the system implementation counts.
+    private var wouldWriteProductionItemsFromTests: Bool {
+        guard !isTestService, security is SystemKeychainSecurity else { return false }
+        let env = ProcessInfo.processInfo.environment
+        return env["XCTestConfigurationFilePath"] != nil
+            || env["XCTestBundlePath"] != nil
+            || env["SWIFT_TESTING_ENABLED"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
     private func cacheKey(account: String) -> String {
         "\(service)|\(account)"
     }
@@ -491,6 +508,7 @@ struct KeychainStore: Sendable {
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: value)
         } else {
+            guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
             let status = write(value, account: account, useDataProtection: true)
             if status != errSecSuccess {
                 guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }
@@ -583,6 +601,7 @@ struct KeychainStore: Sendable {
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: nil)
         } else {
+            guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
             for dataProtection in [true, false] {
                 let status = security.delete(baseQuery(account: account, useDataProtection: dataProtection))
                 guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }

@@ -405,49 +405,95 @@ struct ChargingPlannerDecisionsTests {
             plan: finishedPlan, now: now, connection: .connected, chargingState: .idle))
     }
 
-    // MARK: - Price curve bar intensity
+    // MARK: - Price curve
 
-    @Test
-    func barIntensitySpreadsInsideOneBand() {
-        // A window stuck entirely in the cheap band must still show its shape: the priciest
-        // visible hour renders darker than the cheapest one, which the old flat fill could not.
-        let alphaLow = PriceCurveView.barAlpha(price: 0.20, minimum: 0.20, span: 0.70)
-        let alphaHigh = PriceCurveView.barAlpha(price: 0.90, minimum: 0.20, span: 0.70)
-        #expect(alphaHigh > alphaLow)
-        #expect(alphaHigh - alphaLow > 0.2)
+    private func slot(_ start: TimeInterval, minutes: Double, price: Double) -> ElectricityPricePoint {
+        ElectricityPricePoint(
+            startDate: Date(timeIntervalSince1970: start),
+            endDate: Date(timeIntervalSince1970: start + minutes * 60),
+            sekPerKwh: price)
     }
 
     @Test
-    func barIntensityIsMonotonicInPrice() {
-        // One window spanning all three bands: alpha never decreases as the price rises.
-        let minimum = 0.4, span = 3.2
-        var previous = PriceCurveView.barAlpha(price: minimum, minimum: minimum, span: span)
-        for step in 1...32 {
-            let price = minimum + span * Double(step) / 32
-            let alpha = PriceCurveView.barAlpha(price: price, minimum: minimum, span: span)
-            #expect(alpha >= previous)
-            #expect((0.4...0.8).contains(alpha))
-            previous = alpha
+    func hourlyAveragesQuarterSlotsIntoTheirHour() {
+        // Four quarter-hour slots become one bar at their mean; a mixed series keeps the
+        // hourly slot beside it unchanged.
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let quarters = [0.20, 0.40, 0.60, 0.80].enumerated().map { index, price in
+            slot(origin + Double(index) * 900, minutes: 15, price: price)
         }
+        let hourly = slot(origin + 3_600, minutes: 60, price: 1.50)
+        let result = PriceOutlook.hourly(quarters + [hourly], after: Date(timeIntervalSince1970: origin))
+        #expect(result.count == 2)
+        #expect(abs(result[0].price - 0.50) < 1e-9)
+        #expect(result[0].start == Date(timeIntervalSince1970: origin))
+        #expect(result[0].end == Date(timeIntervalSince1970: origin + 3_600))
+        #expect(abs(result[1].price - 1.50) < 1e-9)
     }
 
     @Test
-    func barIntensityStepsUpAtThresholds() {
-        // Crossing a planning threshold upward must read as a more expensive bar, never a
-        // barely different one: each band ends at or above where the next begins.
-        let minimum = 0.0, span = 3.0
-        #expect(PriceCurveView.barAlpha(price: 1.01, minimum: minimum, span: span)
-            > PriceCurveView.barAlpha(price: 0.99, minimum: minimum, span: span))
-        #expect(PriceCurveView.barAlpha(price: 2.01, minimum: minimum, span: span)
-            > PriceCurveView.barAlpha(price: 1.99, minimum: minimum, span: span))
+    func hourlyDropsHoursThatHaveEnded() {
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let points = [slot(origin, minutes: 60, price: 0.30), slot(origin + 3_600, minutes: 60, price: 0.90)]
+        let result = PriceOutlook.hourly(points, after: Date(timeIntervalSince1970: origin + 3_600 + 60))
+        #expect(result.map(\.price) == [0.90])
     }
 
     @Test
-    func barIntensitySurvivesDegenerateWindow() {
-        // A single-price window divides by a zero span; the bar falls back to its band floor,
-        // which matches the old flat fills.
-        #expect(PriceCurveView.barAlpha(price: 0.5, minimum: 0.5, span: 0) == 0.4)
-        #expect(PriceCurveView.barAlpha(price: 1.5, minimum: 1.5, span: 0) == 0.45)
-        #expect(PriceCurveView.barAlpha(price: 2.5, minimum: 2.5, span: 0) == 0.7)
+    func hourlyWeightsASlotThatCrossesAnHourBoundary() {
+        // A 90-minute slot contributes 60 minutes to its first hour and 30 to the next.
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let points = [
+            slot(origin, minutes: 90, price: 1.0),
+            slot(origin + 5_400, minutes: 30, price: 2.0),
+        ]
+        let result = PriceOutlook.hourly(points, after: Date(timeIntervalSince1970: origin))
+        #expect(result.count == 2)
+        #expect(abs(result[0].price - 1.0) < 1e-9)
+        #expect(abs(result[1].price - 1.5) < 1e-9)
+    }
+
+    @Test
+    func priceAxisStartsAtZeroWithRoundGridlines() {
+        let axis = PriceOutlook.priceAxis(minimum: 0.12, maximum: 2.14)
+        #expect(axis.domain.lowerBound == 0)
+        #expect(axis.domain.upperBound > 2.14)
+        #expect(axis.ticks == [0, 1, 2])
+        #expect(PriceOutlook.decimals(forStep: axis.step) == 0)
+
+        let cheap = PriceOutlook.priceAxis(minimum: 0.05, maximum: 0.90)
+        #expect(cheap.ticks == [0, 0.25, 0.5, 0.75])
+        #expect(PriceOutlook.decimals(forStep: cheap.step) == 2)
+    }
+
+    @Test
+    func priceAxisKeepsNegativePricesBelowZero() {
+        let axis = PriceOutlook.priceAxis(minimum: -0.30, maximum: 0.80)
+        #expect(axis.domain.lowerBound < -0.30)
+        #expect(axis.ticks.contains(0))
+        #expect(axis.ticks.count <= 5)
+        #expect(axis.ticks.allSatisfy { axis.domain.contains($0) })
+    }
+
+    @Test
+    func priceAxisSurvivesAFlatDay() {
+        let flat = PriceOutlook.priceAxis(minimum: 0, maximum: 0)
+        #expect(flat.domain == 0...1)
+        let constant = PriceOutlook.priceAxis(minimum: 0.7, maximum: 0.7)
+        #expect(constant.domain.upperBound > 0.7)
+        #expect(constant.ticks.first == 0)
+    }
+
+    @Test
+    func timeTicksFollowWholeHoursAndStayClearOfTheEdges() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Stockholm")!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 14))!
+        let full = PriceOutlook.timeTicks(from: start, to: start.addingTimeInterval(48 * 3_600),
+                                          hourCount: 48, calendar: calendar)
+        #expect(full.map { calendar.component(.hour, from: $0) } == [18, 0, 6, 12, 18, 0, 6])
+        let short = PriceOutlook.timeTicks(from: start, to: start.addingTimeInterval(10 * 3_600),
+                                           hourCount: 10, calendar: calendar)
+        #expect(short.map { calendar.component(.hour, from: $0) } == [16, 18, 20, 22])
     }
 }

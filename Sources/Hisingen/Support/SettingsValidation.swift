@@ -18,7 +18,7 @@ enum SettingsValidation {
     }
 
     static func isValidOptionalVIN(_ value: String) -> Bool {
-        let vin = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let vin = value.normalizedVIN
         guard !vin.isEmpty else { return true }
         return isValidVIN(vin)
     }

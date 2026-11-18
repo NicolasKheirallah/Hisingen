@@ -69,7 +69,7 @@ final class SessionManager {
                 try await api.authenticate(email: credentials.email, password: credentials.password,
                                            preferredVIN: vin, features: features)
             } catch {
-                if ServiceErrorPolicy.decision(error, provider: brand).error.isRejectedCredential {
+                if VehicleServiceError.map(error, provider: brand).isRejectedCredential {
                     do {
                         try clearPassword()
                     } catch {
@@ -97,7 +97,7 @@ final class SessionManager {
                 try await api.restoreSession(preferredVIN: vin, features: features)
             } catch {
                 try Task.checkCancellation()
-                guard ServiceErrorPolicy.decision(error, provider: brand).error.requiresAuthentication,
+                guard VehicleServiceError.map(error, provider: brand).requiresAuthentication,
                       let credentials = try await passwordCredentials() else { throw error }
                 try await signInWithStoredPassword(credentials)
                 try Task.checkCancellation()

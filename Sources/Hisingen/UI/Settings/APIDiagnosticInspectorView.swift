@@ -28,32 +28,40 @@ struct APIDiagnosticInspectorFilter: Equatable, Sendable {
     var query = ""
 
     func apply(to entries: [APILogEntry]) -> [APILogEntry] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return entries.filter { entry in
-            if let provider, entry.provider != provider { return false }
-            switch outcome {
-            case .all:
-                break
-            case .success:
-                guard entry.statusCode.map({ (200...299).contains($0) }) == true else { return false }
-            case .clientError:
-                guard entry.statusCode.map({ (400...499).contains($0) }) == true else { return false }
-            case .serverError:
-                guard entry.statusCode.map({ (500...599).contains($0) }) == true else { return false }
-            case .transportError:
-                guard entry.errorType != nil else { return false }
-            case .semanticError:
-                guard entry.semanticErrorType != nil else { return false }
-            }
-            guard !needle.isEmpty else { return true }
-            return [entry.method, entry.endpoint, entry.operation,
-                    entry.statusCode.map(String.init), entry.errorType, entry.semanticErrorType,
-                    entry.responsePayloadJSON]
-                .compactMap { $0 }
-                .joined(separator: " ")
-                .lowercased()
-                .contains(needle)
+        let needle = normalizedQuery
+        return entries.filter { matches($0, needle: needle) }
+    }
+
+    var normalizedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    /// `needle` is `normalizedQuery`, passed in so a caller testing many entries trims and
+    /// lowercases the query once.
+    func matches(_ entry: APILogEntry, needle: String) -> Bool {
+        if let provider, entry.provider != provider { return false }
+        switch outcome {
+        case .all:
+            break
+        case .success:
+            guard entry.statusCode.map({ (200...299).contains($0) }) == true else { return false }
+        case .clientError:
+            guard entry.statusCode.map({ (400...499).contains($0) }) == true else { return false }
+        case .serverError:
+            guard entry.statusCode.map({ (500...599).contains($0) }) == true else { return false }
+        case .transportError:
+            guard entry.errorType != nil else { return false }
+        case .semanticError:
+            guard entry.semanticErrorType != nil else { return false }
         }
+        guard !needle.isEmpty else { return true }
+        // Only the short fields are joined and lowercased. The payload can be 256 KB, so it is
+        // searched in place instead of copied and lowercased for every entry on every keystroke.
+        let head = [entry.method, entry.endpoint, entry.operation,
+                    entry.statusCode.map(String.init), entry.errorType, entry.semanticErrorType]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        if head.contains(needle) { return true }
+        return entry.responsePayloadJSON?.range(of: needle, options: .caseInsensitive) != nil
     }
 }
 
@@ -66,25 +74,72 @@ struct APIDiagnosticInspectorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [APILogEntry] = []
+    /// The filtered entries, newest first. Built off the main thread whenever the log or a
+    /// filter changes, so a render only reads it.
+    @State private var rows: [Row] = []
+    @State private var filterTask: Task<Void, Never>?
     /// "No API requests recorded" was asserted on the first frame, before the first snapshot had
     /// resolved, so an inspector with a full buffer briefly told the reader it had nothing.
     @State private var hasLoadedOnce = false
     @State private var provider: APILogProvider?
     @State private var outcome: APIDiagnosticOutcomeFilter = .all
     @State private var query = ""
-    /// Keyed on the entry's own timestamp, not its position: `filtered` is rebuilt every
-    /// second by `refreshLoop()`, so an index would re-point at a different request.
-    @State private var expandedRows = Set<Date>()
+    /// Keyed on the row's own identity, not its position, so a rebuilt list never re-points an
+    /// open row at a different request.
+    @State private var expandedRows = Set<RowID>()
     @State private var showClearConfirmation = false
 
     init(store: APIDiagnosticLogStore = .shared) {
         self.store = store
     }
 
-    private var filtered: [APILogEntry] {
-        APIDiagnosticInspectorFilter(provider: provider, outcome: outcome, query: query)
-            .apply(to: entries)
-            .reversed()
+    /// A timestamp alone is not unique: the log is saved with one-second precision, so every
+    /// request of a refresh comes back from disk with the same one. The ordinal counts earlier
+    /// entries that share it, which stays put as filters change.
+    struct RowID: Hashable, Sendable {
+        let timestamp: Date
+        let ordinal: Int
+    }
+
+    struct Row: Identifiable, Sendable {
+        let id: RowID
+        let entry: APILogEntry
+    }
+
+    nonisolated static func rows(from entries: [APILogEntry],
+                                 matching filter: APIDiagnosticInspectorFilter) -> [Row] {
+        let needle = filter.normalizedQuery
+        var seen: [Date: Int] = [:]
+        var result: [Row] = []
+        for entry in entries {
+            let ordinal = seen[entry.timestamp, default: 0]
+            seen[entry.timestamp] = ordinal + 1
+            if filter.matches(entry, needle: needle) {
+                result.append(Row(id: RowID(timestamp: entry.timestamp, ordinal: ordinal), entry: entry))
+            }
+        }
+        return result.reversed()
+    }
+
+    private func refilter() {
+        let filter = APIDiagnosticInspectorFilter(provider: provider, outcome: outcome, query: query)
+        let source = entries
+        let debounce = !filter.normalizedQuery.isEmpty
+        filterTask?.cancel()
+        filterTask = Task {
+            // Typing restarts this task; only the last keystroke pays for a search.
+            if debounce { try? await Task.sleep(for: .milliseconds(150)) }
+            guard !Task.isCancelled else { return }
+            let result = await Self.filteredRows(source, filter)
+            guard !Task.isCancelled else { return }
+            rows = result
+            hasLoadedOnce = true
+        }
+    }
+
+    private nonisolated static func filteredRows(_ entries: [APILogEntry],
+                                                 _ filter: APIDiagnosticInspectorFilter) async -> [Row] {
+        rows(from: entries, matching: filter)
     }
 
     var body: some View {
@@ -132,7 +187,7 @@ struct APIDiagnosticInspectorView: View {
                         .hisType(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            } else if filtered.isEmpty {
+            } else if rows.isEmpty {
                 ContentUnavailableView(
                     entries.isEmpty ? L10n.text("No API requests recorded") : L10n.text("No matching requests"),
                     systemImage: "network.slash"
@@ -140,15 +195,16 @@ struct APIDiagnosticInspectorView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
             } else {
-                List(filtered, id: \.timestamp) { entry in
+                List(rows) { row in
+                    let entry = row.entry
                     DisclosureGroup(isExpanded: Binding(
-                        get: { expandedRows.contains(entry.timestamp) },
+                        get: { expandedRows.contains(row.id) },
                         set: { expanded in
                             // Expansion animates the revealed detail block; the row
                             // chevron follows without extra work.
                             withAnimation(Motion.resolve(Motion.layout)) {
-                                if expanded { expandedRows.insert(entry.timestamp) }
-                                else { expandedRows.remove(entry.timestamp) }
+                                if expanded { expandedRows.insert(row.id) }
+                                else { expandedRows.remove(row.id) }
                             }
                         }
                     )) {
@@ -221,6 +277,7 @@ struct APIDiagnosticInspectorView: View {
                     withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
                         entries = []
                     }
+                    refilter()
                 }
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
@@ -228,6 +285,16 @@ struct APIDiagnosticInspectorView: View {
             Text(L10n.text("All retained request entries will be discarded. New requests are recorded again as they happen."))
         }
         .task { await refreshLoop() }
+        .onChange(of: provider) { _, _ in refilter() }
+        .onChange(of: outcome) { _, _ in refilter() }
+        .onChange(of: query) { _, _ in refilter() }
+        .onDisappear { filterTask?.cancel() }
+    }
+
+    /// The log only appends and trims its oldest entries, so a changed count or edge entry is a
+    /// changed log.
+    private static func logChanged(from old: [APILogEntry], to new: [APILogEntry]) -> Bool {
+        old.count != new.count || old.first != new.first || old.last != new.last
     }
 
     private func diagnosticDetail(_ label: String, _ value: String) -> some View {
@@ -239,8 +306,13 @@ struct APIDiagnosticInspectorView: View {
 
     private func refreshLoop() async {
         while !Task.isCancelled {
-            entries = await store.snapshot()
-            hasLoadedOnce = true
+            let latest = await store.snapshot()
+            // Most seconds nothing was recorded. Publishing an equal array anyway re-rendered the
+            // list and rebuilt every row once a second.
+            if !hasLoadedOnce || Self.logChanged(from: entries, to: latest) {
+                entries = latest
+                refilter()
+            }
             do { try await Task.sleep(for: .seconds(1)) }
             catch { return }
         }

@@ -478,67 +478,63 @@ struct NowInstrument: View {
 
     private var chargeBounds: VehicleChargeBounds { VehicleChargeBounds(capabilities: state.otaCapabilities) }
 
-    /// The charge target, raised one step a press. A press builds on a queued value when the car has
-    /// not applied one yet, so two quick presses climb instead of sending the same number twice.
     private var chargeLimitControl: some View {
         let current = state.energy.targetPercentage.flatMap { $0 > 0 ? $0 : nil }
-        let queued = state.energy.diagnostics?.unappliedTargetPercentage(current: current)
-        let base = queued ?? current
-        let range = chargeBounds.targetRange
-        let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
-        let next = press?.value
-        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", Format.percent(Double($0))) }
-            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
-        let action = next.map { value in
-            press?.restarts == true
-                ? L10n.format("Lower to %@", Format.percent(Double(value)))
-                : L10n.format("Raise to %@", Format.percent(Double(value)))
-        }
-        return quickControl(
+        return limitControl(
             symbol: "battery.75percent",
             name: L10n.text("Charge Limit"),
-            value: current.map { Format.percent(Double($0)) } ?? L10n.text("Unavailable"),
-            reading: .charging, hasReading: current != nil,
-            note: note,
-            entry: current == nil ? nil : LimitEntry(
-                title: L10n.text("Charge Limit"), unit: "%", range: range, current: current,
-                rangeText: L10n.format("From %1$@ to %2$@", Format.percent(Double(range.lowerBound)),
-                                       Format.percent(Double(range.upperBound))),
-                command: { .setChargeTarget($0) }
-            ),
-            action: action,
-            command: .setChargeTarget(next ?? base ?? range.upperBound)
+            unit: "%", range: chargeBounds.targetRange, current: current,
+            queued: state.energy.diagnostics?.unappliedTargetPercentage(current: current),
+            format: { Format.percent(Double($0)) },
+            command: { .setChargeTarget($0) }
         )
     }
 
-    /// The charging current limit, raised one step a press.
     private var currentLimitControl: some View {
         let current = state.energy.currentLimitAmps.flatMap { $0 > 0 ? $0 : nil }
-        let queued = state.energy.diagnostics?.unappliedLimitAmps(current: current)
-        let base = queued ?? current
-        let range = chargeBounds.amperageRange
-        let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
-        let next = press?.value
-        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", Format.amps($0)) }
-            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
-        let action = next.map { value in
-            press?.restarts == true
-                ? L10n.format("Lower to %@", Format.amps(value))
-                : L10n.format("Raise to %@", Format.amps(value))
-        }
-        return quickControl(
+        return limitControl(
             symbol: "gauge.with.dots.needle.bottom.100percent",
             name: L10n.text("Current Limit"),
-            value: current.map { Format.amps($0) } ?? L10n.text("Unavailable"),
+            unit: "A", range: chargeBounds.amperageRange, current: current,
+            queued: state.energy.diagnostics?.unappliedLimitAmps(current: current),
+            format: Format.amps,
+            command: { .setAmpLimit($0) }
+        )
+    }
+
+    private func limitControl(
+        symbol: String,
+        name: String,
+        unit: String,
+        range: ClosedRange<Int>,
+        current: Int?,
+        queued: Int?,
+        format: (Int) -> String,
+        command: @escaping (Int) -> RemoteCommand
+    ) -> some View {
+        // Step from the queued value so repeated presses advance before the car applies them.
+        let base = queued ?? current
+        let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
+        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", format($0)) }
+            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
+        let action = press.map {
+            $0.restarts
+                ? L10n.format("Lower to %@", format($0.value))
+                : L10n.format("Raise to %@", format($0.value))
+        }
+        return quickControl(
+            symbol: symbol,
+            name: name,
+            value: current.map(format) ?? L10n.text("Unavailable"),
             reading: .charging, hasReading: current != nil,
             note: note,
-            entry: current == nil ? nil : LimitEntry(
-                title: L10n.text("Current Limit"), unit: "A", range: range, current: current,
-                rangeText: L10n.format("From %1$@ to %2$@", Format.amps(range.lowerBound), Format.amps(range.upperBound)),
-                command: { .setAmpLimit($0) }
-            ),
+            entry: current.map {
+                LimitEntry(title: name, unit: unit, range: range, current: $0,
+                           rangeText: L10n.format("From %1$@ to %2$@", format(range.lowerBound), format(range.upperBound)),
+                           command: command)
+            },
             action: action,
-            command: .setAmpLimit(next ?? base ?? range.upperBound)
+            command: command(press?.value ?? base ?? range.upperBound)
         )
     }
 

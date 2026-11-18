@@ -97,6 +97,10 @@ final class HomeChargingModel: ObservableObject {
     @Published private(set) var tibberHome: TibberHome?
     /// Why Tibber's prices could not be read on the last import, or `nil`.
     @Published private(set) var tibberProblem: String?
+    /// What the grid company charges per kWh on top of Tibber's all-in price, for the planner, for the
+    /// house-load costs and for sessions whose charger has no fee of its own.
+    @Published private(set) var gridTariff: GridTariff = .none
+    private var consumptionCache: (homeID: String, from: Date, fetchedAt: Date, hours: [TibberConsumptionHour])?
     @Published private(set) var lastNexBlueImport: HomeSessionSync.ImportReceipt?
     /// Bumped whenever a sync changed history, so the charging card reloads its sessions.
     @Published private(set) var historyRevision = 0
@@ -104,6 +108,10 @@ final class HomeChargingModel: ObservableObject {
     @Published private(set) var clock = Date()
 
     // MARK: Internals
+
+    /// The optional Perific house meter. It lives beside the charger, not inside the pairing: it reads
+    /// the whole house and needs no charger, no vehicle and no Home Assistant.
+    let houseMeter: HouseMeterModel
 
     private let preferences: PreferencesStore
     private let database: VehicleDatabase
@@ -136,10 +144,19 @@ final class HomeChargingModel: ObservableObject {
         self.preferences = preferences
         self.database = database
         self.dependencies = dependencies
+        self.houseMeter = HouseMeterModel(preferences: preferences, dependencies: dependencies)
         self.store = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
         self.pairing = store.pairing
         self.planRecord = store.planRecord
         self.tibberHome = store.tibberHome
+        // A flat network fee saved by an earlier version becomes a flat tariff, once.
+        if let saved = store.gridTariff {
+            self.gridTariff = saved
+        } else if store.tibberNetworkFeeOrePerKwh > 0 {
+            let migrated = GridTariff.flat(orePerKwh: store.tibberNetworkFeeOrePerKwh)
+            store.gridTariff = migrated
+            self.gridTariff = migrated
+        }
         self.lastNexBlueImport = store.nexBlueImport.flatMap { receipt in
             guard store.pairing?.source == .nexBlue, store.pairing?.chargerID == receipt.chargerID,
                   store.pairing?.vin == receipt.vin else { return nil }
@@ -175,7 +192,6 @@ final class HomeChargingModel: ObservableObject {
 
     /// The stored token, read only when the reader reconnects without typing a new one.
     func savedToken() -> String? { (try? store.token()) ?? nil }
-    var sessionPeak: Double? { sessionPeakKw }
 
     // MARK: - Lifecycle
 
@@ -263,11 +279,7 @@ final class HomeChargingModel: ObservableObject {
                 backoff = 2
                 await openSocket(pairing: pairing)
                 await loadComponentInfo()
-                while !Task.isCancelled, current == generation {
-                    if shouldSyncSessions() { Task { await syncSessions() } }
-                    let interval = command.isPending ? Self.pendingPollInterval : Self.pollInterval
-                    await sleepForPoll(interval)
-                    guard !Task.isCancelled, current == generation else { return }
+                try await poll(generation: current) {
                     try await refreshStates(client: client, pairing: pairing)
                     link = .live
                 }
@@ -288,6 +300,16 @@ final class HomeChargingModel: ObservableObject {
             guard !Task.isCancelled, current == generation else { return }
             try? await dependencies.wait(backoff)
             backoff = min(backoff * 2, 60)
+        }
+    }
+
+    private func poll(generation current: Int, read: () async throws -> Void) async throws {
+        while !Task.isCancelled, current == generation {
+            if shouldSyncSessions() { Task { await syncSessions() } }
+            let interval = command.isPending ? Self.pendingPollInterval : Self.pollInterval
+            await sleepForPoll(interval)
+            guard !Task.isCancelled, current == generation else { return }
+            try await read()
         }
     }
 
@@ -314,11 +336,7 @@ final class HomeChargingModel: ObservableObject {
                 if link != .live { link = .connecting }
                 try await readDirect(provider: provider, pairing: pairing)
                 backoff = 2
-                while !Task.isCancelled, current == generation {
-                    if shouldSyncSessions() { Task { await syncSessions() } }
-                    let interval = command.isPending ? Self.pendingPollInterval : Self.pollInterval
-                    await sleepForPoll(interval)
-                    guard !Task.isCancelled, current == generation else { return }
+                try await poll(generation: current) {
                     try await readDirect(provider: provider, pairing: pairing)
                 }
             } catch DirectChargerError.unauthorized {
@@ -361,15 +379,21 @@ final class HomeChargingModel: ObservableObject {
         if pairing.source == .nexBlue {
             let store = store
             guard let token = try? store.nexBlueRefreshToken(), !token.isEmpty else { return nil }
-            return NexBlueProvider(transport: dependencies.transport, now: dependencies.now) { transport in
-                guard let previous = try await store.nexBlueRefreshToken() else { throw DirectChargerError.unauthorized }
-                let result = try await NexBlueProvider.refresh(previous, transport: transport)
-                try await store.updateNexBlueRefreshToken(result.rotatedRefreshToken, previous: previous)
-                return result.bearer
-            }
+            return nexBlueProvider()
         }
         guard let credentials = (try? store.credentials(for: pairing.source)) ?? nil, credentials.isComplete else { return nil }
         return DirectChargerProviders.make(pairing.source, credentials: credentials, transport: dependencies.transport)
+    }
+
+    /// A NexBlue provider that signs in from the saved refresh token, so no password is held.
+    private func nexBlueProvider() -> NexBlueProvider {
+        let store = store
+        return NexBlueProvider(transport: dependencies.transport, now: dependencies.now) { transport in
+            guard let previous = try await store.nexBlueRefreshToken() else { throw DirectChargerError.unauthorized }
+            let result = try await NexBlueProvider.refresh(previous, transport: transport)
+            try await store.updateNexBlueRefreshToken(result.rotatedRefreshToken, previous: previous)
+            return result.bearer
+        }
     }
 
     private func makeClient(for pairing: HomeChargingPairing) -> HomeAssistantClient? {
@@ -407,9 +431,9 @@ final class HomeChargingModel: ObservableObject {
             // Polling carries on alone; the socket only makes updates arrive sooner.
             return
         }
-        guard let stream = try? await opened.stateChanges() else { await opened.close(); return }
-        socket = opened
         let tracked = Set(trackedEntityIDs(pairing))
+        guard let stream = try? await opened.stateChanges(entityIDs: tracked) else { await opened.close(); return }
+        socket = opened
         eventTask?.cancel()
         eventTask = Task { [weak self] in
             for await change in stream {
@@ -512,6 +536,29 @@ final class HomeChargingModel: ObservableObject {
 
     func hasSavedCredentials(for source: ChargerSource) -> Bool { store.hasCredentials(for: source) }
 
+    /// The chargers on an account that signed in earlier, read with the saved login. Signing in
+    /// stores the login before a charger is paired, so a reader who leaves Settings between the two
+    /// steps picks up here instead of typing the account again. `nil` when no login is saved.
+    func resumeDirect(_ source: ChargerSource) async throws -> [DirectChargerSummary]? {
+        guard source.isDirect, store.hasCredentials(for: source) else { return nil }
+        if source == .nexBlue {
+            guard let token = try store.nexBlueRefreshToken(), !token.isEmpty else { return nil }
+            return try await nexBlueProvider().chargers()
+        }
+        guard let credentials = try store.credentials(for: source), credentials.isComplete,
+              let provider = DirectChargerProviders.make(source, credentials: credentials, transport: dependencies.transport) else {
+            return nil
+        }
+        return try await provider.chargers()
+    }
+
+    /// Forgets a login that was saved before any charger was paired. A paired vendor keeps its login:
+    /// the pairing needs it, and Remove Connection is the way out of that.
+    func forgetDirectLogin(_ source: ChargerSource) {
+        guard pairing?.source != source else { return }
+        store.deleteCredentials(for: source)
+    }
+
     func savedUsername(for source: ChargerSource) -> String? {
         ((try? store.credentials(for: source)) ?? nil)?.username
     }
@@ -560,15 +607,99 @@ final class HomeChargingModel: ObservableObject {
         store.tibberHome = home
         tibberHome = home
         tibberProblem = nil
+        seedRegionIfUnset(for: home)
         // Sessions already imported were priced without it; the next import prices them again.
         lastSyncAt = nil
         if pairing != nil { Task { await syncSessions() } }
     }
 
+    /// Reads the connected home again for the price area and grid company, which a home saved by an
+    /// earlier version does not carry. Best effort: a failure keeps what is saved.
+    func refreshTibberHome() async {
+        guard let saved = store.tibberHome, let token = (try? store.tibberToken()) ?? nil, !token.isEmpty else { return }
+        // Settings asks every time the card appears; Tibber is only worth asking while something is missing.
+        guard saved.priceArea == nil || saved.gridCompany == nil || saved.mainFuseSize == nil else { return }
+        guard let homes = try? await TibberClient(token: token, transport: dependencies.transport).homes(),
+              let fresh = homes.first(where: { $0.id == saved.id }),
+              store.tibberHome?.id == saved.id else { return }
+        var updated = saved
+        updated.priceArea = fresh.priceArea ?? saved.priceArea
+        updated.gridCompany = fresh.gridCompany ?? saved.gridCompany
+        updated.mainFuseSize = fresh.mainFuseSize ?? saved.mainFuseSize
+        guard updated != store.tibberHome else { return }
+        store.tibberHome = updated
+        tibberHome = updated
+    }
+
+    /// Hourly whole-home consumption from Tibber's meter data for `[from, to]`, or `nil` when Tibber is
+    /// not connected or does not answer. Tibber rate-limits, and the meter data moves once an hour, so
+    /// one answer is reused for `consumptionCacheLifetime`.
+    func houseConsumption(from: Date, to: Date) async -> [TibberConsumptionHour]? {
+        guard let home = store.tibberHome, let token = (try? store.tibberToken()) ?? nil, !token.isEmpty else { return nil }
+        let now = Date()
+        if let cache = consumptionCache, cache.homeID == home.id, cache.from <= from,
+           now.timeIntervalSince(cache.fetchedAt) < Self.consumptionCacheLifetime {
+            return cache.hours.filter { $0.end > from && $0.start < to }
+        }
+        let client = TibberClient(token: token, transport: dependencies.transport)
+        // Fetch the widest window the client reads, so a narrower period later is served from this.
+        let widest = now.addingTimeInterval(-Double(TibberClient.consumptionPageSize * TibberClient.maximumConsumptionPages) * 3_600)
+        let fetchFrom = min(from, widest)
+        guard let hours = try? await client.consumption(homeID: home.id, from: fetchFrom, to: now.addingTimeInterval(3_600)),
+              store.tibberHome?.id == home.id else { return nil }
+        consumptionCache = (home.id, fetchFrom, now, hours)
+        return hours.filter { $0.end > from && $0.start < to }
+    }
+
+    static let consumptionCacheLifetime: TimeInterval = 30 * 60
+
+    /// Whether any whole-house meter is connected, so the car-share rows have something to read.
+    var hasHouseMeterSource: Bool { tibberHome != nil || houseMeter.isConnected }
+
+    /// The car's share of the house's metered electricity. Tibber's hourly readings are used when
+    /// they answer, because they carry what Tibber billed; otherwise the Perific meter's hourly
+    /// import. The share says which one it came from.
+    func houseLoadShare(from: Date, to: Date, sessions: [HistoricalChargingSession]) async -> HouseLoadShare? {
+        if tibberHome != nil, let hours = await houseConsumption(from: from, to: to),
+           let share = HouseLoad.share(hours: hours, sessions: sessions, gridTariff: gridTariff) {
+            return share
+        }
+        guard houseMeter.isConnected, let hours = await houseMeter.hourlyImport(from: from, to: to),
+              var share = HouseLoad.share(hours: hours, sessions: sessions) else { return nil }
+        share.meter = .perific
+        return share
+    }
+
+    func updateGridTariff(_ tariff: GridTariff) {
+        store.gridTariff = tariff
+        gridTariff = tariff
+    }
+
+    /// Names the grid market from the home's own time zone, so the country picker is already answered
+    /// for anyone whose home is where they say it is. It runs only while no tariff has been saved, so
+    /// a setup the reader already made is never repriced behind their back.
+    private func seedRegionIfUnset(for home: TibberHome) {
+        guard store.gridTariff == nil,
+              let region = GridTariffRegion.matching(timeZoneIdentifier: home.timeZone),
+              region != gridTariff.region else { return }
+        var seeded = gridTariff
+        seeded.region = region
+        updateGridTariff(seeded)
+    }
+
     func disconnectTibber() {
         store.clearTibber()
+        consumptionCache = nil
         tibberHome = nil
         tibberProblem = nil
+    }
+
+    /// The connected Tibber home as the charging planner's price source, or `nil` when none is
+    /// connected or its prices are not in kronor (the planner is built for Swedish spot prices).
+    func plannerTibberSource() -> PlannerPriceProvider.TibberSource? {
+        guard let home = store.tibberHome, home.currency == nil || home.currency == "SEK",
+              let fetch = tibberPriceSource() else { return nil }
+        return PlannerPriceProvider.TibberSource(homeID: home.id, gridTariff: gridTariff, fetch: fetch)
     }
 
     /// Tibber's own price source for a sync, or `nil` when none is connected.
@@ -625,14 +756,6 @@ final class HomeChargingModel: ObservableObject {
         pairing = current
     }
 
-    func updateBatterySensor(_ entityID: String?) {
-        guard var current = pairing else { return }
-        current.entities.vehicleBattery = entityID?.isEmpty == false ? entityID : nil
-        store.pairing = current
-        pairing = current
-        refreshNow()
-    }
-
     /// Unpairs. A plan Home Assistant is still running for this charger is cancelled first, best effort,
     /// so nothing keeps commanding a charger Hisingen no longer controls; the charger is left as it is.
     func unpairCancellingPlan() async {
@@ -659,8 +782,11 @@ final class HomeChargingModel: ObservableObject {
     /// Everything Home Charging holds, the token included. History rows already written stay.
     func eraseEverything() {
         stop()
+        houseMeter.disconnect()
         pairingRevision &+= 1
         store.eraseAll()
+        consumptionCache = nil
+        gridTariff = .none
         tibberHome = nil
         tibberProblem = nil
         pairing = nil
@@ -990,7 +1116,7 @@ final class HomeChargingModel: ObservableObject {
                                                  spotPrices: spot, currency: preferences.currencySymbol),
             now: now, direct: direct, backfill: backfill,
             canWrite: { self.pairingRevision == revision && self.preferences.storeChargingHistory },
-            tibberPrices: tibberPriceSource())
+            tibberPrices: tibberPriceSource(), defaultGridTariff: gridTariff)
         do {
             let summary = try await HomeSessionSync.run(environment)
             guard pairingRevision == revision else { return }

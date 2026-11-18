@@ -34,15 +34,15 @@ struct VehicleActivityTests {
         current.energy.estimatedTimeToTargetMinutes = 20
         current.energy.estimatedTimeToFullMinutes = 90
         #expect(current.remainingChargingMinutes == 20)
-        #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
+        #expect(VehicleReadiness.assessDeparture(current, departure: now.addingTimeInterval(1800), now: now).message
             == L10n.text("The current vehicle estimate finishes before departure."))
         current.energy.estimatedTimeToTargetMinutes = nil
         #expect(current.remainingChargingMinutes == 90)
         #expect(current.chargingEstimateDestination == L10n.text("Full charge"))
-        #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
+        #expect(VehicleReadiness.assessDeparture(current, departure: now.addingTimeInterval(1800), now: now).message
             == L10n.text("The current vehicle estimate finishes after departure."))
         current.freshness.readingDates[.charging] = now.addingTimeInterval(-3600)
-        #expect(VehicleReadiness.chargingByDeparture(current, departure: now.addingTimeInterval(1800), now: now)
+        #expect(VehicleReadiness.assessDeparture(current, departure: now.addingTimeInterval(1800), now: now).message
             == L10n.text("No current charging estimate is available for this departure."))
     }
 

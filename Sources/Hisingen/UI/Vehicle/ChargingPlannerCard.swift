@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Dashboard card for the opt-in Smart Charging Planner. Fetches (via the shared price
-/// service – cached, one fetch per day after publication) today's and tomorrow's Swedish
-/// spot prices for the selected zone, then shows the cheapest contiguous whole-hour
+/// Dashboard card for the opt-in Smart Charging Planner. Reads (via the shared price
+/// provider – cached, one fetch per day after publication) today's and tomorrow's prices
+/// from the connected provider (Tibber), or the Swedish spot prices for the selected zone
+/// when none is connected or it cannot answer, then shows the cheapest contiguous whole-hour
 /// window that covers the energy still needed between the current battery level and the
 /// set charge limit, with the price of charging right now as the baseline, a 48-hour
 /// price outlook chart, and a freshness line.
@@ -13,17 +14,26 @@ struct ChargingPlannerCard: View {
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.homeCharging) private var homeCharging
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var points: [ElectricityPricePoint] = []
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
+    @State private var resolved: PlannerPrices?
 
-    private let service = ElectricityPriceService.shared
+    private let provider = PlannerPriceProvider.shared
 
     private var zone: ElspotZone { preferences.electricityPriceZone }
 
     /// One localized sentence, not three concatenated fragments, so translators can reorder
     /// it. The zone code and the source name are data, not copy, and stay unlocalized.
     private var attributionLine: String {
+        if resolved?.origin == .tibber {
+            let basis = resolved?.includesNetworkFee == true
+                ? L10n.text("Tibber prices include taxes and your network fee")
+                : L10n.text("Tibber prices include taxes, not grid fees")
+            guard let fetchedAt else { return basis }
+            return L10n.format("%@ · fetched %@", basis, Format.shortTime(date: fetchedAt))
+        }
         if let fetchedAt {
             return L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@",
                                zone.rawValue, Format.shortTime(date: fetchedAt))
@@ -47,10 +57,11 @@ struct ChargingPlannerCard: View {
             // the card's own insertion/removal, not snap it.
             .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
             .task(id: plannerTaskID) {
-                let fetched = await service.prices(for: zone)
+                let answer = await provider.resolve(zone: zone)
                 guard !Task.isCancelled else { return }
-                points = fetched
-                fetchedAt = await service.fetchedAt(for: zone)
+                points = answer.points
+                fetchedAt = answer.fetchedAt
+                resolved = answer
                 hasLoaded = true
             }
     }
@@ -104,32 +115,33 @@ struct ChargingPlannerCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
+                if let resolved, !points.isEmpty { sourceRow(resolved) }
+
                 if let model {
                     Group {
-                        Text(model.windowLabel)
-                            .hisType(.subhead, weight: .semibold)
-                            .foregroundStyle(.primary)
-                            .hisTelemetryValue(model.windowLabel, reduceMotion: reduceMotion)
-                        Text(model.detailLine)
-                            .hisType(.label)
-                            .foregroundStyle(.secondary)
-                            .hisCaptionLeading()
-                            .fixedSize(horizontal: false, vertical: true)
-                            .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
-                        if let savingsLine = model.savingsLine {
-                            HStack(spacing: 5) {
-                                Image(systemName: model.savings > 0 ? "arrow.down.circle" : "clock")
-                                    .hisType(.caption)
-                                    .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
-                                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                                Text(savingsLine)
-                                    .hisType(.label, weight: .semibold)
-                                    .foregroundStyle(model.savings > 0 ? HisingenTheme.semanticGood : .secondary)
-                                    .hisTelemetryValue(savingsLine, reduceMotion: reduceMotion)
-                            }
-                            .hisAnimation(Motion.stateChange, value: model.savings > 0)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.timeRange)
+                                .hisType(.display)
+                                .foregroundStyle(HisingenTheme.ink)
+                                .hisTelemetryValue(model.timeRange, reduceMotion: reduceMotion)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(model.dayLabel)
+                                .hisType(.label)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                            Text(model.detailLine)
+                                .hisType(.label)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .hisCaptionLeading()
+                                .fixedSize(horizontal: false, vertical: true)
+                                .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
                         }
-                        PriceCurveView(points: points, plan: plan)
+                        priceFigures(model)
+                        Text(model.savingsLine)
+                            .hisType(.label, weight: .semibold)
+                            .foregroundStyle(model.savings > 0 ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                            .hisTelemetryValue(model.savingsLine, reduceMotion: reduceMotion)
+                        PriceCurveView(points: points, plan: plan,
+                                       expectedEnd: ElectricityPriceService.requiredCoverageEnd(after: Date()))
                     }
                     .transition(plannerTransition)
                 } else if !hasLoaded && points.isEmpty {
@@ -168,8 +180,42 @@ struct ChargingPlannerCard: View {
             // VStack carries the animation because branches cannot animate
             // their own removal.
             .animation(cardChangeAnimation, value: hasLoaded)
-            .animation(cardChangeAnimation, value: planModel?.windowLabel)
+            .animation(cardChangeAnimation, value: planModel?.timeRange)
         }
+    }
+
+    /// The two prices the plan is judged by, as figures over labels: what the window costs per
+    /// kWh and what charging this minute would cost.
+    private func priceFigures(_ model: PlannerModel) -> some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 28))
+        return layout {
+            priceFigure(value: model.averagePrice, label: L10n.text("Planned average"), level: model.plannedLevel)
+            priceFigure(value: model.currentPrice, label: L10n.text("Now"), level: model.currentLevel)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func priceFigure(value: Double, label: String, level: TibberPriceLevel?) -> some View {
+        PlannerPriceFigure(value: value, label: label, level: level)
+    }
+
+    /// Which prices the plan below is built from. A fallback names itself in the warning colour, and
+    /// the reason Tibber could not be used sits in the row's information button.
+    private func sourceRow(_ prices: PlannerPrices) -> some View {
+        let fellBack = prices.isFallback
+        let value: String
+        if prices.origin == .tibber {
+            value = "Tibber"
+        } else {
+            value = fellBack ? L10n.text("Elpriser, Tibber unavailable") : "Elpriser"
+        }
+        let reason = fellBack
+            ? L10n.format("Tibber did not answer, so the planner uses market prices. %@", prices.tibberProblem ?? "")
+                .trimmingCharacters(in: .whitespaces)
+            : nil
+        return KVRow(L10n.text("Prices"), value, valueWarning: fellBack, info: reason)
     }
 
     private var plan: ChargingPlan? {
@@ -198,10 +244,16 @@ struct ChargingPlannerCard: View {
     }
 
     private struct PlannerModel {
-        var windowLabel: String
+        var timeRange: String
+        var dayLabel: String
         var detailLine: String
-        var savingsLine: String?
+        var averagePrice: Double
+        var currentPrice: Double
+        var savingsLine: String
         var savings: Double
+        /// Tibber's own level for the planned window and for this minute, when Tibber is the source.
+        var plannedLevel: TibberPriceLevel?
+        var currentLevel: TibberPriceLevel?
     }
 
     private var planModel: PlannerModel? {
@@ -223,17 +275,13 @@ struct ChargingPlannerCard: View {
         } else {
             dayLabel = Format.shortDate(date: plan.start)
         }
-        let windowLabel = "\(dayLabel) \(Format.shortTime(date: plan.start))–\(Format.shortTime(date: plan.end))"
+        let timeRange = "\(Format.shortTime(date: plan.start))–\(Format.shortTime(date: plan.end))"
 
-        let average = Format.currency(plan.averagePrice, symbol: "kr") + "/kWh"
-        let current = Format.currency(plan.currentPrice, symbol: "kr") + "/kWh"
         let detailLine = L10n.format(
-            "Charge %@ over %d h to reach %d%%: average %@, now %@",
+            "Charge %@ over %d h to reach %d%%",
             Format.energyKwh(plan.energyKwh),
             Int(plan.hours),
-            target,
-            average,
-            current
+            target
         )
 
         let savingsLine = plan.savings > 0.5
@@ -241,10 +289,44 @@ struct ChargingPlannerCard: View {
             : L10n.text("Charging now is cheapest")
 
         return PlannerModel(
-            windowLabel: windowLabel,
+            timeRange: timeRange,
+            dayLabel: dayLabel,
             detailLine: detailLine,
+            averagePrice: plan.averagePrice,
+            currentPrice: plan.currentPrice,
             savingsLine: savingsLine,
-            savings: plan.savings
+            savings: plan.savings,
+            plannedLevel: resolved?.level(from: plan.start, to: plan.end),
+            currentLevel: resolved?.level(at: now)
         )
+    }
+}
+
+/// One price the plan is judged by: the figure over its label. With Tibber as the source the label
+/// carries Tibber's own level for that price.
+struct PlannerPriceFigure: View {
+    let value: Double
+    let label: String
+    var level: TibberPriceLevel?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let text = Format.number(value, decimals: 2)
+        let caption = level.map { L10n.format("%@ · %@", label, $0.title.lowercased()) } ?? label
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(text)
+                    .hisType(size: 22, relativeTo: .title)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .hisTelemetryValue(text, reduceMotion: reduceMotion)
+                Text("kr/kWh")
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+            Text(caption)
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
+        }
     }
 }

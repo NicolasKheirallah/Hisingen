@@ -77,6 +77,17 @@ struct ChargeHistoryRegressionTests {
         #expect(abs(repairedRecord.energyDeliveredKwh - 23.7) < 0.001)
     }
 
+    @Test("Session end reconciliation clamps each timestamp beyond five minutes")
+    func sessionEndDateClampsFutureTimestamps() {
+        let now = Date(timeIntervalSince1970: 1_780_000_000)
+        let boundary = now.addingTimeInterval(300)
+        let beyondBoundary = now.addingTimeInterval(301)
+
+        #expect(ChargingSessionLedger.resolvedEndDate(reported: beyondBoundary, observed: boundary, now: now) == boundary)
+        #expect(ChargingSessionLedger.resolvedEndDate(reported: boundary, observed: beyondBoundary, now: now) == boundary)
+        #expect(ChargingSessionLedger.resolvedEndDate(reported: beyondBoundary, observed: beyondBoundary, now: now) == now)
+    }
+
     @Test("Finalization uses the last charging sample when the stop snapshot SoC is stale")
     @MainActor
     func staleStopSnapshotDoesNotEraseCharge() async throws {

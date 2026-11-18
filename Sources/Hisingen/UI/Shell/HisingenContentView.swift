@@ -483,57 +483,68 @@ struct HisingenContentView: View {
     private func selectedTabContent(state: VehicleState, tab: TabRef) -> some View {
         switch tab {
         case .builtIn(.vehicle):
-            VehicleTabView(layout: TabLayout.resolve(tabComposition, for: tab),
-                           state: state, cars: cars, activeVin: activeVin,
-                           brand: commandBrand,
-                           remoteCommandInProgress: remoteCommandInProgress,
-                           inFlightCommandID: inFlightRemoteCommandID,
-                           feedback: lastRemoteCommandFeedback,
-                           onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
-                           onRemoteCommand: onRemoteCommand,
-                           onSelectCar: onSelectCar,
-                           onDismissCommandReceipt: onDismissCommandReceipt,
-                           onVerifyReceipt: { _ in onRefresh() },
-                           error: error,
-                           history: history, reverseGeocoder: reverseGeocoder,
-                           imageCache: imageCache)
-                .id(state.identity.vin)
-                .transition(.opacity)
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                VehicleTabView(layout: TabLayout.resolve(tabComposition, for: tab),
+                               state: state, cars: cars, activeVin: activeVin,
+                               brand: commandBrand,
+                               remoteCommandInProgress: remoteCommandInProgress,
+                               inFlightCommandID: inFlightRemoteCommandID,
+                               feedback: lastRemoteCommandFeedback,
+                               onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
+                               onRemoteCommand: onRemoteCommand,
+                               onSelectCar: onSelectCar,
+                               onDismissCommandReceipt: onDismissCommandReceipt,
+                               onVerifyReceipt: { _ in onRefresh() },
+                               error: error,
+                               history: history, reverseGeocoder: reverseGeocoder,
+                               imageCache: imageCache)
+                placedExtras(for: tab, state: state)
+            }
+            .id(state.identity.vin)
+            .transition(.opacity)
 
         case .builtIn(.info):
-            InfoTabView(state: state, history: history, imageCache: imageCache,
-                        reverseGeocoder: reverseGeocoder,
-                        onNavigateToHistory: navigateFromInfoToHistory,
-                        onRemoteCommand: onRemoteCommand,
-                        brand: commandBrand,
-                        remoteCommandInProgress: remoteCommandInProgress,
-                        inFlightCommandID: inFlightRemoteCommandID,
-                        onRefresh: onRefresh,
-                        layout: TabLayout.resolve(tabComposition, for: tab))
-                .id(state.identity.vin)
-                .transition(.opacity)
-
-        case .builtIn(.history):
-            HistoryDashboardView(state: state, history: history,
-                                 initialSection: historyJumpTarget,
-                                 layout: TabLayout.resolve(tabComposition, for: tab))
-                .id(state.identity.vin)
-                .transition(.opacity)
-
-        case .builtIn(.controls):
-            ControlsTabView(state: state,
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                InfoTabView(state: state, history: history, imageCache: imageCache,
+                            reverseGeocoder: reverseGeocoder,
+                            onNavigateToHistory: navigateFromInfoToHistory,
+                            onRemoteCommand: onRemoteCommand,
                             brand: commandBrand,
                             remoteCommandInProgress: remoteCommandInProgress,
                             inFlightCommandID: inFlightRemoteCommandID,
-                            feedback: lastRemoteCommandFeedback,
-                            imageCache: imageCache,
-                            onRemoteCommand: onRemoteCommand,
                             onRefresh: onRefresh,
-                            onDismissCommandReceipt: onDismissCommandReceipt,
-                            onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
-                            layout: TabLayout.resolve(tabComposition, for: tab),
-                            drawnOnCar: carDrawnControls)
-                .transition(.opacity)
+                            layout: TabLayout.resolve(tabComposition, for: tab))
+                placedExtras(for: tab, state: state)
+            }
+            .id(state.identity.vin)
+            .transition(.opacity)
+
+        case .builtIn(.history):
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                HistoryDashboardView(state: state, history: history,
+                                     initialSection: historyJumpTarget,
+                                     layout: TabLayout.resolve(tabComposition, for: tab))
+                placedExtras(for: tab, state: state)
+            }
+            .id(state.identity.vin)
+            .transition(.opacity)
+
+        case .builtIn(.controls):
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                ControlsTabView(state: state,
+                                brand: commandBrand,
+                                remoteCommandInProgress: remoteCommandInProgress,
+                                inFlightCommandID: inFlightRemoteCommandID,
+                                feedback: lastRemoteCommandFeedback,
+                                imageCache: imageCache,
+                                onRemoteCommand: onRemoteCommand,
+                                onRefresh: onRefresh,
+                                onDismissCommandReceipt: onDismissCommandReceipt,
+                                onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
+                                layout: TabLayout.resolve(tabComposition, for: tab))
+                placedExtras(for: tab, state: state)
+            }
+            .transition(.opacity)
 
         case .builtIn(.settings):
             EmptyView()
@@ -561,12 +572,37 @@ struct HisingenContentView: View {
         }
     }
 
-    /// The moved controls the reader's Car tab will draw, so Plan knows which it can leave out.
-    private var carDrawnControls: Set<TabItemID> {
-        let car = TabRef.builtIn(.info)
-        guard tabComposition.visibleTabs().contains(car) else { return [] }
-        let layout = TabLayout.resolve(tabComposition, for: car)
-        return Set([TabItemID.controlsAccess, .controlsWindowsLocate, .controlsOTA].filter(layout.draws))
+    /// Standalone cards the reader placed on a shipped tab from another tab. They draw with
+    /// the same views a tab of their own would use, after that tab's own cards and in the
+    /// order the reader arranged them.
+    @ViewBuilder
+    private func placedExtras(for tab: TabRef, state: VehicleState) -> some View {
+        let own = Set(tab.builtIn.map { TabItemCatalog.defaultItems(for: $0) } ?? [])
+        let extras = tabComposition.visibleItems(for: tab).filter {
+            TabItemCatalog.isStandalone($0) && !own.contains($0)
+        }
+        if !extras.isEmpty {
+            ForEach(extras, id: \.self) { item in
+                ComposableCards.view(
+                    item,
+                    state: state,
+                    preferences: preferences,
+                    history: history,
+                    reverseGeocoder: reverseGeocoder,
+                    imageCache: imageCache,
+                    brand: commandBrand,
+                    cars: cars,
+                    activeVin: activeVin,
+                    error: error,
+                    remoteCommandInProgress: remoteCommandInProgress,
+                    inFlightCommandID: inFlightRemoteCommandID,
+                    onRefresh: onRefresh,
+                    onRemoteCommand: onRemoteCommand,
+                    onSelectCar: onSelectCar,
+                    onDismissCommandReceipt: onDismissCommandReceipt
+                )
+            }
+        }
     }
 
     private var garageStates: [VehicleState] {

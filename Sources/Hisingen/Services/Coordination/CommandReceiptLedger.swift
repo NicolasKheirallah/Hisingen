@@ -1,20 +1,6 @@
 import Foundation
 import OSLog
 
-/// What the receipt module wants the transport to be doing.
-///
-/// The module owns the decision; `RefreshCoordinator` owns the stream and poll machinery that
-/// carries it out. That inversion is what makes the rules testable without a provider.
-enum CommandConfirmationTransport: Equatable {
-    /// A live stream with this purpose could prove an awaiting receipt.
-    case stream(VehicleLiveStreamPurpose)
-    /// No stream carries this proof, so the union of these features must be polled after the
-    /// given delay.
-    case poll(features: [AppFeature], after: TimeInterval)
-    /// Nothing is awaiting confirmation.
-    case idle
-}
-
 /// Where a newly accepted Remote Command's receipt was filed.
 struct CommandReceiptFiling: Equatable {
     /// The receipt belongs to the selected vehicle and joined the live collection, so the
@@ -345,22 +331,11 @@ final class CommandReceiptLedger {
 
     // MARK: - Transport
 
-    /// Which transport could prove the awaiting receipts, if any.
-    ///
-    /// The purpose is not derived from `CommandDescriptor.displayField`: that field is a superset
-    /// (`.stopChargingOverride` shares `.chargingState` with the override that streams, and the
-    /// interior commands share `.exterior`), so deriving it would start streams for commands the
-    /// available endpoints cannot prove.
-    func transport(for state: VehicleState, realTimeEnabled: Bool) -> CommandConfirmationTransport {
-        if realTimeEnabled,
-           let purpose = activeRecords.reversed().lazy.compactMap({
-               Self.streamPurpose(for: $0.receipt)
-           }).first {
-            return .stream(purpose)
-        }
-        let features = Array(pollFeatures).sorted { $0.rawValue < $1.rawValue }
-        guard !features.isEmpty else { return .idle }
-        return .poll(features: features, after: pollInterval)
+    /// The newest awaiting receipt that a stream can prove takes priority. Display fields
+    /// alone would also select commands the stream cannot prove, such as Resume Schedule.
+    func confirmationStreamPurpose(realTimeEnabled: Bool) -> VehicleLiveStreamPurpose? {
+        guard realTimeEnabled else { return nil }
+        return activeRecords.reversed().lazy.compactMap { Self.streamPurpose(for: $0.receipt) }.first
     }
 
     /// Features a targeted poll must request to cover every awaiting receipt. `nil` when nothing

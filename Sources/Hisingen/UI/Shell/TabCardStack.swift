@@ -4,33 +4,14 @@ import SwiftUI
 /// The cards a reader can place on a tab of their own, drawn by the same views the shipped
 /// tabs use.
 ///
-/// Membership is a real constraint, not a preference: a card is here only when it draws purely
-/// from the vehicle snapshot, the reader's preferences, and the shared command gate. Cards that
-/// own a tab's own state — the History period picker and its charts, the Info section bars —
-/// belong to the tab that gives them that state and stay there. The Settings pane names them so
-/// the omission is visible rather than mysterious.
+/// Membership is `TabItemCatalog.standaloneItems`, declared there so the pane, the picker and
+/// this view ask one question: a card is here only when it draws purely from the vehicle
+/// snapshot, the reader's preferences, and the shared command gate. Cards that own a tab's own
+/// state (the History period picker and its charts, the Info section bars) belong to the tab
+/// that gives them that state and stay there. A tab of the reader's own names one it cannot
+/// draw instead of dropping it silently.
 @MainActor
 enum ComposableCards {
-    static let reusable: Set<TabItemID> = [
-        .vehicleSwitcher,
-        .vehicleHero,
-        .vehicleCharging,
-        .vehicleChargingPlanner,
-        .vehicleOpenings,
-        .vehicleTyres,
-        .vehicleReadiness,
-        .vehicleLocation,
-        .vehicleWeather,
-        .vehicleReceipts,
-        .vehicleAttention,
-        .controlsClimate,
-        .controlsAccess,
-        .controlsWindowsLocate,
-        .controlsOTA
-    ]
-
-    static func isReusable(_ item: TabItemID) -> Bool { reusable.contains(item) }
-
     @ViewBuilder
     static func view(
         _ item: TabItemID,
@@ -197,12 +178,12 @@ struct TabCardStack: View {
 
     private var placed: [TabItemID] {
         _ = reorderPulse
-        return composition.visibleItems(for: tab).filter { ComposableCards.isReusable($0) }
+        return composition.visibleItems(for: tab).filter { TabItemCatalog.isStandalone($0) }
     }
 
     /// Cards the reader placed that belong to the tab they came from.
     private var tabOwned: [TabItemID] {
-        composition.visibleItems(for: tab).filter { !ComposableCards.isReusable($0) }
+        composition.visibleItems(for: tab).filter { !TabItemCatalog.isStandalone($0) }
     }
 
     var body: some View {

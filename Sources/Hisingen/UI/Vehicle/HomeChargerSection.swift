@@ -55,6 +55,15 @@ struct HomeChargerSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .hisTelemetryValue(session, reduceMotion: reduceMotion)
         }
+        if let phases = card.phaseLine {
+            Text(phases)
+                .hisType(.label)
+                .monospacedDigit()
+                .foregroundStyle(HisingenTheme.inkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .hisTelemetryValue(phases, reduceMotion: reduceMotion)
+        }
+        HouseMeterLines(meter: model.houseMeter, carKw: currentCarKw(input))
         if let plan = card.planLine {
             Text(plan)
                 .hisType(.label)
@@ -86,6 +95,25 @@ struct HomeChargerSection: View {
                 .buttonStyle(.hisSecondary)
                 .disabled(input.link != .live)
         }
+        if !card.details.isEmpty {
+            DisclosureGroup(L10n.text("Charger Details")) {
+                VStack(spacing: 6) {
+                    ForEach(card.details) { detail in
+                        KVRow(detail.label, detail.value, symbol: "exclamationmark.triangle",
+                              warning: detail.needsAttention, info: detail.info)
+                    }
+                }
+                .padding(.top, 6)
+            }
+            .disclosureGroupStyle(WholeRowDisclosureStyle())
+            .hisType(.body, weight: .medium)
+        }
+    }
+
+    /// The charger's wall power, only while the reading is current: a stale figure would be
+    /// subtracted from a live house reading and give a wrong "rest of the house".
+    private func currentCarKw(_ input: HomeChargingCardInput) -> Double? {
+        input.telemetry.isFresh(input.telemetry.powerKw, now: input.now) ? input.telemetry.powerKw?.value : nil
     }
 
     private func noticeView(_ notice: HomeChargingCardModel.Notice, command: HomeChargerCommandTracker.Phase) -> some View {

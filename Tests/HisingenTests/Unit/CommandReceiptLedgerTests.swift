@@ -17,7 +17,7 @@ struct CommandReceiptLedgerTests {
     private let startedAt = Date(timeIntervalSince1970: 1_780_000_000)
 
     @Test
-    func anAwaitingReceiptIsVisibleAndNamesItsTransport() {
+    func anAwaitingReceiptIsVisibleAndProvidesStreamAndPollRequirements() {
         let (ledger, _, cleanup) = makeLedger()
         defer { cleanup() }
         let receipt = lockReceipt()
@@ -26,18 +26,9 @@ struct CommandReceiptLedgerTests {
         #expect(ledger.visibleReceipts == [receipt])
         #expect(ledger.isConfirmationPending)
 
-        // A stream can prove a lock when the user has live updates on...
-        #expect(ledger.transport(for: lockedState(), realTimeEnabled: true)
-            == .stream(.exteriorConfirmation))
-        // ...and without them the same receipt asks for a targeted poll instead of going idle.
-        guard case .poll(let features, let after) = ledger.transport(
-            for: lockedState(), realTimeEnabled: false
-        ) else {
-            Issue.record("expected a targeted poll when live updates are off")
-            return
-        }
-        #expect(features == [RemoteCommand.lock.feature])
-        #expect(after == ledger.pollInterval)
+        #expect(ledger.confirmationStreamPurpose(realTimeEnabled: true) == .exteriorConfirmation)
+        #expect(ledger.confirmationStreamPurpose(realTimeEnabled: false) == nil)
+        #expect(ledger.targetedFeatures(isScheduledTick: true)?.enabled == [RemoteCommand.lock.feature])
     }
 
     @Test
@@ -53,7 +44,8 @@ struct CommandReceiptLedgerTests {
         #expect(filing.isForSelectedVehicle)
         #expect(filing.awaitsTelemetry == false)
         #expect(ledger.visibleReceipts.isEmpty)
-        #expect(ledger.transport(for: lockedState(), realTimeEnabled: true) == .idle)
+        #expect(ledger.confirmationStreamPurpose(realTimeEnabled: true) == nil)
+        #expect(ledger.targetedFeatures(isScheduledTick: true) == nil)
     }
 
     @Test

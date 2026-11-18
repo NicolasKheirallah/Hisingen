@@ -10,6 +10,8 @@ struct HomeChargingStore {
     static let planRecordKey = "home_charging_plan_record_v1"
     static let capturePresenceKey = "home_charging_capture_seen_v1"
     static let tibberHomeKey = "home_charging_tibber_home_v1"
+    static let tibberNetworkFeeKey = "home_charging_tibber_network_fee_v1"
+    static let gridTariffKey = "home_charging_grid_tariff_v1"
     static let tibberVendor = "tibber"
     private static let nexBlueImportKey = "home_charging_nexblue_import_v1"
 
@@ -92,12 +94,36 @@ struct HomeChargingStore {
         }
     }
 
+    /// The reader's variable network fee in öre per kWh, which Tibber's all-in price leaves out. It is
+    /// not secret and belongs to the supplier, so the planner can use it with no charger paired.
+    var tibberNetworkFeeOrePerKwh: Double {
+        get { max(0, defaults.double(forKey: Self.tibberNetworkFeeKey)) }
+        nonmutating set { defaults.set(max(0, newValue), forKey: Self.tibberNetworkFeeKey) }
+    }
+
+    /// The reader's grid tariff. Not secret, and kept when Tibber is disconnected so reconnecting does
+    /// not mean typing it again. `nil` until one is saved; the older flat fee is read as a flat tariff.
+    var gridTariff: GridTariff? {
+        get {
+            guard let data = defaults.data(forKey: Self.gridTariffKey) else { return nil }
+            return try? JSONDecoder().decode(GridTariff.self, from: data)
+        }
+        nonmutating set {
+            guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+                defaults.removeObject(forKey: Self.gridTariffKey)
+                return
+            }
+            defaults.set(data, forKey: Self.gridTariffKey)
+        }
+    }
+
     var hasTibberToken: Bool { keychain.hasStoredChargerCredentials(vendor: Self.tibberVendor) }
     func tibberToken() throws -> String? { try keychain.readChargerCredentials(vendor: Self.tibberVendor) }
     func saveTibberToken(_ token: String) throws { try keychain.saveChargerCredentials(token, vendor: Self.tibberVendor) }
 
     func clearTibber() {
         defaults.removeObject(forKey: Self.tibberHomeKey)
+        defaults.removeObject(forKey: Self.tibberNetworkFeeKey)
         try? keychain.deleteChargerCredentials(vendor: Self.tibberVendor)
     }
 
@@ -152,5 +178,7 @@ struct HomeChargingStore {
         try? keychain.deleteHomeAssistantToken()
         for source in ChargerSource.allCases where source.isDirect { deleteCredentials(for: source) }
         clearTibber()
+        defaults.removeObject(forKey: Self.gridTariffKey)
+        HouseMeterStore(defaults: defaults, keychain: keychain).eraseAll()
     }
 }

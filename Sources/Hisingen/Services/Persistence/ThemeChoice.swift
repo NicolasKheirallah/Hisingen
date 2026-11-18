@@ -26,7 +26,7 @@ struct ThemeChoice: Sendable {
         brand: VehicleBrand,
         defaults: UserDefaults = .standard
     ) -> AppTheme {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         if !key.isEmpty,
            let values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String],
            let stored = values[key],
@@ -56,7 +56,7 @@ struct ThemeChoice: Sendable {
     ) {
         switch scope {
         case .vehicle(let vin):
-            let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let key = vin.normalizedVIN
             if !key.isEmpty {
                 var values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]
                 values[key] = theme.rawValue

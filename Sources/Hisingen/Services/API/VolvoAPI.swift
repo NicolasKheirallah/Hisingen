@@ -681,9 +681,5 @@ actor VolvoAPI {
 }
 
 extension JSONDecoder {
-    static let volvo: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
+    static var volvo: JSONDecoder { .iso }
 }

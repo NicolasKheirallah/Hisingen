@@ -43,6 +43,12 @@ struct ControlsBanners: View {
         Group {
             if let feedback = liveFeedback {
                 feedbackBanner(feedback)
+                    // The expiry needs a clock, not a render, and only while a banner is up:
+                    // an always-on timer rewrote state every 5 s with nothing to expire.
+                    .onAppear { now = Date() }
+                    .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { tick in
+                        now = tick
+                    }
             }
             if vehicleOffline {
                 offlineBanner
@@ -52,10 +58,6 @@ struct ControlsBanners: View {
         // entrance while the removal rides the dismissing transaction.
         .hisAnimation(Motion.entrance, value: liveFeedback?.id)
         .hisAnimation(Motion.entrance, value: vehicleOffline)
-        // The expiry needs a clock, not a render.
-        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { tick in
-            now = tick
-        }
     }
 
     private func feedbackBanner(_ feedback: RemoteCommandFeedback) -> some View {

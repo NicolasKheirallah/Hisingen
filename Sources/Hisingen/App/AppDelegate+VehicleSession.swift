@@ -17,7 +17,7 @@ extension AppDelegate: VehicleSessionControllerContext {
         miniPanel.update(state: state)
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
-        chargingPlannerController.vehicleStateDidUpdate(state)
+        chargingPlannerController.vehicleStateDidUpdate()
         if !state.commandState.hasAwaitingTelemetryConfirmation {
             fleetStore.retain(state)
         }

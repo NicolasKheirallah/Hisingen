@@ -100,6 +100,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case controlsAccess = "controls-access"
     case controlsWindowsLocate = "controls-windows-locate"
     case controlsOTA = "controls-ota"
+    case controlsRoutines = "controls-routines"
 
     // Shared headers, offered to any tab
     case vehicleSwitcher = "vehicle-switcher"
@@ -142,16 +143,13 @@ struct TabItem: Identifiable, Hashable, Sendable {
 /// designed in. It is the fallback for every reader who never opens the new settings pane,
 /// so a tab must render identically to the pre-composition build when nothing is customised.
 enum TabItemCatalog {
-    /// Kept as decodeable ids so an existing custom layout still loads, but no longer offered in
-    /// the editor: these detail cards and their wrapper duplicate sections now owned by Info.
+    /// Ids an older layout can still contain. The catalogue no longer carries their metadata,
+    /// `normalized()` drops them, and the editor never offers them: these detail cards and their
+    /// wrapper duplicated the sections Info now owns.
     static let retiredVehicleDetailItems: Set<TabItemID> = [
         .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
         .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
     ]
-
-    static func isRetired(_ id: TabItemID) -> Bool {
-        retiredVehicleDetailItems.contains(id)
-    }
 
     static let all: [TabItem] = [
         // MARK: Vehicle
@@ -191,24 +189,6 @@ enum TabItemCatalog {
         TabItem(id: .vehicleLocation, title: L10n.text("Vehicle Location"), symbol: "location.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Parking position, address and Apple Maps link.", feature: .vehicleLocation),
-        TabItem(id: .vehicleMore, title: L10n.text("More"), symbol: "ellipsis.circle",
-                sourceTab: .vehicle, kind: .card,
-                detail: "The collapsed disclosure that holds the five detail cards below.", feature: nil),
-        TabItem(id: .vehicleIdentityDetail, title: L10n.text("Vehicle Identity"), symbol: "car.side",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Plate, VIN, odometer, service due and trip meters.", feature: .vehicleIdentity),
-        TabItem(id: .vehicleLighting, title: L10n.text("Vehicle Health & Lighting"), symbol: "shield.lefthalf.filled",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Fluid and lamp warning flags, 12 V battery.", feature: .vehicleHealth),
-        TabItem(id: .vehicleClimate, title: L10n.text("Climate & Timers"), symbol: "fan",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Cabin climate, active timers, schedules, air quality, weather.", feature: .climateStatus),
-        TabItem(id: .vehicleSoftware, title: L10n.text("Vehicle Software"), symbol: "gearshape.2.fill",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Installed and announced versions with release notes.", feature: .softwareUpdates),
-        TabItem(id: .vehicleDiagnostics, title: L10n.text("Diagnostics & Sensors"), symbol: "stethoscope",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Range versus WLTP, network state, average speed and consumption.", feature: .batteryDiagnostics),
 
         // MARK: Info
         TabItem(id: .infoOverview, title: L10n.text("Overview"), symbol: "photo.artframe",
@@ -267,7 +247,7 @@ enum TabItemCatalog {
                 detail: "Upholstery, steering orientation and cabin equipment.", feature: .vehicleIdentity),
         TabItem(id: .infoChargeLocations, title: L10n.text("Saved Charge Locations"), symbol: "mappin.circle.fill",
                 sourceTab: .info, kind: .card,
-                detail: "Saved charging locations and their aliases.", feature: .chargingDetails),
+                detail: "Saved charging locations and their aliases.", feature: .chargeLocations),
         TabItem(id: .infoFactoryBuild, title: L10n.text("Factory Build & Identity"), symbol: "hammer.fill",
                 sourceTab: .info, kind: .card,
                 detail: "Build week, factory specification and market data.", feature: .vehicleIdentity),
@@ -383,6 +363,10 @@ enum TabItemCatalog {
         TabItem(id: .controlsOTA, title: L10n.text("Vehicle software controls"), symbol: "arrow.down.circle.fill",
                 sourceTab: .info, kind: .card,
                 detail: "Install an available software update now.", feature: .remoteOTA),
+        TabItem(id: .controlsRoutines, title: L10n.text("Routines"), symbol: "list.bullet.rectangle",
+                sourceTab: .controls, kind: .card,
+                detail: "Save a sequence of commands to send in order, such as starting climate, setting a charge target and locking.",
+                feature: nil),
 
         // MARK: Shared headers
         TabItem(id: .vehicleSwitcher, title: L10n.text("Vehicle switcher"), symbol: "car.2.fill",
@@ -409,14 +393,68 @@ enum TabItemCatalog {
     static func symbol(_ id: TabItemID) -> String { byID[id]?.symbol ?? "square.dashed" }
 
     static func items(in tab: BuiltInTab) -> [TabItem] {
-        all.filter { $0.sourceTab == tab && !isRetired($0.id) }
+        all.filter { $0.sourceTab == tab }
     }
 
     static var headers: [TabItem] { all.filter { $0.kind == .header } }
 
-    static var cards: [TabItem] { all.filter { $0.isCard && !isRetired($0.id) } }
+    static var cards: [TabItem] { all.filter(\.isCard) }
+
+    /// Cards that draw from the snapshot, the reader's preferences and the command gate alone.
+    /// A tab of the reader's own can render these wherever they are put; every other card owns
+    /// state that only the tab it came from supplies.
+    static let standaloneItems: Set<TabItemID> = [
+        .vehicleSwitcher,
+        .vehicleHero,
+        .vehicleCharging,
+        .vehicleChargingPlanner,
+        .vehicleOpenings,
+        .vehicleTyres,
+        .vehicleReadiness,
+        .vehicleLocation,
+        .vehicleWeather,
+        .vehicleReceipts,
+        .vehicleAttention,
+        .controlsClimate,
+        .controlsAccess,
+        .controlsWindowsLocate,
+        .controlsOTA
+    ]
+
+    static func isStandalone(_ id: TabItemID) -> Bool { standaloneItems.contains(id) }
+
+    /// Standalone cards that may be appended to a shipped tab. The vehicle switcher is a
+    /// header, so it stays in the tab strip of a tab of the reader's own rather than being
+    /// appended below another tab's cards.
+    static let portableCards: Set<TabItemID> = standaloneItems.filter {
+        item($0)?.isCard == true
+    }
+
+    /// Whether `tab` can ever draw `id`.
+    ///
+    /// Settings, the card picker, the composition and the tab views all ask this one question.
+    /// A shipped tab draws its own layout and may also take a standalone card from another tab;
+    /// a tab of the reader's own may name any card, and `TabCardStack` states which of them it
+    /// draws and which stay on their home tab. Settings itself draws no cards.
+    static func canRender(_ id: TabItemID, on tab: TabRef) -> Bool {
+        guard let builtIn = tab.builtIn else { return true }
+        guard builtIn != .settings else { return false }
+        return Set(defaultItems(for: builtIn)).union(portableCards).contains(id)
+    }
+
+    /// The items `tab` draws. A shipped tab draws its own layout plus any portable cards
+    /// placed on it; a tab of the reader's own draws only standalone cards, because the rest
+    /// need the tab that gives them state. `TabCardStack` names those separately.
+    static func roster(for tab: TabRef) -> Set<TabItemID> {
+        guard let builtIn = tab.builtIn else { return standaloneItems }
+        guard builtIn != .settings else { return [] }
+        return Set(defaultItems(for: builtIn)).union(portableCards)
+    }
 
     /// The shipped layout of each built-in tab, in the order it was designed in.
+    ///
+    /// This is also the roster of what that tab can draw: Settings lists it, the picker offers
+    /// it, and the tab view iterates it. A card that is not here has no renderer on that tab.
     static func defaultItems(for tab: BuiltInTab) -> [TabItemID] {
         switch tab {
         case .vehicle:
@@ -424,8 +462,7 @@ enum TabItemCatalog {
                 .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
                 .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
                 .vehicleFuelEngine, .vehicleReadiness, .vehicleOpenings, .vehicleTyres,
-                .vehicleLocation, .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
-                .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
+                .vehicleLocation
             ]
         case .info:
             return [
@@ -449,7 +486,7 @@ enum TabItemCatalog {
         case .controls:
             return [
                 .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
-                .controlsClimate, .controlsEngine
+                .controlsClimate, .controlsEngine, .controlsRoutines
             ]
         case .settings:
             // Settings is its own surface, managed by the settings sections rather than by

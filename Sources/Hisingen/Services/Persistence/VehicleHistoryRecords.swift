@@ -76,6 +76,9 @@ struct WallboxMeasurement: Codable, Equatable, Sendable {
     var currency: String?
     /// How the session was matched to its vehicle (`overlap`, `dedicated`, or why it is unassigned).
     var attribution: String?
+    /// The vendor's raw start and stop tokens (see `ChargerSessionStart` and `ChargerSessionEnd`).
+    var startReason: String?
+    var stopReason: String?
 
     var isEstimatedCost: Bool { costMethod != nil && costMethod != HomeSessionCost.Method.intervalTibber.rawValue }
 }

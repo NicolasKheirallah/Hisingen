@@ -118,16 +118,11 @@ struct SettingsActionsCard: View {
     private func exportSettings() {
         do {
             let data = try preferences.exportSettingsPropertyList()
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.propertyList]
-            panel.nameFieldStringValue = "hisingen-settings.plist"
-            panel.begin { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try data.write(to: url, options: .atomic)
-                    settingsTransferFeedback = (L10n.text("Settings exported."), false)
-                } catch {
+            FileExport.save(data, type: .propertyList, filename: "hisingen-settings.plist") { _, error in
+                if let error {
                     settingsTransferFeedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
+                } else {
+                    settingsTransferFeedback = (L10n.text("Settings exported."), false)
                 }
             }
         } catch {

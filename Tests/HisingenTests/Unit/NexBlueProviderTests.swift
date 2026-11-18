@@ -88,6 +88,59 @@ struct NexBlueProviderTests {
         #expect(telemetry.cableLocked?.value == true)
     }
 
+    @Test func statusCarriesPhasesLimitsPhaseModeAndNetwork() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json("""
+            {"charging_state":2,"power":6.9,"voltage_list":[228,227,228],"current_list":[10.1,10.0,10.2],
+             "cable_current_limit":20,"circuit_fuse":16,"current_limit":16,"phase_charging":0,"network_status":2}
+            """))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.phases == .init(value: [.init(volts: 228, amps: 10.1), .init(volts: 227, amps: 10.0),
+                                                  .init(volts: 228, amps: 10.2)], timestamp: now))
+        #expect(telemetry.cableLimitAmps?.value == 20)
+        #expect(telemetry.circuitFuseAmps?.value == 16)
+        #expect(telemetry.phaseMode?.value == .adaptive)
+        #expect(telemetry.network?.value == .mobile)
+        #expect(telemetry.limits?.binding == .setting)
+    }
+
+    @Test func statusLeavesOutWhatTheChargerDoesNotReport() async throws {
+        let transport = cloud()
+        // Zero is the vendor's "no cable" for the cable rating; an unknown code is not guessed into a mode.
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json("""
+            {"charging_state":0,"cable_current_limit":0,"circuit_fuse":0,"phase_charging":9,"network_status":9,
+             "voltage_list":[228],"current_list":[]}
+            """))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.phases == nil)
+        #expect(telemetry.cableLimitAmps == nil)
+        #expect(telemetry.circuitFuseAmps == nil)
+        #expect(telemetry.phaseMode == nil)
+        #expect(telemetry.network == nil)
+
+        let bare = cloud()
+        bare.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1,"power":0}"#))
+        let minimal = try await provider(bare).telemetry(chargerID: serial, now: now)
+        #expect(minimal.status?.value == .pluggedIn)
+        #expect(minimal.phases == nil && minimal.phaseMode == nil && minimal.network == nil)
+    }
+
+    @Test func historyCarriesTheVendorStartAndStopReasons() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/sessions/charger/" + serial, .json("""
+            {"data":[
+              {"start_timestamp":1779996400,"end_timestamp":1779998200,"consumption":5.5,"start_reason":"Schedule","stop_reason":"EVDisconnected"},
+              {"start_timestamp":1779993000,"end_timestamp":1779994000,"consumption":2.5}
+            ]}
+            """))
+        let candidates = try await provider(transport).sessions(chargerID: serial, from: now.addingTimeInterval(-7_200), to: now)
+        let withReasons = try #require(candidates.first { $0.energyKwh == 5.5 })
+        #expect(withReasons.startReason == "Schedule")
+        #expect(withReasons.stopReason == "EVDisconnected")
+        let without = try #require(candidates.first { $0.energyKwh == 2.5 })
+        #expect(without.startReason == nil && without.stopReason == nil)
+    }
+
     @Test func startAndStopValidateTheCommandResult() async throws {
         let transport = cloud()
         let start = root + "/chargers/NX123/cmd/start_charging"

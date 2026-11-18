@@ -69,9 +69,10 @@ extension EnergyAndChargingSnapshot {
                 : (policy.features.contains(.chargingSchedule) ? previous.schedules : []),
             // Locations are only re-shown when this fetch actually returned them or when the
             // feature was not refreshed; an empty result after a successful refresh clears
-            // rather than holding stale locations.
+            // rather than holding stale locations. Switching the feature off drops them at once.
             locations: !locations.isEmpty ? locations
-                : (policy.keep(.chargingDetails) ? previous.locations : []),
+                : (policy.features.contains(.chargeLocations) && policy.keep(.chargingDetails)
+                    ? previous.locations : []),
             // A failed charge-now read must not keep a stale override pill alive: nil the
             // flag for this cycle rather than carrying the last success forward.
             chargeNowActive: policy.failedFeatures.contains(.remoteCharging)

@@ -223,24 +223,38 @@ four arrange as two by two, and accessibility text sizes stack them in one colum
 
 ### Tabs & Cards
 
-Every card, section and banner in Hisingen is yours to place. **Settings → Tabs &
-Cards** lists them per tab, and each one can be switched off, moved up or down, dragged
-into a new position, or removed. The layout is stored once and read by the tabs
-themselves, so what that pane shows is what the panel draws.
+**Settings → Tabs & Cards** lists the cards each tab can draw. A card can be switched
+off, moved up or down, dragged into a new position, or removed; the pane and the tab
+read the same list, so a card you switch off does not reappear and one you remove
+leaves the tab. A shipped tab takes its own cards back and any card that stands on its
+own from another tab, which draws below that tab's own cards. Cards that own a tab's
+own state, such as the Log charts and the Car section bars, stay where that state is.
 
-Hiding a card also stops Hisingen asking the vehicle for the data behind it — the
+A card drawn inside another keeps its own row here: the weather line and the departure
+check inside the Now hero switch off with their rows. Plan's departure timeline is part
+of the tab rather than a card, so it stays put.
+
+Some rows say the car has not supplied what the card needs yet (**Not reported**) or
+that this vehicle does not have the capability (**Not supported**). A card whose reading
+is switched off shows **Data off**. The row stays so you can switch it off in advance.
+
+Hiding a card also stops Hisingen asking the vehicle for the data behind it: the
 provider request is gated on the same setting. Switching the card back on resumes the
 fetch. An install that predates this pane reads its existing feature toggles once as a
 starting layout, so a card that was already off does not reappear.
 
 **Tabs of your own.** *New tab* in the same pane creates a tab, names it and gives it an
-icon; *Add Cards…* places anything you want on it, from any of the shipped tabs. Cards
-are drawn by the same views the shipped tabs use, so the charging card behaves the same
-whether it is on Now or on a tab you built. Cards that own a tab's own state — the
-Log charts and the Car section bars — stay on the tab that gives them that state,
-and the pane names them rather than leaving them out silently.
+icon; *Add Cards…* places any card that stands on its own on it, from any of the shipped
+tabs. Cards are drawn by the same views the shipped tabs use, so the charging card
+behaves the same whether it is on Now or on a tab you built. Switching a card off on one
+of your tabs hides it there only; its own tab keeps it, and a card switched off on its own
+tab can still be placed on one of yours. Cards that own a tab's own state
+(the Log charts and the Car section bars) stay on the tab that gives them that state. If
+one is already on a tab of your own, that tab names it and says where it lives rather
+than dropping it silently.
 
-Any of Now, Plan, Log and Car can also be hidden from the tab bar.
+The pane returns to the tab you were arranging, and a hidden tab carries an eye-slash
+mark in the strip. Any of Now, Plan, Log and Car can be hidden from the tab bar.
 Settings is always there: it is where the list is managed.
 
 **Tab order.** The tab bar draws your tabs in your order, not the order they were

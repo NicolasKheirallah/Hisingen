@@ -183,16 +183,12 @@ extension InfoTabView {
     }
 
     private func presentBatteryHealthSavePanel(csv: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "battery_health_\(state.identity.vin.prefix(8)).csv"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try csv.write(to: url, atomically: true, encoding: .utf8)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            } catch {
+        FileExport.save(csv, type: .commaSeparatedText,
+                        filename: "battery_health_\(state.identity.vin.prefix(8)).csv") { _, error in
+            if let error {
                 reportError = error.localizedDescription
+            } else {
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }
     }

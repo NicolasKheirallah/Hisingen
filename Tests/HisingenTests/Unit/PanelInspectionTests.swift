@@ -69,7 +69,7 @@ struct PanelInspectionTests {
 
         let account = AccountConnectionModel(preferences: preferences, keychain: keychain, builtinCredentials: .init())
         let history = HistoryWorkspace(database: database, preferences: preferences)
-        let cache = CarImageCache(cacheDirectory: output.appendingPathComponent("fixture-cache"), database: database)
+        let cache = CarImageCache(database: database)
         let actions = PanelActions(
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {}, onOpenUpdate: {},
             onRemoteCommand: { _ in }, onSelectCar: { _ in }, onDismissCommandReceipt: { _ in },

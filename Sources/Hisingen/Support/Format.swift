@@ -20,12 +20,6 @@ enum Format {
         powerKw(Double(watts) / 1_000)
     }
 
-    private static let groupedDistanceFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-
     static func distance(km: Int, grouped: Bool = false, unit: DistanceUnit) -> String {
         let parts = distanceParts(km: km, grouped: grouped, unit: unit)
         return "\(parts.value) \(parts.unit)"
@@ -35,33 +29,20 @@ enum Format {
     /// localized presentation string back into data.
     static func distanceParts(km: Int, grouped: Bool = false, unit: DistanceUnit) -> DistanceParts {
         let value = unit.convert(km: km)
-        groupedDistanceFormatter.locale = L10n.displayLocale
         if grouped {
             return DistanceParts(
-                value: groupedDistanceFormatter.string(from: NSNumber(value: value)) ?? String(value),
+                value: formattedNumber(Double(value), decimals: 0, grouping: true) ?? String(value),
                 unit: unit.suffix
             )
         }
         return DistanceParts(value: String(value), unit: unit.suffix)
     }
 
-    /// Locale decimal separator, grouping deliberately off: the non-grouped `Int` variant above
-    /// never grouped either, and a live catch found the fixed "." rendering "591.0 km" beside
-    /// "238,2 kWh" on the same sv-SE History screen.
-    private static let decimalDistanceFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = false
-        return formatter
-    }()
-
+    /// Locale decimal separator, grouping off unless asked: a live catch found a fixed "."
+    /// rendering "591.0 km" beside "238,2 kWh" on the same sv-SE History screen.
     static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit, grouped: Bool = false) -> String {
         let value = unit == .kilometers ? km : km * UnitConversion.kilometersPerMile
-        decimalDistanceFormatter.locale = L10n.displayLocale
-        decimalDistanceFormatter.usesGroupingSeparator = grouped
-        decimalDistanceFormatter.minimumFractionDigits = decimals
-        decimalDistanceFormatter.maximumFractionDigits = decimals
-        let formatted = decimalDistanceFormatter.string(from: NSNumber(value: value))
+        let formatted = formattedNumber(value, decimals: decimals, grouping: grouped)
             ?? String(format: "%.*f", decimals, value)
         return "\(formatted) \(unit.suffix)"
     }
@@ -172,21 +153,40 @@ enum Format {
     /// Locale-aware decimal, so a comma-decimal system never renders "12,3" as "12.3" (or a
     /// grouped thousands separator lands mid-number). Shared across the History dashboard's
     /// many small numeric labels.
-    private static let decimalFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-    private static let decimalFormatterLock = NSLock()
+    private struct NumberFormatKey: Hashable {
+        let locale: String
+        let decimals: Int
+        let grouping: Bool
+    }
+    private static let numberFormatterLock = NSLock()
+    nonisolated(unsafe) private static var numberFormatters: [NumberFormatKey: NumberFormatter] = [:]
+
+    /// One configured formatter per (language, decimals, grouping), built once. Re-pointing a single
+    /// shared formatter at a new locale and digit count on every call made ICU reconfigure each
+    /// time consecutive labels differed in precision, which is what a dashboard does. Keying on the
+    /// locale identifier keeps a language switch effective on the very next call.
+    private static func formattedNumber(_ value: Double, decimals: Int, grouping: Bool) -> String? {
+        let locale = L10n.displayLocale
+        let key = NumberFormatKey(locale: locale.identifier, decimals: decimals, grouping: grouping)
+        numberFormatterLock.lock()
+        defer { numberFormatterLock.unlock() }
+        let formatter: NumberFormatter
+        if let cached = numberFormatters[key] {
+            formatter = cached
+        } else {
+            formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = locale
+            formatter.minimumFractionDigits = decimals
+            formatter.maximumFractionDigits = decimals
+            formatter.usesGroupingSeparator = grouping
+            numberFormatters[key] = formatter
+        }
+        return formatter.string(from: NSNumber(value: value))
+    }
 
     private static func decimal(_ value: Double, decimals: Int, grouping: Bool = false) -> String {
-        decimalFormatterLock.lock()
-        defer { decimalFormatterLock.unlock() }
-        decimalFormatter.locale = L10n.displayLocale
-        decimalFormatter.minimumFractionDigits = decimals
-        decimalFormatter.maximumFractionDigits = decimals
-        decimalFormatter.usesGroupingSeparator = grouping
-        return decimalFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.*f", decimals, value)
+        formattedNumber(value, decimals: decimals, grouping: grouping) ?? String(format: "%.*f", decimals, value)
     }
 
     /// "12.3 kWh" with the platform's decimal separator.
@@ -260,6 +260,14 @@ enum Format {
     /// access, so a reader who switches the interface language sees dates follow immediately
     /// without a process restart. Exposure is deliberately through computed properties that
     /// do that one assignment first.
+    /// Assigns the locale only when the language actually changed: a `DateFormatter` discards its
+    /// cached pattern whenever `locale` is set, even to an equal value.
+    private static func localized(_ formatter: DateFormatter) -> DateFormatter {
+        let locale = L10n.displayLocale
+        if formatter.locale != locale { formatter.locale = locale }
+        return formatter
+    }
+
     private static let _dateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -268,8 +276,7 @@ enum Format {
     }()
 
     static var dateTimeFormatter: DateFormatter {
-        _dateTimeFormatter.locale = L10n.displayLocale
-        return _dateTimeFormatter
+        return localized(_dateTimeFormatter)
     }
 
     private static let _dateFormatter: DateFormatter = {
@@ -280,8 +287,7 @@ enum Format {
     }()
 
     static var dateFormatter: DateFormatter {
-        _dateFormatter.locale = L10n.displayLocale
-        return _dateFormatter
+        return localized(_dateFormatter)
     }
 
     private static let _timeFormatter: DateFormatter = {
@@ -292,8 +298,7 @@ enum Format {
     }()
 
     static var timeFormatter: DateFormatter {
-        _timeFormatter.locale = L10n.displayLocale
-        return _timeFormatter
+        return localized(_timeFormatter)
     }
 
     /// Shared ISO-8601 formatter for exports (previously constructed per session row).

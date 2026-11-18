@@ -37,14 +37,14 @@ extension RefreshCoordinator {
                     guard let self, requestGeneration == self.generation,
                           let authoritative = self.latestAuthoritative,
                           authoritative.identity.vin == vin else { return false }
-                    let current = await Task.detached(priority: .userInitiated) {
-                        var updated = authoritative
-                        updated.applyLiveUpdate(update)
-                        updated.stripPresentationState()
-                        return updated
-                    }.value
-                    guard requestGeneration == self.generation,
-                          self.latestAuthoritative?.identity.vin == vin else { return false }
+                    // Merged on the main actor with no suspension between reading the baseline and
+                    // writing it back. A poll's `apply` can therefore never land in between and
+                    // be overwritten by a frame built from the state it just replaced. The merge is
+                    // a few field assignments over copy-on-write storage, so there is nothing to
+                    // gain from leaving the actor.
+                    var current = authoritative
+                    current.applyLiveUpdate(update)
+                    current.stripPresentationState()
                     latestAuthoritative = current
                     let frameTime = now()
                     if frameTime.timeIntervalSince(lastPersistAt) >= 10 {
@@ -116,8 +116,8 @@ extension RefreshCoordinator {
         guard let state else { return nil }
         // The loop owns which purpose could prove an awaiting command; the routine charging
         // stream is this coordinator's own fallback.
-        if case .stream(let commandPurpose) = confirmations.transport(
-            for: state, realTimeEnabled: preferences.features.contains(.realTimeUpdates)
+        if let commandPurpose = confirmations.confirmationStreamPurpose(
+            realTimeEnabled: preferences.features.contains(.realTimeUpdates)
         ) {
             return commandPurpose
         }

@@ -375,9 +375,7 @@ class Runtime:
             # Progress counts from now: the counter's current value is the baseline.
             plan.last_energy = snapshot.energy_kwh
             self.plans[charger_id] = plan
-        await self._evaluate(charger_id)
-        await self._save_now()
-        return self._response(charger_id)
+        return await self._apply_plan_change(charger_id)
 
     async def _svc_preview(self, call: ServiceCall) -> dict[str, Any]:
         data = dict(call.data)
@@ -394,7 +392,7 @@ class Runtime:
             plan.last_energy = snapshot.energy_kwh
             slots = await self._slots(charger_id, plan.deadline, now)
             engine.step(plan, snapshot, battery, slots, now, self._history_rates(charger_id))
-        # Nothing is stored and no command is sent: the plan only existed to be looked at.
+        # Preview updates the charger mapping for telemetry. It keeps the plan temporary and discards its command.
         return {"state": plan.phase, "attributes": plan.attributes(self.hass.config.currency, PRICE_SOURCE)}
 
     async def _svc_cancel(self, call: ServiceCall) -> dict[str, Any]:
@@ -416,9 +414,7 @@ class Runtime:
             plan = self._active_plan(charger_id)
             plan.hold = True
             plan.override = False
-        await self._evaluate(charger_id)
-        await self._save_now()
-        return self._response(charger_id)
+        return await self._apply_plan_change(charger_id)
 
     async def _svc_resume(self, call: ServiceCall) -> dict[str, Any]:
         charger_id = call.data["charger_id"]
@@ -426,9 +422,7 @@ class Runtime:
             plan = self._active_plan(charger_id)
             plan.hold = False
             plan.last_command = None
-        await self._evaluate(charger_id)
-        await self._save_now()
-        return self._response(charger_id)
+        return await self._apply_plan_change(charger_id)
 
     async def _svc_charge_now(self, call: ServiceCall) -> dict[str, Any]:
         charger_id = call.data["charger_id"]
@@ -437,6 +431,9 @@ class Runtime:
             plan.override = True
             plan.hold = False
             plan.last_command = None
+        return await self._apply_plan_change(charger_id)
+
+    async def _apply_plan_change(self, charger_id: str) -> dict[str, Any]:
         await self._evaluate(charger_id)
         await self._save_now()
         return self._response(charger_id)

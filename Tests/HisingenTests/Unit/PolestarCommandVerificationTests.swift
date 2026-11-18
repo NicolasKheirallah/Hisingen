@@ -20,9 +20,7 @@ struct PolestarCommandVerificationTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let keychain = KeychainStore(service: suiteName)
         let preferences = PreferencesStore(defaults: defaults, keychain: keychain)
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let cache = CarImageCache(cacheDirectory: directory,
+        let cache = CarImageCache(
             database: VehicleDatabase(database: try SQLiteDatabase(path: ":memory:")))
         let api = PolestarAPI(keychain: keychain, imageCache: cache, preferences: preferences,
                               diagnosticLog: APIDiagnosticLogStore())

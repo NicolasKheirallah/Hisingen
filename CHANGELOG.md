@@ -3,6 +3,154 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Connect a Perific house meter in Settings → Electricity → House Meter. Sign in with your Perific
+  account and the charger card shows what the whole house draws; while the car charges it splits
+  that into the car and the rest of the house. A House Meter list gives voltage and current in each
+  phase and today's imported energy. Car Share of House Load in Log reads the meter's hourly import
+  when Tibber is not connected. It is read only: Hisingen never changes anything in Perific and the
+  charger's load balancing stays as it is. Power is worked out from current and voltage, so it can
+  read slightly above what your supplier bills, and a reading older than three minutes is shown as
+  last known. Perific has no public interface, so this uses the same cloud as the Perific app and
+  could stop working if Perific changes it. The new wording is translated into Swedish; the other
+  languages show English for these strings until they are translated.
+
+- See how each NexBlue charging session began and ended. Open a session in Log and its details add
+  Started (at the charger, remotely, by schedule, by an administrator, on plug-in or after an
+  error) and Ended (cable unplugged, charge complete, remotely, by schedule, held by load
+  balancing, and others). A power loss or an emergency stop is marked with a warning. Sessions
+  imported earlier gain their reasons the next time they are imported.
+- Read the NexBlue charger's supply on the charger card. A new Charger details list shows voltage
+  and current in each phase, the current limit, the cable rating, the circuit fuse, the phase mode
+  and the charger's network. While charging, a line under the session figure shows each phase's
+  current against the limit. The limit row says when the cable or the circuit fuse is lower than
+  the limit you set. Home Assistant and the other direct chargers report none of this, so their
+  card is unchanged. The new wording is translated into Swedish; the other languages show English
+  for these strings until they are translated.
+
+- Switch saved charge locations on or off in Settings → Features → Charging & Energy. It is off
+  by default, including after an update. While it is off, Hisingen does not read the places saved
+  on the car, so the saved-locations list on Plan and the Car card stay empty, and the
+  Home Charging place picker has nothing to offer. This covers both the Polestar ID and the Data
+  Portal connection. Turning it off clears the locations already on screen.
+- Plan charging from your Tibber prices. With Tibber connected in Settings → Electricity, the
+  Charging Planner and the charge-to-target estimate read Tibber's 15-minute prices first. They
+  fall back to Elpriser (elprisetjustnu.se) when Tibber is not connected, does not answer, or has
+  less than an hour of prices ahead. After a failure Tibber is asked again at most every 15
+  minutes. Tibber's price already includes taxes and its markup, so your markup and VAT settings
+  apply to Elpriser prices only.
+- Add your network fee to Tibber's prices. Settings → Electricity → Electricity Supplier has a
+  "Network fee, öre per kWh" field. The planner adds it to Tibber's price, and charger sessions use
+  it when the charger has no fee of its own. A fee set on the paired charger still wins. Costs of
+  past sessions priced from market prices do not use it.
+- Read Tibber's price level in the Charging Planner. With Tibber connected, "Now" and "Planned
+  average" add Tibber's own rating of that price, from very cheap to very expensive. The planned
+  window shows the level most of its quarter-hours sit at. Elpriser prices carry no level.
+- Show how much of the house's electricity the car used. With Tibber connected and a home charger
+  measuring sessions, Log → Charging Trends adds Car Share of House Load, House Consumption, Car at
+  Home and Rest of the House for the selected period, from Tibber's hourly meter readings. Only
+  charger-measured home sessions count, because charging elsewhere never reaches the house meter.
+  Hours Tibber has no reading for are left out instead of counted as zero.
+- Show your Tibber home's price area and grid company in Settings → Electricity. When the price
+  area differs from the zone the planner reads market prices for, Settings offers to switch to it.
+- Show where the planner's prices come from. A Prices row under the Charging Planner header reads
+  Tibber or Elpriser. When Tibber is connected but did not answer, it reads "Elpriser, Tibber
+  unavailable" in the warning colour, and its info button gives the reason.
+- Show missing prices on the planner's chart. Once tomorrow's prices are due and have not arrived,
+  the chart keeps room for them and marks it "Not published yet", where it used to end early.
+
+### Changed
+
+- Open Settings → All faster and scroll it more smoothly. The cards are built as they come into
+  view instead of all at once.
+- Start the Smart Charging Planner's one-minute timer only when the planner is available, instead
+  of on every launch.
+- Delete the old car-image folder under Caches once instead of reading it as a fallback. A render
+  that only existed there is downloaded again.
+- Run the theme-rename migration once at launch. Importing settings still applies it every time.
+- Normalise a VIN in one helper instead of 42 inline copies. Nothing about how VINs match changes.
+- Redraw the Charging Planner so the prices are easy to read. The cheapest window leads as the
+  largest time, with its day and the energy it charges underneath. The planned average and the
+  price now sit as figures over labels, in kr/kWh, followed by what waiting saves. They used to be
+  part of one sentence.
+- The planner's price chart now shows one bar per hour, with the quarter-hour prices averaged into
+  the hour they fall in. Bars start at zero and are all one grey. The planned hours take the live
+  colour, amber in Monochrome Precision, on a faint band of the same colour, where they used to be
+  green. Height is the only thing that shows price, so the chart no longer depends on colour or
+  opacity. Gridlines carry real kr values, a hairline and the weekday mark each midnight, and a
+  tick marks now. Hover a bar to read its hour and price, as before. A negative spot price extends
+  below zero.
+- The planner's charge sentence now reads "Charge 45.4 kWh over 7 h to reach 90%". Its average and
+  current price moved into the figures above it.
+- Add the "Planned average" label and the shorter charge sentence in all 15 languages. The Chinese
+  charge sentence was untranslated English and is now translated.
+- The Current price row in Settings → Electricity shows the price from the source in use, with a
+  line saying where it comes from. With Tibber connected, the markup fields below do not change
+  it.
+- The new Tibber, network fee and price-source texts are translated to Swedish. The other 13
+  languages show the English text until they are translated.
+
+The remaining entries here are code cleanup. Nothing on screen changes, and the CSV, JSON and
+backup files keep their columns, number formats and quoting.
+
+- Build the trip and charging-session CSV columns in one place. Exporting the full history and
+  exporting the selected period still differ as before: the full export writes plain numbers and
+  turns commas in a location name into spaces, and the period export uses your language's number
+  format and quotes cells. The period trip export no longer quotes the trip ID and VIN twice,
+  which only differs for a value containing a comma or a quote.
+- Share one ISO 8601 date formatter and one ISO JSON coder across the exports, the backup and
+  the diagnostic report, in place of 18 formatters and 4 coder variants.
+- Route 11 of the 12 save panels (CSV and JSON exports, settings export, vehicle report,
+  charging history, capability matrix, diagnostic report) through one helper. The Factory
+  Passport, history-tab and diagnostic exports still wait on the panel as before. The vehicle
+  image save keeps its own panel because it writes on a background task.
+- Replace the nested fallback chains behind the vehicle title with one ordered list per label
+  format.
+- Share one cancellation check across the Polestar provider's catch blocks and map an
+  unrecognized error without a per-brand switch whose two branches were identical.
+
+### Fixed
+
+- Make Settings → Tabs & Cards list the cards each tab actually draws. The six Now cards that
+  moved into Car in 3.0 no longer appear as rows on Now, Plan's Routines card is listed and can be
+  switched off, a card from another tab can no longer be added to a shipped tab that has no view
+  for it, the card count leaves out section headers, and an older layout keeps the lock, windows
+  and software controls that moved to Car.
+- Finish the Tabs & Cards contract. A card from another tab now draws on the tab you place it
+  on, below that tab's own cards; switching a card off on one of your own tabs no longer hides it
+  on the tab it came from; a row says "Not reported" or "Not supported" when the car cannot fill
+  it; and the pane reopens on the tab you were arranging, with hidden tabs marked in the strip.
+- Keep a charger login that was saved before pairing. Signing in to NexBlue, Easee or Zaptec saves
+  the login, but a charger is only paired with "Pair charger". Leaving Settings first sent you back
+  to the Home Assistant choice and an empty sign-in form, so the login looked lost. Settings now
+  opens on the vendor with a saved login, reads its chargers again, and shows "Signed in to
+  NexBlue" with a Sign out button. If the vendor no longer accepts the login, you are asked to
+  sign in again.
+- Stop a failing Polestar software-schedule read from holding every refresh for about six seconds.
+  When `GetSchedule` fails with an invalid response, it is skipped for six hours on routine
+  refreshes. Command verification still asks for it.
+- Request Polestar charge locations once per refresh instead of twice. The schedules read and the
+  locations read now share one request.
+- Make the Live API Diagnostics list scroll and search without stalling. It no longer rebuilds
+  every row each second, searches large payloads without copying them, and filters off the main
+  thread. Requests that share a timestamp are separate rows, so expanding one no longer opens the
+  others.
+
+### Removed
+
+- Remove `ServiceErrorPolicy`, a wrapper that returned the error it was given. Callers use
+  `VehicleServiceError.map` directly.
+- Remove helpers nothing in the app called: the stable state-of-health wrapper, the range
+  against WLTP percentage, the charging-by-departure message wrapper and the status item's
+  context-action list. The wallbox read helpers that only tests used moved into the test target.
+- Remove the unused `isConfigured` and `hasDataPortalCredentials` flags from the generated
+  Polestar secrets file and its generator. The release-script fixture test now checks that the
+  client secret is empty instead.
+- Remove protocol doc comments in `VehicleProviding` that described members declared elsewhere.
+
 ## [3.0.0] - 2026-11-16
 
 ### Added

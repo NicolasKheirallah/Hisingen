@@ -41,6 +41,8 @@ extension ChargingSessionLedger {
         var cost: Double?
         var start: Date
         var end: Date
+        var startReason: String?
+        var stopReason: String?
     }
 
     /// Vehicle-observed sessions near a window, for matching. Rows the charger created are not
@@ -148,6 +150,10 @@ extension ChargingSessionLedger {
     private static func sameFigures(_ row: WallboxRowRef, _ candidate: HomeChargingSessionCandidate, cost: HomeSessionCost?) -> Bool {
         guard let energy = row.energyKwh, abs(energy - candidate.energyKwh) < 0.0005,
               let measured = row.measuredAt, abs(measured.timeIntervalSince(candidate.measuredAt)) < 0.5 else { return false }
+        // A reason the row lacks makes the figures differ, so a session stored before reasons
+        // existed is rewritten once. A candidate with none never counts as a difference.
+        if let start = candidate.startReason, start != row.startReason { return false }
+        if let stop = candidate.stopReason, stop != row.stopReason { return false }
         switch (row.cost, cost?.amount) {
         case (nil, nil): return true
         case let (a?, b?): return abs(a - b) < 0.005
@@ -193,7 +199,8 @@ extension ChargingSessionLedger {
     private static let wallboxRefSelect = """
         SELECT id, wallbox_key_kind, wallbox_session_key, wallbox_measured_at, wallbox_energy_kwh, wallbox_cost,
                COALESCE(wallbox_started_at, started_at),
-               COALESCE(wallbox_ended_at, ended_at, started_at)
+               COALESCE(wallbox_ended_at, ended_at, started_at),
+               wallbox_start_reason, wallbox_stop_reason
         FROM charging_sessions
         """
 
@@ -201,7 +208,8 @@ extension ChargingSessionLedger {
         guard let id = stmt.columnText(at: 0), let start = stmt.columnDate(at: 6), let end = stmt.columnDate(at: 7) else { return nil }
         return WallboxRowRef(id: id, keyKind: stmt.columnText(at: 1), key: stmt.columnText(at: 2),
                              measuredAt: stmt.columnDate(at: 3), energyKwh: stmt.columnDouble(at: 4),
-                             cost: stmt.columnDouble(at: 5), start: start, end: end)
+                             cost: stmt.columnDouble(at: 5), start: start, end: end,
+                             startReason: stmt.columnText(at: 8), stopReason: stmt.columnText(at: 9))
     }
 
     private func writeWallboxColumns(rowID: String, candidate: HomeChargingSessionCandidate,
@@ -213,12 +221,14 @@ extension ChargingSessionLedger {
                 wallbox_started_at = ?, wallbox_ended_at = ?, wallbox_peak_kw = ?, wallbox_intervals = ?,
                 wallbox_cost = ?, wallbox_partial_cost = ?, wallbox_cost_method = ?, wallbox_price_source = ?,
                 wallbox_cost_assumptions = ?, wallbox_missing_kwh = ?, wallbox_currency = ?,
+                wallbox_start_reason = COALESCE(?, wallbox_start_reason),
+                wallbox_stop_reason = COALESCE(?, wallbox_stop_reason),
                 wallbox_attribution = COALESCE(?, wallbox_attribution)
             WHERE id = ?;
             """) { stmt in
             try Self.bindWallbox(stmt, candidate: candidate, cost: cost, from: 1)
-            try stmt.bindText(attribution, at: 18)
-            try stmt.bindText(rowID, at: 19)
+            try stmt.bindText(attribution, at: 20)
+            try stmt.bindText(rowID, at: 21)
             try stmt.executeUpdate()
         } process: { _ in }
     }
@@ -235,10 +245,10 @@ extension ChargingSessionLedger {
                 wallbox_energy_source, wallbox_measured_at, wallbox_started_at, wallbox_ended_at,
                 wallbox_peak_kw, wallbox_intervals, wallbox_cost, wallbox_partial_cost, wallbox_cost_method,
                 wallbox_price_source, wallbox_cost_assumptions, wallbox_missing_kwh, wallbox_currency,
-                wallbox_attribution
+                wallbox_start_reason, wallbox_stop_reason, wallbox_attribution
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, 0.0, ?, 0.0, ?, ?, 'completed', 'stopped', 'wallbox_only', 'medium', 2, 0, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             );
             """) { stmt in
             try stmt.bindText(id, at: 1)
@@ -253,13 +263,13 @@ extension ChargingSessionLedger {
             try stmt.bindDate(Date(), at: 9)
             try stmt.bindDate(candidate.endedAt, at: 10)
             try Self.bindWallbox(stmt, candidate: candidate, cost: cost, from: 11)
-            try stmt.bindText(attribution, at: 28)
+            try stmt.bindText(attribution, at: 30)
             try stmt.executeUpdate()
         } process: { _ in }
         return id
     }
 
-    /// Binds the seventeen shared wallbox values, in column order, starting at `index`.
+    /// Binds the nineteen shared wallbox values, in column order, starting at `index`.
     private static func bindWallbox(_ stmt: SQLiteStatement, candidate: HomeChargingSessionCandidate,
                                     cost: HomeSessionCost?, from index: Int32) throws {
         var i = index
@@ -283,33 +293,11 @@ extension ChargingSessionLedger {
         try stmt.bindText(assumptions, at: next())
         try stmt.bindDouble(cost?.missingKwh, at: next())
         try stmt.bindText(cost?.currency, at: next())
+        try stmt.bindText(candidate.startReason, at: next())
+        try stmt.bindText(candidate.stopReason, at: next())
     }
 
     // MARK: - Reads
-
-    func wallboxIntervals(rowID: String) -> [HomeEnergyInterval] {
-        (try? sql.query(sql: "SELECT wallbox_intervals FROM charging_sessions WHERE id = ?;") { stmt in
-            try stmt.bindText(rowID, at: 1)
-        } process: { stmt -> [HomeEnergyInterval] in
-            guard try stmt.stepOrThrow(), let text = stmt.columnText(at: 0), let data = text.data(using: .utf8) else { return [] }
-            return (try? JSONDecoder.iso.decode([HomeEnergyInterval].self, from: data)) ?? []
-        }) ?? []
-    }
-
-    /// Charger sessions no vehicle could be tied to, newest first.
-    func unassignedWallboxSessions(chargerID: String? = nil, limit: Int = 200) -> [HistoricalChargingSession] {
-        let filter = chargerID == nil ? "" : " AND wallbox_charger_id = ?"
-        let query = """
-        SELECT \(Self.chargingSessionColumns) FROM charging_sessions
-        WHERE vin = '' AND wallbox_session_key IS NOT NULL\(filter)
-        ORDER BY started_at DESC LIMIT ?;
-        """
-        return (try? sql.query(sql: query) { stmt in
-            var index: Int32 = 1
-            if let chargerID { try stmt.bindText(chargerID, at: index); index += 1 }
-            try stmt.bindInt64(Int64(limit), at: index)
-        } process: { try Self.sessionRows($0) }) ?? []
-    }
 
     /// The interval records of a charger's most recent sessions, newest first, for estimating its rate.
     func recentWallboxIntervals(chargerID: String, limit: Int = 5) -> [[HomeEnergyInterval]] {
@@ -331,15 +319,6 @@ extension ChargingSessionLedger {
         }) ?? []
     }
 
-    /// How many rows carry a given wallbox key. Used by tests and by the sync summary.
-    func wallboxSessionCount(chargerID: String) -> Int {
-        (try? sql.query(sql: "SELECT COUNT(*) FROM charging_sessions WHERE wallbox_charger_id = ?;") { stmt in
-            try stmt.bindText(chargerID, at: 1)
-        } process: { stmt -> Int in
-            try stmt.stepOrThrow() ? Int(stmt.columnInt64(at: 0) ?? 0) : 0
-        }) ?? 0
-    }
-
     /// The newest wallbox session end for a charger, so a sync can ask Home Assistant only for newer history.
     func latestWallboxEnd(chargerID: String) -> Date? {
         (try? sql.query(sql: "SELECT MAX(COALESCE(wallbox_ended_at, ended_at)) FROM charging_sessions WHERE wallbox_charger_id = ?;") { stmt in
@@ -347,23 +326,5 @@ extension ChargingSessionLedger {
         } process: { stmt -> Date? in
             try stmt.stepOrThrow() ? stmt.columnDate(at: 0) : nil
         }) ?? nil
-    }
-}
-
-extension JSONEncoder {
-    /// ISO 8601 dates and stable key order, for values stored as text.
-    static var sortedISO: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        return encoder
-    }
-}
-
-extension JSONDecoder {
-    static var iso: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
     }
 }

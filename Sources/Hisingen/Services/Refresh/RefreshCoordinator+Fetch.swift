@@ -54,7 +54,7 @@ extension RefreshCoordinator {
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                handle(ServiceErrorPolicy.decision(error, provider: api.brand).error, retrySession: false)
+                handle(VehicleServiceError.map(error, provider: api.brand), retrySession: false)
             }
         }
         publishDiagnostics()
@@ -111,7 +111,7 @@ extension RefreshCoordinator {
                     retryAfterProviderCancellation()
                     return
                 }
-                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
+                let mapped = VehicleServiceError.map(error, provider: api.brand)
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: false)
             }

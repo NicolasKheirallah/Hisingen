@@ -497,26 +497,20 @@ extension HistoryDashboardView {
     // MARK: - Helpers
 
     func exportCSV(_ contents: String, name: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try contents.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+        FileExport.save(contents, type: .commaSeparatedText,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
         }
     }
 
     func exportJSON(_ data: Data, name: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).json"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try data.write(to: url, options: .atomic)
-        } catch {
-            exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+        FileExport.save(data, type: .json,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).json", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
         }
     }
 

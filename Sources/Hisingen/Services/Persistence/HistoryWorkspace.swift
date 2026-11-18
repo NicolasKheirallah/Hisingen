@@ -32,10 +32,7 @@ final class HistoryWorkspace {
 
     // MARK: - Dashboard
 
-    /// Everything that decides what the period-scoped dashboard load returns. The view
-    /// also feeds this value to `.task(id:)`, so the reload trigger and the query inputs
-    /// are one thing and cannot drift apart.
-    struct DashboardQuery: Equatable, Hashable, Sendable {
+    struct DashboardQuery: Sendable {
         var vin: String
         var range: ClosedRange<Date>?
         var rowCap: Int
@@ -43,16 +40,11 @@ final class HistoryWorkspace {
         var capacityKwh: Double
         var hasElectricRange: Bool
         var hasCombustionEngine: Bool
-        /// The view's lifetime-cache identity; documented here because the workspace
-        /// trusts it to decide `loadLifetime` honestly.
-        var lifetimeKey: String
     }
 
-    /// Loads the period snapshot, optionally the lifetime series, and the presentation
-    /// build, off the main actor. Returns nil only when the caller's task was cancelled
-    /// while waiting.
+    /// A period change can reuse the lifetime series supplied by the caller.
     func dashboard(matching query: DashboardQuery, loadLifetime: Bool,
-                   keeping existing: VehicleHistoryLedger.LifetimeSnapshot) async -> HistoryDashboardLoadResult? {
+                   keeping existing: VehicleHistoryLedger.LifetimeSnapshot) async -> HistoryDashboardLoadResult {
         let database = database
         return await Task.detached(priority: .userInitiated) {
             let dashboard = database.history.dashboard(
@@ -75,12 +67,10 @@ final class HistoryWorkspace {
     }
 
     /// The Info tab's recent-records bundle.
-    func recentRecords(for state: VehicleState) async -> VehicleHistoryLedger.RecentRecords {
+    func recentRecords(vin: String) async -> VehicleHistoryLedger.RecentRecords {
         let database = database
-        let vin = state.identity.vin
-        let capacity = usableCapacityKwh(vin: vin, state: state)
         return await Task.detached(priority: .userInitiated) {
-            database.history.recent(vin: vin, chargingCapacityKwh: capacity)
+            database.history.recent(vin: vin)
         }.value
     }
 

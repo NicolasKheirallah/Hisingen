@@ -34,7 +34,7 @@ struct CardAvailabilityTests {
     /// Every reusable card is catalogued, so every one of them gets a real answer rather than
     /// silently defaulting — the planner bug was a card that no gate ever looked at.
     @Test func everyReusableCardIsCatalogued() {
-        for item in ComposableCards.reusable {
+        for item in TabItemCatalog.standaloneItems {
             #expect(TabItemCatalog.item(item) != nil, "\(item) is reusable but not catalogued")
         }
     }

@@ -12,14 +12,10 @@ extension AppDelegate {
                 let data = try await Task.detached(priority: .userInitiated) {
                     try await DiagnosticLogExporter.buildReport(database: database)
                 }.value
-                let panel = NSSavePanel()
-                panel.allowedContentTypes = [.json]
-                panel.nameFieldStringValue = "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json"
-                guard panel.runModal() == .OK, let url = panel.url else { return }
-                do {
-                    try data.write(to: url, options: .atomic)
-                } catch {
-                    presentExportFailure(error)
+                FileExport.save(data, type: .json,
+                                filename: "hisingen_diagnostics_\(Int(Date().timeIntervalSince1970)).json",
+                                modal: true) { _, error in
+                    if let error { self.presentExportFailure(error) }
                 }
             } catch {
                 presentExportFailure(error)

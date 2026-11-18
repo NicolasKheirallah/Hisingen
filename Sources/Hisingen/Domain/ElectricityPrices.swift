@@ -27,6 +27,8 @@ struct ElectricityPricePoint: Codable, Equatable, Sendable {
     var startDate: Date
     var endDate: Date
     var sekPerKwh: Double
+    /// Tibber's own level for the slot. Not stored: only the live Tibber series carries it.
+    var level: TibberPriceLevel? = nil
 
     enum CodingKeys: String, CodingKey {
         case startDate = "time_start"

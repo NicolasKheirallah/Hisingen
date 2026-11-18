@@ -291,7 +291,7 @@ struct InfoTabView: View {
         if weatherCardHasContent {
             add(.weather, ambientWeatherCard)
         }
-        if state.tripComputer.manualTripKm != nil || state.tripComputer.automaticTripKm != nil || state.tripComputer.sinceChargeTripKm != nil || state.tripComputer.averageSpeedKmH != nil {
+        if state.hasTripContent {
             add(.trip, tripComputerCard)
         }
         add(.powertrain, powertrainSpecsCard)
@@ -317,7 +317,7 @@ struct InfoTabView: View {
         if interiorCardHasContent {
             add(.interior, interiorCabinCard)
         }
-        if !savedChargeLocations.isEmpty {
+        if features.contains(.chargeLocations), !savedChargeLocations.isEmpty {
             add(.chargeLocations, chargeLocationsCard)
         }
         add(.factoryBuild, factoryBuildCard)
@@ -343,7 +343,7 @@ struct InfoTabView: View {
         }
         // Timestamps per reading are reference material: after the specifications, and only when
         // the car reported any.
-        if VehicleReading.allCases.contains(where: { state.reportedDate(for: $0) != nil }) {
+        if state.hasReportedDates {
             add(.freshness, readingFreshnessCard)
         }
         // The reader's order, when they have one. Sections the layout does not name — none by
@@ -478,7 +478,7 @@ struct InfoTabView: View {
     }
 
     private func loadAsyncData() async {
-        let loaded = await history.recentRecords(for: state)
+        let loaded = await history.recentRecords(vin: state.identity.vin)
         guard !Task.isCancelled else { return }
         asyncData = loaded
         asyncDataLoaded = true
@@ -496,9 +496,7 @@ struct InfoTabView: View {
 
     // MARK: - Section visibility helpers
 
-    var weatherCardHasContent: Bool {
-        state.weather?.hasCurrentConditions == true
-    }
+    var weatherCardHasContent: Bool { state.hasWeatherContent }
 
     private var serviceCardHasContent: Bool {
         state.maintenance.service.daysToService != nil
@@ -508,29 +506,13 @@ struct InfoTabView: View {
             || (state.maintenance.service.preferredWorkshopID?.isEmpty == false)
     }
 
-    private var exteriorCardHasContent: Bool {
-        (state.identity.externalColour?.isEmpty == false)
-            || ((state.exteriorStatus?.physicalDoorCount ?? 0) > 0)
-    }
+    private var exteriorCardHasContent: Bool { state.hasExteriorContent }
 
-    private var interiorCardHasContent: Bool {
-        (state.identity.upholstery?.isEmpty == false)
-            || (state.formattedSteeringOrientation?.isEmpty == false)
-            || state.climateStatus != nil
-    }
+    private var interiorCardHasContent: Bool { state.hasInteriorContent }
 
-    var savedChargeLocations: [ChargeLocationSnapshot] {
-        state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
-    }
+    var savedChargeLocations: [ChargeLocationSnapshot] { state.savedChargeLocations }
 
-    private var softwareCardHasContent: Bool {
-        guard let sw = state.softwareInfo else { return false }
-        return sw.noUpdateAvailable == true || (sw.installedVersion?.isEmpty == false)
-            || (sw.version?.isEmpty == false)
-            || (sw.latestAvailableVersion?.isEmpty == false)
-            || sw.state != .unknown
-            || sw.scheduledAt != nil
-    }
+    private var softwareCardHasContent: Bool { state.hasSoftwareContent }
 
     var batteryHealthEstimate: BatteryHealthEstimate? {
         if let current = BatteryHealthEstimator.estimate(
@@ -674,16 +656,12 @@ struct InfoTabView: View {
 
     private func exportVehicleReport() {
         let report = buildVehicleReport()
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = "vehicle_report_\(state.identity.vin.prefix(8)).txt"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try report.write(to: url, atomically: true, encoding: .utf8)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            } catch {
+        FileExport.save(report, type: .plainText,
+                        filename: "vehicle_report_\(state.identity.vin.prefix(8)).txt") { _, error in
+            if let error {
                 reportError = error.localizedDescription
+            } else {
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }
     }

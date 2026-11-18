@@ -409,7 +409,7 @@ struct ChargingControlsCard: View {
 
     @ViewBuilder
     private var chargeLocationsSection: some View {
-        if profile.permits(.chargeLocations) && features.contains(.remoteCharging) {
+        if profile.permits(.chargeLocations) && features.contains(.remoteCharging) && features.contains(.chargeLocations) {
             let locations = state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
             VStack(alignment: .leading, spacing: 10) {
                 Divider().opacity(HisingenTheme.dividerOpacity)

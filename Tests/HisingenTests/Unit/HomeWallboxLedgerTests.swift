@@ -267,7 +267,8 @@ struct HomeWallboxMigrationTests {
             while try stmt.stepOrThrow() { if let name = stmt.columnText(at: 1) { names.insert(name) } }
             return names
         }
-        for column in ["wallbox_charger_id", "wallbox_session_key", "wallbox_energy_kwh", "wallbox_cost_method", "wallbox_attribution"] {
+        for column in ["wallbox_charger_id", "wallbox_session_key", "wallbox_energy_kwh", "wallbox_cost_method", "wallbox_attribution",
+                       "wallbox_start_reason", "wallbox_stop_reason"] {
             #expect(columns.contains(column))
         }
         #expect(database.schemaVersion() == VehicleDatabase.latestSchemaVersion)

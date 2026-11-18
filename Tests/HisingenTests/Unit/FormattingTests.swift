@@ -704,4 +704,26 @@ struct FormattingTests {
         #expect(!(formatted.isEmpty))
         #expect(!(formatted.contains(":")), "a short date must not carry a time component")
     }
+
+    @Test
+    func cachedNumberFormattersFollowLanguageAndPrecisionOnEveryCall() {
+        // Calls alternate precision and grouping, and the language flips between them: a formatter
+        // reused across keys would leak the previous call's digits, separator or grouping.
+        for _ in 0..<2 {
+            L10n.withInterfaceLanguageOverride("en") {
+                #expect(Format.energyKwh(6.5) == "6.5 kWh")
+                #expect(Format.percent(92) == "92%")
+                #expect(Format.energyKwh(12.34, decimals: 2) == "12.34 kWh")
+                #expect(Format.distance(km: 12345.6, decimals: 1, unit: .kilometers, grouped: true) == "12,345.6 km")
+                #expect(Format.distance(km: 12345.6, decimals: 0, unit: .kilometers) == "12346 km")
+                #expect(Format.distance(km: 12345, grouped: true, unit: .kilometers) == "12,345 km")
+                #expect(Format.distance(km: 12345, unit: .kilometers) == "12345 km")
+            }
+            L10n.withInterfaceLanguageOverride("sv") {
+                #expect(Format.energyKwh(6.5) == "6,5 kWh")
+                #expect(Format.percent(92) == "92%")
+                #expect(Format.distance(km: 12.5, decimals: 1, unit: .kilometers) == "12,5 km")
+            }
+        }
+    }
 }

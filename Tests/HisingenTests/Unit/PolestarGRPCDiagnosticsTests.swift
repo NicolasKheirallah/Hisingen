@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Hisingen
 
@@ -103,15 +104,16 @@ struct PolestarGRPCDiagnosticsTests {
         let suite = "HisingenPolestarGRPCDiagnostics.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let grpc = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
+        let startedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        let clock = Mutex(startedAt)
+        let now: @Sendable () -> Date = { clock.withLock { $0 } }
+        let grpc = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore(), now: now)
         let path = "/services.vehiclestates.dashboard.DashboardService/GetLatestDashboard"
 
         let base = URL(string: "https://backend.example")!
         let otherBase = URL(string: "https://other.example")!
-        let key = PolestarGRPC.readCapabilityKey(path: path, vin: "VIN-A", base: base)
         let first = await grpc.readStatusFailure(status: "12", path: path, vin: "VIN-A", base: base)
         #expect({ if case PolestarError.grpcUnimplemented = first { return true } else { return false } }())
-        #expect(await grpc.unimplementedReadPaths.contains(key))
 
         #expect(await grpc.isReadPathUnimplemented(path, vin: "VIN-A", base: base))
         #expect(await !grpc.isReadPathUnimplemented(path, vin: "VIN-B", base: base))
@@ -119,12 +121,16 @@ struct PolestarGRPCDiagnosticsTests {
 
         // A transient status is not remembered.
         _ = await grpc.readStatusFailure(status: "14", path: "/x/Y", vin: "VIN-A", base: base)
-        #expect(await !grpc.unimplementedReadPaths.contains("/x/Y"))
+        #expect(await !grpc.isReadPathUnimplemented("/x/Y", vin: "VIN-A", base: base))
 
-        // A fresh actor restores the bounded negative capability from disk.
-        let restored = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
-        #expect(await restored.unimplementedReadPaths.contains(key))
-        #expect(await restored.unimplementedReadPathExpirations[key] != nil)
+        clock.withLock { $0 = startedAt.addingTimeInterval(3_600) }
+        _ = await grpc.readStatusFailure(status: "12", path: path, vin: "VIN-A", base: base)
+        let restored = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore(), now: now)
+        #expect(await restored.isReadPathUnimplemented(path, vin: "VIN-A", base: base))
+
+        clock.withLock { $0 = startedAt.addingTimeInterval(86_400) }
+        #expect(await !restored.isReadPathUnimplemented(path, vin: "VIN-A", base: base))
+        #expect(await !grpc.isReadPathUnimplemented(path, vin: "VIN-A", base: base))
     }
     @Test
     func endpointFallbackRejectsAuthenticationRateLimitingAndCancellation() {
@@ -147,7 +153,9 @@ struct PolestarGRPCDiagnosticsTests {
         defaults.set(["/test/Read": Date().addingTimeInterval(3600).timeIntervalSince1970],
                      forKey: "polestar_unimplemented_grpc_paths_v2")
         let grpc = PolestarGRPC(defaultsSuiteName: suite, diagnosticLog: APIDiagnosticLogStore())
-        #expect(await grpc.unimplementedReadPaths.isEmpty)
+        let base = URL(string: "https://backend.example")!
+        #expect(await !grpc.isReadPathUnimplemented("/test/Read", vin: "VIN-A", base: base))
+        #expect(defaults.object(forKey: "polestar_unimplemented_grpc_paths_v2") == nil)
     }
 
     @Test(arguments: [401, 429])

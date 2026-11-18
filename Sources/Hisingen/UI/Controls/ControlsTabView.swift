@@ -24,14 +24,6 @@ struct ControlsTabView: View {
     /// The reader's layout for this tab: what to draw, and in what order. The default draws
     /// everything exactly as designed.
     var layout: TabLayout = .everything
-    /// Controls that moved to Car (locks, windows and locate, software install). Plan still draws
-    /// one when the reader placed it here, or when their Car layout does not draw it, so a control
-    /// is never left with no home.
-    var drawnOnCar: Set<TabItemID> = []
-
-    private func keepsOnPlan(_ item: TabItemID) -> Bool {
-        layout.places(item) || !drawnOnCar.contains(item)
-    }
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
@@ -67,13 +59,23 @@ struct ControlsTabView: View {
         let view: () -> AnyView
     }
 
+    /// The catalogued items this tab knows how to draw. The banners and receipts are drawn
+    /// outside the card list, so they are named here too. A test compares this with the shipped
+    /// layout: a card added to the catalog without a renderer, or a renderer without a catalog
+    /// entry, fails there instead of in a reader's panel.
+    static let renderedItems: [TabItemID] = [
+        .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
+        .controlsClimate, .controlsEngine, .controlsRoutines
+    ]
+
     private var hasAnyVisibleChargingControls: Bool {
         guard state.powertrain.hasElectricRange else { return false }
         return (profile.permits(.chargeTarget) && features.contains(.remoteCharging))
             || (profile.permits(.chargingCurrentLimit) && features.contains(.remoteCharging))
             || (profile.permits(.chargingScheduleOverride)
                 && (features.contains(.remoteCharging) || features.contains(.remoteSchedules)))
-            || (profile.permits(.chargeLocations) && features.contains(.remoteCharging))
+            || (profile.permits(.chargeLocations) && features.contains(.remoteCharging)
+                && features.contains(.chargeLocations))
             || (profile.permits(.chargingSchedule)
                 && (features.contains(.remoteSchedules) || features.contains(.remoteCharging)))
     }
@@ -119,21 +121,13 @@ struct ControlsTabView: View {
                 view: { AnyView(ChargingPlannerCard(state: state)) }
             ),
             CardEntry(
-                id: TabItemID.controlsAccess.rawValue, item: TabItemID.controlsAccess,
-                isVisible: features.contains(.remoteLocks) && keepsOnPlan(.controlsAccess),
-                view: { AnyView(AccessControlsCard(state: state, gate: gate)) }
-            ),
-            CardEntry(
-                id: TabItemID.controlsWindowsLocate.rawValue, item: TabItemID.controlsWindowsLocate,
-                isVisible: ((features.contains(.remoteWindows) && profile.permits(.windows))
-                    || features.contains(.remoteHonkFlash)) && keepsOnPlan(.controlsWindowsLocate),
-                view: { AnyView(WindowsLocateCard(state: state, gate: gate)) }
-            ),
-            CardEntry(
-                id: TabItemID.controlsOTA.rawValue, item: TabItemID.controlsOTA,
-                isVisible: features.contains(.remoteOTA) && profile.permits(.softwareInstallControl)
-                    && keepsOnPlan(.controlsOTA),
-                view: { AnyView(OTAControlsCard(state: state, gate: gate, onRefresh: onRefresh)) }
+                id: TabItemID.controlsRoutines.rawValue, item: TabItemID.controlsRoutines,
+                // A routine is a sequence of remote commands. With every remote feature off there
+                // is nothing to put in one, so the empty-controls hint is the useful card.
+                isVisible: !features.isDisjoint(with: AppFeature.remoteFeatures),
+                view: {
+                    AnyView(RoutinesCard(state: state, gate: gate, isBusy: remoteCommandInProgress))
+                }
             )
         ]
     }
@@ -184,7 +178,6 @@ struct ControlsTabView: View {
                 if anyCardDimmed || state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
-                RoutinesCard(state: state, gate: commandGate, isBusy: remoteCommandInProgress)
                 RemoteControlsFootnote(features: features, isBrandVolvo: isBrandVolvo)
                     .padding(.horizontal, HisingenTheme.cardPadding)
             } else {
@@ -253,12 +246,6 @@ struct ControlsTabView: View {
                 ]) != .available
             case .controlsCharging:
                 return gate.capabilityAvailability([.setChargeTarget(80), .setAmpLimit(16), .startChargingOverride]) != .available
-            case .controlsAccess:
-                return gate.capabilityAvailability([.lock, .unlock]) != .available
-            case .controlsWindowsLocate:
-                return gate.capabilityAvailability([.closeWindows, .honkAndFlash, .flashLights]) != .available
-            case .controlsOTA:
-                return gate.capabilityAvailability([.installOTANow]) != .available
             default:
                 return false
             }

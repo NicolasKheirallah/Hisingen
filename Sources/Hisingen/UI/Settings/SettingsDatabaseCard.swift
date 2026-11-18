@@ -279,12 +279,8 @@ struct SettingsDatabaseCard: View {
         HStack(spacing: 8) {
             Button {
                 let vin = state?.identity.vin
-                let db = database
-                Task { @MainActor in
-                    let csv = await Task.detached(priority: .userInitiated) {
-                        db.charging.exportChargingSessionsCSV(for: vin)
-                    }.value
-                    saveCSVWithPanel(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                exportCSV(suggestedFilename: "charging_sessions_\(vin?.prefix(8) ?? "all").csv") {
+                    $0.charging.exportChargingSessionsCSV(for: vin)
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -298,12 +294,8 @@ struct SettingsDatabaseCard: View {
 
             Button {
                 let vin = state?.identity.vin
-                let db = database
-                Task { @MainActor in
-                    let csv = await Task.detached(priority: .userInitiated) {
-                        db.history.exportBatteryHealthCSV(for: vin)
-                    }.value
-                    saveCSVWithPanel(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv", csvContent: csv)
+                exportCSV(suggestedFilename: "battery_health_\(vin?.prefix(8) ?? "all").csv") {
+                    $0.history.exportBatteryHealthCSV(for: vin)
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -319,12 +311,8 @@ struct SettingsDatabaseCard: View {
         HStack(spacing: 8) {
             Button {
                 guard let vin = state?.identity.vin else { return }
-                let db = database
-                Task { @MainActor in
-                    let csv = await Task.detached(priority: .userInitiated) {
-                        db.history.exportTelemetryCSV(for: vin)
-                    }.value
-                    saveCSVWithPanel(suggestedFilename: "telemetry_\(vin.prefix(8)).csv", csvContent: csv)
+                exportCSV(suggestedFilename: "telemetry_\(vin.prefix(8)).csv") {
+                    $0.history.exportTelemetryCSV(for: vin)
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -339,12 +327,8 @@ struct SettingsDatabaseCard: View {
 
             Button {
                 guard let vin = state?.identity.vin else { return }
-                let db = database
-                Task { @MainActor in
-                    let csv = await Task.detached(priority: .userInitiated) {
-                        db.history.exportCommandAuditsCSV(for: vin)
-                    }.value
-                    saveCSVWithPanel(suggestedFilename: "command_audit_\(vin.prefix(8)).csv", csvContent: csv)
+                exportCSV(suggestedFilename: "command_audit_\(vin.prefix(8)).csv") {
+                    $0.history.exportCommandAuditsCSV(for: vin)
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -360,12 +344,8 @@ struct SettingsDatabaseCard: View {
 
         Button {
             guard let vin = state?.identity.vin else { return }
-            let db = database
-            Task { @MainActor in
-                let csv = await Task.detached(priority: .userInitiated) {
-                    db.history.exportAirQualityCSV(for: vin)
-                }.value
-                saveCSVWithPanel(suggestedFilename: "air_quality_\(vin.prefix(8)).csv", csvContent: csv)
+            exportCSV(suggestedFilename: "air_quality_\(vin.prefix(8)).csv") {
+                $0.history.exportAirQualityCSV(for: vin)
             }
         } label: {
             HStack(spacing: 4) {
@@ -666,36 +646,26 @@ struct SettingsDatabaseCard: View {
         stats = loaded
     }
 
-    private func saveCSVWithPanel(suggestedFilename: String, csvContent: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = suggestedFilename
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                do {
-                    try csvContent.write(to: url, atomically: true, encoding: .utf8)
-                    setFeedback((L10n.text("Export saved."), false))
-                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                } catch {
-                    setFeedback((L10n.format("Export failed: %@", error.localizedDescription), true))
-                }
-            }
+    private func exportCSV(suggestedFilename: String, generate: @escaping @Sendable (VehicleDatabase) -> String) {
+        let db = database
+        Task { @MainActor in
+            let csv = await Task.detached(priority: .userInitiated) { generate(db) }.value
+            saveCSVWithPanel(suggestedFilename: suggestedFilename, csvContent: csv)
         }
     }
 
+    private func saveCSVWithPanel(suggestedFilename: String, csvContent: String) {
+        saveDataWithPanel(suggestedFilename: suggestedFilename, contentType: .commaSeparatedText,
+                          data: Data(csvContent.utf8))
+    }
+
     private func saveDataWithPanel(suggestedFilename: String, contentType: UTType, data: Data) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [contentType]
-        panel.nameFieldStringValue = suggestedFilename
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                do {
-                    try data.write(to: url, options: .atomic)
-                    setFeedback((L10n.text("Export saved."), false))
-                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-                } catch {
-                    setFeedback((L10n.format("Export failed: %@", error.localizedDescription), true))
-                }
+        FileExport.save(data, type: contentType, filename: suggestedFilename) { _, error in
+            if let error {
+                setFeedback((L10n.format("Export failed: %@", error.localizedDescription), true))
+            } else {
+                setFeedback((L10n.text("Export saved."), false))
+                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }
     }

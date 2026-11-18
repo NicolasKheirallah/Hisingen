@@ -138,7 +138,7 @@ extension RefreshCoordinator {
             } catch {
                 guard requestGeneration == generation, !Task.isCancelled else { return }
                 task = nil
-                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
+                let mapped = VehicleServiceError.map(error, provider: api.brand)
                 // Discovery may briefly omit a requested VIN. Bound retries before treating
                 // that preparation failure as terminal.
                 if case .notConfigured = mapped, selectionRetryCount < 2 {

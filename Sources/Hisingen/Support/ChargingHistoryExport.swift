@@ -46,27 +46,14 @@ enum ChargingHistoryExport {
 
     @MainActor
     private static func save(_ data: Data, type: UTType, filename: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [type]
-        panel.nameFieldStringValue = filename
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try data.write(to: url, options: .atomic)
-            } catch {
-                // Only Sendable values cross back to the main actor to show the alert.
-                let title = L10n.text("Export failed")
-                let message = L10n.text("The charging history could not be written.")
-                let detail = error.localizedDescription
-                Task { @MainActor in
-                    let alert = NSAlert()
-                    alert.alertStyle = .critical
-                    alert.messageText = title
-                    alert.informativeText = "\(message)\n\n\(detail)"
-                    alert.addButton(withTitle: L10n.text("OK"))
-                    alert.runModal()
-                }
-            }
+        FileExport.save(data, type: type, filename: filename) { _, error in
+            guard let error else { return }
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = L10n.text("Export failed")
+            alert.informativeText = "\(L10n.text("The charging history could not be written."))\n\n\(error.localizedDescription)"
+            alert.addButton(withTitle: L10n.text("OK"))
+            alert.runModal()
         }
     }
 }

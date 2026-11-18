@@ -261,7 +261,7 @@ extension RefreshCoordinator {
                     retryAfterProviderCancellation()
                     return
                 }
-                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
+                let mapped = VehicleServiceError.map(error, provider: api.brand)
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: !sessionReady)
             }

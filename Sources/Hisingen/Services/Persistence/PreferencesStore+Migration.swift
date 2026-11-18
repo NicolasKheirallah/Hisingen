@@ -32,6 +32,15 @@ extension PreferencesStore {
         "swedishGold": "charcoalGold",
         "cyanRacing": "circuitBlue"
     ]
+    /// Launch entry point. A settings import still calls `migrateRenamedThemeIdentifiers()` itself,
+    /// because an old export can carry the previous names after this flag is set.
+    func migrateRenamedThemeIdentifiersOnce() {
+        let flagKey = "theme_identifiers_renamed_v1"
+        guard !d.bool(forKey: flagKey) else { return }
+        migrateRenamedThemeIdentifiers()
+        d.set(true, forKey: flagKey)
+    }
+
     func migrateRenamedThemeIdentifiers() {
         let renames = Self.renamedThemeIdentifiers
         for key in d.dictionaryRepresentation().keys where key == "app_theme" || key.hasPrefix("theme_for_") {

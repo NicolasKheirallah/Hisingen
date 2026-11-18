@@ -1587,6 +1587,7 @@
 "Restore software event" = "Återställ programvaruhändelse";
 "Save charge location \"%@\" at the car's position" = "Spara laddplats \"%@\" vid bilens position";
 "Saved Charge Locations" = "Sparade laddplatser";
+"Places saved on the car, with their schedules and current limits" = "Platser som sparats i bilen, med deras scheman och strömgränser";
 "Saved charge locations" = "Sparade laddplatser";
 "Saved command setting; not live cabin telemetry" = "Sparad kommandoinställning; ingen kupételemetri i realtid";
 "Scheduled By" = "Schemalagt av";
@@ -2404,7 +2405,8 @@
 "Tomorrow's prices arrive after 14:15" = "Morgondagens priser kommer efter kl. 14:15";
 "Prices unavailable right now" = "Priser är inte tillgängliga just nu";
 "Spot prices exclude taxes and grid fees" = "Spotpriser exkluderar skatter och nätavgifter";
-"Charge %@ over %d h to reach %d%%: average %@, now %@" = "Ladda %@ under %d h upp till %d %%: snitt %@, just nu %@";
+"Charge %@ over %d h to reach %d%%" = "Ladda %@ under %d h upp till %d %%";
+"Planned average" = "Planerat snitt";
 "Saves %@" = "Sparar %@";
 "Charging now is cheapest" = "Det är billigast att ladda nu";
 "Undecoded Backend Fields (%d)" = "Ej avkodade backend-fält (%d)";
@@ -2997,6 +2999,21 @@
 
 // English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "Spotpriser exklusive skatter och nätavgifter · %@ · elprisetjustnu.se";
+"Tibber prices include taxes, not grid fees" = "Tibberpriser inkluderar skatter men inte nätavgifter";
+"Tibber prices include taxes and your network fee" = "Tibberpriser inkluderar skatter och din nätavgift";
+"%@ · fetched %@" = "%@ · hämtade %@";
+"Elpriser, Tibber unavailable" = "Elpriser, Tibber ej tillgängligt";
+"Tibber did not answer, so the planner uses market prices. %@" = "Tibber svarade inte, så planeraren använder marknadspriser. %@";
+"Tibber has no prices for the coming hours yet." = "Tibber har inga priser för de kommande timmarna än.";
+"Tibber returned no prices." = "Tibber returnerade inga priser.";
+"Not published yet" = "Inte publicerade än";
+"Later prices are not published yet." = "Senare priser är inte publicerade än.";
+"From Tibber, taxes included. The markup below applies to market prices only." = "Från Tibber, skatter inkluderade. Påslaget nedan gäller bara marknadspriser.";
+"Tibber is unavailable. Market price plus your markup." = "Tibber är inte tillgängligt. Marknadspris plus ditt påslag.";
+"Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "Valfritt. Kopplar Tibber för att planera laddning och prissätta sessioner med dess egna 15-minuterspriser, utan Home Assistant.";
+"Used for the planner and charging sessions" = "Används för planeraren och laddsessioner";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibbers pris inkluderar energi, skatter och påslag men inte nätavgiften. Lägg till din här, en kopplad laddare kan ha en egen.";
+"Added to Tibber prices in the planner and for charger sessions." = "Läggs till Tibberpriser i planeraren och för laddsessioner.";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "Spotpriser exklusive skatter och nätavgifter · %@ · elprisetjustnu.se, hämtat %@";
 
 // Electricity rate: automatic mode, contract and provider
@@ -3613,11 +3630,138 @@
 "Currency" = "Valuta";
 "Disconnect Tibber" = "Koppla från Tibber";
 "Electricity Supplier" = "Elleverantör";
-"Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant." = "Valfritt. Ansluter Tibber för att prissätta laddsessioner med Tibbers egna 15-minuterspriser, utan Home Assistant.";
 "Prices" = "Priser";
 "Supplier" = "Leverantör";
 "This token has no Tibber home that Hisingen can read." = "Den här token har inget Tibber-hem som Hisingen kan läsa.";
 "Tibber access token" = "Tibber-åtkomsttoken";
-"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger." = "Tibbers pris inkluderar energi, skatter och påslag men inte nätavgiften. Ange nätavgiften på den parkopplade laddaren.";
 "Use this home" = "Använd det här hemmet";
-"Used for charging sessions" = "Används för laddsessioner";
+
+// English fallback values pending translation
+"At the charger" = "Vid laddboxen";
+"Remotely" = "På distans";
+"By an administrator" = "Av en administratör";
+"By schedule" = "Enligt schema";
+"After an error" = "Efter ett fel";
+"On plug-in" = "Vid inkoppling";
+"Cable unplugged" = "Kabeln drogs ur";
+"Charge complete" = "Laddningen klar";
+"Held by load balancing" = "Hållen av lastbalansering";
+"Cable unlocked" = "Kabeln låstes upp";
+"Not authorised" = "Inte behörig";
+"Charger restarted" = "Laddboxen startade om";
+"Power loss" = "Strömavbrott";
+"Emergency stop" = "Nödstopp";
+"%@ per phase" = "%@ per fas";
+"%@ per phase, limit %@" = "%@ per fas, gräns %@";
+"Current per Phase" = "Ström per fas";
+"Cable Rating" = "Kabelns märkström";
+"Circuit Fuse" = "Gruppsäkring";
+"Phase Mode" = "Fasläge";
+"%@, limited by the cable" = "%@, begränsad av kabeln";
+"%@, limited by the circuit fuse" = "%@, begränsad av gruppsäkringen";
+"The limit is set to %@." = "Gränsen är inställd på %@.";
+"The cable allows %@." = "Kabeln klarar %@.";
+"The circuit fuse is %@." = "Gruppsäkringen är %@.";
+"Charging uses the lowest. The car and load balancing can ask for less." = "Laddningen använder den lägsta. Bilen och lastbalanseringen kan begära mindre.";
+"Adaptive" = "Adaptivt";
+"Single phase" = "En fas";
+"Three phase" = "Tre faser";
+"Wi-Fi" = "Wi-Fi";
+"Mobile data" = "Mobildata";
+"Ethernet" = "Ethernet";
+"Charger Details" = "Laddboxens uppgifter";
+
+// English fallback values pending translation
+"Car Share of House Load" = "Bilens andel av husets förbrukning";
+"Car at Home" = "Bilen hemma";
+"Charger-measured home sessions against the house meter's readings from Tibber, %@ to %@. Charging away from home never reaches that meter." = "Laddarmätta hemmasessioner mot husmätarens värden från Tibber, %@ till %@. Laddning utanför hemmet når aldrig den mätaren.";
+"Cheap" = "Billigt";
+"Expensive" = "Dyrt";
+"Grid company" = "Nätbolag";
+"House Consumption" = "Husets förbrukning";
+"Price area" = "Elområde";
+"Rest of the House" = "Resten av huset";
+"Tibber does not publish this company's fee. The per-kWh part is on your grid invoice." = "Tibber publicerar inte nätbolagets avgift. Den delen per kWh står på din nätfaktura.";
+"Tibber puts this home in %@" = "Tibber placerar det här hemmet i %@";
+"Very cheap" = "Mycket billigt";
+"Very expensive" = "Mycket dyrt";
+
+// English fallback values pending translation
+"House Cost" = "Husets kostnad";
+"Car Cost at Home" = "Bilens kostnad hemma";
+"What Tibber billed for the energy in those hours, taxes included. The grid fee is not in it." = "Det Tibber fakturerade för energin under de timmarna, skatter inräknade. Nätavgiften ingår inte.";
+"The car's energy at each hour's average Tibber price. Sessions are priced by the quarter-hour with your network fee, so the two can differ." = "Bilens energi till varje timmes snittpris hos Tibber. Sessioner prissätts per kvart med din nätavgift, så de två kan skilja sig åt.";
+"In %d of those hours the charger's energy was above the meter's reading, so the reading was used." = "Under %d av de timmarna var laddarens energi högre än mätarens värde, så mätarens värde användes.";
+"House Meter" = "Husmätare";
+"Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger." = "Valfritt. Läser hemmets elanvändning från en Perific-monitor, så att laddningen kan visas mot hela huset. Hisingen bara läser. Perific fortsätter balansera laddaren.";
+"The account you use in the Perific app. It is stored in the macOS Keychain and never exported." = "Kontot du använder i Perific-appen. Det sparas i macOS Nyckelhanteraren och exporteras aldrig.";
+"Sign in and find meters" = "Logga in och hitta mätare";
+"This account has no meter that Hisingen can read. Check that it is the owner account in the Perific app." = "Kontot har ingen mätare som Hisingen kan läsa. Kontrollera att det är ägarkontot i Perific-appen.";
+"Meter" = "Mätare";
+"Use this meter" = "Använd den här mätaren";
+"Source" = "Källa";
+"House Now" = "Huset nu";
+"Calculated from the meter's current and voltage, so it can read slightly above the energy your supplier bills." = "Beräknas från mätarens ström och spänning, så värdet kan ligga något över den energi din elleverantör fakturerar.";
+"Perific did not accept the saved login. Enter the account and password again to reconnect." = "Perific godtog inte den sparade inloggningen. Ange konto och lösenord igen för att ansluta på nytt.";
+"Disconnect Perific" = "Koppla från Perific";
+"Reading every 30 seconds" = "Läser var 30:e sekund";
+"Sign-in refused" = "Inloggningen nekades";
+"This account no longer lists the meter" = "Kontot listar inte längre mätaren";
+"Perific account email" = "E-post för Perific-kontot";
+"House sending %@ to the grid" = "Huset skickar %@ till nätet";
+"House %@" = "Huset %@";
+"Car %@, rest of the house %@" = "Bilen %@, resten av huset %@";
+"House meter last read %@ ago" = "Husmätaren lästes senast för %@ sedan";
+"House Voltage" = "Husets spänning";
+"House Current per Phase" = "Husets ström per fas";
+"Imported Today" = "Importerat i dag";
+"Exported Today" = "Exporterat i dag";
+"%@ V" = "%@ V";
+"%@ A" = "%@ A";
+"The meter sent no voltage, so 230 V is assumed and power is approximate." = "Mätaren skickade ingen spänning, så 230 V antas och effekten är ungefärlig.";
+"Perific did not accept the saved login. Sign in again in Settings, Electricity." = "Perific godtog inte den sparade inloggningen. Logga in igen i Inställningar, El.";
+"Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter." = "Laddarmätta hemmasessioner mot husmätarens värden från Perific, %@ till %@. Laddning utanför hemmet når aldrig den mätaren.";
+"%@ to the grid" = "%@ till nätet";
+
+// English fallback values pending translation
+"Signed in to %@" = "Inloggad hos %@";
+"Reading chargers…" = "Läser laddboxar…";
+
+// English fallback values pending translation
+"%@ öre/kWh" = "%@ öre/kWh";
+"%@ öre/kWh, high-load until %@" = "%@ öre/kWh, höglasttid till %@";
+"%@ öre/kWh, other time until %@" = "%@ öre/kWh, övrig tid till %@";
+"%d%% of your energy fell in high-load time. The time tariff costs less below %d%%, and is always cheaper outside November to March. A change applies for at least a year, so look at a full year first." = "%d%% av din energi låg på höglasttid. Tidstariffen är billigare under %d%% och alltid billigare utanför november till mars. En ändring gäller i minst ett år, så titta på ett helt år först.";
+"About %@ kr a month. For reference only, it is in no per-kWh figure." = "Ungefär %@ kr i månaden. Endast som referens, den ingår inte i något pris per kWh.";
+"Custom time-of-use" = "Egen tidstariff";
+"Fee, öre per kWh" = "Avgift, öre per kWh";
+"Fixed fee, kr per year" = "Fast avgift, kr per år";
+"Flat fee" = "Fast pris per kWh";
+"From %d, VAT included" = "Från %d, moms ingår";
+"Grid Tariff" = "Nättariff";
+"Grid tariff" = "Nättariff";
+"High-load ends at hour" = "Höglasttid slutar vid timme";
+"High-load fee, öre per kWh" = "Avgift på höglasttid, öre per kWh";
+"High-load hours" = "Höglasttimmar";
+"High-load months" = "Höglastmånader";
+"High-load starts at hour" = "Höglasttid börjar vid timme";
+"High-load time" = "Höglasttid";
+"Main fuse" = "Huvudsäkring";
+"No grid fee" = "Ingen nätavgift";
+"Optional. What your grid company charges per kWh on top of Tibber's price. The planner, charger sessions and the house-load costs use it." = "Valfritt. Vad nätbolaget tar per kWh utöver Tibbers pris. Planeraren, laddsessioner och husets kostnader använder det.";
+"Other time" = "Övrig tid";
+"Other time fee, öre per kWh" = "Avgift övrig tid, öre per kWh";
+"Right now" = "Just nu";
+"Single tariff, last %d days" = "Enkeltariff, senaste %d dagarna";
+"Tariff" = "Tariff";
+"The car's energy at each hour's average Tibber price plus your grid transfer fee. Sessions are priced by the quarter-hour, so the two can differ." = "Bilens energi till varje timmes snittpris hos Tibber plus din överföringsavgift. Sessioner prissätts per kvart, så de två kan skilja sig åt.";
+"The public holidays Swedish grid companies name, such as Christmas Eve and Good Friday, are not high-load." = "De helgdagar som svenska nätbolag anger, som julafton och långfredag, räknas inte som höglasttid.";
+"These prices are from %d. Grid companies change them each January, so check your invoice." = "Priserna är från %d. Nätbolagen ändrar dem varje januari, så kontrollera din faktura.";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set your grid tariff in the card below; a paired charger can set its own." = "Tibbers pris inkluderar energi, skatter och påslag men inte nätavgiften. Ange din nättariff i kortet nedan; en ansluten laddare kan ha en egen.";
+"Time tariff, last %d days" = "Tidstariff, senaste %d dagarna";
+"Transfer fee" = "Överföringsavgift";
+"Transfer fees only, worked out on your own hourly readings from Tibber." = "Endast överföringsavgifter, beräknade på dina egna timvärden från Tibber.";
+"Vattenfall single tariff (E4)" = "Vattenfall enkeltariff (E4)";
+"Vattenfall time tariff (T4)" = "Vattenfall tidstariff (T4)";
+"Weekdays only" = "Endast vardagar";
+"What Tibber billed for the energy in those hours, taxes included, plus the grid transfer fee from your tariff. The fixed fee is not in it." = "Det Tibber fakturerade för energin under de timmarna, skatter inräknade, plus överföringsavgiften enligt din tariff. Den fasta avgiften ingår inte.";

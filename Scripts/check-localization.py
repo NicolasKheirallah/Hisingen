@@ -40,6 +40,8 @@ WORD_RE = re.compile(r"[^\W\d_]+")
 UNIT_WORDS = {
     "kwh", "wh", "kw", "kwp", "km", "mi", "mph", "kg", "kr", "mpg", "ms", "min", "hr", "hrs",
     "h", "l", "v", "a", "w", "c", "f", "db", "m", "s", "d", "pm", "ac", "dc",
+    # Subunit of the Swedish and Norwegian krona, written the same in every locale.
+    "öre", "øre",
 }
 # Brand and product names that are never translated.
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}

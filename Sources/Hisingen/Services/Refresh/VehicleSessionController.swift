@@ -135,7 +135,7 @@ final class VehicleSessionController {
     // MARK: - Brand & vehicle selection
 
     func resolvedBrand(for vin: String) -> VehicleBrand {
-        let upper = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upper = vin.normalizedVIN
         if let snapshot = fleetStore.snapshot(for: upper) {
             return snapshot.model.brand
         }
@@ -155,7 +155,7 @@ final class VehicleSessionController {
     }
 
     func selectVehicle(vin: String) {
-        let trimmedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmedVIN = vin.normalizedVIN
         guard !trimmedVIN.isEmpty else { return }
         let targetBrand = resolvedBrand(for: trimmedVIN)
         if preferences.activeBrand == targetBrand {
@@ -172,7 +172,7 @@ final class VehicleSessionController {
     /// VIN-targeted intents and deep links one awaited operation: the coordinator wakes the
     /// await itself when the selection task finishes, so there is no poll here.
     func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
-        let target = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let target = vin.normalizedVIN
         guard !target.isEmpty else { return sessionValid && latest != nil }
         if sessionValid, latest?.identity.vin.uppercased() == target,
            !refreshCoordinator.isBusy { return true }

@@ -84,7 +84,6 @@ final class VehicleHistoryLedger: Sendable {
         var recentActivities: [VehicleActivity] = []
         var airQualityHistory: [AirQualityRecord] = []
         var connectivityHistory: [VehicleDatabase.ConnectivityRecord] = []
-        var chargingSessions: [ChargingSession] = []
         var batteryHealthHistory: [BatteryHealthRecord] = []
         var storeUnreadable = false
     }
@@ -198,7 +197,7 @@ final class VehicleHistoryLedger: Sendable {
     }
 
     /// Everything the Info tab derives from the local SQLite store.
-    func recent(vin: String, chargingCapacityKwh: Double?) -> RecentRecords {
+    func recent(vin: String) -> RecentRecords {
         var records = RecentRecords()
         records.storeUnreadable = !storeIsReadable()
         records.recentTelemetry = recentTelemetry(for: vin, limit: 40)
@@ -210,9 +209,6 @@ final class VehicleHistoryLedger: Sendable {
         records.airQualityHistory = recentAirQuality(for: vin, limit: 500)
         records.connectivityHistory = recentConnectivity(for: vin, limit: 60)
         records.batteryHealthHistory = batteryHealthHistory(for: vin)
-        records.chargingSessions = charging.recentChargingSessions(for: vin, limit: 20)
-            .map { charging.domainSession(from: $0, usableCapacityKwh: chargingCapacityKwh) }
-            .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
         return records
     }
 
@@ -252,7 +248,7 @@ final class VehicleHistoryLedger: Sendable {
     func tripPurposes(for vin: String) -> [String: TripPurpose] {
         let query = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
         return (try? self.sql.readQuery(sql: query) { stmt in
-            try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
+            try stmt.bindText(vin.normalizedVIN, at: 1)
         } process: { stmt -> [String: TripPurpose] in
             var result: [String: TripPurpose] = [:]
             while try stmt.stepOrThrow() {
@@ -433,18 +429,9 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportTripsCSV(for vin: String, limit: Int = 5_000) -> String {
         let trips = derivedTrips(for: vin, limit: limit)
-        let formatter = ISO8601DateFormatter()
         var csv = CSV.tripHistoryHeader + "\n"
         for trip in trips {
-            let values = [
-                trip.id, trip.vin, formatter.string(from: trip.startedAt), formatter.string(from: trip.endedAt),
-                String(format: "%.1f", trip.duration / 60), String(format: "%.2f", trip.distanceKm),
-                trip.averageConsumption.map { String(format: "%.2f", $0) } ?? "",
-                trip.ambientTemperatureCelsius.map { String(format: "%.1f", $0) } ?? "",
-                trip.startLatitude.map { String($0) } ?? "", trip.startLongitude.map { String($0) } ?? "",
-                trip.endLatitude.map { String($0) } ?? "", trip.endLongitude.map { String($0) } ?? ""
-            ]
-            csv += values.joined(separator: ",") + "\n"
+            csv += HistoryCSVRows.trip(trip, number: HistoryCSVRows.posix).joined(separator: ",") + "\n"
         }
         return csv
     }
@@ -465,7 +452,7 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
 
         var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"
-        let df = ISO8601DateFormatter()
+        let df = Format.iso8601
         for r in records {
             let date = df.string(from: r.timestamp)
             csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh)),\(r.measurementSource)\n"
@@ -475,7 +462,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportAirQualityCSV(for vin: String) -> String {
         let records = recentAirQuality(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Air Quality Index,PM2.5,PM10,Filter Remaining (%)\n"
         for r in records {
             func number(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "" }
@@ -486,7 +473,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportTelemetryCSV(for vin: String) -> String {
         let records = recentTelemetry(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Odometer (km),Trip Manual (km),Trip Automatic (km),Average Consumption,Ambient Temperature (C)\n"
         for record in records {
             func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
@@ -497,7 +484,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportCommandAuditsCSV(for vin: String) -> String {
         let records = recentCommandAudits(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         func cell(_ value: String) -> String {
             "\"\(value.replacingOccurrences(of: "\"", with: "\"\"").replacingOccurrences(of: "\n", with: " "))\""
         }
@@ -510,7 +497,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportFuelEntriesCSV(for vin: String) -> String {
         let entries = recentFuelEntries(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Entry ID,VIN,Date,Litres,Price per Litre,Total,Odometer (km)\n"
         for entry in entries {
             csv += "\(entry.id),\(entry.vin),\(formatter.string(from: entry.date)),\(String(format: "%.2f", entry.liters)),\(String(format: "%.3f", entry.pricePerLiter)),\(String(format: "%.2f", entry.liters * entry.pricePerLiter)),\(entry.odometerKm.map { String(format: "%.1f", $0) } ?? "")\n"
@@ -520,7 +507,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportCabinClimateCSV(for vin: String) -> String {
         let records = recentCabinClimate(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Interior (C),Requested Setpoint (C)\n"
         for record in records {
             csv += "\(record.id),\(record.vin),\(formatter.string(from: record.timestamp)),\(record.interiorCelsius.map { String(format: "%.1f", $0) } ?? ""),\(record.requestedCelsius.map { String(format: "%.1f", $0) } ?? "")\n"
@@ -773,7 +760,7 @@ extension VehicleHistoryLedger {
     }
 
     func setTripPurpose(_ purpose: TripPurpose?, tripID: String, vin: String) {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !tripID.isEmpty, !cleanVIN.isEmpty else { return }
         if let purpose {
             let sql = """

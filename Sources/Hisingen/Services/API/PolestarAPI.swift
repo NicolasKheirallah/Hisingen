@@ -908,7 +908,7 @@ actor PolestarAPI {
     /// nothing.
     private func adoptDiscoveredCars(_ accountCars: [ConsumerCarDTO], preferredVIN: String?) throws {
         if accountCars.isEmpty {
-            guard let manualVIN = preferredVIN?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+            guard let manualVIN = preferredVIN?.normalizedVIN,
                   SettingsValidation.isValidVIN(manualVIN) else { throw PolestarError.notConfigured }
             cars = [CarSummary(vin: manualVIN, title: manualVIN)]
             // Manual fallback is not a successful discovery – see discoverySucceeded.

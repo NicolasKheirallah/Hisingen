@@ -46,7 +46,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image battery and range estimated range position relative to car first reading"
         case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels log observed changes rows per page"
         case .general: return "general display menu bar panel size density units language launch charging order"
-        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris home assistant nexblue easee zaptec tibber access token charger wallbox"
+        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris home assistant nexblue easee zaptec tibber access token charger wallbox perific enegic house meter hushållsmätare han port load balancing"
         case .features: return "feature capability vehicle data remote control remote commands lock climate charge schedule location weather authorize authorization"
         case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
         case .privacyData: return "privacy data database storage history retention export backup diagnostics location"

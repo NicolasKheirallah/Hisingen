@@ -98,7 +98,7 @@ struct HomeChargerCommandTracker: Equatable, Sendable {
     }
 
     mutating func confirmedWithoutSending(_ kind: HomeChargerCommandKind, telemetry: HomeChargerTelemetry, now: Date) {
-        phase = .confirmed(kind, at: now, outcome: Self.outcome(for: kind, telemetry: telemetry, now: now) ?? .stopped)
+        phase = .confirmed(kind, at: now, outcome: Self.outcome(for: kind, telemetry: telemetry) ?? .stopped)
     }
 
     mutating func dismiss() {
@@ -114,7 +114,7 @@ struct HomeChargerCommandTracker: Equatable, Sendable {
                 phase = .unconfirmed(kind, since: now, reason: .chargerError)
                 return
             }
-            if let outcome = Self.outcome(for: kind, telemetry: telemetry, now: now) {
+            if let outcome = Self.outcome(for: kind, telemetry: telemetry) {
                 phase = .confirmed(kind, at: now, outcome: outcome)
                 return
             }
@@ -129,7 +129,7 @@ struct HomeChargerCommandTracker: Equatable, Sendable {
         phase = .unconfirmed(kind, since: now, reason: reason)
     }
 
-    private static func outcome(for kind: HomeChargerCommandKind, telemetry: HomeChargerTelemetry, now: Date) -> Outcome? {
+    private static func outcome(for kind: HomeChargerCommandKind, telemetry: HomeChargerTelemetry) -> Outcome? {
         guard let status = telemetry.status?.value else { return nil }
         switch kind {
         case .start:

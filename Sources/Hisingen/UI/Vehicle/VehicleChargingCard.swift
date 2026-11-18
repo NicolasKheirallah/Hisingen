@@ -13,9 +13,10 @@ struct VehicleChargingCard: View {
     @Environment(\.homeCharging) private var homeCharging
     @State private var homeHistoryRevision = 0
     @State private var persistentSessions: [ChargingSession] = []
-    /// Spot price in effect right now, settled the way the user's contract bills it. Only
-    /// loaded in automatic rate mode; nil until the first fetch lands or when none exists.
-    @State private var currentSpotPrice: Double?
+    /// Price per kWh in effect right now, settled the way the user's contract bills it and
+    /// including the markup. Only loaded in automatic rate mode; nil until the first fetch lands
+    /// or when none exists.
+    @State private var currentMarketRate: Double?
 
     private var features: FeatureSelection { preferences.features }
     private var hasLastKnownChargingReadings: Bool {
@@ -66,18 +67,19 @@ struct VehicleChargingCard: View {
     }
 
     private func loadCurrentSpotPrice() async {
-        guard preferences.electricityRateMode == .automatic else { currentSpotPrice = nil; return }
-        let prices = await ElectricityPriceService.shared.prices(for: preferences.electricityPriceZone)
-        let settled = preferences.electricityPriceContract.settle(prices)
-        currentSpotPrice = ChargingPlanner.currentPrice(prices: settled, at: Date())
+        guard preferences.electricityRateMode == .automatic else { currentMarketRate = nil; return }
+        let prices = await PlannerPriceProvider.shared.resolve(zone: preferences.electricityPriceZone)
+        currentMarketRate = prices.currentRate(policy: preferences.electricityRatePolicy, at: Date())
     }
 
-    /// The per-kWh price the charge-to-target estimate uses: the live market price plus the
-    /// user's markup in automatic mode, the typed-in rate otherwise or while no price is known.
+    /// The per-kWh price the charge-to-target estimate uses: the connected provider's price, or the
+    /// live market price plus the user's markup, in automatic mode; the typed-in rate otherwise or
+    /// while no price is known.
     private var estimateRatePerKwh: Double {
-        let policy = preferences.electricityRatePolicy
-        guard policy.isAutomatic, let spot = currentSpotPrice else { return preferences.electricityPricePerKwh }
-        return policy.retailPrice(spotSekPerKwh: spot)
+        guard preferences.electricityRatePolicy.isAutomatic, let rate = currentMarketRate else {
+            return preferences.electricityPricePerKwh
+        }
+        return rate
     }
 
     private var headline: String? {
@@ -116,7 +118,7 @@ struct VehicleChargingCard: View {
                 // Whole units: the inputs are an assumed usable capacity and a static price, so
                 // hundredths implied precision the calculation does not have. The basis is
                 // stated because every detail row below this line names its own.
-                let isMarketRate = preferences.electricityRatePolicy.isAutomatic && currentSpotPrice != nil
+                let isMarketRate = preferences.electricityRatePolicy.isAutomatic && currentMarketRate != nil
                 parts.append(L10n.format(isMarketRate ? "≈%@ to target at the current %@/kWh" : "≈%@ to target at your %@/kWh setting",
                                           Format.currency(cost.rounded(), symbol: preferences.currencySymbol),
                                           String(format: "%.2f", locale: L10n.displayLocale, estimateRatePerKwh)))

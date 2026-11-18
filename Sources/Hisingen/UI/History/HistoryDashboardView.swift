@@ -163,6 +163,11 @@ struct HistoryDashboardView: View {
 
     @State var previousSessionCurve: [HistoryInsights.ChargingCurvePoint] = []
 
+    @Environment(\.homeCharging) var homeCharging
+    /// The car's part of the house's metered electricity for the period, when a house meter (Tibber or
+    /// Perific) is connected and a home charger measured sessions in it.
+    @State var houseLoad: HouseLoadShare?
+
     /// Inclusive date window for the selected period. `nil` means "no filter" (the All case).
     var activeRange: ClosedRange<Date>? {
         let calendar = Calendar.current
@@ -623,8 +628,7 @@ struct HistoryDashboardView: View {
             rowCap: rowCap, tripCap: tripCap,
             capacityKwh: history.usableCapacityKwh(vin: state.identity.vin, state: state),
             hasElectricRange: state.powertrain.hasElectricRange,
-            hasCombustionEngine: state.powertrain.hasCombustionEngine,
-            lifetimeKey: lifetimeKey)
+            hasCombustionEngine: state.powertrain.hasCombustionEngine)
 
         let loaded = await history.dashboard(matching: query,
                                              loadLifetime: loadedLifetimeKey != lifetimeKey,
@@ -632,7 +636,7 @@ struct HistoryDashboardView: View {
 
         // A load cancelled by a newer key must not clear the loading flag the replacement
         // already set, so the flags reset only on the success path.
-        guard !Task.isCancelled, let loaded else { return }
+        guard !Task.isCancelled else { return }
         isLoading = false
         didInitialLoad = true
         snapshot = loaded.dashboard

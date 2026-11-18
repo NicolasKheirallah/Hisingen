@@ -58,6 +58,10 @@ actor PolestarGRPC {
     var sessionGeneration: UInt64 = 0
     private var liveWorkers: [UUID: Task<Void, Never>] = [:]
     var softwareReadGeneration: [String: UInt64] = [:]
+    /// Until when the optional `GetSchedule` leg is skipped for a VIN after it failed with an
+    /// invalid response. Without it a deadline on that one call held every hourly software read
+    /// (and the refresh waiting on it) for the full timeout again.
+    var softwareScheduleRetryAfter: [String: Date] = [:]
     var otaSoftwareIDs: [String: String] = [:]
     /// Backend-advertised charging bounds per VIN (`GetMyCars`), used to validate
     /// charge-target and amp-limit writes against what the vehicle actually supports.
@@ -70,8 +74,7 @@ actor PolestarGRPC {
     /// They are skipped for this vehicle and backend for 24 hours rather than
     /// re-attempted – and failing – on every refresh. The expiry lets a newly deployed backend
     /// capability recover without requiring the user to clear defaults.
-    var unimplementedReadPaths: Set<String>
-    var unimplementedReadPathExpirations: [String: Date]
+    private var unimplementedReadPathExpirations: [String: Date]
     private static let unimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v3"
     private static let legacyUnimplementedReadPathsKey = "polestar_unimplemented_grpc_paths_v1"
     private static let unimplementedReadPathTTL: TimeInterval = 24 * 60 * 60
@@ -127,7 +130,7 @@ actor PolestarGRPC {
         let error = Self.readStatusError(status: status, message: message, path: path)
         let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
         if case .grpcUnimplemented = error,
-           unimplementedReadPaths.insert(key).inserted {
+           unimplementedReadPathExpirations[key] == nil {
             unimplementedReadPathExpirations[key] = now().addingTimeInterval(Self.unimplementedReadPathTTL)
             persistUnimplementedReadPaths()
         }
@@ -140,9 +143,8 @@ actor PolestarGRPC {
 
     func isReadPathUnimplemented(_ path: String, vin: String, base: URL) -> Bool {
         let key = Self.readCapabilityKey(path: path, vin: vin, base: base)
-        guard unimplementedReadPaths.contains(key) else { return false }
-        if let expiry = unimplementedReadPathExpirations[key], expiry > now() { return true }
-        unimplementedReadPaths.remove(key)
+        guard let expiry = unimplementedReadPathExpirations[key] else { return false }
+        if expiry > now() { return true }
         unimplementedReadPathExpirations[key] = nil
         persistUnimplementedReadPaths()
         return false
@@ -295,7 +297,7 @@ actor PolestarGRPC {
 
     let session: URLSession
     private let transport: any PolestarGRPCTransport
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
 
     init(defaultsSuiteName: String? = nil, session: URLSession? = nil,
          diagnosticLog: APIDiagnosticLogStore = .shared,
@@ -318,17 +320,15 @@ actor PolestarGRPC {
             self.transport = PolestarHTTP2Transport()
         }
         let now = now()
-        let persisted = (defaults.dictionary(forKey: Self.unimplementedReadPathsKey)
+        let expirations = (defaults.dictionary(forKey: Self.unimplementedReadPathsKey)
             as? [String: Double] ?? [:]).compactMapValues { epoch -> Date? in
                 let expiry = Date(timeIntervalSince1970: epoch)
                 return expiry > now ? expiry : nil
             }
-        let expirations = persisted
         // Old entries have no vehicle or backend scope and cannot be reused safely.
         defaults.removeObject(forKey: "polestar_unimplemented_grpc_paths_v2")
         defaults.removeObject(forKey: Self.legacyUnimplementedReadPathsKey)
         unimplementedReadPathExpirations = expirations
-        unimplementedReadPaths = Set(expirations.keys)
         defaults.set(expirations.mapValues(\.timeIntervalSince1970),
                      forKey: Self.unimplementedReadPathsKey)
     }
@@ -613,6 +613,7 @@ actor PolestarGRPC {
         // on the same app instance must never inherit the previous account's OTA ids, states,
         // or vehicle-advertised charging limits.
         softwareReadGeneration = [:]
+        softwareScheduleRetryAfter = [:]
         otaSoftwareIDs = [:]
         otaSoftwareStates = [:]
         otaRawSoftwareStates = [:]

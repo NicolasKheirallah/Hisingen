@@ -58,6 +58,10 @@ actor HomeAssistantSocket {
     private var pending: [Int: CheckedContinuation<HAJSONValue, any Error>] = [:]
     private var stateContinuation: AsyncStream<HAStateChange>.Continuation?
     private var subscriptionID: Int?
+    /// Entities the consumer cares about. `nil` delivers every change. Home Assistant sends the
+    /// whole house over this subscription, so anything outside the set is dropped before it is
+    /// decoded a second time or queued behind relevant events.
+    private var watchedEntityIDs: Set<String>?
     private var reader: Task<Void, Never>?
     private(set) var isClosed = false
 
@@ -98,8 +102,9 @@ actor HomeAssistantSocket {
     }
 
     /// Live `state_changed` events. The stream ends when the socket closes, which is the
-    /// caller's cue to reconnect.
-    func stateChanges() async throws -> AsyncStream<HAStateChange> {
+    /// caller's cue to reconnect. Pass `entityIDs` to receive only those entities.
+    func stateChanges(entityIDs: Set<String>? = nil) async throws -> AsyncStream<HAStateChange> {
+        watchedEntityIDs = entityIDs
         let (stream, continuation) = AsyncStream<HAStateChange>.makeStream(bufferingPolicy: .bufferingNewest(512))
         stateContinuation = continuation
         if isClosed { continuation.finish(); return stream }
@@ -192,6 +197,7 @@ actor HomeAssistantSocket {
         case "event":
             guard let event = object["event"]?.objectValue, event["event_type"]?.stringValue == "state_changed",
                   let data = event["data"]?.objectValue, let entityID = data["entity_id"]?.stringValue else { return }
+            if let watched = watchedEntityIDs, !watched.contains(entityID) { return }
             var newState: HAEntityState?
             if let value = data["new_state"], value != .null,
                let encoded = try? JSONEncoder().encode(value) {

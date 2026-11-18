@@ -48,10 +48,6 @@ struct VehicleReadiness {
         var estimateDestination: String? = nil
     }
 
-    static func chargingByDeparture(_ state: VehicleState, departure: Date, now: Date = Date()) -> String {
-        assessDeparture(state, departure: departure, now: now).message
-    }
-
     static func assessDeparture(_ state: VehicleState, departure: Date, now: Date = Date()) -> DepartureAssessment {
         guard departure > now else { return .init(message: L10n.text("Choose a future departure time.")) }
         guard state.hasFreshReading(.battery, now: now), let battery = state.energy.batteryPercentage,

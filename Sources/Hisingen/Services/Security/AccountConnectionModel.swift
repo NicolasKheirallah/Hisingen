@@ -312,7 +312,7 @@ final class AccountConnectionModel: ObservableObject {
             preferences.polestarConnectionMode = mode
             preferences.email = ""
             // Only persist a VIN that validates; never store garbage from the delete form.
-            let candidateVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let candidateVIN = draft.polestarVIN.normalizedVIN
             if candidateVIN.isEmpty || SettingsValidation.isValidVIN(candidateVIN) {
                 preferences.setVin(candidateVIN, for: .polestar)
             }
@@ -323,7 +323,7 @@ final class AccountConnectionModel: ObservableObject {
         guard SettingsValidation.isValidEmail(draft.polestarEmail),
               SettingsValidation.isValidOptionalVIN(draft.polestarVIN) else { return nil }
         let normalizedEmail = trimmedEmail
-        let upperVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upperVIN = draft.polestarVIN.normalizedVIN
         let oldVIN = preferences.vin(for: .polestar)
         let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
         let credentialsChanged = normalizedEmail != preferences.email || upperVIN != oldVIN || !draft.polestarPassword.isEmpty
@@ -378,7 +378,7 @@ final class AccountConnectionModel: ObservableObject {
             }
             preferences.polestarDataPortalAccountID = ""
             preferences.polestarDataPortalClientID = ""
-            let candidateVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let candidateVIN = draft.polestarVIN.normalizedVIN
             if candidateVIN.isEmpty || SettingsValidation.isValidVIN(candidateVIN) {
                 preferences.setVin(candidateVIN, for: .polestar)
             }
@@ -411,7 +411,7 @@ final class AccountConnectionModel: ObservableObject {
         }
         preferences.polestarDataPortalAccountID = trimmedAccountID
         preferences.polestarDataPortalClientID = trimmedID
-        let upperVIN = draft.polestarVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upperVIN = draft.polestarVIN.normalizedVIN
         preferences.setVin(upperVIN, for: .polestar)
         preferences.clearExplicitSignOut(for: .polestar)
         let nickVIN = !upperVIN.isEmpty ? upperVIN : preferences.vin(for: .polestar)
@@ -436,7 +436,7 @@ final class AccountConnectionModel: ObservableObject {
     /// pass validation.
     func beginVolvoSignIn() -> VolvoSignInRequest? {
         guard SettingsValidation.isValidOptionalVIN(draft.volvoVIN) else { return nil }
-        let upperVIN = draft.volvoVIN.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upperVIN = draft.volvoVIN.normalizedVIN
         let trimmedClientID = draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let oldVIN = preferences.vin(for: .volvo)
         preferences.volvoClientID = trimmedClientID

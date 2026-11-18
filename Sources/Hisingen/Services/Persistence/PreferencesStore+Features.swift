@@ -52,11 +52,16 @@ extension PreferencesStore {
     /// not their whole interface.
     var tabComposition: TabComposition {
         get {
-            guard let data = d.data(forKey: Self.tabCompositionKey),
-                  let decoded = try? JSONDecoder().decode(TabComposition.self, from: data) else {
+            guard let data = d.data(forKey: Self.tabCompositionKey) else {
                 return seededTabComposition()
             }
-            return decoded.normalized()
+            if let memo = tabCompositionMemo, memo.raw == data { return memo.value }
+            guard let decoded = try? JSONDecoder().decode(TabComposition.self, from: data) else {
+                return seededTabComposition()
+            }
+            let value = decoded.normalized()
+            tabCompositionMemo = (data, value)
+            return value
         }
         set {
             let clean = newValue.normalized()

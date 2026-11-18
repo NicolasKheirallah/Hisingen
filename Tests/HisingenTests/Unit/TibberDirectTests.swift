@@ -19,6 +19,8 @@ private final class MockTibber: @unchecked Sendable {
     private var _slots: [(Date, Double)] = []
     private var failure: String?
     private var httpStatus = 200
+    private var _consumption: [(Date, Double?)] = []
+    private var _upcoming: [(Date, Double)] = []
     private(set) var queries: [String] = []
     private(set) var beforeCursors: [String?] = []
     private(set) var authorization: [String?] = []
@@ -35,6 +37,14 @@ private final class MockTibber: @unchecked Sendable {
     func setSlots(count: Int, price: @escaping (Int) -> Double = { _ in 1.0 }, startingAt start: Date = base) {
         lock.withLock { _slots = (0..<count).map { (start.addingTimeInterval(Double($0) * 900), price($0)) } }
     }
+    /// Prices Tibber has published for the slots still to come, which only `priceInfo` serves.
+    func setUpcoming(count: Int, price: Double, startingAt start: Date) {
+        lock.withLock { _upcoming = (0..<count).map { (start.addingTimeInterval(Double($0) * 900), price) } }
+    }
+    /// Hourly whole-home readings, oldest first; `nil` is an hour the meter has not reported.
+    func setConsumption(hours: Int, startingAt start: Date = base, kwh: @escaping (Int) -> Double? = { _ in 1.0 }) {
+        lock.withLock { _consumption = (0..<hours).map { (start.addingTimeInterval(Double($0) * 3_600), kwh($0)) } }
+    }
     func setFailure(_ errors: String?) { lock.withLock { failure = errors } }
     func setStatus(_ status: Int) { lock.withLock { httpStatus = status } }
     var requestCount: Int { lock.withLock { queries.count } }
@@ -43,11 +53,11 @@ private final class MockTibber: @unchecked Sendable {
         let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
         let query = body["query"] as? String ?? ""
         let variables = body["variables"] as? [String: Any] ?? [:]
-        let (slots, failure, status) = lock.withLock { () -> ([(Date, Double)], String?, Int) in
+        let (slots, failure, status, hours, upcoming) = lock.withLock { () -> ([(Date, Double)], String?, Int, [(Date, Double?)], [(Date, Double)]) in
             queries.append(query)
             beforeCursors.append(variables["before"] as? String)
             authorization.append(request.value(forHTTPHeaderField: "Authorization"))
-            return (_slots, self.failure, httpStatus)
+            return (_slots, self.failure, httpStatus, _consumption, _upcoming)
         }
         if status != 200 { return .json(#"{"message":"nope"}"#, status: status) }
         if let failure { return .json(#"{"errors":[\#(failure)],"data":null}"#) }
@@ -55,18 +65,35 @@ private final class MockTibber: @unchecked Sendable {
             return .json("""
             {"data":{"viewer":{"homes":[
               {"id":"home-1","timeZone":"Europe/Stockholm","appNickname":"Villa","address":{"address1":"Storgatan 1"},
+               "meteringPointData":{"priceAreaCode":"SE3","gridCompany":"Vattenfall Eldistribution AB"},
                "currentSubscription":{"priceInfo":{"current":{"currency":"SEK"}}}},
               {"id":"home-2","timeZone":"Europe/Stockholm","appNickname":null,"address":{"address1":"Fjällvägen 2"},
                "currentSubscription":null}]}}}
             """)
         }
+        if query.contains("priceInfo(resolution") {
+            // Like the real API: today in full and tomorrow when it is out, each slot with its level.
+            let rows = upcoming.map { #"{"total":\#($0.1),"startsAt":"\#(iso($0.0))","level":"NORMAL"}"# }
+            return .json(#"{"data":{"viewer":{"home":{"currentSubscription":{"priceInfo":{"today":[\#(rows.joined(separator: ","))],"tomorrow":[]}}}}}}"#)
+        }
+        if query.contains("consumption(") {
+            var end = hours.count
+            if let before = variables["before"] as? String, let index = Int(before.dropFirst(4)) { end = index }
+            let start = max(0, end - pageLimit)
+            let edges = (start..<end).map { index -> String in
+                let value = hours[index].1.map { String($0) } ?? "null"
+                return #"{"cursor":"cur-\#(index)","node":{"from":"\#(iso(hours[index].0))","to":"\#(iso(hours[index].0.addingTimeInterval(3_600)))","consumption":\#(value),"cost":\#(hours[index].1.map { String($0 * 1.5) } ?? "null"),"currency":"SEK"}}"#
+            }
+            return .json(#"{"data":{"viewer":{"home":{"consumption":{"edges":[\#(edges.joined(separator: ","))]}}}}}"#)
+        }
         var end = slots.count
         if let before = variables["before"] as? String, let index = Int(before.dropFirst(4)) { end = index }
         let start = max(0, end - pageLimit)
         let edges = (start..<end).map { index in
-            #"{"cursor":"cur-\#(index)","node":{"total":\#(slots[index].1),"startsAt":"\#(iso(slots[index].0))"}}"#
+            let level = index % 2 == 0 ? #","level":"CHEAP""# : ""
+            return #"{"cursor":"cur-\#(index)","node":{"total":\#(slots[index].1),"startsAt":"\#(iso(slots[index].0))"\#(level)}}"#
         }
-        return .json(#"{"data":{"viewer":{"home":{"currentSubscription":{"priceInfo":{"range":{"edges":[\#(edges.joined(separator: ","))]}}}}}}}"#)
+        return .json(#"{"data":{"viewer":{"home":{"currentSubscription":{"priceInfoRange":{"edges":[\#(edges.joined(separator: ","))]}}}}}}"#)
     }
 }
 
@@ -80,6 +107,12 @@ struct TibberClientTests {
         #expect(homes[0].name == "Villa")
         #expect(homes[0].currency == "SEK")
         #expect(homes[0].timeZone == "Europe/Stockholm")
+        // The metering point names the spot-price zone and the grid company.
+        #expect(homes[0].priceArea == "SE3")
+        #expect(homes[0].elspotZone == .se3)
+        #expect(homes[0].gridCompany == "Vattenfall Eldistribution AB")
+        #expect(homes[1].priceArea == nil)
+        #expect(homes[1].elspotZone == nil)
         // No nickname: the street address names it. No subscription: no currency, and no failure.
         #expect(homes[1].name == "Fjällvägen 2")
         #expect(homes[1].currency == nil)
@@ -101,6 +134,86 @@ struct TibberClientTests {
         // Slots are quarter-hours and carry Tibber's all-in price unchanged.
         #expect(points.allSatisfy { $0.end.timeIntervalSince($0.start) == 900 })
         #expect(abs((points.first?.pricePerKwh ?? 0) - 1.03) < 1e-9)
+    }
+
+    @Test("Prices come from the subscription's priceInfoRange, which is where Tibber serves quarter-hours")
+    func queryShape() async throws {
+        // `priceInfo { range(resolution: QUARTER_HOURLY) }` is refused by the live API with HTTP 400,
+        // because that legacy field only takes HOURLY and DAILY.
+        let tibber = MockTibber(pageLimit: 50)
+        tibber.setSlots(count: 8)
+        _ = try await TibberClient(token: "t", transport: tibber.transport).prices(homeID: "home-1", from: base, to: base.addingTimeInterval(8 * 900))
+        #expect(tibber.queries.first?.contains("priceInfoRange(resolution: QUARTER_HOURLY") == true)
+        #expect(tibber.queries.first?.contains("priceInfo {") == false)
+    }
+
+    @Test("A span that reaches past now also gets the prices Tibber has published for the slots to come")
+    func upcomingPricesAreMerged() async throws {
+        // priceInfoRange stops at the slot running now; against the live API it returned nothing after it.
+        let tibber = MockTibber(pageLimit: 50)
+        tibber.setSlots(count: 8, price: { _ in 1.0 })
+        let now = base.addingTimeInterval(8 * 900)
+        tibber.setUpcoming(count: 8, price: 2.0, startingAt: now)
+        let client = TibberClient(token: "t", transport: tibber.transport, now: { now })
+        let points = try await client.prices(homeID: "home-1", from: base, to: base.addingTimeInterval(16 * 900))
+        #expect(points.count == 16)
+        #expect(points.last?.end == base.addingTimeInterval(16 * 900))
+        #expect(points.prefix(8).allSatisfy { $0.pricePerKwh == 1.0 })
+        #expect(points.suffix(8).allSatisfy { $0.pricePerKwh == 2.0 })
+        // The slot the range and the upcoming list both name is one slot, not two.
+        #expect(Set(points.map(\.start)).count == points.count)
+    }
+
+    @Test("A span that ends before now does not ask for upcoming prices")
+    func pastSpanSkipsUpcoming() async throws {
+        let tibber = MockTibber(pageLimit: 50)
+        tibber.setSlots(count: 8)
+        tibber.setUpcoming(count: 8, price: 2.0, startingAt: base.addingTimeInterval(8 * 900))
+        let client = TibberClient(token: "t", transport: tibber.transport, now: { base.addingTimeInterval(8 * 900) })
+        _ = try await client.prices(homeID: "home-1", from: base, to: base.addingTimeInterval(6 * 900))
+        #expect(tibber.queries.allSatisfy { !$0.contains("priceInfo(resolution") })
+    }
+
+    @Test("A slot carries Tibber's level when it gives one, and none when it does not")
+    func levels() async throws {
+        let tibber = MockTibber(pageLimit: 50)
+        tibber.setSlots(count: 4)
+        let points = try await TibberClient(token: "t", transport: tibber.transport).prices(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(4 * 900))
+        #expect(points.map(\.level) == [.cheap, nil, .cheap, nil])
+    }
+
+    @Test("Hourly consumption is read in pages, and an hour without a reading is left out, not counted as zero")
+    func consumption() async throws {
+        let tibber = MockTibber(pageLimit: 12)
+        tibber.setConsumption(hours: 24) { $0 == 5 ? nil : 2.0 }
+        let hours = try await TibberClient(token: "t", transport: tibber.transport).consumption(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(24 * 3_600))
+        #expect(hours.count == 23)
+        #expect(!hours.contains { $0.start == base.addingTimeInterval(5 * 3_600) })
+        #expect(hours.allSatisfy { $0.kwh == 2.0 && $0.end.timeIntervalSince($0.start) == 3_600 })
+        // Tibber's billed cost and its currency ride along with each hour.
+        #expect(hours.allSatisfy { $0.cost == 3.0 && $0.currency == "SEK" })
+        #expect(tibber.beforeCursors == [nil, "cur-12"])
+        #expect(hours == hours.sorted { $0.start < $1.start })
+    }
+
+    @Test("Consumption paging is bounded")
+    func consumptionIsBounded() async throws {
+        let tibber = MockTibber(pageLimit: 2)
+        tibber.setConsumption(hours: 1_000)
+        _ = try await TibberClient(token: "t", transport: tibber.transport).consumption(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(1_000 * 3_600))
+        #expect(tibber.requestCount == TibberClient.maximumConsumptionPages)
+    }
+
+    @Test("One page of consumption is enough when it already reaches back far enough")
+    func consumptionSinglePage() async throws {
+        let tibber = MockTibber(pageLimit: 100)
+        tibber.setConsumption(hours: 24)
+        _ = try await TibberClient(token: "t", transport: tibber.transport).consumption(
+            homeID: "home-1", from: base.addingTimeInterval(6 * 3_600), to: base.addingTimeInterval(20 * 3_600))
+        #expect(tibber.requestCount == 1)
     }
 
     @Test("One page is enough when it already reaches back far enough")
@@ -154,7 +267,8 @@ struct TibberClientTests {
 
     @Test("Hourly prices spread over quarter-hour slots keep their own step")
     func hourlyStep() {
-        let collected: [Date: Double] = [base: 1.0, base.addingTimeInterval(3_600): 2.0, base.addingTimeInterval(7_200): 3.0]
+        let collected: [Date: (price: Double, level: TibberPriceLevel?)] = [
+            base: (1.0, nil), base.addingTimeInterval(3_600): (2.0, nil), base.addingTimeInterval(7_200): (3.0, nil)]
         let points = TibberClient.points(from: collected, from: base, to: base.addingTimeInterval(10_800))
         #expect(points.map { $0.end.timeIntervalSince($0.start) } == [3_600, 3_600, 3_600])
     }

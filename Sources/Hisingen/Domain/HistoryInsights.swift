@@ -441,10 +441,6 @@ enum HistoryInsights {
         return batteryHealthTrend(from: records)
     }
 
-    static func stableStateOfHealth(from records: [BatteryHealthRecord], limit: Int = 3) -> Double? {
-        BatteryHealthEstimator.stableMedianSoH(from: records, limit: limit)
-    }
-
     /// Projects state of health at a future odometer reading from the fitted trend. `nil` when
     /// there isn't enough history to fit a trend, or the projection lands outside a physically
     /// sane 0...100% range (a fabricated-looking number is worse than no number).

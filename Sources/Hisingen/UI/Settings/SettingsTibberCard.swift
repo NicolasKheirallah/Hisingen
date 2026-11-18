@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// Settings, Electricity: the electricity supplier. A Tibber access token prices charger sessions
-/// from Tibber's own 15-minute prices, with no Home Assistant and no charger required. Nothing here
-/// is required; without it sessions are priced from the rate settings above.
+/// Settings, Electricity: the electricity supplier. A Tibber access token prices charger sessions and
+/// the charging planner from Tibber's own 15-minute prices, with no Home Assistant and no charger
+/// required. Nothing here is required; without it, or while Tibber does not answer, the planner reads
+/// the market prices and sessions are priced from the rate settings above.
 @MainActor
 struct SettingsTibberCard: View {
     @ObservedObject var model: HomeChargingModel
+    let binder: PreferenceBinder
 
     @State private var token = ""
     @State private var isConnecting = false
@@ -17,7 +19,7 @@ struct SettingsTibberCard: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "bolt", title: L10n.text("Electricity Supplier"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant."))
+                Text(L10n.text("Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant."))
                     .hisType(.caption)
                     .foregroundStyle(HisingenTheme.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -84,16 +86,44 @@ struct SettingsTibberCard: View {
                 KVRow(L10n.text("Supplier"), "Tibber")
                 KVRow(L10n.text("Home"), home.name)
                 if let currency = home.currency { KVRow(L10n.text("Currency"), currency) }
-                KVRow(L10n.text("Prices"), model.tibberProblem ?? L10n.text("Used for charging sessions"),
+                if let area = home.priceArea { KVRow(L10n.text("Price area"), area) }
+                if let company = home.gridCompany {
+                    KVRow(L10n.text("Grid company"), company,
+                          info: L10n.text("Tibber does not publish this company's fee. The per-kWh part is on your grid invoice."))
+                }
+                KVRow(L10n.text("Prices"), model.tibberProblem ?? L10n.text("Used for the planner and charging sessions"),
                       valueWarning: model.tibberProblem != nil)
             }
-            Text(L10n.text("Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger."))
+            if let zone = suggestedZone(for: home) {
+                HStack(spacing: 6) {
+                    Image(systemName: "mappin.and.ellipse").hisType(.caption).foregroundStyle(HisingenTheme.accent)
+                    Text(L10n.format("Tibber puts this home in %@", zone.title))
+                        .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
+                    Button(L10n.text("Use")) {
+                        binder.preferences.electricityPriceZone = zone
+                        binder.bump()
+                        binder.notify(.presentation)
+                    }
+                    .buttonStyle(.pressable)
+                    .controlSize(.small)
+                    .accessibilityLabel(L10n.format("Use %@", zone.title))
+                }
+            }
+            Text(L10n.text("Tibber's price includes energy, taxes and its markup but not the grid fee. Set your grid tariff in the card below; a paired charger can set its own."))
                 .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
             Button { model.disconnectTibber(); token = ""; homes = nil } label: {
                 Text(L10n.text("Disconnect Tibber")).frame(minHeight: 24)
             }
             .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
         }
+    }
+
+    /// The zone Tibber reports for the home, when it differs from the one the planner reads market
+    /// prices for. Only offered where Hisingen reads market prices at all.
+    private func suggestedZone(for home: TibberHome) -> ElspotZone? {
+        guard binder.preferences.marketCountry.offersMarketPricing,
+              let zone = home.elspotZone, zone != binder.preferences.electricityPriceZone else { return nil }
+        return zone
     }
 
     // MARK: Actions

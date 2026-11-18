@@ -21,14 +21,3 @@ struct PanelRule: View {
             .allowsHitTesting(false)
     }
 }
-
-struct VehicleStudio<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        content
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 12)
-            .background(HisingenTheme.palette.studioFill)
-    }
-}

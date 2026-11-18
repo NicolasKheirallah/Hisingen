@@ -20,14 +20,22 @@ extension PreferencesStore {
         let model = modelName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let year = modelYear?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let modelAndYear = [model.isEmpty ? nil : model, year.isEmpty ? nil : year].compactMap { $0 }.joined(separator: " · ")
+        let both: String?
+        let order: [String]
         switch selected {
-        case .registration: return reg.isEmpty ? (nick.isEmpty ? (modelAndYear.isEmpty ? (model.isEmpty ? brand.displayName : model) : modelAndYear) : nick) : reg
-        case .nickname: return nick.isEmpty ? (reg.isEmpty ? (modelAndYear.isEmpty ? (model.isEmpty ? brand.displayName : model) : modelAndYear) : reg) : nick
-        case .modelAndYear: return modelAndYear.isEmpty ? (model.isEmpty ? (nick.isEmpty ? (reg.isEmpty ? brand.displayName : reg) : nick) : model) : modelAndYear
-        case .modelOnly: return model.isEmpty ? (modelAndYear.isEmpty ? (nick.isEmpty ? (reg.isEmpty ? brand.displayName : reg) : nick) : modelAndYear) : model
-        case .nicknameAndRegistration: return !nick.isEmpty && !reg.isEmpty ? "\(nick) (\(reg))" : (nick.isEmpty ? (reg.isEmpty ? (modelAndYear.isEmpty ? brand.displayName : modelAndYear) : reg) : nick)
-        case .registrationAndModel: return !reg.isEmpty && !model.isEmpty ? "\(reg) · \(model)" : (reg.isEmpty ? (modelAndYear.isEmpty ? (nick.isEmpty ? brand.displayName : nick) : modelAndYear) : reg)
+        case .registration: both = nil; order = [reg, nick, modelAndYear, model]
+        case .nickname: both = nil; order = [nick, reg, modelAndYear, model]
+        case .modelAndYear: both = nil; order = [modelAndYear, model, nick, reg]
+        case .modelOnly: both = nil; order = [model, modelAndYear, nick, reg]
+        case .nicknameAndRegistration:
+            both = !nick.isEmpty && !reg.isEmpty ? "\(nick) (\(reg))" : nil
+            order = [nick, reg, modelAndYear]
+        case .registrationAndModel:
+            both = !reg.isEmpty && !model.isEmpty ? "\(reg) · \(model)" : nil
+            order = [reg, modelAndYear, nick]
         }
+        // The first reading the owner has that the chosen format can show; the brand name when none.
+        return both ?? order.first(where: { !$0.isEmpty }) ?? brand.displayName
     }
 
     var menuBarStyle: MenuBarStyle { get { let raw = d.string(forKey: "statusbar_display_option") ?? ""; if let value = MenuBarStyle(rawValue: raw) { return value }; switch raw { case "Range", "Range (km)": return .range; case "Charge Time": return .chargingAware; case "Battery and Range": return .batteryAndRange; case "Compact Charging": return .compactCharging; case "Battery and Power": return .batteryAndPower; default: return .battery } } set { d.set(newValue.rawValue, forKey: "statusbar_display_option") } }
@@ -98,13 +106,13 @@ extension PreferencesStore {
     var appearanceMode: AppearanceMode { get { AppearanceMode(rawValue: d.string(forKey: "his_appearanceMode") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "his_appearanceMode"); applyAppearance() } }
 
     func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         let resolvedBrand = brand ?? (key.isEmpty ? activeBrand : (VehicleBrand.isVolvoVIN(key) ? .volvo : activeBrand))
         return ThemeChoice.resolve(vin: key, brand: resolvedBrand, defaults: d)
     }
 
     func setTheme(_ theme: AppTheme, for vin: String, brand: VehicleBrand? = nil) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         if !key.isEmpty {
             ThemeChoice.assign(theme, scope: .vehicle(key), defaults: d)
         }

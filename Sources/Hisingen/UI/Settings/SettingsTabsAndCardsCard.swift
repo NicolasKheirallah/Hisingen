@@ -12,7 +12,7 @@ struct SettingsTabsAndCardsCard: View {
     let binder: PreferenceBinder
     var state: VehicleState?
 
-    @State private var selectedTab: TabRef = .vehicle
+    @AppStorage("settings.tabs.selectedKey") private var selectedTabKey = TabRef.vehicle.storageKey
     @State private var searchText = ""
     @State private var showAddItems = false
     @State private var renamingTabID: String?
@@ -21,6 +21,13 @@ struct SettingsTabsAndCardsCard: View {
     @State private var newTabName = ""
     @State private var newTabSymbol = CustomTab.symbolChoices[0]
     @State private var pendingTabDeletion: TabRef?
+
+    /// The last tab this pane was looking at. The selection is a stored key rather than a
+    /// `@State` so reopening Settings returns to the tab the reader was arranging.
+    private var selectedTab: TabRef {
+        let saved = TabRef(storageKey: selectedTabKey) ?? .vehicle
+        return tabList.contains(saved) ? saved : .vehicle
+    }
 
     private var prefs: PreferencesStore { binder.preferences }
     private var composition: TabComposition { prefs.tabComposition }
@@ -44,7 +51,7 @@ struct SettingsTabsAndCardsCard: View {
     }
 
     private func tabItems(of tab: TabRef) -> [TabItemID] {
-        composition.visibleItems(for: tab).filter { !TabItemCatalog.isRetired($0) }
+        composition.visibleItems(for: tab)
     }
 
     /// Everything the reader can currently see, across every tab. These readings must keep
@@ -65,7 +72,7 @@ struct SettingsTabsAndCardsCard: View {
         var switchedOff: Set<AppFeature> = []
         let tabs = BuiltInTab.allCases.map { TabRef.builtIn($0) } + updated.customTabs.map(\.reference)
         for tab in tabs {
-            let referenced = Set(updated.items(for: tab).compactMap { TabItemCatalog.item($0)?.feature })
+            let referenced = Set(updated.renderableItems(for: tab).compactMap { TabItemCatalog.item($0)?.feature })
             let shown = Set(updated.visibleItems(for: tab).compactMap { TabItemCatalog.item($0)?.feature })
             switchedOff.formUnion(referenced.subtracting(shown))
         }
@@ -128,7 +135,7 @@ struct SettingsTabsAndCardsCard: View {
                 var updated = composition
                 if let id = tab.customID { updated.removeCustomTab(id) }
                 save(updated)
-                if selectedTab == tab { selectedTab = .vehicle }
+                if selectedTab == tab { selectedTabKey = TabRef.vehicle.storageKey }
                 pendingTabDeletion = nil
             }
             Button(L10n.text("Cancel"), role: .cancel) { pendingTabDeletion = nil }
@@ -210,8 +217,9 @@ struct SettingsTabsAndCardsCard: View {
     @ViewBuilder
     private func tabChip(_ tab: TabRef) -> some View {
         let selected = selectedTab == tab
+        let hidden = tab.builtIn?.isHideable == true && !composition.isVisible(tab)
         let chip = Button {
-            withAnimation(Motion.resolve(Motion.selection)) { selectedTab = tab }
+            withAnimation(Motion.resolve(Motion.selection)) { selectedTabKey = tab.storageKey }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: composition.symbol(for: tab)).hisType(.micro)
@@ -219,6 +227,10 @@ struct SettingsTabsAndCardsCard: View {
                     .hisType(.caption, weight: selected ? .semibold : .regular)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
+                if hidden {
+                    Image(systemName: "eye.slash").hisType(.nano)
+                        .accessibilityHidden(true)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -230,7 +242,9 @@ struct SettingsTabsAndCardsCard: View {
             selected ? HisingenTheme.accent.opacity(0.12) : Color.primary.opacity(0.04),
             in: RoundedRectangle(cornerRadius: 0, style: .continuous)
         )
+        .opacity(hidden && !selected ? 0.65 : 1)
         .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(hidden ? L10n.text("Hidden") : "")
         .contextMenu { tabContextMenu(tab) }
 
         if tab == .settings {
@@ -274,7 +288,9 @@ struct SettingsTabsAndCardsCard: View {
                 var updated = composition
                 updated.setTab(builtIn, shown: !updated.isVisible(tab))
                 save(updated)
-                if !updated.isVisible(tab) { selectedTab = updated.visibleTabs().first ?? .vehicle }
+                if !updated.isVisible(tab) {
+                    selectedTabKey = (updated.visibleTabs().first ?? .vehicle).storageKey
+                }
             }
         }
         if let id = tab.customID {
@@ -340,8 +356,8 @@ struct SettingsTabsAndCardsCard: View {
 
                 Button {
                     var updated = composition
-                    for entry in composition.items(for: selectedTab) { updated.setItem(entry, shown: true) }
-                    enableFeatures(composition.items(for: selectedTab))
+                    for entry in composition.renderableItems(for: selectedTab) { updated.setItem(entry, shown: true, on: selectedTab) }
+                    enableFeatures(composition.renderableItems(for: selectedTab))
                     save(updated)
                 } label: {
                     Label(L10n.text("Show All"), systemImage: "eye")
@@ -352,7 +368,7 @@ struct SettingsTabsAndCardsCard: View {
 
                 Button {
                     var updated = composition
-                    for entry in composition.items(for: selectedTab) { updated.setItem(entry, shown: false) }
+                    for entry in composition.renderableItems(for: selectedTab) { updated.setItem(entry, shown: false, on: selectedTab) }
                     save(updated)
                 } label: {
                     Label(L10n.text("Hide All"), systemImage: "eye.slash")
@@ -369,7 +385,7 @@ struct SettingsTabsAndCardsCard: View {
                         var updated = composition
                         let shipped = TabItemCatalog.defaultItems(for: builtIn)
                         updated.setItems(shipped, for: selectedTab)
-                        for entry in shipped { updated.setItem(entry, shown: true) }
+                        for entry in shipped { updated.setItem(entry, shown: true, on: selectedTab) }
                         enableFeatures(shipped)
                         save(updated)
                     } label: {
@@ -506,7 +522,7 @@ struct SettingsTabsAndCardsCard: View {
     // MARK: - Rows
 
     private var tabItems: [TabItemID] {
-        let items = composition.items(for: selectedTab)
+        let items = composition.renderableItems(for: selectedTab)
         let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return items }
         return items.filter { item in
@@ -532,13 +548,20 @@ struct SettingsTabsAndCardsCard: View {
         }
     }
 
+    private func availability(_ item: TabItemID) -> TabItemAvailability {
+        TabItemAvailability.of(item, state: state,
+                               enabledFeatures: prefs.features.enabled,
+                               plannerAvailable: prefs.smartChargingPlannerAvailable)
+    }
+
     private func row(_ item: TabItemID) -> some View {
         let entry = TabItemCatalog.item(item)
         let kind = entry?.kind ?? .card
         let isHeader = kind == .header
-        let shown = composition.shows(item)
-        let index = composition.items(for: selectedTab).firstIndex(of: item)
-        return HStack(spacing: 8) {
+        let shown = composition.shows(item, on: selectedTab)
+        let index = composition.renderableItems(for: selectedTab).firstIndex(of: item)
+        let isExtra = isPlacedExtra(item)
+        let base = HStack(spacing: 8) {
             Image(systemName: TabItemCatalog.symbol(item))
                 .hisType(.body)
                 .foregroundStyle(shown ? .secondary : .tertiary)
@@ -555,11 +578,24 @@ struct SettingsTabsAndCardsCard: View {
                         chip(source.title)
                     }
                     // Cards and the readings behind them move together when this pane is used,
-                    // so this only appears for a combination made in the feature list. Naming
-                    // it beats a card that draws empty with no explanation.
-                    if shown, let feature = entry?.feature, !prefs.features.contains(feature) {
-                        chip(L10n.text("Data off"), warning: true)
-                            .help(L10n.format("Hisingen is not requesting this reading because “%@” is switched off in Settings → Features.", feature.title))
+                    // so this only appears for a combination made in the feature list, or for a
+                    // card the car has not reported and cannot support.
+                    if shown {
+                        switch availability(item) {
+                        case .switchedOff:
+                            if let feature = entry?.feature {
+                                chip(L10n.text("Data off"), warning: true)
+                                    .help(L10n.format("Hisingen is not requesting this reading because “%@” is switched off in Settings → Features.", feature.title))
+                            } else {
+                                chip(L10n.text("Data off"), warning: true)
+                            }
+                        case .notReported:
+                            chip(L10n.text("Not reported"))
+                        case .notSupported:
+                            chip(L10n.text("Not supported"))
+                        case .drawable:
+                            EmptyView()
+                        }
                     }
                 }
                 Text(entry?.detail ?? "")
@@ -575,13 +611,13 @@ struct SettingsTabsAndCardsCard: View {
 
             Spacer(minLength: 6)
 
-            if !isHeader {
+            if !isHeader, !isExtra {
                 reorderControls(item: item)
             }
 
             Button {
                 var updated = composition
-                updated.setItem(item, shown: !shown)
+                updated.setItem(item, shown: !shown, on: selectedTab)
                 if !shown { ensureFeature(for: item) }
                 save(updated)
             } label: {
@@ -599,7 +635,7 @@ struct SettingsTabsAndCardsCard: View {
             .accessibilityHint(shown ? L10n.text("Hide from this tab") : L10n.text("Show on this tab"))
 
             Menu {
-                if !isHeader {
+                if !isHeader, !isExtra {
                     Button(L10n.text("Move to Top")) { moveToTop(item) }
                         .disabled(index == topCardIndex || topCardIndex == nil)
                     Button(L10n.text("Move Up")) { moveBy(item, -1) }
@@ -636,18 +672,36 @@ struct SettingsTabsAndCardsCard: View {
         .padding(.horizontal, 4)
         .opacity(shown ? 1.0 : 0.55)
         .contentShape(Rectangle())
-        .draggable(TabItemDragPayload(item: item)) {
-            Label(TabItemCatalog.title(item), systemImage: TabItemCatalog.symbol(item))
-                .hisType(.caption)
-                .padding(4)
+
+        // A card placed from another tab draws below this tab's own cards, so it has no
+        // position among them to drag into. Hiding, removing and moving it back home still
+        // work; reordering it here would describe an order the tab does not draw.
+        return Group {
+            if isExtra {
+                base
+            } else {
+                base
+                    .draggable(TabItemDragPayload(item: item)) {
+                        Label(TabItemCatalog.title(item), systemImage: TabItemCatalog.symbol(item))
+                            .hisType(.caption)
+                            .padding(4)
+                    }
+                    .dropDestination(for: TabItemDragPayload.self) { payload, _ in
+                        guard let first = payload.first, first.item != item else { return false }
+                        var updated = composition
+                        updated.move(first.item, onto: item, in: selectedTab)
+                        save(updated)
+                        return true
+                    }
+            }
         }
-        .dropDestination(for: TabItemDragPayload.self) { payload, _ in
-            guard let first = payload.first, first.item != item else { return false }
-            var updated = composition
-            updated.move(first.item, onto: item, in: selectedTab)
-            save(updated)
-            return true
-        }
+    }
+
+    /// A card placed on a shipped tab from another tab. It draws below that tab's own cards,
+    /// so it keeps no reorder position among them.
+    private func isPlacedExtra(_ item: TabItemID) -> Bool {
+        guard let builtIn = selectedTab.builtIn else { return false }
+        return !TabItemCatalog.defaultItems(for: builtIn).contains(item)
     }
 
     private func historyPageSizePicker(for item: TabItemID) -> some View {
@@ -673,6 +727,8 @@ struct SettingsTabsAndCardsCard: View {
         HStack(spacing: 1) {
             Button { moveBy(item, -1) } label: {
                 Image(systemName: "chevron.up").hisType(.nano, weight: .bold)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .disabled(!composition.canMove(item, in: selectedTab, by: -1))
@@ -681,6 +737,8 @@ struct SettingsTabsAndCardsCard: View {
 
             Button { moveBy(item, 1) } label: {
                 Image(systemName: "chevron.down").hisType(.nano, weight: .bold)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .disabled(!composition.canMove(item, in: selectedTab, by: 1))
@@ -707,13 +765,13 @@ struct SettingsTabsAndCardsCard: View {
     /// Index of the first card, which is where "Move to Top" means. Headers stay above it:
     /// dropping a chart above the period picker would change what the picker appears to control.
     private var topCardIndex: Int? {
-        composition.items(for: selectedTab)
+        composition.renderableItems(for: selectedTab)
             .firstIndex { TabItemCatalog.item($0)?.isCard == true }
     }
 
     private func moveToTop(_ item: TabItemID) {
         guard let target = topCardIndex else { return }
-        var items = composition.items(for: selectedTab)
+        var items = composition.renderableItems(for: selectedTab)
         guard let from = items.firstIndex(of: item) else { return }
         items.remove(at: from)
         items.insert(item, at: min(target, items.count))
@@ -734,6 +792,8 @@ struct SettingsTabsAndCardsCard: View {
         HStack(spacing: 1) {
             Button { moveTabToFirst(tab) } label: {
                 Image(systemName: "arrow.left.to.line").hisType(.nano, weight: .bold)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .disabled(!composition.canMoveTab(tab, by: -1))
@@ -742,6 +802,8 @@ struct SettingsTabsAndCardsCard: View {
 
             Button { moveTab(tab, -1) } label: {
                 Image(systemName: "chevron.left").hisType(.nano, weight: .bold)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .disabled(!composition.canMoveTab(tab, by: -1))
@@ -750,6 +812,8 @@ struct SettingsTabsAndCardsCard: View {
 
             Button { moveTab(tab, 1) } label: {
                 Image(systemName: "chevron.right").hisType(.nano, weight: .bold)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
             .disabled(!composition.canMoveTab(tab, by: 1))
@@ -773,11 +837,16 @@ struct SettingsTabsAndCardsCard: View {
 
     // MARK: - Counts
 
-    private var visibleCount: Int {
-        composition.items(for: selectedTab).filter { composition.shows($0) }.count
+    /// The card rows only. Headers are strips, not cards, and a count that included them made
+    /// a tab with one card and one header read as "2 of 2 cards".
+    private var cardItems: [TabItemID] {
+        composition.renderableItems(for: selectedTab)
+            .filter { TabItemCatalog.item($0)?.isCard == true }
     }
 
-    private var totalCount: Int { composition.items(for: selectedTab).count }
+    private var visibleCount: Int { cardItems.filter { composition.shows($0, on: selectedTab) }.count }
+
+    private var totalCount: Int { cardItems.count }
 
     // MARK: - Sheets
 
@@ -832,7 +901,7 @@ struct SettingsTabsAndCardsCard: View {
         var updated = composition
         let tab = updated.addCustomTab(name: newTabName, symbol: newTabSymbol)
         save(updated)
-        selectedTab = tab
+        selectedTabKey = tab.storageKey
         showNewTabSheet = false
     }
 }
