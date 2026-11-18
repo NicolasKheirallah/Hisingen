@@ -86,7 +86,11 @@ struct VehicleChargingCard: View {
         guard features.contains(.chargingDetails) else { return nil }
         if state.isCharging {
             var parts = [state.energy.chargingState.displayName]
-            if let watts = state.energy.powerWatts, watts > 0 { parts.append(Format.kilowatts(watts: watts)) }
+            if let draw = state.liveChargingDraw() {
+                parts.append(draw)
+            } else if let watts = state.energy.powerWatts, watts > 0 {
+                parts.append(Format.kilowatts(watts: watts))
+            }
             if state.energy.type != .unknown, state.energy.type != .none { parts.append(state.energy.type.displayName) }
             return parts.joined(separator: " · ")
         }

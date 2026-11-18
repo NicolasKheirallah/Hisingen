@@ -9,10 +9,6 @@ struct VehicleTabView: View {
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
-    func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
-        layout.ordered(entries, by: item)
-    }
-
     let state: VehicleState
     let cars: [CarSummary]
     let activeVin: String?
@@ -34,6 +30,7 @@ struct VehicleTabView: View {
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var dismissedSoftwareEventIdentifier: String?
     @Namespace private var carChipNamespace
 
@@ -74,9 +71,21 @@ struct VehicleTabView: View {
     }
 
     var body: some View {
+        let twoColumns = preferences.wideCardLayout == .twoColumns
+            && HisingenTheme.layoutWidth >= 500 && !typeSize.isAccessibilitySize
+        let rows = Self.cardRows(layout: layout, features: features, twoColumns: twoColumns)
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            ForEach(rowItems, id: \.self) { item in
-                card(item)
+            ForEach(rows, id: \.first) { row in
+                if row.count == 2 {
+                    HStack(alignment: .top, spacing: HisingenTheme.sectionSpacing) {
+                        ForEach(row, id: \.self) { item in
+                            card(item).frame(maxWidth: .infinity)
+                        }
+                    }
+                    .transition(cardTransition)
+                } else if let item = row.first {
+                    card(item)
+                }
             }
         }
         .animation(cardChangeAnimation, value: warningsSignature)
@@ -88,19 +97,26 @@ struct VehicleTabView: View {
         }
     }
 
-    /// The rows this tab draws, in the reader's order when they have one.
-    ///
-    /// The roster is the catalogue's shipped layout, the same list Settings shows. Deriving it
-    /// here is what stopped the pane and the tab from disagreeing about what is on Now.
-    /// Two of the shipped rows hold a pair of cards side by side on a wide panel, so the filter
-    /// runs before the pairing and a hidden card takes its partner's column with it.
-    private var rowItems: [TabItemID] {
-        ordered(TabItemCatalog.defaultItems(for: .vehicle), by: { $0 }).filter { draws($0) }
+    static func cardRows(layout: TabLayout, features: FeatureSelection, twoColumns: Bool) -> [[TabItemID]] {
+        let items = layout.ordered(TabItemCatalog.defaultItems(for: .vehicle), by: { $0 }).filter { item in
+            guard layout.draws(item) else { return false }
+            switch item {
+            case .vehicleTyres, .vehicleLocation:
+                return CardAvailability.of(item, enabledFeatures: features.enabled) == .drawable
+            default:
+                return true
+            }
+        }
+        return items.reduce(into: [[TabItemID]]()) { rows, item in
+            if twoColumns,
+               (rows.last == [.vehicleTyres] && item == .vehicleLocation
+                || rows.last == [.vehicleLocation] && item == .vehicleTyres) {
+                rows[rows.count - 1].append(item)
+            } else {
+                rows.append([item])
+            }
+        }
     }
-
-    /// One row. The two paired rows fall back to a single column when the reader moved one of
-    /// their cards and the pair no longer shares a screen row.
-    private static let twoColumnThreshold: CGFloat = 500
 
     @ViewBuilder
     private func card(_ item: TabItemID) -> some View {
@@ -109,9 +125,7 @@ struct VehicleTabView: View {
             multiCarChips
         case .vehicleHero:
             NowInstrument(state: state, imageCache: imageCache, commandGate: commandGate,
-                          feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
-                          showsDepartureCheck: draws(.vehicleReadiness),
-                          showsWeather: draws(.vehicleWeather))
+                          feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands)
         case .vehicleReceipts:
             ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
                 CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
@@ -125,7 +139,7 @@ struct VehicleTabView: View {
                 card.transition(cardTransition)
             }
         case .vehicleWeather:
-            if !draws(.vehicleHero), features.contains(.vehicleWeather) {
+            if features.contains(.vehicleWeather) {
                 NowWeatherReadout(state: state)
             }
         case .vehicleCharging:
@@ -134,7 +148,8 @@ struct VehicleTabView: View {
         case .vehicleChargingPlanner:
             if let card = chargingPlannerCard { card.transition(cardTransition) }
         case .vehicleFuelEngine:
-            if let row = VehicleDashboardRows.fuel(state: state, distanceUnit: preferences.distanceUnit) {
+            if state.powertrain.hasCombustionEngine,
+               let row = VehicleDashboardRows.fuel(state: state, distanceUnit: preferences.distanceUnit) {
                 row.transition(cardTransition)
             }
         case .vehicleOpenings:
@@ -142,48 +157,16 @@ struct VehicleTabView: View {
                 row.transition(cardTransition)
             }
         case .vehicleTyres:
-            if !rowItems.contains(.vehicleOpenings) {
-                pairedCard(tireSchematicCard, .vehicleLocation, locationCard)
-            }
+            tireSchematicCard.transition(cardTransition)
         case .vehicleLocation:
-            if !rowItems.contains(.vehicleTyres) {
-                pairedCard(locationCard, nil, nil)
-            }
+            locationCard.transition(cardTransition)
         case .vehicleReadiness:
-            if features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
-                if !draws(.vehicleHero), let check = VehicleDashboardRows.departureCheck(state: state) {
-                    check.transition(cardTransition)
-                }
+            if state.powertrain.hasElectricRange,
+               features.contains(.vehicleHealth) || features.contains(.exteriorStatus) {
+                DepartureCheckDisclosure(state: state)
+                    .padding(.horizontal, HisingenTheme.cardPadding)
+                    .transition(cardTransition)
             }
-        default:
-            EmptyView()
-        }
-    }
-
-    /// A card, paired with the next one when the reader has left the shipped pairing intact and
-    /// the panel is wide enough for two columns.
-    @ViewBuilder
-    private func pairedCard(_ primary: AnyView?, _ partnerItem: TabItemID?, _ partner: AnyView?) -> some View {
-        let partnerView = partnerItem.flatMap { rowItems.contains($0) ? partner : nil }
-        adaptiveCardsRow(primary, partnerView)
-    }
-
-    private var usesTwoColumnCards: Bool {
-        preferences.wideCardLayout == .twoColumns && HisingenTheme.layoutWidth >= Self.twoColumnThreshold
-    }
-
-    @ViewBuilder
-    private func adaptiveCardsRow(_ primary: AnyView?, _ secondary: AnyView?) -> some View {
-        switch (primary, secondary) {
-        case (.some(let first), .some(let second)) where usesTwoColumnCards:
-            HStack(alignment: .top, spacing: HisingenTheme.sectionSpacing) {
-                first.frame(maxWidth: .infinity)
-                second.frame(maxWidth: .infinity)
-            }.transition(cardTransition)
-        case (.some(let first), .some(let second)):
-            VStack(spacing: HisingenTheme.sectionSpacing) { first; second }.transition(cardTransition)
-        case (.some(let only), _):
-            only.transition(cardTransition)
         default:
             EmptyView()
         }
@@ -239,24 +222,31 @@ struct VehicleTabView: View {
     /// which is the unavailable card's whole job.
     private var openingsRow: AnyView? {
         guard features.contains(.exteriorStatus) else { return nil }
-        guard let exterior = state.exteriorStatus, !exterior.openings.isEmpty else {
+        guard let row = VehicleDashboardRows.doors(state: state) else {
             if state.isVolvo { return AnyView(volvoUnavailableCard(symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo, message: L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and 'Volvo Connected Services' enabled in vehicle privacy settings."))) }
-            return UnavailableFeatureCard.make(state: state, feature: .exteriorStatus, symbol: "car.side.lock", title: L10n.text("Doors & Openings"), color: .indigo, badge: AppFeature.exteriorStatus.title)
+            return UnavailableFeatureCard.make(
+                state: state, feature: .exteriorStatus, symbol: "car.side.lock",
+                title: L10n.text("Doors & Openings"), color: .indigo, badge: AppFeature.exteriorStatus.title,
+                message: L10n.text("No door or window state was reported on the last refresh.")
+            )
         }
-        return VehicleDashboardRows.doors(state: state)
+        return row
     }
 
-    private var tireSchematicCard: AnyView? {
-        guard features.contains(.tyreAndWarnings) else { return nil }
+    private var tireSchematicCard: AnyView {
         guard let tyres = state.maintenance.details?.tyres, !tyres.isEmpty else {
             if state.isVolvo { return AnyView(volvoUnavailableCard(symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: HisingenTheme.semanticActive, message: L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors."))) }
-            return UnavailableFeatureCard.make(state: state, feature: .tyreAndWarnings, symbol: "circle.grid.2x2", title: L10n.text("Tire Status (iTPMS)"), color: HisingenTheme.semanticActive, badge: AppFeature.tyreAndWarnings.title)
+            return AnyView(UnavailableFeatureCard(
+                symbol: "circle.grid.2x2", title: L10n.text("Tyre Status"),
+                color: HisingenTheme.semanticActive, badge: AppFeature.tyreAndWarnings.title,
+                message: L10n.text("No tyre pressures or warning levels were reported on the last refresh."),
+                state: state.freshness.unavailableFeatures.contains(.tyreAndWarnings) ? .unsupported : .unavailable
+            ))
         }
         return AnyView(TireStatusCardView(tyres: tyres, model: state.model))
     }
 
-    private var locationCard: AnyView? {
-        guard features.contains(.vehicleLocation) else { return nil }
+    private var locationCard: AnyView {
         guard let location = state.location, let latitude = location.latitude, let longitude = location.longitude else {
             let explanation = state.isVolvo ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.") : L10n.text("Parking position unavailable.")
             return AnyView(Card {
@@ -269,8 +259,7 @@ struct VehicleTabView: View {
                 }
             })
         }
-        let inlineWeather = !draws(.vehicleWeather) && features.contains(.vehicleWeather) ? state.weather : nil
-        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: inlineWeather, isLive: !state.hasOldData(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
+        return AnyView(LocationCardView(lat: latitude, lon: longitude, speed: location.speed, heading: location.heading, timestamp: location.timestamp, altitude: location.altitudeMeters, accuracy: location.accuracyMeters, parkingBrake: location.parkingBrakeEngaged, gear: location.gear, weather: nil, isLive: !state.hasOldData(), freshnessText: state.freshnessDescription, reverseGeocoder: reverseGeocoder))
     }
 
     /// A section that cannot show its data.

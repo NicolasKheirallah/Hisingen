@@ -386,7 +386,8 @@ struct HistoryDashboardView: View {
         }
         // The reader's order, with the terminal states left where they are: they describe the
         // data, not the layout, and belong at the end whichever way the cards are arranged.
-        let grouped = drawn.filter { $0.item == nil || sectionGroup.contains($0.id) }
+        let group = draws(.historyPeriodPicker) ? sectionGroup : .all
+        let grouped = drawn.filter { $0.item == nil || group.contains($0.id) }
         let cards = grouped.compactMap { section in section.item.map { (section: section, item: $0) } }
         return ordered(cards, by: \.item).map(\.section) + grouped.filter { $0.item == nil }
     }

@@ -19,6 +19,57 @@ struct TabRenderContractTests {
     }
 
     @Test
+    func planKeepsReceiptsInTheConfiguredOrderAndCanHideThem() {
+        var composition = TabComposition()
+        let controls: Set<TabItemID> = [.controlsClimate, .controlsRoutines]
+        composition.setItems([.controlsClimate, .controlsReceipts, .controlsRoutines], for: .controls)
+        let layout = TabLayout.resolve(composition, for: .controls)
+        #expect(ControlsTabView.orderedCardItems(layout: layout, controls: controls, hasReceipts: true)
+                == [.controlsClimate, .controlsReceipts, .controlsRoutines])
+        #expect(ControlsTabView.orderedCardItems(layout: layout, controls: controls, hasReceipts: false)
+                == [.controlsClimate, .controlsRoutines])
+
+        composition.setItem(.controlsReceipts, shown: false, on: .controls)
+        let hidden = TabLayout.resolve(composition, for: .controls)
+        #expect(ControlsTabView.orderedCardItems(layout: hidden, controls: controls, hasReceipts: true)
+                == [.controlsClimate, .controlsRoutines])
+    }
+
+    @Test(arguments: [false, true])
+    func nowKeepsOpeningsTyresAndLocationWhenAllAreEnabled(twoColumns: Bool) {
+        let features = FeatureSelection(enabled: [.exteriorStatus, .tyreAndWarnings, .vehicleLocation])
+        let layout = TabLayout.resolve(TabComposition(), for: .vehicle)
+        let rows = VehicleTabView.cardRows(layout: layout, features: features, twoColumns: twoColumns)
+
+        #expect(rows.flatMap { $0 } == layout.items)
+        let expected: [[TabItemID]] = twoColumns
+            ? [[.vehicleOpenings], [.vehicleTyres, .vehicleLocation]]
+            : [[.vehicleOpenings], [.vehicleTyres], [.vehicleLocation]]
+        #expect(Array(rows.suffix(expected.count)) == expected)
+    }
+
+    @Test
+    func nowPreservesTheConfiguredOrderAndHidesOnlyTheSelectedCard() {
+        let features = FeatureSelection(enabled: [.exteriorStatus, .tyreAndWarnings, .vehicleLocation])
+        var composition = TabComposition()
+        composition.setItems([.vehicleLocation, .vehicleOpenings, .vehicleTyres], for: .vehicle)
+        let ordered = VehicleTabView.cardRows(layout: .resolve(composition, for: .vehicle),
+                                             features: features, twoColumns: true)
+        #expect(ordered == [[.vehicleLocation], [.vehicleOpenings], [.vehicleTyres]])
+
+        composition.setItem(.vehicleTyres, shown: false, on: .vehicle)
+        let hidden = VehicleTabView.cardRows(layout: .resolve(composition, for: .vehicle),
+                                            features: features, twoColumns: true)
+        #expect(hidden == [[.vehicleLocation], [.vehicleOpenings]])
+
+        composition.setItem(.vehicleTyres, shown: true, on: .vehicle)
+        composition.setItems([.vehicleLocation, .vehicleTyres, .vehicleOpenings], for: .vehicle)
+        let reversedPair = VehicleTabView.cardRows(layout: .resolve(composition, for: .vehicle),
+                                                   features: features, twoColumns: true)
+        #expect(reversedPair == [[.vehicleLocation, .vehicleTyres], [.vehicleOpenings]])
+    }
+
+    @Test
     func everyHistorySectionMapsToACardOnLog() {
         let scoped = ScopedPreferences(label: "tab-render-contract")
         let view = HistoryDashboardView(

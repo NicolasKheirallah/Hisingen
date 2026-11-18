@@ -147,6 +147,10 @@ backup files keep their columns, number formats and quoting.
 
 ### Fixed
 
+- Fixed a sign-in prompt that could appear after a restart or app update while Hisingen restored
+  a saved Polestar or Volvo session. If you open the menu bar panel while it connects, it shows
+  the last known vehicle data when available or a connecting message.
+
 - Stop a NexBlue charger that is delivering power from reading "Waiting for the car to start
   drawing power". A current power reading now wins over a waiting charging state.
 - Make Settings → Tabs & Cards list the cards each tab actually draws. The six Now cards that

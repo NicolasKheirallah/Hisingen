@@ -26,7 +26,7 @@ final class StatusItemController: NSObject {
     private let popover: NSPopover
     private var latestState: VehicleState?
     private var latestError: String?
-    private var authenticated = false
+    private var signInRequired = true
     /// Set at the first successful sign-in and cleared only when the setup pass completes,
     /// so a popover closed mid-pass reopens onto the pass instead of silently skipping it.
     private var setupMode = false
@@ -828,10 +828,10 @@ final class StatusItemController: NSObject {
         statusItem.button?.setAccessibilityLabel(L10n.text("Hisingen, refreshing"))
     }
 
-    func render(data: VehicleState?, error: String?, authenticated: Bool, diagnostics: DiagnosticsSnapshot? = nil) {
+    func render(data: VehicleState?, error: String?, signInRequired: Bool, diagnostics: DiagnosticsSnapshot? = nil) {
         latestState = data
         latestError = error
-        self.authenticated = authenticated
+        self.signInRequired = signInRequired
         if let diagnostics { self.diagnostics = diagnostics }
         let title = barTitle(for: data)
         let isStale = data?.isStale() ?? false
@@ -968,7 +968,7 @@ final class StatusItemController: NSObject {
             guard let self, !Task.isCancelled else { return }
             self.chargingCompletedAt = nil
             self.render(data: self.latestState, error: self.latestError,
-                        authenticated: self.authenticated, diagnostics: self.diagnostics)
+                        signInRequired: self.signInRequired, diagnostics: self.diagnostics)
         }
     }
 
@@ -1066,7 +1066,7 @@ final class StatusItemController: NSObject {
         PanelDisplay(
             state: latestState,
             error: latestError,
-            authenticated: authenticated,
+            signInRequired: signInRequired,
             activeVin: activeVin,
             fleet: fleet,
             remoteCommandInProgress: remoteCommandInProgress,

@@ -6,7 +6,7 @@ import SwiftUI
 struct PanelDisplay {
     var state: VehicleState?
     var error: String?
-    var authenticated: Bool
+    var signInRequired: Bool
     var activeVin: String?
     var fleet: FleetSnapshot
     var remoteCommandInProgress: Bool

@@ -7,8 +7,6 @@ struct NowInstrument: View {
     let commandGate: ControlsCommandGate
     var feedback: RemoteCommandFeedback? = nil
     var onAuthorizeRemoteCommands: (() -> Void)? = nil
-    var showsDepartureCheck = false
-    var showsWeather = false
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -122,10 +120,6 @@ struct NowInstrument: View {
                                 onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
                                 onFollowUp: commandGate.send)
             }
-            if showsDepartureCheck, state.powertrain.hasElectricRange {
-                PanelRule()
-                DepartureCheckDisclosure(state: state)
-            }
             if typeSize.isAccessibilitySize { profile(height: 116) }
         }
         .padding(.horizontal, inset)
@@ -165,9 +159,6 @@ struct NowInstrument: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if showsWeather, preferences.features.contains(.vehicleWeather) {
-                NowWeatherButton(state: state)
-            }
         }
     }
 
@@ -452,6 +443,7 @@ struct NowInstrument: View {
 
     private var chargingControl: some View {
         let overriding = state.energy.chargeNowActive == true
+        let isLive = state.isCharging && state.hasFreshReading(.charging)
         // There is no plain "stop charging" command, only the schedule override. A car that is
         // already charging on its own schedule has nothing to offer here; one charging because of
         // an override offers to hand control back to the schedule.
@@ -460,7 +452,7 @@ struct NowInstrument: View {
         let unplugged = state.energy.connection == .disconnected
         let hasAction = overriding
             || (state.energy.chargingState != .complete && !unplugged
-                && !(state.isCharging && state.hasFreshReading(.charging)))
+                && !isLive)
         let status = state.energy.connection == .disconnected && state.energy.chargingState == .idle
             ? L10n.text("Cable disconnected")
             : state.energy.chargingState.displayName
@@ -469,8 +461,9 @@ struct NowInstrument: View {
             name: L10n.text("Charging"),
             value: status,
             reading: .charging, hasReading: state.energy.connection != .unknown || state.energy.chargingState.isRecognised,
-            activity: state.isCharging && state.hasFreshReading(.charging) ? .live : nil,
-            symbolMotion: state.isCharging && state.hasFreshReading(.charging) ? .breathe : .still,
+            activity: isLive ? .live : nil,
+            symbolMotion: isLive ? .breathe : .still,
+            readout: state.liveChargingDraw(),
             action: hasAction ? (overriding ? L10n.text("Resume Schedule") : L10n.text("Charge Now")) : nil,
             command: overriding ? .stopChargingOverride : .startChargingOverride
         )
@@ -547,6 +540,7 @@ struct NowInstrument: View {
         hasReading: Bool,
         activity: CardActivity? = nil,
         symbolMotion: CardSymbol.Kind = .still,
+        readout: String? = nil,
         countdown: CardCountdownSource? = nil,
         note: String? = nil,
         entry: LimitEntry? = nil,
@@ -563,7 +557,8 @@ struct NowInstrument: View {
         let remainingNow = countdown.flatMap {
             ClimateCountdown.minutesRemaining(reported: $0.minutes, at: $0.reportedAt, now: Date())
         }
-        let spoken = [value, remainingNow.map { L10n.format("%d min remaining", $0) }, age].compactMap { $0 }.joined(separator: ", ")
+        let spoken = [value, readout, remainingNow.map { L10n.format("%d min remaining", $0) }, age]
+            .compactMap { $0 }.joined(separator: ", ")
         if let action {
             let availability = commandGate.availability(command)
             let sending = commandGate.isSending(command)
@@ -578,7 +573,7 @@ struct NowInstrument: View {
                     actionColor: activity.map { availability.isAvailable ? $0.foreground : $0.secondary }
                         ?? (availability.isAvailable ? HisingenTheme.ink : HisingenTheme.inkMuted),
                     sending: sending, activity: activity,
-                    symbolMotion: symbolMotion, waiting: awaiting, countdown: countdown
+                    symbolMotion: symbolMotion, waiting: awaiting, readout: readout, countdown: countdown
                 )
             }
             .buttonStyle(.pressable)
@@ -600,7 +595,7 @@ struct NowInstrument: View {
         } else {
             quickControlLabel(symbol: symbol, name: name, value: value, valueColor: valueColor, detail: detail,
                               activity: activity, symbolMotion: symbolMotion, waiting: awaiting,
-                              countdown: countdown)
+                              readout: readout, countdown: countdown)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(name)
                 .accessibilityValue([spoken, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
@@ -616,6 +611,7 @@ struct NowInstrument: View {
         activity: CardActivity? = nil,
         symbolMotion: CardSymbol.Kind = .still,
         waiting: Bool = false,
+        readout: String? = nil,
         countdown: CardCountdownSource? = nil
     ) -> some View {
         let secondary = activity?.secondary ?? HisingenTheme.inkMuted
@@ -642,6 +638,13 @@ struct NowInstrument: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(reduceMotion ? .identity : .numericText())
                     .hisAnimation(Motion.stateChange, value: value)
+            }
+            if let readout {
+                Text(readout)
+                    .hisType(.body)
+                    .foregroundStyle(valueColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hisTelemetryValue(readout, reduceMotion: reduceMotion)
             }
             if let countdown {
                 CardCountdown(minutes: countdown.minutes, reportedAt: countdown.reportedAt, color: secondary)

@@ -27,10 +27,6 @@ struct ControlsTabView: View {
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
-    func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
-        layout.ordered(entries, by: item)
-    }
-
     @Environment(\.preferencesStore) private var preferences
     @State private var showScheduleEditor = false
     @State private var scheduleEditorKind: ScheduleKind = .climate
@@ -51,18 +47,13 @@ struct ControlsTabView: View {
         )
     }
 
-    private struct CardEntry: Identifiable {
-        let id: String
+    private struct CardEntry {
         /// Which catalogued card this is, so the reader's layout can switch it off.
         let item: TabItemID
         let isVisible: Bool
         let view: () -> AnyView
     }
 
-    /// The catalogued items this tab knows how to draw. The banners and receipts are drawn
-    /// outside the card list, so they are named here too. A test compares this with the shipped
-    /// layout: a card added to the catalog without a renderer, or a renderer without a catalog
-    /// entry, fails there instead of in a reader's panel.
     static let renderedItems: [TabItemID] = [
         .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
         .controlsClimate, .controlsEngine, .controlsRoutines
@@ -84,7 +75,7 @@ struct ControlsTabView: View {
         let gate = commandGate
         return [
             CardEntry(
-                id: TabItemID.controlsClimate.rawValue, item: TabItemID.controlsClimate,
+                item: .controlsClimate,
                 isVisible: features.contains(.remoteClimate)
                     || (features.contains(.remotePreCleaning) && profile.permits(.preCleaning)),
                 view: {
@@ -97,12 +88,12 @@ struct ControlsTabView: View {
                 }
             ),
             CardEntry(
-                id: TabItemID.controlsEngine.rawValue, item: TabItemID.controlsEngine,
+                item: .controlsEngine,
                 isVisible: state.powertrain.hasCombustionEngine && isBrandVolvo && engineStartPermitted,
                 view: { AnyView(EngineControlsCard(state: state, gate: gate)) }
             ),
             CardEntry(
-                id: TabItemID.controlsCharging.rawValue, item: TabItemID.controlsCharging,
+                item: .controlsCharging,
                 isVisible: hasAnyVisibleChargingControls,
                 view: {
                     AnyView(ChargingControlsCard(
@@ -113,7 +104,7 @@ struct ControlsTabView: View {
                 }
             ),
             CardEntry(
-                id: TabItemID.controlsChargingPlanner.rawValue, item: TabItemID.controlsChargingPlanner,
+                item: .controlsChargingPlanner,
                 // Same gating the Vehicle tab applies: the planner needs the feature switch
                 // and a car that can act on it.
                 isVisible: preferences.smartChargingPlannerAvailable && state.powertrain.hasElectricRange
@@ -121,7 +112,7 @@ struct ControlsTabView: View {
                 view: { AnyView(ChargingPlannerCard(state: state)) }
             ),
             CardEntry(
-                id: TabItemID.controlsRoutines.rawValue, item: TabItemID.controlsRoutines,
+                item: .controlsRoutines,
                 // A routine is a sequence of remote commands. With every remote feature off there
                 // is nothing to put in one, so the empty-controls hint is the useful card.
                 isVisible: !features.isDisjoint(with: AppFeature.remoteFeatures),
@@ -133,7 +124,26 @@ struct ControlsTabView: View {
     }
 
     private var visibleCards: [CardEntry] {
-        ordered(cards.filter { $0.isVisible && draws($0.item) }, by: { $0.item })
+        cards.filter { $0.isVisible && draws($0.item) }
+    }
+
+    static func orderedCardItems(layout: TabLayout, controls: Set<TabItemID>, hasReceipts: Bool) -> [TabItemID] {
+        let items = renderedItems.filter { item in
+            layout.draws(item) && (item == .controlsReceipts ? hasReceipts : controls.contains(item))
+        }
+        return layout.ordered(items, by: { $0 })
+    }
+
+    @ViewBuilder
+    private func planCard(_ item: TabItemID, controls: [CardEntry]) -> some View {
+        if item == .controlsReceipts {
+            ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
+                CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
+                                   onVerify: { _ in onRefresh() })
+            }
+        } else if let entry = controls.first(where: { $0.item == item }) {
+            entry.view()
+        }
     }
 
     private var engineStartPermitted: Bool {
@@ -141,24 +151,26 @@ struct ControlsTabView: View {
     }
 
     var body: some View {
+        let controls = visibleCards
+        let items = Self.orderedCardItems(
+            layout: layout, controls: Set(controls.map(\.item)), hasReceipts: !state.commandState.receipts.isEmpty
+        )
+        let receiptsLead = items.first == .controlsReceipts
         VStack(spacing: HisingenTheme.sectionSpacing) {
             if draws(.controlsBanners) {
                 ControlsBanners(
-                state: state,
-                feedback: feedback,
-                features: features,
-                isBrandVolvo: isBrandVolvo,
-                showRestrictedNotice: !visibleCards.isEmpty,
-                onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
-                onFollowUp: onRemoteCommand
+                    state: state,
+                    feedback: feedback,
+                    features: features,
+                    isBrandVolvo: isBrandVolvo,
+                    showRestrictedNotice: !controls.isEmpty,
+                    onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                    onFollowUp: onRemoteCommand
                 )
             }
 
-            if draws(.controlsReceipts) {
-                ForEach(Array(state.commandState.receipts.reversed()), id: \.id) { receipt in
-                    CommandReceiptChip(receipt: receipt, onDismiss: onDismissCommandReceipt,
-                                       onVerify: { _ in onRefresh() })
-                }
+            if receiptsLead {
+                planCard(.controlsReceipts, controls: controls)
             }
 
             // When: the departure, the next 24 hours, then every timer.
@@ -173,8 +185,10 @@ struct ControlsTabView: View {
             .padding(.horizontal, HisingenTheme.cardPadding)
             .padding(.top, 4)
 
-            if !visibleCards.isEmpty {
-                ForEach(visibleCards) { entry in entry.view() }
+            ForEach(items.dropFirst(receiptsLead ? 1 : 0), id: \.self) { item in
+                planCard(item, controls: controls)
+            }
+            if !controls.isEmpty {
                 if anyCardDimmed || state.probedCapabilities == nil {
                     ControlsReprobeButton(onRefresh: onRefresh)
                 }
@@ -184,9 +198,7 @@ struct ControlsTabView: View {
                 noControlsEnabledCard
             }
         }
-        // CardEntry is Identifiable, so feature-flag flips animate insertion,
-        // removal and reorder of the stack instead of rebuilding it in place.
-        .hisAnimation(Motion.cardChange, value: visibleCards.map(\.id))
+        .hisAnimation(Motion.cardChange, value: items)
         .hisAnimation(Motion.cardChange, value: anyCardDimmed)
         .hisAnimation(Motion.cardChange, value: state.probedCapabilities == nil)
         .sheet(isPresented: $showScheduleEditor) {

@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     let notificationPermission: NotificationPermission
     var state: VehicleState? = nil
+    var refreshError: String? = nil
     var fleet = FleetSnapshot()
     var database: VehicleDatabase = VehicleDatabase.shared
     var imageCache: CarImageCache = CarImageCache.shared
@@ -139,7 +140,7 @@ struct SettingsView: View {
                         .transition(Self.sectionSwapTransition)
                     }
                     if shows(.tabsAndCards) {
-                        SettingsTabsAndCardsCard(binder: binder, state: state)
+                        SettingsTabsAndCardsCard(binder: binder, state: state, refreshError: refreshError)
                             .transition(Self.sectionSwapTransition)
                     }
                     if shows(.updates) {

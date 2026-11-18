@@ -22,7 +22,7 @@ struct RetainedDataNoticeID: Hashable {
 struct HisingenContentView: View {
     let state: VehicleState?
     let error: String?
-    let authenticated: Bool
+    let signInRequired: Bool
     private var cars: [CarSummary] { fleet.cars }
     let activeVin: String?
     let fleet: FleetSnapshot
@@ -128,7 +128,7 @@ struct HisingenContentView: View {
     /// `tabBar` that every other tab draws never rendered.
     private var showsSettingsAsTab: Bool {
         TabRouting.settingsDrawsAsTab(
-            authenticated: authenticated,
+            authenticated: !signInRequired,
             hasSnapshot: state != nil,
             setupMode: setupMode
         )
@@ -140,6 +140,7 @@ struct HisingenContentView: View {
         SettingsView(
             notificationPermission: notificationPermission,
             state: state,
+            refreshError: error,
             fleet: fleet,
             imageCache: imageCache,
             showsHeaderBar: !showsSettingsAsTab,
@@ -164,7 +165,7 @@ struct HisingenContentView: View {
         let actions = panel.actions
         self.state = display.state
         self.error = display.error
-        self.authenticated = display.authenticated
+        self.signInRequired = display.signInRequired
         self.activeVin = display.activeVin
         self.fleet = display.fleet
         self.remoteCommandInProgress = display.remoteCommandInProgress
@@ -228,7 +229,7 @@ struct HisingenContentView: View {
                 settingsScreen
                     .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                     .transition(modeTransition)
-            } else if !authenticated {
+            } else if signInRequired {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged,
                                   accountConnection: accountConnection, onTestConnection: onTestConnection)
                     .transition(modeTransition)
@@ -327,7 +328,7 @@ struct HisingenContentView: View {
         .onAppear { hasMaterialized = true }
         .animation(reduceMotion ? nil : Motion.layout, value: panelLayout)
         .animation(reduceMotion ? nil : Motion.entrance, value: setupMode)
-        .animation(reduceMotion ? nil : Motion.entrance, value: authenticated)
+        .animation(reduceMotion ? nil : Motion.entrance, value: signInRequired)
         .tint(HisingenTheme.accent)
         // Native controls and any text outside the ramp take the house face too.
         .font(HisingenTheme.font(size: 13))
@@ -629,7 +630,7 @@ struct HisingenContentView: View {
 
     private var firstLaunchWelcomeCard: some View {
         var details = [L10n.text("Click the car icon in the menu bar any time to open this panel.")]
-        if !authenticated {
+        if signInRequired {
             details.append(L10n.text("Connect your vehicle account below to get started."))
         }
         return DismissibleNoticeBanner(
@@ -774,7 +775,7 @@ struct HisingenContentView: View {
             .accessibilityHidden(true)
     }
 
-    /// Shown while authenticated but with no snapshot yet.
+    /// Shown while connecting, or when the app has no snapshot to display yet.
     ///
     /// A failure is not a loading state. Printing the error under a spinner that keeps
     /// spinning made "still connecting" and "this failed for good" look identical, and left
@@ -1062,7 +1063,7 @@ struct HisingenContentView: View {
             .help(L10n.text("Refresh Telemetry (⌘R)"))
             .accessibilityLabel(L10n.text("Refresh Telemetry"))
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(!authenticated)
+            .disabled(signInRequired)
 
         }
         .padding(.horizontal, HisingenTheme.sectionSpacing + HisingenTheme.cardPadding)

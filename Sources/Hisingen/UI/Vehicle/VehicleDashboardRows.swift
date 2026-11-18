@@ -104,13 +104,6 @@ enum VehicleDashboardRows {
         }
         return AnyView(DashboardRow(symbol: symbol, value: value, label: L10n.text("Fuel & Engine"), tint: tint))
     }
-
-    /// The departure checker, one disclosure: collapsed it is a single quiet line, and the
-    /// feature the readiness card carried survives without a titled section.
-    static func departureCheck(state: VehicleState) -> AnyView? {
-        guard state.powertrain.hasElectricRange else { return nil }
-        return AnyView(DepartureCheckDisclosure(state: state))
-    }
 }
 
 /// The collapsed-by-default charging-before-departure checker.

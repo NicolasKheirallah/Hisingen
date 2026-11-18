@@ -5,6 +5,43 @@ import Testing
 @Suite(.timeLimit(.minutes(1)))
 @MainActor
 struct VehicleSessionControllerTests {
+    @Test(arguments: [VehicleBrand.polestar, .volvo])
+    func aReturningAccountKeepsSignInHiddenWhileRestoring(brand: VehicleBrand) async throws {
+        let scoped = ScopedPreferences(label: "returning-account")
+        let preferences = scoped.store
+        preferences.activeBrand = brand
+        preferences.vin = "RETURNING"
+        let store = VehicleStateStore(defaults: scoped.defaults, database: .inMemory(), preferences: preferences)
+        let context = SessionTestContext()
+        let configuring = TestEvent<Void>()
+        let continueRestore = TestEvent<Void>()
+        let manager = SessionManager(readPassword: { nil }, configure: { _, _ in
+            configuring.yield(())
+            try await continueRestore.next()
+        })
+        let controller = VehicleSessionController(
+            context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
+            sessionManager: manager,
+            providers: ProviderRegistry(polestar: SessionTestProvider(brand: .polestar),
+                                        volvo: SessionTestProvider(brand: .volvo)),
+            fleetStore: FleetStore(stateStore: store, preferences: preferences), observesEnvironment: false)
+        defer { controller.stop() }
+
+        controller.primeDisplayState()
+        #expect(!controller.signInRequired)
+        controller.resume()
+
+        _ = try await configuring.next()
+        #expect(!controller.signInRequired)
+        #expect(!controller.sessionValid)
+
+        continueRestore.yield(())
+        _ = try await context.states.next()
+        #expect(!controller.signInRequired)
+        #expect(controller.sessionValid)
+        #expect(context.authenticationRequiredCount == 0)
+    }
+
     @Test func aRefreshDoesNotDiscardAnUnconfirmedCommandReceipt() async throws {
         let suite = "VehicleSessionControllerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -68,6 +105,7 @@ struct VehicleSessionControllerTests {
         _ = try await context.authentication.next()
         #expect(context.authenticationRequiredCount == 1)
         #expect(!controller.sessionValid)
+        #expect(controller.signInRequired)
     }
 
     @Test(arguments: [VehicleBrand.polestar, .volvo])

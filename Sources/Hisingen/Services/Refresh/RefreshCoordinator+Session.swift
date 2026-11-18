@@ -243,6 +243,7 @@ extension RefreshCoordinator {
                 onEvent?(.sessionEstablished(cars: cars, selectedVIN: vin))
                 sessionReady = true
                 sessionIntent = .resume
+                publishDiagnostics()
                 let intervalState = Self.signposter.beginInterval("fetchVehicleState")
                 do {
                     let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)

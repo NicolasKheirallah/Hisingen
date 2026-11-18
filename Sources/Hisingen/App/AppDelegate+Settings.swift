@@ -16,6 +16,7 @@ extension AppDelegate {
         let settings = SettingsView(
             notificationPermission: statusController.notificationPermission,
             state: vehicleSession.latest,
+            refreshError: vehicleSession.lastError,
             fleet: fleetStore.snapshot(activeState: vehicleSession.latest),
             database: vehicleDatabase,
             imageCache: imageCache,

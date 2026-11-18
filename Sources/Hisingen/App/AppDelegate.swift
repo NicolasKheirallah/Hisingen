@@ -186,7 +186,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // Before any sign-in flow can run: installs upgrading from earlier versions carry
         // session material and must never be greeted by the first-run setup pass.
         preferences.seedSetupPassForExistingInstall()
-        let initiallyAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
         launchAtLoginController.reconcile(userInitiated: false)
         updateController.applyConfiguration()
         vehicleSession.resume()
@@ -196,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         chargingPlannerController.reload()
         homeCharging.start()
         homeCharging.houseMeter.start()
-        if !initiallyAuthenticated {
+        if vehicleSession.signInRequired {
             statusController.openPopover()
         }
     }
@@ -249,12 +248,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     }
 
     func render() {
-        let isAuth = vehicleSession.sessionValid
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
         statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback
         statusController.render(data: vehicleSession.latest, error: vehicleSession.lastError,
-                               authenticated: isAuth, diagnostics: vehicleSession.lastDiagnostics)
+                               signInRequired: vehicleSession.signInRequired,
+                               diagnostics: vehicleSession.lastDiagnostics)
     }
 
     @objc private func systemAppearanceDidChange() {

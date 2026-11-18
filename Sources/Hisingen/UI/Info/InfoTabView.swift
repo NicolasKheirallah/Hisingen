@@ -211,7 +211,8 @@ struct InfoTabView: View {
 
     var body: some View {
         let allEntries = makeSections()
-        let entries = selectedCategory == .all ? allEntries : allEntries.filter { selectedCategory.matches($0.id) }
+        let category = draws(.infoNavBar) ? selectedCategory : .all
+        let entries = allEntries.filter { category.matches($0.id) }
         return ScrollViewReader { proxy in
             VStack(spacing: HisingenTheme.sectionSpacing) {
                 if draws(.infoNavBar) {

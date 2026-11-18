@@ -386,6 +386,15 @@ extension VehicleState {
         return Format.completionTime(from: minutes, baseDate: reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt)
     }
 
+    func liveChargingDraw(now: Date = Date()) -> String? {
+        guard isCharging, hasFreshReading(.charging, now: now),
+              !freshness.retainedDataCategories.contains(.chargingDetails) else { return nil }
+        var readings: [String] = []
+        if let watts = chargingPowerWatts, watts >= 0 { readings.append(Format.kilowatts(watts: watts)) }
+        if let amps = chargingCurrentAmps, amps >= 0 { readings.append(Format.amps(amps)) }
+        return readings.isEmpty ? nil : readings.joined(separator: " · ")
+    }
+
     func formattedChargingRate(unit: DistanceUnit) -> String? {
         guard let watts = chargingPowerWatts, watts > 0, isCharging else { return nil }
 

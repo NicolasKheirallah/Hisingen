@@ -9,9 +9,9 @@ import Testing
 @Suite("PanelModel")
 struct PanelModelTests {
 
-    private func makeDisplay(authenticated: Bool = true) -> PanelDisplay {
+    private func makeDisplay() -> PanelDisplay {
         PanelDisplay(
-            state: nil, error: nil, authenticated: authenticated, activeVin: nil,
+            state: nil, error: nil, signInRequired: false, activeVin: nil,
             fleet: FleetSnapshot(),
             remoteCommandInProgress: false, commandBrand: .polestar,
             inFlightRemoteCommandID: nil, lastRemoteCommandFeedback: nil,
@@ -49,13 +49,13 @@ struct PanelModelTests {
         let cancellable = model.objectWillChange.sink { published += 1 }
 
         var next = makeDisplay()
-        next.authenticated = false
+        next.signInRequired = true
         next.activeVin = "YSMTEST"
         next.updateVersion = "2.1.0"
         model.update(next)
 
         #expect(published == 1)
-        #expect(model.display.authenticated == false)
+        #expect(model.display.signInRequired)
         #expect(model.display.activeVin == "YSMTEST")
         #expect(model.display.updateVersion == "2.1.0")
         _ = cancellable
