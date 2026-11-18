@@ -43,8 +43,8 @@ struct ElectricityPricePoint: Codable, Equatable, Sendable {
 struct ChargingPlan: Equatable, Sendable {
     var start: Date
     var end: Date
-    /// Whole hours the window spans – the recommendation is always expressed in hours,
-    /// never in 15-minute slices.
+    /// Hours the window spans. A quarter-hourly price gives a window that can end on a quarter,
+    /// so this is a fraction, not a whole number.
     var hours: Double
     var energyKwh: Double
     /// SEK/kWh averaged over the window.
@@ -60,11 +60,15 @@ enum ChargingPlanner {
     /// with the lowest energy-weighted average price. Works for any slot granularity
     /// (hourly, quarterly, or a mix) because windows are accumulated in seconds, not
     /// in slot counts. Ties resolve to the earliest window.
+    /// `granularity` is the shortest window the reader's price can express: an hour for an hourly
+    /// contract, a quarter hour for a 15-minute one. The run length is rounded up to a whole number
+    /// of steps, so a quarter-hourly plan can propose 1 h 15 min where an hourly one would say 2 h.
     static func cheapestWindow(
         prices: [ElectricityPricePoint],
         now: Date,
         energyKwh: Double,
-        chargerPowerKw: Double
+        chargerPowerKw: Double,
+        granularity: TimeInterval = 3_600
     ) -> ChargingPlan? {
         guard energyKwh > 0, chargerPowerKw > 0 else { return nil }
         let slots = prices
@@ -72,9 +76,12 @@ enum ChargingPlanner {
             .sorted { $0.startDate == $1.startDate ? $0.endDate < $1.endDate : $0.startDate < $1.startDate }
         guard !slots.isEmpty else { return nil }
 
-        // Whole hours, at least one: "charge between 02:00 and 04:00", not "02:14–03:40".
-        let hours = max(1.0, (energyKwh / chargerPowerKw).rounded(.up))
-        let targetSeconds = hours * 3_600
+        // At least one step, rounded up to a whole number of them: "02:00–03:15" at quarter-hourly
+        // prices, "02:00–04:00" at hourly ones.
+        let step = max(60, granularity)
+        let neededSeconds = (energyKwh / chargerPowerKw) * 3_600
+        let targetSeconds = max(step, (neededSeconds / step).rounded(.up) * step)
+        let hours = targetSeconds / 3_600
         let current = currentPrice(prices: prices, at: now) ?? slots[0].sekPerKwh
 
         var bestAverage: Double?
@@ -114,6 +121,39 @@ enum ChargingPlanner {
             currentPrice: current,
             savings: (current - average) * energyKwh
         )
+    }
+
+    /// A flat rate's own series, an hour at a time. There is no market file behind a fixed rate, so
+    /// the planner gets one synthetic hour per hour: with a single price the window lands as early as
+    /// the horizon allows and the saving is nothing, which is the truth. A night tariff, when the
+    /// reader has opted into one, is honoured inside its window and makes the window worth choosing.
+    static func fixedSeries(
+        dayPricePerKwh: Double,
+        nightPricePerKwh: Double? = nil,
+        nightStartHour: Int = 22,
+        nightEndHour: Int = 6,
+        from now: Date,
+        length: TimeInterval = 48 * 3_600,
+        calendar: Calendar = ElectricityPriceService.stockholmCalendar
+    ) -> [ElectricityPricePoint] {
+        guard let hour = calendar.dateInterval(of: .hour, for: now) else { return [] }
+        let day = max(0, dayPricePerKwh)
+        let night = nightPricePerKwh.map { max(0, $0) }
+        let limit = now.addingTimeInterval(length)
+        var points: [ElectricityPricePoint] = []
+        var start = hour.start
+        while start < limit {
+            let end = start.addingTimeInterval(3_600)
+            let hourOfDay = calendar.component(.hour, from: start)
+            let isNight = night != nil && (nightStartHour <= nightEndHour
+                ? hourOfDay >= nightStartHour && hourOfDay < nightEndHour
+                : hourOfDay >= nightStartHour || hourOfDay < nightEndHour)
+            points.append(ElectricityPricePoint(
+                startDate: start, endDate: end, sekPerKwh: isNight ? (night ?? day) : day
+            ))
+            start = end
+        }
+        return points
     }
 
     /// The price in effect at the given instant, preferring the latest overlapping slot.

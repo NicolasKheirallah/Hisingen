@@ -19,6 +19,9 @@ struct ChargingPlannerCard: View {
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
     @State private var resolved: PlannerPrices?
+    /// Set when the reader picks a basis in this card; `nil` means "read the shared setting", which is
+    /// what keeps Settings and the planner showing the same thing.
+    @State private var basisOverride: PlannerPriceBasis?
 
     private let provider = PlannerPriceProvider.shared
 
@@ -115,7 +118,9 @@ struct ChargingPlannerCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
-                if let resolved, !points.isEmpty { sourceRow(resolved) }
+                basisRow
+
+                if basis != .fixed, let resolved, !points.isEmpty { sourceRow(resolved) }
 
                 if let model {
                     Group {
@@ -140,7 +145,7 @@ struct ChargingPlannerCard: View {
                             .hisType(.label, weight: .semibold)
                             .foregroundStyle(model.savings > 0 ? HisingenTheme.ink : HisingenTheme.inkMuted)
                             .hisTelemetryValue(model.savingsLine, reduceMotion: reduceMotion)
-                        PriceCurveView(points: points, plan: plan,
+                        PriceCurveView(points: priceSeries, plan: plan,
                                        expectedEnd: ElectricityPriceService.requiredCoverageEnd(after: Date()))
                     }
                     .transition(plannerTransition)
@@ -167,9 +172,11 @@ struct ChargingPlannerCard: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(attributionLine)
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
+                if basis != .fixed {
+                    Text(attributionLine)
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                }
 
                 if showsHome, let homeCharging {
                     PanelRule().padding(.vertical, 2)
@@ -201,6 +208,26 @@ struct ChargingPlannerCard: View {
         PlannerPriceFigure(value: value, label: label, level: level)
     }
 
+    /// The three ways the planner can read a price, offered as one choice: 15-minute market slots,
+    /// hourly ones, or the reader's own flat rate.
+    private var basisRow: some View {
+        HStack(spacing: 8) {
+            Text(L10n.text("Price basis"))
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.inkMuted)
+            Spacer(minLength: 8)
+            Picker("", selection: Binding(get: { basis }, set: { chooseBasis($0) })) {
+                ForEach(PlannerPriceBasis.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Price basis"))
+            .controlSize(.small)
+            .frame(maxWidth: 150)
+        }
+    }
+
     /// Which prices the plan below is built from. A fallback names itself in the warning colour, and
     /// the reason Tibber could not be used sits in the row's information button.
     private func sourceRow(_ prices: PlannerPrices) -> some View {
@@ -218,13 +245,50 @@ struct ChargingPlannerCard: View {
         return KVRow(L10n.text("Prices"), value, valueWarning: fellBack, info: reason)
     }
 
+    /// How the planner prices a slot, always read from the shared electricity setting so this card
+    /// cannot disagree with Settings about what a kWh costs. The stored override is only a redraw
+    /// trigger — the store is not observable — and is never allowed to outrank the setting itself.
+    private var basis: PlannerPriceBasis {
+        _ = basisOverride
+        return PlannerPriceBasis(mode: preferences.electricityRateMode,
+                                 contract: preferences.electricityPriceContract)
+    }
+
+    private func chooseBasis(_ new: PlannerPriceBasis) {
+        guard new != basis else { return }
+        preferences.electricityRateMode = new.mode
+        preferences.electricityPriceContract = new.contract
+        basisOverride = new
+    }
+
+    /// The prices the plan is built from. A flat rate has no market file behind it, so it gets a
+    /// series of its own and the fetched market prices stay out of the decision.
+    private var priceSeries: [ElectricityPricePoint] {
+        guard basis == .fixed else { return points }
+        return ChargingPlanner.fixedSeries(
+            dayPricePerKwh: preferences.electricityPricePerKwh,
+            nightPricePerKwh: preferences.nightTariffEnabled ? preferences.nightElectricityPricePerKwh : nil,
+            nightStartHour: preferences.nightTariffStartHour,
+            nightEndHour: preferences.nightTariffEndHour,
+            from: Date()
+        )
+    }
+
     private var plan: ChargingPlan? {
         ChargingPlanner.cheapestWindow(
-            prices: points,
+            prices: priceSeries,
             now: Date(),
             energyKwh: neededEnergyKwh,
-            chargerPowerKw: plannerPowerKw
+            chargerPowerKw: plannerPowerKw,
+            granularity: basis.granularity
         )
+    }
+
+    /// "2 h" at hourly prices, "1 h 15 min" at quarter-hourly ones.
+    private func durationText(_ hours: Double) -> String {
+        let total = Int((hours * 60).rounded())
+        if total < 60 { return L10n.format("%d min", total) }
+        return L10n.format("%d h %d min", total / 60, total % 60)
     }
 
     private var statusMessage: String {
@@ -235,10 +299,14 @@ struct ChargingPlannerCard: View {
         // fit this charge" – a 54 h charge on a weak outlet will not fit into even a
         // complete two-day outlook, and blaming the publication time would be a lie.
         let now = Date()
-        let planHours = max(1.0, (neededEnergyKwh / plannerPowerKw).rounded(.up))
+        let step = basis.granularity
+        let planSeconds = max(step, ((neededEnergyKwh / plannerPowerKw) / step).rounded(.up) * step)
         let dataComplete = horizon >= ElectricityPriceService.requiredCoverageEnd(after: now)
-        if dataComplete && horizon.timeIntervalSince(now) < planHours * 3_600 {
-            return L10n.format("A %d h charge is longer than the price outlook", Int(planHours))
+        if dataComplete && horizon.timeIntervalSince(now) < planSeconds {
+            let minutes = Int((planSeconds / 60).rounded())
+            return minutes % 60 == 0
+                ? L10n.format("A %d h charge is longer than the price outlook", minutes / 60)
+                : L10n.format("A %@ charge is longer than the price outlook", durationText(planSeconds / 3_600))
         }
         return L10n.text("Tomorrow's prices arrive after 14:15")
     }
@@ -277,12 +345,10 @@ struct ChargingPlannerCard: View {
         }
         let timeRange = "\(Format.shortTime(date: plan.start))–\(Format.shortTime(date: plan.end))"
 
-        let detailLine = L10n.format(
-            "Charge %@ over %d h to reach %d%%",
-            Format.energyKwh(plan.energyKwh),
-            Int(plan.hours),
-            target
-        )
+        let minutes = Int((plan.hours * 60).rounded())
+        let detailLine = minutes % 60 == 0
+            ? L10n.format("Charge %@ over %d h to reach %d%%", Format.energyKwh(plan.energyKwh), minutes / 60, target)
+            : L10n.format("Charge %@ over %@ to reach %d%%", Format.energyKwh(plan.energyKwh), durationText(plan.hours), target)
 
         let savingsLine = plan.savings > 0.5
             ? L10n.format("Saves %@", Format.currency(plan.savings, symbol: "kr"))

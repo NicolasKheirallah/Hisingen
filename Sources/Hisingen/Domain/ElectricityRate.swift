@@ -122,6 +122,49 @@ enum ElectricityPriceContract: String, CaseIterable, Codable, Sendable, Identifi
     }
 }
 
+/// How the charging planner reads a price, offered as one choice rather than two settings that can
+/// disagree. Two options settle the market by the contract; the third is the reader's own flat rate,
+/// which has no market series behind it.
+enum PlannerPriceBasis: String, CaseIterable, Codable, Sendable, Identifiable {
+    case quarterHour
+    case hourly
+    case fixed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .quarterHour: return L10n.text("15 min")
+        case .hourly: return L10n.text("60 min")
+        case .fixed: return L10n.text("Fixed rate")
+        }
+    }
+
+    /// The shortest window the planner may propose. A 15-minute price can be used in quarter-hour
+    /// lengths; an hourly price, and a flat rate, in whole hours.
+    var granularity: TimeInterval {
+        switch self {
+        case .quarterHour: return 900
+        case .hourly, .fixed: return 3_600
+        }
+    }
+
+    /// The rate mode this basis writes back, so the planner and the rest of the app agree.
+    var mode: ElectricityRateMode { self == .fixed ? .fixed : .automatic }
+
+    /// The contract this basis writes back. A flat rate has no market series, so the contract it
+    /// leaves behind is the one it reads as: quarter-hour, which keeps the published intervals.
+    var contract: ElectricityPriceContract { self == .quarterHour ? .quarterHour : .hourly }
+
+    init(mode: ElectricityRateMode, contract: ElectricityPriceContract) {
+        if mode == .fixed {
+            self = .fixed
+        } else {
+            self = contract == .quarterHour ? .quarterHour : .hourly
+        }
+    }
+}
+
 /// Everything needed to turn a stored spot cost into the figure on the user's bill. The
 /// conversion is affine in the spot price, so history stores the raw market cost once and
 /// every display re-derives the billed cost: changing the markup re-prices past sessions.

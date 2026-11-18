@@ -497,3 +497,115 @@ struct ChargingPlannerDecisionsTests {
         #expect(short.map { calendar.component(.hour, from: $0) } == [16, 18, 20, 22])
     }
 }
+
+/// The three bases the planner can read a price in: 15-minute slots, hourly slots, and a flat rate.
+struct ChargingPlannerBasisTests {
+    /// Quarter-hour slots for a day, one cheap quarter-hour block, everything else flat.
+    private func quarterSeries(cheapFrom index: Int, cheapCount: Int) -> [ElectricityPricePoint] {
+        let start = fixtureDate(2026, 2, 10, 0)
+        return (0..<96).map { slot in
+            let slotStart = start.addingTimeInterval(Double(slot) * 900)
+            let cheap = slot >= index && slot < index + cheapCount
+            return ElectricityPricePoint(
+                startDate: slotStart, endDate: slotStart.addingTimeInterval(900),
+                sekPerKwh: cheap ? 0.1 : 1.0
+            )
+        }
+    }
+
+    @Test
+    func aQuarterHourlyBasisCanProposeAPartHourWindow() {
+        // 10 kWh at 7 kW needs 1.43 h: two whole hours hourly, 1.5 h at 15-minute prices.
+        // The cheap block is longer than either window, so it wins outright instead of tying.
+        let points = quarterSeries(cheapFrom: 8, cheapCount: 8)
+        let now = fixtureDate(2026, 2, 10, 0)
+        let hourly = ChargingPlanner.cheapestWindow(
+            prices: points, now: now, energyKwh: 10, chargerPowerKw: 7, granularity: 3_600
+        )
+        let quarter = ChargingPlanner.cheapestWindow(
+            prices: points, now: now, energyKwh: 10, chargerPowerKw: 7, granularity: 900
+        )
+        #expect(hourly?.hours == 2)
+        #expect(quarter?.hours == 1.5)
+        // Both land in the cheap block, which starts on the hour here.
+        #expect(quarter?.start == fixtureDate(2026, 2, 10, 2))
+        #expect(quarter?.end == fixtureDate(2026, 2, 10, 3, 30))
+    }
+
+    @Test
+    func aQuarterHourlyBasisPlacesTheWindowOnAQuarter() {
+        // The cheap block starts at 02:15 and runs long enough to hold the whole window, so the
+        // earliest cheapest start is itself on a quarter hour.
+        let points = quarterSeries(cheapFrom: 9, cheapCount: 8)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: points, now: fixtureDate(2026, 2, 10, 0),
+            energyKwh: 10, chargerPowerKw: 7, granularity: 900
+        )
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 2, 15))
+        #expect(plan?.hours == 1.5)
+        // An hourly window could not have started here.
+        #expect(plan?.start != fixtureDate(2026, 2, 10, 2))
+    }
+
+    @Test
+    func anHourlyBasisStillRoundsToWholeHours() {
+        let points = quarterSeries(cheapFrom: 8, cheapCount: 8)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: points, now: fixtureDate(2026, 2, 10, 0),
+            energyKwh: 10, chargerPowerKw: 7, granularity: 3_600
+        )
+        #expect(plan?.hours == 2)
+        let minutes = Int(((plan?.hours ?? 0) * 60).rounded())
+        #expect(minutes % 60 == 0)
+    }
+
+    @Test
+    func aFlatRateSeriesIsFlatAndStartsOnTheHour() {
+        let series = ChargingPlanner.fixedSeries(
+            dayPricePerKwh: 1.5, from: fixtureDate(2026, 2, 10, 3, 20), length: 4 * 3_600
+        )
+        #expect(series.first?.startDate == fixtureDate(2026, 2, 10, 3))
+        #expect(series.allSatisfy { $0.sekPerKwh == 1.5 })
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: series, now: fixtureDate(2026, 2, 10, 3, 20), energyKwh: 14, chargerPowerKw: 7
+        )
+        // One price everywhere means waiting buys nothing, and the earliest window wins.
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 3, 20))
+        #expect((plan?.savings ?? -1) == 0)
+    }
+
+    @Test
+    func aNightTariffInsideAFixedRateIsWorthWaitingFor() {
+        let series = ChargingPlanner.fixedSeries(
+            dayPricePerKwh: 2.0, nightPricePerKwh: 0.5,
+            nightStartHour: 22, nightEndHour: 6,
+            from: fixtureDate(2026, 2, 10, 18), length: 24 * 3_600
+        )
+        func price(atHour hour: Int) -> Double? {
+            series.first { plannerFixtureCalendar.component(.hour, from: $0.startDate) == hour }?.sekPerKwh
+        }
+        #expect(price(atHour: 23) == 0.5)
+        #expect(price(atHour: 3) == 0.5)
+        #expect(price(atHour: 12) == 2.0)
+        let now = fixtureDate(2026, 2, 10, 18)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: series, now: now, energyKwh: 14, chargerPowerKw: 7, granularity: 3_600
+        )
+        #expect((plan?.savings ?? 0) > 0)
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 22))
+    }
+
+    @Test
+    func theBasisAndTheSettingRoundTrip() {
+        #expect(PlannerPriceBasis(mode: .automatic, contract: .quarterHour) == .quarterHour)
+        #expect(PlannerPriceBasis(mode: .automatic, contract: .hourly) == .hourly)
+        // A flat rate has no contract to name, and reads back as itself whatever is stored beside it.
+        #expect(PlannerPriceBasis(mode: .fixed, contract: .hourly) == .fixed)
+        for basis in PlannerPriceBasis.allCases {
+            #expect(PlannerPriceBasis(mode: basis.mode, contract: basis.contract) == basis)
+        }
+        #expect(PlannerPriceBasis.quarterHour.granularity == 900)
+        #expect(PlannerPriceBasis.hourly.granularity == 3_600)
+        #expect(PlannerPriceBasis.allCases.count == 3)
+    }
+}
