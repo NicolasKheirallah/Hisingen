@@ -7,18 +7,19 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- Pick how the Charging Planner reads a price. A Price basis row above the plan offers 15 min,
-  60 min or Fixed rate. It is the same setting Settings → Electricity shows, so the two cannot
-  disagree about what a kWh costs. Choosing 15 min plans in quarter-hour steps, so a charge that
-  needs an hour and a half no longer waits for two whole hours. Fixed rate prices the plan from
-  your own rate instead of the market, and honours the night tariff when you have one switched on,
-  so a cheap night still wins. The card hides the market source and the elprisetjustnu.se line
-  while Fixed rate is chosen, because neither applies.
+- The Charging Planner now follows the contract set in Settings → Electricity instead of always
+  planning in whole hours. A 15-minute contract plans in quarter-hour steps, so a charge that needs
+  an hour and a half no longer waits for two whole hours. A fixed rate is priced from your own rate
+  instead of the market, and honours the night tariff when you have one switched on, so a cheap
+  night still wins. The card hides the market source and the elprisetjustnu.se line while the rate
+  mode is fixed, because neither applies.
 
 - Choose the country your grid company bills in, then the tariff within it. Settings →
   Electricity → Grid Tariff adds a Country row offering Sweden, Norway, Denmark, Germany and the
-  Netherlands. Sweden is the only one whose published rates ship with the app, so the other four
-  say so and ask you to copy the fee from your invoice as a custom tariff. Changing country keeps
+  Netherlands. The country your connected Tibber home sits in is offered beside the picker, read
+  from the home's time zone, so it rarely needs choosing. Sweden is the only one whose published
+  rates ship with the app, so the other four say so and ask you to copy the fee from your invoice
+  as a custom tariff. Changing country keeps
   the high-load window and clears the rates and the fixed fee, because a rate written in one
   country's currency is a different number in another's.
 
@@ -107,8 +108,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   largest time, with its day and the energy it charges underneath. The planned average and the
   price now sit as figures over labels, in kr/kWh, followed by what waiting saves. They used to be
   part of one sentence.
-- The planner's price chart now shows one bar per hour, with the quarter-hour prices averaged into
-  the hour they fall in. Bars start at zero and are all one grey. The planned hours take the live
+- The planner's price chart draws a bar per slot the contract settles at: one per hour for an hourly
+  contract, one per quarter hour for a 15-minute one, with quarter-hour prices averaged into the
+  hour when the contract is hourly. Bars start at zero and are all one grey. The planned hours take the live
   colour, amber in Monochrome Precision, on a faint band of the same colour, where they used to be
   green. Height is the only thing that shows price, so the chart no longer depends on colour or
   opacity. Gridlines carry real kr values, a hairline and the weekday mark each midnight, and a
@@ -145,6 +147,8 @@ backup files keep their columns, number formats and quoting.
 
 ### Fixed
 
+- Stop a NexBlue charger that is delivering power from reading "Waiting for the car to start
+  drawing power". A current power reading now wins over a waiting charging state.
 - Make Settings → Tabs & Cards list the cards each tab actually draws. The six Now cards that
   moved into Car in 3.0 no longer appear as rows on Now, and an older layout keeps the lock,
   windows and software controls that moved to Car. Plan's Routines card is listed and can be

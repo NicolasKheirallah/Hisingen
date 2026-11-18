@@ -19,9 +19,6 @@ struct ChargingPlannerCard: View {
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
     @State private var resolved: PlannerPrices?
-    /// Set when the reader picks a basis in this card; `nil` means "read the shared setting", which is
-    /// what keeps Settings and the planner showing the same thing.
-    @State private var basisOverride: PlannerPriceBasis?
 
     private let provider = PlannerPriceProvider.shared
 
@@ -118,8 +115,6 @@ struct ChargingPlannerCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
 
-                basisRow
-
                 if basis != .fixed, let resolved, !points.isEmpty { sourceRow(resolved) }
 
                 if let model {
@@ -146,6 +141,8 @@ struct ChargingPlannerCard: View {
                             .foregroundStyle(model.savings > 0 ? HisingenTheme.ink : HisingenTheme.inkMuted)
                             .hisTelemetryValue(model.savingsLine, reduceMotion: reduceMotion)
                         PriceCurveView(points: priceSeries, plan: plan,
+                                       granularity: basis.granularity,
+                                       caption: basis.chartCaption,
                                        expectedEnd: ElectricityPriceService.requiredCoverageEnd(after: Date()))
                     }
                     .transition(plannerTransition)
@@ -208,26 +205,6 @@ struct ChargingPlannerCard: View {
         PlannerPriceFigure(value: value, label: label, level: level)
     }
 
-    /// The three ways the planner can read a price, offered as one choice: 15-minute market slots,
-    /// hourly ones, or the reader's own flat rate.
-    private var basisRow: some View {
-        HStack(spacing: 8) {
-            Text(L10n.text("Price basis"))
-                .hisType(.label)
-                .foregroundStyle(HisingenTheme.inkMuted)
-            Spacer(minLength: 8)
-            Picker("", selection: Binding(get: { basis }, set: { chooseBasis($0) })) {
-                ForEach(PlannerPriceBasis.allCases) { option in
-                    Text(option.title).tag(option)
-                }
-            }
-            .labelsHidden()
-            .accessibilityLabel(L10n.text("Price basis"))
-            .controlSize(.small)
-            .frame(maxWidth: 150)
-        }
-    }
-
     /// Which prices the plan below is built from. A fallback names itself in the warning colour, and
     /// the reason Tibber could not be used sits in the row's information button.
     private func sourceRow(_ prices: PlannerPrices) -> some View {
@@ -245,20 +222,11 @@ struct ChargingPlannerCard: View {
         return KVRow(L10n.text("Prices"), value, valueWarning: fellBack, info: reason)
     }
 
-    /// How the planner prices a slot, always read from the shared electricity setting so this card
-    /// cannot disagree with Settings about what a kWh costs. The stored override is only a redraw
-    /// trigger — the store is not observable — and is never allowed to outrank the setting itself.
+    /// How the planner prices a slot, read from the electricity setting. There is no choice here:
+    /// Settings → Electricity owns the contract, and this card follows it.
     private var basis: PlannerPriceBasis {
-        _ = basisOverride
-        return PlannerPriceBasis(mode: preferences.electricityRateMode,
-                                 contract: preferences.electricityPriceContract)
-    }
-
-    private func chooseBasis(_ new: PlannerPriceBasis) {
-        guard new != basis else { return }
-        preferences.electricityRateMode = new.mode
-        preferences.electricityPriceContract = new.contract
-        basisOverride = new
+        PlannerPriceBasis(mode: preferences.electricityRateMode,
+                          contract: preferences.electricityPriceContract)
     }
 
     /// The prices the plan is built from. A flat rate has no market file behind it, so it gets a

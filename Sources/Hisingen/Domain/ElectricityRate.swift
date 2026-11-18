@@ -122,26 +122,16 @@ enum ElectricityPriceContract: String, CaseIterable, Codable, Sendable, Identifi
     }
 }
 
-/// How the charging planner reads a price, offered as one choice rather than two settings that can
-/// disagree. Two options settle the market by the contract; the third is the reader's own flat rate,
-/// which has no market series behind it.
-enum PlannerPriceBasis: String, CaseIterable, Codable, Sendable, Identifiable {
+/// How the charging planner reads a price. It is derived from the two settings Settings → Electricity
+/// already holds, the rate mode and the contract, so the planner has no choice of its own to make.
+enum PlannerPriceBasis: Sendable, Equatable {
     case quarterHour
     case hourly
     case fixed
 
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .quarterHour: return L10n.text("15 min")
-        case .hourly: return L10n.text("60 min")
-        case .fixed: return L10n.text("Fixed rate")
-        }
-    }
-
-    /// The shortest window the planner may propose. A 15-minute price can be used in quarter-hour
-    /// lengths; an hourly price, and a flat rate, in whole hours.
+    /// The shortest window the planner may propose, and the width of one bar in its chart. A
+    /// 15-minute price can be used in quarter-hour lengths; an hourly price, and a flat rate, in
+    /// whole hours.
     var granularity: TimeInterval {
         switch self {
         case .quarterHour: return 900
@@ -149,12 +139,14 @@ enum PlannerPriceBasis: String, CaseIterable, Codable, Sendable, Identifiable {
         }
     }
 
-    /// The rate mode this basis writes back, so the planner and the rest of the app agree.
-    var mode: ElectricityRateMode { self == .fixed ? .fixed : .automatic }
-
-    /// The contract this basis writes back. A flat rate has no market series, so the contract it
-    /// leaves behind is the one it reads as: quarter-hour, which keeps the published intervals.
-    var contract: ElectricityPriceContract { self == .quarterHour ? .quarterHour : .hourly }
+    /// What the planner's chart calls the resolution it is drawing.
+    var chartCaption: String {
+        switch self {
+        case .quarterHour: return ElectricityPriceContract.quarterHour.title
+        case .hourly: return ElectricityPriceContract.hourly.title
+        case .fixed: return L10n.text("Fixed rate")
+        }
+    }
 
     init(mode: ElectricityRateMode, contract: ElectricityPriceContract) {
         if mode == .fixed {

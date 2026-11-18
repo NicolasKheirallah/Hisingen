@@ -370,6 +370,11 @@ extension HomeChargerTelemetry {
         }
         guard let status = status?.value else { return .unavailable }
         let power = isFresh(powerKw, now: now, staleAfter: staleAfter) ? powerKw?.value : nil
+        // A waiting token can lag the car: NexBlue has reported ev_waiting while the charger
+        // metered power. A current power reading above the idle threshold is the stronger fact.
+        if status.cableState == true, let power, power >= Self.zeroPowerThresholdKw {
+            return .charging(powerKw: power)
+        }
         switch status {
         case .unplugged: return .noCable
         case .pluggedIn: return .pluggedIn

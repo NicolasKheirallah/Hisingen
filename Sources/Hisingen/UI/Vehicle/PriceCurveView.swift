@@ -1,9 +1,8 @@
 import SwiftUI
 import Charts
 
-/// One hour of the spot-price outlook. Quarter-hour slots are averaged into the hour they sit in,
-/// weighted by how long each lasted, so 48 hours read as 48 bars whatever granularity the source
-/// published.
+/// One bar of the spot-price outlook. A published quarter-hour slot and a published hour both fold
+/// into the resolution the reader's contract settles at, weighted by how long each lasted.
 struct PriceHour: Identifiable, Equatable, Sendable {
     var start: Date
     var end: Date
@@ -16,16 +15,19 @@ struct PriceHour: Identifiable, Equatable, Sendable {
 enum PriceOutlook {
     private static let hour: TimeInterval = 3_600
 
-    /// Hourly averages for every hour that has not ended yet. Hour boundaries follow the epoch,
-    /// which lines up with local hours in every zone whose offset is a whole number of hours.
-    nonisolated static func hourly(_ points: [ElectricityPricePoint], after now: Date) -> [PriceHour] {
+    /// Averages for every slot that has not ended yet, each `granularity` seconds wide. Slot
+    /// boundaries follow the epoch, which lines up with local slots in every zone whose offset is a
+    /// whole number of slots.
+    nonisolated static func slots(_ points: [ElectricityPricePoint], after now: Date,
+                                  granularity: TimeInterval) -> [PriceHour] {
+        let width = max(60, granularity)
         var buckets: [TimeInterval: (weighted: Double, seconds: Double)] = [:]
         for point in points where point.endDate > now && point.endDate > point.startDate && point.sekPerKwh.isFinite {
             var cursor = point.startDate.timeIntervalSince1970
             let end = point.endDate.timeIntervalSince1970
             while cursor < end {
-                let bucket = (cursor / hour).rounded(.down) * hour
-                let sliceEnd = min(end, bucket + hour)
+                let bucket = (cursor / width).rounded(.down) * width
+                let sliceEnd = min(end, bucket + width)
                 let overlap = sliceEnd - cursor
                 var running = buckets[bucket] ?? (0, 0)
                 running.weighted += overlap * point.sekPerKwh
@@ -37,9 +39,14 @@ enum PriceOutlook {
         return buckets.keys.sorted().compactMap { key in
             guard let total = buckets[key], total.seconds > 0 else { return nil }
             let start = Date(timeIntervalSince1970: key)
-            let end = start.addingTimeInterval(hour)
+            let end = start.addingTimeInterval(width)
             return end > now ? PriceHour(start: start, end: end, price: total.weighted / total.seconds) : nil
         }
+    }
+
+    /// Hourly averages, for callers that always want one bar per hour.
+    nonisolated static func hourly(_ points: [ElectricityPricePoint], after now: Date) -> [PriceHour] {
+        slots(points, after: now, granularity: hour)
     }
 
     /// Value-axis range and gridlines. The bars always start at zero so their heights compare
@@ -95,6 +102,11 @@ enum PriceOutlook {
 struct PriceCurveView: View {
     let points: [ElectricityPricePoint]
     let plan: ChargingPlan?
+    /// The width of one bar, and the resolution the reader's contract settles at: a quarter hour
+    /// for a 15-minute contract, a whole hour for an hourly one or a flat rate.
+    var granularity: TimeInterval = 3_600
+    /// What the chart calls that resolution.
+    var caption: String = L10n.text("Hourly price")
     /// The instant the series should reach by now (end of tomorrow once tomorrow's prices are due).
     /// Where the series stops short of it, the chart keeps the room and says the prices are missing,
     /// so a short outlook reads as "not published yet" and not as a plan with no later hours.
@@ -103,24 +115,25 @@ struct PriceCurveView: View {
     @State private var scrubDate: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// A gap between neighbouring bars, split across both sides of each.
-    private static let barInset: TimeInterval = 5 * 60
+    /// A gap between neighbouring bars, split across both sides of each. It shrinks with the bar so
+    /// a quarter-hour bar keeps most of its width as bar rather than as gap.
+    private var barInset: TimeInterval { min(5 * 60, granularity / 6) }
 
     var body: some View {
-        let hours = PriceOutlook.hourly(points, after: now)
-        if let first = hours.first, let last = hours.last,
-           let low = hours.map(\.price).min(), let high = hours.map(\.price).max() {
-            chart(hours: hours, domainStart: first.start, dataEnd: last.end,
+        let bars = PriceOutlook.slots(points, after: now, granularity: granularity)
+        if let first = bars.first, let last = bars.last,
+           let low = bars.map(\.price).min(), let high = bars.map(\.price).max() {
+            chart(bars: bars, domainStart: first.start, dataEnd: last.end,
                   domainEnd: max(last.end, expectedEnd ?? last.end), low: low, high: high)
         }
     }
 
-    private func chart(hours: [PriceHour], domainStart: Date, dataEnd: Date, domainEnd: Date, low: Double, high: Double) -> some View {
+    private func chart(bars: [PriceHour], domainStart: Date, dataEnd: Date, domainEnd: Date, low: Double, high: Double) -> some View {
         let axis = PriceOutlook.priceAxis(minimum: low, maximum: high)
         let hourCount = Int((domainEnd.timeIntervalSince(domainStart) / 3_600).rounded())
         let ticks = PriceOutlook.timeTicks(from: domainStart, to: domainEnd, hourCount: hourCount)
         let missing = domainEnd.timeIntervalSince(dataEnd) >= 3_600
-        let selected = scrubDate.flatMap { HistoryInsights.nearest(to: $0, in: hours, timestamp: \.start) }
+        let selected = scrubDate.flatMap { HistoryInsights.nearest(to: $0, in: bars, timestamp: \.start) }
         let calendar = Calendar.current
         return VStack(alignment: .leading, spacing: 6) {
             // The caption and the readout share one line, so the chart does not move when a bar
@@ -132,7 +145,7 @@ struct PriceCurveView: View {
                         .hisTelemetryValue(text, reduceMotion: reduceMotion)
                         .historyScrubCallout()
                 } else {
-                    Text(L10n.format("%@ · %@", L10n.text("Hourly price"), L10n.text("kr per kWh")))
+                    Text(L10n.format("%@ · %@", caption, L10n.text("kr per kWh")))
                         .hisType(.caption)
                         .foregroundStyle(HisingenTheme.inkMuted)
                 }
@@ -163,14 +176,14 @@ struct PriceCurveView: View {
                             .foregroundStyle(HisingenTheme.inkMuted)
                     }
                 }
-                ForEach(hours) { hour in
+                ForEach(bars) { bar in
                     RectangleMark(
-                        xStart: .value("Hour start", hour.start.addingTimeInterval(Self.barInset)),
-                        xEnd: .value("Hour end", hour.end.addingTimeInterval(-Self.barInset)),
+                        xStart: .value("Bar start", bar.start.addingTimeInterval(barInset)),
+                        xEnd: .value("Bar end", bar.end.addingTimeInterval(-barInset)),
                         yStart: .value("Zero", 0),
-                        yEnd: .value("Price", hour.price)
+                        yEnd: .value("Price", bar.price)
                     )
-                    .foregroundStyle(barColor(for: hour, selected: selected))
+                    .foregroundStyle(barColor(for: bar, selected: selected))
                 }
                 if now > domainStart && now < domainEnd {
                     RuleMark(x: .value("Now", now))

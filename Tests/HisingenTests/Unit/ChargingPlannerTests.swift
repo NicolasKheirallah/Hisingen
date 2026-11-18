@@ -596,16 +596,38 @@ struct ChargingPlannerBasisTests {
     }
 
     @Test
-    func theBasisAndTheSettingRoundTrip() {
+    func theBasisComesStraightFromTheElectricitySettings() {
         #expect(PlannerPriceBasis(mode: .automatic, contract: .quarterHour) == .quarterHour)
         #expect(PlannerPriceBasis(mode: .automatic, contract: .hourly) == .hourly)
-        // A flat rate has no contract to name, and reads back as itself whatever is stored beside it.
+        // A flat rate wins over whatever contract is stored beside it.
         #expect(PlannerPriceBasis(mode: .fixed, contract: .hourly) == .fixed)
-        for basis in PlannerPriceBasis.allCases {
-            #expect(PlannerPriceBasis(mode: basis.mode, contract: basis.contract) == basis)
-        }
+        #expect(PlannerPriceBasis(mode: .fixed, contract: .quarterHour) == .fixed)
         #expect(PlannerPriceBasis.quarterHour.granularity == 900)
         #expect(PlannerPriceBasis.hourly.granularity == 3_600)
-        #expect(PlannerPriceBasis.allCases.count == 3)
+        // A flat rate is planned and drawn an hour at a time.
+        #expect(PlannerPriceBasis.fixed.granularity == 3_600)
+        #expect(PlannerPriceBasis.quarterHour.chartCaption == ElectricityPriceContract.quarterHour.title)
+        #expect(PlannerPriceBasis.hourly.chartCaption == ElectricityPriceContract.hourly.title)
+    }
+
+    @Test
+    func theChartBarWidthFollowsTheBasis() {
+        // Four quarter-hour slots make one bar an hour, or four bars at quarter-hour width.
+        let start = fixtureDate(2026, 2, 10, 0)
+        let quarters = (0..<4).map { slot in
+            let slotStart = start.addingTimeInterval(Double(slot) * 900)
+            return ElectricityPricePoint(
+                startDate: slotStart, endDate: slotStart.addingTimeInterval(900),
+                sekPerKwh: Double(slot + 1)
+            )
+        }
+        let hourly = PriceOutlook.slots(quarters, after: start, granularity: 3_600)
+        #expect(hourly.count == 1)
+        #expect(abs((hourly.first?.price ?? 0) - 2.5) < 1e-9)
+
+        let fifteen = PriceOutlook.slots(quarters, after: start, granularity: 900)
+        #expect(fifteen.count == 4)
+        #expect(fifteen.map(\.price) == [1, 2, 3, 4])
+        #expect(fifteen.allSatisfy { $0.end.timeIntervalSince($0.start) == 900 })
     }
 }

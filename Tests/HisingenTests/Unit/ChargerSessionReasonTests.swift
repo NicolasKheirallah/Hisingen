@@ -227,4 +227,12 @@ struct HomeChargerElectricalCardTests {
         #expect(model.actions.contains { $0.kind == .chargeNow && $0.isEnabled })
         #expect(model.notice?.text != L10n.text("Charging is disabled on this charger."))
     }
+
+    @Test("A charger that is drawing power is not described as waiting for the car")
+    func powerWhileWaiting() {
+        let model = card(telemetry(status: .waitingForVehicle, power: 7.2))
+        #expect(model.vehicleLine.contains(L10n.text("Charging")))
+        #expect(model.notice?.text != L10n.text("Waiting for the car to start drawing power"))
+        #expect(model.actions.contains { $0.kind == .pause })
+    }
 }

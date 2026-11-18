@@ -27,6 +27,7 @@ struct SettingsGridTariffCard: View {
                     Text(L10n.text("Optional. What your grid company charges per kWh on top of Tibber's price. The planner, charger sessions and the house-load costs use it."))
                         .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
                     regionPicker
+                    if let suggested = suggestedRegion { regionOffer(suggested) }
                     if !tariff.region.hasPublishedRates { noRatesNotice }
                     kindPicker
                     if tariff.isPreset { presetRows }
@@ -96,6 +97,34 @@ struct SettingsGridTariffCard: View {
             .padding(9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .hisNotice(HisingenTheme.semanticWarning)
+    }
+
+    /// The market the connected Tibber home sits in, when it differs from the one the tariff is
+    /// priced in. Tibber reports the home's time zone, so this needs no answer from the reader.
+    private var suggestedRegion: GridTariffRegion? {
+        guard let region = GridTariffRegion.matching(timeZoneIdentifier: model.tibberHome?.timeZone),
+              region != tariff.region else { return nil }
+        return region
+    }
+
+    /// Offered rather than applied: crossing a border clears the rates, so the reader asks for it.
+    private func regionOffer(_ region: GridTariffRegion) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mappin.and.ellipse")
+                .hisType(.caption)
+                .foregroundStyle(HisingenTheme.accent)
+            Text(L10n.format("Tibber puts this home in %@", region.displayName))
+                .hisType(.caption)
+                .foregroundStyle(HisingenTheme.inkMuted)
+            Button(L10n.text("Use")) {
+                guard region != tariff.region else { return }
+                model.updateGridTariff(tariff.moved(to: region))
+                loadFields()
+            }
+            .buttonStyle(.pressable)
+            .controlSize(.small)
+            .accessibilityLabel(L10n.format("Use %@", region.displayName))
+        }
     }
 
     private var noRatesNotice: some View {

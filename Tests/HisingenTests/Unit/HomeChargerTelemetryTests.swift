@@ -116,6 +116,23 @@ struct HomeChargerTelemetryTests {
         #expect(telemetry(status: "error", power: "0").activity(now: reported) == .fault)
     }
 
+    @Test("A charger that is drawing power is charging, whichever waiting token it reports")
+    func powerWhileWaitingIsCharging() {
+        for status in ["ev_waiting", "lb_waiting", "delay_waiting", "connected", "finished"] {
+            #expect(telemetry(status: status, power: "4.2").activity(now: reported) == .charging(powerKw: 4.2))
+        }
+        // A fault or an unplugged charger keeps its own meaning even if a power reading disagrees.
+        #expect(telemetry(status: "error", power: "4.2").activity(now: reported) == .fault)
+        #expect(telemetry(status: "idle", power: "4.2").activity(now: reported) == .noCable)
+    }
+
+    @Test("A stale power reading does not turn a waiting charger into charging")
+    func stalePowerDoesNotOverrideWaiting() {
+        var stale = telemetry(status: "ev_waiting", power: "4.2")
+        stale.powerKw = .init(value: 4.2, timestamp: reported.addingTimeInterval(-HomeChargerTelemetry.defaultStaleAfter - 60))
+        #expect(stale.activity(now: reported) == .waitingForVehicle)
+    }
+
     // MARK: - Connector evidence
 
     @Test("A current charger reading confirms the connector; otherwise the source is named")
