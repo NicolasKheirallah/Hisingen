@@ -3763,3 +3763,20 @@
 "Vattenfall time tariff (T4)" = "Vattenfall Zeittarif (T4)";
 "Weekdays only" = "Nur Werktage";
 "What Tibber billed for the energy in those hours, taxes included, plus the grid transfer fee from your tariff. The fixed fee is not in it." = "Was Tibber für die Energie in diesen Stunden berechnet hat, inklusive Steuern, plus die Netzgebühr aus Ihrem Tarif. Die Grundgebühr ist nicht enthalten.";
+
+"Norway" = "Norway";
+"Denmark" = "Denmark";
+"Germany" = "Germany";
+"Netherlands" = "Netherlands";
+"Fixed fee, %@ per year" = "Fixed fee, %@ per year";
+"High-load fee, %@ per kWh" = "High-load fee, %@ per kWh";
+"Other time fee, %@ per kWh" = "Other time fee, %@ per kWh";
+"About %@ %@ a month. For reference only, it is in no per-kWh figure." = "About %@ %@ a month. For reference only, it is in no per-kWh figure.";
+"No published grid rates for %@ in this build. Copy the fee from your invoice and enter it as a custom tariff." = "No published grid rates for %@ in this build. Copy the fee from your invoice and enter it as a custom tariff.";
+"These prices are %@'s, but your grid company is %@. Check them against your invoice, or enter your own as a custom tariff." = "These prices are %@'s, but your grid company is %@. Check them against your invoice, or enter your own as a custom tariff.";
+"%@ %@/kWh" = "%@ %@/kWh";
+"%@ %@/kWh, high-load until %@" = "%@ %@/kWh, high-load until %@";
+"%@ %@/kWh, other time until %@" = "%@ %@/kWh, other time until %@";
+"Charge %@ over %@ to reach %d%%" = "Charge %@ over %@ to reach %d%%";
+"A %@ charge is longer than the price outlook" = "A %@ charge is longer than the price outlook";
+"%d h %d min" = "%d h %d min";

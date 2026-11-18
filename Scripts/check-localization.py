@@ -45,8 +45,9 @@ UNIT_WORDS = {
 }
 # Brand and product names that are never translated.
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}
-# Exact values that are intentionally identical to English.
-ALLOWED_VALUES = {"Hisingen Glass"}
+# Exact values that are intentionally identical to English. "Tariff" is the word in Swedish,
+# Norwegian bokmål and Nynorsk as well, so translating it would mean inventing a different one.
+ALLOWED_VALUES = {"Hisingen Glass", "Tariff"}
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.
 PLACEHOLDER_VALUE = "undefined"
