@@ -3,17 +3,33 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.1] - 2026-11-18
 
 ### Added
 
-- Show a NexBlue charger by its model, such as "NexBlue Edge 2", in the pairing list and Settings
-  instead of its serial number. Two chargers of the same model keep a short serial suffix. The
-  overnight timer is hidden for a charger another account shares with you, because NexBlue allows
-  only the owner to read or write a schedule.
-- When a charger reports that charging is disabled, the charger card says so and **Charge now**
-  stays disabled instead of sending a command the charger would refuse. A reading older than the
-  usual ten minutes is not trusted for this.
+- Pick how the Charging Planner reads a price. A Price basis row above the plan offers 15 min,
+  60 min or Fixed rate. It is the same setting Settings → Electricity shows, so the two cannot
+  disagree about what a kWh costs. Choosing 15 min plans in quarter-hour steps, so a charge that
+  needs an hour and a half no longer waits for two whole hours. Fixed rate prices the plan from
+  your own rate instead of the market, and honours the night tariff when you have one switched on,
+  so a cheap night still wins. The card hides the market source and the elprisetjustnu.se line
+  while Fixed rate is chosen, because neither applies.
+
+- Choose the country your grid company bills in, then the tariff within it. Settings →
+  Electricity → Grid Tariff adds a Country row offering Sweden, Norway, Denmark, Germany and the
+  Netherlands. Sweden is the only one whose published rates ship with the app, so the other four
+  say so and ask you to copy the fee from your invoice as a custom tariff. Changing country keeps
+  the high-load window and clears the rates and the fixed fee, because a rate written in one
+  country's currency is a different number in another's.
+
+- Settings → Electricity → Grid Tariff says when the selected Vattenfall tariff belongs to a grid
+  company other than yours. Vattenfall Eldistribution is one of several Swedish operators, and
+  applying its transfer fee to another operator's meter would put a wrong price under every cost
+  the app shows.
+
+- When a NexBlue charger reports that charging is disabled, its card says so and **Charge now**
+  stays disabled until charging is turned back on in myNexBlue. A reading older than the usual ten
+  minutes is not trusted for this.
 
 - Connect a Perific house meter in Settings → Electricity → House Meter. Sign in with your Perific
   account and the charger card shows what the whole house draws; while the car charges it splits
@@ -72,6 +88,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
+- Start the main fuse on a Vattenfall grid tariff from the fuse your Tibber home reports, instead
+  of the usual 25 A. It can still be changed, and the fixed yearly fee follows it.
+
+- Name a NexBlue charger by its model in the pairing list and Settings, such as "NexBlue Edge 2",
+  instead of its serial number. Two chargers of the same model keep a short serial suffix.
+- Hide the overnight timer when a charger is shared with your account by invitation. NexBlue lets
+  only the owner read or write a charger's schedule, so the button led to a refusal.
 - Open Settings → All faster and scroll it more smoothly. The cards are built as they come into
   view instead of all at once.
 - Start the Smart Charging Planner's one-minute timer only when the planner is available, instead
@@ -123,14 +146,18 @@ backup files keep their columns, number formats and quoting.
 ### Fixed
 
 - Make Settings → Tabs & Cards list the cards each tab actually draws. The six Now cards that
-  moved into Car in 3.0 no longer appear as rows on Now, Plan's Routines card is listed and can be
-  switched off, a card from another tab can no longer be added to a shipped tab that has no view
-  for it, the card count leaves out section headers, and an older layout keeps the lock, windows
-  and software controls that moved to Car.
-- Finish the Tabs & Cards contract. A card from another tab now draws on the tab you place it
-  on, below that tab's own cards; switching a card off on one of your own tabs no longer hides it
-  on the tab it came from; a row says "Not reported" or "Not supported" when the car cannot fill
-  it; and the pane reopens on the tab you were arranging, with hidden tabs marked in the strip.
+  moved into Car in 3.0 no longer appear as rows on Now, and an older layout keeps the lock,
+  windows and software controls that moved to Car. Plan's Routines card is listed and can be
+  switched off, and the card count leaves out section headers. The picker on a shipped tab offers
+  its own cards and any card that stands on its own from another tab; a borrowed card draws below
+  that tab's own cards. Cards that own a tab's own state stay on the tab that gives them that
+  state.
+- Finish the per-tab contract. Switching a card off on one of your own tabs hides it there only,
+  and a card switched off on its own tab can still be placed on one of yours. Removing a card from
+  one of your tabs leaves the card on the tab it came from. A row says "Not reported" when the car
+  has not sent the reading, "Not supported" when the vehicle cannot support it, and "Data off"
+  when its reading is switched off. The pane reopens on the tab you were arranging, marks hidden
+  tabs in the strip, and gives the reorder arrows a larger target.
 - Keep a charger login that was saved before pairing. Signing in to NexBlue, Easee or Zaptec saves
   the login, but a charger is only paired with "Pair charger". Leaving Settings first sent you back
   to the Home Assistant choice and an empty sign-in form, so the login looked lost. Settings now
