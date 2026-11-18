@@ -3,6 +3,28 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-11-18
+
+### Changed
+
+- docs: add feature guide and screenshot tour [skip release]
+- Merge main and preserve the documentation update
+- docs: add feature guide and screenshot tour [skip release]
+- test: stop the Home Assistant command test idling on an escaped slash
+- fix(build): pick the DMG tool by what it supports, not by whether it exists
+- test: keep the Tibber pricing expectations type-checkable on the pinned Xcode
+- fix(build): split the charging-session CSV row so the pinned Xcode can type-check it
+- feat: 3.0.0 redesign, direct chargers, Tibber prices and reader themes
+- docs: credit Home Assistant in the third-party notices
+- fix(ui-check): follow the charge-target presets onto the underline grammar
+- chore(l10n): key the home charging strings
+- feat(home-charging): ship the Home Assistant component and its guide
+- feat: land reader themes and home charger telemetry for 3.0.0
+- Polish Hisingen panels and local builds
+- fix(ui): soften Sodium contrast and replace system button styles
+- feat(ui): redesign the panel around Now, Plan, Log and Car
+- fix(ui): panel contrast, honest attention count and fewer duplicate controls
+
 ## [3.0.0] - 2026-11-16
 
 ### Added
