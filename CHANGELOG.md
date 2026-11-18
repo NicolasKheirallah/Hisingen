@@ -94,7 +94,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Name a NexBlue charger by its model in the pairing list and Settings, such as "NexBlue Edge 2",
   instead of its serial number. Two chargers of the same model keep a short serial suffix.
 - Hide the overnight timer when a charger is shared with your account by invitation. NexBlue lets
-  only the owner read or write a charger's schedule, so the button led to a refusal.
+  only the owner read or write a charger's schedule, so the button used to lead to a refusal.
 - Open Settings → All faster and scroll it more smoothly. The cards are built as they come into
   view instead of all at once.
 - Start the Smart Charging Planner's one-minute timer only when the planner is available, instead
