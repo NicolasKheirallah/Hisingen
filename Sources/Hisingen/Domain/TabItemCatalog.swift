@@ -26,6 +26,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case vehicleExceptions = "vehicle-exceptions"
     case vehicleWeather = "vehicle-weather"
     case vehicleCharging = "vehicle-charging"
+    case vehicleHomeCharger = "vehicle-home-charger"
     case vehicleChargingPlanner = "vehicle-charging-planner"
     case vehicleFuelEngine = "vehicle-fuel-engine"
     case vehicleReadiness = "vehicle-readiness"
@@ -100,6 +101,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case controlsAccess = "controls-access"
     case controlsWindowsLocate = "controls-windows-locate"
     case controlsOTA = "controls-ota"
+    case controlsRoutines = "controls-routines"
 
     // Shared headers, offered to any tab
     case vehicleSwitcher = "vehicle-switcher"
@@ -128,9 +130,7 @@ struct TabItem: Identifiable, Hashable, Sendable {
     let sourceTab: BuiltInTab
     let kind: TabItemKind
     let detail: String
-    /// The stored data this card draws on. Hiding the last card that needs it is what
-    /// switches the corresponding provider request off, so an item with no feature over
-    /// here is drawing on data the app always fetches.
+    /// The feature that controls requests for the card's primary data.
     let feature: AppFeature?
 
     var isCard: Bool { kind == .card }
@@ -142,16 +142,13 @@ struct TabItem: Identifiable, Hashable, Sendable {
 /// designed in. It is the fallback for every reader who never opens the new settings pane,
 /// so a tab must render identically to the pre-composition build when nothing is customised.
 enum TabItemCatalog {
-    /// Kept as decodeable ids so an existing custom layout still loads, but no longer offered in
-    /// the editor: these detail cards and their wrapper duplicate sections now owned by Info.
+    /// Ids an older layout can still contain. The catalogue no longer carries their metadata,
+    /// `normalized()` drops them, and the editor never offers them: these detail cards and their
+    /// wrapper duplicated the sections Info now owns.
     static let retiredVehicleDetailItems: Set<TabItemID> = [
         .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
         .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
     ]
-
-    static func isRetired(_ id: TabItemID) -> Bool {
-        retiredVehicleDetailItems.contains(id)
-    }
 
     static let all: [TabItem] = [
         // MARK: Vehicle
@@ -173,9 +170,10 @@ enum TabItemCatalog {
         TabItem(id: .vehicleCharging, title: L10n.text("Charging"), symbol: "bolt.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Charge level, power, connector state and completion time.", feature: .chargingDetails),
-        TabItem(id: .vehicleChargingPlanner, title: L10n.text("Smart Charging Planner"), symbol: "calendar.badge.clock",
+        TabItem(id: .vehicleHomeCharger, title: L10n.text("Home charger"), symbol: "powerplug",
                 sourceTab: .vehicle, kind: .card,
-                detail: "Cheapest charging window from spot prices.", feature: .smartChargingPlanner),
+                detail: "What the home charger reports: wall power, session energy and its plan. Needs a saved charger login.",
+                feature: nil),
         TabItem(id: .vehicleFuelEngine, title: L10n.text("Fuel & Engine"), symbol: "fuelpump.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Fuel level, range and combustion engine state.", feature: nil),
@@ -191,24 +189,6 @@ enum TabItemCatalog {
         TabItem(id: .vehicleLocation, title: L10n.text("Vehicle Location"), symbol: "location.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Parking position, address and Apple Maps link.", feature: .vehicleLocation),
-        TabItem(id: .vehicleMore, title: L10n.text("More"), symbol: "ellipsis.circle",
-                sourceTab: .vehicle, kind: .card,
-                detail: "The collapsed disclosure that holds the five detail cards below.", feature: nil),
-        TabItem(id: .vehicleIdentityDetail, title: L10n.text("Vehicle Identity"), symbol: "car.side",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Plate, VIN, odometer, service due and trip meters.", feature: .vehicleIdentity),
-        TabItem(id: .vehicleLighting, title: L10n.text("Vehicle Health & Lighting"), symbol: "shield.lefthalf.filled",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Fluid and lamp warning flags, 12 V battery.", feature: .vehicleHealth),
-        TabItem(id: .vehicleClimate, title: L10n.text("Climate & Timers"), symbol: "fan",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Cabin climate, active timers, schedules, air quality, weather.", feature: .climateStatus),
-        TabItem(id: .vehicleSoftware, title: L10n.text("Vehicle Software"), symbol: "gearshape.2.fill",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Installed and announced versions with release notes.", feature: .softwareUpdates),
-        TabItem(id: .vehicleDiagnostics, title: L10n.text("Diagnostics & Sensors"), symbol: "stethoscope",
-                sourceTab: .vehicle, kind: .card,
-                detail: "Range versus WLTP, network state, average speed and consumption.", feature: .batteryDiagnostics),
 
         // MARK: Info
         TabItem(id: .infoOverview, title: L10n.text("Overview"), symbol: "photo.artframe",
@@ -267,7 +247,7 @@ enum TabItemCatalog {
                 detail: "Upholstery, steering orientation and cabin equipment.", feature: .vehicleIdentity),
         TabItem(id: .infoChargeLocations, title: L10n.text("Saved Charge Locations"), symbol: "mappin.circle.fill",
                 sourceTab: .info, kind: .card,
-                detail: "Saved charging locations and their aliases.", feature: .chargingDetails),
+                detail: "Saved charging locations and their aliases.", feature: .chargeLocations),
         TabItem(id: .infoFactoryBuild, title: L10n.text("Factory Build & Identity"), symbol: "hammer.fill",
                 sourceTab: .info, kind: .card,
                 detail: "Build week, factory specification and market data.", feature: .vehicleIdentity),
@@ -321,9 +301,9 @@ enum TabItemCatalog {
         TabItem(id: .historyChargeLocations, title: L10n.text("Charge Locations"), symbol: "mappin.and.ellipse",
                 sourceTab: .history, kind: .card,
                 detail: "Where charging happened, and how much.", feature: nil),
-        TabItem(id: .historyChargingHistory, title: L10n.text("Charging History"), symbol: "list.bullet.rectangle",
+        TabItem(id: .historyChargingHistory, title: L10n.text("Charging Summary"), symbol: "list.bullet.rectangle",
                 sourceTab: .history, kind: .card,
-                detail: "Full session table with export.", feature: nil),
+                detail: "Charging totals, power, timing and cost for the selected period.", feature: nil),
         TabItem(id: .historyFuelEconomy, title: L10n.text("Fuel Economy"), symbol: "fuelpump.fill",
                 sourceTab: .history, kind: .card,
                 detail: "Measured consumption between fill-ups.", feature: nil),
@@ -359,9 +339,6 @@ enum TabItemCatalog {
         TabItem(id: .controlsBanners, title: L10n.text("Command status banners"), symbol: "text.bubble",
                 sourceTab: .controls, kind: .header,
                 detail: "Sent, failed and offline notices, above the controls.", feature: nil),
-        TabItem(id: .controlsReceipts, title: L10n.text("Command receipts"), symbol: "checkmark.circle",
-                sourceTab: .controls, kind: .card,
-                detail: "Receipts for commands still awaiting confirmation.", feature: nil),
         TabItem(id: .controlsClimate, title: L10n.text("Climate controls"), symbol: "fan",
                 sourceTab: .controls, kind: .card,
                 detail: "Start climate, set temperature and seat heating.", feature: .remoteClimate),
@@ -383,6 +360,10 @@ enum TabItemCatalog {
         TabItem(id: .controlsOTA, title: L10n.text("Vehicle software controls"), symbol: "arrow.down.circle.fill",
                 sourceTab: .info, kind: .card,
                 detail: "Install an available software update now.", feature: .remoteOTA),
+        TabItem(id: .controlsRoutines, title: L10n.text("Routines"), symbol: "list.bullet.rectangle",
+                sourceTab: .controls, kind: .card,
+                detail: "Save a sequence of commands to send in order, such as starting climate, setting a charge target and locking.",
+                feature: nil),
 
         // MARK: Shared headers
         TabItem(id: .vehicleSwitcher, title: L10n.text("Vehicle switcher"), symbol: "car.2.fill",
@@ -400,56 +381,121 @@ enum TabItemCatalog {
         uniqueKeysWithValues: all.map { ($0.id, $0) }
     )
 
-    static func item(_ id: TabItemID) -> TabItem? { byID[id] }
+    static func canonicalID(_ id: TabItemID) -> TabItemID {
+        switch id {
+        case .vehicleChargingPlanner: return .controlsChargingPlanner
+        case .controlsReceipts: return .vehicleReceipts
+        default: return id
+        }
+    }
+
+    static func item(_ id: TabItemID) -> TabItem? { byID[canonicalID(id)] }
 
     /// Falls back to the raw value so an item that somehow escaped the table still renders
     /// with a readable name instead of crashing a tab.
-    static func title(_ id: TabItemID) -> String { byID[id]?.title ?? id.rawValue }
+    static func title(_ id: TabItemID) -> String { item(id)?.title ?? id.rawValue }
 
-    static func symbol(_ id: TabItemID) -> String { byID[id]?.symbol ?? "square.dashed" }
+    static func symbol(_ id: TabItemID) -> String { item(id)?.symbol ?? "square.dashed" }
 
     static func items(in tab: BuiltInTab) -> [TabItem] {
-        all.filter { $0.sourceTab == tab && !isRetired($0.id) }
+        all.filter { $0.sourceTab == tab }
     }
 
     static var headers: [TabItem] { all.filter { $0.kind == .header } }
 
-    static var cards: [TabItem] { all.filter { $0.isCard && !isRetired($0.id) } }
+    static var cards: [TabItem] { all.filter(\.isCard) }
+
+    /// Cards that draw from the snapshot, the reader's preferences and the command gate alone.
+    /// A tab of the reader's own can render these wherever they are put; every other card owns
+    /// state that only the tab it came from supplies.
+    static let standaloneItems: Set<TabItemID> = [
+        .vehicleSwitcher,
+        .vehicleHero,
+        .vehicleCharging,
+        .vehicleHomeCharger,
+        .vehicleOpenings,
+        .vehicleTyres,
+        .vehicleReadiness,
+        .vehicleLocation,
+        .vehicleWeather,
+        .vehicleReceipts,
+        .vehicleAttention,
+        .controlsChargingPlanner,
+        .controlsClimate,
+        .controlsAccess,
+        .controlsWindowsLocate,
+        .controlsOTA
+    ]
+
+    static var nowInlineItems: Set<TabItemID> {
+        Set(defaultItems(for: .vehicle)).union([.vehicleTyres])
+    }
+
+    static func isStandalone(_ id: TabItemID) -> Bool { standaloneItems.contains(id) }
+
+    /// Standalone cards that may be appended to a shipped tab. The vehicle switcher is a
+    /// header, so it stays in the tab strip of a tab of the reader's own rather than being
+    /// appended below another tab's cards.
+    static let portableCards: Set<TabItemID> = standaloneItems.filter {
+        item($0)?.isCard == true
+    }
+
+    /// Whether `tab` can ever draw `id`.
+    ///
+    /// Settings, the card picker, the composition and the tab views all ask this one question.
+    /// A shipped tab draws its own layout and may also take a standalone card from another tab;
+    /// a tab of the reader's own may name any card, and `TabCardStack` states which of them it
+    /// draws and which stay on their home tab. Settings itself draws no cards.
+    static func canRender(_ id: TabItemID, on tab: TabRef) -> Bool {
+        guard let builtIn = tab.builtIn else { return true }
+        guard builtIn != .settings else { return false }
+        return Set(defaultItems(for: builtIn)).union(portableCards).contains(id)
+    }
+
+    /// The items `tab` draws. A shipped tab draws its own layout plus any portable cards
+    /// placed on it; a tab of the reader's own draws only standalone cards, because the rest
+    /// need the tab that gives them state. `TabCardStack` names those separately.
+    static func roster(for tab: TabRef) -> Set<TabItemID> {
+        guard let builtIn = tab.builtIn else { return standaloneItems }
+        guard builtIn != .settings else { return [] }
+        return Set(defaultItems(for: builtIn)).union(portableCards)
+    }
 
     /// The shipped layout of each built-in tab, in the order it was designed in.
+    ///
+    /// This is also the roster of what that tab can draw: Settings lists it, the picker offers
+    /// it, and the tab view iterates it. A card that is not here has no renderer on that tab.
     static func defaultItems(for tab: BuiltInTab) -> [TabItemID] {
         switch tab {
         case .vehicle:
             return [
-                .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
-                .vehicleFuelEngine, .vehicleReadiness, .vehicleOpenings, .vehicleTyres,
-                .vehicleLocation, .vehicleMore, .vehicleIdentityDetail, .vehicleLighting,
-                .vehicleClimate, .vehicleSoftware, .vehicleDiagnostics
+                .vehicleSwitcher, .vehicleHero, .vehicleReadiness, .vehicleReceipts, .vehicleAttention,
+                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleHomeCharger, .controlsChargingPlanner,
+                .vehicleFuelEngine, .vehicleOpenings, .vehicleLocation
             ]
         case .info:
             return [
-                .infoNavBar, .infoOverview, .infoFreshness, .infoDoors, .infoTyres,
-                .infoFluids, .infoSoftware, .controlsOTA, .infoLocation, .controlsAccess,
-                .controlsWindowsLocate, .infoWeather, .infoTrip,
-                .infoPowertrain, .infoBatteryHealth, .infoBatteryDiagnostics, .infoAirQuality,
-                .infoConnectivity, .infoService, .infoWarranty, .infoExterior, .infoInterior,
-                .infoChargeLocations, .infoFactoryBuild, .infoCapabilities, .infoActivity
+                .infoNavBar, .infoOverview, .infoLocation, .infoDoors, .controlsAccess, .controlsWindowsLocate,
+                .infoTyres, .infoFluids, .infoService, .infoWarranty, .infoBatteryHealth, .infoBatteryDiagnostics,
+                .infoSoftware, .controlsOTA, .infoFactoryBuild, .infoPowertrain, .infoExterior, .infoInterior,
+                .infoChargeLocations, .infoWeather, .infoAirQuality, .infoTrip, .infoConnectivity,
+                .infoCapabilities, .infoActivity, .infoFreshness
             ]
         case .history:
             return [
-                .historyPeriodPicker, .historyOverview, .historyActivity, .historyWarnings, .historyMonth,
-                .historyAirCleaning, .historyEmissions, .historyDrivingPatterns, .historyDistance,
-                .historyMonthlyMileage, .historyTrips, .historyChargingSessions,
-                .historyChargingCurve, .historyMonthlyCharging, .historyChargeLocations,
-                .historyChargingHistory, .historyFuelEconomy, .historyRecentFills,
-                .historyEfficiency, .historyConsumption, .historyOdometer, .historyBatteryHealth,
-                .historyTyrePressure, .historyAirQuality, .historyCabinClimate, .historyAutomations
+                .historyPeriodPicker, .historyOverview,
+                .historyChargingSessions, .historyChargingCurve,
+                .historyActivity, .historyWarnings, .historyAutomations, .historyMonth,
+                .historyChargingHistory, .historyMonthlyCharging, .historyChargeLocations, .historyTrips, .historyDrivingPatterns,
+                .historyDistance, .historyMonthlyMileage, .historyOdometer,
+                .historyEfficiency, .historyConsumption, .historyFuelEconomy, .historyRecentFills, .historyEmissions,
+                .historyAirCleaning, .historyAirQuality, .historyCabinClimate,
+                .historyBatteryHealth, .historyTyrePressure
             ]
         case .controls:
             return [
-                .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
-                .controlsClimate, .controlsEngine
+                .controlsBanners, .controlsCharging, .vehicleHomeCharger, .vehicleReceipts, .controlsChargingPlanner,
+                .controlsClimate, .controlsEngine, .controlsRoutines
             ]
         case .settings:
             // Settings is its own surface, managed by the settings sections rather than by

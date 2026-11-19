@@ -377,14 +377,6 @@ struct HistoryInsightsAggregatesTests {
         #expect(abs(ols - -1) > abs(robust - -1))
     }
 
-    @Test
-    func testStableStateOfHealthIsMedianOfRecent() {
-        let records = [batteryHealth(1, odometerKm: 50_000, sohPct: 92),
-                       batteryHealth(2, odometerKm: 51_000, sohPct: 60),
-                       batteryHealth(3, odometerKm: 52_000, sohPct: 91)]
-        #expect(HistoryInsights.stableStateOfHealth(from: records) == 91)
-    }
-
     // MARK: - Command statistics
 
     @Test

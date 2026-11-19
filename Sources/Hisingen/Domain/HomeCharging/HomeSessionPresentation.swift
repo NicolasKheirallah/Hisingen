@@ -8,8 +8,16 @@ struct WallboxSessionPresentation: Equatable {
     /// `nil` when no cost is known at all.
     var costValue: String?
     var costInfo: String?
+    /// How the charger says the session began and ended; `nil` when it gave no reason this build can word.
+    var startedBy: String?
+    var endedBy: String?
+    var endedByNeedsAttention: Bool
 
     init(_ wallbox: WallboxMeasurement, currencyFallback: String) {
+        startedBy = ChargerSessionStart(token: wallbox.startReason)?.text
+        let end = ChargerSessionEnd(token: wallbox.stopReason)
+        endedBy = end?.text
+        endedByNeedsAttention = end?.needsAttention ?? false
         energyValue = Format.energyKwh(wallbox.energyKwh)
         let measuredAt = Format.dateTimeFormatter.string(from: wallbox.measuredAt)
         if let vendor = Self.vendorName(for: wallbox.energySource) {

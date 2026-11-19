@@ -6,12 +6,10 @@ import UniformTypeIdentifiers
 @MainActor
 struct SettingsActionsCard: View {
     let binder: PreferenceBinder
-    let onSignOut: () -> Void
 
     @State private var pendingSettingsImport: Data?
     @State private var showSettingsImportConfirmation = false
     @State private var showSettingsResetConfirmation = false
-    @State private var showSignOutConfirmation = false
     @State private var settingsTransferFeedback: (message: String, isError: Bool)?
 
     private var preferences: PreferencesStore { binder.preferences }
@@ -19,7 +17,7 @@ struct SettingsActionsCard: View {
     var body: some View {
         Card {
             VStack(spacing: 8) {
-                CardHeader(symbol: "gearshape.2", title: L10n.text("Settings Actions"), color: .secondary)
+                CardHeader(symbol: "gearshape.2", title: L10n.text("Settings Backup"), color: .secondary)
                 HStack(spacing: 8) {
                     Button { exportSettings() } label: {
                         Label(L10n.text("Export Settings"), systemImage: "square.and.arrow.up")
@@ -48,44 +46,7 @@ struct SettingsActionsCard: View {
                     .foregroundStyle(settingsTransferFeedback.isError ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
                     .textSelection(.enabled)
                 }
-
-                Divider().opacity(HisingenTheme.dividerOpacity)
-                Button(role: .destructive) {
-                    showSignOutConfirmation = true
-                } label: {
-                    HStack {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                        Text(L10n.format("Sign Out of %@ Account", preferences.activeBrand.displayName))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
-                .controlSize(.regular)
-
-                Button {
-                    NSApp.terminate(nil)
-                } label: {
-                    HStack {
-                        Image(systemName: "power")
-                        Text(L10n.text("Quit Hisingen"))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.pressable)
-                .hisType(.label)
-                .foregroundStyle(.secondary)
-                .padding(.top, 2)
             }
-        }
-        .confirmationDialog(
-            L10n.format("Sign out of %@?", preferences.activeBrand.displayName),
-            isPresented: $showSignOutConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.text("Sign Out & Remove Session"), role: .destructive) { onSignOut() }
-            Button(L10n.text("Cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.text("The saved session and account credentials for this provider will be removed from this Mac. Local vehicle history is kept."))
         }
         .confirmationDialog(
             L10n.text("Import these settings?"),
@@ -118,16 +79,11 @@ struct SettingsActionsCard: View {
     private func exportSettings() {
         do {
             let data = try preferences.exportSettingsPropertyList()
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.propertyList]
-            panel.nameFieldStringValue = "hisingen-settings.plist"
-            panel.begin { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try data.write(to: url, options: .atomic)
-                    settingsTransferFeedback = (L10n.text("Settings exported."), false)
-                } catch {
+            FileExport.save(data, type: .propertyList, filename: "hisingen-settings.plist") { _, error in
+                if let error {
                     settingsTransferFeedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
+                } else {
+                    settingsTransferFeedback = (L10n.text("Settings exported."), false)
                 }
             }
         } catch {

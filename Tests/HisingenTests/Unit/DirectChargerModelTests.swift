@@ -135,6 +135,16 @@ struct DirectChargerModelTests {
         harness.model.stop()
     }
 
+    @Test("A direct charger's card needs the saved account login")
+    func directCardNeedsTheLogin() throws {
+        let signedOut = try DirectHarness(signedIn: false)
+        #expect(!signedOut.model.isSignedIn)
+        #expect(signedOut.model.cardInput(for: signedOut.state()) == nil)
+        let signedIn = try DirectHarness()
+        #expect(signedIn.model.isSignedIn)
+        #expect(signedIn.model.cardInput(for: signedIn.state()) != nil)
+    }
+
     @Test("The card names the vendor and offers no plan editor")
     func cardIsProviderAware() async throws {
         let harness = try DirectHarness()

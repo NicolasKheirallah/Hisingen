@@ -69,12 +69,20 @@ enum HomeSessionSync {
         var canWrite: @MainActor () -> Bool
         /// Tibber's own API, when the reader connected it. Tried before Home Assistant's `tibber.get_prices`.
         var tibberPrices: (@Sendable (Date, Date) async throws -> [HomePricePoint])?
+        /// The Tibber supplier's network fee, used when the charger has none of its own.
+        var defaultNetworkFeeOrePerKwh: Double
+        /// The grid tariff, which wins over the flat default when set: the fee then follows the clock.
+        var defaultGridTariff: GridTariff?
 
         init(client: HomeAssistantClient?, pairing: HomeChargingPairing, ledger: ChargingSessionLedger,
              recordingEnabled: Bool, fallback: HomeSessionPricer.Fallback, now: Date,
              direct: (any DirectChargerProvider)? = nil, backfill: DateInterval? = nil,
              canWrite: @escaping @MainActor () -> Bool = { true },
-             tibberPrices: (@Sendable (Date, Date) async throws -> [HomePricePoint])? = nil) {
+             tibberPrices: (@Sendable (Date, Date) async throws -> [HomePricePoint])? = nil,
+             defaultNetworkFeeOrePerKwh: Double = 0,
+             defaultGridTariff: GridTariff? = nil) {
+            self.defaultNetworkFeeOrePerKwh = defaultNetworkFeeOrePerKwh
+            self.defaultGridTariff = defaultGridTariff
             self.client = client
             self.pairing = pairing
             self.ledger = ledger
@@ -156,7 +164,11 @@ enum HomeSessionSync {
         for candidate in candidates.sorted(by: { $0.keyKind.rank > $1.keyKind.rank }) {
             let observed = ledger.observedVehicleSessions(from: candidate.startedAt, to: candidate.endedAt)
             let decision = HomeSessionAttribution.decide(candidate: candidate, pairing: pairing, observed: observed)
-            let cost = HomeSessionPricer.price(candidate, tibber: tibber, networkFeeOrePerKwh: pairing.networkFeeOrePerKwh,
+            // A fee set on the paired charger wins; otherwise the grid tariff, then the flat default.
+            let tariff = pairing.networkFeeOrePerKwh > 0
+                ? GridTariff.flat(orePerKwh: pairing.networkFeeOrePerKwh)
+                : (environment.defaultGridTariff ?? .flat(orePerKwh: environment.defaultNetworkFeeOrePerKwh))
+            let cost = HomeSessionPricer.price(candidate, tibber: tibber, gridTariff: tariff,
                                                fallback: environment.fallback, tibberSource: tibberSource)
             guard let result = ledger.recordWallboxSession(candidate, decision: decision, cost: cost,
                                                            locationName: pairing.locationAlias) else {

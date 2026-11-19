@@ -36,6 +36,33 @@ struct VehicleActiveVerdictTests {
         #expect(verdict != nil)
     }
 
+    @Test func liveChargingDrawUsesAvailableMeasurementsInsteadOfTheLimit() {
+        let now = Date()
+        var charging = vehicle(state: .charging, connection: .connected, powerWatts: 7_200, currentAmps: 16)
+        charging.freshness.readingDates[.charging] = now
+        charging.energy.currentLimitAmps = 32
+        let power = Format.kilowatts(watts: 7_200)
+        let current = Format.amps(16)
+
+        #expect(charging.liveChargingDraw(now: now) == "\(power) · \(current)")
+        #expect(charging.liveChargingDraw(now: now.addingTimeInterval(601)) == nil)
+
+        charging.energy.currentAmps = nil
+        #expect(charging.liveChargingDraw(now: now) == power)
+        charging.energy.powerWatts = nil
+        #expect(charging.liveChargingDraw(now: now) == nil)
+
+        charging.energy.currentAmps = 0
+        #expect(charging.liveChargingDraw(now: now) == Format.amps(0))
+        charging.energy.currentAmps = 16
+        #expect(charging.liveChargingDraw(now: now) == current)
+        charging.freshness.retainedDataCategories = [.chargingDetails]
+        #expect(charging.liveChargingDraw(now: now) == nil)
+        charging.freshness.retainedDataCategories = []
+        charging.energy.chargingState = .scheduled
+        #expect(charging.liveChargingDraw(now: now) == nil)
+    }
+
     @Test func connectedButIdleCarHasNoVerdict() {
         #expect(state().activeVerdict == nil)
         #expect(state(chargingState: .scheduled).activeVerdict == nil)

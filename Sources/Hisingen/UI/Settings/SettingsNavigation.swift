@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// Stable, testable settings destinations. Search is intentionally section based: it
-/// keeps every control in its explanatory card instead of returning orphaned toggles.
+/// Stable settings sidebar sections and search destinations.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case all, accounts, appearance, tabsAndCards, general, electricity, features, notifications, privacyData, updates, about
+    case all, accounts, appearance, tabsAndCards, general, electricity, features, notifications, privacyData, updates
 
     var id: String { rawValue }
 
@@ -19,7 +18,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .notifications: return L10n.text("Notifications")
         case .privacyData: return L10n.text("Privacy & Data")
         case .updates: return L10n.text("Updates")
-        case .about: return L10n.text("About")
         }
     }
 
@@ -35,29 +33,133 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .notifications: return "bell"
         case .privacyData: return "hand.raised"
         case .updates: return "arrow.triangle.2.circlepath"
-        case .about: return "info.circle"
-        }
-    }
-
-    private var searchTerms: String {
-        switch self {
-        case .all: return ""
-        case .accounts: return "account login sign in polestar volvo credentials vehicle vin garage fleet authorize authorization remote commands"
-        case .appearance: return "appearance theme color dark light screenshot privacy floating panel car image battery and range estimated range position relative to car first reading"
-        case .tabsAndCards: return "tab tabs card cards dashboard layout sections order reorder hide show customize custom widgets panels log observed changes rows per page"
-        case .general: return "general display menu bar panel size density units language launch charging order"
-        case .electricity: return "electricity rate price tariff cost kwh country sweden spot price elspot zone provider contract markup vat tax grid fee night charging planner elpris home assistant nexblue easee zaptec tibber access token charger wallbox"
-        case .features: return "feature capability vehicle data remote control remote commands lock climate charge schedule location weather authorize authorization"
-        case .notifications: return "notification alert sound quiet hours warning battery rain unlocked reminder"
-        case .privacyData: return "privacy data database storage history retention export backup diagnostics location"
-        case .updates: return "update automatic frequency interval download version channel release"
-        case .about: return "about help diagnostics quit sign out version reset"
         }
     }
 
     func matches(_ query: String) -> Bool {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return needle.isEmpty || title.lowercased().contains(needle) || searchTerms.contains(needle)
+        let terms = SettingsDestination.searchTerms(query)
+        if terms.isEmpty { return true }
+        let sectionTitle = SettingsDestination.searchTerms(title)
+        if terms.allSatisfy({ term in sectionTitle.contains(where: { $0.hasPrefix(term) }) }) { return true }
+        return SettingsDestination.allCases.contains { $0.section == self && $0.matches(query) }
+    }
+}
+
+enum SettingsDestination: String, CaseIterable, Identifiable {
+    case account, remoteAuthorization, garage, vehicleReferences
+    case appearance, vehicleAppearance, menuBar, panel, general
+    case electricity, gridTariff, plannerSettings, homeCharging, electricitySupplier, houseMeter
+    case tabLayout, nowControls, chargingLayout
+    case vehicleData, remoteFeatures, vehicleCapabilities, automation
+    case notifications, plannerAlerts
+    case privacy, localData, backup
+    case updates
+
+    var id: String { rawValue }
+
+    var section: SettingsSection {
+        switch self {
+        case .account, .remoteAuthorization, .garage, .vehicleReferences: .accounts
+        case .appearance, .vehicleAppearance, .menuBar, .panel: .appearance
+        case .general: .general
+        case .electricity, .plannerSettings, .homeCharging, .electricitySupplier, .gridTariff, .houseMeter: .electricity
+        case .tabLayout, .nowControls, .chargingLayout: .tabsAndCards
+        case .vehicleData, .remoteFeatures, .vehicleCapabilities, .automation: .features
+        case .notifications, .plannerAlerts: .notifications
+        case .privacy, .localData, .backup: .privacyData
+        case .updates: .updates
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .account: L10n.text("Account")
+        case .remoteAuthorization: L10n.text("Remote Command Permissions")
+        case .garage: L10n.text("Garage & Fleet")
+        case .vehicleReferences: L10n.text("Vehicle References")
+        case .appearance: L10n.text("Appearance & Themes")
+        case .vehicleAppearance: L10n.text("Vehicle Presentation")
+        case .menuBar: L10n.text("Menu Bar")
+        case .panel: L10n.text("Panel")
+        case .general: L10n.text("Language & Units")
+        case .electricity: L10n.text("Electricity Rate")
+        case .plannerSettings: L10n.text("Charging Planner")
+        case .homeCharging: L10n.text("Home Charging")
+        case .electricitySupplier: L10n.text("Electricity Supplier")
+        case .gridTariff: L10n.text("Grid Tariff")
+        case .houseMeter: L10n.text("House Meter")
+        case .tabLayout: L10n.text("Tabs & Cards")
+        case .nowControls: L10n.text("Controls on Now")
+        case .chargingLayout: L10n.text("Charging Stat Order")
+        case .vehicleData: L10n.text("Vehicle Data")
+        case .remoteFeatures: L10n.text("Remote Controls")
+        case .vehicleCapabilities: L10n.text("Vehicle Capability Matrix")
+        case .automation: L10n.text("Automations")
+        case .notifications: L10n.text("Notifications")
+        case .plannerAlerts: L10n.text("Charging Planner Alerts")
+        case .privacy: L10n.text("Privacy")
+        case .localData: L10n.text("SQLite Storage & Data")
+        case .backup: L10n.text("Settings Backup")
+        case .updates: L10n.text("Hisingen Updates")
+        }
+    }
+
+    private var aliases: String {
+        switch self {
+        case .account: "login sign in sign out polestar volvo credentials VIN test connection"
+        case .remoteAuthorization: "remote command authorize authorization commands polestar volvo restricted scopes approved permissions reauthenticate"
+        case .garage: "fleet nickname rename vehicle switch active vehicle theme per vehicle reorder"
+        case .vehicleReferences: "warranty service date delivery usable battery capacity wltp override kilometrage"
+        case .appearance: "theme color dark light mode create theme default"
+        case .vehicleAppearance: "image vehicle perspective battery range model badge license plate display name first reading"
+        case .menuBar: "menu bar tint status icon style display"
+        case .panel: "floating charging panel window size density auto close"
+        case .general: "general language time format clock am pm 24h 12h distance units temperature pressure fuel consumption launch login"
+        case .electricity: "rate price zone tariff country market spot elspot elpris contract markup vat tax night fixed cost kwh grid carbon intensity emissions"
+        case .plannerSettings: "smart charging planner charging power cheapest hours estimate"
+        case .homeCharging: "connected services home assistant nexblue easee zaptec wallbox charger pair import earlier sessions"
+        case .electricitySupplier: "connected services tibber supplier token home quarter hour"
+        case .gridTariff: "network fee fuse capacity charge grid tariff operator vattenfall"
+        case .houseMeter: "connected services perific enegic house meter hushållsmätare han port load balancing"
+        case .tabLayout: "tab card layout sections order reorder hide show customize custom widgets rows per page pagination history log"
+        case .nowControls: "quick control actions limit step lock climate windows honk tailgate now"
+        case .chargingLayout: "charging order statistics stat rows rearrange details"
+        case .vehicleData: "data fetch readings telemetry VIN charging schedules air quality vehicle location maps weather software status diagnostics real time updates"
+        case .remoteFeatures: "remote commands lock climate charge window software remote feature"
+        case .vehicleCapabilities: "capability matrix supported available TPMS support export"
+        case .automation: "autostart auto start routines calendar preconditioning schedule event cheap window"
+        case .notifications: "alert warning sound quiet hours low battery unlock rain threshold delay private banners mute badge daily summary"
+        case .plannerAlerts: "charging planner notifications notify cheap window lead time tomorrow prices"
+        case .privacy: "privacy dashboard screenshot redaction blur VIN plate coordinates device owner command authentication touch id"
+        case .localData: "history location retention database prune samples erase sign out exports diagnostics backup"
+        case .backup: "settings actions transfer export import backup reset preferences"
+        case .updates: "app automatic update check download version frequency interval channel release about"
+        }
+    }
+
+    func matches(_ query: String) -> Bool {
+        let words = Self.searchTerms(title + " " + aliases)
+        return Self.searchTerms(query).allSatisfy { term in words.contains { $0.hasPrefix(term) } }
+    }
+
+    static func searchTerms(_ text: String) -> [Substring] {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: L10n.displayLocale)
+            .split { !$0.isLetter && !$0.isNumber }
+    }
+
+    static func owner(of feature: AppFeature) -> Self {
+        if feature.isRemoteControl { return .remoteFeatures }
+        switch feature {
+        case .smartChargingPlanner: return .plannerSettings
+        case .notifications: return .notifications
+        case .updateChecks: return .updates
+        default: return .vehicleData
+        }
+    }
+
+    static func matches(_ item: TabItem, query: String) -> Bool {
+        let words = searchTerms(item.title + " " + item.detail)
+        return searchTerms(query).allSatisfy { term in words.contains { $0.hasPrefix(term) } }
     }
 }
 
@@ -180,7 +282,8 @@ struct SettingsSidebar: View {
                 }
             }
         }
-        .padding(22)
+        .padding(.vertical, 22)
+        .padding(.horizontal, HisingenTheme.layoutWidth < 600 ? 14 : 22)
     }
 }
 

@@ -17,12 +17,8 @@ struct PerformancePathTests {
 
     @Test("Image writes use SQLite as the only durable tier")
     func singleDurableImageTier() async throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("HisingenImagePerformance-\(UUID())", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
         let database = VehicleDatabase.inMemory()
-        let cache = CarImageCache(cacheDirectory: directory, database: database)
+        let cache = CarImageCache(database: database)
         let bytes = Data([1, 2, 3, 4])
 
         cache.save(bytes, for: "image-vin", angle: 0)
@@ -30,9 +26,6 @@ struct PerformancePathTests {
         cache.dropMemoryCache(for: "IMAGE-VIN")
 
         #expect(cache.image(for: "IMAGE-VIN", angle: 0) == bytes)
-        #expect(!FileManager.default.fileExists(
-            atPath: directory.appendingPathComponent("IMAGE-VIN_angle0.jpg").path
-        ))
     }
 
     @Test("Presentation equality never compares artwork bytes")

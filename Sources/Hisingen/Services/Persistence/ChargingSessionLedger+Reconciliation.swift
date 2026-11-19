@@ -22,19 +22,14 @@ extension ChargingSessionLedger {
         }
 
         let observedEndSoc = samples.last?.batteryPercentage ?? record.startSoc
-        let now = Date()
-        let clampedEndedAt: Date = {
-            let candidate = record.endedAt ?? record.startedAt
-            return candidate.timeIntervalSinceNow > 5 * 60 ? now : candidate
-        }()
-        let clampedLastSample: Date = {
-            let candidate = samples.last?.timestamp ?? record.startedAt
-            return candidate.timeIntervalSinceNow > 5 * 60 ? now : candidate
-        }()
         // Display the observed end even when balancing erased gain; energy math below
         // still clamps negative gain to zero so a SoC drop never becomes negative kWh.
         let resolvedEndSoc = max(record.endSoc ?? observedEndSoc, observedEndSoc)
-        let resolvedEndDate = max(clampedEndedAt, clampedLastSample)
+        let resolvedEndDate = Self.resolvedEndDate(
+            reported: record.endedAt ?? record.startedAt,
+            observed: samples.last?.timestamp ?? record.startedAt,
+            now: Date()
+        )
         let percentageAdded = max(0, resolvedEndSoc - record.startSoc)
         let resolvedEnergy: Double = {
             if record.energyDeliveredKwh > 0 { return record.energyDeliveredKwh }
@@ -83,10 +78,7 @@ extension ChargingSessionLedger {
         }
 
         guard let endedAt = record.endedAt, let last = samples.last else { return samples }
-        let now = Date()
-        let clampedEndedAt = endedAt.timeIntervalSinceNow > 5 * 60 ? now : endedAt
-        let clampedLastTs: Date = last.timestamp.timeIntervalSinceNow > 5 * 60 ? now : last.timestamp
-        let resolvedEndDate = max(clampedEndedAt, clampedLastTs)
+        let resolvedEndDate = Self.resolvedEndDate(reported: endedAt, observed: last.timestamp, now: Date())
         let observedEndSoc = max(record.endSoc ?? last.soc, last.soc)
         if abs(last.timestamp.timeIntervalSince(resolvedEndDate)) > 1
             || abs(last.soc - observedEndSoc) > 0.01 {
@@ -112,18 +104,13 @@ extension ChargingSessionLedger {
         let percentageAdded = max(0, resolvedEndSoc - record.startSoc)
         guard percentageAdded > 0, usableCapacityKwh > 0 else { return record }
         let powers = samples.compactMap(\.powerKw)
-        let now = Date()
-        let clampedEnd: Date = {
-            let candidate = record.endedAt ?? record.startedAt
-            return candidate.timeIntervalSinceNow > 5 * 60 ? now : candidate
-        }()
-        let clampedLast: Date = {
-            let candidate = samples.last?.timestamp ?? record.startedAt
-            return candidate.timeIntervalSinceNow > 5 * 60 ? now : candidate
-        }()
         return HistoricalChargingSession(
             id: record.id, vin: record.vin, startedAt: record.startedAt,
-            endedAt: max(clampedEnd, clampedLast),
+            endedAt: Self.resolvedEndDate(
+                reported: record.endedAt ?? record.startedAt,
+                observed: samples.last?.timestamp ?? record.startedAt,
+                now: Date()
+            ),
             startSoc: record.startSoc, endSoc: resolvedEndSoc,
             energyDeliveredKwh: percentageAdded / 100 * usableCapacityKwh,
             peakPowerKw: max(record.peakPowerKw, powers.max() ?? 0),
@@ -142,6 +129,12 @@ extension ChargingSessionLedger {
             lastObservedAt: record.lastObservedAt, summaryVersion: record.summaryVersion,
             pendingStopCount: record.pendingStopCount, estimatedCost: record.estimatedCost
         )
+    }
+
+    static func resolvedEndDate(reported: Date, observed: Date, now: Date) -> Date {
+        let latestPlausibleDate = now.addingTimeInterval(5 * 60)
+        return max(reported > latestPlausibleDate ? now : reported,
+                   observed > latestPlausibleDate ? now : observed)
     }
 
     // MARK: - Legacy reconciliation

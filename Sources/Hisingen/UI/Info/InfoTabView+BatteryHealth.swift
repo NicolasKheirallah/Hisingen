@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 extension InfoTabView {
@@ -25,6 +24,7 @@ extension InfoTabView {
                         .foregroundStyle(.secondary)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
+                    batteryLinks
                 }
             })
         }
@@ -39,7 +39,6 @@ extension InfoTabView {
         let nominal = state.factoryNominalBatteryCapacityKwh
         let packDesc = state.batteryPackDescription
         let statusColor: Color = soh >= 90.0 ? HisingenTheme.semanticGood : (soh >= 80.0 ? HisingenTheme.semanticWarning : HisingenTheme.semanticCritical)
-        let history = asyncData.batteryHealthHistory
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -113,87 +112,23 @@ extension InfoTabView {
                     KVRow(L10n.text("Estimated Usable Capacity"), String(format: "%.1f kWh / %.1f kWh (%.1f kWh nominal)", locale: L10n.displayLocale, usable, factoryUsable, nominal), symbol: "battery.100", info: L10n.text("Calculated from the displayed SoH estimate and configured reference capacity. It is not a measured BMS capacity."))
                     KVRow(L10n.text("Typical Warranty Reference"), L10n.text("70% / 160,000 km (8 Years)"), symbol: "shield.lefthalf.filled", info: L10n.text("General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents."))
 
-                    if !history.isEmpty {
-                        Divider().opacity(HisingenTheme.dividerOpacity)
-                            .padding(.vertical, 2)
-
-                        DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ForEach(history.prefix(5)) { r in
-                                    HStack {
-                                        Text(Format.dateTimeFormatter.string(from: r.timestamp))
-                                            .hisType(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Spacer()
-                                        // This printed raw kilometres while the row three lines
-                                        // above converted through the reader's unit.
-                                        Text(Format.distance(km: r.odometerKm, decimals: 0, unit: preferences.distanceUnit))
-                                            .hisType(.caption, weight: .medium)
-                                            .foregroundStyle(.secondary)
-                                        Text(String(format: "%.1f%% SoH", locale: L10n.displayLocale, r.stateOfHealthPct))
-                                            .hisType(.caption, weight: .semibold)
-                                            .foregroundStyle(HisingenTheme.semanticGood)
-                                    }
-                                    .padding(.vertical, 1)
-                                    .help(r.measurementSource == BatteryHealthRecord.fullChargeRangeSource
-                                        ? L10n.text("Saved full-charge range estimate. It updates only after another 100% reading.")
-                                        : L10n.text("Previous calculation retained for trend continuity; it is not used as the current SoH."))
-                                }
-                                HStack {
-                                    Spacer()
-                                    Button {
-                                        exportBatteryHealthCSV()
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "square.and.arrow.up")
-                                            Text(L10n.text("Export Health Log (CSV)"))
-                                        }
-                                        .hisType(.caption, weight: .medium)
-                                    }
-                                    .buttonStyle(.pressable)
-                                    .controlSize(.mini)
-                                }
-                                .padding(.top, 2)
-                            }
-                            .padding(.top, 4)
-                        } label: {
-                            HStack {
-                                Text(L10n.text("Calculated SoH Milestones"))
-                                Spacer()
-                                Text(L10n.format("%d logs", history.count))
-                                    .hisType(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .hisType(.label, weight: .medium)
-                        }
-                        .disclosureGroupStyle(WholeRowDisclosureStyle())
-                    }
+                    batteryLinks
                 }
             }
         })
     }
 
-    func exportBatteryHealthCSV() {
-        let vin = state.identity.vin
-        Task { @MainActor in
-            let csv = await history.exportCSV(.batteryHealth, scope: .fullHistory, vin: vin,
-                                              selectedSessionID: nil, periodTrips: [], periodSessions: [])
-            presentBatteryHealthSavePanel(csv: csv)
-        }
-    }
-
-    private func presentBatteryHealthSavePanel(csv: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "battery_health_\(state.identity.vin.prefix(8)).csv"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try csv.write(to: url, atomically: true, encoding: .utf8)
-                NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-            } catch {
-                reportError = error.localizedDescription
+    private var batteryLinks: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let onNavigateToSettings {
+                NavigationRow(title: L10n.text("Edit Vehicle References")) { onNavigateToSettings(.vehicleReferences) }
+            }
+            if let onNavigateToLogSection, !asyncData.batteryHealthHistory.isEmpty {
+                NavigationRow(title: L10n.text("Open Battery Health History")) {
+                    onNavigateToLogSection(.historyBatteryHealth)
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

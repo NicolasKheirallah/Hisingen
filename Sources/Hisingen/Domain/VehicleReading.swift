@@ -81,3 +81,27 @@ extension VehicleState {
         return age >= -60 && age <= maximumAge
     }
 }
+
+
+struct VehicleChargingReadout {
+    let isLastKnown: Bool
+    let isCharging: Bool
+    let batteryPercentage: Double?
+    let powerWatts: Int?
+    let targetPercentage: Int?
+    let minutesRemaining: Int?
+    let completionTime: String?
+
+    init(state: VehicleState) {
+        isLastKnown = state.freshness.isCached || state.hasOldData()
+            || state.freshness.retainedDataCategories.contains(.chargingDetails)
+        isCharging = state.isCharging
+        batteryPercentage = state.energy.batteryPercentage
+        powerWatts = state.chargingPowerWatts
+        targetPercentage = state.energy.targetPercentage
+        completionTime = isLastKnown ? nil : state.formattedCompletionTime
+        minutesRemaining = completionTime == nil ? nil : state.remainingChargingMinutes
+    }
+
+    var isLiveCharging: Bool { isCharging && !isLastKnown }
+}

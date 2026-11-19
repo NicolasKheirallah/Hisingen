@@ -19,6 +19,14 @@ struct SettingsUpdatesCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
 
+                SettingsFeatureToggleRow(
+                    binder: binder,
+                    feature: .updateChecks,
+                    symbol: "arrow.down.circle",
+                    title: "App Update Checks",
+                    detail: "Allow checks against Hisingen’s signed stable update feed"
+                )
+
                 HStack {
                     Label(L10n.text("Stable channel"), systemImage: "checkmark.seal.fill")
                         .hisType(.caption, weight: .medium)
@@ -30,6 +38,7 @@ struct SettingsUpdatesCard: View {
                         Label(L10n.text("Check Now"), systemImage: "arrow.clockwise")
                     }
                     .controlSize(.small)
+                    .disabled(!prefs.features.contains(.updateChecks))
                 }
 
                 HStack {
@@ -56,6 +65,7 @@ struct SettingsUpdatesCard: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .accessibilityLabel(L10n.text("Automatically check for updates"))
+                    .disabled(!prefs.features.contains(.updateChecks))
                 }
 
                 HStack {
@@ -76,7 +86,7 @@ struct SettingsUpdatesCard: View {
                     .controlSize(.small)
                     .frame(maxWidth: 160)
                     .accessibilityLabel(L10n.text("Check frequency"))
-                    .disabled(!prefs.automaticallyChecksForUpdates)
+                    .disabled(!prefs.features.contains(.updateChecks) || !prefs.automaticallyChecksForUpdates)
                 }
 
                 Divider().opacity(HisingenTheme.dividerOpacity)
@@ -97,7 +107,7 @@ struct SettingsUpdatesCard: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
                         .accessibilityLabel(L10n.text("Automatically download updates"))
-                        .disabled(!prefs.automaticallyChecksForUpdates)
+                        .disabled(!prefs.features.contains(.updateChecks) || !prefs.automaticallyChecksForUpdates)
                 }
             }
         }

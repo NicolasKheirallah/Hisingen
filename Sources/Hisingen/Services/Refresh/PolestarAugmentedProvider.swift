@@ -56,15 +56,13 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             try await telemetryProvider.prepareSession()
             telemetryOk = true
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             logTelemetryFailure("Telemetry provider prepareSession non-fatal", error)
         }
         do {
             try await commandProvider.prepareSession()
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             logger.warning("Command provider prepareSession non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             if !telemetryOk { throw error }
         }
@@ -75,16 +73,14 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await commandProvider.authenticate(email: email, password: password, preferredVIN: preferredVIN, features: features)
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             commandAuthError = error
             logger.warning("Command provider authenticate non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
         do {
             try await telemetryProvider.prepareSession()
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             logTelemetryFailure("Telemetry provider prepareSession non-fatal", error)
         }
         guard await hasWarmSession else {
@@ -101,8 +97,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await commandProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             commandError = error
             logger.warning("Command provider restoreSession non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
@@ -110,8 +105,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await telemetryProvider.restoreSession(preferredVIN: preferredVIN, features: features)
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             telemetryError = error
             logTelemetryFailure("Telemetry provider restoreSession non-fatal", error)
         }
@@ -132,15 +126,13 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
         do {
             try await telemetryProvider.signOut()
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             firstError = firstError ?? error
         }
         do {
             try await commandProvider.signOut()
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             firstError = firstError ?? error
         }
         if let firstError { throw firstError }
@@ -152,15 +144,13 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
             try await telemetryProvider.reloadVehicleMetadata(vin: vin, features: features)
             telemetryOk = true
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             logTelemetryFailure("Telemetry reloadVehicleMetadata non-fatal", error)
         }
         do {
             try await commandProvider.reloadVehicleMetadata(vin: vin, features: features)
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             logger.warning("Command reloadVehicleMetadata non-fatal: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
             if !telemetryOk { throw error }
         }
@@ -203,15 +193,13 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
                         state.freshness.servedByFallback = true
                     }
                 } catch {
-                    try Task.checkCancellation()
-                    if error is CancellationError { throw error }
+                    try rethrowIfCancelled(error)
                 }
             }
             try Task.checkCancellation()
             return state
         } catch let primaryError {
-            try Task.checkCancellation()
-            if primaryError is CancellationError { throw primaryError }
+            try rethrowIfCancelled(primaryError)
             logTelemetryFailure("Primary Data Portal telemetry failed, trying Polestar ID fallback", primaryError)
             guard await commandProvider.hasWarmSession else { throw primaryError }
             do {
@@ -219,8 +207,7 @@ actor PolestarAugmentedProvider: VehicleProviding, VehicleLiveStreaming {
                 fallbackState.freshness.servedByFallback = true
                 return fallbackState
             } catch {
-                try Task.checkCancellation()
-                if error is CancellationError { throw error }
+                try rethrowIfCancelled(error)
                 logger.error("Fallback Polestar ID telemetry also failed: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
                 throw primaryError
             }

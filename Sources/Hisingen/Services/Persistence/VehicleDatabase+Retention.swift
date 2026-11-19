@@ -61,6 +61,9 @@ extension VehicleDatabase {
             ("DELETE FROM vehicle_warning_events WHERE cleared_at IS NOT NULL AND cleared_at < ?;",
              "cleared_at", warningEventsOlderThanDays),
             ("DELETE FROM connectivity_history WHERE timestamp < ?;", "timestamp", connectivityOlderThanDays),
+            // Readings the metric log keeps for a year; the reader's own session notes live as long as the sessions.
+            ("DELETE FROM vehicle_metric_log WHERE metric != 'session_note' AND timestamp < ?;", "timestamp", 365),
+            ("DELETE FROM vehicle_metric_log WHERE metric = 'session_note' AND timestamp < ?;", "timestamp", chargingSessionsOlderThanDays),
             ("DELETE FROM cabin_climate_history WHERE timestamp < ?;", "timestamp", cabinClimateOlderThanDays),
             // The render-image cache stores a full-resolution PNG plus a thumbnail per
             // (vin, angle) and was never pruned – it is the single biggest contributor to a
@@ -70,7 +73,8 @@ extension VehicleDatabase {
         if let sampleRetentionDays {
             cutoffs += [
                 ("DELETE FROM charging_samples WHERE timestamp < ?;", "timestamp", sampleRetentionDays),
-                ("DELETE FROM telemetry_logs WHERE timestamp < ?;", "timestamp", sampleRetentionDays)
+                ("DELETE FROM telemetry_logs WHERE timestamp < ?;", "timestamp", sampleRetentionDays),
+                ("DELETE FROM vehicle_metric_log WHERE metric != 'session_note' AND timestamp < ?;", "timestamp", sampleRetentionDays)
             ]
         }
         try db.withTransaction {

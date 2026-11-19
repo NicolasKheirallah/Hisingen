@@ -87,11 +87,20 @@ actor BearerSession {
     typealias Authenticate = @Sendable (any HomeAssistantTransport) async throws -> Token
     typealias CheckResponse = @Sendable (HTTPURLResponse, Data) throws -> Void
 
+    /// How a vendor wants its token presented. Almost every cloud takes `Authorization: Bearer`;
+    /// Enegic's wants the bare token in `X-Authorization`.
+    struct TokenHeader: Sendable {
+        var name: String
+        var prefix: String
+        static let bearer = TokenHeader(name: "Authorization", prefix: "Bearer ")
+    }
+
     private let baseURL: URL
     private let transport: any HomeAssistantTransport
     private let authenticate: Authenticate
     private let checkResponse: CheckResponse
     private let now: @Sendable () -> Date
+    private let tokenHeader: TokenHeader
     private var token: String?
     private var expiry: Date?
     private var authentication: Task<String, any Error>?
@@ -101,9 +110,11 @@ actor BearerSession {
     static let renewalMargin: TimeInterval = 120
 
     init(baseURL: URL, transport: any HomeAssistantTransport, now: @escaping @Sendable () -> Date = { Date() },
-         initialToken: Token? = nil, checkResponse: @escaping CheckResponse = BearerSession.check,
+         initialToken: Token? = nil, tokenHeader: TokenHeader = .bearer,
+         checkResponse: @escaping CheckResponse = BearerSession.check,
          authenticate: @escaping Authenticate) {
         self.baseURL = baseURL
+        self.tokenHeader = tokenHeader
         self.transport = transport
         self.authenticate = authenticate
         self.checkResponse = checkResponse
@@ -162,7 +173,7 @@ actor BearerSession {
                          bearer: String) async throws -> Data {
         try Task.checkCancellation()
         var request = try Self.request(baseURL: baseURL, method: method, path: path, query: query)
-        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        request.setValue(tokenHeader.prefix + bearer, forHTTPHeaderField: tokenHeader.name)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let jsonBody {
             request.httpBody = jsonBody
@@ -282,8 +293,6 @@ enum DirectChargerDates {
     }
 
     static func format(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date)
+        Format.iso8601.string(from: date)
     }
 }

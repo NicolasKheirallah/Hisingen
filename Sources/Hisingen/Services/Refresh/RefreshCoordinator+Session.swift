@@ -243,6 +243,7 @@ extension RefreshCoordinator {
                 onEvent?(.sessionEstablished(cars: cars, selectedVIN: vin))
                 sessionReady = true
                 sessionIntent = .resume
+                publishDiagnostics()
                 let intervalState = Self.signposter.beginInterval("fetchVehicleState")
                 do {
                     let state = try await api.fetchVehicleState(vin: vin, features: preferences.features)
@@ -261,7 +262,7 @@ extension RefreshCoordinator {
                     retryAfterProviderCancellation()
                     return
                 }
-                let mapped = ServiceErrorPolicy.decision(error, provider: api.brand).error
+                let mapped = VehicleServiceError.map(error, provider: api.brand)
                 if mapped.requiresAuthentication { sessionReady = false }
                 handle(mapped, retrySession: !sessionReady)
             }

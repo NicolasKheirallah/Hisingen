@@ -12,7 +12,7 @@ extension HistoryDashboardView {
         let hours = tripPresentation.hours
         let split = tripPresentation.weekdayWeekend
         guard aggregateTrips.count >= 4 else {
-            return AnyView(Card {
+            return AnyView(HistoryCardSurface {
                 HisingenEmptyState(
                     symbol: "clock.arrow.circlepath",
                     title: L10n.text("Driving patterns need more trips"),
@@ -20,20 +20,31 @@ extension HistoryDashboardView {
                 )
             })
         }
-        return AnyView(Card {
+        return AnyView(HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Driving Patterns"), color: HisingenTheme.semanticActive)
+                HistorySectionHeading(symbol: "clock.arrow.circlepath", title: L10n.text("Driving Patterns"), color: HisingenTheme.semanticActive)
                 Chart(hours) { bucket in
                     BarMark(
                         x: .value(L10n.text("Hour"), bucket.hour),
                         y: .value(L10n.text("Trips"), bucket.tripCount)
                     )
-                    .foregroundStyle(HisingenTheme.accent.gradient)
-                    .cornerRadius(1.5)
+                    .foregroundStyle(HisingenTheme.chartInfo)
                 }
-                .chartXScale(domain: 0...23)
-                .chartXAxis { AxisMarks(values: [0, 6, 12, 18, 23]) }
-                .chartYAxisLabel(L10n.text("Trips"))
+                // Half a bar of room each side, so the midnight and 23:00 bars are not cut in half.
+                .chartXScale(domain: -0.5...23.5)
+                .chartXAxis {
+                    AxisMarks(values: [0, 6, 12, 18, 23]) { tick in
+                        AxisGridLine().foregroundStyle(HisingenTheme.hairline)
+                        AxisTick().foregroundStyle(HisingenTheme.hairline)
+                        if let hour = tick.as(Int.self) {
+                            AxisValueLabel {
+                                Text(Format.clockTime(hour: hour))
+                                    .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
+                            }
+                        }
+                    }
+                }
+                .historyYAxis(L10n.text("Trips"))
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(L10n.text("Departures by hour of day chart"))
                 .accessibilityValue(chartAccessibilityValue(points: hours.map { Double($0.tripCount) }))
@@ -44,7 +55,7 @@ extension HistoryDashboardView {
                     curveStat(L10n.text("Weekend / day"),
                               Format.distance(km: split.weekendKmPerDay, decimals: 1, unit: preferences.distanceUnit))
                     if let busiest = hours.max(by: { $0.tripCount < $1.tripCount }), busiest.tripCount > 0 {
-                        curveStat(L10n.text("Busiest hour"), String(format: "%02d:00", locale: L10n.displayLocale, busiest.hour))
+                        curveStat(L10n.text("Busiest hour"), Format.clockTime(hour: busiest.hour))
                     }
                 }
                 dataConfidenceNote(for: aggregateTrips.map(\.startedAt))
@@ -66,10 +77,10 @@ extension HistoryDashboardView {
     }
 
     var monthlyMileageReportCard: some View {
-        Card {
+        HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "calendar.badge.checkmark", title: L10n.text("Monthly Mileage Report"), color: HisingenTheme.chartInfo)
+                    HistorySectionHeading(symbol: "calendar.badge.checkmark", title: L10n.text("Monthly Mileage Report"), color: HisingenTheme.chartInfo)
                     Spacer()
                     Picker(L10n.text("Month"), selection: Binding(
                         get: { selectedMileageReport?.monthStart },
@@ -134,7 +145,7 @@ extension HistoryDashboardView {
                 .monospacedDigit()
                 .foregroundStyle(color)
             Text(L10n.format("%@ · %d trips", title, trips))
-                .hisType(.nano)
+                .hisType(.micro)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,61 +159,55 @@ extension HistoryDashboardView {
         let weekly = HistoryInsights.weeklyDistance(from: trips)
         let daily = HistoryInsights.dailyDistance(from: trips)
         let bestDay = daily.max { $0.distanceKm < $1.distanceKm }
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "chart.bar", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
-                Chart {
-                    ForEach(daily) { day in
-                        BarMark(
-                            x: .value(L10n.text("Date"), day.day, unit: .day),
-                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: day.distanceKm)),
-                            width: .ratio(0.65)
-                        )
-                        .foregroundStyle(HisingenTheme.accent)
-                        .cornerRadius(2)
+                HistorySectionHeading(symbol: "chart.bar", title: L10n.text("Distance Over Time"), color: HisingenTheme.semanticActive)
+                // Past about six weeks a daily bar is under a few points wide, so the weekly
+                // total takes over rather than drawing both resolutions of the same trips.
+                if daily.count > 45, weekly.count >= 2 {
+                    HistoryScrubChart(items: weekly, date: { $0.week }, ruleUnit: .weekOfYear,
+                                      callout: { "\(Format.dateFormatter.string(from: $0.week)) · \(Format.distance(km: $0.distanceKm, decimals: 0, unit: preferences.distanceUnit))" }) {
+                        ForEach(weekly) { bucket in
+                            BarMark(
+                                x: .value(L10n.text("Week"), bucket.week, unit: .weekOfYear),
+                                y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
+                            )
+                            .foregroundStyle(HisingenTheme.chartInfo)
+                        }
                     }
-                    if let scrubDistance, let hit = HistoryInsights.nearest(to: scrubDistance, in: daily, timestamp: \.day) {
-                        RuleMark(x: .value(L10n.text("Date"), hit.day, unit: .day))
-                            .foregroundStyle(Color.primary.opacity(0.25))
-                            .annotation(position: .top, spacing: 0,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                Text("\(Format.dateFormatter.string(from: hit.day)) · \(Format.distance(km: hit.distanceKm, decimals: 1, unit: preferences.distanceUnit))")
-                                    .historyScrubCallout()
-                            }
-                    }
-                }
-                .chartXSelection(value: $scrubDistance)
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) {
-                        AxisGridLine().foregroundStyle(HisingenTheme.hairline)
-                        AxisValueLabel().foregroundStyle(HisingenTheme.inkMuted)
-                    }
-                }
-                .chartYAxisLabel(preferences.distanceUnit.suffix)
-                .frame(height: chartHeight * 1.35)
-                .accessibilityLabel(L10n.text("Trip distance history chart"))
-                .accessibilityValue(chartAccessibilityValue(
-                    points: daily.map { preferences.distanceUnit.convert(km: $0.distanceKm) }
-                ))
-                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
-                    title: L10n.text("Distance Over Time"),
-                    yLabel: preferences.distanceUnit.suffix,
-                    points: daily.map { ($0.day, preferences.distanceUnit.convert(km: $0.distanceKm)) }
-                ))
-                .hisAnimation(Motion.progress, value: periodDataKey)
-                if weekly.count >= 3 {
-                    Chart(weekly) { bucket in
-                        BarMark(
-                            x: .value(L10n.text("Week"), bucket.week, unit: .weekOfYear),
-                            y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
-                        )
-                        .foregroundStyle(HisingenTheme.accent.opacity(0.55).gradient)
-                        .cornerRadius(2)
-                    }
-                    .chartYAxisLabel(preferences.distanceUnit.suffix)
-                    .frame(height: chartHeight * 0.62)
+                    .historyTimeAxis(spanning: weekly.map(\.week))
+                    .historyYAxis(preferences.distanceUnit.suffix)
+                    .frame(height: chartHeight * 1.35)
                     .accessibilityLabel(L10n.text("Weekly distance chart"))
-                    .accessibilityValue(chartAccessibilityValue(points: weekly.map { $0.distanceKm }))
+                    .accessibilityValue(chartAccessibilityValue(points: weekly.map { preferences.distanceUnit.convert(km: $0.distanceKm) }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Weekly distance chart"), yLabel: preferences.distanceUnit.suffix,
+                        points: weekly.map { ($0.week, preferences.distanceUnit.convert(km: $0.distanceKm)) }))
+                    .hisAnimation(Motion.progress, value: periodDataKey)
+                } else {
+                    HistoryScrubChart(items: daily, date: { $0.day }, ruleUnit: .day,
+                                      callout: { "\(Format.dateFormatter.string(from: $0.day)) · \(Format.distance(km: $0.distanceKm, decimals: 1, unit: preferences.distanceUnit))" }) {
+                        ForEach(daily) { day in
+                            BarMark(
+                                x: .value(L10n.text("Date"), day.day, unit: .day),
+                                y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: day.distanceKm)),
+                                width: .ratio(0.65)
+                            )
+                            .foregroundStyle(HisingenTheme.chartInfo)
+                        }
+                    }
+                    .historyTimeAxis(spanning: daily.map(\.day))
+                    .historyYAxis(preferences.distanceUnit.suffix)
+                    .frame(height: chartHeight * 1.35)
+                    .accessibilityLabel(L10n.text("Trip distance history chart"))
+                    .accessibilityValue(chartAccessibilityValue(
+                        points: daily.map { preferences.distanceUnit.convert(km: $0.distanceKm) }
+                    ))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Distance Over Time"),
+                        yLabel: preferences.distanceUnit.suffix,
+                        points: daily.map { ($0.day, preferences.distanceUnit.convert(km: $0.distanceKm)) }
+                    ))
                     .hisAnimation(Motion.progress, value: periodDataKey)
                 }
                 if let longest {
@@ -229,16 +234,17 @@ extension HistoryDashboardView {
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                temperatureConsumptionSection(trips: trips)
                 dataConfidenceNote(for: aggregateTrips.map(\.endedAt))
             }
         }
     }
 
     var tripListCard: some View {
-        Card {
+        HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: HisingenTheme.chartPositive)
+                    HistorySectionHeading(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: L10n.text("Detected Trips"), color: HisingenTheme.chartPositive)
                     Spacer()
                     Menu {
                         Picker(L10n.text("Sort"), selection: $tripSort) {
@@ -377,6 +383,7 @@ extension HistoryDashboardView {
                             if let consumption = trip.averageConsumption, state.powertrain.hasElectricRange,
                                HistoryInsights.efficiencyBounds.contains(consumption) {
                                 Text("· " + Format.energyConsumption(kwhPer100Km: consumption, unit: preferences.energyConsumptionUnit))
+                                Text("· " + Format.energyKwh(consumption * trip.distanceKm / 100))
                             }
                         }
                         .hisType(.micro).foregroundStyle(.secondary)

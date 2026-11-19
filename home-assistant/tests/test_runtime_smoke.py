@@ -269,12 +269,18 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(self.hass.switch_commands(), ["turn_on"])
         run(scenario())
 
-    def test_preview_changes_nothing_and_sends_nothing(self):
+    def test_preview_updates_charger_mapping_without_keeping_a_plan_or_sending_a_command(self):
         async def scenario():
             self.hass.set_charger("connected")
             runtime = await self.start()
-            response = await runtime._svc_preview(Call(plan_data()))
+            data = plan_data()
+            response = await runtime._svc_preview(Call(data))
             self.assertTrue(response["attributes"]["windows"])
+            self.assertEqual(runtime.chargers["NX1"]["entities"], data["charger"])
+
+            data["charger"]["power"] = "sensor.replacement_power"
+            await runtime._svc_preview(Call(data))
+            self.assertEqual(runtime.chargers["NX1"]["entities"]["power"], "sensor.replacement_power")
             self.assertNotIn("NX1", runtime.plans)
             self.assertEqual(self.hass.switch_commands(), [])
         run(scenario())

@@ -132,9 +132,6 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         if let keychain = error as? KeychainError {
             return keychain.isInteractionRequired ? .keychainConsentRequired : .secureStorage
         }
-        switch provider {
-        case .polestar: return .invalidResponse(operation: "network request")
-        case .volvo: return .invalidResponse(operation: "network request")
-        }
+        return .invalidResponse(operation: "network request")
     }
 }

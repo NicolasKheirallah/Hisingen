@@ -123,7 +123,7 @@ final class LiveStreamEngine {
                     metrics.lastDisconnectedAt = failedAt
                     let duration = failedAt.timeIntervalSince(connectedAt ?? streamStartedAt)
                     metrics.lastConnectionDuration = max(0, duration)
-                    let mapped = ServiceErrorPolicy.decision(error, provider: providerBrand).error
+                    let mapped = VehicleServiceError.map(error, provider: providerBrand)
                     metrics.lastDisconnectReason = DiagnosticRedaction.redact(String(describing: mapped))
                     if duration >= policy.stabilityInterval {
                         // Only a stream that stayed up proves the authorization works again.
@@ -148,9 +148,7 @@ final class LiveStreamEngine {
                             try await streaming.refreshLiveStreamAuthorization()
                             metrics.authorizationRefreshes += 1
                         } catch {
-                            let refreshError = ServiceErrorPolicy.decision(
-                                error, provider: providerBrand
-                            ).error
+                            let refreshError = VehicleServiceError.map(error, provider: providerBrand)
                             logger.warning("Live stream token recovery failed: \(String(describing: refreshError), privacy: .public)")
                             // The exchange itself was refused. Retrying reconnects with the same
                             // dead session, which is the loop this park exists to end.

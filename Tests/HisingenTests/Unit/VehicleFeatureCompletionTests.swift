@@ -137,7 +137,7 @@ struct VehicleFeatureCompletionTests {
 
     @Test
     func statusItemMenu() throws {
-        #expect(Set(StatusItemController.coreContextActions) == [.lock, .climate, .refresh])
+        #expect(Set(StatusItemController.CoreContextAction.allCases) == [.lock, .climate, .refresh])
         var state = try NotificationTestHarness().makeState()
         state.exteriorStatus = ExteriorSnapshot(openings: [], isLocked: false, alarmTriggered: false)
         #expect(StatusItemController.lockCommand(for: state) == .lock)

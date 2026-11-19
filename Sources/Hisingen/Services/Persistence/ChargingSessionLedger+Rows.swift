@@ -74,7 +74,8 @@ extension ChargingSessionLedger {
             cost: stmt.columnDouble(at: 38), partialCost: stmt.columnDouble(at: 39),
             costMethod: stmt.columnText(at: 40), priceSource: stmt.columnText(at: 41),
             costAssumptions: assumptions, missingKwh: stmt.columnDouble(at: 43),
-            currency: stmt.columnText(at: 44), attribution: stmt.columnText(at: 45)
+            currency: stmt.columnText(at: 44), attribution: stmt.columnText(at: 45),
+            startReason: stmt.columnText(at: 46), stopReason: stmt.columnText(at: 47)
         )
     }
 
@@ -90,6 +91,6 @@ extension ChargingSessionLedger {
         wallbox_energy_source, wallbox_measured_at, wallbox_started_at, wallbox_ended_at,
         wallbox_peak_kw, wallbox_cost, wallbox_partial_cost, wallbox_cost_method,
         wallbox_price_source, wallbox_cost_assumptions, wallbox_missing_kwh,
-        wallbox_currency, wallbox_attribution
+        wallbox_currency, wallbox_attribution, wallbox_start_reason, wallbox_stop_reason
         """
 }

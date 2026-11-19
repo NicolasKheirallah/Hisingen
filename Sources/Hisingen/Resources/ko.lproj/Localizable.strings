@@ -1338,7 +1338,6 @@
 "charging" = "충전";
 "Charging curve charge-level chart" = "충전 곡선 충전 수준 차트";
 "Charging curve power chart" = "충전 곡선 출력 차트";
-"Charging curve voltage and current chart" = "충전 곡선 전압 및 전류 차트";
 "Charging Functions" = "충전 기능";
 "Charging power is unusually low" = "충전 출력이 비정상적으로 낮습니다";
 "Charging Sessions" = "충전 세션";
@@ -1553,6 +1552,7 @@
 "Restore software event" = "소프트웨어 이벤트 복원";
 "Save charge location \"%@\" at the car's position" = "차량 위치에 충전 위치 \"%@\" 저장";
 "Saved Charge Locations" = "저장된 충전 위치";
+"Places saved on the car, with their schedules and current limits" = "차량에 저장된 장소와 해당 일정 및 전류 제한";
 "Saved charge locations" = "저장된 충전 위치";
 "Saved command setting; not live cabin telemetry" = "저장된 명령 설정이며 실시간 실내 원격 측정이 아님";
 "Scheduled By" = "예약자";
@@ -1597,7 +1597,6 @@
 "Switch to %@" = "%@(으)로 전환";
 "Tailgate Open/Close" = "테일게이트 열기/닫기";
 "Taller panel, more visible history" = "더 높은 패널, 더 잘 보이는 기록";
-"Tariff Cost" = "요금 비용";
 "Telemetry" = "원격 측정";
 "Telemetry Entries" = "원격 측정 항목";
 "The charge target must be between %d%% and 100%% on this vehicle." = "이 차량의 충전 목표는 %d%%~100%% 사이여야 합니다.";
@@ -1671,7 +1670,6 @@
 "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for recent ambient temperature." = "%.0f%% 충전 시 차량이 보고한 주행거리를 구성된 WLTP/모델 참조값과 비교하고 최근 외기 온도로 보정합니다.";
 "VIN-specific reference entered in Settings. It is not a live range value." = "설정에 입력된 VIN별 참조값입니다. 실시간 주행거리 값이 아닙니다.";
 "VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry." = "설정에 입력된 VIN별 참조값입니다. 계산된 에너지 및 SoH 추정에 사용되며 제공업체 원격 측정 데이터가 아닙니다.";
-"Voltage (V)" = "전압(V)";
 "Volume (litres)" = "용량(리터)";
 "Volvo's official API does not support changing charge settings." = "Volvo 공식 API는 충전 설정 변경을 지원하지 않습니다.";
 "Waiting for backend authorization" = "백엔드 승인 대기 중";
@@ -1754,7 +1752,6 @@
 "Battery health, odometer totals and lifetime cost always use full history, regardless of the range above." = "배터리 상태, 주행거리계 합계, 누적 비용은 위에서 선택한 기간과 관계없이 항상 전체 기록을 사용합니다.";
 "Busiest hour" = "가장 바쁜 시간대";
 "CO₂ Avoided" = "절감한 CO₂";
-"Charge level of this session versus the previous session" = "이번 세션과 이전 세션의 충전 수준 비교";
 "Charging by Location" = "위치별 충전";
 "Charging by Month" = "월별 충전";
 "Charging cost per month chart" = "월별 충전 비용 차트";
@@ -1976,7 +1973,7 @@
 "Export All History (JSON)" = "전체 기록 내보내기 (JSON)";
 "Alert after an opening has been left open for %d minutes" = "열린 상태가 %d분 동안 유지되면 알림";
 "Alert once at %d%% or below while unplugged and not charging" = "플러그가 연결되지 않고 충전 중이 아닐 때 %d%% 이하가 되면 한 번 알림";
-"Alert if parked and unlocked after %02d:00" = "%02d:00 이후 주차 중 잠금이 풀려 있으면 알림";
+"Alert if parked and unlocked after %@" = "%@ 이후 주차 중 잠금이 풀려 있으면 알림";
 "The selected settings archive is larger than 1 MB." = "선택한 설정 보관 파일이 1MB보다 큽니다.";
 "Settings imported." = "설정을 가져왔습니다.";
 
@@ -2384,10 +2381,11 @@
 "Today" = "오늘";
 "Tomorrow" = "내일";
 "Loading prices…" = "가격을 불러오는 중…";
-"Tomorrow's prices arrive after 14:15" = "내일 요금은 14:15 이후에 나옵니다";
+"Tomorrow's prices arrive after %@" = "내일 요금은 %@ 이후에 나옵니다";
 "Prices unavailable right now" = "지금은 요금을 불러올 수 없습니다";
 "Spot prices exclude taxes and grid fees" = "현물 가격에는 세금과 계통 이용 요금이 포함되지 않습니다";
-"Charge %@ over %d h to reach %d%%: average %@, now %@" = "%@ 충전, %d시간 내 %d%% 도달: 평균 %@, 현재 %@";
+"Charge %@ over %d h to reach %d%%" = "%@ 충전, %d시간 내 %d%% 도달";
+"Planned average" = "계획 평균";
 "Saves %@" = "%@ 저장";
 "Charging now is cheapest" = "지금 충전하는 것이 가장 저렴합니다";
 "A %d h charge is longer than the price outlook" = "%d시간 충전은 가격 전망 기간보다 깁니다";
@@ -2409,7 +2407,7 @@
 "Notify When the Cheap Window Opens" = "저렴한 시간대가 시작되면 알림";
 "One banner per window, respecting quiet hours" = "방해 금지 시간을 지키며 창마다 배너 하나씩";
 "Notify When Tomorrow's Prices Arrive" = "내일 가격이 나오면 알림";
-"One daily banner after 14:15 with the cheapest hour" = "14:15 이후 하루 한 번, 가장 저렴한 시간대를 알리는 배너";
+"One daily banner after %@ with the cheapest hour" = "%@ 이후 하루 한 번, 가장 저렴한 시간대를 알리는 배너";
 "Auto-Start Charging in the Window" = "지정 시간대에 자동 충전 시작";
 "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab: only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "시간대가 진행되는 동안 충전 시작 명령을 자동으로 보냅니다";
@@ -2453,14 +2451,12 @@
 "Export All Months" = "모든 월 내보내기";
 "Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "참고용입니다: %@ g CO₂/kWh 전력망 강도와 %@ g CO₂/km 가솔린 차(웰투휠)를 가정합니다. 설정 → 일반 → Grid Carbon Intensity에서 전력망 값을 설정할 수 있습니다.";
 
-// English fallback values pending translation
 "Lead Time" = "준비 시간";
 "How long before the window opens the banner arrives" = "시간대가 시작되기 전 배너를 받는 시점";
 "When the window opens" = "충전 시간대가 열리면";
 "1 hour before" = "1시간 전";
 "%d minutes before" = "%d분 전";
 
-// English fallback values pending translation
 "%1$d of %2$d windows open" = "창문 %2$d개 중 %1$d개 열림";
 "%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
 "%@ kr" = "%@ kr";
@@ -2522,7 +2518,6 @@
 "kr per kWh" = "kWh당 kr";
 "≈%@ to target at your %@/kWh setting" = "목표까지 약 %@ (설정한 %@/kWh 기준)";
 
-// English fallback values pending translation
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept." = "스냅샷, 캐시된 이미지, 충전 및 주유 기록, 텔레메트리, 상태 로그, 공기 질, 명령 감사 기록, 이 차량의 이름과 테마가 영구 삭제됩니다. 계정 자격 증명은 유지됩니다.";
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept." = "모든 차량의 스냅샷, 캐시된 이미지, 충전 및 주유 기록, 텔레메트리, 상태 로그, 공기 질, 명령 감사 기록이 이 Mac에 저장된 이름, 테마, 기타 차량별 설정과 함께 영구 삭제됩니다. 계정 자격 증명은 유지됩니다.";
 "Erase Everything Permanently" = "모든 항목 영구 삭제";
@@ -2530,7 +2525,6 @@
 "Clear saved locations for every vehicle?" = "모든 차량의 저장된 위치를 지울까요?";
 "Clear All Locations" = "모든 위치 지우기";
 
-// English fallback values pending translation
 "Time to Target Distance" = "목표 거리까지 시간";
 "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "차량 추정치. 차량에 설정된 목표 거리에 도달할 수 있도록 충전하는 데 필요한 시간입니다.";
 "Time to Full" = "완충까지 시간";
@@ -2655,7 +2649,6 @@
 "unknown time" = "시간 알 수 없음";
 "⚡ charging" = "⚡ 충전 중";
 
-// English fallback values pending translation
 "%@ (%@)" = "%@ (%@)";
 "%@ L/100km" = "%@ L/100km";
 "%@ copy" = "%@ 사본";
@@ -2843,7 +2836,6 @@
 "Nothing on this tab yet" = "이 탭에 아직 항목이 없습니다";
 "On" = "On";
 "On this tab" = "이 탭에서";
-"Open History" = "기록 열기";
 "Open Settings to configure Polestar Developer Portal." = "설정을 열어 Polestar 개발자 포털을 구성하세요.";
 "Opens this timer for editing" = "이 타이머를 열어 편집합니다";
 "Operation" = "작업";
@@ -2972,17 +2964,14 @@
 "“%@” and its card arrangement will be removed. The cards themselves stay available on the tabs they came from." = "“%@”와 카드 배치가 삭제됩니다. 카드 자체는 원래 탭에서 계속 사용할 수 있습니다.";
 "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window." = "Polestar가 인증 절차(2단계 인증, CAPTCHA 또는 약관 업데이트)를 요구했습니다. 대화형 창에서 로그인을 완료하세요.";
 
-// English fallback values pending translation
 "Custom range: %@–%@" = "사용자 지정 기간: %@–%@";
 "Hisingen · History summary" = "Hisingen · 기록 요약";
 "Refresh" = "새로 고침";
 "Reload the vehicle state" = "차량 상태 다시 불러오기";
 
-// English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "현물 가격에는 세금과 계통 이용 요금이 포함되지 않습니다 · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "현물 가격에는 세금과 계통 이용 요금이 포함되지 않습니다 · %@ · elprisetjustnu.se, %@에 가져옴";
 
-// English fallback values pending translation
 "Fixed rate" = "고정 요금";
 "Other provider" = "다른 제공업체";
 "15-minute price" = "15분 단위 가격";
@@ -3017,7 +3006,6 @@
 "Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "시장 가격이 적용되는 세션은 %@ 요금을 쓰고, 나머지 %d개 세션은 저장된 비용이나 고정 요금을 씁니다.";
 "≈%@ to target at the current %@/kWh" = "목표까지 약 %@ (현재 %@/kWh 기준)";
 
-// English fallback values pending translation
 "Electricity" = "전기";
 "Country" = "국가";
 "Sweden" = "스웨덴";
@@ -3293,7 +3281,6 @@
 "My Theme" = "내 테마";
 "Your colours, adjusted to stay readable in light and dark." = "밝은 모드와 어두운 모드에서 읽기 쉽도록 조정된 내 색상입니다.";
 
-// English fallback values pending translation
 "%@ by %@" = "%@ by %@";
 "%@ delivered" = "%@ delivered";
 "%@ from charger" = "%@ from charger";
@@ -3320,7 +3307,6 @@
 "Cancel plan" = "Cancel plan";
 "Cancel the plan?" = "Cancel the plan?";
 "Cancelled" = "Cancelled";
-"Charge now" = "Charge now";
 "Charge now is on in the car" = "Charge now is on in the car";
 "Charge now is running" = "Charge now is running";
 "Charge now is running and replaces the plan windows." = "Charge now is running and replaces the plan windows.";
@@ -3507,7 +3493,6 @@
 "Waiting for the car to start drawing power." = "Waiting for the car to start drawing power.";
 "What Home Assistant would do" = "What Home Assistant would do";
 
-// English fallback values pending translation
 "Charge Limit" = "충전 한도";
 "Each press raises a limit by this share of the highest value your car allows." = "한 번 누를 때마다 차량이 허용하는 최댓값의 이 비율만큼 한도가 올라갑니다.";
 "Last known: %@" = "Last known: %@";
@@ -3520,16 +3505,13 @@
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
 
-// English fallback values pending translation
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "New access token" = "New access token";
 "Save token" = "Save token";
 
-// English fallback values pending translation
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
 
-// English fallback values pending translation
 "%@ accepted the command. Waiting for the charger to confirm." = "%@ accepted the command. Waiting for the charger to confirm.";
 "%@ did not accept the saved login" = "%@ did not accept the saved login";
 "%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ did not accept the saved login. Enter the account and password again to reconnect.";
@@ -3581,7 +3563,7 @@
 "The charger or window changed. Preview the timer again." = "충전기 또는 시간대가 변경되었습니다. 타이머를 다시 미리 보세요.";
 "The timer could not be verified. Check Schedule in myNexBlue before trying again." = "타이머를 확인하지 못했습니다. 다시 시도하기 전에 myNexBlue에서 예약을 확인하세요.";
 "Cheapest overnight charge" = "가장 저렴한 야간 충전";
-"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "선택한 전력 가격 지역에서 18:00부터 07:00 사이의 일회성 충전 시간대를 찾습니다.";
+"Find a one-time charging window between %@ and %@ using your selected spot price area." = "선택한 전력 가격 지역에서 %@:00부터 %@ 사이의 일회성 충전 시간대를 찾습니다.";
 "Preview timer" = "타이머 미리 보기";
 "Save timer" = "타이머 저장";
 "Timer verified on the charger. You can manage it in myNexBlue." = "충전기에서 타이머를 확인했습니다. myNexBlue에서 관리할 수 있습니다.";
@@ -3591,17 +3573,291 @@
 "Choose up to one year of completed sessions to import." = "가져올 완료된 충전 세션을 최대 1년 범위에서 선택하세요.";
 "Through" = "종료일 포함";
 
-// English fallback values pending translation
 "Connect and find homes" = "Connect and find homes";
 "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported.";
 "Currency" = "Currency";
 "Disconnect Tibber" = "Disconnect Tibber";
 "Electricity Supplier" = "Electricity Supplier";
-"Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant." = "Optional. Connects Tibber to price charging sessions from its own 15-minute prices, without Home Assistant.";
 "Prices" = "Prices";
 "Supplier" = "Supplier";
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
-"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Set the network fee on the paired charger.";
 "Use this home" = "Use this home";
-"Used for charging sessions" = "Used for charging sessions";
+"Tibber prices include taxes, not grid fees" = "Tibber prices include taxes, not grid fees";
+"Tibber prices include taxes and your network fee" = "Tibber prices include taxes and your network fee";
+"%@ · fetched %@" = "%@ · fetched %@";
+"Elpriser, Tibber unavailable" = "Elpriser, Tibber unavailable";
+"Tibber did not answer, so the planner uses market prices. %@" = "Tibber did not answer, so the planner uses market prices. %@";
+"Tibber has no prices for the coming hours yet." = "Tibber has no prices for the coming hours yet.";
+"Tibber returned no prices." = "Tibber returned no prices.";
+"Not published yet" = "Not published yet";
+"Later prices are not published yet." = "Later prices are not published yet.";
+"From Tibber, taxes included. The markup below applies to market prices only." = "From Tibber, taxes included. The markup below applies to market prices only.";
+"Tibber is unavailable. Market price plus your markup." = "Tibber is unavailable. Market price plus your markup.";
+"Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant.";
+"Used for the planner and charging sessions" = "Used for the planner and charging sessions";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own.";
+"Added to Tibber prices in the planner and for charger sessions." = "Added to Tibber prices in the planner and for charger sessions.";
+
+"At the charger" = "At the charger";
+"Remotely" = "Remotely";
+"By an administrator" = "By an administrator";
+"By schedule" = "By schedule";
+"After an error" = "After an error";
+"On plug-in" = "On plug-in";
+"Cable unplugged" = "Cable unplugged";
+"Charge complete" = "Charge complete";
+"Held by load balancing" = "Held by load balancing";
+"Cable unlocked" = "Cable unlocked";
+"Not authorised" = "Not authorised";
+"Charger restarted" = "Charger restarted";
+"Power loss" = "Power loss";
+"Emergency stop" = "Emergency stop";
+"%@ per phase" = "%@ per phase";
+"%@ per phase, limit %@" = "%@ per phase, limit %@";
+"Current per Phase" = "Current per Phase";
+"Cable Rating" = "Cable Rating";
+"Circuit Fuse" = "Circuit Fuse";
+"Phase Mode" = "Phase Mode";
+"%@, limited by the cable" = "%@, limited by the cable";
+"%@, limited by the circuit fuse" = "%@, limited by the circuit fuse";
+"The limit is set to %@." = "The limit is set to %@.";
+"The cable allows %@." = "The cable allows %@.";
+"The circuit fuse is %@." = "The circuit fuse is %@.";
+"Charging uses the lowest. The car and load balancing can ask for less." = "Charging uses the lowest. The car and load balancing can ask for less.";
+"Adaptive" = "Adaptive";
+"Single phase" = "Single phase";
+"Three phase" = "Three phase";
+"Wi-Fi" = "Wi-Fi";
+"Mobile data" = "Mobile data";
+"Ethernet" = "Ethernet";
+"Charger Details" = "Charger Details";
+
+"Car Share of House Load" = "주택 전력 사용량 중 자동차 비중";
+"Car at Home" = "집에서의 자동차";
+"Charger-measured home sessions against the house meter's readings from Tibber, %@ to %@. Charging away from home never reaches that meter." = "충전기가 측정한 집 충전 세션을 Tibber의 집 계량기 검침값(%@ ~ %@)과 비교한 값입니다. 집 밖 충전은 이 계량기에 잡히지 않습니다.";
+"Cheap" = "저렴";
+"Expensive" = "비쌈";
+"Grid company" = "전력망 회사";
+"House Consumption" = "주택 소비량";
+"Price area" = "가격 구역";
+"Rest of the House" = "나머지 주택";
+"Tibber does not publish this company's fee. The per-kWh part is on your grid invoice." = "Tibber는 이 회사의 요금을 공개하지 않습니다. kWh당 요금은 전력망 청구서에 있습니다.";
+"Tibber puts this home in %@" = "Tibber는 이 집을 %@로 분류합니다";
+"Very cheap" = "매우 저렴";
+"Very expensive" = "매우 비쌈";
+
+"House Cost" = "주택 비용";
+"Car Cost at Home" = "집에서의 자동차 비용";
+"What Tibber billed for the energy in those hours, taxes included. The grid fee is not in it." = "해당 시간의 에너지에 대해 Tibber가 청구한 금액입니다. 세금은 포함되고 전력망 요금은 포함되지 않습니다.";
+"The car's energy at each hour's average Tibber price. Sessions are priced by the quarter-hour with your network fee, so the two can differ." = "각 시간의 Tibber 평균 가격으로 계산한 자동차의 에너지 비용입니다. 세션은 15분 단위와 네트워크 요금으로 계산되므로 두 값은 다를 수 있습니다.";
+"In %d of those hours the charger's energy was above the meter's reading, so the reading was used." = "해당 시간 중 %d시간 동안 충전기의 에너지가 계량기 값보다 커서 계량기 값을 사용했습니다.";
+
+"House Meter" = "House Meter";
+"Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger." = "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger.";
+"The account you use in the Perific app. It is stored in the macOS Keychain and never exported." = "The account you use in the Perific app. It is stored in the macOS Keychain and never exported.";
+"Sign in and find meters" = "Sign in and find meters";
+"This account has no meter that Hisingen can read. Check that it is the owner account in the Perific app." = "This account has no meter that Hisingen can read. Check that it is the owner account in the Perific app.";
+"Meter" = "Meter";
+"Use this meter" = "Use this meter";
+"Source" = "Source";
+"House Now" = "House Now";
+"Calculated from the meter's current and voltage, so it can read slightly above the energy your supplier bills." = "Calculated from the meter's current and voltage, so it can read slightly above the energy your supplier bills.";
+"Perific did not accept the saved login. Enter the account and password again to reconnect." = "Perific did not accept the saved login. Enter the account and password again to reconnect.";
+"Disconnect Perific" = "Disconnect Perific";
+"Reading every 30 seconds" = "Reading every 30 seconds";
+"Sign-in refused" = "Sign-in refused";
+"This account no longer lists the meter" = "This account no longer lists the meter";
+"Perific account email" = "Perific account email";
+"House sending %@ to the grid" = "House sending %@ to the grid";
+"House %@" = "House %@";
+"Car %@, rest of the house %@" = "Car %@, rest of the house %@";
+"House meter last read %@ ago" = "House meter last read %@ ago";
+"House Voltage" = "House Voltage";
+"House Current per Phase" = "House Current per Phase";
+"Imported Today" = "Imported Today";
+"Exported Today" = "Exported Today";
+"%@ V" = "%@ V";
+"%@ A" = "%@ A";
+"The meter sent no voltage, so 230 V is assumed and power is approximate." = "The meter sent no voltage, so 230 V is assumed and power is approximate.";
+"Perific did not accept the saved login. Sign in again in Settings, Electricity." = "Perific did not accept the saved login. Sign in again in Settings, Electricity.";
+"Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter." = "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter.";
+
+"%@ to the grid" = "%@ to the grid";
+
+"Signed in to %@" = "Signed in to %@";
+"Reading chargers…" = "Reading chargers…";
+
+"%@ öre/kWh" = "%@ öre/kWh";
+"%@ öre/kWh, high-load until %@" = "%@ öre/kWh, 피크 시간 %@까지";
+"%@ öre/kWh, other time until %@" = "%@ öre/kWh, 그 외 시간 %@까지";
+"%d%% of your energy fell in high-load time. The time tariff costs less below %d%%, and is always cheaper outside November to March. A change applies for at least a year, so look at a full year first." = "에너지의 %d%%가 피크 시간에 사용되었습니다. 시간대별 요금은 %d%% 미만일 때 더 저렴하며 11월~3월 외에는 항상 더 저렴합니다. 변경은 최소 1년간 적용되므로 먼저 1년 전체를 살펴보세요.";
+"About %@ kr a month. For reference only, it is in no per-kWh figure." = "월 약 %@ kr입니다. 참고용이며 kWh당 가격에는 포함되지 않습니다.";
+"Custom time-of-use" = "사용자 지정 시간대별 요금";
+"Fee, öre per kWh" = "요금, kWh당 öre";
+"Fixed fee, kr per year" = "고정 요금, 연 kr";
+"Flat fee" = "단일 요금";
+"From %d, VAT included" = "%d년부터, 부가세 포함";
+"Grid Tariff" = "전력망 요금제";
+"Grid tariff" = "전력망 요금제";
+"High-load ends at hour" = "피크 시간 종료 시각";
+"High-load fee, öre per kWh" = "피크 시간 요금, kWh당 öre";
+"High-load hours" = "피크 시간대";
+"High-load months" = "피크 월";
+"High-load starts at hour" = "피크 시간 시작 시각";
+"High-load time" = "피크 시간";
+"Main fuse" = "주 차단기";
+"No grid fee" = "전력망 요금 없음";
+"Optional. What your grid company charges per kWh on top of Tibber's price. The planner, charger sessions and the house-load costs use it." = "선택 사항. 전력망 회사가 Tibber 가격에 더해 kWh당 부과하는 요금입니다. 플래너, 충전 세션, 집 비용에 사용됩니다.";
+"Other time" = "그 외 시간";
+"Other time fee, öre per kWh" = "그 외 시간 요금, kWh당 öre";
+"Right now" = "지금";
+"Single tariff, last %d days" = "단일 요금제, 최근 %d일";
+"Tariff" = "요금제";
+"The car's energy at each hour's average Tibber price plus your grid transfer fee. Sessions are priced by the quarter-hour, so the two can differ." = "각 시간의 Tibber 평균 가격에 전력망 요금을 더한 자동차의 에너지 비용입니다. 세션은 15분 단위로 계산되므로 두 값은 다를 수 있습니다.";
+"The public holidays Swedish grid companies name, such as Christmas Eve and Good Friday, are not high-load." = "크리스마스 이브와 성금요일처럼 스웨덴 전력망 회사가 명시한 공휴일은 피크 시간이 아닙니다.";
+"These prices are from %d. Grid companies change them each January, so check your invoice." = "이 가격은 %d년 기준입니다. 전력망 회사는 매년 1월에 가격을 바꾸므로 청구서를 확인하세요.";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set your grid tariff in the card below; a paired charger can set its own." = "Tibber 가격에는 에너지, 세금, 마진이 포함되지만 전력망 요금은 포함되지 않습니다. 아래 카드에서 전력망 요금제를 설정하세요. 연결된 충전기는 자체 요금을 가질 수 있습니다.";
+"Time tariff, last %d days" = "시간대별 요금제, 최근 %d일";
+"Transfer fee" = "송전 요금";
+"Transfer fees only, worked out on your own hourly readings from Tibber." = "송전 요금만 포함하며, Tibber의 시간별 검침값으로 계산했습니다.";
+"Vattenfall single tariff (E4)" = "Vattenfall 단일 요금제 (E4)";
+"Vattenfall time tariff (T4)" = "Vattenfall 시간대별 요금제 (T4)";
+"Weekdays only" = "평일만";
+"What Tibber billed for the energy in those hours, taxes included, plus the grid transfer fee from your tariff. The fixed fee is not in it." = "해당 시간의 에너지에 대해 Tibber가 청구한 금액으로, 세금과 요금제의 송전 요금이 포함됩니다. 고정 요금은 포함되지 않습니다.";
+
+"Norway" = "Norway";
+"Denmark" = "Denmark";
+"Germany" = "Germany";
+"Netherlands" = "Netherlands";
+"Fixed fee, %@ per year" = "Fixed fee, %@ per year";
+"High-load fee, %@ per kWh" = "High-load fee, %@ per kWh";
+"Other time fee, %@ per kWh" = "Other time fee, %@ per kWh";
+"About %@ %@ a month. For reference only, it is in no per-kWh figure." = "About %@ %@ a month. For reference only, it is in no per-kWh figure.";
+"No published grid rates for %@ in this build. Copy the fee from your invoice and enter it as a custom tariff." = "No published grid rates for %@ in this build. Copy the fee from your invoice and enter it as a custom tariff.";
+"These prices are %@'s, but your grid company is %@. Check them against your invoice, or enter your own as a custom tariff." = "These prices are %@'s, but your grid company is %@. Check them against your invoice, or enter your own as a custom tariff.";
+"%@ %@/kWh" = "%@ %@/kWh";
+"%@ %@/kWh, high-load until %@" = "%@ %@/kWh, high-load until %@";
+"%@ %@/kWh, other time until %@" = "%@ %@/kWh, other time until %@";
+"Charge %@ over %@ to reach %d%%" = "Charge %@ over %@ to reach %d%%";
+"A %@ charge is longer than the price outlook" = "A %@ charge is longer than the price outlook";
+"%d h %d min" = "%d h %d min";
+
+// Card and settings consolidation
+"Activity type" = "활동 유형";
+"Add the in-service date from your warranty documents." = "보증 서류에 적힌 차량 운행 개시일을 추가하세요.";
+"All Notifications" = "모든 알림";
+"Automation" = "자동화";
+"Back" = "뒤로";
+"Battery health, lifetime odometer totals, fuel fill-ups, cabin temperatures and lifetime cost use the full history." = "배터리 상태, 누적 주행 거리, 주유 내역, 실내 온도 및 누적 비용은 전체 기록을 기준으로 합니다.";
+"Battery-side energy" = "배터리에 전달된 에너지";
+"By Peak Power" = "최고 전력별";
+"Charger Schedule" = "충전기 일정";
+"Charger is offline" = "충전기가 오프라인 상태입니다";
+"Charging Alerts" = "충전 알림";
+"Charging Planner Alerts" = "충전 계획 알림";
+"Charging Summary" = "충전 요약";
+"Choose which cards each tab shows and in what order. Manage data requests in Features." = "각 탭에 표시할 카드와 순서를 선택하세요. 데이터 요청은 기능에서 관리합니다.";
+"Clear Filter" = "필터 지우기";
+"Connect an account and choose a vehicle to edit its references." = "계정을 연결하고 차량을 선택해 기준값을 편집하세요.";
+"Default theme for %@ vehicles" = "%@ 차량의 기본 테마";
+"Departure · %@" = "출발 · %@";
+"Edit In-Service Date" = "운행 개시일 편집";
+"Edit Plan" = "계획 편집";
+"Edit Vehicle References" = "차량 기준값 편집";
+"Energy & Fuel" = "에너지 및 연료";
+"Energy delivered by charger" = "충전기에서 공급한 에너지";
+"Erase local history on sign out is enabled. Signing out also erases saved history." = "로그아웃할 때 로컬 기록 지우기가 켜져 있습니다. 로그아웃하면 저장된 기록도 지워집니다.";
+"Export from Log" = "기록에서 내보내기";
+"Full History (CSV)" = "전체 기록(CSV)";
+"Grid Tariff Country" = "전력망 요금 국가";
+"Language & Units" = "언어 및 단위";
+"Last Remote Command" = "마지막 원격 명령";
+"Latest Charging Session" = "최근 충전 세션";
+"Loading charging samples…" = "충전 측정값 불러오는 중…";
+"Local vehicle history is kept." = "로컬 차량 기록은 유지됩니다.";
+"Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization in Accounts. Charging, timers and software installation work with the account sign-in alone." = "잠금, 공조, 창문, 실내 공기 정화 및 차량 찾기는 계정에서 한 번만 브라우저로 승인해야 합니다. 충전, 타이머 및 소프트웨어 설치는 계정 로그인만으로 사용할 수 있습니다.";
+"Menu Bar" = "메뉴 막대";
+"No charging samples were recorded for this session." = "이 세션의 충전 측정값이 기록되지 않았습니다.";
+"No completed charging sessions have been recorded." = "완료된 충전 세션이 기록되지 않았습니다.";
+"No fill-ups have been recorded." = "기록된 주유 내역이 없습니다.";
+"No parking location was reported on the last refresh." = "마지막 새로 고침에서 주차 위치가 보고되지 않았습니다.";
+"No vehicle changes or commands recorded." = "차량 변경 사항이나 명령이 기록되지 않았습니다.";
+"On hold" = "일시 중지";
+"Open Air Quality History" = "공기질 기록 열기";
+"Open Battery Health History" = "배터리 상태 기록 열기";
+"Open Charge Location" = "충전 위치 열기";
+"Open in Plan" = "계획에서 열기";
+"Open in Log" = "기록에서 열기";
+"Expanded" = "펼쳐짐";
+"Collapsed" = "접힘";
+"Update to v%@" = "v%@(으)로 업데이트";
+"Open Garage" = "차고 열기";
+"Open Plan Automations" = "계획의 자동화 열기";
+"Panel" = "패널";
+"Parking & Access" = "주차 및 차량 출입";
+"Planner Settings" = "플래너 설정";
+"Reading charger schedule…" = "충전기 일정 읽는 중…";
+"Recent Completed Charging Sessions (JSON)" = "최근 완료된 충전 세션(JSON)";
+"Recent Vehicle Activity" = "최근 차량 활동";
+"Reconnect Tibber" = "Tibber 다시 연결";
+"Remote Command Permissions" = "원격 명령 권한";
+"Saved charge location" = "저장된 충전 위치";
+"Selected" = "선택됨";
+"Selected Period (CSV)" = "선택한 기간(CSV)";
+"Selected Session Samples (CSV)" = "선택한 세션의 측정값(CSV)";
+"Service & Protection" = "정비 및 보호";
+"Set Plan" = "계획 설정";
+"Settings Backup" = "설정 백업";
+"The charger schedule could not be read." = "충전기 일정을 읽을 수 없습니다.";
+"The saved session and account credentials for this provider will be removed from this Mac." = "이 Mac에서 이 서비스 제공업체의 저장된 세션 및 계정 자격 증명이 제거됩니다.";
+"Theme" = "테마";
+"This vehicle has no editable warranty or battery references." = "이 차량에는 수정할 수 있는 보증 또는 배터리 기준값이 없습니다.";
+"This vehicle uses %@. Change its theme in Garage." = "이 차량은 %@ 테마를 사용합니다. 차고에서 테마를 변경하세요.";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff." = "Tibber 요금에는 전력 비용, 세금 및 추가 요금이 포함되며 전력망 이용료는 별도입니다. 전기에서 전력망 요금을 설정하세요. 연결된 충전기에는 별도 요금을 적용할 수 있습니다.";
+"Timer %d" = "타이머 %d";
+"Use Brand Default" = "브랜드 기본값 사용";
+"Used for spot prices and when Tibber prices are unavailable." = "현물 가격과 Tibber 가격을 사용할 수 없을 때 적용됩니다.";
+"Vehicle Data Settings" = "차량 데이터 설정";
+"Vehicle Presentation" = "차량 표시";
+"Vehicle References" = "차량 기준값";
+"Vehicle Specifications" = "차량 제원";
+"View Sessions" = "충전 세션 보기";
+"View charging sessions at %@" = "%@의 충전 세션 보기";
+
+"Time Format" = "시간 형식";
+"24-hour" = "24시간제";
+"12-hour (AM/PM)" = "12시간제 (오전/오후)";
+
+"Paused" = "일시 중지됨";
+"Average" = "평균";
+"Month in progress" = "진행 중인 달";
+"All recorded history" = "기록된 전체 이력";
+"Battery Level" = "배터리 잔량";
+"Lost While Parked" = "주차 중 손실";
+"Parked drain counts only stretches between two readings taken unplugged with no trip in between, so it is a floor, not a total." = "주차 중 손실은 충전기가 연결되지 않고 그 사이 주행이 없는 두 측정값 사이만 계산하므로 총합이 아닌 최소값입니다.";
+"Cost per 100 km" = "100km당 비용";
+"Cost per 100 mi" = "100mi당 비용";
+"Saved vs Fixed Rate" = "고정 요금 대비 절감액";
+"Market-priced sessions against what the same energy would have cost at your fixed rate. Sessions without market prices are left out." = "시장 가격으로 정산된 충전을 같은 에너지가 고정 요금으로 들었을 비용과 비교합니다. 시장 가격이 없는 충전은 제외됩니다.";
+"Peak Power by Session" = "충전별 최대 출력";
+"Energy by Time of Day" = "시간대별 에너지";
+"Consumption vs Temperature" = "소비량과 온도";
+"Normalised to %@" = "%@ 기준으로 보정";
+"Recording Coverage" = "기록 범위";
+"Hours per day with a reading. A short day means Hisingen was not running, not that the car did nothing." = "측정값이 있는 하루당 시간입니다. 짧은 날은 Hisingen이 실행되지 않았다는 뜻이며 차가 아무것도 하지 않았다는 뜻이 아닙니다.";
+"Energy Use by Month" = "월별 에너지 사용량";
+"On pace for %@" = "이 속도라면 %@";
+"Session note" = "충전 메모";
+"Unpriced Energy" = "가격 미산정 에너지";
+"At this pace the distance limit is reached around %@" = "이 속도라면 %@경 거리 한도에 도달합니다";
+"Temperature" = "온도";
+"Total Price" = "총 가격";
+"Priced So Far" = "지금까지 계산된 금액";
+"No charger measured this session, so the battery-side energy is priced with your rate settings." = "이 세션은 충전기가 측정하지 않아 배터리 측 에너지를 요금 설정으로 계산합니다.";
+"Pricing" = "가격 계산";
+"Session total at the average price" = "세션 합계를 평균 가격으로 계산";
+"Per 15 minutes" = "15분 단위";
+"Tibber's price per 15 minutes with the grid transfer fee added." = "15분 단위 Tibber 가격에 송전 요금을 더한 값입니다.";
+"Spot price with the markup, other charges and VAT from your rate settings." = "요금 설정의 마진, 기타 요금, 부가세를 더한 현물 가격입니다.";
+"Spot price only. Taxes and grid fees are not included." = "현물 가격만 표시합니다. 세금과 송전 요금은 포함되지 않습니다.";

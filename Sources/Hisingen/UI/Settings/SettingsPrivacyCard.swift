@@ -2,47 +2,43 @@ import SwiftUI
 
 @MainActor
 struct SettingsPrivacyCard: View {
-    @Binding var persistLocationHistory: Bool
     let binder: PreferenceBinder
-
-    private var preferences: PreferencesStore { binder.preferences }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "hand.raised", title: L10n.text("Privacy Dashboard"), color: HisingenTheme.chartInfo)
+                CardHeader(symbol: "hand.raised", title: L10n.text("Privacy"), color: HisingenTheme.chartInfo)
                 Text(L10n.text("Hisingen keeps account secrets in the macOS Keychain and vehicle history in a local SQLite database."))
                     .hisType(.caption)
                     .foregroundStyle(.secondary)
-                    .hisCaptionLeading()
-                    .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
 
-                KVRow(L10n.text("Account secrets"), L10n.text("macOS Keychain"), symbol: "key")
-                KVRow(L10n.text("Vehicle history"), L10n.text("Stored locally on this Mac"), symbol: "internaldrive")
-                KVRow(
-                    L10n.text("Precise location retention"),
-                    persistLocationHistory ? L10n.text("Enabled") : L10n.text("Off (recommended)"),
-                    symbol: persistLocationHistory ? "location" : "location.slash"
+                privacyToggle(
+                    "Screenshot Privacy Mode",
+                    detail: "Blurs VIN, plate and coordinates across the app for safe sharing.",
+                    isOn: binder.toggle(\.privacyRedactionEnabled, .presentation)
                 )
-                KVRow(
-                    L10n.text("Screenshot redaction"),
-                    preferences.privacyRedactionEnabled ? L10n.text("Enabled") : L10n.text("Disabled"),
-                    symbol: "eye.slash"
+                privacyToggle(
+                    "Require device-owner authentication",
+                    detail: "Authenticate before running remote commands",
+                    isOn: binder.toggle(\.requireBiometricsForRemoteControls)
                 )
-                KVRow(
-                    L10n.text("Remote-command authentication"),
-                    preferences.requireBiometricsForRemoteControls ? L10n.text("Required") : L10n.text("Not required"),
-                    symbol: "person.badge.key.fill"
-                )
-
-                Text(L10n.text("Exports may contain vehicle identifiers and telemetry. Review files before sharing them."))
-                    .hisType(.micro, weight: .medium)
-                    .foregroundStyle(HisingenTheme.semanticWarning)
-                    .hisCaptionLeading()
-                    .hisCaptionLeading()
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func privacyToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.text(title)).hisType(.label, weight: .semibold)
+                Text(L10n.text(detail))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
     }
 }

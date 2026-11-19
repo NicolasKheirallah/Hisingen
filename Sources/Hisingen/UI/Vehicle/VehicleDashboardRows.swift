@@ -104,13 +104,6 @@ enum VehicleDashboardRows {
         }
         return AnyView(DashboardRow(symbol: symbol, value: value, label: L10n.text("Fuel & Engine"), tint: tint))
     }
-
-    /// The departure checker, one disclosure: collapsed it is a single quiet line, and the
-    /// feature the readiness card carried survives without a titled section.
-    static func departureCheck(state: VehicleState) -> AnyView? {
-        guard state.powertrain.hasElectricRange else { return nil }
-        return AnyView(DepartureCheckDisclosure(state: state))
-    }
 }
 
 /// The collapsed-by-default charging-before-departure checker.
@@ -174,5 +167,38 @@ struct DepartureCheckDisclosure: View {
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle())
         .padding(.vertical, 3)
+    }
+}
+
+
+struct DepartureSummary: View {
+    let state: VehicleState
+    var compact = false
+    let onOpenPlan: () -> Void
+
+    var body: some View {
+        let next = PlanTimeline.entries(for: state).first { $0.schedule.kind == .departure }?.next
+        Group {
+            if let next, compact {
+                NavigationRow(title: L10n.text("Departure"),
+                              detail: L10n.format("%@, %@", PlanDeparture.dayText(next), Format.shortTime(date: next)),
+                              destination: L10n.text("Open in Plan"),
+                              action: onOpenPlan)
+            } else if let next {
+                NavigationRow(
+                    title: L10n.format("Departure · %@", Format.dateTimeFormatter.string(from: next)),
+                    detail: VehicleReadiness.assessDeparture(state, departure: next).message,
+                    action: onOpenPlan
+                )
+            } else {
+                NavigationRow(title: L10n.text("Check charging before departure"), action: onOpenPlan)
+            }
+        }
+        .padding(.top, compact ? 8 : 0)
+        .background(alignment: .top) {
+            if compact { PanelRule() }
+        }
+        .help(L10n.text("Open in Plan"))
+        .padding(.horizontal, HisingenTheme.cardPadding)
     }
 }

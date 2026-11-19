@@ -135,26 +135,11 @@ enum HistoryExport {
         operation.run()
     }
 
-    private static func opt(_ value: Double?, _ places: Int) -> String {
-        value.map { String(format: "%.\(places)f", locale: L10n.displayLocale, $0) } ?? ""
-    }
-
     static func tripsCSV(_ trips: [TripHistoryEntry]) -> String {
-        func coord(_ value: Double?) -> String { value.map { String($0) } ?? "" }
         var rows = [CSV.tripHistoryHeader]
         for trip in trips {
-            let fields: [String] = [
-                CSV.field(trip.id), CSV.field(trip.vin),
-                Format.iso8601.string(from: trip.startedAt),
-                Format.iso8601.string(from: trip.endedAt),
-                String(format: "%.1f", locale: L10n.displayLocale, trip.duration / 60),
-                String(format: "%.2f", locale: L10n.displayLocale, trip.distanceKm),
-                opt(trip.averageConsumption, 2),
-                opt(trip.ambientTemperatureCelsius, 1),
-                coord(trip.startLatitude), coord(trip.startLongitude),
-                coord(trip.endLatitude), coord(trip.endLongitude)
-            ]
-            rows.append(fields.map(CSV.field).joined(separator: ","))
+            rows.append(HistoryCSVRows.trip(trip, number: HistoryCSVRows.localized)
+                .map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
     }
@@ -162,46 +147,189 @@ enum HistoryExport {
     static func chargingSessionsCSV(_ sessions: [HistoricalChargingSession]) -> String {
         var rows = [CSV.chargingHistoryHeader]
         for s in sessions {
-            // Built in small typed groups: one 25-element literal plus a concatenation is more
-            // than the pinned Xcode can type-check in reasonable time.
-            let endedAt: String = s.endedAt.map { Format.iso8601.string(from: $0) } ?? ""
-            let startSoc: String = s.startSoc < 0
-                ? "" : String(format: "%.1f", locale: L10n.displayLocale, s.startSoc)
-            let nightStart: String = s.nightTariffStartHour.map(String.init) ?? ""
-            let nightEnd: String = s.nightTariffEndHour.map(String.init) ?? ""
-            var fields: [String] = []
-            fields += [s.id, s.vin, Format.iso8601.string(from: s.startedAt), endedAt, startSoc]
-            fields += [
-                opt(s.endSoc, 1),
-                String(format: "%.2f", locale: L10n.displayLocale, s.energyDeliveredKwh),
-                String(format: "%.1f", locale: L10n.displayLocale, s.peakPowerKw),
-                String(format: "%.1f", locale: L10n.displayLocale, s.averagePowerKw)
-            ]
-            fields += [
-                s.locationName ?? "",
-                s.lifecycleState.rawValue,
-                s.completionReason?.rawValue ?? "",
-                s.energySource.rawValue,
-                s.confidence.rawValue
-            ]
-            fields += [
-                opt(s.sampleCoverage, 3),
-                opt(s.usableCapacityKwh, 2),
-                opt(s.tariffPricePerKwh, 4),
-                String(s.nightTariffEnabled),
-                opt(s.nightTariffPricePerKwh, 4),
-                nightStart,
-                nightEnd
-            ]
-            fields += [
-                opt(s.estimatedCost, 2),
-                s.currencySymbol ?? "",
-                opt(s.targetSoc, 1),
-                String(s.summaryVersion)
-            ]
-            fields += WallboxCSV.fields(s.wallbox)
+            let fields = HistoryCSVRows.chargingSession(s, number: HistoryCSVRows.localized, location: { $0 })
+                + WallboxCSV.fields(s.wallbox)
             rows.append(fields.map(CSV.field).joined(separator: ","))
         }
         return rows.joined(separator: "\n") + "\n"
+    }
+}
+
+// MARK: - Shared axes
+
+/// How a Date axis words its ticks. One rule for every History chart, driven by the span the
+/// chart covers and by the reader's Time Format setting (`L10n.clockLocale`). The automatic axis
+/// ignored that setting and printed bare hour numbers ("18 19 20") for a session curve.
+enum HistoryTimeAxis {
+    static func format(span: TimeInterval, monthly: Bool = false) -> Date.FormatStyle {
+        let base = Date.FormatStyle().locale(L10n.clockLocale)
+        if monthly { return span > 400 * 86_400 ? base.month(.abbreviated).year() : base.month(.abbreviated) }
+        if span <= 86_400 { return base.hour().minute() }
+        if span <= 3 * 86_400 { return base.month(.abbreviated).day().hour() }
+        if span > 365 * 86_400 { return base.month(.abbreviated).year() }
+        return base.month(.abbreviated).day()
+    }
+}
+
+/// One colour per quantity across the charging charts, so a hue means the same thing on every
+/// card. Power and current used to share the attention colour on the same card.
+@MainActor
+enum HistoryChartColor {
+    static var chargeLevel: Color { HisingenTheme.chartPositive }
+    static var power: Color { HisingenTheme.chartAttention }
+    static var current: Color { HisingenTheme.chartInfo }
+    static var voltage: Color { HisingenTheme.chartHealth }
+}
+
+extension View {
+    /// Date x-axis for a chart that spans `domain`. Labels at the edges anchor inward so the
+    /// first and last tick are never clipped to "…".
+    @MainActor
+    func historyTimeAxis(domain: ClosedRange<Date>, monthly: Bool = false, showsLabels: Bool = true) -> some View {
+        let span = max(1, domain.upperBound.timeIntervalSince(domain.lowerBound))
+        let format = HistoryTimeAxis.format(span: span, monthly: monthly)
+        return chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                AxisGridLine().foregroundStyle(HisingenTheme.hairline)
+                AxisTick().foregroundStyle(HisingenTheme.hairline)
+                if showsLabels, let date = value.as(Date.self) {
+                    let fraction = date.timeIntervalSince(domain.lowerBound) / span
+                    let anchor: UnitPoint = fraction < 0.12 ? .topLeading : fraction > 0.88 ? .topTrailing : .top
+                    AxisValueLabel(centered: false, anchor: anchor, collisionResolution: .greedy) {
+                        Text(date.formatted(format))
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Date x-axis for a chart whose domain is whatever its data covers.
+    @MainActor
+    func historyTimeAxis(spanning dates: [Date], monthly: Bool = false, showsLabels: Bool = true) -> some View {
+        let lower = dates.min() ?? Date()
+        let upper = max(dates.max() ?? lower, lower.addingTimeInterval(60))
+        return historyTimeAxis(domain: lower...upper, monthly: monthly, showsLabels: showsLabels)
+    }
+
+    /// Trailing value axis with the unit above it. Every History chart used its own side, title
+    /// and font; this is the one rule. `labelWidth` pins the label column so charts stacked on a
+    /// shared time axis keep identical plot widths.
+    @MainActor
+    func historyYAxis(_ unit: String? = nil, values: AxisMarkValues = .automatic(desiredCount: 4),
+                      labelWidth: CGFloat? = nil) -> some View {
+        chartYAxis {
+            AxisMarks(position: .trailing, values: values) { value in
+                AxisGridLine().foregroundStyle(HisingenTheme.hairline)
+                AxisValueLabel {
+                    if let number = value.as(Double.self) ?? value.as(Int.self).map(Double.init) {
+                        Text(Format.number(number, decimals: abs(number) < 10 && number != number.rounded() ? 1 : 0))
+                            .hisType(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .frame(width: labelWidth, alignment: .trailing)
+                    }
+                }
+            }
+        }
+        .chartYAxisLabel(position: .top, alignment: .trailing, spacing: 2) {
+            if let unit {
+                Text(unit).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
+            }
+        }
+    }
+}
+
+// MARK: - Legend
+
+/// A legend entry drawn as the mark it names: a solid or dashed stroke, or a filled square for a band.
+struct HistoryChartLegendItem: View {
+    let color: Color
+    let label: String
+    var dashed = false
+    var band = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Group {
+                if band {
+                    Rectangle().fill(color).frame(width: 10, height: 10)
+                } else if dashed {
+                    Rectangle().stroke(color, style: StrokeStyle(lineWidth: 2.5, dash: [3, 2]))
+                        .frame(width: 14, height: 2.5)
+                } else {
+                    Rectangle().fill(color).frame(width: 14, height: 2.5)
+                }
+            }
+            .accessibilityHidden(true)
+            Text(label).hisType(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Units for plotted values
+
+extension EnergyConsumptionUnit {
+    /// The canonical kWh/100 km reading in the unit the reader chose, so the axis, the scrub
+    /// callout and the header agree. The charts plotted the raw value under a header that had
+    /// already been converted.
+    func plotValue(kwhPer100Km value: Double) -> Double {
+        switch self {
+        case .kwhPer100Km: return value
+        case .kwhPer100Miles: return value * 1.609344
+        case .milesPerKwh: return value > 0 ? 62.1371192 / value : 0
+        }
+    }
+}
+
+extension FuelEconomyUnit {
+    func plotValue(lPer100Km value: Double) -> Double {
+        switch self {
+        case .litersPer100Km: return value
+        case .milesPerGallonUS: return value > 0 ? 235.214583 / value : 0
+        case .milesPerGallonUK: return value > 0 ? 282.481 / value : 0
+        case .kmPerLiter: return value > 0 ? 100.0 / value : 0
+        }
+    }
+}
+
+// MARK: - Scrubbing
+
+/// A time-series chart with a scrub cursor and callout. The selection lives here, not in the
+/// dashboard: it used to be `@State` on the whole `HistoryDashboardView`, so every pointer move
+/// re-ran the body of every card (seasonal efficiency, range estimate, tariff split).
+struct HistoryScrubChart<Item: Identifiable, Marks: ChartContent>: View {
+    let items: [Item]
+    let date: (Item) -> Date
+    var ruleUnit: Calendar.Component? = nil
+    let callout: (Item) -> String
+    @ChartContentBuilder let marks: () -> Marks
+
+    @State private var scrub: Date?
+
+    var body: some View {
+        Chart {
+            marks()
+            if let scrub, let hit = HistoryInsights.nearest(to: scrub, in: items, timestamp: date) {
+                if let ruleUnit {
+                    cursor(PlottableValue.value(L10n.text("Date"), date(hit), unit: ruleUnit), text: callout(hit))
+                } else {
+                    cursor(PlottableValue.value(L10n.text("Date"), date(hit)), text: callout(hit))
+                }
+            }
+        }
+        .chartXSelection(value: $scrub)
+    }
+
+    @ChartContentBuilder
+    private func cursor(_ x: PlottableValue<Date>, text: String) -> some ChartContent {
+        RuleMark(x: x)
+            .foregroundStyle(Color.primary.opacity(0.25))
+            .annotation(position: .top, spacing: 0,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                Text(text).historyScrubCallout()
+            }
     }
 }

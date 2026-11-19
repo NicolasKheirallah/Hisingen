@@ -10,8 +10,6 @@ final class StatusItemController: NSObject {
         case refresh
     }
 
-    static let coreContextActions = CoreContextAction.allCases
-
     static func lockCommand(for state: VehicleState?) -> RemoteCommand {
         state?.exteriorStatus?.isLocked == true ? .unlock : .lock
     }
@@ -28,7 +26,7 @@ final class StatusItemController: NSObject {
     private let popover: NSPopover
     private var latestState: VehicleState?
     private var latestError: String?
-    private var authenticated = false
+    private var signInRequired = true
     /// Set at the first successful sign-in and cleared only when the setup pass completes,
     /// so a popover closed mid-pass reopens onto the pass instead of silently skipping it.
     private var setupMode = false
@@ -336,15 +334,14 @@ final class StatusItemController: NSObject {
                         )
                     }
                     if let car = cars.first(where: { $0.vin == vin }) {
-                        return car.displayTitle()
+                        return car.displayTitle(preferences: preferences)
                     }
-                    return vin
+                    return preferences.privacyRedactionEnabled ? preferences.activeBrand.displayName : vin
                 }()
                 let battery = snapshot?.energy.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌃⌥\(index + 1)" : ""
-                let title = shortcut.isEmpty
-                    ? "\(name)\(battery) (\(vin.prefix(8))...)"
-                    : "\(name)\(battery) (\(vin.prefix(8))...)   [\(shortcut)]"
+                let identifier = preferences.privacyRedactionEnabled ? "" : " (\(vin.prefix(8))...)"
+                let title = "\(name)\(battery)\(identifier)" + (shortcut.isEmpty ? "" : "   [\(shortcut)]")
                 let item = NSMenuItem(title: title, action: #selector(contextSwitchCar(_:)), keyEquivalent: "")
                 item.representedObject = vin
                 item.state = vin == activeVin ? .on : .off
@@ -455,15 +452,6 @@ final class StatusItemController: NSObject {
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
             remoteSection.submenu = controlsMenu
-
-            if !state.energy.sessions.isEmpty {
-                let exportItem = menu.addItem(
-                    withTitle: L10n.text("Export Charging History (CSV)…"),
-                    action: #selector(contextExportChargingCSV),
-                    keyEquivalent: ""
-                )
-                exportItem.target = self
-            }
         }
 
         // Quick panel geometry switching without a trip into Settings → General.
@@ -692,19 +680,6 @@ final class StatusItemController: NSObject {
         onRemoteCommand(.honkAndFlash)
     }
 
-    @objc private func contextExportChargingCSV() {
-        guard let state = latestState, !state.energy.sessions.isEmpty else { return }
-        // Reuses the shared export's panel + write path so a failed write surfaces an
-        // NSAlert with the underlying error instead of being swallowed by `try?`.
-        ChargingHistoryExport.saveCSV(
-            sessions: state.energy.sessions,
-            vin: state.identity.vin,
-            tariffPricePerKwh: preferences.electricityPricePerKwh,
-            currencySymbol: preferences.currencySymbol,
-            ratePolicy: preferences.electricityRatePolicy
-        )
-    }
-
     /// The stored tab is what decides the surface, so every Settings entry point has to move it:
     /// `HisingenContentView` draws Settings when the selection is `.settings`. A separate flag
     /// left the menu item and the `⌘,` shortcut writing a value nothing read.
@@ -852,10 +827,10 @@ final class StatusItemController: NSObject {
         statusItem.button?.setAccessibilityLabel(L10n.text("Hisingen, refreshing"))
     }
 
-    func render(data: VehicleState?, error: String?, authenticated: Bool, diagnostics: DiagnosticsSnapshot? = nil) {
+    func render(data: VehicleState?, error: String?, signInRequired: Bool, diagnostics: DiagnosticsSnapshot? = nil) {
         latestState = data
         latestError = error
-        self.authenticated = authenticated
+        self.signInRequired = signInRequired
         if let diagnostics { self.diagnostics = diagnostics }
         let title = barTitle(for: data)
         let isStale = data?.isStale() ?? false
@@ -992,7 +967,7 @@ final class StatusItemController: NSObject {
             guard let self, !Task.isCancelled else { return }
             self.chargingCompletedAt = nil
             self.render(data: self.latestState, error: self.latestError,
-                        authenticated: self.authenticated, diagnostics: self.diagnostics)
+                        signInRequired: self.signInRequired, diagnostics: self.diagnostics)
         }
     }
 
@@ -1090,7 +1065,7 @@ final class StatusItemController: NSObject {
         PanelDisplay(
             state: latestState,
             error: latestError,
-            authenticated: authenticated,
+            signInRequired: signInRequired,
             activeVin: activeVin,
             fleet: fleet,
             remoteCommandInProgress: remoteCommandInProgress,

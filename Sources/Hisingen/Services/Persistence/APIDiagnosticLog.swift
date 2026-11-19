@@ -248,9 +248,7 @@ actor APIDiagnosticLogStore {
         loadedFromDisk = true
         guard let url = Self.archiveURL,
               let data = try? Data(contentsOf: url) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let stored = try? decoder.decode([APILogEntry].self, from: data) else { return }
+        guard let stored = try? JSONDecoder.iso.decode([APILogEntry].self, from: data) else { return }
         entries = stored
         trimIfNeeded()
     }

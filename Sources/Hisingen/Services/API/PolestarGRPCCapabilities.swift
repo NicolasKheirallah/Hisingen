@@ -124,6 +124,9 @@ extension PolestarGRPC {
         return Self.parseDashboardOdometer(data)
     }
 
+    /// Matches the capability layer's stand-down for a service that is not usable on this car.
+    private static let softwareScheduleStandDown: TimeInterval = 6 * 60 * 60
+
     func fetchSoftware(vin: String, accessToken: String, locale: String, requireComplete: Bool = false, requireSoftwareIdentity: Bool = false) async throws -> VehicleSoftwareInfo? {
         // Optional OTA status must not hold core telemetry behind the default minute-long
         // deadline. Command verification keeps its existing deadline and completeness rules.
@@ -176,33 +179,43 @@ extension PolestarGRPC {
         // 2…10080). The backend answers -2 when nothing is scheduled, which must not be
         // surfaced as a countdown.
         var relativeMinutes: Int?
-        do {
-            let body = try await firstMessage(path: Self.softwareSchedulePath,
-                                              message: Protobuf.stringField(1, vin),
-                                              vin: vin, accessToken: accessToken,
-                                              timeoutInterval: timeoutInterval)
-            guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
-            _ = try Protobuf.decode(body)
-            if let scheduler = Self.message(body, field: 1) {
-                _ = try Protobuf.decode(scheduler)
-                let fields = Protobuf.fields(scheduler)
-                scheduledAt = Self.timestamp(Self.message(fields, field: 3))
-                if otaSoftwareIDs[vin] == nil { rememberSoftwareID(Self.string(fields, 4), vin: vin) }
-                if let rawRelative = Self.varint(fields, 2) {
-                    let signed = Int(bitPattern: UInt(truncatingIfNeeded: rawRelative))
-                    if signed > 0 { relativeMinutes = signed }
+        // A failing GetSchedule is retried hourly at best, and each try costs the full timeout.
+        // Skipped only while GetSoftwareInfo has answered; command verification always asks.
+        let skipsSchedule = timeoutInterval != nil && info != nil
+            && (softwareScheduleRetryAfter[vin].map { $0 > now() } ?? false)
+        if !skipsSchedule {
+            do {
+                let body = try await firstMessage(path: Self.softwareSchedulePath,
+                                                  message: Protobuf.stringField(1, vin),
+                                                  vin: vin, accessToken: accessToken,
+                                                  timeoutInterval: timeoutInterval)
+                guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
+                _ = try Protobuf.decode(body)
+                softwareScheduleRetryAfter[vin] = nil
+                if let scheduler = Self.message(body, field: 1) {
+                    _ = try Protobuf.decode(scheduler)
+                    let fields = Protobuf.fields(scheduler)
+                    scheduledAt = Self.timestamp(Self.message(fields, field: 3))
+                    if otaSoftwareIDs[vin] == nil { rememberSoftwareID(Self.string(fields, 4), vin: vin) }
+                    if let rawRelative = Self.varint(fields, 2) {
+                        let signed = Int(bitPattern: UInt(truncatingIfNeeded: rawRelative))
+                        if signed > 0 { relativeMinutes = signed }
+                    }
+                    if let setByValue = Self.varint(fields, 5), let intValue = Int(exactly: setByValue), let setBy = ScheduleSetBy(rawValue: intValue) {
+                        scheduleSetBy = setBy
+                    }
+                    if scheduledAt != nil, otaSoftwareStates[vin] == nil {
+                        otaSoftwareStates[vin] = .scheduled
+                    }
                 }
-                if let setByValue = Self.varint(fields, 5), let intValue = Int(exactly: setByValue), let setBy = ScheduleSetBy(rawValue: intValue) {
-                    scheduleSetBy = setBy
+            } catch {
+                try Task.checkCancellation()
+                if PolestarAPI.isGlobalFailure(error) { throw error }
+                if case PolestarError.invalidResponse = error, timeoutInterval != nil {
+                    softwareScheduleRetryAfter[vin] = now().addingTimeInterval(Self.softwareScheduleStandDown)
                 }
-                if scheduledAt != nil, otaSoftwareStates[vin] == nil {
-                    otaSoftwareStates[vin] = .scheduled
-                }
+                if firstError == nil { firstError = error }
             }
-        } catch {
-            try Task.checkCancellation()
-            if PolestarAPI.isGlobalFailure(error) { throw error }
-            if firstError == nil { firstError = error }
         }
 
         guard generation == sessionGeneration && softwareReadGeneration[vin] == readGeneration else { throw CancellationError() }
@@ -285,8 +298,14 @@ extension PolestarGRPC {
         }
     }
 
-    func fetchChargingSchedules(vin: String, accessToken: String) async throws -> [VehicleSchedule] {        var schedules: [VehicleSchedule] = []
+    func fetchChargingSchedules(vin: String, accessToken: String,
+                                includesChargeLocations: Bool) async throws -> [VehicleSchedule] {
+        var schedules: [VehicleSchedule] = []
         var errors: [Error] = []
+        // Started before the timer read so this leg and the charge-locations capability share one
+        // request. Reaching it afterwards missed that flight about half the time.
+        async let locations: Data? = includesChargeLocations
+            ? chargeLocationsBody(vin: vin, accessToken: accessToken) : nil
         do {
             let body = try await firstMessage(path: Self.globalChargeTimerPath,
                                               message: Self.chronosRequest(vin),
@@ -301,16 +320,16 @@ extension PolestarGRPC {
             errors.append(error)
         }
         do {
-            let body = try await chargeLocationsBody(vin: vin, accessToken: accessToken)
-            schedules.append(contentsOf: Self.parseChargeLocationSchedules(body))
+            if let body = try await locations {
+                schedules.append(contentsOf: Self.parseChargeLocationSchedules(body))
+            }
         } catch {
             try Task.checkCancellation()
             if PolestarAPI.isGlobalFailure(error) { throw error }
             errors.append(error)
         }
 
-
-        if schedules.isEmpty, errors.count == 2 {
+        if schedules.isEmpty, errors.count == (includesChargeLocations ? 2 : 1) {
             let hasInfrastructureError = errors.contains { error in
                 if let polestarError = error as? PolestarError {
                     switch polestarError {

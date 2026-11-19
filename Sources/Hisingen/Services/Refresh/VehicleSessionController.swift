@@ -54,6 +54,7 @@ final class VehicleSessionController {
     private(set) var latest: VehicleState?
     private(set) var lastError: String?
     private(set) var sessionValid = false
+    private(set) var signInRequired = true
     private(set) var lastDiagnostics: DiagnosticsSnapshot?
 
     private var activeProvider: any VehicleProviding {
@@ -95,15 +96,15 @@ final class VehicleSessionController {
     /// Seeds the display from persisted state (no network) and renders once, so the status
     /// item shows the last known vehicle immediately at launch.
     func primeDisplayState() {
-        let authenticated = preferences.hasResumableSession(for: preferences.activeBrand)
-        let vin = preferences.vin(for: preferences.activeBrand)
+        let brand = preferences.activeBrand
+        signInRequired = initiallyRequiresSignIn(for: brand)
+        let vin = preferences.vin(for: brand)
         let nickname = preferences.vehicleNickname(for: vin)
         if !vin.isEmpty {
             setFleet(
                 [CarSummary(vin: vin, title: nickname.isEmpty ? preferences.activeBrand.displayName : nickname)],
                 activeVIN: vin)
         }
-        sessionValid = authenticated
         latest = vin.isEmpty ? nil : fleetStore.snapshot(for: vin)
         context?.sessionStateDidChange()
     }
@@ -135,7 +136,7 @@ final class VehicleSessionController {
     // MARK: - Brand & vehicle selection
 
     func resolvedBrand(for vin: String) -> VehicleBrand {
-        let upper = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let upper = vin.normalizedVIN
         if let snapshot = fleetStore.snapshot(for: upper) {
             return snapshot.model.brand
         }
@@ -155,7 +156,7 @@ final class VehicleSessionController {
     }
 
     func selectVehicle(vin: String) {
-        let trimmedVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmedVIN = vin.normalizedVIN
         guard !trimmedVIN.isEmpty else { return }
         let targetBrand = resolvedBrand(for: trimmedVIN)
         if preferences.activeBrand == targetBrand {
@@ -172,7 +173,7 @@ final class VehicleSessionController {
     /// VIN-targeted intents and deep links one awaited operation: the coordinator wakes the
     /// await itself when the selection task finishes, so there is no poll here.
     func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
-        let target = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let target = vin.normalizedVIN
         guard !target.isEmpty else { return sessionValid && latest != nil }
         if sessionValid, latest?.identity.vin.uppercased() == target,
            !refreshCoordinator.isBusy { return true }
@@ -224,7 +225,8 @@ final class VehicleSessionController {
             preferences.setVin(targetVin, for: brand)
         }
         preferences.syncAppThemeStorageKey()
-        sessionValid = preferences.hasResumableSession(for: brand)
+        sessionValid = false
+        signInRequired = initiallyRequiresSignIn(for: brand)
         let vin = preferences.vin(for: brand)
         let nick = preferences.vehicleNickname(for: vin)
         latest = vin.isEmpty ? nil : fleetStore.snapshot(for: vin)
@@ -243,6 +245,13 @@ final class VehicleSessionController {
         currentPolestarMode = preferences.polestarConnectionMode
         connectCoordinator()
         context?.sessionStateDidChange()
+    }
+
+    private func initiallyRequiresSignIn(for brand: VehicleBrand) -> Bool {
+        if preferences.hasExplicitSignOut(for: brand) { return true }
+        // A saved vehicle can predate the Keychain presence flags. The provider still reads
+        // the actual credential during restore.
+        return preferences.vin(for: brand).isEmpty && !preferences.hasResumableSession(for: brand)
     }
 
     private func setFleet(_ cars: [CarSummary], activeVIN: String?) {
@@ -265,6 +274,7 @@ final class VehicleSessionController {
         case .selectionChanged(let vin):
             context?.setActiveVIN(vin)
         case .sessionEstablished(let cars, let selectedVIN):
+            lastError = nil
             setFleet(cars, activeVIN: selectedVIN)
             context?.sessionDidEstablish()
         case .state(let state):
@@ -284,6 +294,7 @@ final class VehicleSessionController {
             latest = nil
             lastError = nil
             sessionValid = false
+            signInRequired = true
             setFleet([], activeVIN: nil)
             context?.sessionStateDidChange()
         }
@@ -296,18 +307,15 @@ final class VehicleSessionController {
         // hear about it whether notifications are on or off.
         if error.requiresAuthentication {
             sessionValid = false
+            signInRequired = true
             context?.authenticationRequired()
         }
         context?.sessionStateDidChange()
     }
 
     private func handleDiagnostics(_ diagnostics: DiagnosticsSnapshot) {
-        // sessionValid follows the coordinator's own session-ready signal only. Keychain
-        // presence (`hasResumableSession`) survives an expired token, so OR-ing it in here
-        // resurrected a dead session on the next diagnostics tick and instantly cleared the
-        // just-posted sign-in-required banner. Stored credentials remain only the pre-first-
-        // diagnostics display default (see primeDisplayState).
         sessionValid = diagnostics.sessionValid
+        if diagnostics.sessionValid { signInRequired = false }
         lastDiagnostics = diagnostics
         // A parked stream is still waiting for the user, even when the fallback poll keeps
         // succeeding: withdrawing the sign-in request here would hide the one thing the park

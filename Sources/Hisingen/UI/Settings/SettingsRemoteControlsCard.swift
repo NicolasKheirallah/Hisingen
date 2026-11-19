@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Settings → Features → "Remote Controls": the per-provider authorization affordance
-/// (Volvo restricted scopes / Polestar command sign-in) followed by one feature toggle per
+/// Settings → Features → "Remote Controls": one feature toggle per
 /// remote command, greyed out where the vehicle's capability profile or the provider API
 /// does not permit it. Extracted from `SettingsView`.
 @MainActor
 struct SettingsRemoteControlsCard: View {
     let state: VehicleState?
     let binder: PreferenceBinder
+    var onOpenAuthorization: (() -> Void)? = nil
 
     private var prefs: PreferencesStore { binder.preferences }
 
@@ -40,42 +40,14 @@ struct SettingsRemoteControlsCard: View {
 
                 Text(isVolvo
                      ? L10n.text("Climate is available with the standard API subscription. Lock, locate, engine-start, and location permissions require approval for your Volvo developer application and a new sign-in.")
-                     : L10n.text("Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization below. Charging, timers and software installation work with the account sign-in alone."))
+                     : L10n.text("Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization in Accounts. Charging, timers and software installation work with the account sign-in alone."))
                     .hisType(.caption)
                     .foregroundStyle(.secondary)
+                if let onOpenAuthorization {
+                    NavigationRow(title: L10n.text("Remote Command Permissions"), action: onOpenAuthorization)
+                }
 
                 VStack(spacing: 4) {
-                    if isVolvo {
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.text("Approved Volvo permissions"))
-                                    .hisType(.label, weight: .semibold)
-                                Text(L10n.text("Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in."))
-                                    .hisType(.micro)
-                                    .hisCaptionLeading()
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Toggle("", isOn: Binding(
-                                get: { prefs.volvoRestrictedScopesEnabled },
-                                set: { enabled in
-                                    prefs.volvoRestrictedScopesEnabled = enabled
-                                    binder.bump()
-                                    binder.notify(.features)
-                                }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                        }
-                        .padding(8)
-                        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
-                    } else {
-                        // One control, two pages: Accounts draws the same row, so the grant is
-                        // found where account sign-in is, not only where the toggles are.
-                        RemoteCommandAuthorizationRow(binder: binder)
-                    }
                     row(.remoteClimate, symbol: "fan", title: "Remote Climate", detail: "Start & stop cabin preconditioning", isSupported: supportsCapability(.climateStartStop), badgeText: isVolvo ? nil : commandAuthBadge(true))
                     row(.remoteLocks, symbol: "lock", title: "Remote Locks", detail: "Central lock and unlock", isSupported: supportsCapability(.locks) && (!isVolvo || prefs.volvoRestrictedScopesEnabled), badgeText: isVolvo ? "Requires Approval" : commandAuthBadge(true))
                     row(.remoteCharging, symbol: "bolt", title: "Remote Charging", detail: "Set target SoC, current limit & charge now", isSupported: !isVolvo && supportsCapability(.chargeTarget), badgeText: isVolvo ? "Read-Only in API" : nil)

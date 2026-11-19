@@ -339,5 +339,24 @@ extension VehicleDatabase {
                 logger.error("Custom theme table migration failed; it will retry next launch: \(error, privacy: .public)")
             }
         }
+
+        // v9: the vendor's own start and stop reasons for a charger session, kept as the raw
+        // token so a reason this build cannot word yet is still stored and shown once it can.
+        if version == 8 {
+            let additions = ["wallbox_start_reason", "wallbox_stop_reason"]
+            for column in additions {
+                addColumnIfMissing(table: "charging_sessions", column: column, declaration: "TEXT")
+            }
+            if additions.allSatisfy({ columnExists(table: "charging_sessions", column: $0) }) {
+                do {
+                    try db.execute(sql: "PRAGMA user_version = 9;")
+                    version = 9
+                } catch {
+                    logger.error("Wallbox reason migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
+            } else {
+                logger.error("Wallbox reason schema migration remains incomplete; it will retry next launch")
+            }
+        }
     }
 }

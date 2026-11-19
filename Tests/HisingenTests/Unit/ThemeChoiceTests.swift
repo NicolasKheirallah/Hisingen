@@ -114,6 +114,28 @@ struct ThemeChoiceTests {
 
     @Test
     @MainActor
+    func testLaunchRenameRunsOnceAndAnImportStillRenames() throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        )
+        defaults.set("swedishGold", forKey: "app_theme")
+
+        preferences.migrateRenamedThemeIdentifiersOnce()
+        #expect(defaults.string(forKey: "app_theme") == AppTheme.charcoalGold.rawValue)
+
+        defaults.set("swedishGold", forKey: "app_theme")
+        preferences.migrateRenamedThemeIdentifiersOnce()
+        #expect(defaults.string(forKey: "app_theme") == "swedishGold")
+
+        preferences.migrateRenamedThemeIdentifiers()
+        #expect(defaults.string(forKey: "app_theme") == AppTheme.charcoalGold.rawValue)
+    }
+
+    @Test
+    @MainActor
     func testImportingAnOlderArchiveRenamesTheTheme() throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }

@@ -57,7 +57,7 @@ class ProtectionPolicyTests(unittest.TestCase):
             result = subprocess.run(["sh", "Scripts/inject-secrets.sh"], cwd=root, env=environment, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("isConfigured: Bool = false", (root / "Sources/Hisingen/Services/API/GeneratedVolvoSecrets.swift").read_text())
-            self.assertIn("hasDataPortalCredentials: Bool = false", (root / "Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift").read_text())
+            self.assertIn('static var clientSecret: String { "" }', (root / "Sources/Hisingen/Services/API/GeneratedPolestarSecrets.swift").read_text())
 
 
 

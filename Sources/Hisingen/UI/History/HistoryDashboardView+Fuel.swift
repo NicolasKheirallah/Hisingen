@@ -48,7 +48,7 @@ extension HistoryDashboardView {
         let points = HistoryInsights.fuelEconomyBetweenFills(tuples)
         let priceSeries = fuelEntries.filter { $0.pricePerLiter > 0 }.sorted { $0.date < $1.date }
         guard points.count >= 2 || priceSeries.count >= 3 else {
-            return AnyView(Card {
+            return AnyView(HistoryCardSurface {
                 HisingenEmptyState(
                     symbol: "fuelpump",
                     title: L10n.text("Fuel trend needs more fill-ups"),
@@ -57,10 +57,10 @@ extension HistoryDashboardView {
             })
         }
         let avgEconomy = points.isEmpty ? nil : points.reduce(0) { $0 + $1.litersPer100Km } / Double(points.count)
-        return AnyView(Card {
+        return AnyView(HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
+                    HistorySectionHeading(symbol: "fuelpump", title: L10n.text("Fuel Economy"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let avgEconomy {
                         Text(Format.fuelEconomy(lPer100Km: avgEconomy, unit: preferences.fuelEconomyUnit))
@@ -68,6 +68,7 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                     }
                 }
+                let fuelUnit = preferences.fuelEconomyUnit
                 if points.count == 1, let only = points.first {
                     // A one-point series drew as a blank rectangle: `LineMark` alone has nothing to
                     // draw a line between, so the card showed an empty frame exactly when there was
@@ -75,35 +76,43 @@ extension HistoryDashboardView {
                     Chart([only]) { point in
                         PointMark(
                             x: .value(L10n.text("Date"), point.date),
-                            y: .value(L10n.text("Consumption"), point.litersPer100Km)
+                            y: .value(L10n.text("Consumption"), fuelUnit.plotValue(lPer100Km: point.litersPer100Km))
                         )
                         .symbolSize(24)
-                        .foregroundStyle(HisingenTheme.chartInfo)
+                        .foregroundStyle(HisingenTheme.chartAttention)
                     }
-                    .chartYAxisLabel(L10n.text("L/100km"))
+                    .historyTimeAxis(spanning: [only.date])
+                    .historyYAxis(fuelUnit.suffix)
                     .frame(height: chartHeight)
                     .accessibilityLabel(L10n.text("Fuel consumption trend chart"))
-                    .accessibilityValue(chartAccessibilityValue(points: [only.litersPer100Km]))
+                    .accessibilityValue(chartAccessibilityValue(points: [fuelUnit.plotValue(lPer100Km: only.litersPer100Km)]))
                 } else if points.count >= 2 {
-                    Chart(points) { point in
-                        LineMark(
-                            x: .value(L10n.text("Date"), point.date),
-                            y: .value(L10n.text("Economy"), point.litersPer100Km)
-                        )
-                        .foregroundStyle(HisingenTheme.chartAttention)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
-                        PointMark(
-                            x: .value(L10n.text("Date"), point.date),
-                            y: .value(L10n.text("Economy"), point.litersPer100Km)
-                        )
-                        .symbolSize(14)
-                        .foregroundStyle(HisingenTheme.chartAttention)
+                    HistoryScrubChart(items: points, date: { $0.date },
+                                      callout: { "\(Format.dateFormatter.string(from: $0.date)) · \(Format.fuelEconomy(lPer100Km: $0.litersPer100Km, unit: fuelUnit))" }) {
+                        ForEach(points) { point in
+                            LineMark(
+                                x: .value(L10n.text("Date"), point.date),
+                                y: .value(L10n.text("Economy"), fuelUnit.plotValue(lPer100Km: point.litersPer100Km))
+                            )
+                            .foregroundStyle(HisingenTheme.chartAttention)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                            .interpolationMethod(.linear)
+                            PointMark(
+                                x: .value(L10n.text("Date"), point.date),
+                                y: .value(L10n.text("Economy"), fuelUnit.plotValue(lPer100Km: point.litersPer100Km))
+                            )
+                            .symbolSize(14)
+                            .foregroundStyle(HisingenTheme.chartAttention)
+                        }
                     }
-                    .chartYAxisLabel(L10n.text("L/100km"))
+                    .historyTimeAxis(spanning: points.map(\.date))
+                    .historyYAxis(fuelUnit.suffix)
                     .frame(height: chartHeight * 0.8)
                     .accessibilityLabel(L10n.text("Fuel economy between fill-ups chart"))
-                    .accessibilityValue(chartAccessibilityValue(points: points.map { $0.litersPer100Km }))
+                    .accessibilityValue(chartAccessibilityValue(points: points.map { fuelUnit.plotValue(lPer100Km: $0.litersPer100Km) }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Fuel Economy"), yLabel: fuelUnit.suffix,
+                        points: points.map { ($0.date, fuelUnit.plotValue(lPer100Km: $0.litersPer100Km)) }))
                     .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 if priceSeries.count >= 3 {
@@ -115,10 +124,14 @@ extension HistoryDashboardView {
                         .foregroundStyle(HisingenTheme.chartInfo)
                         .interpolationMethod(.monotone)
                     }
-                    .chartYAxisLabel(L10n.format("%@/L", preferences.currencySymbol))
+                    .historyTimeAxis(spanning: priceSeries.map(\.date))
+                    .historyYAxis(L10n.format("%@/L", preferences.currencySymbol))
                     .frame(height: chartHeight * 0.55)
                     .accessibilityLabel(L10n.text("Fuel price per litre trend chart"))
                     .accessibilityValue(chartAccessibilityValue(points: priceSeries.map { $0.pricePerLiter }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Price"), yLabel: preferences.currencySymbol,
+                        points: priceSeries.map { ($0.date, $0.pricePerLiter) }))
                     .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
                 Text(L10n.text("Economy is measured tank-to-tank and needs an odometer reading on each fill-up."))
@@ -128,22 +141,25 @@ extension HistoryDashboardView {
     }
 
     var recentFillsCard: AnyView {
-        guard !fuelEntries.isEmpty else { return AnyView(EmptyView()) }
         let totalSpend = fuelEntries.reduce(0) { $0 + $1.liters * $1.pricePerLiter }
         let totalLitres = fuelEntries.reduce(0) { $0 + $1.liters }
         let avgPrice = totalLitres > 0 ? totalSpend / totalLitres : 0
-        return AnyView(Card {
+        return AnyView(HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "drop", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
-                HStack(spacing: 12) {
-                    curveStat(L10n.text("Total Spend"), Format.currency(totalSpend, symbol: preferences.currencySymbol))
-                    curveStat(L10n.text("Total Volume"), Format.fuelVolume(liters: totalLitres, unit: preferences.fuelVolumeUnit))
-                    if avgPrice > 0 {
-                        curveStat(L10n.text("Avg Price/L"), Format.currency(avgPrice, symbol: preferences.currencySymbol, decimals: 3))
+                HStack {
+                    HistorySectionHeading(symbol: "drop", title: L10n.text("Fuel Fill-Ups"), color: HisingenTheme.chartPositive)
+                    Spacer()
+                    if state.powertrain.hasCombustionEngine {
+                        Button(L10n.text("Add Fuel")) { showFuelSheet = true }
+                            .buttonStyle(.hisSecondary)
+                            .controlSize(.small)
                     }
                 }
+                if !fuelEntries.isEmpty {
+                    fuelTotals(totalSpend: totalSpend, totalLitres: totalLitres, avgPrice: avgPrice)
+                }
                 PaginatedSection(items: fuelEntries, pageSize: preferences.historyPageSize(for: .historyRecentFills),
-                                 emptyMessage: L10n.text("No fill-ups were recorded in this period.")) { visible, footer in
+                                 emptyMessage: L10n.text("No fill-ups have been recorded.")) { visible, footer in
                     ForEach(visible) { entry in
                         HStack {
                             Text(Format.dateFormatter.string(from: entry.date)).hisType(.caption).foregroundStyle(.secondary)
@@ -168,4 +184,14 @@ extension HistoryDashboardView {
             }
         })
     }
+    private func fuelTotals(totalSpend: Double, totalLitres: Double, avgPrice: Double) -> some View {
+        HStack(spacing: 12) {
+            curveStat(L10n.text("Total Spend"), Format.currency(totalSpend, symbol: preferences.currencySymbol))
+            curveStat(L10n.text("Total Volume"), Format.fuelVolume(liters: totalLitres, unit: preferences.fuelVolumeUnit))
+            if avgPrice > 0 {
+                curveStat(L10n.text("Avg Price/L"), Format.currency(avgPrice, symbol: preferences.currencySymbol, decimals: 3))
+            }
+        }
+    }
+
 }

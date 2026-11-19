@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 final class CarImageCache: @unchecked Sendable {
     static let shared = CarImageCache()
@@ -8,12 +7,9 @@ final class CarImageCache: @unchecked Sendable {
     // high-volume, low-diagnostic-value traffic, and failures already surface as a
     // missing render plus a unified-log entry here.
 
-    private let fileManager = FileManager.default
-    private let cacheDirectory: URL
     private let database: VehicleDatabase
     private let lock = NSLock()
     private let ioQueue = DispatchQueue(label: "com.hisingen.image-cache-io", qos: .utility)
-    private let logger = AppLog.logger("image-cache")
     // Raw source bytes are capped so a long session switching vehicles/angles cannot pin
     // hundreds of MB (each entry is up to the 5 MB download cap); entries evict
     // least-recently-used past the budget, mirroring VehicleArtworkStore's bounded tier.
@@ -27,18 +23,20 @@ final class CarImageCache: @unchecked Sendable {
     /// the wrong-angle render as the side profile. -1 is already the interior sentinel.
     private static let primaryImageSQLiteAngle = -2
 
-    init(cacheDirectory: URL? = nil, database: VehicleDatabase = .shared) {
+    init(database: VehicleDatabase = .shared) {
         self.database = database
-        let paths = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
-        let base = paths.first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let dir = cacheDirectory ?? base.appendingPathComponent("Hisingen/CarImages", isDirectory: true)
-        self.cacheDirectory = dir
-        do {
-            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
-        } catch {
-            logger.error("Could not create image cache directory: \(error, privacy: .public)")
-        }
+        _ = Self.legacyFileTierRemoval
     }
+
+    /// Releases before the SQLite image tier kept JPEGs under Caches. Nothing reads or writes
+    /// them now, and a missing render is downloaded again, so the folder is deleted once per
+    /// process instead of being migrated.
+    private static let legacyFileTierRemoval: Void = {
+        guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let folder = base.appendingPathComponent("Hisingen/CarImages", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
+        DispatchQueue.global(qos: .utility).async { try? FileManager.default.removeItem(at: folder) }
+    }()
 
     func hasImage(for vin: String, angle: Int? = nil) -> Bool {
         guard let cleanVIN = sanitizedVIN(vin) else { return false }
@@ -47,8 +45,6 @@ final class CarImageCache: @unchecked Sendable {
         let inMemory = memoryCache[key] != nil
         lock.unlock()
         if inMemory { return true }
-        let fileURL = cacheDirectory.appendingPathComponent("\(sanitizedFileKey(key)).jpg")
-        if fileManager.fileExists(atPath: fileURL.path) { return true }
         guard let parts = parseKey(key) else { return false }
         return database.images.hasVehicleImage(for: parts.vin, angle: parts.angle)
     }
@@ -76,17 +72,12 @@ final class CarImageCache: @unchecked Sendable {
     }
 
     private func sanitizedVIN(_ vin: String) -> String? {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty else { return nil }
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
         guard cleanVIN.unicodeScalars.allSatisfy({ allowed.contains($0) }),
               !cleanVIN.contains("/"), !cleanVIN.contains("..") else { return nil }
         return cleanVIN
-    }
-
-    private func sanitizedFileKey(_ key: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
-        return key.unicodeScalars.map { allowed.contains($0) ? String($0) : "_" }.joined()
     }
 
     private func read(key: String) -> Data? {
@@ -106,17 +97,6 @@ final class CarImageCache: @unchecked Sendable {
             }
         }
 
-        // Files are a legacy tier. Migrate a hit into the single SQLite durable store and
-        // remove the duplicate only after the database write has completed.
-        let fileURL = cacheDirectory.appendingPathComponent("\(sanitizedFileKey(key)).jpg")
-        if let data = try? Data(contentsOf: fileURL), !data.isEmpty {
-            lock.lock()
-            store(data, forKey: key)
-            lock.unlock()
-            persist(data, key: key, legacyFileURL: fileURL)
-            return data
-        }
-
         return nil
     }
 
@@ -127,18 +107,14 @@ final class CarImageCache: @unchecked Sendable {
         store(data, forKey: key)
         lock.unlock()
 
-        persist(data, key: key, legacyFileURL: nil)
+        persist(data, key: key)
     }
 
-    private func persist(_ data: Data, key: String, legacyFileURL: URL?) {
+    private func persist(_ data: Data, key: String) {
         guard let parts = parseKey(key) else { return }
         let database = self.database
-        ioQueue.async { [logger] in
-            let saved = database.images.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
-            if saved, let legacyFileURL {
-                do { try FileManager.default.removeItem(at: legacyFileURL) }
-                catch { logger.debug("Could not remove migrated image cache file: \(error, privacy: .public)") }
-            }
+        ioQueue.async {
+            _ = database.images.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
         }
     }
 
@@ -149,8 +125,8 @@ final class CarImageCache: @unchecked Sendable {
     }
 
     /// Drops the in-memory bytes for one VIN (primary, all angles, interior). Called from the
-    /// sign-out/clear path so a signed-out vehicle's renders stop pinning memory; the disk and
-    /// SQLite tiers remain as the durable cache.
+    /// sign-out/clear path so a signed-out vehicle's renders stop pinning memory; the SQLite
+    /// tier remains as the durable cache.
     ///
     /// An empty VIN names no vehicle and drops nothing: the fleet-wide drop is
     /// `dropAllMemoryCaches()`, so a blank identifier can never mean "every vehicle" one tier
@@ -178,34 +154,19 @@ final class CarImageCache: @unchecked Sendable {
         memoryCacheBytes = 0
     }
 
-    /// Removes every tier for one VIN: memory, the JPEG files on disk, and the SQLite rows.
-    /// Sign-out and "Erase local vehicle data" use this; dropping only the memory tier left
-    /// the downloaded car photos readable on disk.
+    /// Removes every tier for one VIN: memory and the SQLite rows. Sign-out and "Erase local
+    /// vehicle data" use this; dropping only the memory tier left the downloaded car photos
+    /// readable in the database.
     func forget(vin: String) {
         guard let cleanVIN = sanitizedVIN(vin) else { return }
         dropMemoryCache(for: cleanVIN)
-        removeFiles(matching: cleanVIN)
         _ = database.images.deleteVehicleImages(for: cleanVIN)
     }
 
     /// Fleet-wide erase. `dropAllMemoryCaches` is the cheap memory-only form.
     func forgetAll() {
         dropAllMemoryCaches()
-        if let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) {
-            for file in files where file.pathExtension == "jpg" {
-                try? fileManager.removeItem(at: file)
-            }
-        }
         _ = database.images.deleteAllVehicleImages()
-    }
-
-    private func removeFiles(matching cleanVIN: String) {
-        guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else { return }
-        for file in files {
-            let name = file.deletingPathExtension().lastPathComponent
-            guard name == cleanVIN || name.hasPrefix("\(cleanVIN)_") else { continue }
-            try? fileManager.removeItem(at: file)
-        }
     }
 
     // Callers hold `lock`.

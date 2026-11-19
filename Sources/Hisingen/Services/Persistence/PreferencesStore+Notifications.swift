@@ -19,13 +19,13 @@ extension PreferencesStore {
     /// at or after the announced end. Key `…_v2`: v1 stored plan starts, which would be
     /// misread under the new semantics.
     func plannerNotifiedWindowEnd(for vin: String) -> Date? {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty,
               let all = d.dictionary(forKey: "planner_notified_window_ends_v2") as? [String: Double] else { return nil }
         return all[key].map(Date.init(timeIntervalSince1970:))
     }
     func setPlannerNotifiedWindowEnd(_ date: Date?, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var all = d.dictionary(forKey: "planner_notified_window_ends_v2") as? [String: Double] ?? [:]
         if let date { all[key] = date.timeIntervalSince1970 } else { all.removeValue(forKey: key) }
@@ -94,12 +94,12 @@ extension PreferencesStore {
     /// Per-VIN notification mute: baselines keep advancing while muted so un-muting
     /// never replays a burst of stale edge events.
     func isMuted(vin: String) -> Bool {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return false }
         return (d.array(forKey: "muted_vehicle_vins_v1") as? [String])?.contains(key) ?? false
     }
     func setMuted(_ muted: Bool, for vin: String) {
-        let key = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let key = vin.normalizedVIN
         guard !key.isEmpty else { return }
         var values = d.array(forKey: "muted_vehicle_vins_v1") as? [String] ?? []
         if muted { if !values.contains(key) { values.append(key) } }

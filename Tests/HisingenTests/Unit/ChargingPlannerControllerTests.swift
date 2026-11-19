@@ -65,13 +65,13 @@ struct ChargingPlannerControllerTests {
         let harness = PlannerHarness()
         var calls = harness.prices.calls.makeAsyncIterator()
 
-        harness.controller.vehicleStateDidUpdate(vehicle(connection: .disconnected))
+        harness.controller.vehicleStateDidUpdate()
         await settle()
         #expect(await harness.prices.callCount == 0)
 
         harness.controller.start()
         _ = await calls.next()
-        harness.controller.vehicleStateDidUpdate(vehicle(connection: .disconnected))
+        harness.controller.vehicleStateDidUpdate()
         _ = await calls.next()
         #expect(await harness.prices.callCount == 2)
     }

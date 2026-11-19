@@ -369,21 +369,6 @@ extension VehicleState {
         VehicleBrand.isVolvoVIN(vin)
     }
 
-    /// Current vehicle-reported range at the present SOC compared with a WLTP reference at the
-    /// same SOC – the model-family table, or a VIN-specific `specification` override entered in
-    /// Settings when one exists. This is a range comparison, not battery State of Health.
-    /// `battery >= 20` matches the same low-SOC cutoff `BatteryHealthEstimator`'s range signal
-    /// uses, since the vehicle's own range readout gets noisier as it approaches empty.
-    func currentRangeVsModelWltpPercent(specification: VehicleSpecificationOverride? = nil) -> Double? {
-        guard let battery = batteryPercentage, battery >= 20,
-              let range = rangeKm, range > 0 else { return nil }
-        let referenceRange = specification?.wltpRangeKm ?? referenceElectricWltpRangeKm
-        guard let referenceRange, referenceRange > 0 else { return nil }
-        let expectedRangeAtCurrentSoC = referenceRange * (battery / 100.0)
-        guard expectedRangeAtCurrentSoC > 0 else { return nil }
-        return (Double(range) / expectedRangeAtCurrentSoC * 1000).rounded() / 10
-    }
-
     var estimatedChargingCompletion: Date? {
         guard isCharging, let minutes = remainingChargingMinutes, minutes > 0 else { return nil }
         guard !hasOldData() else { return nil }
@@ -399,6 +384,15 @@ extension VehicleState {
         // stated in the present tense on the Charging card's second line.
         guard !hasOldData() else { return nil }
         return Format.completionTime(from: minutes, baseDate: reportedDate(for: .charging) ?? vehicleReportedAt ?? fetchedAt)
+    }
+
+    func liveChargingDraw(now: Date = Date()) -> String? {
+        guard isCharging, hasFreshReading(.charging, now: now),
+              !freshness.retainedDataCategories.contains(.chargingDetails) else { return nil }
+        var readings: [String] = []
+        if let watts = chargingPowerWatts, watts >= 0 { readings.append(Format.kilowatts(watts: watts)) }
+        if let amps = chargingCurrentAmps, amps >= 0 { readings.append(Format.amps(amps)) }
+        return readings.isEmpty ? nil : readings.joined(separator: " · ")
     }
 
     func formattedChargingRate(unit: DistanceUnit) -> String? {

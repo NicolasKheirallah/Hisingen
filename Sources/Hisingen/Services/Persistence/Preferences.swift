@@ -4,6 +4,30 @@ import Foundation
 import SwiftUI
 
 
+enum AppTimeFormat: String, CaseIterable, Sendable {
+    case twentyFourHour = "24h"
+    case twelveHour = "12h"
+
+    static let storageKey = "time_format"
+
+    static var current: Self {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(Self.init(rawValue:)) ?? .twentyFourHour
+    }
+
+    var title: String {
+        switch self {
+        case .twentyFourHour: L10n.text("24-hour")
+        case .twelveHour: L10n.text("12-hour (AM/PM)")
+        }
+    }
+
+    func locale(basedOn locale: Locale) -> Locale {
+        var components = Locale.Components(locale: locale)
+        components.hourCycle = self == .twentyFourHour ? .zeroToTwentyThree : .oneToTwelve
+        return Locale(components: components)
+    }
+}
+
 enum InterfaceLanguage: String, CaseIterable {
     case system
     case english

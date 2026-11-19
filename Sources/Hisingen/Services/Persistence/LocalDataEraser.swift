@@ -15,9 +15,9 @@ enum VehicleScope: Equatable {
         case .all:
             return true
         case .vehicle(let target):
-            let provided = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let provided = vin.normalizedVIN
             guard !provided.isEmpty else { return false }
-            return provided == target.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            return provided == target.normalizedVIN
         }
     }
 }

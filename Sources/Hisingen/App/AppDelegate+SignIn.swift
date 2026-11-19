@@ -15,7 +15,7 @@ extension AppDelegate {
 extension AppDelegate: SignInCoordinatorContext {
     func activateBrandAfterSignIn(_ brand: VehicleBrand) {
         // The browser flow has just written a new refresh token. Discard any earlier negative
-        // presence result before the brand switch derives `sessionValid` from preferences.
+        // presence result before the brand switch decides what the panel should show.
         preferences.invalidateSessionCache()
         vehicleSession.adoptBrandAfterSignIn(brand)
     }

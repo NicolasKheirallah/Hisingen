@@ -146,16 +146,12 @@ struct SettingsCapabilityMatrixCard: View {
             "\(csvCell(capability.title)),\(csvCell(state.capabilityProfile.support(for: capability).displayName))"
         }
         let csv = (["capability,support"] + rows).joined(separator: "\n") + "\n"
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "capabilities_\(preferences.exportVINComponent(state.identity.vin)).csv"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                try csv.write(to: url, atomically: true, encoding: .utf8)
-                exportFeedback = (L10n.text("Capability matrix exported."), false)
-            } catch {
+        FileExport.save(csv, type: .commaSeparatedText,
+                        filename: "capabilities_\(preferences.exportVINComponent(state.identity.vin)).csv") { _, error in
+            if let error {
                 exportFeedback = (L10n.format("Export failed: %@", error.localizedDescription), true)
+            } else {
+                exportFeedback = (L10n.text("Capability matrix exported."), false)
             }
         }
     }

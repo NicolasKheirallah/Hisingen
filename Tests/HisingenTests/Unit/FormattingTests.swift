@@ -644,7 +644,7 @@ struct FormattingTests {
         let formattedUTC = Format.completionTime(from: 90, baseDate: baseDate, timeZone: utcZone)
 
         let reference = DateFormatter()
-        reference.locale = L10n.displayLocale
+        reference.locale = L10n.clockLocale
         reference.dateStyle = .none
         reference.timeStyle = .short
         reference.timeZone = utcZone
@@ -667,17 +667,39 @@ struct FormattingTests {
         comps.second = 0
         let date = try #require(calendar.date(from: comps), "fixture construction must not silently fall back to now")
 
-        // The product formatter is locale- and timezone-bound (Locale.current), so pin the
+        // The product formatter is locale- and timezone-bound (app clock preference), so pin the
         // exact rendered instant via an identically-configured reference, plus a
         // cross-instant inequality that fails if the time component is dropped.
         let reference = DateFormatter()
-        reference.locale = L10n.displayLocale
+        reference.locale = L10n.clockLocale
         reference.dateStyle = .none
         reference.timeStyle = .short
         let formatted = Format.shortTime(date: date)
         #expect(formatted == reference.string(from: date))
         #expect(Format.shortTime(date: date.addingTimeInterval(10 * 3_600)) == reference.string(from: date.addingTimeInterval(10 * 3_600)), "a 10-hour offset must change the rendered time")
         #expect(!(formatted.isEmpty))
+    }
+
+    @Test
+    func clockCycleOverridesLocaleAndKeepsHomeTimeZone() throws {
+        let utc = Format.clockTimeZone
+        let stockholm = try #require(TimeZone(identifier: "Europe/Stockholm"))
+        let date = Format.clockDate(hour: 14, minute: 15)
+        let english = Locale(identifier: "en_US")
+        let twentyFour = AppTimeFormat.twentyFourHour.locale(basedOn: english)
+        let twelve = AppTimeFormat.twelveHour.locale(basedOn: english)
+
+        let utc24 = Format.localizedDateFormatter(timeZone: utc, locale: twentyFour)
+        let utc12 = Format.localizedDateFormatter(timeZone: utc, locale: twelve)
+        let stockholm24 = Format.localizedDateFormatter(dateStyle: .short, timeZone: stockholm, locale: twentyFour)
+
+        #expect(utc24.string(from: date) == "14:15")
+        #expect(utc12.string(from: date).contains("2:15"))
+        #expect(utc12.string(from: date).hasSuffix("PM"))
+        #expect(stockholm24.string(from: date).hasSuffix("15:15"))
+        #expect(utc24.string(from: Format.clockDate(hour: 0)) == "00:00")
+        #expect(utc12.string(from: Format.clockDate(hour: 0)).hasSuffix("AM"))
+        #expect(utc24.string(from: date) == "14:15")
     }
 
     @Test
@@ -703,5 +725,27 @@ struct FormattingTests {
         #expect(Format.shortDate(date: date.addingTimeInterval(24 * 3_600)) == reference.string(from: date.addingTimeInterval(24 * 3_600)), "the next day must render differently")
         #expect(!(formatted.isEmpty))
         #expect(!(formatted.contains(":")), "a short date must not carry a time component")
+    }
+
+    @Test
+    func cachedNumberFormattersFollowLanguageAndPrecisionOnEveryCall() {
+        // Calls alternate precision and grouping, and the language flips between them: a formatter
+        // reused across keys would leak the previous call's digits, separator or grouping.
+        for _ in 0..<2 {
+            L10n.withInterfaceLanguageOverride("en") {
+                #expect(Format.energyKwh(6.5) == "6.5 kWh")
+                #expect(Format.percent(92) == "92%")
+                #expect(Format.energyKwh(12.34, decimals: 2) == "12.34 kWh")
+                #expect(Format.distance(km: 12345.6, decimals: 1, unit: .kilometers, grouped: true) == "12,345.6 km")
+                #expect(Format.distance(km: 12345.6, decimals: 0, unit: .kilometers) == "12346 km")
+                #expect(Format.distance(km: 12345, grouped: true, unit: .kilometers) == "12,345 km")
+                #expect(Format.distance(km: 12345, unit: .kilometers) == "12345 km")
+            }
+            L10n.withInterfaceLanguageOverride("sv") {
+                #expect(Format.energyKwh(6.5) == "6,5 kWh")
+                #expect(Format.percent(92) == "92%")
+                #expect(Format.distance(km: 12.5, decimals: 1, unit: .kilometers) == "12,5 km")
+            }
+        }
     }
 }

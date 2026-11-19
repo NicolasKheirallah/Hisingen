@@ -11,6 +11,10 @@ enum KeychainError: Error, LocalizedError {
     /// launch, so callers must not treat this as "credential gone" and must not retry in a
     /// loop: each retry can block its thread on the pending prompt.
     case interactionRequired
+    /// A test process tried to write the production Keychain items. Tests must hand the store
+    /// an isolated `io.kheirallah.hisingen.tests.` service; a default-constructed one would
+    /// overwrite the developer's real sign-in.
+    case productionItemsFromTests
 
     /// macOS reports a pending ACL consent with errSecInteractionRequired.
     var isInteractionRequired: Bool {
@@ -29,6 +33,8 @@ enum KeychainError: Error, LocalizedError {
             return L10n.format("Keychain error: %@", msg)
         case .interactionRequired:
             return L10n.text("Hisingen is waiting for Keychain access to be approved.")
+        case .productionItemsFromTests:
+            return "A test tried to modify the production Keychain items."
         }
     }
 }
@@ -462,6 +468,23 @@ struct KeychainStore: Sendable {
 
     private static let testStore = TestSecretStore()
 
+    /// True when this store would hit the real login Keychain from inside a test run. An
+    /// injected `security` double never reaches it, so only the system implementation counts.
+    private var wouldWriteProductionItemsFromTests: Bool {
+        guard !isTestService, security is SystemKeychainSecurity else { return false }
+        let env = ProcessInfo.processInfo.environment
+        if env["XCTestConfigurationFilePath"] != nil
+            || env["XCTestBundlePath"] != nil
+            || env["SWIFT_TESTING_ENABLED"] != nil
+            || NSClassFromString("XCTestCase") != nil { return true }
+        // `swift test` with Swift Testing sets none of the above: no XCTest class is loaded, the
+        // environment carries no XCTest keys, and the host process is SwiftPM's own helper. Without
+        // this the guard let a test write into the login Keychain.
+        let processName = ProcessInfo.processInfo.processName
+        if processName.hasPrefix("swiftpm-testing") || processName == "xctest" { return true }
+        return Bundle.main.bundlePath.hasSuffix(".xctest")
+    }
+
     private func cacheKey(account: String) -> String {
         "\(service)|\(account)"
     }
@@ -481,6 +504,7 @@ struct KeychainStore: Sendable {
     private func save(_ value: String, account: String) throws {
         operationLock.lock()
         defer { operationLock.unlock() }
+        guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
         // A rewrite of an unchanged secret still touches the item's access list, and a build
         // with a different code identity that does it can reset which apps may read it without
         // a password. The cache holds only what this process read or stored, so a match means
@@ -583,6 +607,7 @@ struct KeychainStore: Sendable {
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: nil)
         } else {
+            guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
             for dataProtection in [true, false] {
                 let status = security.delete(baseQuery(account: account, useDataProtection: dataProtection))
                 guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }

@@ -18,6 +18,7 @@ app. This file lists what that covers, where each part came from, and under whic
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
 | Tibber | Home name and 15-minute import prices at runtime | Tibber developer terms | Optional Tibber prices in Home Charging |
+| Perific (formerly Enegic) | Whole-house power and meter readings at runtime, read only | No public interface | Optional house meter in Home Charging |
 | Home Assistant | Charger status and plans at runtime, through the reader's own instance | Apache 2.0 | Optional Home Charging |
 | Volvo Cars APIs | Vehicle data at runtime | Volvo Cars developer terms | Volvo support |
 | Polestar interfaces | Vehicle data at runtime | Polestar's terms | Polestar support |
@@ -99,6 +100,14 @@ runs, over its REST and WebSocket APIs at the address the reader enters, for exa
 [home-assistant/custom_components/hisingen_home_charging](home-assistant/custom_components/hisingen_home_charging)
 is Hisingen's own code, installed by the reader into Home Assistant; no Home Assistant source is
 copied into the app. The integration is optional and off until a charger is paired.
+
+### Perific (formerly Enegic)
+
+Hisingen's optional House Meter reads a Perific monitor on the electricity meter's HAN port,
+through the same cloud the Perific app uses at `https://api.enegic.com`. Perific publishes no
+public interface for this, so the connection is the one its own app makes and could stop working
+if Perific changes it. It is read only: Hisingen never writes to Perific, and the charger's load
+balancing stays with Perific. The integration is optional and off until a monitor is connected.
 
 ## Software bundled with the app
 

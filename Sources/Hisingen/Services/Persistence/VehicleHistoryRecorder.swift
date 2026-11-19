@@ -330,6 +330,33 @@ final class VehicleHistoryRecorder {
             recordingEnabled: inputs.storeChargingHistory
         )
         recordBatteryHealth(state, specification: inputs.specification, database: database)
+        recordMetrics(state, storeChargingHistory: inputs.storeChargingHistory, into: database)
+    }
+
+    /// The readings that arrive on every refresh and are kept only when they change: charge level
+    /// (so a parked car shows its drain), the software version, and the energy split since the last
+    /// charge. Level and energy follow the charging-history switch; the version does not, since it
+    /// says nothing about when or where the car was used.
+    private nonisolated static func recordMetrics(
+        _ state: VehicleState, storeChargingHistory: Bool, into database: VehicleDatabase
+    ) {
+        let vin = state.identity.vin
+        let at = state.freshness.fetchedAt
+        if let version = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version {
+            database.history.recordSoftwareVersion(vin: vin, version: version, timestamp: at)
+        }
+        guard storeChargingHistory else { return }
+        if let percentage = state.energy.batteryPercentage {
+            database.history.recordBatteryLevel(
+                vin: vin, percentage: percentage,
+                plugged: state.energy.connection == .connected, timestamp: at)
+        }
+        if let split = state.energy.diagnostics?.energyBreakdownByPeriod?.sinceCharge, split.hasData {
+            let sample = EnergyBreakdownSample(
+                driving: split.driving?.wattHours ?? 0, climate: split.climate?.wattHours ?? 0,
+                battery: split.battery?.wattHours ?? 0, other: split.other?.wattHours ?? 0)
+            database.history.recordEnergyBreakdown(vin: vin, sample: sample, timestamp: at)
+        }
     }
 
     private nonisolated static func chargingLocationName(for state: VehicleState, persistLocationHistory: Bool) -> String? {

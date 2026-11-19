@@ -25,7 +25,6 @@ extension VehicleState {
     var chargingSchedules: [VehicleSchedule] { energy.schedules }
     var chargeLocations: [ChargeLocationSnapshot] { energy.locations }
     var chargingSamples: [ChargingSample] { energy.samples }
-    var chargingSessions: [ChargingSession] { energy.sessions }
 
     var availability: VehicleAvailability { identity.availability }
     var modelName: String? { identity.modelName }
@@ -50,7 +49,6 @@ extension VehicleState {
     var frontBrakePadStatus: String? { maintenance.frontBrakePadStatus }
     var rearBrakePadStatus: String? { maintenance.rearBrakePadStatus }
 
-    var isCachedSnapshot: Bool { freshness.isCached }
     var fetchedAt: Date { freshness.fetchedAt }
     var vehicleReportedAt: Date? { freshness.vehicleReportedAt }
     var readingDates: [VehicleReading: Date] { freshness.readingDates }

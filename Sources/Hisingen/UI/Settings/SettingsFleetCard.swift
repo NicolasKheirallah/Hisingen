@@ -366,6 +366,7 @@ struct FleetVehicleCardRow: View {
                         get: { preferences.vehicleNickname(for: vin) },
                         set: { preferences.setVehicleNickname($0, for: vin) }
                     ))
+                    .onSubmit { onSettingsChanged(.presentation) }
                     .controlSize(.mini)
                     .frame(maxWidth: 110)
                 }
@@ -375,19 +376,16 @@ struct FleetVehicleCardRow: View {
                         .hisType(.micro)
                         .foregroundStyle(.secondary)
 
-                    Picker("", selection: Binding(
-                        get: { preferences.theme(for: vin, brand: brand) },
+                    Picker(L10n.text("Theme"), selection: Binding<AppTheme?>(
+                        get: { preferences.vehicleThemeOverride(for: vin) },
                         set: { newTheme in
-                            preferences.setTheme(newTheme, for: vin, brand: brand)
-                            if isActive {
-                                preferences.appTheme = newTheme
-                                preferences.syncAppThemeStorageKey()
-                            }
+                            preferences.setVehicleTheme(newTheme, for: vin)
                             onSettingsChanged(.presentation)
                         }
                     )) {
-                        ForEach(AppTheme.allCases + CustomThemeStore.all().map(\.theme), id: \.self) { t in
-                            Text(t.title).tag(t)
+                        Text(L10n.text("Use Brand Default")).tag(nil as AppTheme?)
+                        ForEach(AppTheme.allCases + CustomThemeStore.all().map(\.theme), id: \.self) { theme in
+                            Text(theme.title).tag(Optional(theme))
                         }
                     }
                     .labelsHidden()

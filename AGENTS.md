@@ -15,3 +15,5 @@ Before starting, ask the user when antislop applies: during the work, or after i
 Standing answer for this project: DURING. UI and copy work follows the rules while it is
 written and ends with the core file's Delivery Gate as a PASS/FAIL report.
 <!-- antislop:end -->
+
+Always update the changelog after any changes!

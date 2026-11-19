@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 extension HistoryDashboardView {
     // MARK: - Period picker
 
-    func periodPicker(proxy: ScrollViewProxy) -> some View {
+    var periodPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .bottom, spacing: 10) {
                 // Custom is the last period, not a separate calendar glyph: choosing it opens the
@@ -26,11 +26,12 @@ extension HistoryDashboardView {
                 .popover(isPresented: $showCustomRangeEditor, arrowEdge: .bottom) { customRangePopover }
 
                 InformationButton(
-                    message: L10n.text("Battery health, odometer totals and lifetime cost always use full history, regardless of the range above."),
+                    message: L10n.text("Battery health, lifetime odometer totals, fuel fill-ups, cabin temperatures and lifetime cost use the full history."),
                     subject: L10n.text("History Period")
                 )
 
-                historyJumpMenu(proxy: proxy)
+                historyJumpMenu()
+                exportMenu.labelStyle(.iconOnly)
             }
 
             // History describes energy, cost and range, and it was the one data surface that never
@@ -124,7 +125,7 @@ extension HistoryDashboardView {
                 HStack {
                     CardHeader(symbol: "chart.xyaxis.line", title: L10n.text("History Overview"), color: HisingenTheme.chartInfo)
                     Spacer()
-                    if state.powertrain.hasCombustionEngine {
+                    if state.powertrain.hasCombustionEngine && !draws(.historyRecentFills) {
                         Button { showFuelSheet = true } label: {
                             Label(L10n.text("Add Fuel"), systemImage: "drop")
                                 .hisType(.caption, weight: .medium)
@@ -132,7 +133,7 @@ extension HistoryDashboardView {
                         .buttonStyle(.pressable)
                         .help(L10n.text("Log a fill-up so fuel spend is included in cost estimates"))
                     }
-                    exportMenu
+                    if !showsHistoryExportHeader { exportMenu }
                 }
                 HStack(spacing: 10) {
                     metric(L10n.text("Distance"), Format.distance(km: totalDistance, decimals: 1, unit: preferences.distanceUnit), "road.lanes")
@@ -141,20 +142,22 @@ extension HistoryDashboardView {
                     metricColumnDivider
                     metric(L10n.text("Driving"), Format.shortDuration(minutes: Int(drivingTime / 60)), "clock")
                 }
-                HStack(spacing: 10) {
-                    metric(L10n.text("Charge Sessions"), Format.count(chargingSessions.count), "bolt")
-                    metricColumnDivider
-                    metric(L10n.text("Estimated Energy"), Format.energyKwh(energy), "bolt.circle")
-                    metricColumnDivider
-                    metric(
-                        L10n.text("Estimated Cost"),
-                        estimatedCost.map { Format.currency($0.amount, symbol: $0.currency) } ?? "–",
-                        "creditcard"
-                    )
-                }
-                if estimatedCost == nil, !chargingSessions.isEmpty {
-                    footnote("exclamationmark.triangle",
-                             L10n.text("Charging cost spans multiple currencies, so it is not totalled here. See the per-location breakdown below."))
+                if !chargingSessions.isEmpty && !showsChargingSummary {
+                    HStack(spacing: 10) {
+                        metric(L10n.text("Charge Sessions"), Format.count(chargingSessions.count), "bolt")
+                        metricColumnDivider
+                        metric(L10n.text("Estimated Energy"), Format.energyKwh(energy), "bolt.circle")
+                        metricColumnDivider
+                        metric(
+                            L10n.text("Estimated Cost"),
+                            estimatedCost.map { Format.currency($0.amount, symbol: $0.currency) } ?? "–",
+                            "creditcard"
+                        )
+                    }
+                    if estimatedCost == nil, !chargingSessions.isEmpty {
+                        footnote("exclamationmark.triangle",
+                                 L10n.text("Charging cost spans multiple currencies, so it is not totalled here. See the per-location breakdown below."))
+                    }
                 }
                 // No fail-open `?? Date()`. It read as a real projection of "today", which is the
                 // one answer a service date must never invent; a missing date is stated as missing.
@@ -204,11 +207,11 @@ extension HistoryDashboardView {
 
     /// One path for every export entry: the workspace decides how the CSV is built
     /// (period rows it is handed, or a full-history ledger query off-main).
-    func exportThroughWorkspace(_ kind: HistoryWorkspace.ExportKind, name: String) {
+    private func exportThroughWorkspace(_ kind: HistoryWorkspace.ExportKind, name: String,
+                                        scope: HistoryWorkspace.ExportScope = .fullHistory) {
         let vin = state.identity.vin
-        let scope: HistoryWorkspace.ExportScope = exportScope == .selectedPeriod ? .selectedPeriod : .fullHistory
         let sessionID = selectedSession?.id
-        let periodTrips = trips
+        let periodTrips = aggregateTrips
         let periodSessions = chargingSessions
         Task { @MainActor in
             let csv = await history.exportCSV(kind, scope: scope, vin: vin, selectedSessionID: sessionID,
@@ -219,62 +222,51 @@ extension HistoryDashboardView {
 
     var exportMenu: some View {
         Menu {
-            Picker(L10n.text("Range (trips & charging sessions)"), selection: $exportScope) {
-                ForEach(ExportScope.allCases) { Text(L10n.text($0.rawValue)).tag($0) }
+            Menu(L10n.text("Selected Period (CSV)")) {
+                Button(L10n.text("Trips")) {
+                    exportThroughWorkspace(.trips, name: "Trips", scope: .selectedPeriod)
+                }
+                .disabled(aggregateTrips.isEmpty)
+                Button(L10n.text("Charging Sessions")) {
+                    exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions", scope: .selectedPeriod)
+                }
+                .disabled(chargingSessions.isEmpty)
             }
-            Divider()
-            Button(L10n.text("Trips")) {
-                exportThroughWorkspace(.trips, name: "Trips")
+
+            Menu(L10n.text("Full History (CSV)")) {
+                Button(L10n.text("Trips")) { exportThroughWorkspace(.trips, name: "Trips") }
+                Button(L10n.text("Charging Sessions")) {
+                    exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions")
+                }
+                Button(L10n.text("Battery Health")) { exportThroughWorkspace(.batteryHealth, name: "Battery-Health") }
+                Button(L10n.text("Air Quality")) { exportThroughWorkspace(.airQuality, name: "Air-Quality") }
+                Button(L10n.text("Telemetry")) { exportThroughWorkspace(.telemetry, name: "Telemetry") }
+                Button(L10n.text("Automation Log")) {
+                    exportThroughWorkspace(.commandAudits, name: "Automation-Log")
+                }
+                if state.powertrain.hasCombustionEngine {
+                    Button(L10n.text("Fuel Fill-Ups")) { exportThroughWorkspace(.fuelEntries, name: "Fuel") }
+                }
+                Button(L10n.text("Cabin Climate")) { exportThroughWorkspace(.cabinClimate, name: "Cabin-Climate") }
             }
-            .disabled(trips.isEmpty)
-            Button(L10n.text("Charging Sessions")) {
-                exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions")
-            }
-            .disabled(chargingSessions.isEmpty)
-            Button(L10n.text("Session Samples")) {
-                guard selectedSession != nil else { return }
+            Button(L10n.text("Selected Session Samples (CSV)")) {
                 exportThroughWorkspace(.sessionSamples, name: "Charging-Samples")
             }
-            .disabled(selectedSession == nil || selectedSessionCurve.isEmpty)
-            Button(L10n.text("Battery Health")) {
-                exportThroughWorkspace(.batteryHealth, name: "Battery-Health")
+            .disabled(selectedSession == nil || selectedSessionSamples.isEmpty)
+            Button(L10n.text("Recent Completed Charging Sessions (JSON)")) {
+                Task { await exportRecentChargingSessions() }
             }
-            .disabled(batteryHealthRecords.isEmpty)
-            Button(L10n.text("Air Quality")) {
-                exportThroughWorkspace(.airQuality, name: "Air-Quality")
-            }
-            .disabled(airQualityRecords.isEmpty)
-            Button(L10n.text("Telemetry")) {
-                exportThroughWorkspace(.telemetry, name: "Telemetry")
-            }
-            .disabled(telemetryRecords.isEmpty)
-            Button(L10n.text("Automation Log")) {
-                exportThroughWorkspace(.commandAudits, name: "Automation-Log")
-            }
-            .disabled(commands.isEmpty)
-            if state.powertrain.hasCombustionEngine {
-                Button(L10n.text("Fuel Fill-Ups")) {
-                    exportThroughWorkspace(.fuelEntries, name: "Fuel")
-                }
-                .disabled(fuelEntries.isEmpty)
-            }
-            Button(L10n.text("Cabin Climate")) {
-                exportThroughWorkspace(.cabinClimate, name: "Cabin-Climate")
-            }
-            .disabled(cabinClimateRecords.isEmpty)
-            Divider()
             Button(L10n.text("Full Backup (JSON)")) {
-                let workspace = history
                 let includeCoordinates = preferences.persistLocationHistory
-                Task { @MainActor in
-                    let data = await workspace.exportBackupJSON(includeCoordinates: includeCoordinates)
-                    guard let data else {
+                Task {
+                    guard let data = await history.exportBackupJSON(includeCoordinates: includeCoordinates) else {
                         exportError = L10n.text("The backup could not be created.")
                         return
                     }
                     exportJSON(data, name: "Full-Backup")
                 }
             }
+            .disabled(storeUnreadable)
             Divider()
             Button(L10n.text("Copy Summary")) {
                 HistoryExport.copyToClipboard(historySummaryText)
@@ -296,7 +288,19 @@ extension HistoryDashboardView {
         .menuStyle(.borderlessButton)
         .hisCaptionLeading()
         .fixedSize(horizontal: false, vertical: true)
+        .help(L10n.text("Export history data"))
         .accessibilityLabel(L10n.text("Export history data"))
+        .disabled(storeUnreadable || isLoading)
+    }
+
+    private func exportRecentChargingSessions() async {
+        let vin = state.identity.vin
+        let sessions = await history.persistentChargingSessions(vin: vin, state: state)
+        guard !sessions.isEmpty else {
+            exportError = L10n.text("No completed charging sessions have been recorded.")
+            return
+        }
+        ChargingHistoryExport.saveJSON(sessions: sessions, vin: vin)
     }
 
     /// One overview reading: a value over its label, typography on the panel glass. The old
@@ -353,6 +357,7 @@ extension HistoryDashboardView {
                 }
                 Text(L10n.text("Compares the elapsed part of this month against the same number of days last month."))
                     .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
+                monthProjectionText
                 if lastYear.distanceKm > 0 || lastYear.energyKwh > 0 {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                     HStack(spacing: 10) {
@@ -434,9 +439,9 @@ extension HistoryDashboardView {
                 consumptionKwhPer100Km: consumption,
                 gridGramsCO2PerKwh: preferences.gridCarbonIntensityGramsPerKwh)
         else { return AnyView(EmptyView()) }
-        return AnyView(Card {
+        return AnyView(HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "leaf", title: L10n.text("Emissions vs Petrol"), color: HisingenTheme.semanticGood)
+                HistorySectionHeading(symbol: "leaf", title: L10n.text("Emissions vs Petrol"), color: HisingenTheme.semanticGood)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("CO₂ Avoided"), Format.massKg(comparison.avoidedKgCO2))
                     curveStat(L10n.text("EV Generation"), Format.massKg(comparison.electricKgCO2))
@@ -497,26 +502,20 @@ extension HistoryDashboardView {
     // MARK: - Helpers
 
     func exportCSV(_ contents: String, name: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try contents.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+        FileExport.save(contents, type: .commaSeparatedText,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
         }
     }
 
     func exportJSON(_ data: Data, name: String) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "Hisingen-\(name)-\(state.identity.vin.suffix(6)).json"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try data.write(to: url, options: .atomic)
-        } catch {
-            exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+        FileExport.save(data, type: .json,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).json", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
         }
     }
 

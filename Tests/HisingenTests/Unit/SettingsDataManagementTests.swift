@@ -39,7 +39,7 @@ struct SettingsDataManagementTests {
     func historyBackupHasAnExplicitReadOnlySchema() throws {
         let database = VehicleDatabase.inMemory()
         let vin = "SETTINGS_BACKUP_TEST"
-        let sessionID = database.charging.startChargingSession(vin: vin, startSoc: 30)
+        let sessionID = database.charging.startChargingSession(vin: vin, startSoc: 30, location: "Home/Garage")
         database.charging.recordChargingSample(
             sessionId: sessionID, vin: vin, soc: 31, powerKw: 11,
             voltage: 230, current: 16
@@ -47,13 +47,24 @@ struct SettingsDataManagementTests {
         #expect(database.history.recordConnectivity(vin: vin, networkType: "LTE", signalBars: 4, wakeReason: "app"))
         #expect(database.history.recordCabinClimate(vin: vin, interiorCelsius: 20, requestedCelsius: 21))
         #expect(database.history.addFuelEntry(vin: vin, date: Date(), liters: 10, pricePerLiter: 2, odometerKm: 500))
-        let data = try database.exportBackupJSON(includeCoordinates: false)
-        let payload = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(payload["schema"] as? String == "hisingen-backup-v1")
-        #expect(payload["includesCoordinates"] as? Bool == false)
-        #expect((payload["chargingSamples"] as? [[String: Any]])?.count == 1)
-        #expect((payload["connectivity"] as? [[String: Any]])?.count == 1)
-        #expect((payload["cabinClimate"] as? [[String: Any]])?.count == 1)
-        #expect((payload["fuelEntries"] as? [[String: Any]])?.count == 1)
+        #expect(database.history.recordTelemetry(
+            vin: vin, odometerKm: 500, tripManualKm: nil, tripAutoKm: nil, avgConsumption: nil,
+            ambientTempC: nil, latitude: 57.7, longitude: 11.9
+        ))
+        for includeCoordinates in [false, true] {
+            let data = try database.exportBackupJSON(includeCoordinates: includeCoordinates)
+            let payload = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(payload["schema"] as? String == "hisingen-backup-v1")
+            #expect(payload["includesCoordinates"] as? Bool == includeCoordinates)
+            #expect((payload["chargingSamples"] as? [[String: Any]])?.count == 1)
+            #expect((payload["connectivity"] as? [[String: Any]])?.count == 1)
+            #expect((payload["cabinClimate"] as? [[String: Any]])?.count == 1)
+            #expect((payload["fuelEntries"] as? [[String: Any]])?.count == 1)
+            let session = try #require((payload["chargingSessions"] as? [[String: Any]])?.first)
+            let telemetry = try #require((payload["telemetry"] as? [[String: Any]])?.first)
+            #expect(session["locationName"] as? String == (includeCoordinates ? "Home/Garage" : nil))
+            #expect(telemetry["latitude"] as? Double == (includeCoordinates ? 57.7 : nil))
+            #expect(telemetry["longitude"] as? Double == (includeCoordinates ? 11.9 : nil))
+        }
     }
 }

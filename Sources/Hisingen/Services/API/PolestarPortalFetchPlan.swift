@@ -34,7 +34,7 @@ struct PolestarPortalFetchPlan: Sendable {
             (.target, features.contains(.chargingDetails) || features.contains(.remoteCharging)),
             (.amp, features.contains(.chargingDetails) || features.contains(.remoteCharging)),
             (.now, features.contains(.chargingDetails) || features.contains(.remoteCharging)),
-            (.locations, features.contains(.chargingDetails) || features.contains(.chargingSchedule) || features.contains(.remoteSchedules)),
+            (.locations, features.contains(.chargeLocations)),
             (.timer, features.contains(.chargingSchedule) || features.contains(.remoteSchedules) || features.contains(.chargingDetails)),
             (.climateTimer, features.contains(.climateStatus) || features.contains(.remoteClimate) || features.contains(.chargingSchedule)),
             (.cleaning, features.contains(.airQuality) || features.contains(.remotePreCleaning))

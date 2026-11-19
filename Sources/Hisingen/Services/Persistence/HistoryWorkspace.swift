@@ -32,10 +32,7 @@ final class HistoryWorkspace {
 
     // MARK: - Dashboard
 
-    /// Everything that decides what the period-scoped dashboard load returns. The view
-    /// also feeds this value to `.task(id:)`, so the reload trigger and the query inputs
-    /// are one thing and cannot drift apart.
-    struct DashboardQuery: Equatable, Hashable, Sendable {
+    struct DashboardQuery: Sendable {
         var vin: String
         var range: ClosedRange<Date>?
         var rowCap: Int
@@ -43,16 +40,11 @@ final class HistoryWorkspace {
         var capacityKwh: Double
         var hasElectricRange: Bool
         var hasCombustionEngine: Bool
-        /// The view's lifetime-cache identity; documented here because the workspace
-        /// trusts it to decide `loadLifetime` honestly.
-        var lifetimeKey: String
     }
 
-    /// Loads the period snapshot, optionally the lifetime series, and the presentation
-    /// build, off the main actor. Returns nil only when the caller's task was cancelled
-    /// while waiting.
+    /// A period change can reuse the lifetime series supplied by the caller.
     func dashboard(matching query: DashboardQuery, loadLifetime: Bool,
-                   keeping existing: VehicleHistoryLedger.LifetimeSnapshot) async -> HistoryDashboardLoadResult? {
+                   keeping existing: VehicleHistoryLedger.LifetimeSnapshot) async -> HistoryDashboardLoadResult {
         let database = database
         return await Task.detached(priority: .userInitiated) {
             let dashboard = database.history.dashboard(
@@ -75,12 +67,10 @@ final class HistoryWorkspace {
     }
 
     /// The Info tab's recent-records bundle.
-    func recentRecords(for state: VehicleState) async -> VehicleHistoryLedger.RecentRecords {
+    func recentRecords(vin: String) async -> VehicleHistoryLedger.RecentRecords {
         let database = database
-        let vin = state.identity.vin
-        let capacity = usableCapacityKwh(vin: vin, state: state)
         return await Task.detached(priority: .userInitiated) {
-            database.history.recent(vin: vin, chargingCapacityKwh: capacity)
+            database.history.recent(vin: vin)
         }.value
     }
 
@@ -108,6 +98,8 @@ final class HistoryWorkspace {
         var samples: [HistoricalChargingSample]
         var current: [HistoryInsights.ChargingCurvePoint]
         var previous: [HistoryInsights.ChargingCurvePoint]
+        /// What the home charger itself reported during the session, if it was paired and recording.
+        var chargerPower: [VehicleMetricRecord] = []
     }
 
     /// The selected session's samples and curve, plus the prior session's curve when the
@@ -121,7 +113,11 @@ final class HistoryWorkspace {
             let previousCurve = previous.map {
                 HistoryInsights.chargingCurve(from: database.charging.reconciledSamples(for: $0))
             } ?? []
-            return SessionCurves(samples: samples, current: current, previous: previousCurve)
+            let end = (session.endedAt ?? Date()).addingTimeInterval(120)
+            let chargerPower = database.history
+                .metrics(for: session.vin, metric: .chargerPower, since: session.startedAt.addingTimeInterval(-120))
+                .filter { $0.timestamp <= end }
+            return SessionCurves(samples: samples, current: current, previous: previousCurve, chargerPower: chargerPower)
         }.value
     }
 
@@ -132,6 +128,10 @@ final class HistoryWorkspace {
                       pricePerLiter: Double, odometerKm: Double?) -> Bool {
         database.history.addFuelEntry(vin: vin, date: date, liters: liters,
                                       pricePerLiter: pricePerLiter, odometerKm: odometerKm)
+    }
+
+    func setSessionNote(_ note: String, sessionID: String, vin: String) {
+        database.history.setSessionNote(note, sessionID: sessionID, vin: vin)
     }
 
     func deleteFuelEntry(id: Int64) {

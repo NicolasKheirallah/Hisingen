@@ -160,7 +160,7 @@ const HAPTIC_FILES = [
   // (SettingsDisplayCard, NotificationToggleRow and the rest), so its haptic covers them.
   'Sources/Hisingen/UI/Settings/PreferenceBinder.swift',
   'Sources/Hisingen/UI/Settings/SettingsFeatureToggleRow.swift',
-  'Sources/Hisingen/UI/Controls/ScheduleEditorSheet.swift',
+  'Sources/Hisingen/UI/Controls/ControlsCommandGate.swift',
   'Sources/Hisingen/UI/Components/CommandReceiptChip.swift',
 ];
 function checkHaptics() {
@@ -175,7 +175,7 @@ function checkHaptics() {
 const MENU_FILES = [
   'Sources/Hisingen/UI/History/HistoryDashboardView+Trips.swift',
   'Sources/Hisingen/UI/History/ChargingSessionRow.swift',
-  'Sources/Hisingen/UI/Controls/ScheduleEditorSheet.swift',
+  'Sources/Hisingen/UI/Controls/PlanTimeline.swift',
 ];
 function checkMenus() {
   for (const rel of MENU_FILES) {

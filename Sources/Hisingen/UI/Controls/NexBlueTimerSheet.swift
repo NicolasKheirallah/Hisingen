@@ -15,7 +15,8 @@ struct NexBlueTimerSheet: View {
             Text(L10n.text("Cheapest overnight charge"))
                 .hisType(.displaySmall, weight: HisingenTheme.headingWeight)
                 .accessibilityAddTraits(.isHeader)
-            Text(L10n.text("Find a one-time charging window between 18:00 and 07:00 using your selected spot price area."))
+            Text(L10n.format("Find a one-time charging window between %@ and %@ using your selected spot price area.",
+                             Format.clockTime(hour: 18), Format.clockTime(hour: 7)))
                 .hisType(.body)
                 .foregroundStyle(HisingenTheme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)

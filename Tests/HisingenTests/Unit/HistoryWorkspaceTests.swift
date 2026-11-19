@@ -59,12 +59,28 @@ struct HistoryWorkspaceTests {
     @Test
     func recentRecordsDistinguishAnUnreadableStoreFromAnEmptyStore() {
         let unreadableDatabase = VehicleDatabase(database: .unavailable(path: ":test-unavailable:"))
-        let unreadable = unreadableDatabase.history.recent(vin: vin, chargingCapacityKwh: nil)
+        let unreadable = unreadableDatabase.history.recent(vin: vin)
         #expect(unreadable.storeUnreadable)
 
         let readableDatabase = VehicleDatabase.inMemory()
-        let readable = readableDatabase.history.recent(vin: vin, chargingCapacityKwh: nil)
+        let readable = readableDatabase.history.recent(vin: vin)
         #expect(!readable.storeUnreadable)
+    }
+
+    @Test
+    func persistentChargingSessionsReturnCompletedDomainSessionsForTheVehicle() async throws {
+        let harness = Harness(label: "workspace-charging")
+        defer { harness.close() }
+
+        let startedAt = Date(timeIntervalSince1970: 1_780_000_000)
+        harness.seedSession(vin: vin, startedAt: startedAt, energyKwh: 7.9)
+        harness.seedSession(vin: "OTHER-VIN", startedAt: startedAt, energyKwh: 11)
+
+        let sessions = await harness.workspace.persistentChargingSessions(vin: vin, state: vehicle(vin: vin))
+        #expect(sessions.count == 1)
+        let session = try #require(sessions.first)
+        #expect(session.kwhDelivered == 7.9)
+        #expect(session.samples.last?.batteryPercentage == 70)
     }
 
     @Test
@@ -95,15 +111,9 @@ struct HistoryWorkspaceTests {
 
         let query = HistoryWorkspace.DashboardQuery(
             vin: vin, range: nil, rowCap: 3_000, tripCap: 3_000,
-            capacityKwh: 75, hasElectricRange: true, hasCombustionEngine: true,
-            lifetimeKey: "t0")
+            capacityKwh: 75, hasElectricRange: true, hasCombustionEngine: true)
         let loaded = await harness.workspace.dashboard(matching: query, loadLifetime: true,
                                                        keeping: .init())
-        guard let loaded else {
-            Issue.record("dashboard load returned nil without cancellation")
-            return
-        }
-
         #expect(loaded.dashboard.storeUnreadable == false)
         #expect(loaded.dashboard.chargingSessions.count == 1)
         #expect(loaded.lifetime.fuelEntries.count == 1)
@@ -121,12 +131,11 @@ struct HistoryWorkspaceTests {
 
         let query = HistoryWorkspace.DashboardQuery(
             vin: vin, range: nil, rowCap: 3_000, tripCap: 3_000,
-            capacityKwh: 75, hasElectricRange: true, hasCombustionEngine: false,
-            lifetimeKey: "t1")
+            capacityKwh: 75, hasElectricRange: true, hasCombustionEngine: false)
         let loaded = await harness.workspace.dashboard(matching: query, loadLifetime: false,
                                                        keeping: existing)
-        #expect(loaded?.lifetime.fuelEntries.count == 1)
-        #expect(loaded?.lifetime.batteryHealthRecords.isEmpty == true)
+        #expect(loaded.lifetime.fuelEntries.count == 1)
+        #expect(loaded.lifetime.batteryHealthRecords.isEmpty)
     }
 
     @Test

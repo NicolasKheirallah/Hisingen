@@ -31,18 +31,18 @@ protocol VehicleProviding: RemoteCommandExecuting {
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws
     /// Requires a session, but no prior vehicle-selection call.
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState
+}
+
+protocol VehicleMetadataProviding: Sendable {
     /// Identity the provider already holds for a VIN, without a telemetry fetch. The
     /// augmented provider overlays it onto portal-served state so consumer-only metadata
     /// (model name, plate, owner greeting) survives refreshes that never touch the
     /// consumer API. Nil when the provider holds none.
+    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot?
     /// Telemetry only the consumer API serves, for the augmented provider to overlay onto
     /// portal-served state the same way `identitySnapshot` is. Nil when the provider has
     /// nothing to add (including a cold session), so a portal refresh is never poisoned
     /// by the overlay's own transport failures.
-}
-
-protocol VehicleMetadataProviding: Sendable {
-    func identitySnapshot(for vin: String, features: FeatureSelection) async -> VehicleIdentitySnapshot?
     func consumerTelemetryOverlay(for vin: String, features: FeatureSelection) async -> ConsumerTelemetryOverlay?
 }
 

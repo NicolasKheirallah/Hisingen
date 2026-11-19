@@ -29,6 +29,13 @@ struct ChargingSessionRow: View {
                     KVRow(L10n.text("Duration"), Format.shortDuration(minutes: session.durationMinutes), symbol: "timer")
                     if let wallbox = wallboxPresentation {
                         KVRow(L10n.text("Charger Energy"), wallbox.energyValue, symbol: "powerplug", info: wallbox.energyInfo)
+                        if let startedBy = wallbox.startedBy {
+                            KVRow(L10n.text("Started"), startedBy)
+                        }
+                        if let endedBy = wallbox.endedBy {
+                            KVRow(L10n.text("Ended"), endedBy, symbol: "exclamationmark.triangle",
+                                  warning: wallbox.endedByNeedsAttention)
+                        }
                     }
                     if showsBatteryEstimate {
                         KVRow(

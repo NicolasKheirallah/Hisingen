@@ -72,10 +72,6 @@ extension AccountCredentialsForm {
             }
 
             if style != .welcoming {
-                labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                    HisTextField(L10n.text("e.g. My Volvo, Family car"), text: model.binding(\.volvoNickname))
-                }
-
                 labeledField(L10n.text("VIN (Optional, auto-detected)")) {
                     HisTextField("YV1...", text: model.binding(\.volvoVIN))
                 }
@@ -118,7 +114,7 @@ extension AccountCredentialsForm {
     }
 
     private func beginVolvoSignIn() {
-        guard let request = model.beginVolvoSignIn() else { return }
+        guard let request = model.beginVolvoSignIn(saveNickname: false) else { return }
         onSettingsChanged(.volvoSignIn(
             clientID: request.clientID,
             clientSecret: request.clientSecret,

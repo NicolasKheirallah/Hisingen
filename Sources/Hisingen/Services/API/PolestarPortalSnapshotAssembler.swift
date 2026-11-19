@@ -34,7 +34,9 @@ enum PolestarPortalSnapshotAssembler {
         }
     }
 
-    private static func assembleReadingDates(from bundle: PolestarPortalTelemetryBundle) -> [VehicleReading: Date] {
+    private static func assembleReadingDates(
+        from bundle: PolestarPortalTelemetryBundle, chargingState: ChargingState
+    ) -> [VehicleReading: Date] {
         var readingDates: [VehicleReading: Date] = [:]
         if let bDate = bundle.battery?.timestamp?.date { readingDates[.battery] = bDate }
         if let eDate = bundle.exterior?.timestamp?.date { readingDates[.openings] = eDate }
@@ -44,13 +46,19 @@ enum PolestarPortalSnapshotAssembler {
         if let cDate = bundle.parkingClimatization?.timestamp?.date { readingDates[.climateStatus] = cDate }
         if let aDate = bundle.preCleaning?.timestamp?.date { readingDates[.airQuality] = aDate }
         if let avDate = bundle.availability?.timestamp?.date { readingDates[.availability] = avDate }
-        if let cnDate = bundle.chargeNow?.syncedOverrideChargeTimer?.updatedAtTimestamp?.date { readingDates[.charging] = cnDate }
+        if chargingState.isRecognised {
+            readingDates[.charging] = bundle.battery?.timestamp?.date
+        } else {
+            readingDates[.charging] = bundle.chargeNow?.syncedOverrideChargeTimer?.updatedAtTimestamp?.date
+        }
         return readingDates
     }
 
     /// Portal ingest times keyed like the vehicle report times above, so the freshness card
     /// can show where a domain sat in the delivery pipeline.
-    private static func assembleMetaReceivedDates(from bundle: PolestarPortalTelemetryBundle) -> [VehicleReading: Date] {
+    private static func assembleMetaReceivedDates(
+        from bundle: PolestarPortalTelemetryBundle, chargingState: ChargingState
+    ) -> [VehicleReading: Date] {
         var received: [VehicleReading: Date] = [:]
         func ingest(_ raw: String?, for reading: VehicleReading) {
             guard let raw, let date = Self.parseMetaReceivedAt(raw) else { return }
@@ -64,7 +72,8 @@ enum PolestarPortalSnapshotAssembler {
         ingest(bundle.parkingClimatization?.metaReceivedAt, for: .climateStatus)
         ingest(bundle.preCleaning?.metaReceivedAt, for: .airQuality)
         ingest(bundle.availability?.metaReceivedAt, for: .availability)
-        ingest(bundle.chargeNow?.metaReceivedAt, for: .charging)
+        ingest(chargingState.isRecognised ? bundle.battery?.metaReceivedAt : bundle.chargeNow?.metaReceivedAt,
+               for: .charging)
         return received
     }
 
@@ -191,7 +200,7 @@ enum PolestarPortalSnapshotAssembler {
                 return nil
             }()
         )
-        let readingDates = assembleReadingDates(from: bundle)
+        let readingDates = assembleReadingDates(from: bundle, chargingState: energy.chargingState)
         let freshness = SnapshotFreshness(
             isCached: false,
             fetchedAt: now,
@@ -200,7 +209,7 @@ enum PolestarPortalSnapshotAssembler {
             // metaReceivedAt is the portal's ingest time; a large gap to the vehicle's own
             // timestamp means the reading sat in the delivery pipeline and may be older
             // than its freshness suggests.
-            metaReceivedDates: assembleMetaReceivedDates(from: bundle),
+            metaReceivedDates: assembleMetaReceivedDates(from: bundle, chargingState: energy.chargingState),
             dataWarnings: assemblePipelineLagWarnings(from: bundle),
             // The consumer-exclusive commands are never portal-served; the rest of the
             // list is what this refresh actually asked for and failed to read.

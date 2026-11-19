@@ -55,12 +55,6 @@ extension HisingenTheme {
     /// A boundary drawn at the width of a boundary, not of a hairline.
     static var cardBoundaryIncreasedWidth: CGFloat { 1 }
 
-    /// Corner radius for a full-width notice banner: one value, not a theme branch.
-    ///
-    /// A banner is a slight concentric inset of the section carrying it, which is why it is 10
-    /// rather than the card's 12.
-    static var bannerRadius: CGFloat { 0 }
-
     /// A compact, neutral marker for keyboard focus on custom pressable buttons.
     /// It deliberately uses the foreground ink instead of the theme accent so focus never becomes
     /// a large blue outline in blue-accented themes.

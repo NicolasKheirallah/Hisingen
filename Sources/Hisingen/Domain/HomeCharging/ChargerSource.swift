@@ -26,16 +26,6 @@ enum ChargerSource: String, Codable, CaseIterable, Identifiable, Sendable {
 
     /// The Hisingen component for Home Assistant owns adaptive charging plans.
     var supportsPlans: Bool { self == .homeAssistant }
-
-    /// What the vendor calls the login, for the setup form.
-    var accountLabel: String {
-        switch self {
-        case .homeAssistant: return "Token"
-        case .easee: return "Easee account"
-        case .zaptec: return "Zaptec account"
-        case .nexBlue: return "myNexBlue account"
-        }
-    }
 }
 
 /// The login a direct charger needs. It lives in the Keychain and nowhere else: never in
@@ -59,6 +49,9 @@ struct DirectChargerSummary: Equatable, Identifiable, Sendable {
     /// The site or installation the vendor files it under, when there is one.
     var siteName: String?
     var isOnline: Bool?
+    /// The vendor's role for this account. NexBlue uses -1 installer, 0 owner, 1 user, 2 admin;
+    /// its schedule reads and writes are owner-only. `nil` when the vendor does not say.
+    var role: Int? = nil
 
     var displayName: String {
         let base = name.isEmpty ? id : name

@@ -122,6 +122,41 @@ enum ElectricityPriceContract: String, CaseIterable, Codable, Sendable, Identifi
     }
 }
 
+/// How the charging planner reads a price. It is derived from the two settings Settings → Electricity
+/// already holds, the rate mode and the contract, so the planner has no choice of its own to make.
+enum PlannerPriceBasis: Sendable, Equatable {
+    case quarterHour
+    case hourly
+    case fixed
+
+    /// The shortest window the planner may propose, and the width of one bar in its chart. A
+    /// 15-minute price can be used in quarter-hour lengths; an hourly price, and a flat rate, in
+    /// whole hours.
+    var granularity: TimeInterval {
+        switch self {
+        case .quarterHour: return 900
+        case .hourly, .fixed: return 3_600
+        }
+    }
+
+    /// What the planner's chart calls the resolution it is drawing.
+    var chartCaption: String {
+        switch self {
+        case .quarterHour: return ElectricityPriceContract.quarterHour.title
+        case .hourly: return ElectricityPriceContract.hourly.title
+        case .fixed: return L10n.text("Fixed rate")
+        }
+    }
+
+    init(mode: ElectricityRateMode, contract: ElectricityPriceContract) {
+        if mode == .fixed {
+            self = .fixed
+        } else {
+            self = contract == .quarterHour ? .quarterHour : .hourly
+        }
+    }
+}
+
 /// Everything needed to turn a stored spot cost into the figure on the user's bill. The
 /// conversion is affine in the spot price, so history stores the raw market cost once and
 /// every display re-derives the billed cost: changing the markup re-prices past sessions.

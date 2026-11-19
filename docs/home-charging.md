@@ -13,6 +13,10 @@ The direct provider reads from NexBlue's cloud and saves its refresh token in th
 
 **Charge now** and **Pause** require a current charger status. After NexBlue accepts the command, Hisingen waits for the charger to report the result.
 
+Open **Charger details** at the foot of the charger card to see what NexBlue reports about the supply: voltage and current in each phase, the current limit, the cable rating, the circuit fuse, the phase mode, and how the charger reaches the cloud. While charging, a line under the session figure gives the current in each phase next to the limit that applies. The limit row says so when the cable or the circuit fuse is lower than the limit you set. Charging uses the lowest of the three, and the car and load balancing can ask for less, so a low current can have a cause the card cannot see. Phase readings older than ten minutes are left out. Home Assistant and the other direct chargers do not report these values, so the list does not appear for them.
+
+Imported NexBlue sessions record how each one began and ended. Open a session in **Log** to see **Started** (at the charger, remotely, by schedule, by an administrator, on plug-in or after an error) and **Ended** (cable unplugged, charge complete, remotely, by schedule, held by load balancing, and others). A power loss or an emergency stop is marked with a warning. **Remotely** means the command came through the NexBlue cloud and not from the charger. Sessions imported before this release gain their reasons the next time they are imported, and a reason Hisingen has no wording for is left out.
+
 Use **Cheapest overnight charge** on the paired vehicle’s charger card to preview a fixed one-time window using your selected Swedish spot price area. Choose a duration from one to eight hours. Hisingen compares the published prices between 18:00 and 07:00 in the charger’s time zone. An owner account, normal scheduling mode, and a free schedule slot are required. An existing active timer blocks a new one. **Save timer** appends the new window and reads it back from the charger. The charger runs the saved window on its own. To cancel it or clear a used slot, open **Schedule** in myNexBlue. The vehicle’s charging schedule and charge limit still apply. [NexBlue scheduling guide](https://nexblue.com/en-nl/apps/hc/mynexblue-app/how-to-set-the-charging-schedule)
 
 In **Settings → Electricity → Home Charging**, **Import earlier sessions** lets you choose up to one year at a time. Both dates are included. Settings shows when the most recent successful import ran and the date range it checked. Older sessions appear when NexBlue still has them and your account can read them. Repeating an import keeps one copy of each session. If a pause ends a session, each session keeps its own energy reading.
@@ -65,11 +69,32 @@ Tibber prices charging sessions with no Home Assistant and no charger involved.
 2. Open **Settings → Electricity → Electricity Supplier**, paste the token and select **Connect and find homes**.
 3. Choose the Tibber home and select **Use this home**.
 
-Hisingen asks Tibber's API (`api.tibber.com`) for 15-minute import prices, newest first and page by page, only for the span of the sessions it is pricing. A price is Tibber's all-in `total`: energy, taxes and Tibber's markup, without the grid fee, so the **Network fee** on the paired charger is the only thing added. A session with fine enough readings (Zaptec's energy details) is priced per interval, and one with only a total (Easee, NexBlue) is priced at the time-weighted average over the session. In both cases a missing price slot is shown as missing and never filled. If Tibber cannot be read (a revoked token, a rate limit, no network), the import still runs, the session is priced from your electricity settings, and Settings says why. The token is stored in the macOS Keychain and deleted by **Disconnect Tibber** or by erasing all data.
+Hisingen asks Tibber's API (`api.tibber.com`) for 15-minute import prices (the subscription's `priceInfoRange`), newest first and page by page, only for the span of the sessions it is pricing. A price is Tibber's all-in `total`: energy, taxes and Tibber's markup, without the grid fee, so the **Network fee** on the paired charger is the only thing added. A session with fine enough readings (Zaptec's energy details) is priced per interval, and one with only a total (Easee, NexBlue) is priced at the time-weighted average over the session. In both cases a missing price slot is shown as missing and never filled. If Tibber cannot be read (a revoked token, a rate limit, no network), the import still runs, the session is priced from your electricity settings, and Settings says why. The token is stored in the macOS Keychain and deleted by **Disconnect Tibber** or by erasing all data.
+
+`priceInfoRange` stops at the slot running now, so a request that reaches past now also reads `priceInfo { today tomorrow }` for the rest of today and for tomorrow (published in the afternoon). Without that the Charging Planner sees no prices ahead and falls back to Elpriser. Each quarter-hour also carries Tibber's own level, which the Charging Planner shows beside "Now" and "Planned average". The home's price area and grid company come from its metering point; the grid company's fee is not published, so it stays the Network fee you type in. Hourly meter readings (`consumption`, about two months back) feed the Car Share of House Load rows in Log, Charging Trends. Live power needs a Tibber Pulse: without one the API answers "no active pulse devices found in home", and Hisingen does not use it.
 
 It works with every charger connection, Home Assistant included: with Tibber connected, its own prices are used first and Home Assistant's `tibber.get_prices` is only the fallback.
 
-Live checks: confirm that the home list shows your home, that a recent session's cost matches the Tibber app within the network fee, and that the first import after connecting prices sessions older than a day (Hisingen reads up to about 40 days of prices, and the cursor paging is the part I could not test against Tibber itself).
+Live checks: confirm that the home list shows your home, that a recent session's cost matches the Tibber app within the network fee, and that the first import after connecting prices sessions older than a day (Hisingen reads up to about 40 days of prices; against a real account the cursor paging reached back to the start of the subscription).
+
+## Connect a Perific house meter
+
+A Perific (formerly Enegic) monitor on the electricity meter's HAN port can show what the whole house draws, next to the charger. This is optional and read only: Hisingen never writes to Perific, never touches its load balancer, and needs no Home Assistant and no paired charger.
+
+1. Open **Settings, Electricity**, find **House Meter** and sign in with the account you use in the Perific app. The login is kept in the macOS Keychain and is never exported. With one meter on the account, Hisingen uses it. With several, pick one.
+2. On the charging card, a muted line under the session figure reads **House 3.4 kW**. While the car charges and both readings are current, a second line splits it: **Car 2.3 kW, rest of the house 1.1 kW**. A **House Meter** disclosure lists voltage and current in each phase and the energy imported today (and exported, when there is any).
+3. In **Log, Charging Trends**, Car Share of House Load reads the meter's hourly import when Tibber is not connected (or does not answer). Tibber stays first because it also reports what each hour cost. The row's information button says which meter the share came from.
+
+What to know about the numbers:
+
+- **Power is apparent power.** The monitor reports current and voltage per phase, not watts. Hisingen multiplies and adds them, so the figure can read slightly above the energy the meter bills when the power factor is poor.
+- **Today's totals are the meter's own difference.** The monitor reports a running total at local midnight and another now, so today's imported and exported energy moves with every read, not every few minutes. History is read for the hourly trends, and for today only when the meter has no completed day yet.
+- **A reading older than three minutes is shown as last known**, with its age, and the car split is left out. The monitor reports about every ten seconds and Hisingen reads every thirty.
+- **Only the grid connection is seen.** The HAN port carries no solar production.
+- **History starts when the monitor was registered.** The cloud answers one point per minute, and Hisingen keeps the readings taken on the hour.
+- **The split is left out when it cannot be right**: when the car's power is more than a tenth above the house's, or either reading is not current.
+
+How it talks to Perific: there is no public API and no local interface. The monitor reports to Enegic's cloud, and Hisingen reads the same cloud the Perific app does, with `PUT /createtoken` for the login (a token that lasts a year, sent bare in `X-Authorization`), `GET /getaccountoverview` for the meter, `PUT /getlatestpackets` for live readings and `PUT /getphasedata` for history. These are not vendor-documented. Everything here was checked against a live account on 2026-11-18 (a Perific One, firmware 4.5.15, packet version 3), but Enegic can change it without notice, and using it may not be something Perific supports. If it stops working, Hisingen shows the meter as unreachable and the rest of the app carries on.
 
 ## Connect through Home Assistant
 
@@ -320,11 +345,19 @@ cannot be reached the card says so and keeps the vehicle's own data working.
 
 ## Load balancing (Perific and Enegic)
 
-Perific stays in charge of dynamic load balancing, and Hisingen does not talk to it. When the
+Perific stays in charge of dynamic load balancing, and Hisingen never writes to it. When the
 charger reports `lb_waiting` the card says **Waiting for available power**; charging well below the
 session's own peak is reported as reduced power that load balancing can cause. An exact current
 allocation would need a live, timestamped signal from Perific on your installation, and none is
-assumed.
+assumed. The optional house meter (see Connect a Perific house meter) only reads what the whole
+house draws.
+
+On the installation this was built against, the Perific account lists the monitor and one Open
+reporter (Perific's partner link, which is how NexBlue appears), and that reporter's own settings
+say `LoadBalancingEnabled: false` with a 20 A rule on the monitor. NexBlue's own site setting is
+also off. So limiting of the charger may not be coming from Perific there at all. Treat
+`lb_waiting` as the charger's word, and confirm in the Perific and NexBlue apps which of them is
+balancing before relying on the wording.
 
 ## Live checks that need your installation
 
@@ -397,7 +430,7 @@ Read from Home Assistant core (`homeassistant/components/nexblue`, dev branch) a
 
 The Tibber action `tibber.get_prices` returns `prices` per home as `start_time` and `price` entries. The documentation's example shows 15-minute spacing.
 
-Perific/Enegic is not read. Reduced charging and waiting are explained from the charger's own status and measured power.
+Load balancing itself is not read from Perific. Reduced charging and waiting are explained from the charger's own status and measured power. The optional house meter is a separate, read-only reading of the whole house.
 
 ## Live checks that need your installation
 

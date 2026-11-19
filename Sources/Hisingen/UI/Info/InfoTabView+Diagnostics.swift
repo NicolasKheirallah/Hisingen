@@ -29,7 +29,7 @@ extension InfoTabView {
         if hasNewer, let latest {
             rows.append(KVRow(L10n.text("Available Version"), latest, symbol: "arrow.down.circle", valueWarning: true))
         }
-        if sw.state != .unknown || sw.rawState != nil {
+        if sw.state != .unknown || sw.rawState != nil || sw.noUpdateAvailable == true {
             rows.append(KVRow(L10n.text("Update State"), stateLabel, symbol: "gearshape.arrow.triangle.2.circlepath",
                               valueWarning: failed))
         }

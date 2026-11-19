@@ -28,16 +28,9 @@ private let usesStandaloneCommandLineTools = selectedDeveloperDirectory() == com
 private let testingFrameworks = "\(commandLineTools)/Library/Developer/Frameworks"
 private let testingLibraries = "\(commandLineTools)/Library/Developer/usr/lib"
 
-/// Complete concurrency checking is enforced for every build path — `swift build`, Xcode,
-/// IDE indexing, `make run` — rather than only when the CI/Makefile pass the CLI flag.
-/// The Swift 6 language mode itself is set per target below.
-private let concurrencySwiftSettings: [SwiftSetting] = [
-    .enableUpcomingFeature("StrictConcurrency")
-]
-
-private let testSwiftSettings: [SwiftSetting] = concurrencySwiftSettings + (usesStandaloneCommandLineTools
+private let testSwiftSettings: [SwiftSetting] = usesStandaloneCommandLineTools
     ? [.unsafeFlags(["-F", testingFrameworks])]
-    : [])
+    : []
 private let testLinkerSettings: [LinkerSetting] = usesStandaloneCommandLineTools
     ? [.unsafeFlags([
         "-F\(testingFrameworks)",
@@ -75,8 +68,7 @@ let package = Package(
                 .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport")
             ],
             path: "Sources/Hisingen",
-            exclude: ["Resources"],
-            swiftSettings: concurrencySwiftSettings
+            exclude: ["Resources"]
         ),
         .testTarget(
             name: "HisingenTests",

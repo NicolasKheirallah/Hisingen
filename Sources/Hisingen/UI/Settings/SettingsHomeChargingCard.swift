@@ -31,25 +31,31 @@ struct SettingsHomeChargingCard: View {
     @State var directSelection = ""
     @State var directFailure: String?
     @State var isSigningIn = false
+    @State var isResuming = false
+    @State private var seededSource = false
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "powerplug", title: L10n.text("Home Charging"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Connect a charger to view its status, control charging, and import sessions."))
-                    .hisType(.caption)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let pairing = model.pairing {
-                    pairedView(pairing)
-                } else {
-                    setupView
-                }
+        SettingsConnectedServiceCard(
+            title: "Home Charging",
+            symbol: "powerplug",
+            detail: "Connect a charger to view its status, control charging, and import sessions."
+        ) {
+            if let pairing = model.pairing {
+                pairedView(pairing)
+            } else {
+                setupView
             }
         }
         .onAppear {
             if address.isEmpty { address = model.savedAddress ?? "" }
             if vin.isEmpty { vin = state?.identity.vin ?? fleet.vehicles.first ?? "" }
+            // A login saved before pairing would otherwise sit behind the Home Assistant choice,
+            // which is what this view starts on every time Settings opens.
+            if !seededSource, model.pairing == nil, source == .homeAssistant,
+               let saved = ChargerSource.allCases.first(where: { model.hasSavedCredentials(for: $0) }) {
+                source = saved
+            }
+            seededSource = true
         }
         .confirmationDialog(L10n.text("Remove Home Assistant from Hisingen?"), isPresented: $confirmsErase, titleVisibility: .visible) {
             Button(L10n.text("Remove Connection and Token"), role: .destructive) { model.eraseEverything(); discovery = nil; token = "" }
@@ -159,24 +165,7 @@ struct SettingsHomeChargingCard: View {
         }
         .hisType(.body, weight: .medium)
 
-        field(L10n.text("Vehicle"), detail: L10n.text("Sessions and plans are tied to this vehicle only. A car being near the charger is not enough.")) {
-            Picker("", selection: $vin) {
-                ForEach(fleet.vehicles, id: \.self) { Text(vehicleTitle($0)).tag($0) }
-            }
-            .labelsHidden()
-            .accessibilityLabel(L10n.text("Vehicle"))
-        }
-        field(L10n.text("Charge location"), detail: L10n.text("The saved location in the car where this charger stands.")) {
-            Picker("", selection: $locationID) {
-                Text(L10n.text("None")).tag("")
-                ForEach(savedLocations) { Text($0.alias.isEmpty ? L10n.text("Unnamed location") : $0.alias).tag($0.id) }
-            }
-            .labelsHidden()
-            .accessibilityLabel(L10n.text("Charge location"))
-        }
-        toggleRow(L10n.text("Other cars also use this charger"),
-                  detail: L10n.text("A shared charger only records a session for this vehicle when the car's own charging overlaps it."),
-                  isOn: $isShared)
+        pairingFields(vehicleDetail: L10n.text("Sessions and plans are tied to this vehicle only. A car being near the charger is not enough."))
         field(L10n.text("Battery sensor for percentage plans"),
               detail: L10n.text("Optional. A sensor Home Assistant keeps on its own, for example from a Polestar integration.")) {
             Picker("", selection: Binding(get: { map.vehicleBattery ?? "" }, set: { map.vehicleBattery = $0.isEmpty ? nil : $0 })) {
@@ -331,6 +320,28 @@ struct SettingsHomeChargingCard: View {
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    func pairingFields(vehicleDetail: String) -> some View {
+        field(L10n.text("Vehicle"), detail: vehicleDetail) {
+            Picker("", selection: $vin) {
+                ForEach(fleet.vehicles, id: \.self) { Text(vehicleTitle($0)).tag($0) }
+            }
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Vehicle"))
+        }
+        field(L10n.text("Charge location"), detail: L10n.text("The saved location in the car where this charger stands.")) {
+            Picker("", selection: $locationID) {
+                Text(L10n.text("None")).tag("")
+                ForEach(savedLocations) { Text($0.alias.isEmpty ? L10n.text("Unnamed location") : $0.alias).tag($0.id) }
+            }
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Charge location"))
+        }
+        toggleRow(L10n.text("Other cars also use this charger"),
+                  detail: L10n.text("A shared charger only records a session for this vehicle when the car's own charging overlaps it."),
+                  isOn: $isShared)
+    }
 
     var savedLocations: [ChargeLocationSnapshot] {
         let snapshot = vin == state?.identity.vin ? state : fleet.snapshot(for: vin)

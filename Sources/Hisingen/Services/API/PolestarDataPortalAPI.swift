@@ -761,8 +761,7 @@ actor PolestarDataPortalAPI {
         do {
             return PortalReading(value: try await authenticatedGET(path, expectedVIN: vin), failedRead: false)
         } catch {
-            try Task.checkCancellation()
-            if error is CancellationError { throw error }
+            try rethrowIfCancelled(error)
             // Paths carry the VIN and the error can echo one, so both stay private.
             logger.warning("Data Portal telemetry failed for \(path, privacy: .private): \(String(describing: error), privacy: .private)")
             if let portalError = error as? PolestarDataPortalError {

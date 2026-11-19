@@ -2,67 +2,70 @@ import SwiftUI
 
 struct NowWeatherButton: View {
     let state: VehicleState
+    let weather: VehicleWeather
 
     @Environment(\.preferencesStore) private var preferences
-    @State private var isShowingDetails = false
+    @State private var showsDetails = false
 
-    var body: some View {
-        if let weather = state.weather, weather.hasCurrentConditions {
-            let temperature = weather.temperatureCelsius.map {
-                Format.temperature(celsius: $0, unit: preferences.temperatureUnit)
-            }
-            let condition = weather.condition.flatMap { $0.isEmpty ? nil : L10n.text($0) }
-            let freshness = state.hasLastKnownWeather ? L10n.text("Last known readings") : nil
-            Button {
-                isShowingDetails.toggle()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: weatherSymbol(weather.condition))
-                        .accessibilityHidden(true)
-                    if let temperature {
-                        Text(temperature)
-                            .monospacedDigit()
-                    }
-                }
-                .hisType(.body, weight: .medium)
-                .foregroundStyle(HisingenTheme.ink)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .frame(minHeight: 28)
-                .background(HisingenTheme.chipFill)
-                .fixedSize()
-            }
-            .buttonStyle(.pressable)
-            .help(L10n.text("Ambient Conditions"))
-            .accessibilityLabel(L10n.text("Ambient Conditions"))
-            .accessibilityValue([temperature, condition, freshness].compactMap { $0 }.joined(separator: ", "))
-            .popover(isPresented: $isShowingDetails, arrowEdge: .bottom) {
-                NowWeatherReadout(state: state, onClose: { isShowingDetails = false })
-                    .frame(width: 320)
-                    .padding(.vertical, 8)
-                    .background(HisingenTheme.popoverSurface)
-            }
+    private var symbol: String {
+        switch weather.condition?.lowercased() {
+        case "clear": "sun.max"
+        case "overcast", "cloudy": "cloud"
+        case "fog": "cloud.fog"
+        case "drizzle": "cloud.drizzle"
+        case "rain", "rain showers": "cloud.rain"
+        case "freezing rain", "freezing drizzle": "cloud.sleet"
+        case "snow", "snow grains", "snow showers": "cloud.snow"
+        case "thunderstorm": "cloud.bolt.rain"
+        default: "cloud.sun"
         }
     }
 
-    private func weatherSymbol(_ condition: String?) -> String {
-        switch condition {
-        case "Clear": return "sun.max"
-        case "Partly Cloudy": return "cloud.sun"
-        case "Overcast": return "cloud"
-        case "Fog": return "cloud.fog"
-        case "Drizzle", "Freezing Drizzle": return "cloud.drizzle"
-        case "Rain", "Freezing Rain", "Rain Showers": return "cloud.rain"
-        case "Snow", "Snow Grains", "Snow Showers": return "cloud.snow"
-        case "Thunderstorm": return "cloud.bolt"
-        default: return "thermometer.medium"
+    /// The figure the symbol stands for, so the reader does not have to open the popover for it.
+    private var temperatureText: String? {
+        weather.temperatureCelsius.map { Format.temperature(celsius: $0, unit: preferences.temperatureUnit) }
+    }
+
+    private var summary: String {
+        let condition = weather.condition.flatMap { $0.isEmpty ? nil : L10n.text($0) }
+        let temperature = weather.temperatureCelsius.map {
+            Format.temperature(celsius: $0, unit: preferences.temperatureUnit)
+        }
+        let values = [condition, temperature].compactMap { $0 }
+        let context = state.hasLastKnownWeather ? [L10n.text("Last known readings")] : []
+        return (context + values).joined(separator: " · ")
+    }
+
+    var body: some View {
+        Button {
+            showsDetails.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .hisType(.title)
+                if let temperatureText {
+                    Text(temperatureText)
+                        .hisType(.subhead)
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .frame(minWidth: 36, minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(L10n.text("Ambient Conditions"))
+        .accessibilityValue(summary)
+        .help(summary.isEmpty ? L10n.text("Ambient Conditions") : summary)
+        .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
+            NowWeatherReadout(state: state)
+                .frame(width: 310)
         }
     }
 }
 
 struct NowWeatherReadout: View {
     let state: VehicleState
-    var onClose: (() -> Void)? = nil
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -81,25 +84,10 @@ struct NowWeatherReadout: View {
                     CardHeaderWithAccessory(
                         heading: CardHeader(symbol: "cloud.sun", title: L10n.text("Ambient Conditions"), color: HisingenTheme.ink)
                     ) {
-                        if let onClose {
-                            Button(action: onClose) {
-                                Image(systemName: "xmark")
-                                    .hisType(.label)
-                                    .foregroundStyle(HisingenTheme.ink)
-                            }
-                            .buttonStyle(.pressable)
-                            .keyboardShortcut(.cancelAction)
-                            .help(L10n.text("Close"))
-                            .accessibilityLabel(L10n.text("Close"))
-                        } else {
-                            observation(weather.timestamp)
-                        }
-                    }
-                    if onClose != nil {
                         observation(weather.timestamp)
                     }
                     PanelRule()
-                    if onClose != nil || typeSize.isAccessibilitySize {
+                    if typeSize.isAccessibilitySize {
                         stackedReadings(readings)
                     } else {
                         ViewThatFits(in: .horizontal) {

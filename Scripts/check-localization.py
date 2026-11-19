@@ -40,11 +40,14 @@ WORD_RE = re.compile(r"[^\W\d_]+")
 UNIT_WORDS = {
     "kwh", "wh", "kw", "kwp", "km", "mi", "mph", "kg", "kr", "mpg", "ms", "min", "hr", "hrs",
     "h", "l", "v", "a", "w", "c", "f", "db", "m", "s", "d", "pm", "ac", "dc",
+    # Subunit of the Swedish and Norwegian krona, written the same in every locale.
+    "öre", "øre",
 }
 # Brand and product names that are never translated.
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}
-# Exact values that are intentionally identical to English.
-ALLOWED_VALUES = {"Hisingen Glass"}
+# Exact values that are intentionally identical to English. "Tariff" is the word in Swedish,
+# Norwegian bokmål and Nynorsk as well, so translating it would mean inventing a different one.
+ALLOWED_VALUES = {"Hisingen Glass", "Tariff"}
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.
 PLACEHOLDER_VALUE = "undefined"

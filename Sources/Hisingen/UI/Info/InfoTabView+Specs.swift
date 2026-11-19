@@ -90,25 +90,18 @@ extension InfoTabView {
                                   symbol: "clock.badge.checkmark"))
             }
         }
-        for timer in state.climateTimers.filter(\.isActive).prefix(3) {
-            rows.append(KVRow(L10n.text("Ready at"), Format.scheduleText(timer), symbol: "clock.badge.checkmark"))
-        }
-        for schedule in state.energy.schedules.filter(\.isActive).prefix(4) {
-            var title = schedule.kind == .departure
-                ? L10n.text("Departure Schedule")
-                : L10n.text("Charging Schedule")
-            if let location = schedule.locationName, !location.isEmpty {
-                title = "\(location) \(title)"
-            }
-            rows.append(KVRow(title, Format.scheduleText(schedule), symbol: "calendar.badge.clock"))
-        }
-
         guard !rows.isEmpty else { return AnyView(EmptyView()) }
 
         return AnyView(Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "carseat.left", title: L10n.text("Interior & Cabin"), color: HisingenTheme.chartInfo)
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                if let onNavigateToPlan, preferences.features.contains(.remoteClimate) {
+                    NavigationRow(
+                        title: L10n.text("Open in Plan"),
+                        accessibilityName: "\(L10n.text("Open in Plan")), \(L10n.text("Climate"))"
+                    ) { onNavigateToPlan(.controlsClimate) }
+                }
                 if let rawFields = state.climateStatus?.unknownWireFields, !rawFields.isEmpty {
                     DisclosureGroup(L10n.format("Undecoded Backend Fields (%d)", rawFields.count)) {
                         ForEach(rawFields.indices, id: \.self) { index in
@@ -352,15 +345,13 @@ extension InfoTabView {
                 HStack {
                     Spacer()
                     Button {
-                        let panel = NSSavePanel()
-                        panel.allowedContentTypes = [.commaSeparatedText]
-                        panel.nameFieldStringValue = "Hisingen-Factory-Passport-\(state.identity.vin.suffix(6)).csv"
-                        guard panel.runModal() == .OK, let url = panel.url else { return }
-                        do {
-                            try Self.factoryPassportCSV(state: state, preferences: preferences)
-                                .write(to: url, atomically: true, encoding: .utf8)
-                        } catch {
-                            reportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+                        FileExport.save(Self.factoryPassportCSV(state: state, preferences: preferences),
+                                        type: .commaSeparatedText,
+                                        filename: "Hisingen-Factory-Passport-\(state.identity.vin.suffix(6)).csv",
+                                        modal: true) { url, error in
+                            if let error {
+                                reportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+                            }
                         }
                     } label: {
                         Label(L10n.text("Export Factory Passport (CSV)"), systemImage: "square.and.arrow.down")
@@ -436,7 +427,7 @@ extension InfoTabView {
                         HStack(alignment: .top, spacing: 7) {
                             Image(systemName: "calendar.badge.exclamationmark")
                                 .foregroundStyle(.secondary)
-                            Text(L10n.text("Warranty dates are not supplied by the vehicle API. Add the verified in-service date in Settings → Vehicle Data if you want it recorded here."))
+                            Text(L10n.text("Add the in-service date from your warranty documents."))
                                 .hisType(.caption)
                                 .foregroundStyle(.secondary)
                                 .hisCaptionLeading()
@@ -445,6 +436,10 @@ extension InfoTabView {
                         }
                         .padding(8)
                         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 0, style: .continuous))
+                    }
+
+                    if let onNavigateToSettings {
+                        NavigationRow(title: L10n.text("Edit In-Service Date")) { onNavigateToSettings(.vehicleReferences) }
                     }
 
                     if let userInServiceDate {

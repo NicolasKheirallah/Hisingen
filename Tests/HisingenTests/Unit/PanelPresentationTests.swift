@@ -17,6 +17,24 @@ struct PanelPresentationTests {
         #expect(upcoming.map(\.next) == [now + 120, now + 3_600])
     }
 
+    @Test func aGlobalChargingWindowRepeatsDailyWithoutWeekdays() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let morning = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 8
+        )))
+        let schedule = VehicleSchedule(
+            kind: .globalCharging, startHour: 7, startMinute: 30,
+            endHour: 10, endMinute: 0, weekdays: [], isActive: true
+        )
+        let tomorrow = try #require(calendar.date(from: DateComponents(
+            year: 2026, month: 11, day: 19, hour: 7, minute: 30
+        )))
+
+        #expect(schedule.validationMessage(expectedKind: .globalCharging) == nil)
+        #expect(PlanTimeline.nextStart(of: schedule, after: morning, calendar: calendar) == tomorrow)
+    }
+
     @Test func chargeTraceDoesNotMoveOutOfWindowReadingsOntoTheBoundary() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let window = start...(start + 3_600)

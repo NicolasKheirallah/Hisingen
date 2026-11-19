@@ -20,12 +20,6 @@ enum Format {
         powerKw(Double(watts) / 1_000)
     }
 
-    private static let groupedDistanceFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-
     static func distance(km: Int, grouped: Bool = false, unit: DistanceUnit) -> String {
         let parts = distanceParts(km: km, grouped: grouped, unit: unit)
         return "\(parts.value) \(parts.unit)"
@@ -35,33 +29,20 @@ enum Format {
     /// localized presentation string back into data.
     static func distanceParts(km: Int, grouped: Bool = false, unit: DistanceUnit) -> DistanceParts {
         let value = unit.convert(km: km)
-        groupedDistanceFormatter.locale = L10n.displayLocale
         if grouped {
             return DistanceParts(
-                value: groupedDistanceFormatter.string(from: NSNumber(value: value)) ?? String(value),
+                value: formattedNumber(Double(value), decimals: 0, grouping: true) ?? String(value),
                 unit: unit.suffix
             )
         }
         return DistanceParts(value: String(value), unit: unit.suffix)
     }
 
-    /// Locale decimal separator, grouping deliberately off: the non-grouped `Int` variant above
-    /// never grouped either, and a live catch found the fixed "." rendering "591.0 km" beside
-    /// "238,2 kWh" on the same sv-SE History screen.
-    private static let decimalDistanceFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = false
-        return formatter
-    }()
-
+    /// Locale decimal separator, grouping off unless asked: a live catch found a fixed "."
+    /// rendering "591.0 km" beside "238,2 kWh" on the same sv-SE History screen.
     static func distance(km: Double, decimals: Int = 1, unit: DistanceUnit, grouped: Bool = false) -> String {
         let value = unit == .kilometers ? km : km * UnitConversion.kilometersPerMile
-        decimalDistanceFormatter.locale = L10n.displayLocale
-        decimalDistanceFormatter.usesGroupingSeparator = grouped
-        decimalDistanceFormatter.minimumFractionDigits = decimals
-        decimalDistanceFormatter.maximumFractionDigits = decimals
-        let formatted = decimalDistanceFormatter.string(from: NSNumber(value: value))
+        let formatted = formattedNumber(value, decimals: decimals, grouping: grouped)
             ?? String(format: "%.*f", decimals, value)
         return "\(formatted) \(unit.suffix)"
     }
@@ -111,28 +92,8 @@ enum Format {
         return isLocked ? "lock.fill" : "lock.open.fill"
     }
 
-    /// Completion-time rendering shares one formatter per time zone instead of building a new
-    /// `DateFormatter` per call – this feeds a computed property evaluated on every popover
-    /// render while charging.
-    private static let completionTimeLock = NSLock()
-    nonisolated(unsafe) private static var completionTimeFormatters: [String: DateFormatter] = [:]
-
     static func completionTime(from minutes: Int, baseDate: Date = Date(), timeZone: TimeZone = .current) -> String {
-        let target = baseDate.addingTimeInterval(TimeInterval(minutes * 60))
-        let key = timeZone.identifier
-        completionTimeLock.lock()
-        if let cached = completionTimeFormatters[key] {
-            completionTimeLock.unlock()
-            return cached.string(from: target)
-        }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        formatter.timeZone = timeZone
-        formatter.locale = L10n.displayLocale
-        completionTimeFormatters[key] = formatter
-        completionTimeLock.unlock()
-        return formatter.string(from: target)
+        shortTime(date: baseDate.addingTimeInterval(TimeInterval(minutes * 60)), timeZone: timeZone)
     }
 
     static func chargingRateKmPerHour(powerWatts: Int, consumptionWhPerKm: Double = UnitConversion.defaultConsumptionWhPerKm) -> Int {
@@ -172,21 +133,40 @@ enum Format {
     /// Locale-aware decimal, so a comma-decimal system never renders "12,3" as "12.3" (or a
     /// grouped thousands separator lands mid-number). Shared across the History dashboard's
     /// many small numeric labels.
-    private static let decimalFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter
-    }()
-    private static let decimalFormatterLock = NSLock()
+    private struct NumberFormatKey: Hashable {
+        let locale: String
+        let decimals: Int
+        let grouping: Bool
+    }
+    private static let numberFormatterLock = NSLock()
+    nonisolated(unsafe) private static var numberFormatters: [NumberFormatKey: NumberFormatter] = [:]
+
+    /// One configured formatter per (language, decimals, grouping), built once. Re-pointing a single
+    /// shared formatter at a new locale and digit count on every call made ICU reconfigure each
+    /// time consecutive labels differed in precision, which is what a dashboard does. Keying on the
+    /// locale identifier keeps a language switch effective on the very next call.
+    private static func formattedNumber(_ value: Double, decimals: Int, grouping: Bool) -> String? {
+        let locale = L10n.displayLocale
+        let key = NumberFormatKey(locale: locale.identifier, decimals: decimals, grouping: grouping)
+        numberFormatterLock.lock()
+        defer { numberFormatterLock.unlock() }
+        let formatter: NumberFormatter
+        if let cached = numberFormatters[key] {
+            formatter = cached
+        } else {
+            formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = locale
+            formatter.minimumFractionDigits = decimals
+            formatter.maximumFractionDigits = decimals
+            formatter.usesGroupingSeparator = grouping
+            numberFormatters[key] = formatter
+        }
+        return formatter.string(from: NSNumber(value: value))
+    }
 
     private static func decimal(_ value: Double, decimals: Int, grouping: Bool = false) -> String {
-        decimalFormatterLock.lock()
-        defer { decimalFormatterLock.unlock() }
-        decimalFormatter.locale = L10n.displayLocale
-        decimalFormatter.minimumFractionDigits = decimals
-        decimalFormatter.maximumFractionDigits = decimals
-        decimalFormatter.usesGroupingSeparator = grouping
-        return decimalFormatter.string(from: NSNumber(value: value)) ?? String(format: "%.*f", decimals, value)
+        formattedNumber(value, decimals: decimals, grouping: grouping) ?? String(format: "%.*f", decimals, value)
     }
 
     /// "12.3 kWh" with the platform's decimal separator.
@@ -256,44 +236,61 @@ enum Format {
         return L10n.format("%d d ago", seconds / 86_400)
     }
 
-    /// The shared formatters below are cached objects whose `locale` is refreshed on every
-    /// access, so a reader who switches the interface language sees dates follow immediately
-    /// without a process restart. Exposure is deliberately through computed properties that
-    /// do that one assignment first.
-    private static let _dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    static var dateTimeFormatter: DateFormatter {
-        _dateTimeFormatter.locale = L10n.displayLocale
-        return _dateTimeFormatter
+    private struct DateFormatterKey: Hashable {
+        let locale: Locale
+        let timeZone: TimeZone
+        let dateStyle: DateFormatter.Style
+        let timeStyle: DateFormatter.Style
+        let hourOnly: Bool
     }
 
-    private static let _dateFormatter: DateFormatter = {
+    private static let dateFormattersLock = NSLock()
+    nonisolated(unsafe) private static var dateFormatters: [DateFormatterKey: DateFormatter] = [:]
+
+    static func localizedDateFormatter(
+        dateStyle: DateFormatter.Style = .none,
+        timeStyle: DateFormatter.Style = .short,
+        timeZone: TimeZone = .current,
+        locale: Locale = L10n.clockLocale,
+        hourOnly: Bool = false
+    ) -> DateFormatter {
+        let key = DateFormatterKey(
+            locale: locale, timeZone: timeZone, dateStyle: dateStyle,
+            timeStyle: timeStyle, hourOnly: hourOnly
+        )
+        dateFormattersLock.lock()
+        defer { dateFormattersLock.unlock() }
+        if let cached = dateFormatters[key] { return cached }
+
         let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        if hourOnly {
+            formatter.setLocalizedDateFormatFromTemplate("j")
+        } else {
+            formatter.dateStyle = dateStyle
+            formatter.timeStyle = timeStyle
+        }
+        dateFormatters[key] = formatter
         return formatter
-    }()
+    }
+
+    static var dateTimeFormatter: DateFormatter { localizedDateFormatter(dateStyle: .short) }
 
     static var dateFormatter: DateFormatter {
-        _dateFormatter.locale = L10n.displayLocale
-        return _dateFormatter
+        localizedDateFormatter(dateStyle: .short, timeStyle: .none, locale: L10n.displayLocale)
     }
 
-    private static let _timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    static var timeFormatter: DateFormatter { localizedDateFormatter() }
 
-    static var timeFormatter: DateFormatter {
-        _timeFormatter.locale = L10n.displayLocale
-        return _timeFormatter
+    static let clockTimeZone = TimeZone(secondsFromGMT: 0)!
+
+    static func clockDate(hour: Int, minute: Int = 0) -> Date {
+        Date(timeIntervalSince1970: TimeInterval(hour * 3_600 + minute * 60))
+    }
+
+    static func clockTime(hour: Int, minute: Int = 0) -> String {
+        shortTime(date: clockDate(hour: hour, minute: minute), timeZone: clockTimeZone)
     }
 
     /// Shared ISO-8601 formatter for exports (previously constructed per session row).
@@ -307,16 +304,16 @@ enum Format {
         dateFormatter.string(from: date)
     }
 
-    static func shortTime(date: Date) -> String {
-        timeFormatter.string(from: date)
+    static func shortTime(date: Date, timeZone: TimeZone = .current) -> String {
+        localizedDateFormatter(timeZone: timeZone).string(from: date)
     }
 
     static func scheduleText(_ schedule: VehicleSchedule) -> String {
         guard let hour = schedule.startHour, let minute = schedule.startMinute else { return L10n.text("Active") }
-        let start = String(format: "%02d:%02d", hour, minute)
+        let start = clockTime(hour: hour, minute: minute)
         let window: String
         if let endHour = schedule.endHour, let endMinute = schedule.endMinute {
-            window = "\(start)–\(String(format: "%02d:%02d", endHour, endMinute))"
+            window = "\(start)–\(clockTime(hour: endHour, minute: endMinute))"
         } else { window = start }
         guard !schedule.weekdays.isEmpty else { return window }
         return "\(schedule.weekdays.map(\.shortName).joined(separator: ", ")) · \(window)"

@@ -134,7 +134,7 @@ enum DiagnosticLogExporter {
         let info = Bundle.main.infoDictionary
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return [
-            "exportedAt": ISO8601DateFormatter().string(from: now),
+            "exportedAt": Format.iso8601.string(from: now),
             "appVersion": info?["CFBundleShortVersionString"] ?? "development",
             "appBuild": info?["CFBundleVersion"] ?? "-",
             "platform": "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
@@ -164,7 +164,7 @@ enum DiagnosticLogExporter {
                            vdmsDiscovery: VDMSDiscoveryDiagnostics? = nil,
                            commandAudits: [[String: Any]] = [],
                            databaseStats: [String: Any]? = nil) throws -> Data {
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
 
         var apiRows: [[String: Any]] = []
         var payloadBudget = apiPayloadBudgetBytes
@@ -354,7 +354,7 @@ enum DiagnosticLogExporter {
         var commandAudits: [[String: Any]] = []
         var databaseStats: [String: Any]?
         if let database {
-            let formatter = ISO8601DateFormatter()
+            let formatter = Format.iso8601
             // Newest first; VINs and free-text errors pass the redactor on the way out.
             commandAudits = database.history.recentCommandAudits(for: nil, limit: 25).map { audit in
                 [

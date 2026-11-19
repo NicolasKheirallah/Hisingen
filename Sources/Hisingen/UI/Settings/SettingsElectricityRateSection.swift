@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings → Display, Units & Energy → "Electricity Rate". One switch decides where every
+/// Settings → Electricity → "Electricity Rate". One switch decides where every
 /// charge-cost figure comes from: a rate typed in (with the optional night tariff), or the
 /// market spot price for the user's zone plus their provider's markup. Automatic mode asks
 /// for the contract type (15-minute or hourly settlement), the provider, and the markup and
@@ -23,7 +23,8 @@ struct SettingsElectricityRateSection: View {
     private enum PriceLookup: Equatable {
         case loading
         case unavailable
-        case spot(Double)
+        /// The per-kWh price the settings produce, and which source it came from.
+        case rate(Double, origin: PlannerPriceOrigin, tibberUnavailable: Bool)
     }
 
     private var preferences: PreferencesStore { binder.preferences }
@@ -103,17 +104,6 @@ struct SettingsElectricityRateSection: View {
     private var automaticRows: some View {
         VStack(spacing: 10) {
             pickerRow(
-                title: "Price Zone", detail: "Spot-price area you live in",
-                accessibility: "Electricity price zone"
-            ) {
-                Picker("", selection: binder(\.electricityPriceZone, .presentation)) {
-                    ForEach(ElspotZone.allCases) { zone in
-                        Text(zone.title).tag(zone)
-                    }
-                }
-            }
-
-            pickerRow(
                 title: "Contract", detail: "How your contract settles the market price",
                 accessibility: "Electricity contract type"
             ) {
@@ -191,36 +181,53 @@ struct SettingsElectricityRateSection: View {
     /// What the settings produce right now, so a wrong markup shows up as a wrong number
     /// before it shows up in History.
     private var currentPriceRow: some View {
-        HStack(spacing: 8) {
-            Text(L10n.text("Current price"))
-                .hisType(.body, weight: .medium)
-            Spacer()
-            switch priceLookup {
-            case .loading:
-                Text(L10n.text("Fetching prices…"))
-                    .hisType(.label)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(L10n.text("Current price"))
+                    .hisType(.body, weight: .medium)
+                Spacer()
+                switch priceLookup {
+                case .loading:
+                    Text(L10n.text("Fetching prices…"))
+                        .hisType(.label)
+                        .foregroundStyle(.secondary)
+                case .unavailable:
+                    Text(L10n.text("Market prices unavailable"))
+                        .hisType(.label)
+                        .foregroundStyle(.secondary)
+                case .rate(let rate, _, _):
+                    let price = L10n.format("%@/kWh", Format.currency(rate, symbol: preferences.currencySymbol, decimals: 2))
+                    Text(price)
+                        .hisType(.body, weight: .bold)
+                        .hisTelemetryValue(price, reduceMotion: reduceMotion)
+                }
+            }
+            if let basis = priceBasis {
+                Text(basis)
+                    .hisType(.caption)
                     .foregroundStyle(.secondary)
-            case .unavailable:
-                Text(L10n.text("Market prices unavailable"))
-                    .hisType(.label)
-                    .foregroundStyle(.secondary)
-            case .spot(let spot):
-                let price = L10n.format("%@/kWh", Format.currency(policy.retailPrice(spotSekPerKwh: spot), symbol: preferences.currencySymbol, decimals: 2))
-                Text(price)
-                    .hisType(.body, weight: .bold)
-                    .hisTelemetryValue(price, reduceMotion: reduceMotion)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .combine)
     }
 
+    /// Says where the figure above comes from, because with Tibber connected the markup fields below
+    /// do not move it.
+    private var priceBasis: String? {
+        guard case .rate(_, let origin, let tibberUnavailable) = priceLookup else { return nil }
+        if origin == .tibber {
+            return L10n.text("From Tibber, taxes included. The markup below applies to market prices only.")
+        }
+        return tibberUnavailable ? L10n.text("Tibber is unavailable. Market price plus your markup.") : nil
+    }
+
     private func loadCurrentPrice() async {
         guard preferences.electricityRateMode == .automatic else { return }
         priceLookup = .loading
-        let prices = await ElectricityPriceService.shared.prices(for: preferences.electricityPriceZone)
-        let settled = preferences.electricityPriceContract.settle(prices)
-        if let spot = ChargingPlanner.currentPrice(prices: settled, at: Date()) {
-            priceLookup = .spot(spot)
+        let prices = await PlannerPriceProvider.shared.resolve(zone: preferences.electricityPriceZone)
+        if let rate = prices.currentRate(policy: policy, at: Date()) {
+            priceLookup = .rate(rate, origin: prices.origin, tibberUnavailable: prices.isFallback)
         } else {
             priceLookup = .unavailable
         }
@@ -265,7 +272,7 @@ struct SettingsElectricityRateSection: View {
                             .hisType(.label)
                             .foregroundStyle(.secondary)
                         Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
-                            Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffStartHour))
+                            Text(Format.clockTime(hour: preferences.nightTariffStartHour))
                                 .hisType(.label, design: .monospaced)
                         }
                         .controlSize(.small)
@@ -273,7 +280,7 @@ struct SettingsElectricityRateSection: View {
                             .hisType(.label)
                             .foregroundStyle(.secondary)
                         Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
-                            Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffEndHour))
+                            Text(Format.clockTime(hour: preferences.nightTariffEndHour))
                                 .hisType(.label, design: .monospaced)
                         }
                         .controlSize(.small)

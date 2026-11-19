@@ -411,15 +411,19 @@ struct ChargerSourceTests {
         """
         let pairing = try JSONDecoder.iso.decode(HomeChargingPairing.self, from: Data(legacy.utf8))
         #expect(pairing.source == .homeAssistant)
+        #expect(pairing.chargerRole == nil)
+        #expect(pairing.canControlSchedule)
     }
 
     @Test("A direct pairing round-trips with its source and carries no Home Assistant address")
     func directRoundTrip() throws {
         let pairing = HomeChargingPairing(baseURL: "", chargerID: "EH1", chargerName: "Garage", entities: HomeChargerEntityMap(),
-                                          vin: "YSM", locationID: nil, locationAlias: "Home", source: .easee)
+                                          vin: "YSM", locationID: nil, locationAlias: "Home", source: .easee,
+                                          chargerRole: 0)
         let data = try JSONEncoder.sortedISO.encode(pairing)
         let decoded = try JSONDecoder.iso.decode(HomeChargingPairing.self, from: data)
         #expect(decoded.source == .easee)
+        #expect(decoded.chargerRole == 0)
         #expect(decoded.baseURL.isEmpty)
         #expect(!String(decoding: data, as: UTF8.self).contains("password"))
     }
@@ -429,6 +433,21 @@ struct ChargerSourceTests {
         #expect(ChargerSource.homeAssistant.supportsPlans)
         #expect(!ChargerSource.easee.supportsPlans && ChargerSource.easee.isDirect)
         #expect(!ChargerSource.zaptec.supportsPlans && ChargerSource.zaptec.isDirect)
+    }
+
+    @Test("Only the owner's role keeps the schedule control")
+    func scheduleControlNeedsOwner() {
+        func pairing(_ role: Int?) -> HomeChargingPairing {
+            HomeChargingPairing(baseURL: "", chargerID: "NX1", chargerName: "NexBlue", entities: HomeChargerEntityMap(),
+                                vin: "YSM", locationID: nil, locationAlias: "Home", source: .nexBlue,
+                                chargerRole: role)
+        }
+        #expect(pairing(0).canControlSchedule)
+        #expect(!pairing(1).canControlSchedule)
+        #expect(!pairing(-1).canControlSchedule)
+        #expect(!pairing(2).canControlSchedule)
+        // A pairing saved before the role was stored keeps the control; the provider still refuses.
+        #expect(pairing(nil).canControlSchedule)
     }
 
     @Test("A session's energy source names the vendor cloud it came from")

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// App name, version/build, and author links at the foot of the About section.
+/// App and build information at the foot of Updates.
 @MainActor
 struct SettingsVersionFooter: View {
     var body: some View {
@@ -45,13 +45,7 @@ struct SettingsVersionFooter: View {
                 .buttonStyle(.link)
                 .hisType(.caption, weight: .medium)
             }
-            Label(
-                L10n.text("Credentials stay in Keychain. Vehicle history stays on this Mac unless you export it."),
-                systemImage: "lock.shield"
-            )
-            .hisType(.micro)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
+
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)

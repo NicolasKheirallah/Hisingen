@@ -22,10 +22,10 @@ extension HistoryDashboardView {
         // series' gap segments apply to it unchanged rather than needing a second rule.
         let smoothed = smoothedBase
         let smoothedSegmentByID = gapSegmentIndex(of: smoothedBase, timestamp: \.timestamp)
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "gauge.high", title: L10n.text("Consumption Trend"), color: HisingenTheme.chartPositive)
+                    HistorySectionHeading(symbol: "gauge.high", title: L10n.text("Consumption Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let average {
                         Text(preferences.energyConsumptionUnit.format(kwhPer100Km: average))
@@ -33,61 +33,64 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                     }
                 }
-                Chart {
+                let unit = preferences.energyConsumptionUnit
+                let plotAverage = average.map { unit.plotValue(kwhPer100Km: $0) }
+                HistoryScrubChart(items: points, date: { $0.timestamp },
+                                  callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(unit.format(kwhPer100Km: $0.kwhPer100Km))" }) {
+                    // Raw readings are the evidence: muted points on a thin line. The moving
+                    // average is the reading of them, so it is the solid, heavier line.
                     ForEach(points) { point in
                         LineMark(
                             x: .value(L10n.text("Date"), point.timestamp),
-                            y: .value(L10n.text("Consumption"), point.kwhPer100Km),
+                            y: .value(L10n.text("Consumption"), unit.plotValue(kwhPer100Km: point.kwhPer100Km)),
                             series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
                         )
-                        .foregroundStyle(HisingenTheme.chartInfo)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .interpolationMethod(.linear)
                         PointMark(
                             x: .value(L10n.text("Date"), point.timestamp),
-                            y: .value(L10n.text("Consumption"), point.kwhPer100Km)
+                            y: .value(L10n.text("Consumption"), unit.plotValue(kwhPer100Km: point.kwhPer100Km))
                         )
                         .symbolSize(14)
-                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.85))
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.6))
                     }
-                    // Split by the same gap rule as the raw reading. It used to run as one
-                    // unbroken line across every gap, so an average drawn through a fortnight of
-                    // missing data looked exactly like an average drawn through a fortnight of
-                    // readings, and the app contradicted the gap rule it applies three lines above.
+                    // Split by the same gap rule as the raw reading, so an average drawn through a
+                    // fortnight of missing data does not look like one drawn through readings.
                     ForEach(smoothed) { point in
                         LineMark(
                             x: .value(L10n.text("Date"), point.timestamp),
-                            y: .value(L10n.text("Smoothed"), point.value),
+                            y: .value(L10n.text("Smoothed"), unit.plotValue(kwhPer100Km: point.value)),
                             series: .value(L10n.text("Segment"), smoothedSegmentByID[point.id] ?? 0)
                         )
-                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.4))
-                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 3]))
-                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(HisingenTheme.chartInfo)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                        .interpolationMethod(.linear)
                     }
-                    if let scrubEfficiency, let hit = HistoryInsights.nearest(to: scrubEfficiency, in: points, timestamp: \.timestamp) {
-                        RuleMark(x: .value(L10n.text("Date"), hit.timestamp))
-                            .foregroundStyle(Color.primary.opacity(0.25))
-                            .annotation(position: .top, spacing: 0,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                Text("\(Format.dateFormatter.string(from: hit.timestamp)) · \(preferences.energyConsumptionUnit.format(kwhPer100Km: hit.kwhPer100Km))")
-                                    .historyScrubCallout()
-                            }
+                    if let plotAverage {
+                        RuleMark(y: .value(L10n.text("Average consumption"), plotAverage))
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                 }
-                .chartXSelection(value: $scrubEfficiency)
+                .historyTimeAxis(spanning: points.map(\.timestamp))
+                .historyYAxis(unit.title)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Energy consumption trend chart"))
-                .accessibilityValue(chartAccessibilityValue(points: smoothed.map { $0.value }))
+                .accessibilityValue(chartAccessibilityValue(points: smoothed.map { unit.plotValue(kwhPer100Km: $0.value) }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Consumption Trend"),
-                    yLabel: "kWh/100km",
-                    points: points.map { ($0.timestamp, $0.kwhPer100Km) }
+                    yLabel: unit.title,
+                    points: points.map { ($0.timestamp, unit.plotValue(kwhPer100Km: $0.kwhPer100Km)) }
                 ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 if !smoothed.isEmpty {
                     HStack(spacing: 10) {
-                        legendSwatch(HisingenTheme.chartInfo, L10n.text("Reading"))
-                        legendSwatch(HisingenTheme.chartInfo.opacity(0.4), L10n.text("5-point average"), dashed: true)
+                        HistoryChartLegendItem(color: HisingenTheme.chartInfo.opacity(0.6), label: L10n.text("Reading"))
+                        HistoryChartLegendItem(color: HisingenTheme.chartInfo, label: L10n.text("5-point average"))
+                        if plotAverage != nil {
+                            HistoryChartLegendItem(color: HisingenTheme.inkMuted, label: L10n.text("Average consumption"), dashed: true)
+                        }
                         Spacer()
                     }
                 }
@@ -97,6 +100,8 @@ extension HistoryDashboardView {
                         .hisType(.micro).foregroundStyle(.secondary)
                 }
                 seasonalRow(seasonal)
+                costPerDistanceStat(averageKwhPer100Km: average)
+                energyUseByMonthSection
                 if state.hasFreshReading(.battery), let battery = state.energy.batteryPercentage,
                    let estimate = HistoryInsights.historicalRange(
                     from: telemetryRecords, vin: state.identity.vin,
@@ -148,11 +153,7 @@ extension HistoryDashboardView {
     }
 
     func legendSwatch(_ color: Color, _ label: String, dashed: Bool = false) -> some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 0).fill(color).frame(width: 14, height: 2.5)
-                .overlay(dashed ? RoundedRectangle(cornerRadius: 0).stroke(color, style: StrokeStyle(lineWidth: 2.5, dash: [2, 2])) : nil)
-            Text(label).hisType(.nano).foregroundStyle(.secondary)
-        }
+        HistoryChartLegendItem(color: color, label: label, dashed: dashed)
     }
 
     // MARK: - Consumption trend (combustion / hybrid)
@@ -161,10 +162,10 @@ extension HistoryDashboardView {
         let points = combustionConsumptionPoints
         let segmentByID = gapSegmentIndex(of: points, timestamp: \.timestamp)
         let average = points.isEmpty ? nil : points.reduce(0) { $0 + $1.kwhPer100Km } / Double(points.count)
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "fuelpump", title: L10n.text("Fuel Consumption Trend"), color: HisingenTheme.semanticWarning)
+                    HistorySectionHeading(symbol: "fuelpump", title: L10n.text("Fuel Consumption Trend"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     if let average {
                         Text(Format.fuelEconomy(lPer100Km: average, unit: preferences.fuelEconomyUnit))
@@ -172,24 +173,35 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                     }
                 }
-                Chart(points) { point in
-                    LineMark(
-                        x: .value(L10n.text("Date"), point.timestamp),
-                        y: .value(L10n.text("Consumption"), point.kwhPer100Km),
-                        series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
-                    )
-                    .foregroundStyle(HisingenTheme.chartAttention)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                    .interpolationMethod(.catmullRom)
+                let fuelUnit = preferences.fuelEconomyUnit
+                HistoryScrubChart(items: points, date: { $0.timestamp },
+                                  callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(Format.fuelEconomy(lPer100Km: $0.kwhPer100Km, unit: fuelUnit))" }) {
+                    ForEach(points) { point in
+                        LineMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), fuelUnit.plotValue(lPer100Km: point.kwhPer100Km)),
+                            series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
+                        )
+                        .foregroundStyle(HisingenTheme.chartAttention)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.linear)
+                        PointMark(
+                            x: .value(L10n.text("Date"), point.timestamp),
+                            y: .value(L10n.text("Consumption"), fuelUnit.plotValue(lPer100Km: point.kwhPer100Km))
+                        )
+                        .symbolSize(14)
+                        .foregroundStyle(HisingenTheme.chartAttention)
+                    }
                 }
-                .chartYAxisLabel(L10n.text("L/100km"))
+                .historyTimeAxis(spanning: points.map(\.timestamp))
+                .historyYAxis(fuelUnit.suffix)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Fuel consumption trend chart"))
-                .accessibilityValue(chartAccessibilityValue(points: points.map { $0.kwhPer100Km }))
+                .accessibilityValue(chartAccessibilityValue(points: points.map { fuelUnit.plotValue(lPer100Km: $0.kwhPer100Km) }))
                 .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
                     title: L10n.text("Fuel Consumption Trend"),
-                    yLabel: "L/100km",
-                    points: points.map { ($0.timestamp, $0.kwhPer100Km) }
+                    yLabel: fuelUnit.suffix,
+                    points: points.map { ($0.timestamp, fuelUnit.plotValue(lPer100Km: $0.kwhPer100Km)) }
                 ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 Text(L10n.text("Vehicle-reported litres per 100 km between fill-ups. Short, cold trips raise it."))
@@ -204,10 +216,10 @@ extension HistoryDashboardView {
         let segmentByID = gapSegmentIndex(of: odometerPoints, timestamp: \.timestamp)
         let kmPerDay = HistoryInsights.averageKmPerDay(from: allTimeOdometerPoints)
         let monthly = HistoryInsights.monthlyMileage(from: allTimeOdometerPoints)
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "road.lanes", title: L10n.text("Odometer History"), color: HisingenTheme.chartInfo)
+                    HistorySectionHeading(symbol: "road.lanes", title: L10n.text("Odometer History"), color: HisingenTheme.chartInfo)
                     Spacer()
                     if let covered {
                         Text("+\(Format.distance(km: covered, decimals: 0, unit: preferences.distanceUnit))")
@@ -215,29 +227,22 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                     }
                 }
-                Chart {
+                HistoryScrubChart(items: odometerPoints, date: { $0.timestamp },
+                                  callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(Format.distance(km: $0.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true))" }) {
                     ForEach(odometerPoints) { point in
                         LineMark(
                             x: .value(L10n.text("Date"), point.timestamp),
                             y: .value(L10n.text("Odometer"), preferences.distanceUnit.convert(km: point.odometerKm)),
                             series: .value(L10n.text("Segment"), segmentByID[point.id] ?? 0)
                         )
-                        .foregroundStyle(HisingenTheme.accent)
+                        .foregroundStyle(HisingenTheme.chartInfo)
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                         .interpolationMethod(.monotone)
                     }
-                    if let scrubOdometer, let hit = HistoryInsights.nearest(to: scrubOdometer, in: odometerPoints, timestamp: \.timestamp) {
-                        RuleMark(x: .value(L10n.text("Date"), hit.timestamp))
-                            .foregroundStyle(Color.primary.opacity(0.25))
-                            .annotation(position: .top, spacing: 0,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                Text("\(Format.dateFormatter.string(from: hit.timestamp)) · \(Format.distance(km: hit.odometerKm, decimals: 0, unit: preferences.distanceUnit, grouped: true))")
-                                    .historyScrubCallout()
-                            }
-                    }
                 }
-                .chartXSelection(value: $scrubOdometer)
-                .chartYAxisLabel(preferences.distanceUnit.suffix)
+                .chartYScale(domain: .automatic(includesZero: false))
+                .historyTimeAxis(spanning: odometerPoints.map(\.timestamp))
+                .historyYAxis(preferences.distanceUnit.suffix)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Odometer history chart"))
                 .accessibilityValue(chartAccessibilityValue(points: odometerPoints.map { Double($0.odometerKm) }))
@@ -249,20 +254,27 @@ extension HistoryDashboardView {
                 ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 if monthly.count >= 2 {
+                    // This chart ignores the period selector, so it says so where it is drawn.
+                    Text(L10n.text("All recorded history")).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
                     Chart(monthly) { bucket in
                         BarMark(
                             x: .value(L10n.text("Month"), bucket.month, unit: .month),
                             y: .value(L10n.text("Distance"), preferences.distanceUnit.convert(km: bucket.distanceKm))
                         )
-                        .foregroundStyle(HisingenTheme.accent.opacity(0.6))
-                        .cornerRadius(2)
+                        .foregroundStyle(HisingenTheme.chartInfo.opacity(0.6))
                     }
-                    .chartYAxisLabel(preferences.distanceUnit.suffix)
+                    .historyTimeAxis(spanning: monthly.map(\.month), monthly: true)
+                    .historyYAxis(preferences.distanceUnit.suffix)
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Monthly mileage chart"))
                     .accessibilityValue(chartAccessibilityValue(points: monthly.map { $0.distanceKm }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Monthly mileage chart"), yLabel: preferences.distanceUnit.suffix,
+                        points: monthly.map { ($0.month, preferences.distanceUnit.convert(km: $0.distanceKm)) },
+                        valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }))
                     .hisAnimation(Motion.progress, value: lifetimeDataKey)
                 }
+                batteryWarrantyStat(kmPerDay: kmPerDay)
                 if let kmPerDay {
                     curveStat(L10n.text("Average Daily Distance"),
                               Format.distance(km: kmPerDay, decimals: 1, unit: preferences.distanceUnit) + "/" + L10n.text("day"))
@@ -281,10 +293,10 @@ extension HistoryDashboardView {
     var batteryHealthCard: some View {
         let records = Array(batteryHealthRecords.reversed())
         let latest = batteryHealthRecords.first
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "heart.text.square", title: L10n.text("Battery Health Trend"), color: HisingenTheme.chartHealth)
+                    HistorySectionHeading(symbol: "heart.text.square", title: L10n.text("Battery Health Trend"), color: HisingenTheme.chartHealth)
                     Spacer()
                     if let latest {
                         Text(Format.percent(latest.stateOfHealthPct, decimals: 1))
@@ -292,8 +304,10 @@ extension HistoryDashboardView {
                             .monospacedDigit()
                     }
                 }
+                batteryLevelSection
                 if records.count >= 2 {
-                    Chart {
+                    HistoryScrubChart(items: records, date: { $0.timestamp },
+                                      callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(Format.percent($0.stateOfHealthPct, decimals: 1))" }) {
                         ForEach(records) { record in
                             LineMark(
                                 x: .value(L10n.text("Date"), record.timestamp),
@@ -309,19 +323,10 @@ extension HistoryDashboardView {
                             .symbolSize(16)
                             .foregroundStyle(HisingenTheme.chartHealth.opacity(0.85))
                         }
-                        if let scrubSoH, let hit = HistoryInsights.nearest(to: scrubSoH, in: records, timestamp: \.timestamp) {
-                            RuleMark(x: .value(L10n.text("Date"), hit.timestamp))
-                                .foregroundStyle(Color.primary.opacity(0.25))
-                                .annotation(position: .top, spacing: 0,
-                                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                    Text("\(Format.dateFormatter.string(from: hit.timestamp)) · \(Format.percent(hit.stateOfHealthPct, decimals: 1))")
-                                        .historyScrubCallout()
-                                }
-                        }
                     }
-                    .chartXSelection(value: $scrubSoH)
                     .chartYScale(domain: sohDomain(records))
-                    .chartYAxisLabel("%")
+                    .historyTimeAxis(spanning: records.map(\.timestamp))
+                    .historyYAxis("%")
                     .frame(height: chartHeight)
                     .accessibilityLabel(L10n.text("Battery health trend chart"))
                     .accessibilityValue(chartAccessibilityValue(points: records.map { $0.stateOfHealthPct }))
@@ -385,10 +390,10 @@ extension HistoryDashboardView {
         let aqiSegmentByID = Dictionary(uniqueKeysWithValues:
             HistoryInsights.segments(of: aqiPoints, maxGap: HistoryInsights.defaultChartGapThreshold, timestamp: { $0.record.timestamp })
                 .enumerated().flatMap { index, run in run.map { ($0.record.id, index) } })
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: HisingenTheme.chartPositive)
+                    HistorySectionHeading(symbol: "wind", title: L10n.text("Cabin Air Quality Trend"), color: HisingenTheme.chartPositive)
                     Spacer()
                     if let latestAqi = latest?.airQualityIndex {
                         Text(L10n.format("%d AQI", Int(latestAqi)))
@@ -397,28 +402,30 @@ extension HistoryDashboardView {
                     }
                 }
                 if !aqiPoints.isEmpty {
-                    Chart(aqiPoints, id: \.record.id) { item in
-                        LineMark(
-                            x: .value(L10n.text("Date"), item.record.timestamp),
-                            y: .value(L10n.text("Air Quality Index"), item.aqi),
-                            series: .value(L10n.text("Segment"), aqiSegmentByID[item.record.id] ?? 0)
-                        )
-                        .foregroundStyle(HisingenTheme.chartInfo)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
-                        .interpolationMethod(.catmullRom)
+                    HistoryScrubChart(items: chronological.filter { $0.airQualityIndex != nil },
+                                      date: { $0.timestamp },
+                                      callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(L10n.format("%d AQI", Int($0.airQualityIndex ?? 0)))" }) {
+                        ForEach(aqiPoints, id: \.record.id) { item in
+                            LineMark(
+                                x: .value(L10n.text("Date"), item.record.timestamp),
+                                y: .value(L10n.text("Air Quality Index"), item.aqi),
+                                series: .value(L10n.text("Segment"), aqiSegmentByID[item.record.id] ?? 0)
+                            )
+                            .foregroundStyle(HisingenTheme.chartInfo)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                            .interpolationMethod(.linear)
+                        }
                         RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
                             .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.35))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            // The adjacent PM chart draws a legend; this line was labelled for
-                            // VoiceOver only, so a sighted reader saw a dashed rule with nothing
-                            // saying what it marks.
                             .annotation(position: .top, alignment: .leading) {
                                 Text(L10n.text("Moderate"))
-                                    .hisType(.nano, weight: .medium)
+                                    .hisType(.micro, weight: .medium)
                                     .foregroundStyle(HisingenTheme.semanticWarning)
                             }
                     }
-                    .chartYAxisLabel(L10n.text("AQI"))
+                    .historyTimeAxis(spanning: aqiPoints.map { $0.record.timestamp })
+                    .historyYAxis(L10n.text("AQI"))
                     .frame(height: chartHeight)
                     .accessibilityLabel(L10n.text("Air quality index trend chart"))
                     .accessibilityValue(chartAccessibilityValue(points: aqiPoints.map { $0.aqi }))
@@ -437,9 +444,16 @@ extension HistoryDashboardView {
                                 y: .value("PM2.5", item.pm25),
                                 series: .value(L10n.text("Series"), "PM2.5")
                             )
-                            .foregroundStyle(.linearGradient(colors: [HisingenTheme.chartInfo.opacity(0.25), HisingenTheme.chartInfo.opacity(0.02)],
-                                                             startPoint: .top, endPoint: .bottom))
-                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(HisingenTheme.chartInfo.opacity(0.14))
+                            .interpolationMethod(.linear)
+                            LineMark(
+                                x: .value(L10n.text("Date"), item.record.timestamp),
+                                y: .value("PM2.5", item.pm25),
+                                series: .value(L10n.text("Series"), "PM2.5 line")
+                            )
+                            .foregroundStyle(HisingenTheme.chartInfo)
+                            .lineStyle(StrokeStyle(lineWidth: 1.2))
+                            .interpolationMethod(.linear)
                         }
                         ForEach(pm10Points, id: \.record.id) { item in
                             LineMark(
@@ -453,10 +467,11 @@ extension HistoryDashboardView {
                                 differentiateWithoutColor: differentiateWithoutColor,
                                 width: 1.2
                             ))
-                            .interpolationMethod(.catmullRom)
+                            .interpolationMethod(.linear)
                         }
                     }
-                    .chartYAxisLabel("µg/m³")
+                    .historyTimeAxis(spanning: pm25Points.map { $0.record.timestamp } + pm10Points.map { $0.record.timestamp })
+                    .historyYAxis("µg/m³")
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
                     .accessibilityValue(chartAccessibilityValue(points: pm10Points.map { $0.pm10 }))
@@ -504,10 +519,10 @@ extension HistoryDashboardView {
             .map { (command: $0.key, total: $0.value.count, failed: $0.value.filter { $0.status == "failed" }.count) }
             .sorted { $0.total > $1.total }
         let failures = commands.filter { $0.status == "failed" && ($0.errorMessage?.isEmpty == false) }.prefix(3)
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "command", title: L10n.text("Automation & Commands"), color: HisingenTheme.semanticWarning)
+                    HistorySectionHeading(symbol: "command", title: L10n.text("Automation & Commands"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     if let rate = stats.successRatePct {
                         Text(Format.percent(rate))
@@ -546,18 +561,25 @@ extension HistoryDashboardView {
                                  resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No automations ran in this period.")) { visibleCommands, footer in
                     ForEach(visibleCommands) { record in
-                        HStack {
-                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
-                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                .hisType(.caption, weight: .medium)
+                        let outcome = auditOutcome(record.status)
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: outcome.symbol)
+                                .foregroundStyle(outcome.color)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
+                                    .hisType(.caption, weight: .medium)
+                                Text(outcome.label)
+                                    .hisType(.micro)
+                                    .foregroundStyle(HisingenTheme.inkMuted)
+                            }
                             if let ms = record.durationMs {
                                 Text(L10n.format("%d ms", ms)).hisType(.nano).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(record.executedAt, style: .relative).hisType(.micro).foregroundStyle(.secondary)
                         }
-                        .help(record.errorMessage ?? record.status.capitalized)
+                        .help(record.errorMessage ?? outcome.label)
                     }
                     footer
                 }
@@ -574,45 +596,97 @@ extension HistoryDashboardView {
         }
     }
 
+    private func auditOutcome(_ status: String) -> (symbol: String, color: Color, label: String) {
+        switch status {
+        case "confirmed":
+            ("checkmark.circle.fill", HisingenTheme.semanticGood, L10n.text("Matching vehicle reading observed"))
+        case "completed":
+            ("checkmark.circle.fill", HisingenTheme.semanticGood, L10n.text("Completed"))
+        case "acknowledged":
+            ("checkmark.circle.fill", HisingenTheme.semanticGood, L10n.text("Command acknowledged by the vehicle service"))
+        case "failed":
+            ("xmark.circle.fill", HisingenTheme.semanticCritical, L10n.text("Failed"))
+        case "confirmation_timed_out":
+            ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning, L10n.text("Command outcome not confirmed"))
+        case "accepted", "delivered":
+            ("clock", HisingenTheme.inkMuted, L10n.text("Command sent: waiting for the vehicle"))
+        default:
+            ("questionmark.circle", HisingenTheme.inkMuted, L10n.text("Unknown"))
+        }
+    }
+
     /// Cabin temperature trend from digital-twin climate readings. Hidden entirely on
     /// vehicles that never report interior temperature.
     var cabinClimateCard: AnyView {
         let chronological = cabinClimateRecords.sorted { $0.timestamp < $1.timestamp }
         let plotted = chronological.filter { $0.interiorCelsius != nil }
         guard let latest = plotted.last?.interiorCelsius else { return AnyView(EmptyView()) }
-        return AnyView(Card {
+        let setpointRecords = plotted.filter { $0.requestedCelsius != nil }
+        let cabinGap: TimeInterval = 6 * 3_600
+        func runs(_ records: [VehicleDatabase.CabinClimateRecord]) -> [Int64: Int] {
+            var result: [Int64: Int] = [:]
+            for (index, run) in HistoryInsights.segments(of: records, maxGap: cabinGap, timestamp: { $0.timestamp }).enumerated() {
+                for record in run { result[record.id] = index }
+            }
+            return result
+        }
+        let interiorRuns = runs(plotted)
+        let setpointRuns = runs(setpointRecords)
+        return AnyView(HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CardHeader(symbol: "thermometer.medium", title: L10n.text("Cabin Temperature Trend"), color: HisingenTheme.semanticWarning)
+                    HistorySectionHeading(symbol: "thermometer.medium", title: L10n.text("Cabin Temperature Trend"), color: HisingenTheme.semanticWarning)
                     Spacer()
                     Text(Format.temperature(celsius: latest, unit: preferences.temperatureUnit))
                         .hisType(.caption, weight: .semibold, design: .rounded).foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
-                Chart(plotted) { record in
-                    LineMark(
-                        x: .value(L10n.text("Date"), record.timestamp),
-                        y: .value(L10n.text("Interior"), preferences.temperatureUnit.convert(celsius: record.interiorCelsius ?? 0))
-                    )
-                    .foregroundStyle(HisingenTheme.chartAttention)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                    .interpolationMethod(.catmullRom)
-                    if let requested = record.requestedCelsius {
+                let tempUnit = preferences.temperatureUnit
+                HistoryScrubChart(items: plotted, date: { $0.timestamp },
+                                  callout: { "\(Format.dateFormatter.string(from: $0.timestamp)) · \(Format.temperature(celsius: $0.interiorCelsius ?? 0, unit: tempUnit))" }) {
+                    // Each run of readings is its own line, and a stretch with no readings is a
+                    // break, as the caption below says. It used to draw straight across the gap.
+                    ForEach(plotted) { record in
                         LineMark(
                             x: .value(L10n.text("Date"), record.timestamp),
-                            y: .value(L10n.text("Setpoint"), preferences.temperatureUnit.convert(celsius: requested))
+                            y: .value(L10n.text("Interior"), tempUnit.convert(celsius: record.interiorCelsius ?? 0)),
+                            series: .value(L10n.text("Segment"), "interior-\(interiorRuns[record.id] ?? 0)")
                         )
-                        .foregroundStyle(HisingenTheme.accent.opacity(0.45))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(HisingenTheme.chartAttention)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        .interpolationMethod(.linear)
+                    }
+                    ForEach(setpointRecords) { record in
+                        LineMark(
+                            x: .value(L10n.text("Date"), record.timestamp),
+                            y: .value(L10n.text("Setpoint"), tempUnit.convert(celsius: record.requestedCelsius ?? 0)),
+                            series: .value(L10n.text("Segment"), "setpoint-\(setpointRuns[record.id] ?? 0)")
+                        )
+                        .foregroundStyle(HisingenTheme.chartInfo)
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                        .interpolationMethod(.linear)
                     }
                 }
-                .chartYAxisLabel(preferences.temperatureUnit.suffix)
+                .historyTimeAxis(spanning: plotted.map(\.timestamp))
+                .historyYAxis(tempUnit.suffix)
                 .frame(height: chartHeight * 0.9)
                 .accessibilityLabel(L10n.text("Cabin temperature trend chart"))
                 .accessibilityValue(chartAccessibilityValue(
                     points: plotted.compactMap { $0.interiorCelsius }
-                        .map { preferences.temperatureUnit.convert(celsius: $0) }))
+                        .map { tempUnit.convert(celsius: $0) }))
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: L10n.text("Cabin Temperature Trend"), yLabel: tempUnit.suffix,
+                    points: plotted.compactMap { record in
+                        record.interiorCelsius.map { (record.timestamp, tempUnit.convert(celsius: $0)) }
+                    }))
                 .hisAnimation(Motion.progress, value: lifetimeDataKey)
+                HStack(spacing: 10) {
+                    HistoryChartLegendItem(color: HisingenTheme.chartAttention, label: L10n.text("Interior"))
+                    if !setpointRecords.isEmpty {
+                        HistoryChartLegendItem(color: HisingenTheme.chartInfo, label: L10n.text("Setpoint"), dashed: true)
+                    }
+                    Spacer()
+                }
                 Text(L10n.text("Recorded while the vehicle reported climate status. Setpoints appear dashed; gaps mean the car was asleep or not reporting."))
                     .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()

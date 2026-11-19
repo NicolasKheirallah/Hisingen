@@ -41,6 +41,15 @@ final class VehicleHistoryLedger: Sendable {
         var warningEvents: [VehicleDatabase.WarningEventRecord] = []
         var telemetryRecords: [HistoricalTelemetryRecord] = []
         var anomalousSessionIDs: Set<String> = []
+        /// Charge level readings in the period, oldest first, for the battery-level chart and parked drain.
+        var batteryLevels: [VehicleMetricRecord] = []
+        /// Every software version the car has reported, oldest first (period-independent).
+        var softwareVersions: [VehicleMetricRecord] = []
+        /// Energy-used-since-charge readings in the period, oldest first.
+        var energySamples: [VehicleMetricRecord] = []
+        var sessionNotes: [String: String] = [:]
+        /// Hourly "the app was running" marks in the period, for the recording-coverage strip.
+        var coverageTimestamps: [Date] = []
         var thisMonth = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
         var lastMonth = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
         var thisYear = Comparison(distanceKm: 0, energyKwh: 0, averageConsumption: nil)
@@ -84,7 +93,6 @@ final class VehicleHistoryLedger: Sendable {
         var recentActivities: [VehicleActivity] = []
         var airQualityHistory: [AirQualityRecord] = []
         var connectivityHistory: [VehicleDatabase.ConnectivityRecord] = []
-        var chargingSessions: [ChargingSession] = []
         var batteryHealthHistory: [BatteryHealthRecord] = []
         var storeUnreadable = false
     }
@@ -146,6 +154,12 @@ final class VehicleHistoryLedger: Sendable {
         let rawTelemetry = recentTelemetry(for: vin, limit: telemetryLimit, since: range?.lowerBound)
         snap.telemetryRecords = rawTelemetry.filter { inRange($0.timestamp) }
 
+        snap.batteryLevels = metrics(for: vin, metric: .batteryLevel, since: range?.lowerBound).filter { inRange($0.timestamp) }
+        snap.softwareVersions = metrics(for: vin, metric: .softwareVersion)
+        snap.energySamples = metrics(for: vin, metric: .energySinceCharge, since: range?.lowerBound).filter { inRange($0.timestamp) }
+        snap.sessionNotes = sessionNotes(for: vin)
+        snap.coverageTimestamps = recentConnectivity(for: vin, limit: 6_000).map(\.timestamp).filter { inRange($0) }
+
         snap.truncated = rawTrips.count >= tripLimit || rawSessions.count >= rowCap
             || rawTelemetry.count >= telemetryLimit || rawActivities.count >= 1000
 
@@ -198,7 +212,7 @@ final class VehicleHistoryLedger: Sendable {
     }
 
     /// Everything the Info tab derives from the local SQLite store.
-    func recent(vin: String, chargingCapacityKwh: Double?) -> RecentRecords {
+    func recent(vin: String) -> RecentRecords {
         var records = RecentRecords()
         records.storeUnreadable = !storeIsReadable()
         records.recentTelemetry = recentTelemetry(for: vin, limit: 40)
@@ -210,9 +224,6 @@ final class VehicleHistoryLedger: Sendable {
         records.airQualityHistory = recentAirQuality(for: vin, limit: 500)
         records.connectivityHistory = recentConnectivity(for: vin, limit: 60)
         records.batteryHealthHistory = batteryHealthHistory(for: vin)
-        records.chargingSessions = charging.recentChargingSessions(for: vin, limit: 20)
-            .map { charging.domainSession(from: $0, usableCapacityKwh: chargingCapacityKwh) }
-            .filter { $0.percentageAdded > 0 && $0.kwhDelivered > 0 }
         return records
     }
 
@@ -252,7 +263,7 @@ final class VehicleHistoryLedger: Sendable {
     func tripPurposes(for vin: String) -> [String: TripPurpose] {
         let query = "SELECT trip_id, purpose FROM trip_tags WHERE vin = ?;"
         return (try? self.sql.readQuery(sql: query) { stmt in
-            try stmt.bindText(vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), at: 1)
+            try stmt.bindText(vin.normalizedVIN, at: 1)
         } process: { stmt -> [String: TripPurpose] in
             var result: [String: TripPurpose] = [:]
             while try stmt.stepOrThrow() {
@@ -433,18 +444,9 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportTripsCSV(for vin: String, limit: Int = 5_000) -> String {
         let trips = derivedTrips(for: vin, limit: limit)
-        let formatter = ISO8601DateFormatter()
         var csv = CSV.tripHistoryHeader + "\n"
         for trip in trips {
-            let values = [
-                trip.id, trip.vin, formatter.string(from: trip.startedAt), formatter.string(from: trip.endedAt),
-                String(format: "%.1f", trip.duration / 60), String(format: "%.2f", trip.distanceKm),
-                trip.averageConsumption.map { String(format: "%.2f", $0) } ?? "",
-                trip.ambientTemperatureCelsius.map { String(format: "%.1f", $0) } ?? "",
-                trip.startLatitude.map { String($0) } ?? "", trip.startLongitude.map { String($0) } ?? "",
-                trip.endLatitude.map { String($0) } ?? "", trip.endLongitude.map { String($0) } ?? ""
-            ]
-            csv += values.joined(separator: ",") + "\n"
+            csv += HistoryCSVRows.trip(trip, number: HistoryCSVRows.posix).joined(separator: ",") + "\n"
         }
         return csv
     }
@@ -465,7 +467,7 @@ final class VehicleHistoryLedger: Sendable {
         }) ?? []
 
         var csv = "Record ID,VIN,Date,Odometer (km),Calculated State of Health (%),Calculated Degradation (%),Estimated Usable (kWh),Method\n"
-        let df = ISO8601DateFormatter()
+        let df = Format.iso8601
         for r in records {
             let date = df.string(from: r.timestamp)
             csv += "\(r.id),\(r.vin),\(date),\(String(format: "%.1f", r.odometerKm)),\(String(format: "%.2f", r.stateOfHealthPct)),\(String(format: "%.2f", r.degradationPct)),\(String(format: "%.2f", r.effectiveUsableKwh)),\(r.measurementSource)\n"
@@ -475,7 +477,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportAirQualityCSV(for vin: String) -> String {
         let records = recentAirQuality(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Air Quality Index,PM2.5,PM10,Filter Remaining (%)\n"
         for r in records {
             func number(_ value: Double?) -> String { value.map { String(format: "%.1f", $0) } ?? "" }
@@ -486,7 +488,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportTelemetryCSV(for vin: String) -> String {
         let records = recentTelemetry(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Odometer (km),Trip Manual (km),Trip Automatic (km),Average Consumption,Ambient Temperature (C)\n"
         for record in records {
             func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
@@ -497,7 +499,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportCommandAuditsCSV(for vin: String) -> String {
         let records = recentCommandAudits(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         func cell(_ value: String) -> String {
             "\"\(value.replacingOccurrences(of: "\"", with: "\"\"").replacingOccurrences(of: "\n", with: " "))\""
         }
@@ -510,7 +512,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportFuelEntriesCSV(for vin: String) -> String {
         let entries = recentFuelEntries(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Entry ID,VIN,Date,Litres,Price per Litre,Total,Odometer (km)\n"
         for entry in entries {
             csv += "\(entry.id),\(entry.vin),\(formatter.string(from: entry.date)),\(String(format: "%.2f", entry.liters)),\(String(format: "%.3f", entry.pricePerLiter)),\(String(format: "%.2f", entry.liters * entry.pricePerLiter)),\(entry.odometerKm.map { String(format: "%.1f", $0) } ?? "")\n"
@@ -520,7 +522,7 @@ final class VehicleHistoryLedger: Sendable {
 
     func exportCabinClimateCSV(for vin: String) -> String {
         let records = recentCabinClimate(for: vin, limit: 10_000)
-        let formatter = ISO8601DateFormatter()
+        let formatter = Format.iso8601
         var csv = "Record ID,VIN,Date,Interior (C),Requested Setpoint (C)\n"
         for record in records {
             csv += "\(record.id),\(record.vin),\(formatter.string(from: record.timestamp)),\(record.interiorCelsius.map { String(format: "%.1f", $0) } ?? ""),\(record.requestedCelsius.map { String(format: "%.1f", $0) } ?? "")\n"
@@ -773,7 +775,7 @@ extension VehicleHistoryLedger {
     }
 
     func setTripPurpose(_ purpose: TripPurpose?, tripID: String, vin: String) {
-        let cleanVIN = vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let cleanVIN = vin.normalizedVIN
         guard !tripID.isEmpty, !cleanVIN.isEmpty else { return }
         if let purpose {
             let sql = """
@@ -934,5 +936,177 @@ extension VehicleHistoryLedger {
         } catch {
             logger.error("Could not save vehicle activity: \(error, privacy: .public)")
         }
+    }
+}
+
+// MARK: - Metric log
+
+/// The kinds of reading the metric log holds. Each is something Hisingen already receives on
+/// every refresh but used to discard, so a question like "how much did the car lose while parked"
+/// had no data behind it. Rows are written only when the reading changes, so the table stays small.
+enum VehicleMetric: String, Sendable {
+    /// Battery state of charge: `value` is the percentage, `text` is `plugged` or `parked`.
+    case batteryLevel = "soc"
+    /// The software version the car reported: `text` is the version string.
+    case softwareVersion = "software_version"
+    /// Energy used since the last charge: `value` is the total in Wh, `text` the JSON split
+    /// (`EnergyBreakdownSample`).
+    case energySinceCharge = "energy_since_charge"
+    /// The reader's own note on one charging session: `ref` is the session id, `text` the note.
+    case sessionNote = "session_note"
+    /// Power the home charger itself reported while a session ran, in kW.
+    case chargerPower = "charger_power"
+}
+
+struct VehicleMetricRecord: Identifiable, Equatable, Sendable {
+    let id: Int64
+    let vin: String
+    let timestamp: Date
+    let metric: String
+    let value: Double?
+    let text: String?
+    let ref: String?
+}
+
+/// The split of energy used since a charge, in watt-hours, as stored in the metric log.
+struct EnergyBreakdownSample: Codable, Equatable, Sendable {
+    var driving: Double
+    var climate: Double
+    var battery: Double
+    var other: Double
+
+    var total: Double { driving + climate + battery + other }
+}
+
+extension VehicleHistoryLedger {
+    /// Minimum change in charge level, and longest silence, between two stored battery readings.
+    static let batteryLevelMinimumStep = 1.0
+    static let batteryLevelHeartbeat: TimeInterval = 30 * 60
+    static let energyBreakdownHeartbeat: TimeInterval = 60 * 60
+
+    @discardableResult
+    func recordMetric(vin: String, metric: VehicleMetric, value: Double? = nil, text: String? = nil,
+                      ref: String? = nil, timestamp: Date = Date()) -> Bool {
+        do {
+            try sql.query(sql: """
+                INSERT INTO vehicle_metric_log (vin, timestamp, metric, value, text, ref)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """, bindings: { stmt in
+                try stmt.bindText(vin, at: 1)
+                try stmt.bindDate(timestamp, at: 2)
+                try stmt.bindText(metric.rawValue, at: 3)
+                try stmt.bindDouble(value, at: 4)
+                try stmt.bindText(text, at: 5)
+                try stmt.bindText(ref, at: 6)
+                try stmt.executeUpdate()
+            }) { _ in }
+            return true
+        } catch {
+            logger.error("Metric insert failed: \(error, privacy: .public)")
+            return false
+        }
+    }
+
+    func lastMetric(vin: String, metric: VehicleMetric, ref: String? = nil) -> VehicleMetricRecord? {
+        let refClause = ref == nil ? "" : " AND ref = ?"
+        let query = """
+        SELECT id, vin, timestamp, metric, value, text, ref FROM vehicle_metric_log
+        WHERE vin = ? AND metric = ?\(refClause) ORDER BY timestamp DESC, id DESC LIMIT 1;
+        """
+        let rows: [VehicleMetricRecord]? = try? sql.readQuery(sql: query) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindText(metric.rawValue, at: 2)
+            if let ref { try stmt.bindText(ref, at: 3) }
+        } process: { stmt in
+            try HistoryRowDecoder.rows(stmt, decode: Self.metricRow)
+        }
+        return rows?.first
+    }
+
+    /// Oldest first, so a series can be walked in time order.
+    func metrics(for vin: String, metric: VehicleMetric, since: Date? = nil, limit: Int = 20_000) -> [VehicleMetricRecord] {
+        let sinceClause = since == nil ? "" : " AND timestamp >= ?"
+        let query = """
+        SELECT id, vin, timestamp, metric, value, text, ref FROM vehicle_metric_log
+        WHERE vin = ? AND metric = ?\(sinceClause) ORDER BY timestamp ASC, id ASC LIMIT ?;
+        """
+        return (try? sql.readQuery(sql: query) { stmt in
+            try stmt.bindText(vin, at: 1)
+            try stmt.bindText(metric.rawValue, at: 2)
+            if let since { try stmt.bindDate(since, at: 3) }
+            try stmt.bindInt64(Int64(max(1, limit)), at: since == nil ? 3 : 4)
+        } process: { stmt in
+            try HistoryRowDecoder.rows(stmt, decode: Self.metricRow)
+        }) ?? []
+    }
+
+    private static func metricRow(_ stmt: SQLiteStatement) -> VehicleMetricRecord? {
+        guard let id = stmt.columnInt64(at: 0), let vin = stmt.columnText(at: 1),
+              let timestamp = stmt.columnDate(at: 2), let metric = stmt.columnText(at: 3) else { return nil }
+        return VehicleMetricRecord(id: id, vin: vin, timestamp: timestamp, metric: metric,
+                                   value: stmt.columnDouble(at: 4), text: stmt.columnText(at: 5),
+                                   ref: stmt.columnText(at: 6))
+    }
+
+    // MARK: Gated writers
+
+    /// Stores the charge level when it moved by a point or more, when the plugged state flipped,
+    /// or after 30 quiet minutes, so a parked car still shows a slow slope.
+    @discardableResult
+    func recordBatteryLevel(vin: String, percentage: Double, plugged: Bool, timestamp: Date = Date()) -> Bool {
+        let text = plugged ? "plugged" : "parked"
+        if let last = lastMetric(vin: vin, metric: .batteryLevel), let lastValue = last.value {
+            let quiet = timestamp.timeIntervalSince(last.timestamp) < Self.batteryLevelHeartbeat
+            if quiet, abs(percentage - lastValue) < Self.batteryLevelMinimumStep, last.text == text { return false }
+        }
+        return recordMetric(vin: vin, metric: .batteryLevel, value: percentage, text: text, timestamp: timestamp)
+    }
+
+    @discardableResult
+    func recordSoftwareVersion(vin: String, version: String, timestamp: Date = Date()) -> Bool {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if lastMetric(vin: vin, metric: .softwareVersion)?.text == trimmed { return false }
+        return recordMetric(vin: vin, metric: .softwareVersion, text: trimmed, timestamp: timestamp)
+    }
+
+    /// Stores the energy split since the last charge at most hourly. The total only grows until the
+    /// next charge, so the latest row of each cycle is that cycle's final tally.
+    @discardableResult
+    func recordEnergyBreakdown(vin: String, sample: EnergyBreakdownSample, timestamp: Date = Date()) -> Bool {
+        guard sample.total > 0, let json = try? JSONEncoder().encode(sample),
+              let text = String(data: json, encoding: .utf8) else { return false }
+        if let last = lastMetric(vin: vin, metric: .energySinceCharge),
+           timestamp.timeIntervalSince(last.timestamp) < Self.energyBreakdownHeartbeat,
+           last.value == sample.total { return false }
+        return recordMetric(vin: vin, metric: .energySinceCharge, value: sample.total, text: text, timestamp: timestamp)
+    }
+
+    /// Stores charger-reported power once a minute at most, and only while the charger is delivering.
+    @discardableResult
+    func recordChargerPower(vin: String, kilowatts: Double, timestamp: Date = Date()) -> Bool {
+        guard kilowatts >= 0 else { return false }
+        if let last = lastMetric(vin: vin, metric: .chargerPower),
+           timestamp.timeIntervalSince(last.timestamp) < 60, last.value == kilowatts { return false }
+        return recordMetric(vin: vin, metric: .chargerPower, value: kilowatts, timestamp: timestamp)
+    }
+
+    // MARK: Session notes
+
+    /// The newest note per session id. An empty note clears it (the newest row wins).
+    func sessionNotes(for vin: String) -> [String: String] {
+        var notes: [String: String] = [:]
+        for record in metrics(for: vin, metric: .sessionNote) {
+            guard let ref = record.ref else { continue }
+            if let text = record.text, !text.isEmpty { notes[ref] = text } else { notes.removeValue(forKey: ref) }
+        }
+        return notes
+    }
+
+    func setSessionNote(_ note: String, sessionID: String, vin: String) {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = sessionNotes(for: vin)[sessionID] ?? ""
+        guard trimmed != current else { return }
+        recordMetric(vin: vin, metric: .sessionNote, text: String(trimmed.prefix(280)), ref: sessionID)
     }
 }

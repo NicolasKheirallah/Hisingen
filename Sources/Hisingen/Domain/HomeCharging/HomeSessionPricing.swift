@@ -6,6 +6,32 @@ struct HomePricePoint: Equatable, Sendable {
     var start: Date
     var end: Date
     var pricePerKwh: Double
+    /// Tibber's own reading of this slot against its recent average, when the source gave one.
+    var level: TibberPriceLevel? = nil
+}
+
+/// How Tibber rates a price slot against the prices around it.
+enum TibberPriceLevel: String, Codable, CaseIterable, Sendable {
+    case veryCheap = "VERY_CHEAP"
+    case cheap = "CHEAP"
+    case normal = "NORMAL"
+    case expensive = "EXPENSIVE"
+    case veryExpensive = "VERY_EXPENSIVE"
+
+    /// Position on the five-step scale, cheapest first.
+    var rank: Int { Self.allCases.firstIndex(of: self) ?? 2 }
+
+    init(rank: Int) { self = Self.allCases[min(max(rank, 0), Self.allCases.count - 1)] }
+
+    var title: String {
+        switch self {
+        case .veryCheap: return L10n.text("Very cheap")
+        case .cheap: return L10n.text("Cheap")
+        case .normal: return L10n.text("Normal")
+        case .expensive: return L10n.text("Expensive")
+        case .veryExpensive: return L10n.text("Very expensive")
+        }
+    }
 }
 
 /// The cost of one charger session with the way it was reached recorded beside it.
@@ -52,14 +78,27 @@ enum HomeSessionPricer {
     static let tariffSource = "Fixed tariff from the Hisingen rate settings"
 
     /// `tibberSource` names where `tibber` came from: Home Assistant by default, or the Tibber API.
+    /// A flat network fee, as a charger's own setting gives it.
     static func price(_ session: HomeChargingSessionCandidate, tibber: [HomePricePoint],
                       networkFeeOrePerKwh: Double, fallback: Fallback,
                       tibberSource: String = HomeSessionPricer.tibberSource) -> HomeSessionCost {
-        let fee = max(0, networkFeeOrePerKwh) / 100
+        price(session, tibber: tibber, gridTariff: .flat(orePerKwh: networkFeeOrePerKwh), fallback: fallback,
+              tibberSource: tibberSource)
+    }
+
+    /// The grid tariff decides the fee for each stretch of the session by the clock, so a session that
+    /// runs across the edge of the high-load window pays each side its own rate.
+    static func price(_ session: HomeChargingSessionCandidate, tibber: [HomePricePoint],
+                      gridTariff: GridTariff, fallback: Fallback,
+                      tibberSource: String = HomeSessionPricer.tibberSource) -> HomeSessionCost {
         var assumptions = ["Tibber's price includes energy, taxes and Tibber's markup"]
-        assumptions.append(fee > 0
-            ? "Variable network fee of \(trimmed(networkFeeOrePerKwh)) öre/kWh added"
-            : "No variable network fee is set, so none is added")
+        if gridTariff.isTimeVarying {
+            assumptions.append("Grid transfer fee by the time of day added: \(trimmed(gridTariff.peakOrePerKwh)) öre/kWh in high-load time, \(trimmed(gridTariff.offPeakOrePerKwh)) öre/kWh otherwise")
+        } else if gridTariff.hasFee {
+            assumptions.append("Variable network fee of \(trimmed(gridTariff.offPeakOrePerKwh)) öre/kWh added")
+        } else {
+            assumptions.append("No variable network fee is set, so none is added")
+        }
 
         let slots = tibber.sorted { $0.start < $1.start }
 
@@ -75,6 +114,8 @@ enum HomeSessionPricer {
                     let overlap = min(slot.end, interval.end).timeIntervalSince(max(slot.start, interval.start))
                     guard overlap > 0 else { continue }
                     let share = interval.kwh * overlap / duration
+                    let from = max(slot.start, interval.start)
+                    let fee = gridTariff.averageFeePerKwh(from: from, to: from.addingTimeInterval(overlap))
                     cost += share * (slot.pricePerKwh + fee)
                     priced += share
                     coveredSeconds += overlap
@@ -97,7 +138,9 @@ enum HomeSessionPricer {
         if let average = coveredAverage(slots, from: session.startedAt, to: session.endedAt) {
             assumptions.append("Session total priced at the time-weighted average price over the session")
             return HomeSessionCost(
-                method: .totalTibberAverage, amount: session.energyKwh * (average + fee), partialAmount: nil,
+                method: .totalTibberAverage,
+                amount: session.energyKwh * (average + gridTariff.averageFeePerKwh(from: session.startedAt, to: session.endedAt)),
+                partialAmount: nil,
                 pricedKwh: session.energyKwh, missingKwh: 0, priceSource: tibberSource,
                 assumptions: assumptions, currency: fallback.currency
             )

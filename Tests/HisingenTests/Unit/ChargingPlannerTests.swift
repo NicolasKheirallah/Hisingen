@@ -405,49 +405,229 @@ struct ChargingPlannerDecisionsTests {
             plan: finishedPlan, now: now, connection: .connected, chargingState: .idle))
     }
 
-    // MARK: - Price curve bar intensity
+    // MARK: - Price curve
 
-    @Test
-    func barIntensitySpreadsInsideOneBand() {
-        // A window stuck entirely in the cheap band must still show its shape: the priciest
-        // visible hour renders darker than the cheapest one, which the old flat fill could not.
-        let alphaLow = PriceCurveView.barAlpha(price: 0.20, minimum: 0.20, span: 0.70)
-        let alphaHigh = PriceCurveView.barAlpha(price: 0.90, minimum: 0.20, span: 0.70)
-        #expect(alphaHigh > alphaLow)
-        #expect(alphaHigh - alphaLow > 0.2)
+    private func slot(_ start: TimeInterval, minutes: Double, price: Double) -> ElectricityPricePoint {
+        ElectricityPricePoint(
+            startDate: Date(timeIntervalSince1970: start),
+            endDate: Date(timeIntervalSince1970: start + minutes * 60),
+            sekPerKwh: price)
     }
 
     @Test
-    func barIntensityIsMonotonicInPrice() {
-        // One window spanning all three bands: alpha never decreases as the price rises.
-        let minimum = 0.4, span = 3.2
-        var previous = PriceCurveView.barAlpha(price: minimum, minimum: minimum, span: span)
-        for step in 1...32 {
-            let price = minimum + span * Double(step) / 32
-            let alpha = PriceCurveView.barAlpha(price: price, minimum: minimum, span: span)
-            #expect(alpha >= previous)
-            #expect((0.4...0.8).contains(alpha))
-            previous = alpha
+    func hourlyAveragesQuarterSlotsIntoTheirHour() {
+        // Four quarter-hour slots become one bar at their mean; a mixed series keeps the
+        // hourly slot beside it unchanged.
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let quarters = [0.20, 0.40, 0.60, 0.80].enumerated().map { index, price in
+            slot(origin + Double(index) * 900, minutes: 15, price: price)
+        }
+        let hourly = slot(origin + 3_600, minutes: 60, price: 1.50)
+        let result = PriceOutlook.hourly(quarters + [hourly], after: Date(timeIntervalSince1970: origin))
+        #expect(result.count == 2)
+        #expect(abs(result[0].price - 0.50) < 1e-9)
+        #expect(result[0].start == Date(timeIntervalSince1970: origin))
+        #expect(result[0].end == Date(timeIntervalSince1970: origin + 3_600))
+        #expect(abs(result[1].price - 1.50) < 1e-9)
+    }
+
+    @Test
+    func hourlyDropsHoursThatHaveEnded() {
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let points = [slot(origin, minutes: 60, price: 0.30), slot(origin + 3_600, minutes: 60, price: 0.90)]
+        let result = PriceOutlook.hourly(points, after: Date(timeIntervalSince1970: origin + 3_600 + 60))
+        #expect(result.map(\.price) == [0.90])
+    }
+
+    @Test
+    func hourlyWeightsASlotThatCrossesAnHourBoundary() {
+        // A 90-minute slot contributes 60 minutes to its first hour and 30 to the next.
+        let origin: TimeInterval = 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: 3_600)
+        let points = [
+            slot(origin, minutes: 90, price: 1.0),
+            slot(origin + 5_400, minutes: 30, price: 2.0),
+        ]
+        let result = PriceOutlook.hourly(points, after: Date(timeIntervalSince1970: origin))
+        #expect(result.count == 2)
+        #expect(abs(result[0].price - 1.0) < 1e-9)
+        #expect(abs(result[1].price - 1.5) < 1e-9)
+    }
+
+    @Test
+    func priceAxisStartsAtZeroWithRoundGridlines() {
+        let axis = PriceOutlook.priceAxis(minimum: 0.12, maximum: 2.14)
+        #expect(axis.domain.lowerBound == 0)
+        #expect(axis.domain.upperBound > 2.14)
+        #expect(axis.ticks == [0, 1, 2])
+        #expect(PriceOutlook.decimals(forStep: axis.step) == 0)
+
+        let cheap = PriceOutlook.priceAxis(minimum: 0.05, maximum: 0.90)
+        #expect(cheap.ticks == [0, 0.25, 0.5, 0.75])
+        #expect(PriceOutlook.decimals(forStep: cheap.step) == 2)
+    }
+
+    @Test
+    func priceAxisKeepsNegativePricesBelowZero() {
+        let axis = PriceOutlook.priceAxis(minimum: -0.30, maximum: 0.80)
+        #expect(axis.domain.lowerBound < -0.30)
+        #expect(axis.ticks.contains(0))
+        #expect(axis.ticks.count <= 5)
+        #expect(axis.ticks.allSatisfy { axis.domain.contains($0) })
+    }
+
+    @Test
+    func priceAxisSurvivesAFlatDay() {
+        let flat = PriceOutlook.priceAxis(minimum: 0, maximum: 0)
+        #expect(flat.domain == 0...1)
+        let constant = PriceOutlook.priceAxis(minimum: 0.7, maximum: 0.7)
+        #expect(constant.domain.upperBound > 0.7)
+        #expect(constant.ticks.first == 0)
+    }
+
+    @Test
+    func timeTicksFollowWholeHoursAndStayClearOfTheEdges() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Stockholm")!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 14))!
+        let full = PriceOutlook.timeTicks(from: start, to: start.addingTimeInterval(48 * 3_600),
+                                          hourCount: 48, calendar: calendar)
+        #expect(full.map { calendar.component(.hour, from: $0) } == [18, 0, 6, 12, 18, 0, 6])
+        let short = PriceOutlook.timeTicks(from: start, to: start.addingTimeInterval(10 * 3_600),
+                                           hourCount: 10, calendar: calendar)
+        #expect(short.map { calendar.component(.hour, from: $0) } == [16, 18, 20, 22])
+    }
+}
+
+/// The three bases the planner can read a price in: 15-minute slots, hourly slots, and a flat rate.
+struct ChargingPlannerBasisTests {
+    /// Quarter-hour slots for a day, one cheap quarter-hour block, everything else flat.
+    private func quarterSeries(cheapFrom index: Int, cheapCount: Int) -> [ElectricityPricePoint] {
+        let start = fixtureDate(2026, 2, 10, 0)
+        return (0..<96).map { slot in
+            let slotStart = start.addingTimeInterval(Double(slot) * 900)
+            let cheap = slot >= index && slot < index + cheapCount
+            return ElectricityPricePoint(
+                startDate: slotStart, endDate: slotStart.addingTimeInterval(900),
+                sekPerKwh: cheap ? 0.1 : 1.0
+            )
         }
     }
 
     @Test
-    func barIntensityStepsUpAtThresholds() {
-        // Crossing a planning threshold upward must read as a more expensive bar, never a
-        // barely different one: each band ends at or above where the next begins.
-        let minimum = 0.0, span = 3.0
-        #expect(PriceCurveView.barAlpha(price: 1.01, minimum: minimum, span: span)
-            > PriceCurveView.barAlpha(price: 0.99, minimum: minimum, span: span))
-        #expect(PriceCurveView.barAlpha(price: 2.01, minimum: minimum, span: span)
-            > PriceCurveView.barAlpha(price: 1.99, minimum: minimum, span: span))
+    func aQuarterHourlyBasisCanProposeAPartHourWindow() {
+        // 10 kWh at 7 kW needs 1.43 h: two whole hours hourly, 1.5 h at 15-minute prices.
+        // The cheap block is longer than either window, so it wins outright instead of tying.
+        let points = quarterSeries(cheapFrom: 8, cheapCount: 8)
+        let now = fixtureDate(2026, 2, 10, 0)
+        let hourly = ChargingPlanner.cheapestWindow(
+            prices: points, now: now, energyKwh: 10, chargerPowerKw: 7, granularity: 3_600
+        )
+        let quarter = ChargingPlanner.cheapestWindow(
+            prices: points, now: now, energyKwh: 10, chargerPowerKw: 7, granularity: 900
+        )
+        #expect(hourly?.hours == 2)
+        #expect(quarter?.hours == 1.5)
+        // Both land in the cheap block, which starts on the hour here.
+        #expect(quarter?.start == fixtureDate(2026, 2, 10, 2))
+        #expect(quarter?.end == fixtureDate(2026, 2, 10, 3, 30))
     }
 
     @Test
-    func barIntensitySurvivesDegenerateWindow() {
-        // A single-price window divides by a zero span; the bar falls back to its band floor,
-        // which matches the old flat fills.
-        #expect(PriceCurveView.barAlpha(price: 0.5, minimum: 0.5, span: 0) == 0.4)
-        #expect(PriceCurveView.barAlpha(price: 1.5, minimum: 1.5, span: 0) == 0.45)
-        #expect(PriceCurveView.barAlpha(price: 2.5, minimum: 2.5, span: 0) == 0.7)
+    func aQuarterHourlyBasisPlacesTheWindowOnAQuarter() {
+        // The cheap block starts at 02:15 and runs long enough to hold the whole window, so the
+        // earliest cheapest start is itself on a quarter hour.
+        let points = quarterSeries(cheapFrom: 9, cheapCount: 8)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: points, now: fixtureDate(2026, 2, 10, 0),
+            energyKwh: 10, chargerPowerKw: 7, granularity: 900
+        )
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 2, 15))
+        #expect(plan?.hours == 1.5)
+        // An hourly window could not have started here.
+        #expect(plan?.start != fixtureDate(2026, 2, 10, 2))
+    }
+
+    @Test
+    func anHourlyBasisStillRoundsToWholeHours() {
+        let points = quarterSeries(cheapFrom: 8, cheapCount: 8)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: points, now: fixtureDate(2026, 2, 10, 0),
+            energyKwh: 10, chargerPowerKw: 7, granularity: 3_600
+        )
+        #expect(plan?.hours == 2)
+        let minutes = Int(((plan?.hours ?? 0) * 60).rounded())
+        #expect(minutes % 60 == 0)
+    }
+
+    @Test
+    func aFlatRateSeriesIsFlatAndStartsOnTheHour() {
+        let series = ChargingPlanner.fixedSeries(
+            dayPricePerKwh: 1.5, from: fixtureDate(2026, 2, 10, 3, 20), length: 4 * 3_600
+        )
+        #expect(series.first?.startDate == fixtureDate(2026, 2, 10, 3))
+        #expect(series.allSatisfy { $0.sekPerKwh == 1.5 })
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: series, now: fixtureDate(2026, 2, 10, 3, 20), energyKwh: 14, chargerPowerKw: 7
+        )
+        // One price everywhere means waiting buys nothing, and the earliest window wins.
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 3, 20))
+        #expect((plan?.savings ?? -1) == 0)
+    }
+
+    @Test
+    func aNightTariffInsideAFixedRateIsWorthWaitingFor() {
+        let series = ChargingPlanner.fixedSeries(
+            dayPricePerKwh: 2.0, nightPricePerKwh: 0.5,
+            nightStartHour: 22, nightEndHour: 6,
+            from: fixtureDate(2026, 2, 10, 18), length: 24 * 3_600
+        )
+        func price(atHour hour: Int) -> Double? {
+            series.first { plannerFixtureCalendar.component(.hour, from: $0.startDate) == hour }?.sekPerKwh
+        }
+        #expect(price(atHour: 23) == 0.5)
+        #expect(price(atHour: 3) == 0.5)
+        #expect(price(atHour: 12) == 2.0)
+        let now = fixtureDate(2026, 2, 10, 18)
+        let plan = ChargingPlanner.cheapestWindow(
+            prices: series, now: now, energyKwh: 14, chargerPowerKw: 7, granularity: 3_600
+        )
+        #expect((plan?.savings ?? 0) > 0)
+        #expect(plan?.start == fixtureDate(2026, 2, 10, 22))
+    }
+
+    @Test
+    func theBasisComesStraightFromTheElectricitySettings() {
+        #expect(PlannerPriceBasis(mode: .automatic, contract: .quarterHour) == .quarterHour)
+        #expect(PlannerPriceBasis(mode: .automatic, contract: .hourly) == .hourly)
+        // A flat rate wins over whatever contract is stored beside it.
+        #expect(PlannerPriceBasis(mode: .fixed, contract: .hourly) == .fixed)
+        #expect(PlannerPriceBasis(mode: .fixed, contract: .quarterHour) == .fixed)
+        #expect(PlannerPriceBasis.quarterHour.granularity == 900)
+        #expect(PlannerPriceBasis.hourly.granularity == 3_600)
+        // A flat rate is planned and drawn an hour at a time.
+        #expect(PlannerPriceBasis.fixed.granularity == 3_600)
+        #expect(PlannerPriceBasis.quarterHour.chartCaption == ElectricityPriceContract.quarterHour.title)
+        #expect(PlannerPriceBasis.hourly.chartCaption == ElectricityPriceContract.hourly.title)
+    }
+
+    @Test
+    func theChartBarWidthFollowsTheBasis() {
+        // Four quarter-hour slots make one bar an hour, or four bars at quarter-hour width.
+        let start = fixtureDate(2026, 2, 10, 0)
+        let quarters = (0..<4).map { slot in
+            let slotStart = start.addingTimeInterval(Double(slot) * 900)
+            return ElectricityPricePoint(
+                startDate: slotStart, endDate: slotStart.addingTimeInterval(900),
+                sekPerKwh: Double(slot + 1)
+            )
+        }
+        let hourly = PriceOutlook.slots(quarters, after: start, granularity: 3_600)
+        #expect(hourly.count == 1)
+        #expect(abs((hourly.first?.price ?? 0) - 2.5) < 1e-9)
+
+        let fifteen = PriceOutlook.slots(quarters, after: start, granularity: 900)
+        #expect(fifteen.count == 4)
+        #expect(fifteen.map(\.price) == [1, 2, 3, 4])
+        #expect(fifteen.allSatisfy { $0.end.timeIntervalSince($0.start) == 900 })
     }
 }

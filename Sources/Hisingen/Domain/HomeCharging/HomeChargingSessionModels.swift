@@ -49,10 +49,16 @@ struct HomeChargingSessionCandidate: Codable, Equatable, Sendable {
     /// Vehicle battery percent from a Home Assistant sensor, when the capture component had one.
     var vehicleStartPercent: Double?
     var vehicleEndPercent: Double?
+    /// The vendor's own tokens for how the session began and ended, when its session list gives them.
+    var startReason: String?
+    var stopReason: String?
 
     init(key: String, keyKind: KeyKind, chargerID: String, startedAt: Date, endedAt: Date,
          energyKwh: Double, energySource: String, measuredAt: Date, intervals: [HomeEnergyInterval] = [],
-         peakPowerKw: Double? = nil, vehicleStartPercent: Double? = nil, vehicleEndPercent: Double? = nil) {
+         peakPowerKw: Double? = nil, vehicleStartPercent: Double? = nil, vehicleEndPercent: Double? = nil,
+         startReason: String? = nil, stopReason: String? = nil) {
+        self.startReason = startReason
+        self.stopReason = stopReason
         self.key = key
         self.keyKind = keyKind
         self.chargerID = chargerID

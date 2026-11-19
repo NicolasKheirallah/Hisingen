@@ -104,6 +104,7 @@ extension PolestarAPI {
             || features.contains(.remoteWindows)
         let needsSoftware = features.contains(.softwareUpdates) || features.contains(.remoteOTA)
         let needsSchedules = features.contains(.chargingSchedule) || features.contains(.remoteSchedules)
+        let needsChargeLocations = features.contains(.chargeLocations)
         let needsClimate = features.contains(.climateStatus) || features.contains(.remoteClimate)
         let needsClimateTimers = features.contains(.climateStatus) || features.contains(.remoteSchedules)
         let needsAirQuality = features.contains(.airQuality)
@@ -144,7 +145,10 @@ extension PolestarAPI {
         async let scheduleTask: CapabilityState<[VehicleSchedule]> = optionalCapability(
             .schedules,
             enabled: needsSchedules, vin: vin, bypassCache: bypassCommandCaches
-        ) { Optional(try await self.grpc.fetchChargingSchedules(vin: vin, accessToken: serviceToken)) }
+        ) {
+            Optional(try await self.grpc.fetchChargingSchedules(
+                vin: vin, accessToken: serviceToken, includesChargeLocations: needsChargeLocations))
+        }
         async let climateTask: CapabilityState<VehicleClimateStatus> = optionalCapability(
             .climate, enabled: needsClimate, vin: vin,
             bypassCache: bypassCommandCaches
@@ -176,7 +180,7 @@ extension PolestarAPI {
             bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchAmpLimit(vin: vin, accessToken: serviceToken) }
         async let chargeLocationsTask: CapabilityState<[ChargeLocationSnapshot]> = optionalCapability(
-            .chargeLocations, enabled: needsSchedules, vin: vin, bypassCache: bypassCommandCaches
+            .chargeLocations, enabled: needsChargeLocations, vin: vin, bypassCache: bypassCommandCaches
         ) { try await self.grpc.fetchChargeLocations(vin: vin, accessToken: serviceToken) }
         // MyCars supplies identity fallbacks and the installed version independently of OTA discovery.
         async let myCarsTask: CapabilityState<VehicleOTACapabilities> = optionalCapability(

@@ -198,6 +198,40 @@ struct HomeAssistantSocketTests {
         #expect(await socket.isClosed)
     }
 
+    @Test("A watched set drops other entities' changes and an unwatched socket delivers all of them")
+    func stateChangesCanBeScopedToWatchedEntities() async throws {
+        func event(_ entity: String, _ state: String) -> String {
+            """
+            {"id":1,"type":"event","event":{"event_type":"state_changed","data":{"entity_id":"\(entity)",
+            "new_state":{"entity_id":"\(entity)","state":"\(state)","attributes":{},
+            "last_changed":"2026-11-16T01:50:00.123456+00:00","last_updated":"2026-11-16T01:50:00.123456+00:00"}}}}
+            """
+        }
+        for watched in [Set(["sensor.wanted"]), nil] as [Set<String>?] {
+            let connection = ScriptedSocketConnection()
+            connection.push("{\"type\":\"auth_required\"}")
+            connection.push("{\"type\":\"auth_ok\"}")
+            let socket = try await HomeAssistantSocket.open(baseURL: base, token: "t", connector: ScriptedSocketConnector(connection: connection))
+            async let subscribed = socket.stateChanges(entityIDs: watched)
+            await waitUntil { connection.sent.contains { $0.contains("subscribe_events") } }
+            connection.push("{\"id\":1,\"type\":\"result\",\"success\":true,\"result\":null}")
+            let stream = try await subscribed
+
+            connection.push(event("sensor.unrelated", "1"))
+            connection.push(event("sensor.wanted", "2"))
+            var iterator = stream.makeAsyncIterator()
+            let first = await iterator.next()
+            if watched == nil {
+                #expect(first?.entityID == "sensor.unrelated")
+                #expect(await iterator.next()?.entityID == "sensor.wanted")
+            } else {
+                #expect(first?.entityID == "sensor.wanted", "the unrelated entity never reaches the stream")
+                #expect(first?.newState?.state == "2")
+            }
+            connection.drop()
+        }
+    }
+
     @Test("A command resolves with its result and a failed command throws")
     func commandRoundTrip() async throws {
         let connection = ScriptedSocketConnection()

@@ -577,6 +577,10 @@ struct PolestarDataPortalTests {
 
         #expect(state.energy.batteryPercentage == 78.5)
         #expect(state.energy.chargingState == .charging)
+        let chargingReport = try #require(state.reportedDate(for: .charging))
+        #expect(chargingReport == Date(timeIntervalSince1970: 1_716_300_120.5))
+        let draw = state.liveChargingDraw(now: chargingReport)
+        #expect(draw == "\(Format.kilowatts(watts: 48_500)) · \(Format.amps(125))")
         #expect(state.energy.targetPercentage == 80)
         #expect(state.energy.currentLimitAmps == 16)
         #expect(state.energy.locations.count == 1)

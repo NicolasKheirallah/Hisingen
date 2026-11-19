@@ -4,33 +4,14 @@ import SwiftUI
 /// The cards a reader can place on a tab of their own, drawn by the same views the shipped
 /// tabs use.
 ///
-/// Membership is a real constraint, not a preference: a card is here only when it draws purely
-/// from the vehicle snapshot, the reader's preferences, and the shared command gate. Cards that
-/// own a tab's own state — the History period picker and its charts, the Info section bars —
-/// belong to the tab that gives them that state and stay there. The Settings pane names them so
-/// the omission is visible rather than mysterious.
+/// Membership is `TabItemCatalog.standaloneItems`, declared there so the pane, the picker and
+/// this view ask one question: a card is here only when it draws purely from the vehicle
+/// snapshot, the reader's preferences, and the shared command gate. Cards that own a tab's own
+/// state (the History period picker and its charts, the Info section bars) belong to the tab
+/// that gives them that state and stay there. A tab of the reader's own names one it cannot
+/// draw instead of dropping it silently.
 @MainActor
 enum ComposableCards {
-    static let reusable: Set<TabItemID> = [
-        .vehicleSwitcher,
-        .vehicleHero,
-        .vehicleCharging,
-        .vehicleChargingPlanner,
-        .vehicleOpenings,
-        .vehicleTyres,
-        .vehicleReadiness,
-        .vehicleLocation,
-        .vehicleWeather,
-        .vehicleReceipts,
-        .vehicleAttention,
-        .controlsClimate,
-        .controlsAccess,
-        .controlsWindowsLocate,
-        .controlsOTA
-    ]
-
-    static func isReusable(_ item: TabItemID) -> Bool { reusable.contains(item) }
-
     @ViewBuilder
     static func view(
         _ item: TabItemID,
@@ -45,53 +26,139 @@ enum ComposableCards {
         error: String?,
         remoteCommandInProgress: Bool,
         inFlightCommandID: String?,
-        onRefresh: @escaping () -> Void,
+        onRefresh: (() -> Void)? = nil,
         onRemoteCommand: @escaping (RemoteCommand) -> Void,
         onSelectCar: @escaping (String) -> Void,
-        onDismissCommandReceipt: @escaping (UUID) -> Void
+        onDismissCommandReceipt: @escaping (UUID) -> Void,
+        onVerifyReceipt: ((UUID) -> Void)? = nil,
+        feedback: RemoteCommandFeedback? = nil,
+        onAuthorizeRemoteCommands: (() -> Void)? = nil,
+        onOpenPlan: ((TabItemID) -> Void)? = nil,
+        onOpenCar: ((TabItemID) -> Void)? = nil,
+        onOpenSession: ((String) -> Void)? = nil,
+        compact: Bool = false,
+        repeatsDisconnectedStatus: Bool = true,
+        showsExceptions: Bool = false,
+        showsCommandReceipts: Bool = false,
+        showsWeatherIcon: Bool = false,
+        usesCompactNow: Bool = false,
+        dismissedSoftwareEventIdentifier: String? = nil
     ) -> some View {
         // A card whose data the reader switched off must not draw, and must not start work:
         // the planner's `.task` fetches spot prices. One declared rule, consulted in one place.
-        if CardAvailability.of(item, enabledFeatures: preferences.features.enabled) == .drawable {
+        let composition = preferences.tabComposition
+        let planItems = Set(composition.visibleItems(for: .controls))
+        let carItems = Set(composition.visibleItems(for: .info))
+        let availability = TabItemAvailability.of(
+            item, state: state, enabledFeatures: preferences.features.enabled,
+            plannerAvailable: preferences.smartChargingPlannerAvailable
+        )
+        if availability != .switchedOff || item == .vehicleHero || item == .vehicleCharging {
             switch item {
             case .vehicleSwitcher:
                 GarageChipStrip(cars: cars, activeVin: activeVin, brand: brand, onSelectCar: onSelectCar)
 
             case .vehicleHero:
-                VehicleHeroCard(state: state, displayedStateSummary: state.stateSummary, imageCache: imageCache)
+                NowInstrument(
+                    state: state, imageCache: imageCache,
+                    commandGate: gate(state, preferences, brand, remoteCommandInProgress,
+                                      inFlightCommandID, onRemoteCommand),
+                    feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                    showsAttention: usesCompactNow ? showsExceptions : !showsExceptions,
+                    showsCommandReceipts: showsCommandReceipts,
+                    showsWeatherIcon: showsWeatherIcon,
+                    usesCompactOverview: usesCompactNow,
+                    carSectionAction: { section in
+                        guard carItems.contains(section), let onOpenCar else { return nil }
+                        return { onOpenCar(section) }
+                    },
+                    dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier
+                )
 
             case .vehicleCharging:
-                VehicleChargingCard(state: state, history: history)
+                VehicleChargingCard(
+                    state: state, history: history, repeatsDisconnectedStatus: repeatsDisconnectedStatus,
+                    onOpenSession: onOpenSession,
+                    onOpenBattery: (carItems.contains(.infoBatteryDiagnostics) ? onOpenCar : nil)
+                        .map { navigate in { navigate(.infoBatteryDiagnostics) } }
+                )
+
+            case .vehicleHomeCharger:
+                HomeChargerCard(
+                    state: state,
+                    onOpenPlan: (compact && planItems.contains(.vehicleHomeCharger) ? onOpenPlan : nil)
+                        .map { navigate in { navigate(.vehicleHomeCharger) } }
+                )
 
             case .vehicleChargingPlanner, .controlsChargingPlanner:
-                ChargingPlannerCard(state: state)
+                ChargingPlannerCard(
+                    state: state,
+                    onOpenPlanner: (compact && planItems.contains(.controlsChargingPlanner) ? onOpenPlan : nil).map { navigate in
+                        { navigate(.controlsChargingPlanner) }
+                    }
+                )
 
             case .vehicleOpenings:
-                ComposableOpeningsCard(state: state)
+                ComposableOpeningsCard(
+                    state: state,
+                    onOpenCar: (compact && carItems.contains(.infoDoors) ? onOpenCar : nil)
+                        .map { navigate in { navigate(.infoDoors) } }
+                )
 
             case .vehicleTyres:
-                ComposableTyresCard(state: state)
+                VehicleTyresCard(state: state)
 
             case .vehicleReadiness:
-                VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
+                if let onOpenPlan, compact {
+                    DepartureSummary(state: state, compact: usesCompactNow) { onOpenPlan(.vehicleReadiness) }
+                } else if compact {
+                    DepartureCheckDisclosure(state: state).padding(.horizontal, HisingenTheme.cardPadding)
+                } else {
+                    VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
+                }
 
             case .vehicleLocation:
-                ComposableLocationCard(state: state, reverseGeocoder: reverseGeocoder)
+                ComposableLocationCard(
+                    state: state,
+                    reverseGeocoder: reverseGeocoder,
+                    compact: compact,
+                    onOpenCar: (carItems.contains(.infoLocation) ? onOpenCar : nil)
+                        .map { navigate in { navigate(.infoLocation) } }
+                )
 
             case .vehicleWeather:
                 NowWeatherReadout(state: state)
 
-            case .vehicleReceipts:
-                ComposableReceiptsCard(state: state, onDismiss: onDismissCommandReceipt,
-                                       onVerify: { _ in onRefresh() })
+            case .vehicleReceipts, .controlsReceipts:
+                CommandReceiptsView(state: state, onDismiss: onDismissCommandReceipt,
+                                    onVerify: onVerifyReceipt)
 
             case .vehicleAttention:
-                ComposableAttentionCard(state: state, error: error, onRefresh: onRefresh)
+                ComposableAttentionCard(
+                    state: state, error: error, onRefresh: onRefresh, showsReadingIssues: true,
+                    exceptions: showsExceptions ? ExceptionsCard.attentionRows(
+                        state: state, features: preferences.features,
+                        dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier
+                    ) : []
+                )
+
+            case .vehicleExceptions:
+                ComposableAttentionCard(
+                    state: state, error: nil, onRefresh: onRefresh, showsReadingIssues: false,
+                    exceptions: ExceptionsCard.attentionRows(
+                        state: state, features: preferences.features,
+                        dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier
+                    )
+                )
 
             case .controlsClimate:
-                ClimateControlCard(state: state, gate: gate(state, preferences, brand, remoteCommandInProgress,
-                                                             inFlightCommandID, onRemoteCommand),
-                                   onShowSchedule: { _ in })
+                ClimateControlCard(
+                    state: state,
+                    gate: gate(state, preferences, brand, remoteCommandInProgress,
+                               inFlightCommandID, onRemoteCommand),
+                    onShowSchedule: { _ in onOpenPlan?(.vehicleReadiness) },
+                    settingsOnly: onOpenPlan == nil
+                )
 
             case .controlsAccess:
                 AccessControlsCard(state: state, gate: gate(state, preferences, brand, remoteCommandInProgress,
@@ -104,7 +171,7 @@ enum ComposableCards {
             case .controlsOTA:
                 OTAControlsCard(state: state, gate: gate(state, preferences, brand, remoteCommandInProgress,
                                                          inFlightCommandID, onRemoteCommand),
-                                onRefresh: onRefresh)
+                                onRefresh: { onRefresh?() })
 
             default:
                 EmptyView()
@@ -172,6 +239,12 @@ struct TabCardStack: View {
     let onRemoteCommand: (RemoteCommand) -> Void
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
+    var brand: VehicleBrand? = nil
+    var feedback: RemoteCommandFeedback? = nil
+    var onAuthorizeRemoteCommands: (() -> Void)? = nil
+    var onOpenPlan: ((TabItemID) -> Void)? = nil
+    var onOpenCar: ((TabItemID) -> Void)? = nil
+    var onOpenSession: ((String) -> Void)? = nil
 
     /// Bumped after every drag move so the stack re-reads the composition. The preferences
     /// store is unobserved by design, and a pure reorder changes no feature membership, so
@@ -197,12 +270,12 @@ struct TabCardStack: View {
 
     private var placed: [TabItemID] {
         _ = reorderPulse
-        return composition.visibleItems(for: tab).filter { ComposableCards.isReusable($0) }
+        return composition.visibleItems(for: tab).filter { TabItemCatalog.isStandalone($0) }
     }
 
     /// Cards the reader placed that belong to the tab they came from.
     private var tabOwned: [TabItemID] {
-        composition.visibleItems(for: tab).filter { !ComposableCards.isReusable($0) }
+        composition.visibleItems(for: tab).filter { !TabItemCatalog.isStandalone($0) }
     }
 
     var body: some View {
@@ -215,7 +288,7 @@ struct TabCardStack: View {
                     history: history,
                     reverseGeocoder: reverseGeocoder,
                     imageCache: imageCache,
-                    brand: preferences.activeBrand,
+                    brand: brand ?? preferences.activeBrand,
                     cars: cars,
                     activeVin: activeVin,
                     error: error,
@@ -224,7 +297,14 @@ struct TabCardStack: View {
                     onRefresh: onRefresh,
                     onRemoteCommand: onRemoteCommand,
                     onSelectCar: onSelectCar,
-                    onDismissCommandReceipt: onDismissCommandReceipt
+                    onDismissCommandReceipt: onDismissCommandReceipt,
+                    onVerifyReceipt: { _ in onRefresh() },
+                    feedback: feedback,
+                    onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
+                    onOpenPlan: onOpenPlan,
+                    onOpenCar: onOpenCar,
+                    onOpenSession: onOpenSession,
+                    showsCommandReceipts: placed.contains(.vehicleReceipts)
                 )
                 .transition(.opacity)
                 // Attached before the drag transforms, so what it reports is the resting
@@ -252,7 +332,7 @@ struct TabCardStack: View {
                 .accessibilityAction(named: L10n.text("Move Down")) { moveItem(item, slots: 1) }
             }
 
-            if placed.isEmpty { emptyCard }
+            if placed.isEmpty && tabOwned.isEmpty { emptyCard }
             if !tabOwned.isEmpty { tabOwnedCard }
         }
         .hisAnimation(Motion.cardChange, value: placed)
@@ -427,9 +507,14 @@ private struct CardDragHandle: View {
 @MainActor
 private struct ComposableOpeningsCard: View {
     let state: VehicleState
+    var onOpenCar: (() -> Void)? = nil
 
     var body: some View {
-        if let exterior = state.exteriorStatus, !exterior.openings.isEmpty {
+        if let onOpenCar, let row = VehicleDashboardRows.doors(state: state) {
+            Button(action: onOpenCar) { row }
+                .buttonStyle(.pressable)
+                .help(L10n.text("Doors & Openings"))
+        } else if let exterior = state.exteriorStatus, !exterior.openings.isEmpty {
             DoorsAndOpeningsCardView(
                 ext: exterior,
                 isLocked: exterior.isLocked,
@@ -453,7 +538,7 @@ private struct ComposableOpeningsCard: View {
 }
 
 @MainActor
-private struct ComposableTyresCard: View {
+struct VehicleTyresCard: View {
     let state: VehicleState
 
     var body: some View {
@@ -463,7 +548,9 @@ private struct ComposableTyresCard: View {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
                     CardHeader(symbol: "circle.grid.2x2", title: L10n.text("Tyre Status"), color: HisingenTheme.semanticActive)
-                    Text(L10n.text("No tyre pressures or warning levels were reported on the last refresh."))
+                    Text(state.isVolvo
+                         ? L10n.text("Requires 'Connected Vehicle API' subscription on developer.volvocars.com and vehicle driven to calibrate iTPMS sensors.")
+                         : L10n.text("No tyre pressures or warning levels were reported on the last refresh."))
                         .hisType(.label)
                         .foregroundStyle(HisingenTheme.inkMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -477,6 +564,8 @@ private struct ComposableTyresCard: View {
 private struct ComposableLocationCard: View {
     let state: VehicleState
     let reverseGeocoder: ReverseGeocoder
+    var compact = false
+    var onOpenCar: (() -> Void)? = nil
 
     var body: some View {
         if let location = state.location, let latitude = location.latitude, let longitude = location.longitude {
@@ -489,7 +578,9 @@ private struct ComposableLocationCard: View {
                 weather: state.weather,
                 isLive: !state.hasOldData(),
                 freshnessText: state.freshnessDescription,
-                reverseGeocoder: reverseGeocoder
+                reverseGeocoder: reverseGeocoder,
+                compact: compact && onOpenCar != nil,
+                onOpenDetails: onOpenCar
             )
         } else {
             Card {
@@ -508,7 +599,7 @@ private struct ComposableLocationCard: View {
 }
 
 @MainActor
-private struct ComposableReceiptsCard: View {
+struct CommandReceiptsView: View {
     let state: VehicleState
     let onDismiss: (UUID) -> Void
     var onVerify: ((UUID) -> Void)? = nil
@@ -529,22 +620,34 @@ private struct ComposableReceiptsCard: View {
 private struct ComposableAttentionCard: View {
     let state: VehicleState
     let error: String?
-    let onRefresh: () -> Void
+    let onRefresh: (() -> Void)?
+    let showsReadingIssues: Bool
+    var exceptions: [KVRow] = []
 
     var body: some View {
-        let items = (error.map { [$0] } ?? []) + state.freshness.dataWarnings
-        if !items.isEmpty {
+        let items = showsReadingIssues ? (error.map { [$0] } ?? []) + state.freshness.dataWarnings : []
+        if !items.isEmpty || !exceptions.isEmpty {
             Card {
                 VStack(alignment: .leading, spacing: 6) {
                     CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Attention"),
                                color: HisingenTheme.semanticWarning, isSemantic: true)
-                    ForEach(items, id: \.self) { Text("• \($0)").hisType(.label).foregroundStyle(.secondary) }
-                    Button(L10n.text("Refresh")) { onRefresh() }
-                        .buttonStyle(.pressable)
-                        .hisType(.label, weight: .semibold)
-                        .foregroundStyle(HisingenTheme.accent)
-                        .help(L10n.text("Reload the vehicle state"))
-                        .accessibilityLabel(L10n.text("Refresh"))
+                    if !items.isEmpty {
+                        Text(L10n.text("Reading Freshness"))
+                            .hisType(.label, weight: .semibold)
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            Text(item).hisType(.label).foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                        if let onRefresh {
+                            Button(L10n.text("Refresh"), action: onRefresh)
+                                .buttonStyle(.hisSecondary)
+                        }
+                    }
+                    if !exceptions.isEmpty {
+                        if !items.isEmpty { PanelRule() }
+                        Text(L10n.text("Vehicle Warnings & Alarm"))
+                            .hisType(.label, weight: .semibold)
+                        ForEach(exceptions.indices, id: \.self) { exceptions[$0] }
+                    }
                 }
             }
         }
@@ -554,38 +657,42 @@ private struct ComposableAttentionCard: View {
 /// The garage chip strip, so a reader with more than one car can keep the switcher wherever
 /// they look for it.
 @MainActor
-private struct GarageChipStrip: View {
+struct GarageChipStrip: View {
     let cars: [CarSummary]
     let activeVin: String?
     let brand: VehicleBrand
     let onSelectCar: (String) -> Void
     @Namespace private var namespace
+    @Environment(\.preferencesStore) private var preferences
 
     var body: some View {
         if cars.count > 1 {
             let currentVin = activeVin ?? cars.first?.vin ?? ""
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 14) {
                     ForEach(cars, id: \.vin) { car in
                         let selected = car.vin == currentVin
                         Button { onSelectCar(car.vin) } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: brand == .polestar ? "bolt.car" : "car")
-                                    .hisType(.caption)
-                                Text(car.title).hisType(.label, weight: selected ? .bold : .medium)
-                            }
-                            .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background {
-                                if selected {
-                                    RoundedRectangle(cornerRadius: 0)
-                                        .fill(HisingenTheme.accent.opacity(0.12))
-                                        .matchedGeometryEffect(id: "garageChipSelection", in: namespace)
-                                } else {
-                                    HoverChipFill(shape: RoundedRectangle(cornerRadius: 0), resting: 0.04)
+                            // One weight for every chip, so choosing a car never moves its
+                            // neighbours; the selection is the 2pt underline the tabs use.
+                            Text(car.displayTitle(preferences: preferences))
+                                .hisType(.label)
+                                .lineLimit(1)
+                                .foregroundStyle(selected ? HisingenTheme.ink : HisingenTheme.inkMuted)
+                                .padding(.horizontal, 4)
+                                .frame(minHeight: 28)
+                                .overlay(alignment: .bottom) {
+                                    if selected {
+                                        Rectangle()
+                                            .fill(HisingenTheme.ink)
+                                            .frame(height: 2)
+                                            .matchedGeometryEffect(id: "garageChipSelection", in: namespace)
+                                    }
                                 }
-                            }
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.pressable)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
                     }
                 }
                 .padding(.horizontal, 2)

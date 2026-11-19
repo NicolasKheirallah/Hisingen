@@ -28,6 +28,8 @@ struct NexBlueProviderTests {
         let transport = cloud()
         let result = try await NexBlueProvider.signIn(credentials, transport: transport)
         #expect(result.chargers.map(\.id) == [serial])
+        #expect(result.chargers.first?.name == "NexBlue NX123")
+        #expect(result.chargers.first?.role == 0)
         #expect(result.refreshToken == "refresh")
         let login = try #require(transport.requests(path: root + "/account/login").first)
         let body = try #require(login.httpBody)
@@ -39,6 +41,39 @@ struct NexBlueProviderTests {
         #expect(fields["account_type"] as? Int == 0)
         #expect(transport.requests(path: root + "/chargers").first?.value(forHTTPHeaderField: "Authorization") == "Bearer access")
         #expect(transport.requests(path: root + "/account/refresh_token").isEmpty)
+    }
+
+    @Test func chargerNamesUseTheProductAndKeepTheRole() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/" + serial, .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        let result = try await NexBlueProvider.signIn(credentials, transport: transport)
+        #expect(result.chargers.first?.name == "NexBlue Edge 2")
+        #expect(result.chargers.first?.role == 0)
+        // The detail request is best effort and never blocks the list.
+        #expect(transport.requests(path: root + "/chargers/" + serial).count == 1)
+    }
+
+    @Test func chargersOfOneModelStayDistinguishable() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers", .json(
+            #"{"data":[{"serial_number":"NX123","role":0},{"serial_number":"NX456","role":1}]}"#))
+        transport.route("GET", root + "/chargers/NX123", .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        transport.route("GET", root + "/chargers/NX456", .json(#"{"product_name":"NexBlue Edge 2"}"#))
+        let result = try await NexBlueProvider.signIn(credentials, transport: transport)
+        #expect(result.chargers.map(\.name) == ["NexBlue Edge 2 · X123", "NexBlue Edge 2 · X456"])
+        #expect(result.chargers.map(\.role) == [0, 1])
+    }
+
+    @Test func statusReportsWhetherChargingIsDisabled() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1,"is_disable":true}"#))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.isDisabled?.value == true)
+
+        let bare = cloud()
+        bare.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1}"#))
+        let unknown = try await provider(bare).telemetry(chargerID: serial, now: now)
+        #expect(unknown.isDisabled == nil)
     }
 
     @Test func rejectsInvalidGrantsAndDoesNotForwardRawErrorMessages() async throws {
@@ -86,6 +121,59 @@ struct NexBlueProviderTests {
         #expect(telemetry.lifetimeEnergyKwh?.value == 100.5)
         #expect(telemetry.currentLimitAmps?.value == 16)
         #expect(telemetry.cableLocked?.value == true)
+    }
+
+    @Test func statusCarriesPhasesLimitsPhaseModeAndNetwork() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json("""
+            {"charging_state":2,"power":6.9,"voltage_list":[228,227,228],"current_list":[10.1,10.0,10.2],
+             "cable_current_limit":20,"circuit_fuse":16,"current_limit":16,"phase_charging":0,"network_status":2}
+            """))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.phases == .init(value: [.init(volts: 228, amps: 10.1), .init(volts: 227, amps: 10.0),
+                                                  .init(volts: 228, amps: 10.2)], timestamp: now))
+        #expect(telemetry.cableLimitAmps?.value == 20)
+        #expect(telemetry.circuitFuseAmps?.value == 16)
+        #expect(telemetry.phaseMode?.value == .adaptive)
+        #expect(telemetry.network?.value == .mobile)
+        #expect(telemetry.limits?.binding == .setting)
+    }
+
+    @Test func statusLeavesOutWhatTheChargerDoesNotReport() async throws {
+        let transport = cloud()
+        // Zero is the vendor's "no cable" for the cable rating; an unknown code is not guessed into a mode.
+        transport.route("GET", root + "/chargers/NX123/cmd/status", .json("""
+            {"charging_state":0,"cable_current_limit":0,"circuit_fuse":0,"phase_charging":9,"network_status":9,
+             "voltage_list":[228],"current_list":[]}
+            """))
+        let telemetry = try await provider(transport).telemetry(chargerID: serial, now: now)
+        #expect(telemetry.phases == nil)
+        #expect(telemetry.cableLimitAmps == nil)
+        #expect(telemetry.circuitFuseAmps == nil)
+        #expect(telemetry.phaseMode == nil)
+        #expect(telemetry.network == nil)
+
+        let bare = cloud()
+        bare.route("GET", root + "/chargers/NX123/cmd/status", .json(#"{"charging_state":1,"power":0}"#))
+        let minimal = try await provider(bare).telemetry(chargerID: serial, now: now)
+        #expect(minimal.status?.value == .pluggedIn)
+        #expect(minimal.phases == nil && minimal.phaseMode == nil && minimal.network == nil)
+    }
+
+    @Test func historyCarriesTheVendorStartAndStopReasons() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/sessions/charger/" + serial, .json("""
+            {"data":[
+              {"start_timestamp":1779996400,"end_timestamp":1779998200,"consumption":5.5,"start_reason":"Schedule","stop_reason":"EVDisconnected"},
+              {"start_timestamp":1779993000,"end_timestamp":1779994000,"consumption":2.5}
+            ]}
+            """))
+        let candidates = try await provider(transport).sessions(chargerID: serial, from: now.addingTimeInterval(-7_200), to: now)
+        let withReasons = try #require(candidates.first { $0.energyKwh == 5.5 })
+        #expect(withReasons.startReason == "Schedule")
+        #expect(withReasons.stopReason == "EVDisconnected")
+        let without = try #require(candidates.first { $0.energyKwh == 2.5 })
+        #expect(without.startReason == nil && without.stopReason == nil)
     }
 
     @Test func startAndStopValidateTheCommandResult() async throws {

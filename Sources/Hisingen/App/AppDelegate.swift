@@ -50,9 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // One maintenance pass, before anything can read: legacy plist snapshots move into SQLite,
-        // expired caches are dropped, and the legacy charging-summary repair starts. It used to be
-        // split between construction and the read paths themselves.
+        // Drop expired caches before restoring the session.
         stateStore.activate()
         mainMenuController = MainMenuController(
             onCheckForUpdates: { [weak self] in self?.updateController.checkNow() },
@@ -66,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             object: nil
         )
         preferences.migrateLegacyDefaults()
-        preferences.migrateRenamedThemeIdentifiers()
+        preferences.migrateRenamedThemeIdentifiersOnce()
         preferences.migrateLegacyPassword()
         // Applied after the legacy-defaults migration: on the one launch that carries the
         // old domain's keys over, the migrated appearance is the one that must take effect.
@@ -137,10 +135,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
                 return await self.startCalendarClimate()
             }
         )
+        // Tibber first when connected, Elpriser when it is not or cannot answer.
+        let plannerPrices = PlannerPriceProvider.shared
+        plannerPrices.setTibberSource { [weak self] in
+            await MainActor.run { self?.homeCharging.plannerTibberSource() }
+        }
         chargingPlannerController = ChargingPlannerController(
             preferences: preferences,
             notifier: notifier,
-            priceService: .shared,
+            priceSource: PlannerPriceProvider.shared,
             database: vehicleDatabase,
             latestState: { [weak self] in self?.vehicleSession.latest },
             // While Home Assistant runs a plan for the car, the vehicle-side scheduler waits.
@@ -183,16 +186,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // Before any sign-in flow can run: installs upgrading from earlier versions carry
         // session material and must never be greeted by the first-run setup pass.
         preferences.seedSetupPassForExistingInstall()
-        let initiallyAuthenticated = preferences.hasResumableSession(for: preferences.activeBrand)
         launchAtLoginController.reconcile(userInitiated: false)
         updateController.applyConfiguration()
         vehicleSession.resume()
         garageScanner.startLoop()
         urlRouter.startHandlingAppleEvents()
         calendarPreconditioning.start()
-        chargingPlannerController.start()
+        chargingPlannerController.reload()
         homeCharging.start()
-        if !initiallyAuthenticated {
+        homeCharging.houseMeter.start()
+        if vehicleSession.signInRequired {
             statusController.openPopover()
         }
     }
@@ -245,12 +248,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     }
 
     func render() {
-        let isAuth = vehicleSession.sessionValid
         statusController.remoteCommandInProgress = commandCoordinator.isInProgress
         statusController.inFlightRemoteCommandID = commandCoordinator.inProgressCommandIdentifier
         statusController.lastRemoteCommandFeedback = lastRemoteCommandFeedback
         statusController.render(data: vehicleSession.latest, error: vehicleSession.lastError,
-                               authenticated: isAuth, diagnostics: vehicleSession.lastDiagnostics)
+                               signInRequired: vehicleSession.signInRequired,
+                               diagnostics: vehicleSession.lastDiagnostics)
     }
 
     @objc private func systemAppearanceDidChange() {

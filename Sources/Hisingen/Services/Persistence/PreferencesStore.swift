@@ -26,6 +26,10 @@ final class PreferencesStore {
     /// UserDefaults, so without this flag every cache refill would retry the same failing write.
     var legacyEmailMigrationAttempted = false
     var cachedHasResumableSession: [VehicleBrand: Bool] = [:]
+    /// The last decoded tab layout, with the stored bytes it came from. The panel reads the
+    /// layout a dozen or more times per render; comparing bytes is cheaper than decoding and
+    /// normalising them again, and any write to the key changes the bytes, so it self-invalidates.
+    var tabCompositionMemo: (raw: Data, value: TabComposition)?
 
     func invalidateSessionCache() {
         cachedEmail = nil
@@ -96,6 +100,7 @@ final class PreferencesStore {
     func boolDefaultTrue(_ key: String) -> Bool { d.object(forKey: key) == nil || d.bool(forKey: key) }
 
     static let tabCompositionKey = "tab_composition_v1"
+    static let unreadableTabCompositionKey = "tab_composition_v1_unreadable"
 
     /// Bundle identifiers the app shipped with before `CFBundleIdentifier` was collapsed to
     /// `io.kheirallah.hisingen`. Each was a distinct `UserDefaults` domain.

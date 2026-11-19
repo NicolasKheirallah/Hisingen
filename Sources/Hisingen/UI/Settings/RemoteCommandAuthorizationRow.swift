@@ -1,12 +1,6 @@
 import SwiftUI
 
-/// The one-time browser grant for Polestar remote commands. Shared by Settings → Features →
-/// Remote Controls and Settings → Accounts, so the control sits where a reader looks for it and
-/// both pages speak the same sentence.
-///
-/// The grant is verified against, and dispatched with, the Polestar ID session. Offering the
-/// browser step without that session throws the grant away, so `needsSignIn` swaps the menu for
-/// the re-sign-in path instead of letting the reader authorize into nothing.
+/// The Polestar browser grant is verified against an active Polestar ID session.
 @MainActor
 struct RemoteCommandAuthorizationRow: View {
     let binder: PreferenceBinder
@@ -26,8 +20,6 @@ struct RemoteCommandAuthorizationRow: View {
         }
     }
 
-    /// The warning row, with the action only where this view owns it: on Features the account
-    /// card sits above and carries the sign-in, while the Accounts copy needs its own button.
     private func signInRow(offersAction: Bool) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -103,5 +95,61 @@ struct RemoteCommandAuthorizationRow: View {
         .padding(8)
         .background((authorized ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning).opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 0))
+    }
+}
+
+@MainActor
+struct SettingsRemoteAuthorizationCard: View {
+    let binder: PreferenceBinder
+
+    private var prefs: PreferencesStore { binder.preferences }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(
+                    symbol: "key",
+                    title: L10n.text("Remote Command Permissions"),
+                    color: HisingenTheme.semanticActive
+                )
+                if prefs.activeBrand == .volvo {
+                    volvoPermissions
+                } else {
+                    RemoteCommandAuthorizationRow(
+                        binder: binder,
+                        needsSignIn: prefs.hasPolestarIDCredentials && !prefs.hasSessionToken(for: .polestar)
+                    )
+                }
+            }
+        }
+    }
+
+    private var volvoPermissions: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.text("Approved Volvo permissions"))
+                    .hisType(.label, weight: .semibold)
+                Text(L10n.text("Request restricted lock, unlock, engine, locate, and location scopes on the next sign-in."))
+                    .hisType(.micro)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { prefs.volvoRestrictedScopesEnabled },
+                set: { enabled in
+                    prefs.volvoRestrictedScopesEnabled = enabled
+                    binder.bump()
+                    binder.notify(.features)
+                }
+            ))
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Approved Volvo permissions"))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        }
+        .padding(8)
+        .background(HisingenTheme.semanticWarning.opacity(0.08), in: RoundedRectangle(cornerRadius: 0))
     }
 }

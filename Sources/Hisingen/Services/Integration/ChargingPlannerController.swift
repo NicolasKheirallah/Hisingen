@@ -7,11 +7,21 @@ protocol ChargingPlannerNotifying {
     func notifyCommandNotice(title: String, body: String, subtitle: String?)
 }
 
-/// The price series the planner reads. `ElectricityPriceService` is the app's source; tests
-/// supply a fixed series so no evaluation touches the network or the wall clock.
+/// The price series the planner reads. `PlannerPriceProvider` is the app's source (the connected
+/// provider, Elpriser behind it); tests supply a fixed series so no evaluation touches the
+/// network or the wall clock.
 protocol ChargingPlannerPriceSource: Sendable {
     func prices(for zone: ElspotZone) async -> [ElectricityPricePoint]
     func fetchedAt(for zone: ElspotZone) async -> Date?
+    /// The bare market series, for pricing past sessions. `prices(for:)` may be a provider's
+    /// all-in series, which must not be stored as a spot cost.
+    func marketPrices(for zone: ElspotZone) async -> [ElectricityPricePoint]
+}
+
+extension ChargingPlannerPriceSource {
+    func marketPrices(for zone: ElspotZone) async -> [ElectricityPricePoint] {
+        await prices(for: zone)
+    }
 }
 
 extension ElectricityPriceService: ChargingPlannerPriceSource {}
@@ -107,7 +117,7 @@ final class ChargingPlannerController {
     }
 
     /// Fresh vehicle data arrived: re-run the plan ahead of the next tick.
-    func vehicleStateDidUpdate(_ state: VehicleState) {
+    func vehicleStateDidUpdate() {
         guard preferences.smartChargingPlannerAvailable, scheduler.isArmed else { return }
         Task { @MainActor in
             await self.evaluate()
@@ -138,7 +148,8 @@ final class ChargingPlannerController {
             generation: evaluationGeneration, vin: initialVIN
         )
         guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
-        backfillSpotCosts(prices: prices)
+        await backfillSpotCosts(zone: zone)
+        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
 
         guard let state = latestState() else { return }
         // Home Assistant owns this car's charging: no window banner, no auto-start from here.
@@ -288,9 +299,14 @@ final class ChargingPlannerController {
 
     /// Prices freshly fetched sessions that predate the series' coverage back in time.
     /// Sessions outside coverage stay untouched so a later pass can price them.
-    private func backfillSpotCosts(prices: [ElectricityPricePoint]) {
+    private func backfillSpotCosts(zone: ElspotZone) async {
+        let vins = activeVINs().filter { !$0.isEmpty }
+        guard !vins.isEmpty else { return }
+        // Always the market series: the stored spot cost is raw, and the rate policy adds the
+        // user's markup and VAT on display. A provider's all-in price would count them twice.
+        let prices = await priceSource.marketPrices(for: zone)
         let contract = preferences.electricityPriceContract
-        for vin in activeVINs() where !vin.isEmpty {
+        for vin in vins {
             chargingLedger.backfillSpotEstimatedCosts(vin: vin, prices: contract.settle(prices))
         }
     }

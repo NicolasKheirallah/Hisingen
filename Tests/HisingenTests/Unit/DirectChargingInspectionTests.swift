@@ -137,7 +137,8 @@ struct DirectChargingInspectionTests {
         window.isReleasedWhenClosed = false
         defer { window.close() }
         let (supplier, prefs, defaults) = try await makeModel(opMode: 1, power: "0", paired: false)
-        let home = TibberHome(id: "h1", name: "Villa", timeZone: nil, currency: "SEK")
+        let home = TibberHome(id: "h1", name: "Villa", timeZone: nil, currency: "SEK", priceArea: "SE4",
+                              gridCompany: "Vattenfall Eldistribution AB")
         for dark in [false, true] {
             try await render(SettingsTibberCard(model: supplier, homes: [home], selection: "h1"), width: 560, name: "tibber-pick",
                              dark: dark, window: window, output: output, preferences: prefs, defaults: defaults, model: supplier)
@@ -148,6 +149,58 @@ struct DirectChargingInspectionTests {
                              window: window, output: output, preferences: prefs, defaults: defaults, model: supplier)
         }
         supplier.stop()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["HISINGEN_PANEL_RENDERS"] != nil))
+    func renderTibberInsights() async throws {
+        let path = try #require(ProcessInfo.processInfo.environment["HISINGEN_PANEL_RENDERS"])
+        let output = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let (model, prefs, defaults) = try await makeModel(opMode: 1, power: "0", paired: false)
+        let from = Date(timeIntervalSince1970: 1_792_000_000)
+        let share = HouseLoadShare(hours: 744, houseKwh: 2_087, carKwh: 412, sessions: 14, coveredFrom: from,
+                                   coveredTo: from.addingTimeInterval(31 * 86_400), cappedKwh: 3.2, cappedHours: 5,
+                                   houseCost: 3_681, carCost: 702, currency: "SEK")
+        var unpriced = share
+        unpriced.houseCost = nil
+        unpriced.carCost = nil
+        unpriced.currency = nil
+        unpriced.cappedHours = 0
+        let width = PanelLayout.resolve(from: PreferencesStore.shared).width
+
+        func trends(_ value: HouseLoadShare) -> some View {
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    CardHeader(symbol: "bolt.badge.clock.fill", title: L10n.text("Charging Trends"), color: HisingenTheme.semanticGood)
+                    HouseLoadRows(share: value)
+                }
+            }
+        }
+        let figures = HStack(alignment: .top, spacing: 28) {
+            PlannerPriceFigure(value: 1.84, label: L10n.text("Planned average"), level: .cheap)
+            PlannerPriceFigure(value: 2.72, label: L10n.text("Now"), level: .veryExpensive)
+        }
+        let stacked = VStack(alignment: .leading, spacing: 10) {
+            PlannerPriceFigure(value: 1.84, label: L10n.text("Planned average"), level: .cheap)
+            PlannerPriceFigure(value: 2.72, label: L10n.text("Now"), level: .veryExpensive)
+        }.environment(\.dynamicTypeSize, .accessibility3)
+        for dark in [false, true] {
+            try await render(trends(share), width: width, name: "house-load-priced", dark: dark, window: window,
+                             output: output, preferences: prefs, defaults: defaults, model: model)
+            try await render(trends(unpriced), width: width, name: "house-load-energy-only", dark: dark, window: window,
+                             output: output, preferences: prefs, defaults: defaults, model: model)
+            try await render(trends(share), width: 380, name: "house-load-narrow", dark: dark, window: window,
+                             output: output, preferences: prefs, defaults: defaults, model: model)
+            try await render(figures, width: width, name: "planner-levels", dark: dark, window: window,
+                             output: output, preferences: prefs, defaults: defaults, model: model)
+            try await render(stacked, width: 380, name: "planner-levels-large-type", dark: dark, window: window,
+                             output: output, preferences: prefs, defaults: defaults, model: model)
+        }
+        model.stop()
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["HISINGEN_PANEL_RENDERS"] != nil))

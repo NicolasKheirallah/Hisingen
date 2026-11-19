@@ -227,7 +227,6 @@ extension VolvoAPI {
         let chargingWatts: Int? = energy?.chargingPowerWatts
         let currentDrawAmps: Int? = energy?.chargingCurrent?.value.map { Int($0.rounded()) }
         let currentLimitAmps: Int? = energy?.chargingCurrentLimit?.value.map { Int($0.rounded()) }
-        let chargingAmps: Int? = currentDrawAmps ?? currentLimitAmps
         let chargingVolts: Int? = energy?.chargingVoltage?.value.map { Int($0.rounded()) }
         let chargingState: ChargingState = ChargingState(volvoChargingStatus: energy?.chargingStateValue)
         let chargerConn: ChargerConnection = ChargerConnection(volvoConnectionStatus: energy?.chargerConnectionStatus?.value)
@@ -334,7 +333,7 @@ extension VolvoAPI {
                 estimatedTimeToFullMinutes: energy?.estTimeToFullMinutes.flatMap { $0 > 0 ? $0 : nil },
                 targetPercentage: targetPct,
                 powerWatts: chargingWatts,
-                currentAmps: currentDrawAmps ?? chargingAmps,
+                currentAmps: currentDrawAmps,
                 voltageVolts: chargingVolts,
                 type: chargingType,
                 connection: chargerConn,

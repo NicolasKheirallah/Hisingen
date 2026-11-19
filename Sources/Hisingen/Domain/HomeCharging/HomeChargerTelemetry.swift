@@ -87,6 +87,46 @@ struct HomeChargerReading<Value: Equatable & Sendable>: Equatable, Sendable {
     var timestamp: Date
 }
 
+/// One supply phase as the charger measures it.
+struct HomeChargerPhase: Equatable, Sendable {
+    var volts: Double
+    var amps: Double
+
+    /// A phase under this voltage is not wired or not energised; it says nothing about the supply.
+    static let energisedVolts = 50.0
+}
+
+/// Whether the charger uses one phase, three, or chooses by itself. A charger setting, not a reading of the car.
+enum HomeChargerPhaseMode: Equatable, Sendable {
+    case adaptive, singlePhase, threePhase
+}
+
+/// How the charger reaches its cloud.
+enum HomeChargerNetwork: Equatable, Sendable {
+    case none, wifi, mobile, ethernet
+}
+
+/// The three ceilings on charging current. The charger draws no more than the lowest of them, so
+/// the card names the one that binds.
+struct HomeChargerLimits: Equatable, Sendable {
+    enum Binding: Equatable, Sendable { case setting, cable, circuitFuse }
+
+    var settingAmps: Double
+    var cableAmps: Double?
+    var circuitFuseAmps: Double?
+
+    var effectiveAmps: Double {
+        min(settingAmps, cableAmps ?? .infinity, circuitFuseAmps ?? .infinity)
+    }
+
+    /// The setting wins a tie: it is the one the reader can change.
+    var binding: Binding {
+        if let cable = cableAmps, cable < settingAmps, cable <= (circuitFuseAmps ?? .infinity) { return .cable }
+        if let fuse = circuitFuseAmps, fuse < settingAmps { return .circuitFuse }
+        return .setting
+    }
+}
+
 /// Which entities feed one charger. `chargingState`, `power`, `sessionEnergy` and
 /// `chargingSwitch` are what the card and the commands need; the rest sharpen the picture.
 struct HomeChargerEntityMap: Codable, Equatable, Sendable {
@@ -158,8 +198,17 @@ struct HomeChargerTelemetry: Equatable, Sendable {
     var lifetimeEnergyKwh: HomeChargerReading<Double>?
     var currentLimitAmps: HomeChargerReading<Double>?
     var chargingEnabled: HomeChargerReading<Bool>?
+    /// The charger's own switch is off, so a start command would be refused. Separate from
+    /// `chargingEnabled`, which says whether energy is moving now, not whether it may start.
+    var isDisabled: HomeChargerReading<Bool>?
     var cableLocked: HomeChargerReading<Bool>?
     var vehicleBatteryPercent: HomeChargerReading<Double>?
+    /// Per-phase voltage and current. Only direct chargers that report them fill these four.
+    var phases: HomeChargerReading<[HomeChargerPhase]>?
+    var cableLimitAmps: HomeChargerReading<Double>?
+    var circuitFuseAmps: HomeChargerReading<Double>?
+    var phaseMode: HomeChargerReading<HomeChargerPhaseMode>?
+    var network: HomeChargerReading<HomeChargerNetwork>?
     /// Entities in the map that Home Assistant reports `unavailable` (not merely stale).
     var unavailableEntities: Set<String> = []
 
@@ -169,15 +218,27 @@ struct HomeChargerTelemetry: Equatable, Sendable {
          lifetimeEnergyKwh: HomeChargerReading<Double>? = nil,
          currentLimitAmps: HomeChargerReading<Double>? = nil,
          chargingEnabled: HomeChargerReading<Bool>? = nil,
+         isDisabled: HomeChargerReading<Bool>? = nil,
          cableLocked: HomeChargerReading<Bool>? = nil,
          vehicleBatteryPercent: HomeChargerReading<Double>? = nil,
-         unavailableEntities: Set<String> = []) {
+         unavailableEntities: Set<String> = [],
+         phases: HomeChargerReading<[HomeChargerPhase]>? = nil,
+         cableLimitAmps: HomeChargerReading<Double>? = nil,
+         circuitFuseAmps: HomeChargerReading<Double>? = nil,
+         phaseMode: HomeChargerReading<HomeChargerPhaseMode>? = nil,
+         network: HomeChargerReading<HomeChargerNetwork>? = nil) {
+        self.phases = phases
+        self.cableLimitAmps = cableLimitAmps
+        self.circuitFuseAmps = circuitFuseAmps
+        self.phaseMode = phaseMode
+        self.network = network
         self.status = status
         self.powerKw = powerKw
         self.sessionEnergyKwh = sessionEnergyKwh
         self.lifetimeEnergyKwh = lifetimeEnergyKwh
         self.currentLimitAmps = currentLimitAmps
         self.chargingEnabled = chargingEnabled
+        self.isDisabled = isDisabled
         self.cableLocked = cableLocked
         self.vehicleBatteryPercent = vehicleBatteryPercent
         self.unavailableEntities = unavailableEntities
@@ -244,11 +305,6 @@ struct HomeChargerTelemetry: Equatable, Sendable {
         unit?.lowercased() == "wh" ? value / 1_000 : value
     }
 
-    /// The newest timestamp across the readings the card is built from.
-    var newestTimestamp: Date? {
-        [status?.timestamp, powerKw?.timestamp, sessionEnergyKwh?.timestamp].compactMap { $0 }.max()
-    }
-
     /// Freshness of the charger status, the reading every other line leans on.
     func freshness(now: Date, staleAfter: TimeInterval = HomeChargerTelemetry.defaultStaleAfter) -> HomeChargerFreshness {
         guard let status else { return .noData }
@@ -294,6 +350,18 @@ enum HomeChargerActivity: Equatable, Sendable {
 }
 
 extension HomeChargerTelemetry {
+    /// The current ceilings, or `nil` when the charger gave no limit setting to compare against.
+    var limits: HomeChargerLimits? {
+        guard let setting = currentLimitAmps?.value, setting > 0 else { return nil }
+        return HomeChargerLimits(settingAmps: setting, cableAmps: cableLimitAmps?.value,
+                                 circuitFuseAmps: circuitFuseAmps?.value)
+    }
+
+    /// The phases carrying voltage, so a single-phase charger is not shown two empty phases.
+    var energisedPhases: [HomeChargerPhase] {
+        (phases?.value ?? []).filter { $0.volts >= HomeChargerPhase.energisedVolts }
+    }
+
     func activity(now: Date, staleAfter: TimeInterval = HomeChargerTelemetry.defaultStaleAfter) -> HomeChargerActivity {
         switch freshness(now: now, staleAfter: staleAfter) {
         case .noData, .unavailable: return .unavailable
@@ -302,6 +370,11 @@ extension HomeChargerTelemetry {
         }
         guard let status = status?.value else { return .unavailable }
         let power = isFresh(powerKw, now: now, staleAfter: staleAfter) ? powerKw?.value : nil
+        // A waiting token can lag the car: NexBlue has reported ev_waiting while the charger
+        // metered power. A current power reading above the idle threshold is the stronger fact.
+        if status.cableState == true, let power, power >= Self.zeroPowerThresholdKw {
+            return .charging(powerKw: power)
+        }
         switch status {
         case .unplugged: return .noCable
         case .pluggedIn: return .pluggedIn

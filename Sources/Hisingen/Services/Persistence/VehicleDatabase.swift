@@ -19,7 +19,7 @@ final class VehicleDatabase: @unchecked Sendable {
     private var vehicleEraseCounts: [String: Int] = [:]
 
     private func historyKey(_ vin: String) -> String {
-        vin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        vin.normalizedVIN
     }
 
     func historyToken(for vin: String) -> HistoryToken? {
@@ -95,7 +95,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 8
+    static let latestSchemaVersion = 9
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -204,7 +204,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
         logger.fault("Database failed PRAGMA quick_check; quarantining \(dbURL.lastPathComponent, privacy: .public) and starting fresh")
         handle.close()
-        let baseStamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let baseStamp = Format.iso8601.string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let uniqueSuffix: String = {
             let ms = Int(Date().timeIntervalSince1970 * 1000) % 1000
             return String(format: "%03d-%08X", ms, UInt32.random(in: 0...UInt32.max))
@@ -373,6 +373,17 @@ final class VehicleDatabase: @unchecked Sendable {
             wake_reason TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_connectivity_vin ON connectivity_history(vin, timestamp DESC);
+
+        CREATE TABLE IF NOT EXISTS vehicle_metric_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            metric TEXT NOT NULL,
+            value REAL,
+            text TEXT,
+            ref TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_metric_log ON vehicle_metric_log(vin, metric, timestamp DESC);
 
         CREATE TABLE IF NOT EXISTS cabin_climate_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
