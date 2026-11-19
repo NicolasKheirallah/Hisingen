@@ -43,8 +43,9 @@ extension AppDelegate {
 
         let host = NSHostingController(rootView: settings)
         let isNewWindow = settingsWindow == nil
+        let openingSize = Self.settingsOpeningSize(on: NSScreen.main ?? NSScreen.screens.first)
         let window = settingsWindow ?? NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1_080, height: 760),
+            contentRect: NSRect(origin: .zero, size: openingSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -54,14 +55,25 @@ extension AppDelegate {
         window.contentViewController = host
         window.isReleasedWhenClosed = false
         if isNewWindow {
-            window.setContentSize(NSSize(width: 1_080, height: 760))
+            window.setContentSize(openingSize)
             window.center()
         }
-        window.setFrameAutosaveName("HisingenSettingsWindowV2")
+        // V3: frames saved under V2 held the old 1080 by 760 opening size and would keep winning.
+        window.setFrameAutosaveName("HisingenSettingsWindowV3")
         settingsWindow = window
         statusController.dismissSettings()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Four fifths of the screen's usable width and six sevenths of its height, never smaller than
+    /// the old fixed size and capped so a large display does not stretch the sidebar and cards.
+    static func settingsOpeningSize(on screen: NSScreen?) -> NSSize {
+        let visible = screen?.visibleFrame.size ?? NSSize(width: 1_440, height: 900)
+        return NSSize(
+            width: min(1_400, max(1_080, (visible.width * 0.8).rounded())),
+            height: min(1_000, max(760, (visible.height * 6 / 7).rounded()))
+        )
     }
 
     func closeSettingsWindow() {
@@ -131,7 +143,7 @@ extension AppDelegate {
         case .presentation:
             preferences.applyAppearance()
             vehicleSession.reloadVehicleMetadata()
-        case .panelLayout:
+        case .panelLayout, .timeFormat:
             break
         case .launchAtLogin:
             launchAtLoginController.reconcile(userInitiated: true)

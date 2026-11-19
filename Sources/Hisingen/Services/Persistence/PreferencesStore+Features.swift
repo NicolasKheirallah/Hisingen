@@ -57,6 +57,11 @@ extension PreferencesStore {
             }
             if let memo = tabCompositionMemo, memo.raw == data { return memo.value }
             guard let decoded = try? JSONDecoder().decode(TabComposition.self, from: data) else {
+                // The next edit writes the shipped layout over this key. Keep the first bytes
+                // that failed to read, so a reader's arrangement is recoverable.
+                if d.data(forKey: Self.unreadableTabCompositionKey) == nil {
+                    d.set(data, forKey: Self.unreadableTabCompositionKey)
+                }
                 return seededTabComposition()
             }
             let value = decoded.normalized()
@@ -74,13 +79,12 @@ extension PreferencesStore {
     /// First read on an installation that predates tabs-and-cards: take the feature toggles
     /// the reader already made as the starting layout, so a card they switched off does not
     /// reappear the first time they open the panel. Runs once — after that the layout is the
-    /// reader's, and a feature they re-enable through the feature list stays hidden until they
-    /// say otherwise.
+    /// reader's. A feature that shipped off keeps its normal placement when the reader opts in.
     private func seededTabComposition() -> TabComposition {
         guard !d.bool(forKey: "tab_items_seeded_v1") else { return .default }
         d.set(true, forKey: "tab_items_seeded_v1")
         var seeded = TabComposition.default
-        let disabled = Set(AppFeature.allCases).subtracting(features.enabled)
+        let disabled = FeatureSelection.default.enabled.subtracting(features.enabled)
         guard !disabled.isEmpty else { return seeded }
         for item in TabItemCatalog.all {
             guard let feature = item.feature, disabled.contains(feature) else { continue }

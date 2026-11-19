@@ -25,7 +25,7 @@ struct VehicleActivityList: View {
                         Text(event.title).hisType(.caption, weight: .semibold)
                         Spacer()
                         Text(event.timestamp, style: .date).hisType(.micro).foregroundStyle(.secondary)
-                        Text(event.timestamp, style: .time).hisType(.micro).foregroundStyle(.secondary)
+                        Text(Format.shortTime(date: event.timestamp)).hisType(.micro).foregroundStyle(.secondary)
                     }
                     Text(event.summary).hisType(.caption).fixedSize(horizontal: false, vertical: true)
                 }

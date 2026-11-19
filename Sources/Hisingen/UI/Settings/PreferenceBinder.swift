@@ -5,6 +5,7 @@ enum SettingsChange {
     case features
     case notifications
     case presentation
+    case timeFormat
     case panelLayout
     case launchAtLogin
     case updater

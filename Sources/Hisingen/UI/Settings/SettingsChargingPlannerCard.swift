@@ -1,55 +1,22 @@
 import SwiftUI
 
-/// Settings → Features → "Charging Planner": the opt-in switch for the smart charging
-/// planner plus its inputs – the Swedish spot-price zone (SE1–SE4, with a suggestion
-/// from the vehicle's GPS when one is available), the charger output used to turn needed
-/// energy into whole charging hours, the window-open / prices-published banners, and the
-/// separate auto-start consent. The feature is off by default; enabling it here gates
-/// both the daily price fetch and the dashboard card. Prices come from
-/// elprisetjustnu.se, fetched once a day after publication.
 @MainActor
 struct SettingsChargingPlannerCard: View {
     let binder: PreferenceBinder
-    var state: VehicleState? = nil
-    @State private var showAutoStartConfirmation = false
+    var onOpenAutomation: (() -> Void)? = nil
 
     private var prefs: PreferencesStore { binder.preferences }
-    private var isEnabled: Bool { prefs.features.contains(.smartChargingPlanner) }
-
-    private static let powerOptions: [Double] = [3.7, 7.4, 11.0, 22.0]
-    private static let leadOptions: [Int] = [0, 15, 30, 60]
 
     private var powerChoices: [Double] {
+        let presets = [3.7, 7.4, 11.0, 22.0]
         let current = prefs.electricityChargerPowerKw
-        return Self.powerOptions.contains(current) ? Self.powerOptions : (Self.powerOptions + [current]).sorted()
-    }
-
-    private var leadChoices: [Int] {
-        let current = prefs.plannerWindowLeadMinutes
-        return Self.leadOptions.contains(current) ? Self.leadOptions : (Self.leadOptions + [current]).sorted()
-    }
-
-    private func leadLabel(_ minutes: Int) -> String {
-        switch minutes {
-        case 0: return L10n.text("When the window opens")
-        case 60: return L10n.text("1 hour before")
-        default: return L10n.format("%d minutes before", minutes)
-        }
-    }
-
-    /// GPS-based zone suggestion, shown only when it is available and differs from the
-    /// current pick. Approximate by design – the real borders bend around municipalities.
-    private var suggestedZone: ElspotZone? {
-        guard let latitude = state?.location?.latitude else { return nil }
-        let suggestion = ChargingPlannerSupport.suggestedZone(latitude: latitude)
-        return suggestion == prefs.electricityPriceZone ? nil : suggestion
+        return presets.contains(current) ? presets : (presets + [current]).sorted()
     }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader(symbol: "chart.bar", title: L10n.text("Charging Planner"), color: HisingenTheme.semanticWarning)
-
                 SettingsFeatureToggleRow(
                     binder: binder,
                     feature: .smartChargingPlanner,
@@ -57,48 +24,8 @@ struct SettingsChargingPlannerCard: View {
                     title: "Smart Charging Planner",
                     detail: "Show the cheapest charging window to your charge limit, from Swedish spot prices"
                 )
-
-                if isEnabled {
+                if prefs.features.contains(.smartChargingPlanner) {
                     Divider().opacity(HisingenTheme.dividerOpacity)
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Price Zone"))
-                                .hisType(.body, weight: .medium)
-                            Text(L10n.text("Spot-price area you live in"))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Picker("", selection: binder(\.electricityPriceZone)) {
-                            ForEach(ElspotZone.allCases) { zone in
-                                Text(zone.title).tag(zone)
-                            }
-                        }
-                        .labelsHidden()
-                        .accessibilityLabel(L10n.text("Electricity price zone"))
-                        .controlSize(.small)
-                        .frame(maxWidth: 220)
-                    }
-
-                    if let suggestedZone {
-                        HStack(spacing: 6) {
-                            Image(systemName: "location")
-                                .hisType(.caption)
-                                .foregroundStyle(HisingenTheme.accent)
-                            Text(L10n.format("The vehicle's location suggests %@", suggestedZone.title))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                            Button(L10n.text("Use")) {
-                                prefs.electricityPriceZone = suggestedZone
-                                binder.bump()
-                            }
-                            .buttonStyle(.pressable)
-                            .controlSize(.small)
-                            .accessibilityLabel(L10n.format("Use %@", suggestedZone.title))
-                        }
-                    }
-
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(L10n.text("Charging Power"))
@@ -118,99 +45,52 @@ struct SettingsChargingPlannerCard: View {
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
-
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Notify When the Cheap Window Opens"))
-                                .hisType(.body, weight: .medium)
-                            Text(L10n.text("One banner per window, respecting quiet hours"))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder(\.notifyPlannerWindowStart))
-                            .labelsHidden()
-                            .accessibilityLabel(L10n.text("Notify When the Cheap Window Opens"))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
+                    if let onOpenAutomation {
+                        NavigationRow(title: L10n.text("Open Plan Automations"), action: onOpenAutomation)
                     }
-
-                    if prefs.notifyPlannerWindowStart {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(L10n.text("Lead Time"))
-                                    .hisType(.body, weight: .medium)
-                                Text(L10n.text("How long before the window opens the banner arrives"))
-                                    .hisType(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Picker("", selection: binder(\.plannerWindowLeadMinutes)) {
-                                ForEach(leadChoices, id: \.self) { minutes in
-                                    Text(leadLabel(minutes)).tag(minutes)
-                                }
-                            }
-                            .labelsHidden()
-                            .accessibilityLabel(L10n.text("Lead Time"))
-                            .controlSize(.small)
-                            .frame(maxWidth: 200)
-                        }
-                    }
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(L10n.text("Notify When Tomorrow's Prices Arrive"))
-                                .hisType(.body, weight: .medium)
-                            Text(L10n.text("One daily banner after 14:15 with the cheapest hour"))
-                                .hisType(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: binder(\.notifyPlannerPricesPublished))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 5) {
-                                Text(L10n.text("Auto-Start Charging in the Window"))
-                                    .hisType(.body, weight: .medium)
-                                InformationButton(message: L10n.text("When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature."))
-                            }
-                            Text(L10n.text("Sends the start-charging command automatically while the window runs"))
-                                .hisType(.caption)
-                                .hisCaptionLeading()
-                                .fixedSize(horizontal: false, vertical: true)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { prefs.plannerAutoStartEnabled },
-                            set: { enabled in
-                                if enabled {
-                                    showAutoStartConfirmation = true
-                                } else {
-                                    prefs.plannerAutoStartEnabled = false
-                                    binder.bump()
-                                    binder.notify(.features)
-                                }
-                            }
-                        ))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                    }
-
-                    Text(L10n.text("Prices are fetched once a day after 14:15 and exclude taxes and grid fees. Source: elprisetjustnu.se."))
-                        .hisType(.micro)
-                        .foregroundStyle(.secondary)
-                        .hisCaptionLeading()
-                        .hisCaptionLeading()
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+        }
+    }
+}
+
+@MainActor
+struct PlannerAutoStartControl: View {
+    let binder: PreferenceBinder
+
+    @State private var showAutoStartConfirmation = false
+
+    private var prefs: PreferencesStore { binder.preferences }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(L10n.text("Auto-Start Charging in the Window"))
+                        .hisType(.body, weight: .medium)
+                    InformationButton(message: L10n.text("When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature."))
+                }
+                Text(L10n.text("Sends the start-charging command automatically while the window runs"))
+                    .hisType(.caption)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { prefs.plannerAutoStartEnabled },
+                set: { enabled in
+                    if enabled {
+                        showAutoStartConfirmation = true
+                    } else {
+                        prefs.plannerAutoStartEnabled = false
+                        binder.bump()
+                        binder.notify(.features)
+                    }
+                }
+            ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
         .confirmationDialog(
             L10n.text("Allow automatic charging commands?"),

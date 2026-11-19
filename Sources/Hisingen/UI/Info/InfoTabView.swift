@@ -17,14 +17,15 @@ struct InfoTabView: View {
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
     func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
-        layout.ordered(entries, by: item)
+        let resolved = layout.isDefault ? TabLayout(items: TabItemCatalog.defaultItems(for: .info)) : layout
+        return resolved.ordered(entries, by: item)
     }
 
     let state: VehicleState
     let history: HistoryWorkspace
     let imageCache: CarImageCache
     let reverseGeocoder: ReverseGeocoder
-    var onNavigateToHistory: () -> Void = {}
+    var onNavigateToHistory: (() -> Void)? = nil
     var onRemoteCommand: (RemoteCommand) -> Void = { _ in }
     /// The command context for the controls that live on Car: locks, windows and locate, and
     /// software install.
@@ -32,6 +33,11 @@ struct InfoTabView: View {
     var remoteCommandInProgress = false
     var inFlightCommandID: String? = nil
     var onRefresh: () -> Void = {}
+    var initialSection: TabItemID? = nil
+    var onNavigateToSettings: ((SettingsDestination) -> Void)? = nil
+    var onNavigateToPlan: ((TabItemID) -> Void)? = nil
+    var onNavigateToChargeLocation: ((String) -> Void)? = nil
+    var onNavigateToLogSection: ((TabItemID) -> Void)? = nil
 
     @State var selectedAngleIndex: Int = CarRenderAngle.frontThreeQuarter.rawValue
     @State var addressText: String?
@@ -71,7 +77,12 @@ struct InfoTabView: View {
             case .all:
                 return true
             case .specs:
-                return section == .overview || section == .factoryBuild || section == .exterior || section == .interior || section == .software || section == .softwareControls || section == .connectivity
+                switch section {
+                case .overview, .factoryBuild, .powertrain, .exterior, .interior, .software, .softwareControls, .connectivity:
+                    return true
+                default:
+                    return false
+                }
             case .battery:
                 return section == .powertrain || section == .batteryHealth || section == .batteryDiagnostics || section == .chargeLocations
             case .status:
@@ -88,13 +99,18 @@ struct InfoTabView: View {
         history: HistoryWorkspace,
         imageCache: CarImageCache,
         reverseGeocoder: ReverseGeocoder,
-        onNavigateToHistory: @escaping () -> Void = {},
+        onNavigateToHistory: (() -> Void)? = nil,
         onRemoteCommand: @escaping (RemoteCommand) -> Void = { _ in },
         brand: VehicleBrand = .polestar,
         remoteCommandInProgress: Bool = false,
         inFlightCommandID: String? = nil,
         onRefresh: @escaping () -> Void = {},
-        layout: TabLayout = .everything
+        layout: TabLayout = .everything,
+        initialSection: TabItemID? = nil,
+        onNavigateToSettings: ((SettingsDestination) -> Void)? = nil,
+        onNavigateToPlan: ((TabItemID) -> Void)? = nil,
+        onNavigateToChargeLocation: ((String) -> Void)? = nil,
+        onNavigateToLogSection: ((TabItemID) -> Void)? = nil
     ) {
         self.brand = brand
         self.remoteCommandInProgress = remoteCommandInProgress
@@ -107,6 +123,11 @@ struct InfoTabView: View {
         self.onNavigateToHistory = onNavigateToHistory
         self.onRemoteCommand = onRemoteCommand
         self.layout = layout
+        self.initialSection = initialSection
+        self.onNavigateToSettings = onNavigateToSettings
+        self.onNavigateToPlan = onNavigateToPlan
+        self.onNavigateToChargeLocation = onNavigateToChargeLocation
+        self.onNavigateToLogSection = onNavigateToLogSection
     }
 
     /// Everything the Info tab derives from the local store lives on the Vehicle History
@@ -202,6 +223,48 @@ struct InfoTabView: View {
         let view: AnyView
     }
 
+    private enum Workflow {
+        case specifications, access, software, service, battery
+
+        init?(section: InfoSection) {
+            switch section {
+            case .factoryBuild, .powertrain, .exterior, .interior: self = .specifications
+            case .location, .doors, .lockControls, .windowControls: self = .access
+            case .software, .softwareControls: self = .software
+            case .service, .fluids, .warranty: self = .service
+            case .batteryHealth, .batteryDiagnostics: self = .battery
+            default: return nil
+            }
+        }
+
+        var title: String? {
+            switch self {
+            case .specifications: return L10n.text("Vehicle Specifications")
+            case .access: return L10n.text("Parking & Access")
+            case .service: return L10n.text("Service & Protection")
+            case .battery: return L10n.text("Battery")
+            case .software: return nil
+            }
+        }
+    }
+
+    private struct WorkflowRun: Identifiable {
+        let workflow: Workflow?
+        var sections: [InfoSectionEntry]
+        var id: InfoSection { sections[0].id }
+    }
+
+    private func workflows(for entries: [InfoSectionEntry]) -> [WorkflowRun] {
+        entries.reduce(into: []) { runs, entry in
+            let workflow = Workflow(section: entry.id)
+            if let workflow, runs.last?.workflow == workflow {
+                runs[runs.count - 1].sections.append(entry)
+            } else {
+                runs.append(WorkflowRun(workflow: workflow, sections: [entry]))
+            }
+        }
+    }
+
     var availableExteriorAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter { angle in
             imageCache.hasImage(for: state.identity.vin, angle: angle.rawValue)
@@ -218,10 +281,21 @@ struct InfoTabView: View {
                 if draws(.infoNavBar) {
                     infoNavBar(proxy: proxy, entries: allEntries)
                 }
-                ForEach(entries) { entry in
-                    entry.view
-                        .id(entry.id)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                ForEach(workflows(for: entries)) { run in
+                    VStack(alignment: .leading, spacing: run.sections.count > 1 ? 6 : 0) {
+                        if run.sections.count > 1, let title = run.workflow?.title {
+                            Text(title)
+                                .hisType(.heading, weight: .semibold)
+                                .foregroundStyle(HisingenTheme.ink)
+                                .accessibilityAddTraits(.isHeader)
+                                .padding(.horizontal, HisingenTheme.cardPadding)
+                        }
+                        ForEach(run.sections) { entry in
+                            entry.view
+                                .id(entry.id)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             .hisAnimation(Motion.cardChange, value: entries.map(\.id))
@@ -233,6 +307,10 @@ struct InfoTabView: View {
             }
             .task(id: "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
             .task(id: coordinateKey) { await resolveAddressIfNeeded() }
+            .onChange(of: initialSection, initial: true) { _, target in
+                guard let target, let section = allEntries.first(where: { Self.item(for: $0.id) == target }) else { return }
+                jump(to: section.id, proxy: proxy)
+            }
             // Every `reportError` comes from writing a report, CSV, pack or image out of the
             // app, so the title names that; the message carries the system's cause.
             .alert(
@@ -268,8 +346,8 @@ struct InfoTabView: View {
                                                  isTailgateLocked: ext.isTailgateLocked,
                                                  model: state.model))
         }
-        if let tyres = state.maintenance.details?.tyres, !tyres.isEmpty {
-            add(.tyres, TireStatusCardView(tyres: tyres, model: state.model))
+        if preferences.features.contains(.tyreAndWarnings) {
+            add(.tyres, VehicleTyresCard(state: state))
         }
         add(.fluids, fluidsAndLightingCard)
         if softwareCardHasContent {
@@ -277,10 +355,14 @@ struct InfoTabView: View {
         }
         let features = preferences.features.enabled
         let profile = state.capabilityProfile
-        if features.contains(.remoteOTA) && profile.permits(.softwareInstallControl) {
-            add(.softwareControls, OTAControlsCard(state: state, gate: commandGate, onRefresh: onRefresh))
+        let showsOTAStatus = !softwareCardHasContent || !draws(.infoSoftware)
+        if features.contains(.remoteOTA) && profile.permits(.softwareInstallControl),
+           showsOTAStatus || OTAControlsCard.hasCurrentControls(state.softwareInfo) {
+            add(.softwareControls, OTAControlsCard(
+                state: state, gate: commandGate, onRefresh: onRefresh, showsStatus: showsOTAStatus
+            ))
         }
-        if state.location?.latitude != nil {
+        if preferences.features.contains(.vehicleLocation) {
             add(.location, parkingLocationCard)
         }
         if features.contains(.remoteLocks) {
@@ -322,10 +404,10 @@ struct InfoTabView: View {
             add(.chargeLocations, chargeLocationsCard)
         }
         add(.factoryBuild, factoryBuildCard)
-        if state.otaCapabilities != nil, state.isVolvo == false {
-            add(.capabilities, capabilityInspectorCard)
+        if state.otaCapabilities != nil, !state.isVolvo {
+            add(.capabilities, capabilitySection(capabilityInspectorCard))
         } else if !capabilityProfileEntries.positive.isEmpty || !capabilityProfileEntries.negative.isEmpty {
-            add(.capabilities, vehicleCapabilityCard)
+            add(.capabilities, capabilitySection(vehicleCapabilityCard))
         }
         // Present from the first paint, with a placeholder until the read lands and an explicit
         // empty state after it, rather than appearing only once it has something to show.
@@ -336,9 +418,6 @@ struct InfoTabView: View {
                 message: L10n.text("Hisingen could not read the local history database. Nothing has been deleted; this is a read failure, not an empty history."),
                 retry: { Task { await loadAsyncData() } }
             ))
-        } else if asyncData.recentTelemetry.isEmpty, asyncData.recentCommands.isEmpty,
-                  asyncData.recentActivities.isEmpty {
-            add(.activity, activityPlaceholderCard(message: L10n.text("No local activity recorded yet.")))
         } else {
             add(.activity, activityHistoryCard)
         }
@@ -352,13 +431,33 @@ struct InfoTabView: View {
         return ordered(out, by: { Self.item(for: $0.id) })
     }
 
+    private func capabilitySection<Content: View>(_ content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            content
+            if let onNavigateToSettings {
+                NavigationRow(title: L10n.text("Vehicle Data Settings")) { onNavigateToSettings(.vehicleCapabilities) }
+                    .padding(.horizontal, HisingenTheme.cardPadding)
+            }
+        }
+    }
+
+    private func jump(to section: InfoSection, proxy: ScrollViewProxy) {
+        if !selectedCategory.matches(section) { selectedCategory = .all }
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation(Motion.resolve(Motion.entrance)) {
+                proxy.scrollTo(section, anchor: .top)
+            }
+        }
+    }
+
     /// The activity section's loading and empty states, matching the header the loaded card uses so
     /// the section does not change shape when its rows arrive.
     @ViewBuilder
     private func activityPlaceholderCard(message: String?, retry: (() -> Void)? = nil) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: HisingenTheme.chartInfo)
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Recent Vehicle Activity"), color: HisingenTheme.chartInfo)
                 if let message {
                     if retry != nil {
                         Label(L10n.text("History could not be read"), systemImage: "exclamationmark.triangle.fill")
@@ -420,9 +519,7 @@ struct InfoTabView: View {
             Menu {
                 ForEach(entries) { entry in
                     Button(entry.id.title) {
-                        withAnimation(Motion.resolve(Motion.entrance)) {
-                            proxy.scrollTo(entry.id, anchor: .top)
-                        }
+                        jump(to: entry.id, proxy: proxy)
                     }
                 }
             } label: {
@@ -474,7 +571,9 @@ struct InfoTabView: View {
     // MARK: - Async data
 
     private var coordinateKey: String? {
-        guard let lat = state.location?.latitude, let lon = state.location?.longitude else { return nil }
+        guard draws(.infoLocation), preferences.features.contains(.vehicleLocation),
+              !preferences.privacyRedactionEnabled,
+              let lat = state.location?.latitude, let lon = state.location?.longitude else { return nil }
         return "\(lat),\(lon)"
     }
 
@@ -486,9 +585,10 @@ struct InfoTabView: View {
     }
 
     private func resolveAddressIfNeeded() async {
-        guard let lat = state.location?.latitude, let lon = state.location?.longitude else { return }
         addressResolved = false
         addressText = nil
+        guard coordinateKey != nil,
+              let lat = state.location?.latitude, let lon = state.location?.longitude else { return }
         let resolved = await reverseGeocoder.geocode(latitude: lat, longitude: lon)
         guard !Task.isCancelled else { return }
         addressText = resolved

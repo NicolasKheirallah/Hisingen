@@ -504,6 +504,7 @@ struct KeychainStore: Sendable {
     private func save(_ value: String, account: String) throws {
         operationLock.lock()
         defer { operationLock.unlock() }
+        guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
         // A rewrite of an unchanged secret still touches the item's access list, and a build
         // with a different code identity that does it can reset which apps may read it without
         // a password. The cache holds only what this process read or stored, so a match means
@@ -514,7 +515,6 @@ struct KeychainStore: Sendable {
         if isTestService {
             Self.testStore.set(cacheKey(account: account), value: value)
         } else {
-            guard !wouldWriteProductionItemsFromTests else { throw KeychainError.productionItemsFromTests }
             let status = write(value, account: account, useDataProtection: true)
             if status != errSecSuccess {
                 guard status != errSecInteractionRequired else { throw KeychainError.interactionRequired }

@@ -371,7 +371,7 @@ struct HomeChargingPlanSheet: View {
             .padding(16)
             PanelRule()
             ScrollView {
-                HomeChargingPlanEditor(state: state, model: model)
+                HomePlannerSection(state: state, model: model)
                     .padding(16)
             }
         }

@@ -27,25 +27,39 @@ struct ThemeChoice: Sendable {
         defaults: UserDefaults = .standard
     ) -> AppTheme {
         let key = vin.normalizedVIN
-        if !key.isEmpty,
-           let values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String],
-           let stored = values[key],
+        if let override = vehicleOverride(for: key, defaults: defaults) {
+            return override
+        }
+        return brandDefault(for: brand, defaults: defaults, allowsLegacyTheme: key.isEmpty)
+    }
+
+    static func brandDefault(for brand: VehicleBrand, defaults: UserDefaults, allowsLegacyTheme: Bool) -> AppTheme {
+        if let stored = defaults.string(forKey: "theme_for_\(brand.rawValue)"),
            let theme = AppTheme(rawValue: stored) {
             return theme
         }
-
-        if let brandStored = defaults.string(forKey: "theme_for_\(brand.rawValue)"),
-           let brandTheme = AppTheme(rawValue: brandStored) {
-            return brandTheme
+        if allowsLegacyTheme,
+           let stored = defaults.string(forKey: "app_theme"),
+           let theme = AppTheme(rawValue: stored) {
+            return theme
         }
-
-        if key.isEmpty,
-           let appStored = defaults.string(forKey: "app_theme"),
-           let appTheme = AppTheme(rawValue: appStored) {
-            return appTheme
-        }
-
         return brand == .volvo ? .volvo : .polestar
+    }
+
+    static func vehicleOverride(for vin: String, defaults: UserDefaults) -> AppTheme? {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty,
+              let values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String],
+              let stored = values[key] else { return nil }
+        return AppTheme(rawValue: stored)
+    }
+
+    static func setVehicleOverride(_ theme: AppTheme?, for vin: String, defaults: UserDefaults) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        var values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]
+        values[key] = theme?.rawValue
+        defaults.set(values, forKey: "vehicle_themes_v1")
     }
 
     /// Assigns a theme at an explicit scope.
@@ -56,12 +70,7 @@ struct ThemeChoice: Sendable {
     ) {
         switch scope {
         case .vehicle(let vin):
-            let key = vin.normalizedVIN
-            if !key.isEmpty {
-                var values = defaults.dictionary(forKey: "vehicle_themes_v1") as? [String: String] ?? [:]
-                values[key] = theme.rawValue
-                defaults.set(values, forKey: "vehicle_themes_v1")
-            }
+            setVehicleOverride(theme, for: vin, defaults: defaults)
             defaults.set(theme.rawValue, forKey: "app_theme")
         case .brand(let brand):
             defaults.set(theme.rawValue, forKey: "theme_for_\(brand.rawValue)")

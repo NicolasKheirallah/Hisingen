@@ -4,7 +4,11 @@ import SwiftUI
 struct ChargingControlsCard: View {
     let state: VehicleState
     let gate: ControlsCommandGate
-    let onShowSchedule: (ScheduleKind) -> Void
+    var selectedLocationID: String? = nil
+
+    static func locationAnchor(_ id: String) -> String { "charge-location-\(id)" }
+
+    @State private var expandedLocations: Set<String> = []
 
     @State private var chargeTargetDraft: Double?
     @State private var ampLimitDraft: Double?
@@ -87,25 +91,6 @@ struct ChargingControlsCard: View {
                 }
 
                 chargeLocationsSection
-
-                if profile.permits(.chargingSchedule)
-                    && (features.contains(.remoteSchedules) || features.contains(.remoteCharging)) {
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-                    Button {
-                        onShowSchedule(.globalCharging)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar.badge.clock")
-                            Text(L10n.text("Manage Timers & Schedules…"))
-                                .hisType(.label, weight: .medium)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 28)
-                    }
-                    .buttonStyle(.hisSecondary)
-                    if state.energy.pendingGlobalChargeTimer == true {
-                        pendingSyncLine(L10n.text("Timer update queued · applies when the car wakes"))
-                    }
-                }
             }
         }
         .opacity(gate.liveOpacity(chargingCommands))
@@ -166,6 +151,9 @@ struct ChargingControlsCard: View {
             Button(L10n.text("Cancel"), role: .cancel) { locationPendingDelete = nil }
         } message: {
             deleteConfirmationMessage
+        }
+        .onChange(of: selectedLocationID, initial: true) { _, id in
+            if let id { expandedLocations.insert(id) }
         }
         .onChange(of: chargeTarget) { _, _ in chargeTargetDraft = nil }
         .onChange(of: ampLimit) { _, _ in ampLimitDraft = nil }
@@ -409,8 +397,9 @@ struct ChargingControlsCard: View {
 
     @ViewBuilder
     private var chargeLocationsSection: some View {
-        if profile.permits(.chargeLocations) && features.contains(.remoteCharging) && features.contains(.chargeLocations) {
-            let locations = state.energy.locations.filter { $0.isSavedLocation || !$0.alias.isEmpty }
+        if features.contains(.chargeLocations) {
+            let locations = state.savedChargeLocations
+            let canEditLocations = profile.permits(.chargeLocations) && features.contains(.remoteCharging)
             VStack(alignment: .leading, spacing: 10) {
                 Divider().opacity(HisingenTheme.dividerOpacity)
                 HStack {
@@ -418,21 +407,20 @@ struct ChargingControlsCard: View {
                         .hisType(.label, weight: .semibold)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button {
-                        showAddLocation = true
-                    } label: {
-                        Label(L10n.text("Add here"), systemImage: "plus.circle")
-                            .hisType(.caption, weight: .medium)
-                            .foregroundStyle(HisingenTheme.accent)
+                    if canEditLocations {
+                        Button {
+                            showAddLocation = true
+                        } label: {
+                            Label(L10n.text("Add here"), systemImage: "plus.circle")
+                                .hisType(.caption, weight: .medium)
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                        .buttonStyle(.pressable)
+                        .disabled(gate.isDisabled(.createChargeLocationAtCar(
+                            alias: "", ampLimit: 0, minimumSoc: 0, optimisedCharging: false
+                        )))
+                        .help(L10n.text("Saves the vehicle's current position as a charge location."))
                     }
-                    .buttonStyle(.pressable)
-                    // Asks the gate, not the raw busy flag, so the card and this control always
-                    // agree on why it is inert. The placeholder values are the ones the sheet
-                    // starts from: availability reads the command's shape, not the user's numbers.
-                    .disabled(gate.isDisabled(.createChargeLocationAtCar(
-                        alias: "", ampLimit: 0, minimumSoc: 0, optimisedCharging: false
-                    )))
-                    .help(L10n.text("Saves the vehicle's current position as a charge location."))
                 }
 
                 if let presence = state.chargeLocationPresence {
@@ -451,15 +439,28 @@ struct ChargingControlsCard: View {
                 }
 
                 if locations.isEmpty {
-                    Text(L10n.text("No saved locations. Use “Add here” while parked where you charge."))
+                    Text(L10n.text(canEditLocations
+                                   ? "No saved locations. Use “Add here” while parked where you charge."
+                                   : "No saved locations reported."))
                         .hisType(.micro)
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
 
                 ForEach(locations) { location in
-                    chargeLocationRow(location)
-                        .transition(.opacity)
+                    DisclosureGroup(isExpanded: locationExpansion(location.id)) {
+                        if canEditLocations {
+                            chargeLocationRow(location)
+                        } else {
+                            locationReadings(location)
+                        }
+                    } label: {
+                        Text(locationName(location))
+                            .hisType(.label, weight: .semibold)
+                    }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
+                    .id(Self.locationAnchor(location.id))
+                    .transition(.opacity)
                 }
             }
             // Keyed on the collection itself so saved/removed locations reflow
@@ -468,7 +469,43 @@ struct ChargingControlsCard: View {
         }
     }
 
+    private func locationExpansion(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedLocations.contains(id) },
+            set: { expanded in
+                if expanded { expandedLocations.insert(id) }
+                else { expandedLocations.remove(id) }
+            }
+        )
+    }
+
+    private func locationName(_ location: ChargeLocationSnapshot) -> String {
+        guard !preferences.privacyRedactionEnabled, !location.alias.isEmpty else {
+            return L10n.text("Saved charge location")
+        }
+        return location.alias
+    }
+
+    private func locationReadings(_ location: ChargeLocationSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            KVRow(L10n.text("Current Limit"),
+                  location.ampLimit > 0 ? Format.amps(location.ampLimit) : L10n.text("Vehicle default"))
+            if location.minimumSoc > 0 {
+                KVRow(L10n.text("Minimum Charge"), Format.percent(Double(location.minimumSoc)))
+            }
+            if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
+                KVRow(L10n.text("Optimised charging"), mode)
+            }
+            if !preferences.privacyRedactionEnabled, let lat = location.latitude, let lon = location.longitude {
+                KVRow(L10n.text("Coordinates"), String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon))
+                    .privacySensitive()
+            }
+        }
+        .padding(.top, 6)
+    }
+
     private func chargeLocationPresenceText(_ presence: ChargeLocationPresence) -> String {
+        if preferences.privacyRedactionEnabled { return L10n.text("Saved charge location") }
         guard let since = presence.since else {
             return L10n.format("At %@", presence.alias)
         }
@@ -487,33 +524,12 @@ struct ChargingControlsCard: View {
         return L10n.format("%d location deletions queued · applies when the car wakes", deletions)
     }
 
-    private func locationScheduleText(_ schedule: VehicleSchedule) -> String {
-        let timeStr = String(format: "%02d:%02d", locale: L10n.displayLocale, schedule.startHour ?? 0, schedule.startMinute ?? 0)
-        let endStr = schedule.endHour.map {
-            String(format: " - %02d:%02d", locale: L10n.displayLocale, $0, schedule.endMinute ?? 0)
-        } ?? ""
-        var parts = "\(schedule.kind.title): \(timeStr)\(endStr)"
-        if !schedule.weekdays.isEmpty {
-            parts += " · \(schedule.weekdays.map(\.shortName).joined(separator: ", "))"
-        } else if schedule.oneShotDate != nil {
-            parts += " · \(L10n.text("Once"))"
-        }
-        if !schedule.isActive {
-            parts += " · \(L10n.text("Off"))"
-        }
-        return parts
-    }
-
     private func chargeLocationRow(_ location: ChargeLocationSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "mappin.circle")
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.accent)
-                Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
-                    .hisType(.label, weight: .semibold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
                 Spacer()
                 Button {
                     renameDraft = location.alias
@@ -663,21 +679,9 @@ struct ChargingControlsCard: View {
                     .transition(.opacity)
             }
 
-            if !location.chargeTimers.isEmpty || !location.departureTimes.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
-                        Label(locationScheduleText(schedule), systemImage: "bolt")
-                            .hisType(.micro)
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(location.departureTimes, id: \.rowIdentity) { schedule in
-                        Label(locationScheduleText(schedule), systemImage: "calendar.badge.clock")
-                            .hisType(.micro)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.top, 2)
-                .transition(.opacity)
+            if !preferences.privacyRedactionEnabled, let lat = location.latitude, let lon = location.longitude {
+                KVRow(L10n.text("Coordinates"), String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon))
+                    .privacySensitive()
             }
 
             Button(role: .destructive) {

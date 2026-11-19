@@ -35,18 +35,15 @@ struct SettingsHomeChargingCard: View {
     @State private var seededSource = false
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "powerplug", title: L10n.text("Home Charging"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Connect a charger to view its status, control charging, and import sessions."))
-                    .hisType(.caption)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let pairing = model.pairing {
-                    pairedView(pairing)
-                } else {
-                    setupView
-                }
+        SettingsConnectedServiceCard(
+            title: "Home Charging",
+            symbol: "powerplug",
+            detail: "Connect a charger to view its status, control charging, and import sessions."
+        ) {
+            if let pairing = model.pairing {
+                pairedView(pairing)
+            } else {
+                setupView
             }
         }
         .onAppear {

@@ -13,8 +13,8 @@ extension HistoryDashboardView {
             facts.append(L10n.format("%d trips", aggregateTrips.count))
             facts.append(L10n.format("%@ driving", Format.shortDuration(minutes: Int(drivingTime / 60))))
         }
-        if energy > 0 && !aggregateTrips.isEmpty { facts.append(Format.energyKwh(energy)) }
-        if let cost {
+        if !showsChargingSummary, energy > 0, !aggregateTrips.isEmpty { facts.append(Format.energyKwh(energy)) }
+        if !showsChargingSummary, let cost {
             facts.append("\(Format.currency(cost.amount, symbol: cost.currency)) \(L10n.text("(estimated)"))")
         }
 
@@ -47,13 +47,14 @@ extension HistoryDashboardView {
                     }
                 }
                 Spacer(minLength: 0)
-                exportMenu
+                if !showsHistoryExportHeader { exportMenu }
             }
 
             if state.powertrain.hasElectricRange || !chargingSessions.isEmpty {
                 PanelRule()
                 EnergyTrace(sessions: chargingSessions, window: activeRange)
             }
+            recordingCoverageSection
         }
         .padding(.horizontal, HisingenTheme.cardPadding)
         .padding(.vertical, 10)
@@ -104,19 +105,29 @@ struct EnergyTrace: View {
         }
     }
 
+    /// Charge-level range of the plot. A trace whose charges all sit between 40 and 80% used to
+    /// spend half its height on empty 0-40 and 80-100; a trace that spans most of the range keeps
+    /// the full 0-100 ruling.
+    private func levelDomain(_ charges: [Charge]) -> ClosedRange<Double> {
+        guard let low = charges.map({ min($0.from, $0.to) }).min(),
+              let high = charges.map({ max($0.from, $0.to) }).max(), high - low < 60 else { return 0...100 }
+        var lower = max(0, (low - 5) / 10).rounded(.down) * 10
+        var upper = min(100, ((high + 5) / 10).rounded(.up) * 10)
+        if upper - lower < 20 { lower = max(0, upper - 20); upper = lower + 20 }
+        return lower...min(100, upper)
+    }
+
     private func chart(_ charges: [Charge], lower: Date, upper: Date) -> some View {
         let span = upper.timeIntervalSince(lower)
-        let dateFormat = Date.FormatStyle().locale(L10n.displayLocale)
-        let tickFormat = span <= 86_400 ? dateFormat.hour().minute()
-            : span <= 3 * 86_400 ? dateFormat.month(.abbreviated).day().hour()
-            : span > 365 * 86_400 ? dateFormat.month(.abbreviated).year()
-            : dateFormat.month(.abbreviated).day()
+        let tickFormat = HistoryTimeAxis.format(span: span)
+        let levels = levelDomain(charges)
+        let yValues: AxisMarkValues = levels == 0...100 ? .stride(by: 25.0) : .automatic(desiredCount: 4)
 
         return Chart(charges) { charge in
             sessionMarks(charge)
         }
         .chartXScale(domain: lower...upper, range: .plotDimension(startPadding: 6, endPadding: 6))
-        .chartYScale(domain: 0.0...100.0, range: .plotDimension(startPadding: 6, endPadding: 6))
+        .chartYScale(domain: levels, range: .plotDimension(startPadding: 6, endPadding: 6))
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisTick().foregroundStyle(HisingenTheme.hairline)
@@ -133,7 +144,7 @@ struct EnergyTrace: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: [0.0, 25, 50, 75, 100]) { value in
+            AxisMarks(position: .trailing, values: yValues) { value in
                 AxisGridLine().foregroundStyle(HisingenTheme.hairline)
                 AxisValueLabel {
                     if let level = value.as(Double.self) {
@@ -150,20 +161,28 @@ struct EnergyTrace: View {
         .accessibilityValue(accessibilitySummary(charges))
     }
 
+    /// One charge, drawn from where it started to where it ended, so a charge with duration
+    /// leans across the time axis instead of standing as a vertical tick at its end. Over a long
+    /// window the lean is under a pixel and it reads as the tick it always was.
     @ChartContentBuilder
     private func sessionMarks(_ charge: Charge) -> some ChartContent {
-        let time = PlottableValue.value(L10n.text("Ended"), charge.end)
+        let startTime = PlottableValue.value(L10n.text("Start"), charge.start)
+        let endTime = PlottableValue.value(L10n.text("Ended"), charge.end)
         let start = PlottableValue.value(L10n.text("Start"), charge.from)
         let end = PlottableValue.value(L10n.text("End"), charge.to)
-        RuleMark(x: time, yStart: start, yEnd: end)
+        LineMark(x: startTime, y: start, series: .value(L10n.text("Session"), charge.id))
+            .foregroundStyle(HisingenTheme.accent)
+            .lineStyle(StrokeStyle(lineWidth: 2))
+            .accessibilityHidden(true)
+        LineMark(x: endTime, y: end, series: .value(L10n.text("Session"), charge.id))
             .foregroundStyle(HisingenTheme.accent)
             .lineStyle(StrokeStyle(lineWidth: 2))
             .accessibilityLabel(Text(Format.dateTimeFormatter.string(from: charge.end)))
             .accessibilityValue(Text(chargeRange(charge)))
-        PointMark(x: time, y: start)
+        PointMark(x: startTime, y: start)
             .symbol { startMarker }
             .accessibilityHidden(true)
-        PointMark(x: time, y: end)
+        PointMark(x: endTime, y: end)
             .symbol { endMarker }
             .accessibilityHidden(true)
     }

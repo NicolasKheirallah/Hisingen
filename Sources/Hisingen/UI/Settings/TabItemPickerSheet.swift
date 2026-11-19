@@ -14,6 +14,8 @@ struct TabItemPickerSheet: View {
     /// A tab the reader built only draws cards that stand on their own. On a shipped tab the
     /// full catalog is offered, because that tab gives its own cards the state they need.
     var isCustomTab = false
+    /// The Home charger card reads a service that needs a saved login, so it is offered only with one.
+    var homeChargerSignedIn = false
     /// Called once per card the reader adds, so the caller can persist each one as it happens.
     let onAdd: (TabItemID) -> Void
     let onDone: () -> Void
@@ -37,19 +39,18 @@ struct TabItemPickerSheet: View {
     private var placed: Set<TabItemID> { Set(composition.renderableItems(for: tab)) }
 
     private var matches: [TabItem] {
-        let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return TabItemCatalog.all.filter { entry in
             // A shipped tab draws only the cards it was built from. A tab of the reader's own
             // takes the items that can stand alone; the rest need the tab that gives them state.
             guard TabItemCatalog.canRender(entry.id, on: tab) else { return false }
             if isCustomTab, !TabItemCatalog.isStandalone(entry.id) { return false }
+            if entry.id == .vehicleHomeCharger, !homeChargerSignedIn { return false }
             switch filter {
             case .everything: break
             case .notOnThisTab: if placed.contains(entry.id) { return false }
             case .hidden: if !composition.isHidden(entry.id, on: tab) { return false }
             }
-            guard !needle.isEmpty else { return true }
-            return entry.title.lowercased().contains(needle) || entry.detail.lowercased().contains(needle)
+            return SettingsDestination.matches(entry, query: searchText)
         }
     }
 

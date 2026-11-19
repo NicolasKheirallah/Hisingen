@@ -58,6 +58,12 @@ struct HisingenContentView: View {
 
     @State private var selectedTab: TabRef
     @State private var historyJumpTarget: String?
+    @State private var historySessionTarget: String?
+    @State private var planJumpTarget: TabItemID?
+    @State private var chargeLocationTarget: String?
+    @State private var carJumpTarget: TabItemID?
+    @State private var settingsDestination: SettingsDestination?
+    @State private var navigationRevision = 0
     private let tabSelection: Binding<TabRef>
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
@@ -87,6 +93,7 @@ struct HisingenContentView: View {
 
 
     @AppStorage("app_theme") private var appTheme: AppTheme = .hisingen
+    @AppStorage(AppTimeFormat.storageKey) private var timeFormat: AppTimeFormat = .twentyFourHour
     @AppStorage("his_appearanceMode") private var storedAppearanceMode: String = AppearanceMode.system.rawValue
 
     /// The tab currently drawn.
@@ -152,7 +159,10 @@ struct HisingenContentView: View {
             },
             onSignOut: onSignOut,
             accountConnection: accountConnection,
-            onTestConnection: onTestConnection
+            onTestConnection: onTestConnection,
+            destination: settingsDestination,
+            onNavigateToPlan: automationPlanLink,
+            onOpenHistory: tabComposition.isVisible(.history) ? { navigateToHistory("export") } : nil
         )
     }
 
@@ -278,8 +288,8 @@ struct HisingenContentView: View {
                                         proxy.scrollTo(target, anchor: .bottom)
                                     }
                                 }
-                                .onChange(of: tab) { _, _ in
-                                    if tab != .history { historyJumpTarget = nil }
+                                .onChange(of: tab) { _, destination in
+                                    clearNavigation(except: destination)
                                     proxy.scrollTo(Self.scrollTopAnchor, anchor: .top)
                                 }
                                 // A command's outcome renders in the banner at the top of this one
@@ -336,7 +346,7 @@ struct HisingenContentView: View {
         // the environment locale, which is the system region by default; an English UI on a
         // Swedish-region Mac got "19 september 2026". Pin the environment to the same display
         // locale the string formatters use, so every date answers to one policy.
-        .environment(\.locale, L10n.displayLocale)
+        .environment(\.locale, timeFormat.locale(basedOn: L10n.displayLocale))
         .preferredColorScheme(AppearanceMode(rawValue: storedAppearanceMode)?.colorScheme)
         // A theme or appearance change is a palette swap: nothing moves, only colour interpolates.
         // That makes it the case Reduce Motion should *keep* — a cross-fade is the non-vestibular
@@ -456,9 +466,65 @@ struct HisingenContentView: View {
     }
 
 
-    private func navigateFromInfoToHistory() {
-        historyJumpTarget = "activity"
-        withAnimation(tabIndicatorAnimation) { select(.history) }
+    private var planLink: ((TabItemID) -> Void)? {
+        tabComposition.isVisible(.controls) ? { navigateToPlan($0) } : nil
+    }
+
+    private var automationPlanLink: ((TabItemID) -> Void)? {
+        guard state != nil, tabComposition.visibleItems(for: .controls).contains(.controlsRoutines) else { return nil }
+        let hasAutomation = preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled
+            || preferences.calendarPreconditioningEnabled
+            || !preferences.features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
+        return hasAutomation ? planLink : nil
+    }
+
+    private var carLink: ((TabItemID) -> Void)? {
+        tabComposition.isVisible(.info) ? { section in
+            carJumpTarget = section
+            open(.info)
+        } : nil
+    }
+
+    private var sessionLink: ((String) -> Void)? {
+        guard tabComposition.isVisible(.history),
+              tabComposition.visibleItems(for: .history).contains(.historyChargingSessions) else { return nil }
+        return { navigateToHistory("charging-sessions", session: $0) }
+    }
+
+    private func navigateToPlan(_ section: TabItemID, location: String? = nil) {
+        planJumpTarget = section
+        chargeLocationTarget = location
+        open(.controls)
+    }
+
+    private func navigateToHistory(_ section: String, session: String? = nil) {
+        historyJumpTarget = section
+        historySessionTarget = session
+        open(.history)
+    }
+
+    private func navigateToSettings(_ destination: SettingsDestination) {
+        settingsDestination = destination
+        open(.settings)
+    }
+
+    private func open(_ destination: TabRef) {
+        guard tabComposition.isVisible(destination) else { return }
+        navigationRevision &+= 1
+        withAnimation(tabIndicatorAnimation) { select(destination) }
+    }
+
+    private func clearNavigation(except tab: TabRef) {
+        if tab != .history {
+            historyJumpTarget = nil
+            historySessionTarget = nil
+        }
+        if tab != .controls {
+            planJumpTarget = nil
+            chargeLocationTarget = nil
+        }
+        if tab != .info { carJumpTarget = nil }
+        if tab != .settings { settingsDestination = nil }
     }
 
     /// One place that writes the selection, so the local mirror and the controller's stored tab
@@ -470,6 +536,8 @@ struct HisingenContentView: View {
     /// now broken twice from exactly that — once as "pressing Settings jumps to Info", and once
     /// as a gear that did nothing because the resolver refused `.settings`.
     private func select(_ tab: TabRef) {
+        if tab == .settings, currentTab != .settings { settingsReturnTab = currentTab }
+        clearNavigation(except: tab)
         selectedTab = tab
         tabSelection.wrappedValue = tab
     }
@@ -498,7 +566,11 @@ struct HisingenContentView: View {
                                onVerifyReceipt: { _ in onRefresh() },
                                error: error,
                                history: history, reverseGeocoder: reverseGeocoder,
-                               imageCache: imageCache)
+                               imageCache: imageCache,
+                               onRefresh: onRefresh,
+                               onOpenPlan: planLink,
+                               onOpenCar: carLink,
+                               onOpenSession: sessionLink)
                 placedExtras(for: tab, state: state)
             }
             .id(state.identity.vin)
@@ -508,13 +580,28 @@ struct HisingenContentView: View {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                 InfoTabView(state: state, history: history, imageCache: imageCache,
                             reverseGeocoder: reverseGeocoder,
-                            onNavigateToHistory: navigateFromInfoToHistory,
+                            onNavigateToHistory: tabComposition.isVisible(.history) ? {
+                                navigateToHistory("activity")
+                            } : nil,
                             onRemoteCommand: onRemoteCommand,
                             brand: commandBrand,
                             remoteCommandInProgress: remoteCommandInProgress,
                             inFlightCommandID: inFlightRemoteCommandID,
                             onRefresh: onRefresh,
-                            layout: TabLayout.resolve(tabComposition, for: tab))
+                            layout: TabLayout.resolve(tabComposition, for: tab),
+                            initialSection: carJumpTarget,
+                            onNavigateToSettings: navigateToSettings,
+                            onNavigateToPlan: planLink,
+                            onNavigateToChargeLocation: tabComposition.visibleItems(for: .controls).contains(.controlsCharging)
+                                ? planLink.map { _ in { navigateToPlan(.controlsCharging, location: $0) } } : nil,
+                            onNavigateToLogSection: tabComposition.isVisible(.history) ? { item in
+                                switch item {
+                                case .historyBatteryHealth: navigateToHistory("battery-health")
+                                case .historyAirQuality: navigateToHistory("air-quality")
+                                default: navigateToHistory("activity")
+                                }
+                            } : nil)
+                    .id(navigationRevision)
                 placedExtras(for: tab, state: state)
             }
             .id(state.identity.vin)
@@ -524,7 +611,9 @@ struct HisingenContentView: View {
             VStack(spacing: HisingenTheme.sectionSpacing) {
                 HistoryDashboardView(state: state, history: history,
                                      initialSection: historyJumpTarget,
-                                     layout: TabLayout.resolve(tabComposition, for: tab))
+                                     layout: TabLayout.resolve(tabComposition, for: tab),
+                                     initialChargingSessionID: historySessionTarget)
+                    .id(navigationRevision)
                 placedExtras(for: tab, state: state)
             }
             .id(state.identity.vin)
@@ -542,7 +631,15 @@ struct HisingenContentView: View {
                                 onRefresh: onRefresh,
                                 onDismissCommandReceipt: onDismissCommandReceipt,
                                 onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
-                                layout: TabLayout.resolve(tabComposition, for: tab))
+                                layout: TabLayout.resolve(tabComposition, for: tab),
+                                initialSection: planJumpTarget,
+                                initialChargeLocationID: chargeLocationTarget,
+                                onNavigateToSettings: navigateToSettings,
+                                onNavigateToHistory: tabComposition.isVisible(.history) ? {
+                                    navigateToHistory("automations")
+                                } : nil,
+                                onSettingsChanged: onSettingsChanged)
+                    .id(navigationRevision)
                 placedExtras(for: tab, state: state)
             }
             .transition(.opacity)
@@ -566,7 +663,13 @@ struct HisingenContentView: View {
                 onRefresh: onRefresh,
                 onRemoteCommand: onRemoteCommand,
                 onSelectCar: onSelectCar,
-                onDismissCommandReceipt: onDismissCommandReceipt
+                onDismissCommandReceipt: onDismissCommandReceipt,
+                brand: commandBrand,
+                feedback: lastRemoteCommandFeedback,
+                onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
+                onOpenPlan: planLink,
+                onOpenCar: carLink,
+                onOpenSession: sessionLink
             )
             .id(state.identity.vin)
             .transition(.opacity)
@@ -578,7 +681,9 @@ struct HisingenContentView: View {
     /// order the reader arranged them.
     @ViewBuilder
     private func placedExtras(for tab: TabRef, state: VehicleState) -> some View {
-        let own = Set(tab.builtIn.map { TabItemCatalog.defaultItems(for: $0) } ?? [])
+        let own = tab == .vehicle
+            ? TabItemCatalog.nowInlineItems
+            : Set(tab.builtIn.map { TabItemCatalog.defaultItems(for: $0) } ?? [])
         let extras = tabComposition.visibleItems(for: tab).filter {
             TabItemCatalog.isStandalone($0) && !own.contains($0)
         }
@@ -600,7 +705,13 @@ struct HisingenContentView: View {
                     onRefresh: onRefresh,
                     onRemoteCommand: onRemoteCommand,
                     onSelectCar: onSelectCar,
-                    onDismissCommandReceipt: onDismissCommandReceipt
+                    onDismissCommandReceipt: onDismissCommandReceipt,
+                    onVerifyReceipt: { _ in onRefresh() },
+                    feedback: lastRemoteCommandFeedback,
+                    onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
+                    onOpenPlan: planLink,
+                    onOpenCar: carLink,
+                    onOpenSession: sessionLink
                 )
             }
         }
@@ -823,7 +934,7 @@ struct HisingenContentView: View {
                     registrationNo: snap.identity.registrationNo
                 )
             }
-            return car.displayTitle()
+            return car.displayTitle(preferences: preferences)
         }()
         guard let snapshot else { return baseTitle }
         var label = baseTitle
@@ -909,7 +1020,7 @@ struct HisingenContentView: View {
                 )
             }
             if let currentCar {
-                return currentCar.displayTitle()
+                return currentCar.displayTitle(preferences: preferences)
             }
             return preferences.activeBrand.displayName
         }()
@@ -994,9 +1105,18 @@ struct HisingenContentView: View {
         .accessibilityLabel(L10n.format("Current vehicle: %@. Switch vehicle.", currentTitle))
     }
 
+    /// Now already draws the car chips above the figures. When they reach every car the footer menu
+    /// would be a second switcher for the same job, so it steps aside; it stays on the other tabs,
+    /// and wherever the garage holds cars or a signed-in brand the chips do not list.
+    private var stripCoversSwitching: Bool {
+        currentTab == .vehicle
+            && TabLayout.resolve(tabComposition, for: .vehicle).draws(.vehicleSwitcher)
+            && cars.count > 1 && garageStates.count <= cars.count && !otherBrandResumable
+    }
+
     private var footerBar: some View {
         HStack(spacing: 8) {
-            if garageStates.count > 1 || cars.count > 1 || otherBrandResumable {
+            if (garageStates.count > 1 || cars.count > 1 || otherBrandResumable) && !stripCoversSwitching {
                 vehicleSwitcher
             }
             if currentTab != .vehicle || !TabLayout.resolve(tabComposition, for: .vehicle).draws(.vehicleHero),
@@ -1026,7 +1146,7 @@ struct HisingenContentView: View {
             } else if let retryAt = diagnostics?.liveStreamRetryAt {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .hisType(.micro)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                     .help(L10n.format("Live stream disconnected. Retrying %@. Scheduled polling is still active.", Format.relativeAge(since: retryAt)))
                     .accessibilityLabel(L10n.text("Live vehicle stream reconnecting"))
             }
@@ -1035,10 +1155,10 @@ struct HisingenContentView: View {
                 Button {
                     onOpenUpdate()
                 } label: {
-                    Label("v\(updateVersion)", systemImage: "arrow.down.circle")
+                    Text(L10n.format("Update to v%@", updateVersion))
                         .hisType(.label, weight: .medium)
-                        .foregroundStyle(.tint)
                 }
+                .buttonStyle(.hisSecondary)
                 .controlSize(.small)
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }

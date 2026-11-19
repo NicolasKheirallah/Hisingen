@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings → Display, Units & Energy → "Electricity Rate". One switch decides where every
+/// Settings → Electricity → "Electricity Rate". One switch decides where every
 /// charge-cost figure comes from: a rate typed in (with the optional night tariff), or the
 /// market spot price for the user's zone plus their provider's markup. Automatic mode asks
 /// for the contract type (15-minute or hourly settlement), the provider, and the markup and
@@ -103,17 +103,6 @@ struct SettingsElectricityRateSection: View {
 
     private var automaticRows: some View {
         VStack(spacing: 10) {
-            pickerRow(
-                title: "Price Zone", detail: "Spot-price area you live in",
-                accessibility: "Electricity price zone"
-            ) {
-                Picker("", selection: binder(\.electricityPriceZone, .presentation)) {
-                    ForEach(ElspotZone.allCases) { zone in
-                        Text(zone.title).tag(zone)
-                    }
-                }
-            }
-
             pickerRow(
                 title: "Contract", detail: "How your contract settles the market price",
                 accessibility: "Electricity contract type"
@@ -283,7 +272,7 @@ struct SettingsElectricityRateSection: View {
                             .hisType(.label)
                             .foregroundStyle(.secondary)
                         Stepper(value: binder(\.nightTariffStartHour), in: 0...23) {
-                            Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffStartHour))
+                            Text(Format.clockTime(hour: preferences.nightTariffStartHour))
                                 .hisType(.label, design: .monospaced)
                         }
                         .controlSize(.small)
@@ -291,7 +280,7 @@ struct SettingsElectricityRateSection: View {
                             .hisType(.label)
                             .foregroundStyle(.secondary)
                         Stepper(value: binder(\.nightTariffEndHour), in: 0...23) {
-                            Text(String(format: "%02d:00", locale: L10n.displayLocale, preferences.nightTariffEndHour))
+                            Text(Format.clockTime(hour: preferences.nightTariffEndHour))
                                 .hisType(.label, design: .monospaced)
                         }
                         .controlSize(.small)

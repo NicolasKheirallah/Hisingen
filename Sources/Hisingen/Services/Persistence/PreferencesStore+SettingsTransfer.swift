@@ -23,7 +23,7 @@ extension PreferencesStore {
             "now_readings_position", "now_first_reading", "now_quick_controls", "now_limit_step", "custom_themes_v1",
             "vehicle_label_format", "distance_unit", "temperature_unit", "pressure_unit",
             "fuel_volume_unit", "fuel_economy_unit", "energy_consumption_unit",
-            "history_sample_retention_days", "interface_language", "tint_menu_bar_icon",
+            "history_sample_retention_days", "interface_language", AppTimeFormat.storageKey, "tint_menu_bar_icon",
             "launch_at_login", "his_appearanceMode", "app_theme", "enabled_features_v2",
             "store_charging_history", "private_notification_details",
             "low_battery_threshold",

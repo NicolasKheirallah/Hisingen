@@ -6,18 +6,27 @@ struct OTAControlsCard: View {
     let gate: ControlsCommandGate
     /// Asks the host to re-read the vehicle, so a failed install has somewhere to go.
     let onRefresh: () -> Void
+    var showsStatus = true
 
     @State private var otaScheduleDelayMinutes: Int = 120
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    static func hasCurrentControls(_ software: VehicleSoftwareInfo?) -> Bool {
+        guard let software else { return false }
+        switch software.state {
+        case .downloading, .installing, .downloaded, .deferred, .scheduled: return true
+        case .failed: return software.hasActionableFailure()
+        default: return false
+        }
+    }
+
     var body: some View {
         Card(compact: true) {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(
-                    symbol: "shippingbox",
-                    title: L10n.text("Vehicle Software & OTA"),
-                    color: HisingenTheme.semanticActive
-                )
+                if showsStatus {
+                    CardHeader(symbol: "shippingbox", title: L10n.text("Vehicle Software & OTA"),
+                               color: HisingenTheme.semanticActive)
+                }
                 if let software = state.softwareInfo {
                     if [.downloaded, .deferred, .scheduled].contains(software.state) {
                         gate.dimReason(gate.liveAvailability([.installOTANow]))
@@ -25,7 +34,11 @@ struct OTAControlsCard: View {
                     // One keyed animation drives the whole status morph: symbol
                     // replace-crossfade, progress line and action groups in/out.
                     Group {
-                        otaStatusLine(software)
+                        if showsStatus {
+                            otaStatusLine(software)
+                        } else if software.hasActionableFailure() {
+                            refreshSoftwareButton
+                        }
                         otaProgressLine(software)
                         otaActions(software)
                     }
@@ -91,21 +104,7 @@ struct OTAControlsCard: View {
                 tint: HisingenTheme.semanticWarning,
                 text: L10n.text("The last software update failed.")
             )
-            // The card narrated the failure and then offered nothing at all: no retry, no re-check,
-            // no route onward. The only re-probe button on the tab appears for a different
-            // condition, so a user who hit this was stuck with a sentence.
-            Button(action: onRefresh) {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.clockwise")
-                    Text(L10n.text("Re-check Software Status"))
-                        .hisType(.caption, weight: .medium)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.hisSecondary)
-            .controlSize(.small)
-            .help(L10n.text("Checks the vehicle again for the current software status."))
-            .transition(.opacity)
+            refreshSoftwareButton
         case .failed:
             otaStatusRow(
                 symbol: "clock.arrow.circlepath",
@@ -127,6 +126,18 @@ struct OTAControlsCard: View {
                 text: L10n.text("Software status is unavailable; the app cannot confirm that the vehicle is up to date.")
             )
         }
+    }
+
+    private var refreshSoftwareButton: some View {
+        Button(action: onRefresh) {
+            Label(L10n.text("Re-check Software Status"), systemImage: "arrow.clockwise")
+                .hisType(.caption, weight: .medium)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.hisSecondary)
+        .controlSize(.small)
+        .help(L10n.text("Checks the vehicle again for the current software status."))
+        .transition(.opacity)
     }
 
     @ViewBuilder

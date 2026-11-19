@@ -92,28 +92,8 @@ enum Format {
         return isLocked ? "lock.fill" : "lock.open.fill"
     }
 
-    /// Completion-time rendering shares one formatter per time zone instead of building a new
-    /// `DateFormatter` per call – this feeds a computed property evaluated on every popover
-    /// render while charging.
-    private static let completionTimeLock = NSLock()
-    nonisolated(unsafe) private static var completionTimeFormatters: [String: DateFormatter] = [:]
-
     static func completionTime(from minutes: Int, baseDate: Date = Date(), timeZone: TimeZone = .current) -> String {
-        let target = baseDate.addingTimeInterval(TimeInterval(minutes * 60))
-        let key = timeZone.identifier
-        completionTimeLock.lock()
-        if let cached = completionTimeFormatters[key] {
-            completionTimeLock.unlock()
-            return cached.string(from: target)
-        }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        formatter.timeZone = timeZone
-        formatter.locale = L10n.displayLocale
-        completionTimeFormatters[key] = formatter
-        completionTimeLock.unlock()
-        return formatter.string(from: target)
+        shortTime(date: baseDate.addingTimeInterval(TimeInterval(minutes * 60)), timeZone: timeZone)
     }
 
     static func chargingRateKmPerHour(powerWatts: Int, consumptionWhPerKm: Double = UnitConversion.defaultConsumptionWhPerKm) -> Int {
@@ -256,49 +236,61 @@ enum Format {
         return L10n.format("%d d ago", seconds / 86_400)
     }
 
-    /// The shared formatters below are cached objects whose `locale` is refreshed on every
-    /// access, so a reader who switches the interface language sees dates follow immediately
-    /// without a process restart. Exposure is deliberately through computed properties that
-    /// do that one assignment first.
-    /// Assigns the locale only when the language actually changed: a `DateFormatter` discards its
-    /// cached pattern whenever `locale` is set, even to an equal value.
-    private static func localized(_ formatter: DateFormatter) -> DateFormatter {
-        let locale = L10n.displayLocale
-        if formatter.locale != locale { formatter.locale = locale }
+    private struct DateFormatterKey: Hashable {
+        let locale: Locale
+        let timeZone: TimeZone
+        let dateStyle: DateFormatter.Style
+        let timeStyle: DateFormatter.Style
+        let hourOnly: Bool
+    }
+
+    private static let dateFormattersLock = NSLock()
+    nonisolated(unsafe) private static var dateFormatters: [DateFormatterKey: DateFormatter] = [:]
+
+    static func localizedDateFormatter(
+        dateStyle: DateFormatter.Style = .none,
+        timeStyle: DateFormatter.Style = .short,
+        timeZone: TimeZone = .current,
+        locale: Locale = L10n.clockLocale,
+        hourOnly: Bool = false
+    ) -> DateFormatter {
+        let key = DateFormatterKey(
+            locale: locale, timeZone: timeZone, dateStyle: dateStyle,
+            timeStyle: timeStyle, hourOnly: hourOnly
+        )
+        dateFormattersLock.lock()
+        defer { dateFormattersLock.unlock() }
+        if let cached = dateFormatters[key] { return cached }
+
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        if hourOnly {
+            formatter.setLocalizedDateFormatFromTemplate("j")
+        } else {
+            formatter.dateStyle = dateStyle
+            formatter.timeStyle = timeStyle
+        }
+        dateFormatters[key] = formatter
         return formatter
     }
 
-    private static let _dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    static var dateTimeFormatter: DateFormatter {
-        return localized(_dateTimeFormatter)
-    }
-
-    private static let _dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
-        return formatter
-    }()
+    static var dateTimeFormatter: DateFormatter { localizedDateFormatter(dateStyle: .short) }
 
     static var dateFormatter: DateFormatter {
-        return localized(_dateFormatter)
+        localizedDateFormatter(dateStyle: .short, timeStyle: .none, locale: L10n.displayLocale)
     }
 
-    private static let _timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    static var timeFormatter: DateFormatter { localizedDateFormatter() }
 
-    static var timeFormatter: DateFormatter {
-        return localized(_timeFormatter)
+    static let clockTimeZone = TimeZone(secondsFromGMT: 0)!
+
+    static func clockDate(hour: Int, minute: Int = 0) -> Date {
+        Date(timeIntervalSince1970: TimeInterval(hour * 3_600 + minute * 60))
+    }
+
+    static func clockTime(hour: Int, minute: Int = 0) -> String {
+        shortTime(date: clockDate(hour: hour, minute: minute), timeZone: clockTimeZone)
     }
 
     /// Shared ISO-8601 formatter for exports (previously constructed per session row).
@@ -312,16 +304,16 @@ enum Format {
         dateFormatter.string(from: date)
     }
 
-    static func shortTime(date: Date) -> String {
-        timeFormatter.string(from: date)
+    static func shortTime(date: Date, timeZone: TimeZone = .current) -> String {
+        localizedDateFormatter(timeZone: timeZone).string(from: date)
     }
 
     static func scheduleText(_ schedule: VehicleSchedule) -> String {
         guard let hour = schedule.startHour, let minute = schedule.startMinute else { return L10n.text("Active") }
-        let start = String(format: "%02d:%02d", hour, minute)
+        let start = clockTime(hour: hour, minute: minute)
         let window: String
         if let endHour = schedule.endHour, let endMinute = schedule.endMinute {
-            window = "\(start)–\(String(format: "%02d:%02d", endHour, endMinute))"
+            window = "\(start)–\(clockTime(hour: endHour, minute: endMinute))"
         } else { window = start }
         guard !schedule.weekdays.isEmpty else { return window }
         return "\(schedule.weekdays.map(\.shortName).joined(separator: ", ")) · \(window)"

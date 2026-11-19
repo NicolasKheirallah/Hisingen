@@ -7,6 +7,12 @@ struct NowInstrument: View {
     let commandGate: ControlsCommandGate
     var feedback: RemoteCommandFeedback? = nil
     var onAuthorizeRemoteCommands: (() -> Void)? = nil
+    var showsAttention = true
+    var showsCommandReceipts = false
+    var showsWeatherIcon = false
+    var usesCompactOverview = false
+    var carSectionAction: ((TabItemID) -> (() -> Void)?)? = nil
+    var dismissedSoftwareEventIdentifier: String? = nil
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -46,6 +52,8 @@ struct NowInstrument: View {
         if state.freshness.isCached { return L10n.text("Showing an offline copy") }
         if showsLastReading { return L10n.text("Last known readings") }
         if case .unavailable = state.identity.availability { return state.identity.availability.displayName }
+        if usesCompactOverview, state.isCharging,
+           visibleQuickControls.contains(.charging), state.hasFreshReading(.charging) { return nil }
         return state.activeVerdict
     }
 
@@ -85,7 +93,8 @@ struct NowInstrument: View {
 
     static func quickCommand(_ identifier: String) -> Bool {
         ["lock", "unlock", "start-climate", "stop-climate", "start-charge-override", "stop-charge-override",
-         "set-charge-target", "set-amp-limit"]
+         "set-charge-target", "set-amp-limit", "start-precleaning", "stop-precleaning", "open-windows",
+         "close-windows", "honk-flash", "open-tailgate", "close-tailgate", "unlock-trunk"]
             .contains(identifier)
     }
 
@@ -97,68 +106,192 @@ struct NowInstrument: View {
 
     private var attentionMessage: VehicleStateSummary? {
         let summary = state.stateSummary
+        if summary.message == L10n.text("Software update failed"),
+           let software = state.softwareInfo, dismissedSoftwareEventIdentifier == software.eventIdentifier { return nil }
+        guard showsAttention || [L10n.text("Low battery"), L10n.text("Low fuel"), L10n.text("Charging fault")].contains(summary.message) else { return nil }
         guard summary.severity == .critical || summary.severity == .warning else { return nil }
         // The lock control already shows the warning and offers the recovery.
         guard summary.message != L10n.text("Unlocked"), summary.message != status else { return nil }
         return summary
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            if typeSize.isAccessibilitySize {
-                readings(alignment: .leading, spread: false)
-            } else {
-                energyBlock
+    private var featuredWarning: (title: String, detail: String?, tint: Color, destination: TabItemID?)? {
+        let summary = state.stateSummary
+        let tyreWarningTitle = L10n.text("Tyre pressure warning")
+        let concernsTyres = [tyreWarningTitle, VehicleWarning.tyrePressure.displayName].contains(summary.message)
+        if showsAttention, preferences.features.contains(.tyreAndWarnings),
+           summary.severity != .critical,
+           attentionMessage == nil || concernsTyres {
+            let tyres = state.maintenance.details?.tyres.filter { $0.warning.needsAttention } ?? []
+            if !tyres.isEmpty {
+                let detail = tyres.map { "\($0.position.displayName) · \($0.warning.displayName)" }
+                    .joined(separator: ", ")
+                return (tyreWarningTitle, detail, HisingenTheme.semanticWarning, .infoTyres)
             }
+        }
+        guard let summary = attentionMessage else { return nil }
+        let destination: TabItemID?
+        if summary.severity == .warning, state.exteriorStatus?.itemsNeedingAttention.isEmpty == false {
+            destination = .infoDoors
+        } else {
+            destination = nil
+        }
+        return (summary.message, nil, summary.severity == .critical
+                ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning, destination)
+    }
+
+    @ViewBuilder
+    private var warningNotice: some View {
+        if let warning = featuredWarning {
+            Group {
+                if let destination = warning.destination, let action = carSectionAction?(destination) {
+                    NavigationRow(title: warning.title, detail: warning.detail,
+                                  destination: BuiltInTab.info.title, action: action)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(warning.title)
+                            .hisType(.body, weight: .medium)
+                            .foregroundStyle(HisingenTheme.ink)
+                        if let detail = warning.detail {
+                            Text(detail)
+                                .hisType(.label)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+            .hisNotice(warning.tint)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: usesCompactOverview ? 12 : 16) {
+            header
+            if usesCompactOverview { warningNotice }
+            energyBlock
             if state.powertrain.hasElectricRange { chargeLine }
             quickStatusStrip
             if let inlineFeedback {
                 ControlsBanners(state: state, feedback: inlineFeedback, features: [],
                                 isBrandVolvo: state.model.brand == .volvo, showRestrictedNotice: false,
                                 showsVehicleOffline: false,
+                                showsCommandReceipts: showsCommandReceipts,
                                 onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
                                 onFollowUp: commandGate.send)
             }
-            if typeSize.isAccessibilitySize { profile(height: 116) }
         }
         .padding(.horizontal, inset)
         .accessibilityElement(children: .contain)
     }
 
     private var header: some View {
-        let layout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
-        return layout {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .hisType(.display)
-                    .foregroundStyle(HisingenTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                if title.range(of: modelName, options: .caseInsensitive) == nil {
-                    Text(modelName)
-                        .hisType(.subhead)
-                        .foregroundStyle(HisingenTheme.inkMuted)
+        HStack(alignment: .top, spacing: 12) {
+            headerReadings
+            if showsWeatherIcon, preferences.features.contains(.vehicleWeather),
+               let weather = state.weather, weather.hasCurrentConditions {
+                NowWeatherButton(state: state, weather: weather)
+            }
+        }
+    }
+
+    private var headerReadings: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    headerTitle
+                    inlineIdentity
                 }
-                freshnessLabel
-                if let status {
-                    Text(status)
-                        .hisType(.subhead)
-                        .foregroundStyle(showsLastReading ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .contentTransition(reduceMotion ? .identity : .opacity)
-                }
-                if let attentionMessage {
-                    Label(attentionMessage.message, systemImage: attentionSymbol(for: attentionMessage))
-                        .hisType(.subhead)
-                        .foregroundStyle(attentionMessage.severity == .critical
-                                         ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning)
-                        .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    headerTitle
+                    inlineIdentity
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            if preferences.vehicleModelBadgePosition == .subheadline, let modelBadge {
+                identityLabel(modelBadge)
+            }
+            let registration = preferences.registrationBadgePosition
+            if registration == .belowGreeting || registration == .platePill {
+                plateBadge
+            }
+            if preferences.features.contains(.ownerGreeting), !preferences.privacyRedactionEnabled,
+               let name = state.identity.ownerFirstName, !name.isEmpty {
+                Text(Format.greeting(name))
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+            freshnessLabel
+            if let status {
+                Text(status)
+                    .hisType(.subhead)
+                    .foregroundStyle(showsLastReading ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(reduceMotion ? .identity : .opacity)
+            }
+            if !usesCompactOverview, let attentionMessage {
+                Label(attentionMessage.message, systemImage: attentionSymbol(for: attentionMessage))
+                    .hisType(.subhead)
+                    .foregroundStyle(attentionMessage.severity == .critical
+                                     ? HisingenTheme.semanticCritical : HisingenTheme.semanticWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerTitle: some View {
+        Text(title)
+            .hisType(.display)
+            .foregroundStyle(HisingenTheme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var modelBadge: String? {
+        guard preferences.features.contains(.vehicleIdentity),
+              title.range(of: modelName, options: .caseInsensitive) == nil else { return nil }
+        return [modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var inlineIdentity: some View {
+        if preferences.vehicleModelBadgePosition == .inlineHeader, let modelBadge {
+            identityLabel(modelBadge)
+        }
+        if preferences.registrationBadgePosition == .inlineHeader { plateBadge }
+    }
+
+    private func identityLabel(_ model: String) -> some View {
+        Text(model)
+            .hisType(.label)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var plateBadge: some View {
+        if preferences.features.contains(.vehicleIdentity), !preferences.privacyRedactionEnabled,
+           let plate = state.identity.registrationNo, !plate.isEmpty,
+           title.range(of: plate, options: .caseInsensitive) == nil {
+            LicensePlateBadge(plate: plate, style: preferences.registrationBadgePosition,
+                              showsSwedishFlag: state.identity.accountMarket?.uppercased() == "SE")
+        }
+    }
+
+    @ViewBuilder
+    private func overlayIdentity(leading: Bool) -> some View {
+        let modelPosition: VehicleModelBadgePosition = leading ? .topLeftOverlay : .topRightOverlay
+        let platePosition: RegistrationNumberBadgePosition = leading ? .topLeftOverlay : .topRightOverlay
+        VStack(alignment: leading ? .leading : .trailing, spacing: 4) {
+            if preferences.vehicleModelBadgePosition == modelPosition, let modelBadge {
+                identityLabel(modelBadge)
+                    .padding(5)
+                    .background(HisingenTheme.canvas)
+            }
+            if preferences.registrationBadgePosition == platePosition { plateBadge }
         }
     }
 
@@ -172,8 +305,10 @@ struct NowInstrument: View {
     private func profile(height: CGFloat) -> some View {
         // Straight on the canvas: the render's own shadow grounds the car.
         InstrumentVehicleProfile(state: state, imageCache: imageCache, height: height, fillsWidth: true)
-            .padding(.vertical, 6)
+            .padding(.vertical, usesCompactOverview ? 0 : 6)
             .frame(maxWidth: .infinity)
+            .overlay(alignment: .topLeading) { overlayIdentity(leading: true) }
+            .overlay(alignment: .topTrailing) { overlayIdentity(leading: false) }
     }
 
     private enum EnergyBlockPart: Hashable {
@@ -188,7 +323,7 @@ struct NowInstrument: View {
         let order: [EnergyBlockPart] = readingsFirst ? [.readings, .profile] : [.profile, .readings]
         let alignment: HorizontalAlignment = stacked || readingsFirst ? .leading : .trailing
         let layout = stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: usesCompactOverview ? 10 : 16))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
 
         return layout {
@@ -198,7 +333,9 @@ struct NowInstrument: View {
                     readings(alignment: alignment, spread: stacked && !typeSize.isAccessibilitySize)
                         .layoutPriority(1)
                 case .profile:
-                    profile(height: condensed ? 128 : min(196, HisingenTheme.layoutWidth * 0.30))
+                    profile(height: usesCompactOverview
+                            ? (condensed ? 80 : min(104, HisingenTheme.layoutWidth * 0.18))
+                            : (condensed ? 128 : min(196, HisingenTheme.layoutWidth * 0.30)))
                 }
             }
         }
@@ -208,13 +345,19 @@ struct NowInstrument: View {
     private func readings(alignment: HorizontalAlignment, spread: Bool) -> some View {
         let showsBattery = state.powertrain.hasElectricRange
         let first = preferences.nowFirstReading
+        // Side by side, the second figure takes the trailing edge so it ends where the charge
+        // line's target label ends, instead of starting at the midpoint.
+        let batteryTrails = spread && showsBattery && first == .range
+        let rangeTrails = spread && showsBattery && first == .battery
         let battery = figure(batteryText, unit: "%", size: condensed ? 44 : 54,
-                             label: L10n.text("Battery"), reading: .battery, alignment: alignment)
-            .frame(maxWidth: spread ? .infinity : nil, alignment: .leading)
+                             label: L10n.text("Battery"), reading: .battery,
+                             alignment: batteryTrails ? .trailing : alignment)
+            .frame(maxWidth: spread ? .infinity : nil, alignment: batteryTrails ? .trailing : .leading)
         let range = figure(rangeParts.value, unit: rangeParts.unit,
                            size: spread || !showsBattery ? (condensed ? 44 : 54) : 32,
-                           label: L10n.text("Estimated Range"), reading: .range, alignment: alignment)
-            .frame(maxWidth: spread ? .infinity : nil, alignment: .leading)
+                           label: L10n.text("Estimated Range"), reading: .range,
+                           alignment: rangeTrails ? .trailing : alignment)
+            .frame(maxWidth: spread ? .infinity : nil, alignment: rangeTrails ? .trailing : .leading)
         let layout = spread
             ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
             : AnyLayout(VStackLayout(alignment: alignment, spacing: 8))
@@ -456,14 +599,19 @@ struct NowInstrument: View {
         let status = state.energy.connection == .disconnected && state.energy.chargingState == .idle
             ? L10n.text("Cable disconnected")
             : state.energy.chargingState.displayName
+        let draw = state.liveChargingDraw()
+        let completion = isLive && usesCompactOverview && !state.freshness.retainedDataCategories.contains(.chargingDetails)
+            ? state.estimatedChargingCompletion : nil
+        let ready = completion.map { "\(L10n.text("Ready at")) \(Format.shortTime(date: $0))" }
         return quickControl(
             symbol: "bolt",
             name: L10n.text("Charging"),
-            value: status,
+            value: usesCompactOverview && isLive ? (draw ?? status) : status,
             reading: .charging, hasReading: state.energy.connection != .unknown || state.energy.chargingState.isRecognised,
             activity: isLive ? .live : nil,
             symbolMotion: isLive ? .breathe : .still,
-            readout: state.liveChargingDraw(),
+            readout: usesCompactOverview && isLive ? nil : draw,
+            note: ready,
             action: hasAction ? (overriding ? L10n.text("Resume Schedule") : L10n.text("Charge Now")) : nil,
             command: overriding ? .stopChargingOverride : .startChargingOverride
         )
@@ -557,7 +705,7 @@ struct NowInstrument: View {
         let remainingNow = countdown.flatMap {
             ClimateCountdown.minutesRemaining(reported: $0.minutes, at: $0.reportedAt, now: Date())
         }
-        let spoken = [value, readout, remainingNow.map { L10n.format("%d min remaining", $0) }, age]
+        let spoken = [value, readout, remainingNow.map { L10n.format("%d min remaining", $0) }, detail, note == nil ? nil : age]
             .compactMap { $0 }.joined(separator: ", ")
         if let action {
             let availability = commandGate.availability(command)
@@ -581,7 +729,7 @@ struct NowInstrument: View {
             .disabled(!availability.isAvailable)
             .help(availability.shortReason ?? commandTitle)
             .accessibilityLabel(sending ? visibleAction : commandTitle)
-            .accessibilityValue([spoken, awaiting ? detail : nil].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityValue(spoken)
             .accessibilityHint(availability.shortReason ?? "")
             .overlay(alignment: .bottomTrailing) {
                 if let entry {
@@ -714,7 +862,7 @@ struct InstrumentVehicleProfile: View {
         let data = state.identity.imageData ?? imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin)
 
         Group {
-            if let data {
+            if preferences.features.contains(.vehicleImage), let data {
                 VehiclePresentationView(identity: .init(vin: vin, angle: angle), imageData: data,
                                         fitHeight: height, fillsInstrumentWidth: fillsWidth)
                     .accessibilityHidden(true)

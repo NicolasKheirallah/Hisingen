@@ -100,6 +100,7 @@ final class PreferencesStore {
     func boolDefaultTrue(_ key: String) -> Bool { d.object(forKey: key) == nil || d.bool(forKey: key) }
 
     static let tabCompositionKey = "tab_composition_v1"
+    static let unreadableTabCompositionKey = "tab_composition_v1_unreadable"
 
     /// Bundle identifiers the app shipped with before `CFBundleIdentifier` was collapsed to
     /// `io.kheirallah.hisingen`. Each was a distinct `UserDefaults` domain.

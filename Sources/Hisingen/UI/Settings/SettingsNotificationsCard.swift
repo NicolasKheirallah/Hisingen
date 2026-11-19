@@ -9,6 +9,7 @@ struct SettingsNotificationsCard: View {
     let notificationPermission: NotificationPermission
     let state: VehicleState?
     let binder: PreferenceBinder
+    var plannerAlertsOnly = false
 
     private var prefs: PreferencesStore { binder.preferences }
     private var settingsVehicleVIN: String { state?.identity.vin ?? prefs.vin }
@@ -21,7 +22,7 @@ struct SettingsNotificationsCard: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bell.badge", title: L10n.text("Notifications"), color: HisingenTheme.semanticWarning)
+                CardHeader(symbol: "bell.badge", title: plannerAlertsOnly ? L10n.text("Charging Planner Alerts") : L10n.text("Notifications"), color: HisingenTheme.semanticWarning)
 
                 permissionBanner
 
@@ -29,14 +30,25 @@ struct SettingsNotificationsCard: View {
                     masterSwitchRow
 
                     Group {
-                        chargingAlertRows
-                        vehicleAlertRows
-                        serviceAndTelemetryRows
-                        environmentRows
-                        summaryRows
-                        soundAndQuietRows
-                        badgeAndMuteRows
-                        testAndPrivacyRows
+                        if !plannerAlertsOnly {
+                            chargingAlertRows
+                        }
+                        if prefs.marketCountry.offersMarketPricing {
+                            if plannerAlertsOnly {
+                                plannerAlertRows
+                            } else {
+                                plannerAlertRows.id(SettingsDestination.plannerAlerts)
+                            }
+                        }
+                        if !plannerAlertsOnly {
+                            vehicleAlertRows
+                            serviceAndTelemetryRows
+                            environmentRows
+                            summaryRows
+                            soundAndQuietRows
+                            badgeAndMuteRows
+                            testAndPrivacyRows
+                        }
                     }
                     // A master switch that says it governs "every local alert below" has to govern
                     // them: disabled, and dimmed so the reason is visible rather than inferred from
@@ -147,6 +159,47 @@ struct SettingsNotificationsCard: View {
             detail: "Alert when battery falls below threshold",
             \.notifyLowBattery
         )
+    }
+
+    private var plannerAlertRows: some View {
+        VStack(spacing: 4) {
+            notificationRow(
+                symbol: "clock",
+                title: "Notify When the Cheap Window Opens",
+                detail: "One banner per window, respecting quiet hours",
+                \.notifyPlannerWindowStart
+            )
+
+            if prefs.notifyPlannerWindowStart {
+                let standardLeadTimes = [0, 15, 30, 60]
+                let currentLeadTime = prefs.plannerWindowLeadMinutes
+                let leadTimes = standardLeadTimes.contains(currentLeadTime)
+                    ? standardLeadTimes : (standardLeadTimes + [currentLeadTime]).sorted()
+                Picker(L10n.text("Lead Time"), selection: binder(\.plannerWindowLeadMinutes, .notifications)) {
+                    ForEach(leadTimes, id: \.self) { minutes in
+                        Text(plannerLeadLabel(minutes)).tag(minutes)
+                    }
+                }
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
+            notificationRow(
+                symbol: "calendar",
+                title: "Notify When Tomorrow's Prices Arrive",
+                detail: L10n.format("One daily banner after %@ with the cheapest hour", Format.clockTime(hour: 14, minute: 15)),
+                \.notifyPlannerPricesPublished
+            )
+        }
+        .hisAnimation(Motion.layout, value: prefs.notifyPlannerWindowStart)
+    }
+
+    private func plannerLeadLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 0: return L10n.text("When the window opens")
+        case 60: return L10n.text("1 hour before")
+        default: return L10n.format("%d minutes before", minutes)
+        }
     }
 
     @ViewBuilder
@@ -283,7 +336,7 @@ struct SettingsNotificationsCard: View {
         notificationRow(
             symbol: "lock.shield",
             title: "Evening Unlocked Reminder",
-            detail: L10n.format("Alert if parked and unlocked after %02d:00", prefs.eveningUnlockedStartHour),
+            detail: L10n.format("Alert if parked and unlocked after %@", Format.clockTime(hour: prefs.eveningUnlockedStartHour)),
             \.notifyEveningUnlocked
         )
         if prefs.notifyEveningUnlocked {
@@ -291,7 +344,7 @@ struct SettingsNotificationsCard: View {
                 title: L10n.text("Evening reminder starts"),
                 \.eveningUnlockedStartHour,
                 values: Array(18...23),
-                label: { String(format: "%02d:00", locale: L10n.displayLocale, $0) }
+                label: { Format.clockTime(hour: $0) }
             )
             .transition(Self.dependentRowTransition)
         }
@@ -313,7 +366,7 @@ struct SettingsNotificationsCard: View {
                 title: L10n.text("Summary time"),
                 \.dailySummaryHour,
                 values: Array(0..<24),
-                label: { String(format: "%02d:00", locale: L10n.displayLocale, $0) }
+                label: { Format.clockTime(hour: $0) }
             )
             .transition(Self.dependentRowTransition)
         }
@@ -349,7 +402,7 @@ struct SettingsNotificationsCard: View {
                 Spacer()
                 Picker("", selection: binder(\.quietHoursStartHour, .notifications)) {
                     ForEach(0..<24, id: \.self) { h in
-                        Text(String(format: "%02d:00", locale: L10n.displayLocale, h)).tag(h)
+                        Text(Format.clockTime(hour: h)).tag(h)
                     }
                 }
                 .labelsHidden()
@@ -361,7 +414,7 @@ struct SettingsNotificationsCard: View {
                     .foregroundStyle(.secondary)
                 Picker("", selection: binder(\.quietHoursEndHour, .notifications)) {
                     ForEach(0..<24, id: \.self) { h in
-                        Text(String(format: "%02d:00", locale: L10n.displayLocale, h)).tag(h)
+                        Text(Format.clockTime(hour: h)).tag(h)
                     }
                 }
                 .labelsHidden()

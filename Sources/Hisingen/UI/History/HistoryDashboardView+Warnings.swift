@@ -7,9 +7,9 @@ extension HistoryDashboardView {
     var warningEvents: [VehicleDatabase.WarningEventRecord] { snapshot.warningEvents }
 
     var warningTimelineCard: some View {
-        Card {
+        HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "exclamationmark.triangle", title: L10n.text("Warning Timeline"), color: HisingenTheme.semanticWarning)
+                HistorySectionHeading(symbol: "exclamationmark.triangle", title: L10n.text("Warning Timeline"), color: HisingenTheme.semanticWarning)
                 PaginatedSection(items: warningEvents, pageSize: preferences.historyPageSize(for: .historyWarnings),
                                  resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No warnings were reported in this period.")) { visible, footer in

@@ -376,6 +376,23 @@ struct HomeChargingModelTests {
         harness.model.stop()
     }
 
+    @Test("The card needs a saved login")
+    func cardNeedsALogin() async throws {
+        let signedOut = try ModelHarness(token: nil)
+        #expect(!signedOut.model.isSignedIn)
+        #expect(!signedOut.model.shouldShow(for: signedOut.state()))
+        #expect(signedOut.model.cardInput(for: signedOut.state()) == nil)
+
+        let signedIn = try ModelHarness()
+        #expect(signedIn.model.isSignedIn)
+        #expect(signedIn.model.shouldShow(for: signedIn.state()))
+
+        // A charger that was never paired has no login to speak of, whatever is stored.
+        let unpaired = try ModelHarness(paired: false)
+        #expect(!unpaired.model.isSignedIn)
+        #expect(unpaired.model.cardInput(for: unpaired.state()) == nil)
+    }
+
     @Test("A shared charger shows its card only where the vehicle is at the saved location")
     func sharedChargerNeedsPresence() async throws {
         let shared = try ModelHarness(shared: true)

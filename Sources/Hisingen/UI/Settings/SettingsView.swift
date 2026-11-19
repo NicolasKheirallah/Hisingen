@@ -19,10 +19,15 @@ struct SettingsView: View {
         ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
 
+    var destination: SettingsDestination? = nil
+    var onNavigateToPlan: ((TabItemID) -> Void)? = nil
+    var onOpenHistory: (() -> Void)? = nil
+
+    @State private var pendingDestination: SettingsDestination?
+    @State private var focusPlannerAlerts = false
     @State private var selectedSettingsSection = SettingsSection.all
     @State private var settingsSearchText = ""
     @State private var showEnableRemoteConfirmation = false
-    @State private var persistLocationHistory = false
     @State private var prefsTick = 0
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.homeCharging) private var homeCharging
@@ -53,7 +58,7 @@ struct SettingsView: View {
                         selection: $selectedSettingsSection,
                         searchText: $settingsSearchText
                     )
-                    .frame(width: 238)
+                    .frame(width: HisingenTheme.layoutWidth < 600 ? 154 : 238)
                     Divider()
                     settingsContent
                 }
@@ -68,9 +73,6 @@ struct SettingsView: View {
         }
         .frame(maxWidth: showsHeaderBar ? HisingenTheme.layoutWidth : .infinity, maxHeight: .infinity)
         .background(HisingenTheme.canvas)
-        .onAppear {
-            persistLocationHistory = preferences.persistLocationHistory
-        }
         .confirmationDialog(
             L10n.text("Enable every remote-control feature?"),
             isPresented: $showEnableRemoteConfirmation,
@@ -91,129 +93,211 @@ struct SettingsView: View {
         }
     }
 
-    private var settingsContent: some View {
-        ScrollView(.vertical) {
-            // Lazy: "All" holds a dozen long cards, and a plain stack kept every picker, switch
-            // and text field of all of them alive while scrolling. Only the cards near the
-            // viewport exist now.
-            LazyVStack(spacing: HisingenTheme.sectionSpacing) {
-                    if shows(.accounts) {
-                        Group {
-                            accountCard
-                            remoteControlsCard
-                            SettingsFleetCard(
-                                fleet: fleet,
-                                imageCache: imageCache,
-                                binder: binder
-                            )
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.appearance) {
-                        SettingsAppearanceCard(
-                            state: state,
-                            imageCache: imageCache,
-                            binder: binder
-                        )
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.general) {
-                        Group {
-                            SettingsDisplayCard(state: state, binder: binder)
-                            SettingsChargingStatOrderCard(binder: binder)
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.electricity) {
-                        Group {
-                            SettingsElectricityCard(binder: binder)
-                            if preferences.marketCountry.offersMarketPricing {
-                                SettingsChargingPlannerCard(binder: binder, state: state)
-                            }
-                            if let homeCharging {
-                                SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
-                                SettingsTibberCard(model: homeCharging, binder: binder)
-                                SettingsGridTariffCard(model: homeCharging)
-                                SettingsHouseMeterCard(meter: homeCharging.houseMeter)
-                            }
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.tabsAndCards) {
-                        SettingsTabsAndCardsCard(binder: binder, state: state, refreshError: refreshError)
-                            .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.updates) {
-                        SettingsUpdatesCard(binder: binder)
-                            .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.features) {
-                        Group {
-                            featureQuickActions
-                            CalendarPreconditioningSettingsCard(binder: binder)
-                            SettingsVehicleDataCard(state: state, binder: binder)
-                            SettingsRemoteControlsCard(state: state, binder: binder)
-                            SettingsCapabilityMatrixCard(state: state)
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.notifications) {
-                        SettingsNotificationsCard(
-                            notificationPermission: notificationPermission,
-                            state: state,
-                            binder: binder
-                        )
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.privacyData) {
-                        Group {
-                            SettingsPrivacyCard(
-                                persistLocationHistory: $persistLocationHistory,
-                                binder: binder
-                            )
-                            SettingsDatabaseCard(
-                                state: state,
-                                database: database,
-                                imageCache: imageCache,
-                                persistLocationHistory: $persistLocationHistory
-                            )
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-                    if shows(.about) {
-                        Group {
-                            SettingsActionsCard(binder: binder, onSignOut: onSignOut)
-                            SettingsVersionFooter()
-                        }
-                        .transition(Self.sectionSwapTransition)
-                    }
-
-                    if !hasVisibleSection {
-                        ContentUnavailableView(
-                            L10n.text("No Settings Found"),
-                            systemImage: "magnifyingglass",
-                            description: Text(
-                                L10n.text("Try a different search term or choose All.")
-                            )
-                        )
-                        .padding(.vertical, 30)
-                        .transition(.opacity)
-                    }
+    private var availableDestinations: [SettingsDestination] {
+        SettingsDestination.allCases.filter {
+            switch $0 {
+            case .plannerSettings, .plannerAlerts: preferences.marketCountry.offersMarketPricing
+            case .homeCharging, .electricitySupplier, .gridTariff, .houseMeter: homeCharging != nil
+            default: true
             }
-            .padding(HisingenTheme.sectionSpacing)
-            .frame(maxWidth: .infinity)
         }
     }
 
-    private func shows(_ section: SettingsSection) -> Bool {
-        let selected = selectedSettingsSection == .all || selectedSettingsSection == section
-        return selected && section.matches(settingsSearchText)
+    private var isSearching: Bool {
+        !SettingsDestination.searchTerms(settingsSearchText).isEmpty
     }
 
-    private var hasVisibleSection: Bool {
-        SettingsSection.allCases
-            .filter { $0 != .all }
-            .contains(where: shows)
+    private var visibleDestinations: [SettingsDestination] {
+        let destinations = availableDestinations
+        guard isSearching else {
+            return destinations.filter {
+                let matchesSection = selectedSettingsSection == .all || $0.section == selectedSettingsSection
+                switch $0 {
+                case .plannerAlerts: return matchesSection && focusPlannerAlerts
+                case .notifications: return matchesSection && !focusPlannerAlerts
+                default: return matchesSection
+                }
+            }
+        }
+
+        let query = SettingsDestination.searchTerms(settingsSearchText)
+        return destinations.filter { target in
+            let names = SettingsDestination.searchTerms(target.section.title)
+            let matchesSection = query.allSatisfy { term in names.contains { $0.hasPrefix(term) } }
+            if target == .plannerAlerts && matchesSection { return false }
+            return matchesSection || target.matches(settingsSearchText)
+        }
+    }
+
+    private func open(_ target: SettingsDestination) {
+        settingsSearchText = ""
+        let available = availableDestinations
+        focusPlannerAlerts = target == .plannerAlerts && available.contains(target)
+        selectedSettingsSection = target.section
+        pendingDestination = available.contains(target) ? target : available.first { $0.section == target.section }
+    }
+
+    private var settingsContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(spacing: HisingenTheme.sectionSpacing) {
+                    ForEach(visibleDestinations) { target in
+                        destinationView(target)
+                            .id(target)
+                            .transition(Self.sectionSwapTransition)
+                    }
+
+                    if visibleDestinations.isEmpty {
+                        ContentUnavailableView(
+                            L10n.text("No Settings Found"),
+                            systemImage: "magnifyingglass",
+                            description: Text(L10n.text("Try a different search term or choose All."))
+                        )
+                        .padding(.vertical, 30)
+                    }
+                }
+                .padding(HisingenTheme.sectionSpacing)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: destination, initial: true) { _, target in
+                if let target { open(target) }
+            }
+            .task(id: pendingDestination) {
+                guard let pendingDestination else { return }
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(pendingDestination, anchor: .top)
+                self.pendingDestination = nil
+            }
+            .onChange(of: visibleDestinations) { _, destinations in
+                if isSearching, let first = destinations.first { proxy.scrollTo(first, anchor: .top) }
+            }
+            .onChange(of: selectedSettingsSection) { _, _ in
+                if isSearching { settingsSearchText = "" }
+                guard pendingDestination == nil else { return }
+                focusPlannerAlerts = false
+                guard let first = visibleDestinations.first else { return }
+                proxy.scrollTo(first, anchor: .top)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func destinationView(_ target: SettingsDestination) -> some View {
+        switch target {
+        case .account:
+            accountCard
+        case .remoteAuthorization:
+            SettingsRemoteAuthorizationCard(binder: binder)
+        case .garage:
+            SettingsFleetCard(fleet: fleet, imageCache: imageCache, binder: binder)
+        case .vehicleReferences:
+            SettingsVehicleReferencesCard(state: state, binder: binder)
+        case .appearance:
+            SettingsAppearanceCard(
+                state: state, imageCache: imageCache, binder: binder,
+                group: .themes, onOpenGarage: { open(.garage) }
+            )
+        case .vehicleAppearance:
+            SettingsAppearanceCard(state: state, imageCache: imageCache, binder: binder, group: .vehicle)
+        case .menuBar:
+            SettingsAppearanceCard(state: state, imageCache: imageCache, binder: binder, group: .menuBar)
+        case .panel:
+            SettingsAppearanceCard(state: state, imageCache: imageCache, binder: binder, group: .panel)
+        case .general:
+            SettingsDisplayCard(binder: binder)
+        case .electricity:
+            if let homeCharging {
+                SettingsElectricityWithSupplier(model: homeCharging, binder: binder, state: state)
+            } else {
+                SettingsElectricityCard(binder: binder, state: state)
+            }
+        case .plannerSettings:
+            let action: (() -> Void)? = onNavigateToPlan.map { navigate in { navigate(.controlsRoutines) } }
+            SettingsChargingPlannerCard(binder: binder, onOpenAutomation: action)
+        case .homeCharging:
+            if let homeCharging {
+                VStack(alignment: .leading, spacing: HisingenTheme.sectionSpacing) {
+                    if !isSearching {
+                        Text(L10n.text("Connected Services"))
+                            .hisType(.heading)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    SettingsHomeChargingCard(model: homeCharging, state: state, fleet: fleet, binder: binder)
+                }
+            }
+        case .electricitySupplier:
+            if let homeCharging { SettingsTibberCard(model: homeCharging) }
+        case .gridTariff:
+            if let homeCharging {
+                SettingsGridTariffCard(
+                    model: homeCharging,
+                    onOpenSupplier: isSearching ? { open(.electricitySupplier) } : nil
+                )
+            }
+        case .houseMeter:
+            if let homeCharging { SettingsHouseMeterCard(meter: homeCharging.houseMeter) }
+        case .tabLayout:
+            SettingsTabsAndCardsCard(
+                binder: binder, state: state, refreshError: refreshError,
+                onOpenFeatureSettings: { open(SettingsDestination.owner(of: $0)) },
+                onOpenCardSettings: { open($0) }
+            )
+        case .nowControls:
+            Card { SettingsNowControls(binder: binder, state: state) }
+        case .chargingLayout:
+            SettingsChargingStatOrderCard(binder: binder)
+        case .vehicleData:
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                if !isSearching { featureQuickActions }
+                SettingsVehicleDataCard(state: state, binder: binder)
+            }
+        case .remoteFeatures:
+            SettingsRemoteControlsCard(
+                state: state, binder: binder, onOpenAuthorization: { open(.remoteAuthorization) }
+            )
+        case .vehicleCapabilities:
+            SettingsCapabilityMatrixCard(state: state)
+        case .automation:
+            if let onNavigateToPlan {
+                NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
+            } else {
+                CalendarPreconditioningSettingsCard(binder: binder)
+                if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
+                    Card { PlannerAutoStartControl(binder: binder) }
+                }
+            }
+        case .notifications, .plannerAlerts:
+            VStack(alignment: .leading, spacing: 8) {
+                if target == .plannerAlerts {
+                    NavigationRow(title: L10n.text("All Notifications")) { open(.notifications) }
+                }
+                SettingsNotificationsCard(
+                    notificationPermission: notificationPermission,
+                    state: state,
+                    binder: binder,
+                    plannerAlertsOnly: target == .plannerAlerts
+                )
+            }
+        case .privacy:
+            SettingsPrivacyCard(binder: binder)
+        case .localData:
+            SettingsDatabaseCard(
+                state: state,
+                database: database,
+                imageCache: imageCache,
+                onExportDiagnosticLogs: { onSettingsChanged(.exportDiagnosticLogs) },
+                onPresentationChanged: { onSettingsChanged(.presentation) },
+                onOpenHistory: onOpenHistory
+            )
+        case .backup:
+            SettingsActionsCard(binder: binder)
+        case .updates:
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                SettingsUpdatesCard(binder: binder)
+                SettingsVersionFooter()
+            }
+        }
     }
 
     private var headerBar: some View {
@@ -221,43 +305,20 @@ struct SettingsView: View {
             Button {
                 onSettingsChanged(.closeSettings)
             } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.left")
-                    // The shell calls this tab "Vehicle"; two of Settings' three exits called it
-                    // "Dashboard", so the reader was told they were going somewhere else.
-                    Text(L10n.text("Vehicle"))
-                }
-                .hisType(.label, weight: .semibold)
+                Label(L10n.text("Back"), systemImage: "chevron.left")
+                    .hisType(.label, weight: .semibold)
             }
             .buttonStyle(.hisSecondary)
             .controlSize(.small)
 
-            Spacer()
-
             Text(L10n.text("Settings"))
                 .hisType(.heading, weight: .bold)
                 .foregroundStyle(HisingenTheme.ink)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer()
-
-            Label(
-                L10n.text("Changes save automatically"),
-                systemImage: "checkmark.circle"
-            )
-            .hisType(.micro, weight: .medium)
-            .foregroundStyle(.secondary)
-
-            Button {
-                onSettingsChanged(.closeSettings)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .hisType(.subhead)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.pressable)
-            .help(L10n.text("Back to Vehicle"))
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, HisingenTheme.sectionSpacing)
         .padding(.top, 2)
     }
 
@@ -275,25 +336,8 @@ struct SettingsView: View {
                     onTestConnection: onTestConnection,
                     model: accountConnection
                 )
-            }
-        }
-    }
-
-    /// The remote-command grant belongs beside the account it is verified against. Features
-    /// keeps the per-command toggles; this card is the one control a reader hunting for
-    /// "authorize" would never have found there. Same glyph and tint as the Features card,
-    /// because it is the same section in both places.
-    private var remoteControlsCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(
-                    symbol: "slider.horizontal.3",
-                    title: L10n.text("Remote Controls"),
-                    color: HisingenTheme.semanticActive
-                )
-                // The Lead wires the real session value; this instance ships with the account
-                // card directly above it, which carries the sign-in path already.
-                RemoteCommandAuthorizationRow(binder: binder, needsSignIn: false)
+                Divider().opacity(HisingenTheme.dividerOpacity)
+                SettingsSignOutButton(binder: binder, onSignOut: onSignOut)
             }
         }
     }

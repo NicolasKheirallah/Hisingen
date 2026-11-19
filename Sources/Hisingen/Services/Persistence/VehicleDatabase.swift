@@ -374,6 +374,17 @@ final class VehicleDatabase: @unchecked Sendable {
         );
         CREATE INDEX IF NOT EXISTS idx_connectivity_vin ON connectivity_history(vin, timestamp DESC);
 
+        CREATE TABLE IF NOT EXISTS vehicle_metric_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vin TEXT NOT NULL,
+            timestamp REAL NOT NULL,
+            metric TEXT NOT NULL,
+            value REAL,
+            text TEXT,
+            ref TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_metric_log ON vehicle_metric_log(vin, metric, timestamp DESC);
+
         CREATE TABLE IF NOT EXISTS cabin_climate_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vin TEXT NOT NULL,

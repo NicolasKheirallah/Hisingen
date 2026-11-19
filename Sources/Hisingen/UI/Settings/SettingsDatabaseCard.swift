@@ -11,7 +11,9 @@ struct SettingsDatabaseCard: View {
     /// not `CarImageCache.shared` – the two are different instances and dropping the wrong one
     /// leaves erased artwork resident in memory.
     let imageCache: CarImageCache
-    @Binding var persistLocationHistory: Bool
+    var onExportDiagnosticLogs: (() -> Void)? = nil
+    var onPresentationChanged: () -> Void = {}
+    var onOpenHistory: (() -> Void)? = nil
 
     @Environment(\.preferencesStore) private var preferences
 
@@ -26,6 +28,7 @@ struct SettingsDatabaseCard: View {
     @State private var showFleetLocationClearConfirmation = false
     @State private var showFleetWipeConfirmation = false
     @State private var showAPIDiagnosticInspector = false
+    @State private var persistLocationHistory = false
     @State private var retentionDays = 90
     @State private var eraseHistoryOnSignOut = false
     @State private var feedback: (message: String, isError: Bool)?
@@ -63,11 +66,27 @@ struct SettingsDatabaseCard: View {
                     Divider().opacity(HisingenTheme.dividerOpacity)
                         .padding(.vertical, 2)
 
+                    Toggle(L10n.text("Charging Session History"), isOn: Binding(
+                        get: { preferences.storeChargingHistory },
+                        set: {
+                            preferences.storeChargingHistory = $0
+                            onPresentationChanged()
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    Text(L10n.text("Keep up to 20 local per-vehicle charging summaries"))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
                     retentionRow
 
                     Divider().opacity(HisingenTheme.dividerOpacity)
                         .padding(.vertical, 2)
 
+                    Text(L10n.text("Exports may contain vehicle identifiers and telemetry. Review files before sharing them."))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     maintenanceSection
                 }
             }
@@ -214,7 +233,11 @@ struct SettingsDatabaseCard: View {
         VStack(spacing: 8) {
             maintenanceButtons
             maintenanceStatus
-            csvExportButtons
+            if let onOpenHistory, state != nil {
+                NavigationRow(title: L10n.text("Export from Log"), action: onOpenHistory)
+            } else {
+                csvExportButtons
+            }
             backupAndDiagnosticButtons
             destructiveButtons
         }
@@ -404,6 +427,10 @@ struct SettingsDatabaseCard: View {
         .help(L10n.text("Shows the in-memory redacted request log with live filters. No raw credentials, VINs, or locations are retained."))
 
         Button {
+            if let onExportDiagnosticLogs {
+                onExportDiagnosticLogs()
+                return
+            }
             let db = database
             Task { @MainActor in
                 let data = await Task.detached(priority: .userInitiated) {

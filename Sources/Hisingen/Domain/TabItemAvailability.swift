@@ -14,13 +14,17 @@ enum TabItemAvailability: Equatable, Sendable {
     case notReported
     /// This vehicle does not have the capability the card needs.
     case notSupported
+    /// The card reads a service the reader has not signed in to.
+    case notSignedIn
 
     static func of(
         _ item: TabItemID,
         state: VehicleState?,
         enabledFeatures: Set<AppFeature>,
-        plannerAvailable: Bool
+        plannerAvailable: Bool,
+        homeChargerSignedIn: Bool = false
     ) -> TabItemAvailability {
+        if item == .vehicleHomeCharger, !homeChargerSignedIn { return .notSignedIn }
         if let feature = TabItemCatalog.item(item)?.feature, !enabledFeatures.contains(feature) {
             // Two controls draw from a second feature as well: climate can run pre-cleaning,
             // and the windows card can honk and flash without the windows permission.

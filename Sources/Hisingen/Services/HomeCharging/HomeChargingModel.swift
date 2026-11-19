@@ -187,6 +187,14 @@ final class HomeChargingModel: ObservableObject {
     }
 
     var isConfigured: Bool { pairing != nil }
+
+    /// Whether the reader is signed in to the paired charger's service: the stored token for Home
+    /// Assistant, the stored account login for a charger Hisingen talks to directly. A login the
+    /// service has since rejected still counts, because the card then says so and where to fix it.
+    var isSignedIn: Bool {
+        guard let pairing else { return false }
+        return pairing.source.isDirect ? store.hasCredentials(for: pairing.source) : store.hasToken
+    }
     var hasToken: Bool { store.hasToken }
     var savedAddress: String? { store.address }
 
@@ -485,12 +493,23 @@ final class HomeChargingModel: ObservableObject {
         guard let status = telemetry.status?.value else { return }
         switch status {
         case .charging:
-            if let power = telemetry.powerKw?.value { sessionPeakKw = max(sessionPeakKw ?? 0, power) }
+            if let power = telemetry.powerKw?.value {
+                sessionPeakKw = max(sessionPeakKw ?? 0, power)
+                recordChargerPower(power, at: telemetry.powerKw?.timestamp)
+            }
         case .unplugged, .finished:
             sessionPeakKw = nil
         default:
             break
         }
+    }
+
+    /// Keeps what the charger itself reported, beside the car's own series, so the two can be
+    /// laid over each other. Only a reading the charger timestamped, for a car this charger is
+    /// paired to, and no more than once a minute.
+    private func recordChargerPower(_ kilowatts: Double, at timestamp: Date?) {
+        guard preferences.storeChargingHistory, let vin = pairing?.vin, !vin.isEmpty, let timestamp else { return }
+        database.history.recordChargerPower(vin: vin, kilowatts: kilowatts, timestamp: timestamp)
     }
 
     // MARK: - Setup
@@ -702,6 +721,17 @@ final class HomeChargingModel: ObservableObject {
         return PlannerPriceProvider.TibberSource(homeID: home.id, gridTariff: gridTariff, fetch: fetch)
     }
 
+    /// Tibber's prices across a past session with the grid fee added, the same way the session sync
+    /// prices it: a fee set on the paired charger wins over the grid tariff. `nil` when Tibber is not
+    /// connected, does not answer, or has no slots that far back.
+    func sessionPriceSeries(from start: Date, to end: Date) async -> SessionPriceSeries? {
+        guard let fetch = tibberPriceSource(), end > start else { return nil }
+        let fee = pairing?.networkFeeOrePerKwh ?? 0
+        let tariff = fee > 0 ? GridTariff.flat(orePerKwh: fee) : gridTariff
+        guard let points = try? await fetch(start.addingTimeInterval(-900), end.addingTimeInterval(900)) else { return nil }
+        return SessionPriceSeries.tibber(points, gridTariff: tariff, from: start, to: end)
+    }
+
     /// Tibber's own price source for a sync, or `nil` when none is connected.
     private func tibberPriceSource() -> (@Sendable (Date, Date) async throws -> [HomePricePoint])? {
         guard let home = store.tibberHome, let token = (try? store.tibberToken()) ?? nil, !token.isEmpty else { return nil }
@@ -803,8 +833,9 @@ final class HomeChargingModel: ObservableObject {
 
     /// Whether the charger section belongs on this vehicle's card. The paired vehicle only. At the
     /// saved location it always shows; elsewhere only a dedicated charger that itself reports a cable.
+    /// Never without a saved login.
     func shouldShow(for state: VehicleState) -> Bool {
-        guard let pairing, pairing.isPaired(toVehicle: state.identity.vin) else { return false }
+        guard let pairing, isSignedIn, pairing.isPaired(toVehicle: state.identity.vin) else { return false }
         if pairing.isAtPairedLocation(state.chargeLocationPresence) { return true }
         if pairing.locationID == nil { return true }
         if pairing.isSharedCharger { return false }
@@ -947,6 +978,14 @@ final class HomeChargingModel: ObservableObject {
             throw DirectChargerError.unreachable
         }
         return (pairing, provider)
+    }
+
+    func readNexBlueSchedule() async throws -> NexBlueSchedule {
+        let (pairing, provider) = try nexBlueTimerConnection()
+        let revision = pairingRevision
+        let schedule = try await provider.schedule(chargerID: pairing.chargerID)
+        guard pairingRevision == revision, link == .live else { throw NexBlueTimerError.changed }
+        return schedule
     }
 
     func previewNexBlueTimer(hours: Int) async throws -> NexBlueTimerPreview {

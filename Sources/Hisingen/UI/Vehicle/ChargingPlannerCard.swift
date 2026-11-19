@@ -10,6 +10,17 @@ import SwiftUI
 @MainActor
 struct ChargingPlannerCard: View {
     let state: VehicleState
+    var showsHomePlan = true
+    var onOpenPlanner: (() -> Void)? = nil
+
+    static func isAvailable(state: VehicleState, preferences: PreferencesStore) -> Bool {
+        TabItemAvailability.of(
+            .controlsChargingPlanner,
+            state: state,
+            enabledFeatures: preferences.features.enabled,
+            plannerAvailable: preferences.smartChargingPlannerAvailable
+        ) == .drawable
+    }
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.homeCharging) private var homeCharging
@@ -52,7 +63,8 @@ struct ChargingPlannerCard: View {
     }
 
     var body: some View {
-        cardContent
+        if Self.isAvailable(state: state, preferences: preferences) {
+            cardContent
             // Crossing the charge threshold in either direction must animate
             // the card's own insertion/removal, not snap it.
             .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
@@ -64,11 +76,12 @@ struct ChargingPlannerCard: View {
                 resolved = answer
                 hasLoaded = true
             }
+        }
     }
 
     /// The paired vehicle with a home charger: Home Assistant can run this car's plan.
     private var showsHome: Bool {
-        guard let homeCharging, homeCharging.supportsPlans else { return false }
+        guard showsHomePlan, onOpenPlanner == nil, let homeCharging, homeCharging.supportsPlans else { return false }
         return homeCharging.shouldShow(for: state)
     }
 
@@ -128,14 +141,17 @@ struct ChargingPlannerCard: View {
                             Text(model.dayLabel)
                                 .hisType(.label)
                                 .foregroundStyle(HisingenTheme.inkMuted)
-                            Text(model.detailLine)
+                            if onOpenPlanner == nil {
+                                Text(model.detailLine)
                                 .hisType(.label)
                                 .foregroundStyle(HisingenTheme.inkMuted)
                                 .hisCaptionLeading()
                                 .fixedSize(horizontal: false, vertical: true)
-                                .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
+                                    .hisTelemetryValue(model.detailLine, reduceMotion: reduceMotion)
+                            }
                         }
-                        priceFigures(model)
+                        if onOpenPlanner == nil {
+                            priceFigures(model)
                         Text(model.savingsLine)
                             .hisType(.label, weight: .semibold)
                             .foregroundStyle(model.savings > 0 ? HisingenTheme.ink : HisingenTheme.inkMuted)
@@ -144,35 +160,43 @@ struct ChargingPlannerCard: View {
                                        granularity: basis.granularity,
                                        caption: basis.chartCaption,
                                        expectedEnd: ElectricityPriceService.requiredCoverageEnd(after: Date()))
+                        }
                     }
                     .transition(plannerTransition)
                 } else if !hasLoaded && points.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HisingenTheme.inkMuted)
                         Text(L10n.text("Loading prices…"))
                             .hisType(.label)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HisingenTheme.inkMuted)
                     }
                     .transition(plannerTransition)
                 } else {
                     Text(statusMessage)
                         .hisType(.label)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                         .transition(plannerTransition)
                 }
 
-                if !state.energy.schedules.isEmpty {
+                if let onOpenPlanner {
+                    NavigationRow(
+                        title: L10n.text("Open in Plan"),
+                        accessibilityName: "\(L10n.text("Open in Plan")), \(L10n.text("Charging Planner"))",
+                        action: onOpenPlanner
+                    )
+                }
+                if onOpenPlanner == nil && !state.energy.schedules.isEmpty {
                     Label(L10n.text("The car has its own charging schedules. The planner does not use them"),
                           systemImage: "calendar.badge.exclamationmark")
                         .hisType(.micro)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                 }
 
-                if basis != .fixed {
+                if onOpenPlanner == nil && basis != .fixed {
                     Text(attributionLine)
                         .hisType(.micro)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                 }
 
                 if showsHome, let homeCharging {
@@ -276,7 +300,7 @@ struct ChargingPlannerCard: View {
                 ? L10n.format("A %d h charge is longer than the price outlook", minutes / 60)
                 : L10n.format("A %@ charge is longer than the price outlook", durationText(planSeconds / 3_600))
         }
-        return L10n.text("Tomorrow's prices arrive after 14:15")
+        return L10n.format("Tomorrow's prices arrive after %@", Format.clockTime(hour: 14, minute: 15))
     }
 
     private struct PlannerModel {

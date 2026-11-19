@@ -26,6 +26,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case vehicleExceptions = "vehicle-exceptions"
     case vehicleWeather = "vehicle-weather"
     case vehicleCharging = "vehicle-charging"
+    case vehicleHomeCharger = "vehicle-home-charger"
     case vehicleChargingPlanner = "vehicle-charging-planner"
     case vehicleFuelEngine = "vehicle-fuel-engine"
     case vehicleReadiness = "vehicle-readiness"
@@ -129,9 +130,7 @@ struct TabItem: Identifiable, Hashable, Sendable {
     let sourceTab: BuiltInTab
     let kind: TabItemKind
     let detail: String
-    /// The stored data this card draws on. Hiding the last card that needs it is what
-    /// switches the corresponding provider request off, so an item with no feature over
-    /// here is drawing on data the app always fetches.
+    /// The feature that controls requests for the card's primary data.
     let feature: AppFeature?
 
     var isCard: Bool { kind == .card }
@@ -171,9 +170,10 @@ enum TabItemCatalog {
         TabItem(id: .vehicleCharging, title: L10n.text("Charging"), symbol: "bolt.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Charge level, power, connector state and completion time.", feature: .chargingDetails),
-        TabItem(id: .vehicleChargingPlanner, title: L10n.text("Smart Charging Planner"), symbol: "calendar.badge.clock",
+        TabItem(id: .vehicleHomeCharger, title: L10n.text("Home charger"), symbol: "powerplug",
                 sourceTab: .vehicle, kind: .card,
-                detail: "Cheapest charging window from spot prices.", feature: .smartChargingPlanner),
+                detail: "What the home charger reports: wall power, session energy and its plan. Needs a saved charger login.",
+                feature: nil),
         TabItem(id: .vehicleFuelEngine, title: L10n.text("Fuel & Engine"), symbol: "fuelpump.fill",
                 sourceTab: .vehicle, kind: .card,
                 detail: "Fuel level, range and combustion engine state.", feature: nil),
@@ -301,9 +301,9 @@ enum TabItemCatalog {
         TabItem(id: .historyChargeLocations, title: L10n.text("Charge Locations"), symbol: "mappin.and.ellipse",
                 sourceTab: .history, kind: .card,
                 detail: "Where charging happened, and how much.", feature: nil),
-        TabItem(id: .historyChargingHistory, title: L10n.text("Charging History"), symbol: "list.bullet.rectangle",
+        TabItem(id: .historyChargingHistory, title: L10n.text("Charging Summary"), symbol: "list.bullet.rectangle",
                 sourceTab: .history, kind: .card,
-                detail: "Full session table with export.", feature: nil),
+                detail: "Charging totals, power, timing and cost for the selected period.", feature: nil),
         TabItem(id: .historyFuelEconomy, title: L10n.text("Fuel Economy"), symbol: "fuelpump.fill",
                 sourceTab: .history, kind: .card,
                 detail: "Measured consumption between fill-ups.", feature: nil),
@@ -339,9 +339,6 @@ enum TabItemCatalog {
         TabItem(id: .controlsBanners, title: L10n.text("Command status banners"), symbol: "text.bubble",
                 sourceTab: .controls, kind: .header,
                 detail: "Sent, failed and offline notices, above the controls.", feature: nil),
-        TabItem(id: .controlsReceipts, title: L10n.text("Command receipts"), symbol: "checkmark.circle",
-                sourceTab: .controls, kind: .card,
-                detail: "Receipts for commands still awaiting confirmation.", feature: nil),
         TabItem(id: .controlsClimate, title: L10n.text("Climate controls"), symbol: "fan",
                 sourceTab: .controls, kind: .card,
                 detail: "Start climate, set temperature and seat heating.", feature: .remoteClimate),
@@ -384,13 +381,21 @@ enum TabItemCatalog {
         uniqueKeysWithValues: all.map { ($0.id, $0) }
     )
 
-    static func item(_ id: TabItemID) -> TabItem? { byID[id] }
+    static func canonicalID(_ id: TabItemID) -> TabItemID {
+        switch id {
+        case .vehicleChargingPlanner: return .controlsChargingPlanner
+        case .controlsReceipts: return .vehicleReceipts
+        default: return id
+        }
+    }
+
+    static func item(_ id: TabItemID) -> TabItem? { byID[canonicalID(id)] }
 
     /// Falls back to the raw value so an item that somehow escaped the table still renders
     /// with a readable name instead of crashing a tab.
-    static func title(_ id: TabItemID) -> String { byID[id]?.title ?? id.rawValue }
+    static func title(_ id: TabItemID) -> String { item(id)?.title ?? id.rawValue }
 
-    static func symbol(_ id: TabItemID) -> String { byID[id]?.symbol ?? "square.dashed" }
+    static func symbol(_ id: TabItemID) -> String { item(id)?.symbol ?? "square.dashed" }
 
     static func items(in tab: BuiltInTab) -> [TabItem] {
         all.filter { $0.sourceTab == tab }
@@ -407,7 +412,7 @@ enum TabItemCatalog {
         .vehicleSwitcher,
         .vehicleHero,
         .vehicleCharging,
-        .vehicleChargingPlanner,
+        .vehicleHomeCharger,
         .vehicleOpenings,
         .vehicleTyres,
         .vehicleReadiness,
@@ -415,11 +420,16 @@ enum TabItemCatalog {
         .vehicleWeather,
         .vehicleReceipts,
         .vehicleAttention,
+        .controlsChargingPlanner,
         .controlsClimate,
         .controlsAccess,
         .controlsWindowsLocate,
         .controlsOTA
     ]
+
+    static var nowInlineItems: Set<TabItemID> {
+        Set(defaultItems(for: .vehicle)).union([.vehicleTyres])
+    }
 
     static func isStandalone(_ id: TabItemID) -> Bool { standaloneItems.contains(id) }
 
@@ -459,33 +469,32 @@ enum TabItemCatalog {
         switch tab {
         case .vehicle:
             return [
-                .vehicleSwitcher, .vehicleHero, .vehicleReceipts, .vehicleAttention,
-                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleChargingPlanner,
-                .vehicleFuelEngine, .vehicleReadiness, .vehicleOpenings, .vehicleTyres,
-                .vehicleLocation
+                .vehicleSwitcher, .vehicleHero, .vehicleReadiness, .vehicleReceipts, .vehicleAttention,
+                .vehicleExceptions, .vehicleWeather, .vehicleCharging, .vehicleHomeCharger, .controlsChargingPlanner,
+                .vehicleFuelEngine, .vehicleOpenings, .vehicleLocation
             ]
         case .info:
             return [
-                .infoNavBar, .infoOverview, .infoFreshness, .infoDoors, .infoTyres,
-                .infoFluids, .infoSoftware, .controlsOTA, .infoLocation, .controlsAccess,
-                .controlsWindowsLocate, .infoWeather, .infoTrip,
-                .infoPowertrain, .infoBatteryHealth, .infoBatteryDiagnostics, .infoAirQuality,
-                .infoConnectivity, .infoService, .infoWarranty, .infoExterior, .infoInterior,
-                .infoChargeLocations, .infoFactoryBuild, .infoCapabilities, .infoActivity
+                .infoNavBar, .infoOverview, .infoLocation, .infoDoors, .controlsAccess, .controlsWindowsLocate,
+                .infoTyres, .infoFluids, .infoService, .infoWarranty, .infoBatteryHealth, .infoBatteryDiagnostics,
+                .infoSoftware, .controlsOTA, .infoFactoryBuild, .infoPowertrain, .infoExterior, .infoInterior,
+                .infoChargeLocations, .infoWeather, .infoAirQuality, .infoTrip, .infoConnectivity,
+                .infoCapabilities, .infoActivity, .infoFreshness
             ]
         case .history:
             return [
-                .historyPeriodPicker, .historyOverview, .historyActivity, .historyWarnings, .historyMonth,
-                .historyAirCleaning, .historyEmissions, .historyDrivingPatterns, .historyDistance,
-                .historyMonthlyMileage, .historyTrips, .historyChargingSessions,
-                .historyChargingCurve, .historyMonthlyCharging, .historyChargeLocations,
-                .historyChargingHistory, .historyFuelEconomy, .historyRecentFills,
-                .historyEfficiency, .historyConsumption, .historyOdometer, .historyBatteryHealth,
-                .historyTyrePressure, .historyAirQuality, .historyCabinClimate, .historyAutomations
+                .historyPeriodPicker, .historyOverview,
+                .historyChargingSessions, .historyChargingCurve,
+                .historyActivity, .historyWarnings, .historyAutomations, .historyMonth,
+                .historyChargingHistory, .historyMonthlyCharging, .historyChargeLocations, .historyTrips, .historyDrivingPatterns,
+                .historyDistance, .historyMonthlyMileage, .historyOdometer,
+                .historyEfficiency, .historyConsumption, .historyFuelEconomy, .historyRecentFills, .historyEmissions,
+                .historyAirCleaning, .historyAirQuality, .historyCabinClimate,
+                .historyBatteryHealth, .historyTyrePressure
             ]
         case .controls:
             return [
-                .controlsBanners, .controlsReceipts, .controlsCharging, .controlsChargingPlanner,
+                .controlsBanners, .controlsCharging, .vehicleHomeCharger, .vehicleReceipts, .controlsChargingPlanner,
                 .controlsClimate, .controlsEngine, .controlsRoutines
             ]
         case .settings:

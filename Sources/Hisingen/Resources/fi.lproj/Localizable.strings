@@ -1338,7 +1338,6 @@
 "charging" = "lataus";
 "Charging curve charge-level chart" = "Latauskäyrän lataustasokaavio";
 "Charging curve power chart" = "Latauskäyrän tehokaavio";
-"Charging curve voltage and current chart" = "Latauskäyrän jännite- ja virtakaavio";
 "Charging Functions" = "Lataustoiminnot";
 "Charging power is unusually low" = "Latausteho on epätavallisen alhainen";
 "Charging Sessions" = "Latausistunnot";
@@ -1598,7 +1597,6 @@
 "Switch to %@" = "Vaihda kohteeseen %@";
 "Tailgate Open/Close" = "Takaluukun avaus/sulkeminen";
 "Taller panel, more visible history" = "Korkeampi paneeli, näkyvämpi historia";
-"Tariff Cost" = "Tariffikustannus";
 "Telemetry" = "Telemetria";
 "Telemetry Entries" = "Telemetriatietueet";
 "The charge target must be between %d%% and 100%% on this vehicle." = "Lataustavoitteen on oltava välillä %d%%–100%% tällä ajoneuvolla.";
@@ -1672,7 +1670,6 @@
 "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for recent ambient temperature." = "Ajoneuvon ilmoittamaa toimintamatkaa %.0f %%:n latauksella verrataan määritettyyn WLTP/mallireferenssiin ja säädetään viimeaikaisen ulkolämpötilan mukaan.";
 "VIN-specific reference entered in Settings. It is not a live range value." = "Asetuksissa syötetty VIN-kohtainen referenssi. Ei ole reaaliaikainen toimintamatka-arvo.";
 "VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry." = "Asetuksissa syötetty VIN-kohtainen referenssi. Käytetään laskettuihin energia- ja SoH-arvioihin; ei palveluntarjoajan telemetriaa.";
-"Voltage (V)" = "Jännite (V)";
 "Volume (litres)" = "Tilavuus (litraa)";
 "Volvo's official API does not support changing charge settings." = "Volvon virallinen API ei tue latausasetusten muuttamista.";
 "Waiting for backend authorization" = "Odotetaan taustajärjestelmän valtuutusta";
@@ -1755,7 +1752,6 @@
 "Battery health, odometer totals and lifetime cost always use full history, regardless of the range above." = "Akun kunto, mittarilukeman yhteissummat ja elinkaarikustannukset käyttävät aina koko historiaa, yllä olevasta aikavälistä riippumatta.";
 "Busiest hour" = "Vilkkain tunti";
 "CO₂ Avoided" = "Vältetty CO₂";
-"Charge level of this session versus the previous session" = "Tämän latausistunnon varaus verrattuna edelliseen";
 "Charging by Location" = "Lataus sijainnin mukaan";
 "Charging by Month" = "Lataus kuukausittain";
 "Charging cost per month chart" = "Latauskustannukset kuukausittain -kaavio";
@@ -1977,7 +1973,7 @@
 "Export All History (JSON)" = "Vie kaikki historia (JSON)";
 "Alert after an opening has been left open for %d minutes" = "Hälytys, kun aukko on ollut auki %d minuuttia";
 "Alert once at %d%% or below while unplugged and not charging" = "Hälytä kerran, kun varaus on %d%% tai alle eikä ajoneuvo lataudu";
-"Alert if parked and unlocked after %02d:00" = "Hälytä, jos ajoneuvo on pysäköity lukitsematta klo %02d:00 jälkeen";
+"Alert if parked and unlocked after %@" = "Hälytä, jos ajoneuvo on pysäköity lukitsematta klo %@ jälkeen";
 "The selected settings archive is larger than 1 MB." = "Valittu asetusarkisto on suurempi kuin 1 Mt.";
 "Settings imported." = "Asetukset tuotu.";
 
@@ -2385,7 +2381,7 @@
 "Today" = "Tänään";
 "Tomorrow" = "Huomenna";
 "Loading prices…" = "Haetaan hintoja …";
-"Tomorrow's prices arrive after 14:15" = "Huomisen hinnat tulevat klo 14:15 jälkeen";
+"Tomorrow's prices arrive after %@" = "Huomisen hinnat tulevat klo %@ jälkeen";
 "Prices unavailable right now" = "Hinnat eivät ole juuri nyt saatavilla";
 "Spot prices exclude taxes and grid fees" = "Spot-hinnat eivät sisällä veroja tai siirtomaksuja";
 "Charge %@ over %d h to reach %d%%" = "Lataa %@ %d h aikana tasolle %d %%";
@@ -2411,7 +2407,7 @@
 "Notify When the Cheap Window Opens" = "Ilmoita kun halpa ikkuna avautuu";
 "One banner per window, respecting quiet hours" = "Yksi ilmoitus per ikkuna, kunnioittaa hiljaisia aikoja";
 "Notify When Tomorrow's Prices Arrive" = "Ilmoita kun huomisen hinnat tulevat";
-"One daily banner after 14:15 with the cheapest hour" = "Yksi päivittäinen ilmoitus klo 14:15 jälkeen halvimmalla tunnilla";
+"One daily banner after %@ with the cheapest hour" = "Yksi päivittäinen ilmoitus klo %@ jälkeen halvimmalla tunnilla";
 "Auto-Start Charging in the Window" = "Käynnistä lataus automaattisesti ikkunassa";
 "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "Kun suunniteltu ikkuna avautuu, Hisingen lähettää saman latauskäskyn kuin Ohjaus-välilehti: vain kun ajoneuvo on kytketty ja latausrajan alapuolella. Vaatii Latauksen ohjaus -toiminnon.";
 "Sends the start-charging command automatically while the window runs" = "Lähettää latauskäskyn automaattisesti ikkunan aikana";
@@ -2455,14 +2451,12 @@
 "Export All Months" = "Vie kaikki kuukaudet";
 "Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Vain suuntaa-antava: olettaa verkon intensiteetiksi %@ g CO₂/kWh ja bensiiniautolle %@ g CO₂/km, kaivosta pyörään. Aseta arvo kohdassa Asetukset → Yleiset → Grid Carbon Intensity.";
 
-// English fallback values pending translation
 "Lead Time" = "Ennakkoaika";
 "How long before the window opens the banner arrives" = "Kuinka kauan ennen ikkunan alkamista banneri saapuu";
 "When the window opens" = "Kun ikkuna aukeaa";
 "1 hour before" = "1 tunti ennen";
 "%d minutes before" = "%d minuuttia ennen";
 
-// English fallback values pending translation
 "%1$d of %2$d windows open" = "%1$d / %2$d ikkunaa auki";
 "%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
 "%@ kr" = "%@ kr";
@@ -2524,7 +2518,6 @@
 "kr per kWh" = "kr/kWh";
 "≈%@ to target at your %@/kWh setting" = "≈%@ tavoitteeseen asetuksellasi %@/kWh";
 
-// English fallback values pending translation
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept." = "Tilannekuvat, välimuistissa olevat kuvat, lataus- ja polttoainehistoria, telemetria, kuntolokit, ilmanlaatu, komentojen tarkastusloki sekä tämän ajoneuvon nimi ja teema poistetaan pysyvästi. Tilin tunnistetiedot säilyvät.";
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept." = "Tilannekuvat, välimuistissa olevat kuvat, lataus- ja polttoainehistoria, telemetria, kuntolokit, ilmanlaatu ja komentojen tarkastusloki poistetaan pysyvästi kaikilta ajoneuvoilta. Samalla poistuvat tämän Macin nimet, teemat ja muut ajoneuvokohtaiset asetukset. Tilin tunnistetiedot säilyvät.";
 "Erase Everything Permanently" = "Poista kaikki pysyvästi";
@@ -2532,7 +2525,6 @@
 "Clear saved locations for every vehicle?" = "Tyhjennetäänkö tallennetut paikat kaikilta ajoneuvoilta?";
 "Clear All Locations" = "Tyhjennä kaikki paikat";
 
-// English fallback values pending translation
 "Time to Target Distance" = "Aika etäisyystavoitteeseen";
 "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Ajoneuvon arvio. Aika, joka tarvitaan lataamiseen auton asetetun etäisyystavoitteen saavuttamiseksi.";
 "Time to Full" = "Aika täyteen lataukseen";
@@ -2657,7 +2649,6 @@
 "unknown time" = "tuntematon aika";
 "⚡ charging" = "⚡ lataus";
 
-// English fallback values pending translation
 "%@ (%@)" = "%@ (%@)";
 "%@ L/100km" = "%@ L/100km";
 "%@ copy" = "%@ kopio";
@@ -2845,7 +2836,6 @@
 "Nothing on this tab yet" = "Tässä välilehdessä ei ole vielä mitään";
 "On" = "On";
 "On this tab" = "Tässä välilehdessä";
-"Open History" = "Avaa historia";
 "Open Settings to configure Polestar Developer Portal." = "Avaa asetukset Polestar Developer Portalin määrittämiseksi.";
 "Opens this timer for editing" = "Avaa tämän ajastimen muokkaus";
 "Operation" = "Toiminto";
@@ -2974,17 +2964,14 @@
 "“%@” and its card arrangement will be removed. The cards themselves stay available on the tabs they came from." = "”%@” ja sen korttijärjestys poistetaan. Kortit itse pysyvät saatavilla välilehdillä, joilta ne tulivat.";
 "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window." = "Polestar vaatii vahvistuksen (2FA, CAPTCHA tai käyttöehtojen päivitys). Suorita kirjautuminen interaktiivisessa ikkunassa.";
 
-// English fallback values pending translation
 "Custom range: %@–%@" = "Oma aikaväli: %@ ja %@";
 "Hisingen · History summary" = "Hisingen · historian yhteenveto";
 "Refresh" = "Päivitä";
 "Reload the vehicle state" = "Lataa ajoneuvon tila uudelleen";
 
-// English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "Pörssihinnat ilman veroja ja siirtomaksuja · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "Pörssihinnat ilman veroja ja siirtomaksuja · %@ · elprisetjustnu.se, haettu %@";
 
-// English fallback values pending translation
 "Fixed rate" = "Kiinteä hinta";
 "Other provider" = "Muu palveluntarjoaja";
 "15-minute price" = "15 minuutin hinta";
@@ -3019,7 +3006,6 @@
 "Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "Pörssihintojen kattamissa istunnoissa käytetään %@. Muissa %d istunnossa käytetään tallennettua kustannusta tai kiinteää hintaasi.";
 "≈%@ to target at the current %@/kWh" = "≈%@ tavoitteeseen nykyisellä hinnalla %@/kWh";
 
-// English fallback values pending translation
 "Electricity" = "Sähkö";
 "Country" = "Maa";
 "Sweden" = "Ruotsi";
@@ -3295,7 +3281,6 @@
 "My Theme" = "Oma teema";
 "Your colours, adjusted to stay readable in light and dark." = "Omat värisi, säädettyinä luettaviksi vaaleassa ja tummassa tilassa.";
 
-// English fallback values pending translation
 "%@ by %@" = "%@ by %@";
 "%@ delivered" = "%@ delivered";
 "%@ from charger" = "%@ from charger";
@@ -3322,7 +3307,6 @@
 "Cancel plan" = "Cancel plan";
 "Cancel the plan?" = "Cancel the plan?";
 "Cancelled" = "Cancelled";
-"Charge now" = "Charge now";
 "Charge now is on in the car" = "Charge now is on in the car";
 "Charge now is running" = "Charge now is running";
 "Charge now is running and replaces the plan windows." = "Charge now is running and replaces the plan windows.";
@@ -3509,7 +3493,6 @@
 "Waiting for the car to start drawing power." = "Waiting for the car to start drawing power.";
 "What Home Assistant would do" = "What Home Assistant would do";
 
-// English fallback values pending translation
 "Charge Limit" = "Latausraja";
 "Each press raises a limit by this share of the highest value your car allows." = "Jokainen painallus nostaa rajaa tällä osuudella auton sallimasta suurimmasta arvosta.";
 "Last known: %@" = "Last known: %@";
@@ -3522,16 +3505,13 @@
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
 
-// English fallback values pending translation
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "New access token" = "New access token";
 "Save token" = "Save token";
 
-// English fallback values pending translation
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
 
-// English fallback values pending translation
 "%@ accepted the command. Waiting for the charger to confirm." = "%@ accepted the command. Waiting for the charger to confirm.";
 "%@ did not accept the saved login" = "%@ did not accept the saved login";
 "%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ did not accept the saved login. Enter the account and password again to reconnect.";
@@ -3583,7 +3563,7 @@
 "The charger or window changed. Preview the timer again." = "Laturi tai latausaika muuttui. Esikatsele ajastinta uudelleen.";
 "The timer could not be verified. Check Schedule in myNexBlue before trying again." = "Ajastinta ei voitu vahvistaa. Tarkista ajastus myNexBluessa ennen uutta yritystä.";
 "Cheapest overnight charge" = "Yön edullisin lataus";
-"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "Etsi valitsemallasi hinta-alueella kertaluonteinen latausaika klo 18–07.";
+"Find a one-time charging window between %@ and %@ using your selected spot price area." = "Etsi valitsemallasi hinta-alueella kertaluonteinen latausaika klo %@–%@.";
 "Preview timer" = "Esikatsele ajastinta";
 "Save timer" = "Tallenna ajastin";
 "Timer verified on the charger. You can manage it in myNexBlue." = "Ajastin vahvistettiin laturissa. Voit hallita sitä myNexBluessa.";
@@ -3593,7 +3573,6 @@
 "Choose up to one year of completed sessions to import." = "Valitse enintään vuoden ajalta päättyneet latauskerrat tuotaviksi.";
 "Through" = "Päättymispäivä";
 
-// English fallback values pending translation
 "Connect and find homes" = "Connect and find homes";
 "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported.";
 "Currency" = "Currency";
@@ -3620,7 +3599,6 @@
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own.";
 "Added to Tibber prices in the planner and for charger sessions." = "Added to Tibber prices in the planner and for charger sessions.";
 
-// English fallback values pending translation
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
 "By an administrator" = "By an administrator";
@@ -3655,7 +3633,6 @@
 "Ethernet" = "Ethernet";
 "Charger Details" = "Charger Details";
 
-// English fallback values pending translation
 "Car Share of House Load" = "Auton osuus talon kulutuksesta";
 "Car at Home" = "Auto kotona";
 "Charger-measured home sessions against the house meter's readings from Tibber, %@ to %@. Charging away from home never reaches that meter." = "Laturin mittaamat kotilataukset talon mittarin Tibber-lukemia vasten, %@ – %@. Kodin ulkopuolinen lataus ei koskaan näy tässä mittarissa.";
@@ -3670,14 +3647,12 @@
 "Very cheap" = "Erittäin edullinen";
 "Very expensive" = "Erittäin kallis";
 
-// English fallback values pending translation
 "House Cost" = "Talon kustannus";
 "Car Cost at Home" = "Auton kustannus kotona";
 "What Tibber billed for the energy in those hours, taxes included. The grid fee is not in it." = "Se, mitä Tibber laskutti energiasta niinä tunteina, verot mukaan lukien. Verkkomaksu ei sisälly.";
 "The car's energy at each hour's average Tibber price. Sessions are priced by the quarter-hour with your network fee, so the two can differ." = "Auton energia kunkin tunnin Tibber-keskihintaan. Lataukset hinnoitellaan vartin tarkkuudella verkkomaksusi kanssa, joten luvut voivat poiketa toisistaan.";
 "In %d of those hours the charger's energy was above the meter's reading, so the reading was used." = "%d näistä tunneista laturin energia ylitti mittarin lukeman, joten käytettiin mittarin lukemaa.";
 
-// English fallback values pending translation
 "House Meter" = "House Meter";
 "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger." = "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger.";
 "The account you use in the Perific app. It is stored in the macOS Keychain and never exported." = "The account you use in the Perific app. It is stored in the macOS Keychain and never exported.";
@@ -3708,14 +3683,11 @@
 "Perific did not accept the saved login. Sign in again in Settings, Electricity." = "Perific did not accept the saved login. Sign in again in Settings, Electricity.";
 "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter." = "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter.";
 
-// English fallback values pending translation
 "%@ to the grid" = "%@ to the grid";
 
-// English fallback values pending translation
 "Signed in to %@" = "Signed in to %@";
 "Reading chargers…" = "Reading chargers…";
 
-// English fallback values pending translation
 "%@ öre/kWh" = "%@ öre/kWh";
 "%@ öre/kWh, high-load until %@" = "%@ öre/kWh, ruuhka-aika %@ asti";
 "%@ öre/kWh, other time until %@" = "%@ öre/kWh, muu aika %@ asti";
@@ -3770,3 +3742,122 @@
 "Charge %@ over %@ to reach %d%%" = "Charge %@ over %@ to reach %d%%";
 "A %@ charge is longer than the price outlook" = "A %@ charge is longer than the price outlook";
 "%d h %d min" = "%d h %d min";
+
+// Card and settings consolidation
+"Activity type" = "Tapahtumatyyppi";
+"Add the in-service date from your warranty documents." = "Lisää takuuasiakirjoissa ilmoitettu käyttöönottopäivä.";
+"All Notifications" = "Kaikki ilmoitukset";
+"Automation" = "Automaatio";
+"Back" = "Takaisin";
+"Battery health, lifetime odometer totals, fuel fill-ups, cabin temperatures and lifetime cost use the full history." = "Akun kunto, matkamittarin kokonaislukemat, tankkaukset, matkustamon lämpötilat ja kokonaiskustannukset perustuvat koko historiaan.";
+"Battery-side energy" = "Akun puolen energia";
+"By Peak Power" = "Huipputehon mukaan";
+"Charger Schedule" = "Laturin aikataulu";
+"Charger is offline" = "Laturi on offline-tilassa";
+"Charging Alerts" = "Latausilmoitukset";
+"Charging Planner Alerts" = "Lataussuunnittelijan ilmoitukset";
+"Charging Summary" = "Latausyhteenveto";
+"Choose which cards each tab shows and in what order. Manage data requests in Features." = "Valitse kunkin välilehden kortit ja niiden järjestys. Hallitse tietojen hakua Toiminnot-osiossa.";
+"Clear Filter" = "Tyhjennä suodatin";
+"Connect an account and choose a vehicle to edit its references." = "Yhdistä tili ja valitse ajoneuvo, jonka viitearvoja haluat muokata.";
+"Default theme for %@ vehicles" = "Merkin %@ ajoneuvojen oletusteema";
+"Departure · %@" = "Lähtö · %@";
+"Edit In-Service Date" = "Muokkaa käyttöönottopäivää";
+"Edit Plan" = "Muokkaa suunnitelmaa";
+"Edit Vehicle References" = "Muokkaa ajoneuvon viitearvoja";
+"Energy & Fuel" = "Energia ja polttoaine";
+"Energy delivered by charger" = "Laturin toimittama energia";
+"Erase local history on sign out is enabled. Signing out also erases saved history." = "Paikallisen historian poisto uloskirjautumisen yhteydessä on käytössä. Uloskirjautuminen poistaa myös tallennetun historian.";
+"Export from Log" = "Vie lokista";
+"Full History (CSV)" = "Koko historia (CSV)";
+"Grid Tariff Country" = "Verkkotariffin maa";
+"Language & Units" = "Kieli ja yksiköt";
+"Last Remote Command" = "Viimeisin etäkomento";
+"Latest Charging Session" = "Viimeisin latauskerta";
+"Loading charging samples…" = "Ladataan latausmittauksia…";
+"Local vehicle history is kept." = "Ajoneuvon paikallinen historia säilytetään.";
+"Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization in Accounts. Charging, timers and software installation work with the account sign-in alone." = "Lukot, ilmastointi, ikkunat, matkustamon puhdistus ja paikannus vaativat tilisivulla käynnistettävän kertavaltuutuksen selaimessa. Lataukseen, ajastimiin ja ohjelmiston asennukseen riittää tilille kirjautuminen.";
+"Menu Bar" = "Valikkorivi";
+"No charging samples were recorded for this session." = "Tältä latauskerralta ei tallennettu mittauksia.";
+"No completed charging sessions have been recorded." = "Yhtään valmistunutta latauskertaa ei ole tallennettu.";
+"No fill-ups have been recorded." = "Yhtään tankkausta ei ole tallennettu.";
+"No parking location was reported on the last refresh." = "Viimeisin päivitys ei sisältänyt pysäköintipaikkaa.";
+"No vehicle changes or commands recorded." = "Ajoneuvon muutoksia tai komentoja ei ole tallennettu.";
+"On hold" = "Keskeytetty";
+"Open Air Quality History" = "Avaa ilmanlaatuhistoria";
+"Open Battery Health History" = "Avaa akun kuntohistoria";
+"Open Charge Location" = "Avaa latauspaikka";
+"Open in Plan" = "Avaa Suunnitelmassa";
+"Open in Log" = "Avaa Lokissa";
+"Expanded" = "Laajennettu";
+"Collapsed" = "Tiivistetty";
+"Update to v%@" = "Päivitä versioon v%@";
+"Open Garage" = "Avaa autotalli";
+"Open Plan Automations" = "Avaa suunnittelun automaatiot";
+"Panel" = "Paneeli";
+"Parking & Access" = "Pysäköinti ja kulku";
+"Planner Settings" = "Suunnittelijan asetukset";
+"Reading charger schedule…" = "Luetaan laturin aikataulua…";
+"Recent Completed Charging Sessions (JSON)" = "Viimeisimmät valmistuneet latauskerrat (JSON)";
+"Recent Vehicle Activity" = "Ajoneuvon viimeisimmät tapahtumat";
+"Reconnect Tibber" = "Yhdistä Tibber uudelleen";
+"Remote Command Permissions" = "Etäkomentojen käyttöoikeudet";
+"Saved charge location" = "Tallennettu latauspaikka";
+"Selected" = "Valittu";
+"Selected Period (CSV)" = "Valittu ajanjakso (CSV)";
+"Selected Session Samples (CSV)" = "Valitun latauskerran mittaukset (CSV)";
+"Service & Protection" = "Huolto ja suoja";
+"Set Plan" = "Luo suunnitelma";
+"Settings Backup" = "Asetusten varmuuskopio";
+"The charger schedule could not be read." = "Laturin aikataulua ei voitu lukea.";
+"The saved session and account credentials for this provider will be removed from this Mac." = "Tämän palveluntarjoajan tallennettu istunto ja tilin tunnistetiedot poistetaan tältä Macilta.";
+"Theme" = "Teema";
+"This vehicle has no editable warranty or battery references." = "Tällä ajoneuvolla ei ole muokattavia takuu- tai akkuviitearvoja.";
+"This vehicle uses %@. Change its theme in Garage." = "Tämä ajoneuvo käyttää teemaa %@. Vaihda se Autotallissa.";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff." = "Tibberin hintaan sisältyvät energia, verot ja marginaali. Määritä verkkotariffi Sähkö-osiossa. Pariliitetty laturi voi käyttää omaa tariffiaan.";
+"Timer %d" = "Ajastin %d";
+"Use Brand Default" = "Käytä merkin oletusteemaa";
+"Used for spot prices and when Tibber prices are unavailable." = "Käytetään spot-hintoihin ja silloin, kun Tibberin hintoja ei ole saatavilla.";
+"Vehicle Data Settings" = "Ajoneuvotietojen asetukset";
+"Vehicle Presentation" = "Ajoneuvon näyttötapa";
+"Vehicle References" = "Ajoneuvon viitearvot";
+"Vehicle Specifications" = "Ajoneuvon tekniset tiedot";
+"View Sessions" = "Näytä latauskerrat";
+"View charging sessions at %@" = "Näytä latauskerrat paikassa %@";
+
+"Time Format" = "Ajan esitysmuoto";
+"24-hour" = "24 tunnin kello";
+"12-hour (AM/PM)" = "12 tunnin kello (ap./ip.)";
+
+"Paused" = "Tauolla";
+"Average" = "Keskiarvo";
+"Month in progress" = "Kuukausi kesken";
+"All recorded history" = "Koko tallennettu historia";
+"Battery Level" = "Akun varaustaso";
+"Lost While Parked" = "Menetetty pysäköitynä";
+"Parked drain counts only stretches between two readings taken unplugged with no trip in between, so it is a floor, not a total." = "Pysäköintihäviö lasketaan vain kahden latauksettoman mittauksen väliltä, joiden välillä ei ole ajoa, joten se on vähimmäisarvo, ei kokonaismäärä.";
+"Cost per 100 km" = "Hinta 100 km:ltä";
+"Cost per 100 mi" = "Hinta 100 mi:ltä";
+"Saved vs Fixed Rate" = "Säästö kiinteään hintaan verrattuna";
+"Market-priced sessions against what the same energy would have cost at your fixed rate. Sessions without market prices are left out." = "Markkinahintaan laskutetut lataukset verrattuna siihen, mitä sama energia olisi maksanut kiinteällä hinnallasi. Lataukset ilman markkinahintoja jätetään pois.";
+"Peak Power by Session" = "Huipputeho latauksittain";
+"Energy by Time of Day" = "Energia vuorokaudenajan mukaan";
+"Consumption vs Temperature" = "Kulutus ja lämpötila";
+"Normalised to %@" = "Normalisoitu: %@";
+"Recording Coverage" = "Tallennuksen kattavuus";
+"Hours per day with a reading. A short day means Hisingen was not running, not that the car did nothing." = "Tunnit päivässä, joilta on mittaus. Lyhyt päivä tarkoittaa, ettei Hisingen ollut käynnissä, ei sitä, ettei auto tehnyt mitään.";
+"Energy Use by Month" = "Energiankäyttö kuukausittain";
+"On pace for %@" = "Vauhdilla %@";
+"Session note" = "Latauksen muistiinpano";
+"Unpriced Energy" = "Hinnoittelematon energia";
+"At this pace the distance limit is reached around %@" = "Tällä vauhdilla kilometriraja saavutetaan noin %@";
+"Temperature" = "Lämpötila";
+"Total Price" = "Kokonaishinta";
+"Priced So Far" = "Hinnoiteltu tähän asti";
+"No charger measured this session, so the battery-side energy is priced with your rate settings." = "Mikään laturi ei mitannut tätä latausta, joten akun puolen energia hinnoitellaan hinta-asetuksillasi.";
+"Pricing" = "Hinnoittelu";
+"Session total at the average price" = "Latauksen kokonaismäärä keskihinnalla";
+"Per 15 minutes" = "15 minuutin jaksoissa";
+"Tibber's price per 15 minutes with the grid transfer fee added." = "Tibberin hinta 15 minuutin jaksoissa siirtomaksu lisättynä.";
+"Spot price with the markup, other charges and VAT from your rate settings." = "Pörssihinta, johon on lisätty marginaali, muut maksut ja ALV hinta-asetuksistasi.";
+"Spot price only. Taxes and grid fees are not included." = "Pelkkä pörssihinta. Verot ja siirtomaksut eivät sisälly.";

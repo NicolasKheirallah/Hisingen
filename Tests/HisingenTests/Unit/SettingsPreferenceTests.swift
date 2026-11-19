@@ -12,6 +12,21 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func timeFormatDefaultsTo24HoursAndSurvivesSettingsTransfer() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(preferences.timeFormat == .twentyFourHour)
+        preferences.timeFormat = .twelveHour
+        let archive = try preferences.exportSettingsPropertyList()
+        #expect(PreferencesStore(defaults: defaults).timeFormat == .twelveHour)
+
+        preferences.resetTransferableSettings()
+        #expect(preferences.timeFormat == .twentyFourHour)
+        try preferences.importSettingsPropertyList(archive)
+        #expect(preferences.timeFormat == .twelveHour)
+    }
+
+    @Test
     func savedFeatureOptOutsSurviveAReadAndRelaunch() throws {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }

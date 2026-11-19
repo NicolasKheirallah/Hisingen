@@ -6,7 +6,7 @@ enum HomeChargerCommandKind: String, Codable, Equatable, Sendable {
 
     var title: String {
         switch self {
-        case .start: return L10n.text("Charge now")
+        case .start: return L10n.text("Charge Now")
         case .pause: return L10n.text("Pause")
         }
     }

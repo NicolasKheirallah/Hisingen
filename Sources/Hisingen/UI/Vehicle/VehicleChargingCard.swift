@@ -6,10 +6,13 @@ struct VehicleChargingCard: View {
     let state: VehicleState
     let history: HistoryWorkspace
     var repeatsDisconnectedStatus = true
+    var onOpenSession: ((String) -> Void)? = nil
+    var onOpenBattery: (() -> Void)? = nil
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The optional home charger. `nil` outside the app shell and for installs that never set it up.
+    /// Only its history revision is read here; its own card is `HomeChargerCard`.
     @Environment(\.homeCharging) private var homeCharging
     @State private var homeHistoryRevision = 0
     @State private var persistentSessions: [ChargingSession] = []
@@ -19,9 +22,8 @@ struct VehicleChargingCard: View {
     @State private var currentMarketRate: Double?
 
     private var features: FeatureSelection { preferences.features }
-    private var hasLastKnownChargingReadings: Bool {
-        state.freshness.isCached || state.hasOldData() || state.freshness.retainedDataCategories.contains(.chargingDetails)
-    }
+    private var chargeReadout: VehicleChargingReadout { VehicleChargingReadout(state: state) }
+    private var hasLastKnownChargingReadings: Bool { chargeReadout.isLastKnown }
     private var loadIdentifier: String {
         "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSinceReferenceDate)|\(homeHistoryRevision)"
     }
@@ -32,9 +34,6 @@ struct VehicleChargingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let homeCharging {
-                HomeChargerSection(state: state, model: homeCharging)
-            }
             if eligible && state.powertrain.hasElectricRange && hasContent {
                 if isIdle {
                     idleCard
@@ -67,7 +66,7 @@ struct VehicleChargingCard: View {
     }
 
     private func loadCurrentSpotPrice() async {
-        guard preferences.electricityRateMode == .automatic else { currentMarketRate = nil; return }
+        guard eligible, preferences.electricityRateMode == .automatic else { currentMarketRate = nil; return }
         let prices = await PlannerPriceProvider.shared.resolve(zone: preferences.electricityPriceZone)
         currentMarketRate = prices.currentRate(policy: preferences.electricityRatePolicy, at: Date())
     }
@@ -95,7 +94,8 @@ struct VehicleChargingCard: View {
             return parts.joined(separator: " · ")
         }
         switch state.energy.connection {
-        case .connected: return L10n.text("Connected · Not charging")
+        case .connected:
+            return state.isComplete ? L10n.text("Charging complete") : L10n.text("Connected · Not charging")
         case .fault: return L10n.text("Charger fault")
         case .disconnected: return L10n.text("Cable disconnected")
         case .unknown: return nil
@@ -103,8 +103,8 @@ struct VehicleChargingCard: View {
     }
 
     private var readyLine: String? {
-        guard !hasLastKnownChargingReadings, state.isCharging, let completion = state.formattedCompletionTime,
-              let minutes = state.remainingChargingMinutes, minutes > 0 else { return nil }
+        let readout = chargeReadout
+        guard let completion = readout.completionTime, let minutes = readout.minutesRemaining else { return nil }
         // Marked as an estimate in the line itself. It sits one weight step below the measured
         // headline and the card already calls this a "Vehicle Dynamic Calculation" in its
         // detail rows, but at a glance it read as a reading.
@@ -140,7 +140,7 @@ struct VehicleChargingCard: View {
     }
 
     private var taggedDetails: [(id: String, row: KVRow)] {
-        var rows: [(String, KVRow)] = []
+        var rows: [(id: String, row: KVRow)] = []
         if features.contains(.chargingDetails) {
             if state.energy.connection != .unknown { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug", valueWarning: state.energy.connection == .fault))) }
             if state.energy.type != .unknown, state.energy.type != .none { rows.append(("type", KVRow(L10n.text("Charging Type"), state.energy.type.displayName, symbol: "bolt.circle"))) }
@@ -225,6 +225,13 @@ struct VehicleChargingCard: View {
                     rows.append(("energyOther", KVRow(L10n.text("Electronics & Aux"), formatBreakdown(other), symbol: "cpu", info: L10n.text("Energy consumed by 12 V computers, lighting, and auxiliary electronics."))))
                 }
             }
+        }
+        if onOpenBattery != nil {
+            let batteryOnly: Set<String> = [
+                "avgConsumption", "avgSinceCharge", "avgAutoTrip", "energySinceCharge",
+                "powerLimit", "energyDrive", "energyClimate", "energyBattery", "energyOther"
+            ]
+            return rows.filter { !batteryOnly.contains($0.id) }
         }
         return rows
     }
@@ -311,7 +318,7 @@ struct VehicleChargingCard: View {
         let showsSummary = repeatsDisconnectedStatus || state.energy.connection != .disconnected
             || state.energy.chargingState != .idle
         return Group {
-            if showsSummary || !persistentSessions.isEmpty {
+            if showsSummary || !persistentSessions.isEmpty || (onOpenBattery != nil && state.energy.diagnostics != nil) {
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
                         if hasLastKnownChargingReadings && showsSummary { lastKnownLabel }
@@ -322,10 +329,18 @@ struct VehicleChargingCard: View {
                                 .accessibilityElement(children: .combine)
                         }
                         if !persistentSessions.isEmpty { historySection }
+                        batteryDetailsLink
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var batteryDetailsLink: some View {
+        if let onOpenBattery, features.contains(.batteryDiagnostics), state.energy.diagnostics != nil {
+            NavigationRow(title: L10n.text("Battery Diagnostics"), action: onOpenBattery)
         }
     }
 
@@ -361,21 +376,36 @@ struct VehicleChargingCard: View {
                 // every refresh, so the countdown flickered instead of morphing and could not be
                 // interrupted mid-update. `hisTelemetryValue` rolls the digits in place.
                 if hasLastKnownChargingReadings { lastKnownLabel }
-                if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging && !hasLastKnownChargingReadings ? HisingenTheme.semanticGood : .primary).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
-                if let readyLine { Text(readyLine).hisType(.body, weight: .medium).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(readyLine, reduceMotion: reduceMotion) }
-                if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(.secondary).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
+                if let headline { Text(headline).hisType(.title, weight: .semibold).monospacedDigit().foregroundStyle(state.isCharging && !hasLastKnownChargingReadings ? HisingenTheme.semanticGood : HisingenTheme.ink).hisTelemetryValue(headline, reduceMotion: reduceMotion) }
+                if let readyLine { Text(readyLine).hisType(.body, weight: .medium).monospacedDigit().foregroundStyle(HisingenTheme.inkMuted).hisTelemetryValue(readyLine, reduceMotion: reduceMotion) }
+                if let secondaryLine { Text(secondaryLine).hisType(.label).monospacedDigit().foregroundStyle(HisingenTheme.inkMuted).hisTelemetryValue(secondaryLine, reduceMotion: reduceMotion) }
                 if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: hasLastKnownChargingReadings ? nil : state.estimatedChargingCompletion, isLive: state.isCharging && !hasLastKnownChargingReadings, currentPowerWatts: hasLastKnownChargingReadings ? nil : state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
-                    Text(state.chargingExplanation).hisType(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(state.chargingExplanation).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
                     DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
                 }
                 if !persistentSessions.isEmpty { historySection }
+                batteryDetailsLink
             }
             .animation(reduceMotion ? nil : Motion.cardChange, value: "\(headline ?? "")|\(readyLine ?? "")|\(secondaryLine ?? "")|\(activeSamples.count)|\(state.isComplete)")
         }
     }
 
+    @ViewBuilder
     private var historySection: some View {
+        if let onOpenSession, let latest = persistentSessions.max(by: { $0.endDate < $1.endDate }) {
+            NavigationRow(
+                title: L10n.text("Latest Charging Session"),
+                detail: Format.dateTimeFormatter.string(from: latest.startDate)
+            ) {
+                onOpenSession(latest.id.uuidString)
+            }
+        } else {
+            localHistoryDisclosure
+        }
+    }
+
+    private var localHistoryDisclosure: some View {
         DisclosureGroup {
             VStack(spacing: 8) {
                 ForEach(persistentSessions.reversed(), id: \.id) { ChargingSessionRow(session: $0) }
@@ -390,7 +420,7 @@ struct VehicleChargingCard: View {
                 }
             }.padding(.top, 6)
         } label: {
-            HStack { Text(L10n.text("Charging History")); Spacer(); Text(L10n.format("%d sessions", persistentSessions.count)).hisType(.caption).foregroundStyle(.secondary) }
+            HStack { Text(L10n.text("Charging History")); Spacer(); Text(L10n.format("%d sessions", persistentSessions.count)).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted) }
         }
         .disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
     }

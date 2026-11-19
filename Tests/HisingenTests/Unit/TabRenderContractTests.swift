@@ -15,36 +15,40 @@ struct TabRenderContractTests {
 
     @Test
     func planRenderedItemsMatchItsShippedLayout() {
-        #expect(Set(ControlsTabView.renderedItems) == Set(TabItemCatalog.defaultItems(for: .controls)))
+        #expect(ControlsTabView.renderedItems == TabItemCatalog.defaultItems(for: .controls))
     }
 
     @Test
     func planKeepsReceiptsInTheConfiguredOrderAndCanHideThem() {
         var composition = TabComposition()
         let controls: Set<TabItemID> = [.controlsClimate, .controlsRoutines]
-        composition.setItems([.controlsClimate, .controlsReceipts, .controlsRoutines], for: .controls)
+        composition.setItems([.controlsClimate, .vehicleReceipts, .controlsRoutines], for: .controls)
         let layout = TabLayout.resolve(composition, for: .controls)
         #expect(ControlsTabView.orderedCardItems(layout: layout, controls: controls, hasReceipts: true)
-                == [.controlsClimate, .controlsReceipts, .controlsRoutines])
+                == [.controlsClimate, .vehicleReceipts, .controlsRoutines])
         #expect(ControlsTabView.orderedCardItems(layout: layout, controls: controls, hasReceipts: false)
                 == [.controlsClimate, .controlsRoutines])
 
-        composition.setItem(.controlsReceipts, shown: false, on: .controls)
+        composition.setItem(.vehicleReceipts, shown: false, on: .controls)
         let hidden = TabLayout.resolve(composition, for: .controls)
         #expect(ControlsTabView.orderedCardItems(layout: hidden, controls: controls, hasReceipts: true)
                 == [.controlsClimate, .controlsRoutines])
     }
 
     @Test(arguments: [false, true])
-    func nowKeepsOpeningsTyresAndLocationWhenAllAreEnabled(twoColumns: Bool) {
+    func nowShowsTyresOnlyWhenExplicitlyPlaced(twoColumns: Bool) {
         let features = FeatureSelection(enabled: [.exteriorStatus, .tyreAndWarnings, .vehicleLocation])
-        let layout = TabLayout.resolve(TabComposition(), for: .vehicle)
-        let rows = VehicleTabView.cardRows(layout: layout, features: features, twoColumns: twoColumns)
+        var composition = TabComposition()
+        let defaultRows = VehicleTabView.cardRows(layout: .resolve(composition, for: .vehicle),
+                                                 features: features, twoColumns: twoColumns)
+        #expect(!defaultRows.flatMap { $0 }.contains(.vehicleTyres))
 
-        #expect(rows.flatMap { $0 } == layout.items)
+        composition.addItem(.vehicleTyres, to: .vehicle)
+        let rows = VehicleTabView.cardRows(layout: .resolve(composition, for: .vehicle),
+                                           features: features, twoColumns: twoColumns)
         let expected: [[TabItemID]] = twoColumns
-            ? [[.vehicleOpenings], [.vehicleTyres, .vehicleLocation]]
-            : [[.vehicleOpenings], [.vehicleTyres], [.vehicleLocation]]
+            ? [[.vehicleOpenings], [.vehicleLocation, .vehicleTyres]]
+            : [[.vehicleOpenings], [.vehicleLocation], [.vehicleTyres]]
         #expect(Array(rows.suffix(expected.count)) == expected)
     }
 
@@ -80,6 +84,36 @@ struct TabRenderContractTests {
         let mapped = Set(view.historySections.compactMap(\.item))
         let cards = Set(TabItemCatalog.defaultItems(for: .history)).subtracting([.historyPeriodPicker])
         #expect(mapped == cards)
+    }
+
+    // MARK: - Home charger
+
+    @Test
+    func theHomeChargerIsACardOfItsOwnOnNowAndPlan() {
+        let item = TabItemCatalog.item(.vehicleHomeCharger)
+        #expect(item?.isCard == true)
+        #expect(TabItemCatalog.isStandalone(.vehicleHomeCharger))
+        #expect(TabItemCatalog.portableCards.contains(.vehicleHomeCharger))
+        let now = TabItemCatalog.defaultItems(for: .vehicle)
+        #expect(now.firstIndex(of: .vehicleHomeCharger) == now.firstIndex(of: .vehicleCharging).map { $0 + 1 })
+        let plan = TabItemCatalog.defaultItems(for: .controls)
+        #expect(plan.firstIndex(of: .vehicleHomeCharger) == plan.firstIndex(of: .controlsCharging).map { $0 + 1 })
+        #expect(TabItemCatalog.canRender(.vehicleHomeCharger, on: .info))
+        #expect(TabItemCatalog.canRender(.vehicleHomeCharger, on: .custom("mine")))
+    }
+
+    @Test
+    func theHomeChargerIsOnlyAvailableWithALogin() {
+        #expect(TabItemAvailability.of(
+            .vehicleHomeCharger, state: vehicle(), enabledFeatures: [], plannerAvailable: true
+        ) == .notSignedIn)
+        #expect(TabItemAvailability.of(
+            .vehicleHomeCharger, state: nil, enabledFeatures: [], plannerAvailable: true
+        ) == .notSignedIn)
+        #expect(TabItemAvailability.of(
+            .vehicleHomeCharger, state: vehicle(), enabledFeatures: [], plannerAvailable: true,
+            homeChargerSignedIn: true
+        ) == .drawable)
     }
 
     // MARK: - Availability

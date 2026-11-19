@@ -334,15 +334,14 @@ final class StatusItemController: NSObject {
                         )
                     }
                     if let car = cars.first(where: { $0.vin == vin }) {
-                        return car.displayTitle()
+                        return car.displayTitle(preferences: preferences)
                     }
-                    return vin
+                    return preferences.privacyRedactionEnabled ? preferences.activeBrand.displayName : vin
                 }()
                 let battery = snapshot?.energy.batteryPercentage.map { " · \(Int($0))%" } ?? ""
                 let shortcut = index < 9 ? "⌃⌥\(index + 1)" : ""
-                let title = shortcut.isEmpty
-                    ? "\(name)\(battery) (\(vin.prefix(8))...)"
-                    : "\(name)\(battery) (\(vin.prefix(8))...)   [\(shortcut)]"
+                let identifier = preferences.privacyRedactionEnabled ? "" : " (\(vin.prefix(8))...)"
+                let title = "\(name)\(battery)\(identifier)" + (shortcut.isEmpty ? "" : "   [\(shortcut)]")
                 let item = NSMenuItem(title: title, action: #selector(contextSwitchCar(_:)), keyEquivalent: "")
                 item.representedObject = vin
                 item.state = vin == activeVin ? .on : .off

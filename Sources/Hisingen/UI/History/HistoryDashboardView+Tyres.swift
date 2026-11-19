@@ -25,9 +25,9 @@ extension HistoryDashboardView {
         let positions = TyrePosition.allCases.filter { position in
             chronological.contains { $0.position == position }
         }
-        return Card {
+        return HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "gauge.medium", title: L10n.text("Tyre Pressure"), color: HisingenTheme.chartInfo)
+                HistorySectionHeading(symbol: "gauge.medium", title: L10n.text("Tyre Pressure"), color: HisingenTheme.chartInfo)
                 if let leak {
                     Text(L10n.format("Possible slow leak: %@", leak.position.displayName))
                         .hisType(.caption, weight: .semibold)
@@ -43,26 +43,22 @@ extension HistoryDashboardView {
                                 series: .value(L10n.text("Tyre"), position.displayName)
                             )
                             .foregroundStyle(tyreSeriesColors[position] ?? HisingenTheme.chartInfo)
-                            .lineStyle(chartSeriesStroke(
-                                index: TyrePosition.allCases.firstIndex(of: position) ?? 0,
-                                differentiateWithoutColor: differentiateWithoutColor,
-                                width: 1.4
-                            ))
-                            .interpolationMethod(.catmullRom)
+                            .lineStyle(tyreStroke(position, leaking: leak?.position == position))
+                            .interpolationMethod(.linear)
                         }
                     }
                 }
-                .chartYAxisLabel(unit.suffix)
+                .historyTimeAxis(spanning: chronological.map(\.timestamp))
+                .historyYAxis(unit.suffix)
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Tyre pressure trend chart"))
                 .accessibilityValue(chartAccessibilityValue(points: chronological.map { unit.convert(kilopascals: $0.kilopascals) }))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 HStack(spacing: 10) {
-                    ForEach(Array(positions.enumerated()), id: \.element) { index, position in
+                    ForEach(positions, id: \.self) { position in
                         legendSwatch(tyreSeriesColors[position] ?? HisingenTheme.chartInfo,
                                      position.displayName,
-                                     dashed: chartSeriesIsDashed(index: TyrePosition.allCases.firstIndex(of: position) ?? 0,
-                                                                 differentiateWithoutColor: differentiateWithoutColor))
+                                     dashed: tyreIsRear(position))
                     }
                 }
                 Text(L10n.text("A reading is kept when a tyre's pressure changes or once an hour. A possible slow leak is a pattern to check, not a diagnosis."))
@@ -70,5 +66,22 @@ extension HistoryDashboardView {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+extension HistoryDashboardView {
+    func tyreIsRear(_ position: TyrePosition) -> Bool {
+        position == .rearLeft || position == .rearRight
+    }
+
+    /// Front tyres draw solid and rear tyres dashed, always. Two of the four theme colours are
+    /// near-identical greys in Monochrome Precision, so colour alone cannot carry the identity;
+    /// the pair that shares a grey differs in stroke. The tyre the leak check suspects is
+    /// drawn heavier.
+    func tyreStroke(_ position: TyrePosition, leaking: Bool) -> StrokeStyle {
+        let width: CGFloat = leaking ? 2.6 : 1.4
+        if tyreIsRear(position) { return StrokeStyle(lineWidth: width, dash: [5, 3]) }
+        if differentiateWithoutColor, position == .frontRight { return StrokeStyle(lineWidth: width, dash: [2, 2]) }
+        return StrokeStyle(lineWidth: width)
     }
 }

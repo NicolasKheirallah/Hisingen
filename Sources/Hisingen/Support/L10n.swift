@@ -67,6 +67,10 @@ enum L10n {
         selectedLanguageCode.map(Locale.init(identifier:)) ?? .current
     }
 
+    static var clockLocale: Locale {
+        AppTimeFormat.current.locale(basedOn: displayLocale)
+    }
+
     private static func localizedBundle(for languageCode: String) -> Bundle? {
         bundleLock.lock()
         defer { bundleLock.unlock() }

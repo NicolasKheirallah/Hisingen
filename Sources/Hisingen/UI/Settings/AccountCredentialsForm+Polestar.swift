@@ -24,8 +24,6 @@ extension AccountCredentialsForm {
                 polestarDataPortalSection
             }
 
-            // The nickname and VIN are optional and live in Settings. On the first sign-in they
-            // only pushed the button off the panel.
             if style != .welcoming {
                 PanelRule().padding(.vertical, 2)
 
@@ -329,10 +327,6 @@ extension AccountCredentialsForm {
 
     private var polestarSharedFields: some View {
         VStack(alignment: .leading, spacing: 8) {
-            labeledField(L10n.text("Vehicle Nickname (Optional)")) {
-                HisTextField(L10n.text("e.g. My Polestar, Midnight"), text: model.binding(\.polestarNickname))
-            }
-
             labeledField(L10n.text("VIN (Optional, auto-detected)")) {
                 HisTextField("YSM...", text: model.binding(\.polestarVIN))
             }
@@ -414,7 +408,7 @@ extension AccountCredentialsForm {
     }
 
     private func savePolestarConnection() {
-        guard let outcome = model.savePolestar(mode: credentialSelection.mode) else { return }
+        guard let outcome = model.savePolestar(mode: credentialSelection.mode, saveNickname: false) else { return }
         withAnimation(reduceMotion ? nil : Motion.stateChange) {
             showSavedFeedback = outcome.saved
             keychainError = outcome.keychainError

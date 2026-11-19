@@ -98,6 +98,8 @@ final class HistoryWorkspace {
         var samples: [HistoricalChargingSample]
         var current: [HistoryInsights.ChargingCurvePoint]
         var previous: [HistoryInsights.ChargingCurvePoint]
+        /// What the home charger itself reported during the session, if it was paired and recording.
+        var chargerPower: [VehicleMetricRecord] = []
     }
 
     /// The selected session's samples and curve, plus the prior session's curve when the
@@ -111,7 +113,11 @@ final class HistoryWorkspace {
             let previousCurve = previous.map {
                 HistoryInsights.chargingCurve(from: database.charging.reconciledSamples(for: $0))
             } ?? []
-            return SessionCurves(samples: samples, current: current, previous: previousCurve)
+            let end = (session.endedAt ?? Date()).addingTimeInterval(120)
+            let chargerPower = database.history
+                .metrics(for: session.vin, metric: .chargerPower, since: session.startedAt.addingTimeInterval(-120))
+                .filter { $0.timestamp <= end }
+            return SessionCurves(samples: samples, current: current, previous: previousCurve, chargerPower: chargerPower)
         }.value
     }
 
@@ -122,6 +128,10 @@ final class HistoryWorkspace {
                       pricePerLiter: Double, odometerKm: Double?) -> Bool {
         database.history.addFuelEntry(vin: vin, date: date, liters: liters,
                                       pricePerLiter: pricePerLiter, odometerKm: odometerKm)
+    }
+
+    func setSessionNote(_ note: String, sessionID: String, vin: String) {
+        database.history.setSessionNote(note, sessionID: sessionID, vin: vin)
     }
 
     func deleteFuelEntry(id: Int64) {

@@ -28,11 +28,7 @@ final class ChargingMiniPanelController {
         guard let panel else { return }
 
         let content = ChargingMiniPanelView(
-            batteryPercentage: state.energy.batteryPercentage,
-            powerWatts: state.energy.powerWatts,
-            minutesToTarget: state.energy.diagnostics?.timeToTargetMinutes
-                ?? state.energy.estimatedTimeToFullMinutes,
-            targetPercent: state.energy.targetPercentage,
+            readout: VehicleChargingReadout(state: state),
             onClose: { [weak self] in self?.hidePanel() }
         )
         if let host {
@@ -134,10 +130,7 @@ final class ChargingMiniPanelController {
 }
 
 private struct ChargingMiniPanelView: View {
-    let batteryPercentage: Double?
-    let powerWatts: Int?
-    let minutesToTarget: Int?
-    let targetPercent: Int?
+    let readout: VehicleChargingReadout
     /// Dismisses the panel from the panel. Nil when the host has no way to turn it off.
     var onClose: (() -> Void)? = nil
 
@@ -147,7 +140,7 @@ private struct ChargingMiniPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(L10n.text("Charging"))
+                Text(L10n.text(readout.isLastKnown ? "Last known readings" : "Charging"))
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.inkMuted)
                 Spacer()
@@ -168,7 +161,7 @@ private struct ChargingMiniPanelView: View {
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                if let battery = batteryPercentage {
+                if let battery = readout.batteryPercentage {
                     Text(String(format: "%.0f", locale: L10n.displayLocale, battery))
                         .hisType(size: 30, relativeTo: .title)
                         .monospacedDigit()
@@ -176,7 +169,7 @@ private struct ChargingMiniPanelView: View {
                     Text("%")
                         .hisType(.subhead)
                         .foregroundStyle(HisingenTheme.inkMuted)
-                    if let target = targetPercent, target < 100 {
+                    if let target = readout.targetPercentage, target < 100 {
                         Text(L10n.format("Target %d%%", target))
                             .hisType(.label)
                             .monospacedDigit()
@@ -188,13 +181,13 @@ private struct ChargingMiniPanelView: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(HisingenTheme.ink)
-            .hisAnimation(Motion.telemetry, value: targetPercent)
+            .hisAnimation(Motion.telemetry, value: readout.targetPercentage)
             HStack(spacing: 10) {
-                if let watts = powerWatts, watts > 0 {
+                if let watts = readout.powerWatts, watts > 0 {
                     Text(Format.kilowatts(watts: watts))
                         .hisTelemetryValue(watts, reduceMotion: reduceMotion)
                 }
-                if let minutes = minutesToTarget, minutes > 0 {
+                if let minutes = readout.minutesRemaining, minutes > 0 {
                     Text(Format.shortDuration(minutes: minutes))
                         .hisTelemetryValue(minutes, reduceMotion: reduceMotion)
                 }
@@ -203,7 +196,7 @@ private struct ChargingMiniPanelView: View {
             .hisType(.caption)
             .monospacedDigit()
             .foregroundStyle(HisingenTheme.inkMuted)
-            EnergyLine(level: batteryPercentage, target: nil, isCharging: true)
+            EnergyLine(level: readout.batteryPercentage, target: nil, isCharging: readout.isLiveCharging)
                 .accessibilityHidden(true)
         }
         .padding(12)

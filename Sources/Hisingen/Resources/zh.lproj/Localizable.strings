@@ -1338,7 +1338,6 @@
 "charging" = "充电";
 "Charging curve charge-level chart" = "充电曲线电量图表";
 "Charging curve power chart" = "充电曲线功率图表";
-"Charging curve voltage and current chart" = "充电曲线电压与电流图表";
 "Charging Functions" = "充电功能";
 "Charging power is unusually low" = "充电功率异常偏低";
 "Charging Sessions" = "充电会话";
@@ -1598,7 +1597,6 @@
 "Switch to %@" = "切换到 %@";
 "Tailgate Open/Close" = "尾门开/关";
 "Taller panel, more visible history" = "更高的面板，更清晰的历史";
-"Tariff Cost" = "电价费用";
 "Telemetry" = "遥测";
 "Telemetry Entries" = "遥测条目";
 "The charge target must be between %d%% and 100%% on this vehicle." = "此车辆的充电目标必须在 %d%% 到 100%% 之间。";
@@ -1672,7 +1670,6 @@
 "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for recent ambient temperature." = "将 %.0f%% 电量下车辆上报的续航与配置的 WLTP/车型参考值比较，并根据近期环境温度进行调整。";
 "VIN-specific reference entered in Settings. It is not a live range value." = "设置中输入的 VIN 专属参考值。它不是实时续航数值。";
 "VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry." = "设置中输入的 VIN 专属参考值。用于能耗和 SoH 计算；非服务商遥测数据。";
-"Voltage (V)" = "电压（V）";
 "Volume (litres)" = "容积（升）";
 "Volvo's official API does not support changing charge settings." = "Volvo 官方 API 不支持修改充电设置。";
 "Waiting for backend authorization" = "等待后台授权";
@@ -1755,7 +1752,6 @@
 "Battery health, odometer totals and lifetime cost always use full history, regardless of the range above." = "无论上方选择何种时间范围，电池健康度、里程总计和全生命周期费用始终基于完整历史数据计算。";
 "Busiest hour" = "最繁忙时段";
 "CO₂ Avoided" = "减少的 CO₂";
-"Charge level of this session versus the previous session" = "本次充电电量与上次充电的对比";
 "Charging by Location" = "按地点统计充电";
 "Charging by Month" = "按月统计充电";
 "Charging cost per month chart" = "每月充电费用图表";
@@ -1977,7 +1973,7 @@
 "Export All History (JSON)" = "导出全部历史记录（JSON）";
 "Alert after an opening has been left open for %d minutes" = "车门或车窗开启超过 %d 分钟后提醒";
 "Alert once at %d%% or below while unplugged and not charging" = "未插电且未充电时，电量降至 %d%% 或以下则提醒一次";
-"Alert if parked and unlocked after %02d:00" = "%02d:00 后仍停放且未上锁时提醒";
+"Alert if parked and unlocked after %@" = "%@ 后仍停放且未上锁时提醒";
 "The selected settings archive is larger than 1 MB." = "所选设置归档超过 1 MB。";
 "Settings imported." = "设置已导入。";
 
@@ -2385,7 +2381,7 @@
 "Today" = "今天";
 "Tomorrow" = "明天";
 "Loading prices…" = "正在加载电价…";
-"Tomorrow's prices arrive after 14:15" = "明日电价将在 14:15 后公布。";
+"Tomorrow's prices arrive after %@" = "明日电价将在 %@ 后公布。";
 "Prices unavailable right now" = "目前无法获取电价";
 "Spot prices exclude taxes and grid fees" = "现货电价不含税费和电网费。";
 "Charge %@ over %d h to reach %d%%" = "充电 %@，%d 小时内充至 %d%%";
@@ -2411,7 +2407,7 @@
 "Notify When the Cheap Window Opens" = "低价时段开始时通知";
 "One banner per window, respecting quiet hours" = "每个时段显示一条横幅，并遵守勿扰时段";
 "Notify When Tomorrow's Prices Arrive" = "明日电价公布时通知";
-"One daily banner after 14:15 with the cheapest hour" = "每天 14:15 后显示一条横幅，提示最便宜的时段";
+"One daily banner after %@ with the cheapest hour" = "每天 %@ 后显示一条横幅，提示最便宜的时段";
 "Auto-Start Charging in the Window" = "在时段内自动开始充电";
 "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab：only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "时段运行期间自动发送开始充电指令";
@@ -2455,14 +2451,12 @@
 "Export All Months" = "导出所有月份";
 "Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "仅供参考：按 %@ g CO₂/kWh 电网碳排放强度和 %@ g CO₂/km 的燃油车（井到轮）计算。可在“设置 → 通用 → Grid Carbon Intensity”中设置电网数值。";
 
-// English fallback values pending translation
 "Lead Time" = "提前时间";
 "How long before the window opens the banner arrives" = "时段开始前多久显示横幅提醒";
 "When the window opens" = "车窗开启时";
 "1 hour before" = "提前 1 小时";
 "%d minutes before" = "提前 %d 分钟";
 
-// English fallback values pending translation
 "%1$d of %2$d windows open" = "已开启 %1$d / %2$d 扇车窗";
 "%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
 "%@ kr" = "%@ kr";
@@ -2524,7 +2518,6 @@
 "kr per kWh" = "kr per kWh";
 "≈%@ to target at your %@/kWh setting" = "距离目标约 %@（按您设置的 %@/kWh 计）";
 
-// English fallback values pending translation
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept." = "快照、缓存图片、充电与加油历史、遥测数据、健康日志、空气质量、指令审计记录，以及此车辆的名称和主题将被永久删除。账户凭据将保留。";
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept." = "所有车辆的快照、缓存图片、充电与加油历史、遥测数据、健康日志、空气质量及指令审计记录将被永久删除，本 Mac 上保存的车辆名称、主题及其他单车设置也会一并删除。账户凭据将保留。";
 "Erase Everything Permanently" = "永久清除全部内容";
@@ -2532,7 +2525,6 @@
 "Clear saved locations for every vehicle?" = "要清除所有车辆已保存的地点吗？";
 "Clear All Locations" = "清除所有地点";
 
-// English fallback values pending translation
 "Time to Target Distance" = "距目标距离时间";
 "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "车辆估算。充至足够电量以达到车内所设距离目标所需的时间。";
 "Time to Full" = "充满时间";
@@ -2657,7 +2649,6 @@
 "unknown time" = "未知时间";
 "⚡ charging" = "⚡ 充电中";
 
-// English fallback values pending translation
 "%@ (%@)" = "%@ (%@)";
 "%@ L/100km" = "%@ L/100km";
 "%@ copy" = "%@ 副本";
@@ -2845,7 +2836,6 @@
 "Nothing on this tab yet" = "此标签页暂无内容";
 "On" = "On";
 "On this tab" = "在此标签页中";
-"Open History" = "打开历史记录";
 "Open Settings to configure Polestar Developer Portal." = "打开设置以配置 Polestar 开发者门户。";
 "Opens this timer for editing" = "打开此定时器进行编辑";
 "Operation" = "操作";
@@ -2974,17 +2964,14 @@
 "“%@” and its card arrangement will be removed. The cards themselves stay available on the tabs they came from." = "将删除“%@”及其卡片排列。卡片本身仍可在原来的标签页中使用。";
 "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window." = "Polestar 要求进行验证（双重验证、验证码或条款更新）。请在交互窗口中完成登录。";
 
-// English fallback values pending translation
 "Custom range: %@–%@" = "自定义范围：%@ 至 %@";
 "Hisingen · History summary" = "Hisingen · 历史摘要";
 "Refresh" = "刷新";
 "Reload the vehicle state" = "重新加载车辆状态";
 
-// English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "现货电价不含税费和电网费 · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "现货电价不含税费和电网费 · %@ · elprisetjustnu.se，获取于 %@";
 
-// English fallback values pending translation
 "Fixed rate" = "固定电价";
 "Other provider" = "其他供应商";
 "15-minute price" = "15 分钟电价";
@@ -3019,7 +3006,6 @@
 "Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "市场电价覆盖的会话使用 %@。其余 %d 次会话使用已保存的费用或您的固定费率。";
 "≈%@ to target at the current %@/kWh" = "距离目标约 %@（以当前 %@/kWh 计）";
 
-// English fallback values pending translation
 "Electricity" = "电费";
 "Country" = "国家/地区";
 "Sweden" = "瑞典";
@@ -3295,7 +3281,6 @@
 "My Theme" = "我的主题";
 "Your colours, adjusted to stay readable in light and dark." = "你的颜色，已调整为在浅色和深色下都清晰可读。";
 
-// English fallback values pending translation
 "%@ by %@" = "%@ by %@";
 "%@ delivered" = "%@ delivered";
 "%@ from charger" = "%@ from charger";
@@ -3322,7 +3307,6 @@
 "Cancel plan" = "Cancel plan";
 "Cancel the plan?" = "Cancel the plan?";
 "Cancelled" = "Cancelled";
-"Charge now" = "Charge now";
 "Charge now is on in the car" = "Charge now is on in the car";
 "Charge now is running" = "Charge now is running";
 "Charge now is running and replaces the plan windows." = "Charge now is running and replaces the plan windows.";
@@ -3509,7 +3493,6 @@
 "Waiting for the car to start drawing power." = "Waiting for the car to start drawing power.";
 "What Home Assistant would do" = "What Home Assistant would do";
 
-// English fallback values pending translation
 "Charge Limit" = "充电上限";
 "Each press raises a limit by this share of the highest value your car allows." = "每按一次，上限就提高车辆所允许最高值的这一比例。";
 "Last known: %@" = "Last known: %@";
@@ -3522,16 +3505,13 @@
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
 
-// English fallback values pending translation
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "New access token" = "New access token";
 "Save token" = "Save token";
 
-// English fallback values pending translation
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
 
-// English fallback values pending translation
 "%@ accepted the command. Waiting for the charger to confirm." = "%@ accepted the command. Waiting for the charger to confirm.";
 "%@ did not accept the saved login" = "%@ did not accept the saved login";
 "%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ did not accept the saved login. Enter the account and password again to reconnect.";
@@ -3583,7 +3563,7 @@
 "The charger or window changed. Preview the timer again." = "充电桩或充电时段已更改。请重新预览定时设置。";
 "The timer could not be verified. Check Schedule in myNexBlue before trying again." = "无法验证定时设置。请先在 myNexBlue 中查看预约，再重试。";
 "Cheapest overnight charge" = "最便宜的夜间充电";
-"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "根据所选电价区域，在 18:00 至次日 07:00 之间查找一次性充电时段。";
+"Find a one-time charging window between %@ and %@ using your selected spot price area." = "根据所选电价区域，在 %@ 至次日 %@ 之间查找一次性充电时段。";
 "Preview timer" = "预览定时设置";
 "Save timer" = "保存定时设置";
 "Timer verified on the charger. You can manage it in myNexBlue." = "已在充电桩上确认定时设置。你可以在 myNexBlue 中管理它。";
@@ -3593,7 +3573,6 @@
 "Choose up to one year of completed sessions to import." = "选择至多一年的已完成充电记录进行导入。";
 "Through" = "截止日期（含当天）";
 
-// English fallback values pending translation
 "Connect and find homes" = "Connect and find homes";
 "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported.";
 "Currency" = "Currency";
@@ -3620,7 +3599,6 @@
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own.";
 "Added to Tibber prices in the planner and for charger sessions." = "Added to Tibber prices in the planner and for charger sessions.";
 
-// English fallback values pending translation
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
 "By an administrator" = "By an administrator";
@@ -3655,7 +3633,6 @@
 "Ethernet" = "Ethernet";
 "Charger Details" = "Charger Details";
 
-// English fallback values pending translation
 "Car Share of House Load" = "汽车占家庭用电的比例";
 "Car at Home" = "家中的汽车";
 "Charger-measured home sessions against the house meter's readings from Tibber, %@ to %@. Charging away from home never reaches that meter." = "充电桩测得的家中充电记录，与 Tibber 提供的家庭电表读数（%@ 至 %@）对照。在家以外的充电不会经过这块电表。";
@@ -3670,14 +3647,12 @@
 "Very cheap" = "非常便宜";
 "Very expensive" = "非常昂贵";
 
-// English fallback values pending translation
 "House Cost" = "家庭费用";
 "Car Cost at Home" = "家中汽车的费用";
 "What Tibber billed for the energy in those hours, taxes included. The grid fee is not in it." = "Tibber 对这些小时内电量收取的费用，含税，不含电网费用。";
 "The car's energy at each hour's average Tibber price. Sessions are priced by the quarter-hour with your network fee, so the two can differ." = "按每小时 Tibber 平均电价计算的汽车用电费用。充电记录按每刻钟并加上您的网络费用计价，因此两者可能不同。";
 "In %d of those hours the charger's energy was above the meter's reading, so the reading was used." = "在其中 %d 个小时里，充电桩的电量高于电表读数，因此采用了电表读数。";
 
-// English fallback values pending translation
 "House Meter" = "House Meter";
 "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger." = "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger.";
 "The account you use in the Perific app. It is stored in the macOS Keychain and never exported." = "The account you use in the Perific app. It is stored in the macOS Keychain and never exported.";
@@ -3708,14 +3683,11 @@
 "Perific did not accept the saved login. Sign in again in Settings, Electricity." = "Perific did not accept the saved login. Sign in again in Settings, Electricity.";
 "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter." = "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter.";
 
-// English fallback values pending translation
 "%@ to the grid" = "%@ to the grid";
 
-// English fallback values pending translation
 "Signed in to %@" = "Signed in to %@";
 "Reading chargers…" = "Reading chargers…";
 
-// English fallback values pending translation
 "%@ öre/kWh" = "%@ öre/kWh";
 "%@ öre/kWh, high-load until %@" = "%@ öre/kWh，高峰时段至 %@";
 "%@ öre/kWh, other time until %@" = "%@ öre/kWh，其他时段至 %@";
@@ -3770,3 +3742,122 @@
 "Charge %@ over %@ to reach %d%%" = "Charge %@ over %@ to reach %d%%";
 "A %@ charge is longer than the price outlook" = "A %@ charge is longer than the price outlook";
 "%d h %d min" = "%d h %d min";
+
+// Card and settings consolidation
+"Activity type" = "活动类型";
+"Add the in-service date from your warranty documents." = "请添加保修文件上注明的启用日期。";
+"All Notifications" = "所有通知";
+"Automation" = "自动化";
+"Back" = "返回";
+"Battery health, lifetime odometer totals, fuel fill-ups, cabin temperatures and lifetime cost use the full history." = "电池健康、累计里程、加油记录、车内温度和累计费用均使用完整历史记录。";
+"Battery-side energy" = "电池侧电量";
+"By Peak Power" = "按峰值功率";
+"Charger Schedule" = "充电桩定时";
+"Charger is offline" = "充电桩已离线";
+"Charging Alerts" = "充电提醒";
+"Charging Planner Alerts" = "充电规划提醒";
+"Charging Summary" = "充电概览";
+"Choose which cards each tab shows and in what order. Manage data requests in Features." = "选择各标签页显示的卡片及其顺序。在“功能”中管理数据请求。";
+"Clear Filter" = "清除筛选";
+"Connect an account and choose a vehicle to edit its references." = "关联账户并选择车辆，即可编辑其参考数据。";
+"Default theme for %@ vehicles" = "%@ 车辆的默认主题";
+"Departure · %@" = "出发 · %@";
+"Edit In-Service Date" = "编辑启用日期";
+"Edit Plan" = "编辑计划";
+"Edit Vehicle References" = "编辑车辆参考数据";
+"Energy & Fuel" = "电能与燃油";
+"Energy delivered by charger" = "充电桩输出电量";
+"Erase local history on sign out is enabled. Signing out also erases saved history." = "已启用“退出登录时清除本地历史记录”。退出登录也会删除已保存的记录。";
+"Export from Log" = "从日志导出";
+"Full History (CSV)" = "完整历史记录 (CSV)";
+"Grid Tariff Country" = "电网费率适用国家";
+"Language & Units" = "语言与单位";
+"Last Remote Command" = "最近一次远程指令";
+"Latest Charging Session" = "最近一次充电";
+"Loading charging samples…" = "正在加载充电采样数据…";
+"Local vehicle history is kept." = "本地车辆历史记录将保留。";
+"Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization in Accounts. Charging, timers and software installation work with the account sign-in alone." = "车锁、空调、车窗、车内空气净化和寻车需要在“账户”中通过浏览器完成一次授权。充电、定时和软件安装只需登录账户。";
+"Menu Bar" = "菜单栏";
+"No charging samples were recorded for this session." = "此次充电没有记录采样数据。";
+"No completed charging sessions have been recorded." = "没有已完成的充电记录。";
+"No fill-ups have been recorded." = "没有加油记录。";
+"No parking location was reported on the last refresh." = "上次刷新时未收到停车位置。";
+"No vehicle changes or commands recorded." = "没有车辆变化或指令记录。";
+"On hold" = "已暂停";
+"Open Air Quality History" = "查看空气质量历史";
+"Open Battery Health History" = "查看电池健康历史";
+"Open Charge Location" = "打开充电地点";
+"Open in Plan" = "在“计划”中打开";
+"Open in Log" = "在“日志”中打开";
+"Expanded" = "已展开";
+"Collapsed" = "已折叠";
+"Update to v%@" = "更新到 v%@";
+"Open Garage" = "打开车库";
+"Open Plan Automations" = "打开计划自动化";
+"Panel" = "面板";
+"Parking & Access" = "停车与车辆出入";
+"Planner Settings" = "规划器设置";
+"Reading charger schedule…" = "正在读取充电桩定时…";
+"Recent Completed Charging Sessions (JSON)" = "近期已完成的充电记录 (JSON)";
+"Recent Vehicle Activity" = "近期车辆动态";
+"Reconnect Tibber" = "重新连接 Tibber";
+"Remote Command Permissions" = "远程指令权限";
+"Saved charge location" = "已保存的充电地点";
+"Selected" = "已选中";
+"Selected Period (CSV)" = "所选时段 (CSV)";
+"Selected Session Samples (CSV)" = "所选充电记录的采样数据 (CSV)";
+"Service & Protection" = "保养与保障";
+"Set Plan" = "设置计划";
+"Settings Backup" = "设置备份";
+"The charger schedule could not be read." = "无法读取充电桩定时。";
+"The saved session and account credentials for this provider will be removed from this Mac." = "此服务商的已保存会话和账户凭证将从这台 Mac 上移除。";
+"Theme" = "主题";
+"This vehicle has no editable warranty or battery references." = "此车辆没有可编辑的保修或电池参考数据。";
+"This vehicle uses %@. Change its theme in Garage." = "此车辆使用 %@。在“车库”中可更改其主题。";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff." = "Tibber 的价格包含电费、税费和服务加价，电网费另计。请在“电力”中设置电网费率。已配对的充电桩可以使用自己的费率。";
+"Timer %d" = "定时 %d";
+"Use Brand Default" = "使用品牌默认主题";
+"Used for spot prices and when Tibber prices are unavailable." = "用于现货电价，也用于 Tibber 电价不可用时。";
+"Vehicle Data Settings" = "车辆数据设置";
+"Vehicle Presentation" = "车辆显示";
+"Vehicle References" = "车辆参考数据";
+"Vehicle Specifications" = "车辆规格";
+"View Sessions" = "查看充电记录";
+"View charging sessions at %@" = "查看 %@ 的充电记录";
+
+"Time Format" = "时间格式";
+"24-hour" = "24 小时制";
+"12-hour (AM/PM)" = "12 小时制（上午/下午）";
+
+"Paused" = "已暂停";
+"Average" = "平均";
+"Month in progress" = "本月进行中";
+"All recorded history" = "全部已记录历史";
+"Battery Level" = "电池电量";
+"Lost While Parked" = "停放期间损失";
+"Parked drain counts only stretches between two readings taken unplugged with no trip in between, so it is a floor, not a total." = "停放损失只统计两次读数之间未接充电器且期间没有行程的时段，因此是下限而非总量。";
+"Cost per 100 km" = "每 100 公里费用";
+"Cost per 100 mi" = "每 100 英里费用";
+"Saved vs Fixed Rate" = "相比固定电价节省";
+"Market-priced sessions against what the same energy would have cost at your fixed rate. Sessions without market prices are left out." = "按市场价结算的充电，对比同样电量按您的固定电价所需的费用。没有市场价格的充电不计入。";
+"Peak Power by Session" = "各次充电峰值功率";
+"Energy by Time of Day" = "按时段统计的电量";
+"Consumption vs Temperature" = "能耗与温度";
+"Normalised to %@" = "归一化到 %@";
+"Recording Coverage" = "记录覆盖率";
+"Hours per day with a reading. A short day means Hisingen was not running, not that the car did nothing." = "每天有读数的小时数。较短的一天意味着 Hisingen 未运行，而不是车辆什么都没做。";
+"Energy Use by Month" = "每月能量使用";
+"On pace for %@" = "按此速度：%@";
+"Session note" = "充电备注";
+"Unpriced Energy" = "未计价电量";
+"At this pace the distance limit is reached around %@" = "按此速度，里程限制将在 %@ 前后达到";
+"Temperature" = "温度";
+"Total Price" = "总价";
+"Priced So Far" = "已计价部分";
+"No charger measured this session, so the battery-side energy is priced with your rate settings." = "没有充电桩测量这次充电，因此按你的电价设置计算电池侧电量的费用。";
+"Pricing" = "计价方式";
+"Session total at the average price" = "按平均价格计算整次充电";
+"Per 15 minutes" = "每 15 分钟";
+"Tibber's price per 15 minutes with the grid transfer fee added." = "Tibber 每 15 分钟的电价，已加上电网输电费。";
+"Spot price with the markup, other charges and VAT from your rate settings." = "现货价格，加上你电价设置中的加价、其他费用和增值税。";
+"Spot price only. Taxes and grid fees are not included." = "仅为现货价格，不含税费和电网费用。";

@@ -1,192 +1,72 @@
 import AppKit
-import Charts
 import SwiftUI
 
 extension InfoTabView {
-    static func locationScheduleSummary(_ schedule: VehicleSchedule) -> String {
-        let timeStr = String(format: "%02d:%02d", locale: L10n.displayLocale, schedule.startHour ?? 0, schedule.startMinute ?? 0)
-        let endStr = schedule.endHour.map {
-            String(format: " - %02d:%02d", locale: L10n.displayLocale, $0, schedule.endMinute ?? 0)
-        } ?? ""
-        var parts = "\(timeStr)\(endStr)"
-        if !schedule.weekdays.isEmpty {
-            parts += " · \(schedule.weekdays.map(\.shortName).joined(separator: ", "))"
-        } else if schedule.oneShotDate != nil {
-            parts += " · \(L10n.text("Once"))"
-        }
-        if !schedule.isActive {
-            parts += " · \(L10n.text("Off"))"
-        }
-        return parts
-    }
-
-    /// Data identity for the recent-telemetry chart: counts plus boundary timestamps change
-    /// exactly when a refresh lands new rows, so the chart animates on the data, not per render.
-    var recentTelemetryChartKey: String {
-        let telemetry = asyncData.recentTelemetry
-        return "\(telemetry.count)_\(telemetry.first?.timestamp.timeIntervalSince1970 ?? 0)" +
-            "_\(telemetry.last?.timestamp.timeIntervalSince1970 ?? 0)"
-    }
-
-    /// Data identity for the stored air-quality history chart.
-    var airQualityHistoryChartKey: String {
-        let history = asyncData.airQualityHistory
-        return "\(history.count)_\(history.first?.timestamp.timeIntervalSince1970 ?? 0)" +
-            "_\(history.last?.timestamp.timeIntervalSince1970 ?? 0)"
-    }
-
-    // MARK: - Activity history
-
     var activityHistoryCard: some View {
-        let telemetry = asyncData.recentTelemetry
-        let commands = asyncData.recentCommands
-        guard !telemetry.isEmpty || !commands.isEmpty || !asyncData.recentActivities.isEmpty else { return AnyView(EmptyView()) }
-
-        let odometerPoints = telemetry
-            .compactMap { record -> (Date, Double)? in record.odometerKm.map { (record.timestamp, $0) } }
-            .sorted { $0.0 < $1.0 }
-
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Vehicle Activity History"), color: HisingenTheme.chartInfo)
-                    Spacer()
-                    Button {
-                        onNavigateToHistory()
-                    } label: {
-                        HStack(spacing: 3) {
-                            Text(L10n.text("Open History"))
-                            Image(systemName: "chevron.right")
-                        }
-                        .hisType(.caption, weight: .semibold)
-                    }
-                    .buttonStyle(.pressable)
-                    .foregroundStyle(HisingenTheme.accent)
+        let latestEvent = asyncData.recentActivities.max { $0.timestamp < $1.timestamp }
+        let latestCommand = asyncData.recentCommands.max { $0.executedAt < $1.executedAt }
+        return Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Recent Vehicle Activity"),
+                           color: HisingenTheme.chartInfo)
+                if let latestEvent, latestEvent.timestamp >= (latestCommand?.executedAt ?? .distantPast) {
+                    VehicleActivityList(events: [latestEvent])
+                } else if let latestCommand {
+                    KVRow(L10n.text("Last Remote Command"), "\(latestCommand.command) · \(latestCommand.status)")
+                    Text(Format.dateTimeFormatter.string(from: latestCommand.executedAt))
+                        .hisType(.caption)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                } else {
+                    Text(L10n.text("No vehicle changes or commands recorded."))
+                        .hisType(.label)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                 }
-
-                if !asyncData.recentActivities.isEmpty {
-                    VehicleActivityList(events: asyncData.recentActivities)
+                if let onNavigateToHistory {
+                    NavigationRow(title: L10n.text("Open in Log"), action: onNavigateToHistory)
                 }
-                if let newest = telemetry.first, let oldest = telemetry.last,
-                   let newOdometer = newest.odometerKm, let oldOdometer = oldest.odometerKm,
-                   newOdometer >= oldOdometer {
-                    KVRow(
-                        L10n.text("Distance Recorded"),
-                        Format.distance(km: newOdometer - oldOdometer, unit: preferences.distanceUnit),
-                        symbol: "road.lanes"
-                    )
-                }
-
-                if odometerPoints.count >= 2 {
-                    let values = odometerPoints.map(\.1)
-                    let lo = values.min() ?? 0
-                    let hi = max(values.max() ?? 1, lo + 1)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.text("Odometer Trend"))
-                            .hisType(.caption, weight: .medium)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
-                        Chart(Array(odometerPoints.enumerated()), id: \.offset) { _, point in
-                            LineMark(
-                                x: .value(L10n.text("Date"), point.0),
-                                y: .value(L10n.text("Odometer"), point.1)
-                            )
-                            .foregroundStyle(HisingenTheme.chartAttention)
-                            .interpolationMethod(.monotone)
-                        }
-                        .chartYScale(domain: lo...hi)
-                        .frame(height: 80)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(L10n.text("Odometer history chart"))
-                        .accessibilityValue(chartAccessibilityValue(points: values))
-                        .hisAnimation(Motion.progress, value: recentTelemetryChartKey)
-                    }
-                }
-
-                if !commands.isEmpty {
-                    Divider().opacity(HisingenTheme.dividerOpacity)
-                    Text(L10n.text("Recent remote commands"))
-                        .hisType(.caption, weight: .semibold)
-                        .foregroundStyle(.secondary)
-                    ForEach(commands) { record in
-                        HStack(spacing: 7) {
-                            Image(systemName: record.status == "failed" ? "xmark.circle.fill" : "checkmark.circle.fill")
-                                .foregroundStyle(record.status == "failed" ? HisingenTheme.semanticCritical : HisingenTheme.semanticGood)
-                            Text(record.command.replacingOccurrences(of: "-", with: " ").capitalized)
-                                .hisType(.caption, weight: .medium)
-                            Spacer()
-                            Text(record.executedAt, style: .relative)
-                                .hisType(.micro)
-                                .foregroundStyle(.secondary)
-                        }
-                        .help(record.errorMessage ?? record.status.capitalized)
-                    }
-                }
-                Text(L10n.text("Stored locally on this Mac. Location coordinates are excluded unless location history is enabled."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .hisCaptionLeading()
-                    .fixedSize(horizontal: false, vertical: true)
             }
-        })
+        }
     }
-
-    // MARK: - Saved charge locations
 
     var chargeLocationsCard: some View {
-        let locations = savedChargeLocations
-        guard !locations.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Saved Charge Locations"), color: HisingenTheme.semanticActive)
-                VStack(spacing: 8) {
-                    ForEach(locations) { location in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(location.alias.isEmpty ? L10n.text("Unnamed location") : location.alias)
-                                    .hisType(.label, weight: .semibold)
-                                Spacer()
-                                if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
-                                    Pill(text: mode, color: HisingenTheme.accent, symbol: "leaf")
-                                }
-                            }
-                            if location.ampLimit > 0 {
-                                KVRow(L10n.text("Current Limit"), "\(location.ampLimit) A", symbol: "gauge.with.dots.needle.bottom.100percent")
-                            }
-                            if location.minimumSoc > 0 {
-                                KVRow(L10n.text("Minimum Charge"), "\(location.minimumSoc)%", symbol: "battery.25")
-                            }
-                            ForEach(location.chargeTimers, id: \.rowIdentity) { schedule in
-                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "bolt")
-                            }
-                            ForEach(location.departureTimes, id: \.rowIdentity) { schedule in
-                                KVRow(schedule.kind.title, Self.locationScheduleSummary(schedule), symbol: "calendar.badge.clock")
-                            }
-                            if let lat = location.latitude, let lon = location.longitude {
-                                KVRow(L10n.text("Coordinates"),
-                                      String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon),
-                                      symbol: "mappin.circle")
-                                    .privacySensitive()
-                            }
-                        }
-                        .padding(.vertical, 2)
-                        if location.id != locations.last?.id {
-                            Divider().opacity(HisingenTheme.dividerOpacity)
-                        }
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "mappin.and.ellipse", title: L10n.text("Saved Charge Locations"),
+                           color: HisingenTheme.semanticActive)
+                ForEach(savedChargeLocations) { location in
+                    let title = preferences.privacyRedactionEnabled || location.alias.isEmpty
+                        ? L10n.text("Saved charge location")
+                        : location.alias
+                    if let onNavigateToChargeLocation {
+                        NavigationRow(title: title) { onNavigateToChargeLocation(location.id) }
+                    } else {
+                        KVRow(title, location.ampLimit > 0 ? Format.amps(location.ampLimit) : L10n.text("Vehicle default"))
                     }
                 }
-                Text(L10n.text("Saved in the vehicle's charging backend. Managed from the Controls tab."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
             }
-        })
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Parking location
 
     var parkingLocationCard: some View {
+        if preferences.privacyRedactionEnabled {
+            return AnyView(Card {
+                Label(L10n.text("Screenshot Privacy Mode"), systemImage: "location.slash")
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            })
+        }
         guard let location = state.location, let lat = location.latitude, let lon = location.longitude else {
-            return AnyView(EmptyView())
+            return AnyView(Card {
+                HisingenEmptyState(
+                    symbol: "location.slash", title: L10n.text("Parking position unavailable."),
+                    message: state.isVolvo
+                        ? L10n.text("Location requires subscribing to the Location API in developer.volvocars.com and enabling 'Share Location' in vehicle settings.")
+                        : L10n.text("No parking location was reported on the last refresh.")
+                )
+            })
         }
 
         let latStr = String(format: "%.4f° %@", locale: L10n.displayLocale, abs(lat), lat >= 0 ? L10n.text("N") : L10n.text("S"))
@@ -249,6 +129,9 @@ extension InfoTabView {
                 VStack(spacing: 6) {
                     KVRow(L10n.text("GPS Coordinates"), "\(latStr), \(lonStr)")
                         .privacySensitive()
+                    if let timestamp = location.timestamp {
+                        KVRow(L10n.text("Observed"), Format.dateTimeFormatter.string(from: timestamp))
+                    }
                     if let speed = location.speed, speed > 0 {
                         KVRow(L10n.text("Speed"), Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit), symbol: "speedometer")
                     }
@@ -414,66 +297,19 @@ extension InfoTabView {
                               info: L10n.text("Air-quality wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
                     }
 
-                    if air.canTogglePreCleaning {
-                        Button {
-                            onRemoteCommand(air.cleaningState == .on ? .stopPreCleaning : .startPreCleaning)
-                        } label: {
-                            Label(
-                                air.cleaningState == .on
-                                    ? L10n.text("Stop Air Cleaning")
-                                    : L10n.text("Clean Cabin Air (PM2.5 Pre-Clean)"),
-                                systemImage: air.cleaningState == .on ? "stop.circle" : "aqi.medium"
-                            )
-                            .hisType(.label, weight: .medium)
-                            .frame(maxWidth: .infinity, minHeight: 28)
-                        }
-                        .buttonStyle(.hisSecondary)
-                        .controlSize(.small)
-                        .padding(.top, 2)
-                        .accessibilityLabel(air.cleaningState == .on
-                                            ? L10n.text("Stop cabin air purification")
-                                            : L10n.text("Start cabin air purification"))
+                    if let onNavigateToPlan, preferences.features.contains(.remotePreCleaning) {
+                        NavigationRow(
+                            title: L10n.text("Open in Plan"),
+                            accessibilityName: "\(L10n.text("Open in Plan")), \(L10n.text("Climate"))"
+                        ) { onNavigateToPlan(.controlsClimate) }
                     }
-
-                    airQualityTrendChart
+                    if let onNavigateToLogSection, !asyncData.airQualityHistory.isEmpty {
+                        NavigationRow(title: L10n.text("Open Air Quality History")) {
+                            onNavigateToLogSection(.historyAirQuality)
+                        }
+                    }
                 }
             }
         })
-    }
-
-    /// Local trend view over stored `air_quality_history` samples – the vehicle/provider APIs
-    /// don't expose any history of their own, so this is entirely reconstructed from readings
-    /// Hisingen recorded during normal refreshes.
-    @ViewBuilder
-    var airQualityTrendChart: some View {
-        let history = asyncData.airQualityHistory
-            .filter { $0.airQualityIndex != nil }
-            .sorted { $0.timestamp < $1.timestamp }
-        if history.count >= 2 {
-            let values = history.compactMap(\.airQualityIndex)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.text("Air Quality Trend"))
-                    .hisType(.caption, weight: .medium)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                Chart(history) { record in
-                    LineMark(
-                        x: .value(L10n.text("Date"), record.timestamp),
-                        y: .value(L10n.text("Air Quality Index"), record.airQualityIndex ?? 0)
-                    )
-                    .foregroundStyle(.teal)
-                    .interpolationMethod(.monotone)
-                    RuleMark(y: .value(L10n.text("Moderate Threshold"), 50))
-                        .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.35))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                }
-                .chartYAxisLabel(L10n.text("AQI"))
-                .frame(height: 90)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(L10n.text("Air quality index history chart"))
-                .accessibilityValue(chartAccessibilityValue(points: values))
-                .hisAnimation(Motion.progress, value: airQualityHistoryChartKey)
-            }
-        }
     }
 }

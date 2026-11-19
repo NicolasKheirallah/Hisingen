@@ -1338,7 +1338,6 @@
 "charging" = "carregamento";
 "Charging curve charge-level chart" = "Gráfico do nível de carga da curva de carregamento";
 "Charging curve power chart" = "Gráfico de potência da curva de carregamento";
-"Charging curve voltage and current chart" = "Gráfico de tensão e corrente da curva de carregamento";
 "Charging Functions" = "Funções de carregamento";
 "Charging power is unusually low" = "A potência de carregamento está invulgarmente baixa";
 "Charging Sessions" = "Sessões de carregamento";
@@ -1598,7 +1597,6 @@
 "Switch to %@" = "Mudar para %@";
 "Tailgate Open/Close" = "Abrir/Fechar porta da bagageira";
 "Taller panel, more visible history" = "Painel mais alto, com mais histórico visível";
-"Tariff Cost" = "Custo da tarifa";
 "Telemetry" = "Telemetria";
 "Telemetry Entries" = "Entradas de telemetria";
 "The charge target must be between %d%% and 100%% on this vehicle." = "O objetivo de carga deve estar entre %d%% e 100%% neste veículo.";
@@ -1672,7 +1670,6 @@
 "Vehicle-reported range at %.0f%% charge is compared with the configured WLTP/model reference and adjusted for recent ambient temperature." = "A autonomia comunicada pelo veículo a %.0f%% de carga é comparada com a referência WLTP/modelo configurada e ajustada pela temperatura ambiente recente.";
 "VIN-specific reference entered in Settings. It is not a live range value." = "Referência específica do VIN introduzida nas Definições. Não é um valor de autonomia em tempo real.";
 "VIN-specific reference entered in Settings. Used for calculated energy and SoH estimates; not provider telemetry." = "Referência específica do VIN introduzida nas Definições. Usada nas estimativas calculadas de energia e SoH; não é telemetria do fornecedor.";
-"Voltage (V)" = "Tensão (V)";
 "Volume (litres)" = "Volume (litros)";
 "Volvo's official API does not support changing charge settings." = "A API oficial da Volvo não suporta alterar as definições de carregamento.";
 "Waiting for backend authorization" = "À espera da autorização do backend";
@@ -1755,7 +1752,6 @@
 "Battery health, odometer totals and lifetime cost always use full history, regardless of the range above." = "A saúde da bateria, os totais do conta-quilómetros e o custo total usam sempre o histórico completo, independentemente do intervalo acima.";
 "Busiest hour" = "Hora de maior movimento";
 "CO₂ Avoided" = "CO₂ evitado";
-"Charge level of this session versus the previous session" = "Nível de carga desta sessão em comparação com a anterior";
 "Charging by Location" = "Carregamento por local";
 "Charging by Month" = "Carregamento por mês";
 "Charging cost per month chart" = "Gráfico do custo de carregamento por mês";
@@ -1977,7 +1973,7 @@
 "Export All History (JSON)" = "Exportar todo o histórico (JSON)";
 "Alert after an opening has been left open for %d minutes" = "Alertar quando uma abertura ficar aberta durante %d minutos";
 "Alert once at %d%% or below while unplugged and not charging" = "Alertar uma vez quando chegar a %d%% ou menos, desligado da corrente e sem carregar";
-"Alert if parked and unlocked after %02d:00" = "Alertar se estacionado e desbloqueado após as %02d:00";
+"Alert if parked and unlocked after %@" = "Alertar se estacionado e desbloqueado após as %@";
 "The selected settings archive is larger than 1 MB." = "O ficheiro de definições selecionado tem mais de 1 MB.";
 "Settings imported." = "Definições importadas.";
 
@@ -2385,7 +2381,7 @@
 "Today" = "Hoje";
 "Tomorrow" = "Amanhã";
 "Loading prices…" = "A carregar preços…";
-"Tomorrow's prices arrive after 14:15" = "Os preços de amanhã chegam depois das 14:15";
+"Tomorrow's prices arrive after %@" = "Os preços de amanhã chegam depois das %@";
 "Prices unavailable right now" = "Preços indisponíveis de momento";
 "Spot prices exclude taxes and grid fees" = "Os preços spot não incluem impostos nem taxas de rede";
 "Charge %@ over %d h to reach %d%%" = "Carregamento %@ durante %d h para atingir %d%%";
@@ -2411,7 +2407,7 @@
 "Notify When the Cheap Window Opens" = "Notificar quando a janela de preço barato abrir";
 "One banner per window, respecting quiet hours" = "Um aviso por janela, respeitando as horas de silêncio";
 "Notify When Tomorrow's Prices Arrive" = "Notificar quando os preços de amanhã forem publicados";
-"One daily banner after 14:15 with the cheapest hour" = "Um aviso diário depois das 14:15 com a hora mais barata";
+"One daily banner after %@ with the cheapest hour" = "Um aviso diário depois das %@ com a hora mais barata";
 "Auto-Start Charging in the Window" = "Arranque automático do carregamento na janela";
 "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab, only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature." = "When the planned window opens, Hisingen sends the same start-charging command as the Controls tab: only while the vehicle is plugged in and below its charge limit. Requires the Charging Controls feature.";
 "Sends the start-charging command automatically while the window runs" = "Envia automaticamente o comando de início do carregamento enquanto a janela estiver ativa";
@@ -2455,14 +2451,12 @@
 "Export All Months" = "Exportar todos os meses";
 "Indicative only: assumes %@ g CO₂/kWh grid intensity and a %@ g CO₂/km petrol car, well-to-wheel. Set the grid figure in Settings → General → Grid Carbon Intensity." = "Apenas indicativo: assume uma intensidade de rede de %@ g CO₂/kWh e um carro a gasolina de %@ g CO₂/km, do poço à roda. Defina o valor de rede em Definições → Geral → Grid Carbon Intensity.";
 
-// English fallback values pending translation
 "Lead Time" = "Antecedência";
 "How long before the window opens the banner arrives" = "Com quanta antecedência antes de a janela abrir chega o aviso";
 "When the window opens" = "Quando a janela abrir";
 "1 hour before" = "1 hora antes";
 "%d minutes before" = "%d minutos antes";
 
-// English fallback values pending translation
 "%1$d of %2$d windows open" = "%1$d de %2$d janelas abertas";
 "%1$d–%2$d of %3$d" = "%1$d–%2$d of %3$d";
 "%@ kr" = "%@ kr";
@@ -2524,7 +2518,6 @@
 "kr per kWh" = "kr por kWh";
 "≈%@ to target at your %@/kWh setting" = "≈%@ até ao objetivo com a sua definição de %@/kWh";
 
-// English fallback values pending translation
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, command audits, and this vehicle’s name and theme will be permanently removed. Account credentials are kept." = "Instantâneos, imagens em cache, histórico de carregamentos e combustível, telemetria, registos de saúde, qualidade do ar, auditorias de comandos e o nome e o tema deste veículo serão eliminados de forma permanente. As credenciais da conta são mantidas.";
 "Snapshots, cached images, charging and fuel history, telemetry, health logs, air quality, and command audits will be permanently removed for every vehicle, together with the names, themes and other per-vehicle settings kept on this Mac. Account credentials are kept." = "Instantâneos, imagens em cache, histórico de carregamentos e combustível, telemetria, registos de saúde, qualidade do ar e auditorias de comandos serão eliminados de forma permanente para todos os veículos, juntamente com os nomes, temas e outras definições por veículo guardadas neste Mac. As credenciais da conta são mantidas.";
 "Erase Everything Permanently" = "Apagar tudo permanentemente";
@@ -2532,7 +2525,6 @@
 "Clear saved locations for every vehicle?" = "Limpar os locais guardados de todos os veículos?";
 "Clear All Locations" = "Limpar todos os locais";
 
-// English fallback values pending translation
 "Time to Target Distance" = "Tempo até a distância alvo";
 "Vehicle Estimate. Time needed to charge enough to reach the distance goal configured in the car." = "Estimativa do veículo. Tempo de carregamento necessário para atingir a distância alvo configurada no carro.";
 "Time to Full" = "Tempo até a carga completa";
@@ -2657,7 +2649,6 @@
 "unknown time" = "hora desconhecida";
 "⚡ charging" = "⚡ a carregar";
 
-// English fallback values pending translation
 "%@ (%@)" = "%@ (%@)";
 "%@ L/100km" = "%@ L/100km";
 "%@ copy" = "Cópia de %@";
@@ -2845,7 +2836,6 @@
 "Nothing on this tab yet" = "Ainda nada neste separador";
 "On" = "On";
 "On this tab" = "Neste separador";
-"Open History" = "Abrir histórico";
 "Open Settings to configure Polestar Developer Portal." = "Abra as Definições para configurar o Polestar Developer Portal.";
 "Opens this timer for editing" = "Abre este temporizador para edição";
 "Operation" = "Operação";
@@ -2974,17 +2964,14 @@
 "“%@” and its card arrangement will be removed. The cards themselves stay available on the tabs they came from." = "«%@» e a sua disposição de cartões serão removidos. Os próprios cartões continuam disponíveis nos separadores de origem.";
 "Polestar presented a verification challenge (2FA, CAPTCHA, or Terms update). Complete sign-in in the interactive window." = "A Polestar apresentou um desafio de verificação (2FA, CAPTCHA ou atualização dos Termos). Conclua o início de sessão na janela interativa.";
 
-// English fallback values pending translation
 "Custom range: %@–%@" = "Intervalo personalizado: %@ a %@";
 "Hisingen · History summary" = "Hisingen · Resumo do histórico";
 "Refresh" = "Atualizar";
 "Reload the vehicle state" = "Recarregar o estado do veículo";
 
-// English fallback values pending translation
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se" = "Os preços spot não incluem impostos nem taxas de rede · %@ · elprisetjustnu.se";
 "Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@" = "Os preços spot não incluem impostos nem taxas de rede · %@ · elprisetjustnu.se, obtidos %@";
 
-// English fallback values pending translation
 "Fixed rate" = "Tarifa fixa";
 "Other provider" = "Outro fornecedor";
 "15-minute price" = "Preço de 15 minutos";
@@ -3019,7 +3006,6 @@
 "Sessions the market prices cover use the %@. The other %d use the saved cost or your fixed rate." = "As sessões abrangidas pelos preços de mercado usam o %@. As outras %d usam o custo guardado ou a sua tarifa fixa.";
 "≈%@ to target at the current %@/kWh" = "≈%@ até ao objetivo ao preço atual de %@/kWh";
 
-// English fallback values pending translation
 "Electricity" = "Eletricidade";
 "Country" = "País";
 "Sweden" = "Suécia";
@@ -3295,7 +3281,6 @@
 "My Theme" = "O meu tema";
 "Your colours, adjusted to stay readable in light and dark." = "As suas cores, ajustadas para continuarem legíveis no claro e no escuro.";
 
-// English fallback values pending translation
 "%@ by %@" = "%@ by %@";
 "%@ delivered" = "%@ delivered";
 "%@ from charger" = "%@ from charger";
@@ -3322,7 +3307,6 @@
 "Cancel plan" = "Cancel plan";
 "Cancel the plan?" = "Cancel the plan?";
 "Cancelled" = "Cancelled";
-"Charge now" = "Charge now";
 "Charge now is on in the car" = "Charge now is on in the car";
 "Charge now is running" = "Charge now is running";
 "Charge now is running and replaces the plan windows." = "Charge now is running and replaces the plan windows.";
@@ -3509,7 +3493,6 @@
 "Waiting for the car to start drawing power." = "Waiting for the car to start drawing power.";
 "What Home Assistant would do" = "What Home Assistant would do";
 
-// English fallback values pending translation
 "Charge Limit" = "Limite de carga";
 "Each press raises a limit by this share of the highest value your car allows." = "Cada clique aumenta um limite nesta fração do valor mais alto que o carro permite.";
 "Last known: %@" = "Last known: %@";
@@ -3522,16 +3505,13 @@
 "Readings are the last values received and may be out of date." = "Readings are the last values received and may be out of date.";
 "tomorrow" = "tomorrow";
 
-// English fallback values pending translation
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "New access token" = "New access token";
 "Save token" = "Save token";
 
-// English fallback values pending translation
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
 
-// English fallback values pending translation
 "%@ accepted the command. Waiting for the charger to confirm." = "%@ accepted the command. Waiting for the charger to confirm.";
 "%@ did not accept the saved login" = "%@ did not accept the saved login";
 "%@ did not accept the saved login. Enter the account and password again to reconnect." = "%@ did not accept the saved login. Enter the account and password again to reconnect.";
@@ -3583,7 +3563,7 @@
 "The charger or window changed. Preview the timer again." = "O carregador ou o horário mudou. Volte a pré-visualizar o temporizador.";
 "The timer could not be verified. Check Schedule in myNexBlue before trying again." = "Não foi possível confirmar o temporizador. Consulte a programação na myNexBlue antes de tentar novamente.";
 "Cheapest overnight charge" = "Carregamento noturno mais barato";
-"Find a one-time charging window between 18:00 and 07:00 using your selected spot price area." = "Encontre um horário único de carregamento entre as 18:00 e as 07:00 na zona de preços selecionada.";
+"Find a one-time charging window between %@ and %@ using your selected spot price area." = "Encontre um horário único de carregamento entre as %@ e as %@ na zona de preços selecionada.";
 "Preview timer" = "Pré-visualizar temporizador";
 "Save timer" = "Guardar temporizador";
 "Timer verified on the charger. You can manage it in myNexBlue." = "Temporizador confirmado no carregador. Pode geri-lo na myNexBlue.";
@@ -3593,7 +3573,6 @@
 "Choose up to one year of completed sessions to import." = "Escolha até um ano de sessões de carregamento concluídas para importar.";
 "Through" = "Até (inclusive)";
 
-// English fallback values pending translation
 "Connect and find homes" = "Connect and find homes";
 "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported." = "Create it at developer.tibber.com. It is stored in the macOS Keychain and never exported.";
 "Currency" = "Currency";
@@ -3620,7 +3599,6 @@
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own.";
 "Added to Tibber prices in the planner and for charger sessions." = "Added to Tibber prices in the planner and for charger sessions.";
 
-// English fallback values pending translation
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
 "By an administrator" = "By an administrator";
@@ -3655,7 +3633,6 @@
 "Ethernet" = "Ethernet";
 "Charger Details" = "Charger Details";
 
-// English fallback values pending translation
 "Car Share of House Load" = "Parte do carro no consumo da casa";
 "Car at Home" = "Carro em casa";
 "Charger-measured home sessions against the house meter's readings from Tibber, %@ to %@. Charging away from home never reaches that meter." = "Sessões em casa medidas pelo carregador, comparadas com as leituras do contador da casa da Tibber, de %@ a %@. O carregamento fora de casa nunca chega a esse contador.";
@@ -3670,14 +3647,12 @@
 "Very cheap" = "Muito barato";
 "Very expensive" = "Muito caro";
 
-// English fallback values pending translation
 "House Cost" = "Custo da casa";
 "Car Cost at Home" = "Custo do carro em casa";
 "What Tibber billed for the energy in those hours, taxes included. The grid fee is not in it." = "O que a Tibber faturou pela energia dessas horas, impostos incluídos. A tarifa de rede não está incluída.";
 "The car's energy at each hour's average Tibber price. Sessions are priced by the quarter-hour with your network fee, so the two can differ." = "A energia do carro ao preço médio da Tibber de cada hora. As sessões são valorizadas por quarto de hora com a sua tarifa de rede, por isso os dois valores podem diferir.";
 "In %d of those hours the charger's energy was above the meter's reading, so the reading was used." = "Em %d dessas horas, a energia do carregador ficou acima da leitura do contador, por isso foi usada a leitura.";
 
-// English fallback values pending translation
 "House Meter" = "House Meter";
 "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger." = "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger.";
 "The account you use in the Perific app. It is stored in the macOS Keychain and never exported." = "The account you use in the Perific app. It is stored in the macOS Keychain and never exported.";
@@ -3708,14 +3683,11 @@
 "Perific did not accept the saved login. Sign in again in Settings, Electricity." = "Perific did not accept the saved login. Sign in again in Settings, Electricity.";
 "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter." = "Charger-measured home sessions against the house meter's readings from Perific, %@ to %@. Charging away from home never reaches that meter.";
 
-// English fallback values pending translation
 "%@ to the grid" = "%@ to the grid";
 
-// English fallback values pending translation
 "Signed in to %@" = "Signed in to %@";
 "Reading chargers…" = "Reading chargers…";
 
-// English fallback values pending translation
 "%@ öre/kWh" = "%@ öre/kWh";
 "%@ öre/kWh, high-load until %@" = "%@ öre/kWh, horas de ponta até %@";
 "%@ öre/kWh, other time until %@" = "%@ öre/kWh, restante tempo até %@";
@@ -3770,3 +3742,122 @@
 "Charge %@ over %@ to reach %d%%" = "Charge %@ over %@ to reach %d%%";
 "A %@ charge is longer than the price outlook" = "A %@ charge is longer than the price outlook";
 "%d h %d min" = "%d h %d min";
+
+// Card and settings consolidation
+"Activity type" = "Tipo de atividade";
+"Add the in-service date from your warranty documents." = "Introduza a data de entrada em serviço indicada nos documentos da garantia.";
+"All Notifications" = "Todas as notificações";
+"Automation" = "Automação";
+"Back" = "Voltar";
+"Battery health, lifetime odometer totals, fuel fill-ups, cabin temperatures and lifetime cost use the full history." = "O estado da bateria, o total do conta-quilómetros, os abastecimentos, as temperaturas do habitáculo e o custo acumulado usam todo o histórico.";
+"Battery-side energy" = "Energia no lado da bateria";
+"By Peak Power" = "Por potência máxima";
+"Charger Schedule" = "Programação do carregador";
+"Charger is offline" = "O carregador está offline";
+"Charging Alerts" = "Alertas de carregamento";
+"Charging Planner Alerts" = "Alertas do planeador de carregamento";
+"Charging Summary" = "Resumo de carregamento";
+"Choose which cards each tab shows and in what order. Manage data requests in Features." = "Escolha os cartões apresentados em cada separador e a sua ordem. Faça a gestão dos pedidos de dados em Funcionalidades.";
+"Clear Filter" = "Limpar filtro";
+"Connect an account and choose a vehicle to edit its references." = "Associe uma conta e escolha um veículo para editar os respetivos valores de referência.";
+"Default theme for %@ vehicles" = "Tema predefinido para veículos %@";
+"Departure · %@" = "Partida · %@";
+"Edit In-Service Date" = "Editar data de entrada em serviço";
+"Edit Plan" = "Editar plano";
+"Edit Vehicle References" = "Editar valores de referência do veículo";
+"Energy & Fuel" = "Energia e combustível";
+"Energy delivered by charger" = "Energia fornecida pelo carregador";
+"Erase local history on sign out is enabled. Signing out also erases saved history." = "A opção de apagar o histórico local ao terminar sessão está ativa. Ao terminar sessão, também será apagado o histórico guardado.";
+"Export from Log" = "Exportar a partir do Histórico";
+"Full History (CSV)" = "Histórico completo (CSV)";
+"Grid Tariff Country" = "País da tarifa da rede";
+"Language & Units" = "Idioma e unidades";
+"Last Remote Command" = "Último comando remoto";
+"Latest Charging Session" = "Última sessão de carregamento";
+"Loading charging samples…" = "A carregar medições de carregamento…";
+"Local vehicle history is kept." = "O histórico local do veículo é mantido.";
+"Locks, climate, windows, cabin cleaning and locate need the one-time browser authorization in Accounts. Charging, timers and software installation work with the account sign-in alone." = "Para os fechos, a climatização, os vidros, a limpeza do habitáculo e a localização, é necessária uma autorização única no navegador em Contas. Para o carregamento, os temporizadores e a instalação de software, basta iniciar sessão na conta.";
+"Menu Bar" = "Barra de menus";
+"No charging samples were recorded for this session." = "Não foram registadas medições de carregamento nesta sessão.";
+"No completed charging sessions have been recorded." = "Não há registo de sessões de carregamento concluídas.";
+"No fill-ups have been recorded." = "Não há registo de abastecimentos.";
+"No parking location was reported on the last refresh." = "Na última atualização, não foi comunicada a localização de estacionamento.";
+"No vehicle changes or commands recorded." = "Não há registo de alterações no veículo nem de comandos.";
+"On hold" = "Em pausa";
+"Open Air Quality History" = "Abrir histórico da qualidade do ar";
+"Open Battery Health History" = "Abrir histórico do estado da bateria";
+"Open Charge Location" = "Abrir localização de carregamento";
+"Open in Plan" = "Abrir em Planear";
+"Open in Log" = "Abrir em Registo";
+"Expanded" = "Expandido";
+"Collapsed" = "Recolhido";
+"Update to v%@" = "Atualizar para v%@";
+"Open Garage" = "Abrir garagem";
+"Open Plan Automations" = "Abrir automações no Plano";
+"Panel" = "Painel";
+"Parking & Access" = "Estacionamento e acesso";
+"Planner Settings" = "Definições do planeador";
+"Reading charger schedule…" = "A ler a programação do carregador…";
+"Recent Completed Charging Sessions (JSON)" = "Sessões de carregamento concluídas recentemente (JSON)";
+"Recent Vehicle Activity" = "Atividade recente do veículo";
+"Reconnect Tibber" = "Voltar a ligar a Tibber";
+"Remote Command Permissions" = "Permissões para comandos remotos";
+"Saved charge location" = "Localização de carregamento guardada";
+"Selected" = "Selecionado";
+"Selected Period (CSV)" = "Período selecionado (CSV)";
+"Selected Session Samples (CSV)" = "Medições da sessão selecionada (CSV)";
+"Service & Protection" = "Manutenção e proteção";
+"Set Plan" = "Configurar plano";
+"Settings Backup" = "Cópia de segurança das definições";
+"The charger schedule could not be read." = "Não foi possível ler a programação do carregador.";
+"The saved session and account credentials for this provider will be removed from this Mac." = "A sessão guardada e as credenciais de conta deste fornecedor serão removidas deste Mac.";
+"Theme" = "Tema visual";
+"This vehicle has no editable warranty or battery references." = "Este veículo não tem dados de referência da garantia ou da bateria que possam ser editados.";
+"This vehicle uses %@. Change its theme in Garage." = "Este veículo usa %@. Altere o tema na Garagem.";
+"Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff." = "O preço da Tibber inclui energia, impostos e margem comercial, mas exclui a taxa de rede. Defina a tarifa da rede em Eletricidade. Um carregador emparelhado pode usar a sua própria tarifa.";
+"Timer %d" = "Temporizador %d";
+"Use Brand Default" = "Usar o tema predefinido da marca";
+"Used for spot prices and when Tibber prices are unavailable." = "Utilizado para os preços do mercado à vista e quando os preços da Tibber não estão disponíveis.";
+"Vehicle Data Settings" = "Definições de dados do veículo";
+"Vehicle Presentation" = "Apresentação do veículo";
+"Vehicle References" = "Valores de referência do veículo";
+"Vehicle Specifications" = "Especificações do veículo";
+"View Sessions" = "Ver sessões";
+"View charging sessions at %@" = "Ver sessões de carregamento em %@";
+
+"Time Format" = "Formato de hora";
+"24-hour" = "24 horas";
+"12-hour (AM/PM)" = "12 horas (AM/PM)";
+
+"Paused" = "Em pausa";
+"Average" = "Média";
+"Month in progress" = "Mês em curso";
+"All recorded history" = "Todo o histórico registado";
+"Battery Level" = "Nível da bateria";
+"Lost While Parked" = "Perdido em estacionamento";
+"Parked drain counts only stretches between two readings taken unplugged with no trip in between, so it is a floor, not a total." = "A perda em estacionamento só conta os intervalos entre duas leituras sem carregador ligado e sem viagem pelo meio, por isso é um mínimo, não um total.";
+"Cost per 100 km" = "Custo por 100 km";
+"Cost per 100 mi" = "Custo por 100 mi";
+"Saved vs Fixed Rate" = "Poupança face à tarifa fixa";
+"Market-priced sessions against what the same energy would have cost at your fixed rate. Sessions without market prices are left out." = "Carregamentos a preço de mercado face ao que a mesma energia teria custado à sua tarifa fixa. Carregamentos sem preços de mercado ficam de fora.";
+"Peak Power by Session" = "Potência máxima por carregamento";
+"Energy by Time of Day" = "Energia por hora do dia";
+"Consumption vs Temperature" = "Consumo e temperatura";
+"Normalised to %@" = "Normalizado para %@";
+"Recording Coverage" = "Cobertura do registo";
+"Hours per day with a reading. A short day means Hisingen was not running, not that the car did nothing." = "Horas por dia com uma leitura. Um dia curto significa que o Hisingen não estava a correr, não que o carro não fez nada.";
+"Energy Use by Month" = "Energia usada por mês";
+"On pace for %@" = "A este ritmo: %@";
+"Session note" = "Nota do carregamento";
+"Unpriced Energy" = "Energia sem preço";
+"At this pace the distance limit is reached around %@" = "A este ritmo, o limite de distância é atingido por volta de %@";
+"Temperature" = "Temperatura";
+"Total Price" = "Preço total";
+"Priced So Far" = "Calculado até agora";
+"No charger measured this session, so the battery-side energy is priced with your rate settings." = "Nenhum carregador mediu esta sessão, por isso a energia do lado da bateria é calculada com as suas definições de tarifa.";
+"Pricing" = "Cálculo do preço";
+"Session total at the average price" = "Total da sessão ao preço médio";
+"Per 15 minutes" = "Por cada 15 minutos";
+"Tibber's price per 15 minutes with the grid transfer fee added." = "Preço da Tibber por cada 15 minutos com a taxa de rede incluída.";
+"Spot price with the markup, other charges and VAT from your rate settings." = "Preço spot com a margem, outros encargos e IVA das suas definições de tarifa.";
+"Spot price only. Taxes and grid fees are not included." = "Apenas preço spot. Impostos e taxas de rede não estão incluídos.";

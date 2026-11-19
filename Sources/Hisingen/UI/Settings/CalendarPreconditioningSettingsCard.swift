@@ -10,7 +10,7 @@ struct CalendarPreconditioningSettingsCard: View {
     @State private var calendars: [EKCalendar] = []
     @State private var permissionDenied = false
     @State private var requestingAccess = false
-    @State private var nextPreview: String?
+    @State private var nextPreview: (title: String, eventStart: Date, fireAt: Date)?
     @State private var previewTask: Task<Void, Never>?
 
     private var preferences: PreferencesStore { binder.preferences }
@@ -86,7 +86,12 @@ struct CalendarPreconditioningSettingsCard: View {
                         }
 
                         if preferences.calendarPreconditioningEnabled, let nextPreview {
-                            Label(nextPreview, systemImage: "clock.arrow.circlepath")
+                            Label(
+                                L10n.format("Next: %@ at %@, climate starts %@",
+                                            nextPreview.title, Format.shortTime(date: nextPreview.eventStart),
+                                            Format.shortTime(date: nextPreview.fireAt)),
+                                systemImage: "clock.arrow.circlepath"
+                            )
                                 .hisType(.micro).foregroundStyle(HisingenTheme.accent)
                                 .hisCaptionLeading()
                                 .hisCaptionLeading()
@@ -123,7 +128,7 @@ struct CalendarPreconditioningSettingsCard: View {
             // outside any transaction; these bindings power their reveals.
             .hisAnimation(Motion.stateChange, value: requestingAccess)
             .hisAnimation(Motion.stateChange, value: permissionDenied)
-            .hisAnimation(Motion.stateChange, value: nextPreview)
+            .hisAnimation(Motion.stateChange, value: nextPreview?.fireAt)
             .hisAnimation(Motion.cardChange, value: preferences.calendarPreconditioningEnabled)
         }
         .task { loadCalendars(); refreshPreview() }
@@ -221,12 +226,7 @@ struct CalendarPreconditioningSettingsCard: View {
                     .min { $0.1 < $1.1 }
             }.value
             guard !Task.isCancelled else { return }
-            nextPreview = next.map { title, eventStart, fireAt in
-                L10n.format("Next: %@ at %@, climate starts %@",
-                            title,
-                            eventStart.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.displayLocale)),
-                            fireAt.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.displayLocale)))
-            }
+            nextPreview = next
         }
     }
 }

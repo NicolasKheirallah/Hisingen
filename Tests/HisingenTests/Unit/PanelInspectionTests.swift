@@ -22,7 +22,8 @@ struct PanelInspectionTests {
         preferences.vehicleLabelFormat = .modelOnly
         preferences.features = FeatureSelection(
             enabled: preferences.features.enabled.union([.remoteLocks, .remoteClimate, .remoteCharging, .remoteSchedules,
-                                                         .remoteWindows, .remoteHonkFlash, .remotePreCleaning])
+                                                         .remoteWindows, .remoteHonkFlash, .remotePreCleaning,
+                                                         .tyreAndWarnings])
         )
         let database = VehicleDatabase.inMemory()
         let vin = "YSMTEST"
@@ -45,6 +46,10 @@ struct PanelInspectionTests {
         reading.climateTimers = [VehicleSchedule(
             kind: .climate, startHour: nil, startMinute: nil, endHour: nil, endMinute: nil,
             isActive: true, oneShotDate: now.addingTimeInterval(12 * 3_600)
+        )]
+        reading.energy.schedules = [VehicleSchedule(
+            kind: .departure, startHour: nil, startMinute: nil, endHour: nil, endMinute: nil,
+            isActive: true, oneShotDate: now.addingTimeInterval(14 * 3_600)
         )]
         for (day, start, end) in [(4, 22.0, 78.0), (12, 44.0, 86.0), (16, 35.0, 71.0), (21, 19.0, 90.0)] {
             let began = now.addingTimeInterval(Double(-day) * 86_400)
@@ -81,7 +86,7 @@ struct PanelInspectionTests {
         var arrangement = TabComposition()
         arrangement.setItems([.vehicleHero, .vehicleLocation, .vehicleOpenings, .vehicleTyres], for: .vehicle)
         arrangement.setItem(.vehicleHero, shown: false, on: .vehicle)
-        arrangement.setItems([.controlsRoutines, .controlsReceipts, .vehicleWeather], for: .controls)
+        arrangement.setItems([.controlsRoutines, .vehicleReceipts, .vehicleWeather], for: .controls)
         arrangement.setItems([.historyPeriodPicker, .historyChargingSessions, .historyOverview], for: .history)
         arrangement.setItem(.historyPeriodPicker, shown: false, on: .history)
         arrangement.setItems([.infoNavBar, .infoWeather, .infoPowertrain, .infoOverview], for: .info)
@@ -109,10 +114,14 @@ struct PanelInspectionTests {
                 window.appearance = appearance
                 var screens = tabs
                 if size == .standard {
-                    screens += [("now-offline", .vehicle), ("now-active", .vehicle), ("now-limits", .vehicle), ("sign-in", .vehicle), ("sign-in-volvo", .vehicle), ("sign-in-error", .vehicle), ("settings", .settings)]
+                    screens += [("now-offline", .vehicle), ("now-active", .vehicle), ("now-limits", .vehicle),
+                                ("now-warning", .vehicle), ("sign-in", .vehicle), ("sign-in-volvo", .vehicle),
+                                ("sign-in-error", .vehicle), ("settings", .settings)]
                     screens.append(("connecting", .vehicle))
                 } else if size == .compact, type == .accessibility5 {
-                    screens += [("sign-in", .vehicle), ("sign-in-volvo", .vehicle)]
+                    screens += [("sign-in", .vehicle), ("sign-in-volvo", .vehicle), ("settings", .settings)]
+                } else if size == .compact {
+                    screens += [("settings", .settings)]
                 } else if size == .grand {
                     screens += tabs.map { ("layout-\($0.0)", $0.1) } + [("layout-custom", custom)]
                 }
@@ -129,7 +138,7 @@ struct PanelInspectionTests {
                         state.freshness.fetchedAt = now.addingTimeInterval(-3_600)
                         state.freshness.vehicleReportedAt = now.addingTimeInterval(-7_200)
                     }
-                    let live = title == "now-active" || title == "now-limits"
+                    let live = title == "now-active" || title == "now-limits" || title == "now-warning"
                     if live {
                         state.climateStatus = VehicleClimateStatus(
                             activity: .heating, timeRemainingMinutes: 18, timerTriggered: false,
@@ -140,9 +149,15 @@ struct PanelInspectionTests {
                         state.energy.connection = .connected
                         state.energy.powerWatts = 7_200
                         state.energy.currentAmps = 16
+                        state.energy.estimatedTimeToFullMinutes = 90
                         state.freshness.readingDates = [
                             .battery: now, .range: now, .locks: now, .climateStatus: now, .charging: now
                         ]
+                    }
+                    if title == "now-warning" {
+                        state.maintenance.details = VehicleHealthDetails(tyres: [
+                            TyrePressure(position: .frontLeft, kilopascals: 190, warning: .low)
+                        ], warnings: [.tyrePressure])
                     }
                     preferences.nowQuickControls = title == "now-active" ? NowQuickControl.allCases
                         : title == "now-limits" ? [.climate, .chargeLimit, .currentLimit] : NowQuickControl.defaults

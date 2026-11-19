@@ -14,8 +14,12 @@ struct CommandReceiptChip: View {
 
     private var appearance: (symbol: String, color: Color) {
         switch receipt.status {
-        case .confirmed, .acknowledged:
+        case .confirmed:
             return ("checkmark.circle.fill", HisingenTheme.semanticGood)
+        case .acknowledged:
+            // The service accepted the command; no reading shows the car did it yet. Green and
+            // filled are kept for the reading that proves it.
+            return ("checkmark.circle", HisingenTheme.inkMuted)
         case .timedOut:
             return ("exclamationmark.triangle.fill", HisingenTheme.semanticWarning)
         case .awaiting:
@@ -47,25 +51,19 @@ struct CommandReceiptChip: View {
                     .hisType(.label, weight: .semibold)
                 Text(receipt.command?.title ?? L10n.text("Values below may update once the car reports in."))
                     .hisType(.micro)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
             }
             .accessibilityElement(children: .combine)
             Spacer()
             if case .acknowledged = receipt.status, let onVerify {
                 Button(L10n.text("Verify now")) { onVerify(receipt.id) }
                     .buttonStyle(.pressable)
-                    .hisType(.micro, weight: .semibold)
+                    .hisType(.label, weight: .semibold)
                     .foregroundStyle(HisingenTheme.accent)
                     .accessibilityLabel(L10n.text("Verify now"))
                     .help(L10n.text("Verify now"))
             }
-            Button {
-                onDismiss(receipt.id)
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(.pressable)
-            .accessibilityLabel(L10n.text("Dismiss command status"))
+            DismissButton(label: L10n.text("Dismiss command status")) { onDismiss(receipt.id) }
         }
         .statusChipSurface(
             tint: appearance.color,

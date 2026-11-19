@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct HistoryDashboardView: View {
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.locale) private var locale
     let state: VehicleState
 
     let history: HistoryWorkspace
@@ -13,11 +14,13 @@ struct HistoryDashboardView: View {
     /// The reader's layout for this tab: what to draw, and in what order. The default draws
     /// everything exactly as designed.
     var layout: TabLayout = .everything
+    var initialChargingSessionID: String? = nil
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
     func ordered<T>(_ entries: [T], by item: (T) -> TabItemID) -> [T] {
-        layout.ordered(entries, by: item)
+        let resolved = layout.isDefault ? TabLayout(items: TabItemCatalog.defaultItems(for: .history)) : layout
+        return resolved.ordered(entries, by: item)
     }
 
     @Environment(\.preferencesStore) var preferences
@@ -36,6 +39,9 @@ struct HistoryDashboardView: View {
     @State var selectedSessionID: String?
 
     @State var sessionSearchText: String = ""
+    @State var sessionFilter: ChargingSessionFilter?
+    @State private var activityFilter: ActivityFilter = .all
+    @State private var requestedSection: String?
 
     @State var tripSearchText: String = ""
 
@@ -63,22 +69,11 @@ struct HistoryDashboardView: View {
     // the first successful load clears it.
     @State var isLoading = true
 
-    @State var exportScope: ExportScope = .fullHistory
-
     @State var overlayPreviousSession = false
 
     /// Drives the selected-session curve card's live dot (same treatment as the live
     /// curve in ChargingCurveView).
     @State var curveLivePulse = false
-
-    // Chart scrub cursors (one per interactive time-series chart).
-    @State var scrubDistance: Date?
-
-    @State var scrubEfficiency: Date?
-
-    @State var scrubOdometer: Date?
-
-    @State var scrubSoH: Date?
 
     /// One base value the whole dashboard scales from, so the OS "larger text" setting grows
     /// the charts and captions instead of being ignored by hard-coded point sizes.
@@ -104,12 +99,6 @@ struct HistoryDashboardView: View {
     }
 
     typealias TripSort = HistoryTripSort
-
-    enum ExportScope: String, CaseIterable, Identifiable {
-        case fullHistory = "Full history"
-        case selectedPeriod = "Selected period"
-        var id: String { rawValue }
-    }
 
     @State var fuelLitersText: String = ""
 
@@ -143,13 +132,20 @@ struct HistoryDashboardView: View {
     /// on every render.
     @State var hiddenTripRows: [TripHistoryEntry] = []
 
-    /// Per-entry search strings, rebuilt once per snapshot so the trip/session filters never
-    /// re-format a date per row on every keystroke or scrub.
-    @State var tripDateStrings: [String: String] = [:]
-
-    @State var sessionLabelStrings: [String: String] = [:]
+    @State private var tripDateStrings: [String: String] = [:]
+    @State private var sessionLabelStrings: [String: String] = [:]
 
     @State var selectedSessionSamples: [HistoricalChargingSample] = []
+    @State var selectedSessionChargerPower: [VehicleMetricRecord] = []
+    /// The price per kWh through the selected session, loaded apart from the curve because it
+    /// may wait on Tibber. `loadedSessionPricesID` says which session it belongs to.
+    @State var selectedSessionPrices: SessionPriceSeries?
+    @State var loadedSessionPricesID: String?
+    @State var sessionNoteDraft = ""
+    /// Notes the reader wrote on sessions, keyed by session id; loaded with the dashboard and
+    /// updated in place when one is saved.
+    @State var sessionNotes: [String: String] = [:]
+    @State var loadedSessionCurveID: String?
 
     @State var presentation = HistoryPresentationSnapshot()
 
@@ -226,7 +222,7 @@ struct HistoryDashboardView: View {
 
     var selectedSession: HistoricalChargingSession? {
         guard let selectedSessionID else { return nil }
-        return chargingSessions.first { $0.id == selectedSessionID }
+        return chargingSessions.first { $0.id.caseInsensitiveCompare(selectedSessionID) == .orderedSame }
     }
 
     var selectedSessionCurve: [HistoryInsights.ChargingCurvePoint] {
@@ -264,9 +260,9 @@ struct HistoryDashboardView: View {
     }
 
     var observedChangesCard: some View {
-        Card {
+        HistoryCardSurface {
             VStack(alignment: .leading, spacing: 8) {
-                CardHeader(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: HisingenTheme.chartInfo)
+                HistorySectionHeading(symbol: "clock.arrow.circlepath", title: L10n.text("Observed Changes"), color: HisingenTheme.chartInfo)
                 PaginatedSection(items: snapshot.activities, pageSize: preferences.historyPageSize(for: .historyActivity),
                                  resetKeys: [periodLoadKey],
                                  emptyMessage: L10n.text("No activity was recorded in this period.")) { visible, footer in
@@ -277,44 +273,86 @@ struct HistoryDashboardView: View {
         }
     }
 
-    /// The post-skeleton card stack. The stack keys on `periodDataKey` so a refresh or
-    /// period change animates the cards when the loaded snapshot lands, not when the load
-    /// One card in the History stack, with the name the jump menu calls it by.
-    ///
-    /// The stack grew to as many as 23 cards in one scroll with no indicator, no position cue and
-    /// no way to reach a card except by scrolling past every one before it, while Info solved the
-    /// identical problem with its own jump menu. The list is the single source for both the cards
-    /// and the menu, so a card cannot be reachable from one and invisible to the other.
-    /// The groups the Log filter offers. Overview stays in every group: it is the period's answer.
     enum HistorySectionGroup: String, CaseIterable, Hashable {
-        case all, charging, driving, climate, status
+        case all, charging, driving, energy, climate, activity, status
 
         var title: String {
             switch self {
             case .all: return L10n.text("All")
             case .charging: return L10n.text("Charging")
             case .driving: return L10n.text("Driving")
-            case .climate: return L10n.text("Climate")
+            case .energy: return L10n.text("Energy & Fuel")
+            case .climate: return L10n.text("Cabin")
+            case .activity: return L10n.text("Activity")
             case .status: return L10n.text("Status")
             }
         }
 
         func contains(_ sectionID: String) -> Bool {
             if self == .all || sectionID == "overview" { return true }
+            if sectionID == "month" { return self == .charging || self == .driving }
+            return HistoryCollection.forSection(sectionID)?.group == self
+        }
+    }
+
+    private enum ActivityFilter: String, CaseIterable {
+        case all, observations, warnings, commands
+
+        var title: String {
             switch self {
-            case .all: return true
-            case .charging:
-                return ["charging-sessions", "charging-curve", "monthly-charging", "charge-locations",
-                        "charging-history", "month"].contains(sectionID)
-            case .driving:
-                return ["driving-patterns", "distance", "monthly-mileage", "trips", "efficiency", "consumption",
-                        "odometer", "fuel-economy", "recent-fills", "emissions", "month"].contains(sectionID)
-            case .climate:
-                return ["air-cleaning", "air-quality", "cabin-climate"].contains(sectionID)
-            case .status:
-                return ["activity", "warnings", "battery-health", "tyre-pressure", "automations"].contains(sectionID)
+            case .all: return L10n.text("All")
+            case .observations: return L10n.text("Observed Changes")
+            case .warnings: return L10n.text("Warnings")
+            case .commands: return L10n.text("Commands")
             }
         }
+
+        func shows(_ id: String) -> Bool {
+            switch self {
+            case .all: return true
+            case .observations: return id == "activity"
+            case .warnings: return id == "warnings"
+            case .commands: return id == "automations"
+            }
+        }
+    }
+
+    private enum HistoryCollection: String {
+        case sessions, chargingSummary, driving, energy, cabin, activity, status
+
+        static func forSection(_ id: String) -> Self? {
+            switch id {
+            case "charging-sessions", "charging-curve": return .sessions
+            case "charging-history", "monthly-charging", "charge-locations": return .chargingSummary
+            case "trips", "driving-patterns", "distance", "monthly-mileage", "odometer": return .driving
+            case "efficiency", "consumption", "fuel-economy", "recent-fills", "emissions": return .energy
+            case "air-cleaning", "air-quality", "cabin-climate": return .cabin
+            case "activity", "warnings", "automations": return .activity
+            case "battery-health", "tyre-pressure": return .status
+            default: return nil
+            }
+        }
+
+        var group: HistorySectionGroup {
+            switch self {
+            case .sessions, .chargingSummary: return .charging
+            case .driving: return .driving
+            case .energy: return .energy
+            case .cabin: return .climate
+            case .activity: return .activity
+            case .status: return .status
+            }
+        }
+
+        var title: String {
+            self == .chargingSummary ? L10n.text("Charging Summary") : group.title
+        }
+    }
+
+    private struct HistoryRun: Identifiable {
+        let collection: HistoryCollection?
+        var sections: [HistorySection]
+        var id: String { "group-\(sections[0].id)" }
     }
 
     struct HistorySection: Identifiable {
@@ -341,15 +379,15 @@ struct HistoryDashboardView: View {
             HistorySection(id: "charging-sessions", title: L10n.text("Charging Sessions"),
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charging-curve", title: L10n.text("Charging Curve"),
-                           isVisible: !chargingSessions.isEmpty && selectedSession != nil && !selectedSessionCurve.isEmpty),
+                           isVisible: selectedSession != nil),
             HistorySection(id: "monthly-charging", title: L10n.text("Charging by Month"),
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charge-locations", title: L10n.text("Charge Locations"),
                            isVisible: !chargingSessions.isEmpty),
-            HistorySection(id: "charging-history", title: L10n.text("Charging History"),
+            HistorySection(id: "charging-history", title: L10n.text("Charging Trends"),
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "fuel-economy", title: L10n.text("Fuel Economy"), isVisible: !fuelEntries.isEmpty),
-            HistorySection(id: "recent-fills", title: L10n.text("Recent Fill-ups"), isVisible: !fuelEntries.isEmpty),
+            HistorySection(id: "recent-fills", title: L10n.text("Recent Fill-ups"), isVisible: state.powertrain.hasCombustionEngine || !fuelEntries.isEmpty),
             HistorySection(id: "efficiency", title: L10n.text("Efficiency"),
                            isVisible: efficiencyPoints.count >= 3),
             HistorySection(id: "consumption", title: L10n.text("Consumption"),
@@ -357,7 +395,7 @@ struct HistoryDashboardView: View {
             HistorySection(id: "odometer", title: L10n.text("Odometer"),
                            isVisible: odometerPoints.count >= 3),
             HistorySection(id: "battery-health", title: L10n.text("Battery Health"),
-                           isVisible: !batteryHealthRecords.isEmpty),
+                           isVisible: !batteryHealthRecords.isEmpty || snapshot.batteryLevels.count >= 3),
             HistorySection(id: "tyre-pressure", title: L10n.text("Tyre Pressure"),
                            isVisible: tyreRecords.count >= 2),
             HistorySection(id: "air-quality", title: L10n.text("Air Quality"),
@@ -392,15 +430,75 @@ struct HistoryDashboardView: View {
         return ordered(cards, by: \.item).map(\.section) + grouped.filter { $0.item == nil }
     }
 
-    /// key flips (that precedes the async query).
+    var showsChargingSummary: Bool {
+        guard draws(.historyChargingHistory), !chargingSessions.isEmpty else { return false }
+        return !draws(.historyPeriodPicker) || sectionGroup.contains("charging-history")
+    }
+
+    var embedsChargingCurve: Bool {
+        layout.includesNewItems && draws(.historyChargingSessions) && draws(.historyChargingCurve)
+    }
+
+    private var historyRuns: [HistoryRun] {
+        visibleHistorySections.reduce(into: []) { runs, section in
+            if embedsChargingCurve && section.id == "charging-curve" { return }
+            let collection = layout.includesNewItems ? HistoryCollection.forSection(section.id) : nil
+            if let collection, runs.last?.collection == collection {
+                runs[runs.count - 1].sections.append(section)
+            } else {
+                runs.append(HistoryRun(collection: collection, sections: [section]))
+            }
+        }
+    }
+
     var dashboardContent: some View {
         LazyVStack(spacing: HisingenTheme.sectionSpacing) {
-            ForEach(visibleHistorySections) { section in
-                historySectionContent(section.id).id(section.id)
+            ForEach(historyRuns) { run in
+                historyRun(run)
+                    .id(run.id)
             }
         }
         .hisAnimation(Motion.cardChange, value: periodDataKey)
         .hisAnimation(Motion.layout, value: sessionCurveKey)
+    }
+
+    @ViewBuilder
+    private func historyRun(_ run: HistoryRun) -> some View {
+        if let collection = run.collection, collection != .sessions,
+           run.sections.count > 1 || collection == .activity {
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    CardHeader(symbol: "", title: collection.title, color: HisingenTheme.ink)
+                    if collection == .activity, run.sections.count > 1 {
+                        activityFilterPicker(for: run.sections)
+                    }
+                    let sections = collection == .activity && run.sections.contains(where: { activityFilter.shows($0.id) })
+                        ? run.sections.filter { activityFilter.shows($0.id) }
+                        : run.sections
+                    ForEach(sections) { section in
+                        if section.id != sections.first?.id { PanelRule() }
+                        historySectionContent(section.id).id(section.id)
+                    }
+                }
+                .environment(\.historyCardEmbedded, true)
+            }
+        } else {
+            ForEach(run.sections) { section in
+                historySectionContent(section.id).id(section.id)
+            }
+        }
+    }
+
+    private func activityFilterPicker(for sections: [HistorySection]) -> some View {
+        let options = ActivityFilter.allCases.filter { filter in sections.contains { filter.shows($0.id) } }
+        return UnderlineSegments(
+            options: options.map { ($0, $0.title) },
+            selection: Binding(
+                get: { options.contains(activityFilter) ? activityFilter : .all },
+                set: { activityFilter = $0 }
+            ),
+            accessibilityLabel: L10n.text("Activity type")
+        )
     }
 
     @ViewBuilder
@@ -422,7 +520,7 @@ struct HistoryDashboardView: View {
         case "trips": tripListCard
         case "charging-sessions": chargingSessionsCard
         case "charging-curve":
-            chargingCurveCard.transition(.opacity.combined(with: .move(edge: .top)))
+            sessionDetail.transition(.opacity)
         case "monthly-charging": monthlyChargingCard
         case "charge-locations": locationBreakdownCard
         case "charging-history": chargingHistoryCard
@@ -446,14 +544,10 @@ struct HistoryDashboardView: View {
 
     /// Jumps the shared scroller to a card. Info has had this for its 22 sections all along; the
     /// stack here is just as long and had nothing.
-    func historyJumpMenu(proxy: ScrollViewProxy) -> some View {
+    func historyJumpMenu() -> some View {
         Menu {
             ForEach(visibleHistorySections) { section in
-                Button(section.title) {
-                    withAnimation(Motion.resolve(Motion.layout)) {
-                        proxy.scrollTo(section.id, anchor: .top)
-                    }
-                }
+                Button(section.title) { requestHistoryJump(section.id) }
             }
         } label: {
             Image(systemName: "list.bullet")
@@ -466,10 +560,23 @@ struct HistoryDashboardView: View {
         .accessibilityLabel(L10n.text("Jump to section"))
     }
 
+    var showsHistoryExportHeader: Bool {
+        draws(.historyPeriodPicker) || initialSection == "export"
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             VStack(spacing: HisingenTheme.sectionSpacing) {
-                if draws(.historyPeriodPicker) { periodPicker(proxy: proxy) }
+                if draws(.historyPeriodPicker) {
+                    periodPicker.id("history-export")
+                } else if showsHistoryExportHeader {
+                    HStack {
+                        Spacer()
+                        exportMenu
+                    }
+                    .padding(.horizontal, HisingenTheme.cardPadding)
+                    .id("history-export")
+                }
 
                 if isLoading && !didInitialLoad {
                     loadingSkeleton
@@ -481,12 +588,22 @@ struct HistoryDashboardView: View {
             }
             .hisAnimation(Motion.entrance, value: didInitialLoad)
             .task(id: didInitialLoad) {
-                guard didInitialLoad, let initialSection else { return }
-                await Task.yield()
-                let sections = visibleHistorySections
-                if let destination = sections.first(where: { $0.id == initialSection }) ?? sections.first {
-                    proxy.scrollTo(destination.id, anchor: .top)
+                guard didInitialLoad else { return }
+                if let initialChargingSessionID, let session = chargingSessions.first(where: {
+                    $0.id.caseInsensitiveCompare(initialChargingSessionID) == .orderedSame
+                }) {
+                    selectedSessionID = session.id
+                    if draws(.historyChargingCurve) {
+                        requestHistoryJump("charging-curve")
+                        return
+                    }
                 }
+                if let initialSection { openInitialSection(initialSection) }
+            }
+            .task(id: requestedSection) {
+                guard let requestedSection else { return }
+                await scrollHistory(to: requestedSection, with: proxy)
+                if !Task.isCancelled, self.requestedSection == requestedSection { self.requestedSection = nil }
             }
         }
 
@@ -522,13 +639,55 @@ struct HistoryDashboardView: View {
         .task(id: tripPresentationKey) { await loadTripPresentation() }
         .task(id: sessionPresentationKey) { await loadSessionPresentation() }
         .task(id: sessionCurveLoadKey) { await loadSessionCurves() }
+        .task(id: selectedSession?.id) { await loadSessionPrices() }
+        .onChange(of: locale.identifier) { _, _ in refreshSearchLabels() }
         .onChange(of: state.dataTimestamp) { _, _ in bumpDataToken() }
         .onChange(of: selectedSessionID) { _, newValue in
             preferences.setSelectedHistorySession(newValue, for: state.identity.vin)
         }
         .onAppear {
-            if selectedSessionID == nil {
+            if selectedSessionID == nil && initialChargingSessionID == nil {
                 selectedSessionID = preferences.selectedHistorySession(for: state.identity.vin)
+            }
+        }
+    }
+
+    private func openInitialSection(_ id: String) {
+        if id == "export" {
+            requestHistoryJump(id)
+            return
+        }
+        let sections = visibleHistorySections
+        let activityDestination = id == "activity" ? sections.first(where: { HistoryCollection.forSection($0.id) == .activity }) : nil
+        if let destination = sections.first(where: { $0.id == id }) ?? activityDestination ?? sections.first {
+            requestHistoryJump(destination.id)
+        }
+    }
+
+    func requestHistoryJump(_ id: String) {
+        if HistoryCollection.forSection(id) == .activity { activityFilter = .all }
+        requestedSection = id
+    }
+
+    private func scrollHistory(to id: String, with proxy: ScrollViewProxy) async {
+        if id == "export" {
+            proxy.scrollTo("history-export", anchor: .top)
+            return
+        }
+        guard let run = historyRuns.first(where: { $0.sections.contains { $0.id == id } })
+                ?? (id == "charging-curve" && embedsChargingCurve
+                    ? historyRuns.first(where: { $0.sections.first?.id == "charging-sessions" })
+                    : nil) else { return }
+        if run.sections.count > 1 || id == "charging-curve" {
+            proxy.scrollTo(run.id, anchor: .top)
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(Motion.resolve(Motion.layout)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+        } else {
+            withAnimation(Motion.resolve(Motion.layout)) {
+                proxy.scrollTo(run.id, anchor: .top)
             }
         }
     }
@@ -595,11 +754,11 @@ struct HistoryDashboardView: View {
 
     var tripPresentationKey: String {
         let hidden = preferences.hiddenTripIDs(for: state.identity.vin).subtracting(restoredTripIDs)
-        return "\(periodDataKey)_\(tripSort.rawValue)_\(tripFilterText)_\(hidden.sorted().joined(separator: ","))"
+        return "\(periodDataKey)_\(locale.identifier)_\(tripSort.rawValue)_\(tripFilterText)_\(hidden.sorted().joined(separator: ","))"
     }
 
     var sessionPresentationKey: String {
-        "\(periodDataKey)_\(sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines))"
+        "\(periodDataKey)_\(locale.identifier)_\(sessionSearchText.trimmingCharacters(in: .whitespacesAndNewlines))_\(String(describing: sessionFilter))"
     }
 
     var sessionCurveLoadKey: String {
@@ -638,6 +797,14 @@ struct HistoryDashboardView: View {
         // A load cancelled by a newer key must not clear the loading flag the replacement
         // already set, so the flags reset only on the success path.
         guard !Task.isCancelled else { return }
+        if !didInitialLoad, let initialChargingSessionID, period != .all,
+           !loaded.dashboard.storeUnreadable,
+           !loaded.dashboard.chargingSessions.contains(where: {
+               $0.id.caseInsensitiveCompare(initialChargingSessionID) == .orderedSame
+           }) {
+            period = .all
+            return
+        }
         isLoading = false
         didInitialLoad = true
         snapshot = loaded.dashboard
@@ -645,34 +812,73 @@ struct HistoryDashboardView: View {
         presentation = loaded.presentation
         if loadedLifetimeKey != lifetimeKey { loadedLifetimeKey = lifetimeKey }
         expandedTripIDs = []
-        tripDateStrings = Dictionary(
-            loaded.dashboard.reportTrips.map { ($0.id, Format.dateTimeFormatter.string(from: $0.endedAt)) },
-            uniquingKeysWith: { first, _ in first })
-        sessionLabelStrings = Dictionary(
-            loaded.dashboard.chargingSessions.map { ($0.id, sessionLabel($0)) },
-            uniquingKeysWith: { first, _ in first })
+        refreshSearchLabels()
         let hidden = preferences.hiddenTripIDs(for: query.vin).subtracting(restoredTripIDs)
         hiddenTripRows = loaded.dashboard.reportTrips.filter { hidden.contains($0.id) }
+        sessionNotes = loaded.dashboard.sessionNotes
         // `selectedSession` resolves to nil on its own when the remembered id isn't in the
         // current range, so the curve card just hides; the saved preference is kept so the
         // curve reappears if the range later includes that session again.
     }
 
+    private func refreshSearchLabels() {
+        let formatter = Format.dateTimeFormatter
+        tripDateStrings = Dictionary(snapshot.reportTrips.map { ($0.id, formatter.string(from: $0.endedAt)) },
+                                     uniquingKeysWith: { first, _ in first })
+        sessionLabelStrings = Dictionary(chargingSessions.map { ($0.id, sessionLabel($0)) },
+                                         uniquingKeysWith: { first, _ in first })
+    }
+
     func loadSessionCurves() async {
-        guard let session = selectedSession else {
+        let selection = selectedSession
+        if selection?.id != loadedSessionCurveID {
             selectedSessionSamples = []
+            selectedSessionChargerPower = []
             selectedSessionCurvePoints = []
             previousSessionCurve = []
-            return
+            loadedSessionCurveID = nil
         }
+        guard let session = selection else { return }
         let previous = overlayPreviousSession
             ? chargingSessions.drop(while: { $0.id != session.id }).dropFirst().first
             : nil
         let curves = await history.sessionCurves(for: session, overlaying: previous)
         guard !Task.isCancelled else { return }
         selectedSessionSamples = curves.samples
+        selectedSessionChargerPower = curves.chargerPower
         selectedSessionCurvePoints = curves.current
         previousSessionCurve = curves.previous
+        loadedSessionCurveID = session.id
+    }
+
+    /// Tibber's slots with the grid fee when Tibber is connected and still holds them (about a
+    /// month back), otherwise the market price for the reader's zone from the local price cache.
+    func loadSessionPrices() async {
+        guard let session = selectedSession else {
+            selectedSessionPrices = nil
+            loadedSessionPricesID = nil
+            return
+        }
+        if loadedSessionPricesID != session.id { selectedSessionPrices = nil }
+        let start = session.wallbox?.startedAt ?? session.startedAt
+        let end = session.wallbox?.endedAt ?? session.endedAt ?? Date()
+        var series = await homeCharging?.sessionPriceSeries(from: start, to: end)
+        if series == nil {
+            let zone = preferences.electricityPriceZone
+            let calendar = ElectricityPriceService.stockholmCalendar
+            var points: [ElectricityPricePoint] = []
+            var day = calendar.startOfDay(for: start)
+            // A session spans a day or two, so this asks for at most a couple of day files.
+            while day <= end {
+                points = await ElectricityPriceService.shared.historicalPrices(zone: zone, day: day)
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+            series = SessionPriceSeries.spot(points, policy: preferences.electricityRatePolicy, from: start, to: end)
+        }
+        guard !Task.isCancelled, selectedSession?.id == session.id else { return }
+        selectedSessionPrices = series
+        loadedSessionPricesID = session.id
     }
 
     func loadTripPresentation() async {
@@ -702,11 +908,14 @@ struct HistoryDashboardView: View {
         }
         let sessions = chargingSessions
         let labels = sessionLabelStrings
+        let filter = sessionFilter
+        let unknownLocation = L10n.text("Unknown location")
         let loaded = await Task.detached(priority: .userInitiated) {
-            guard !search.isEmpty else { return sessions }
-            return sessions.filter {
-                (labels[$0.id] ?? "").localizedCaseInsensitiveContains(search)
+            let matches = sessions.filter { session in
+                (filter?.contains(session, unknownLocation: unknownLocation) ?? true)
+                    && (search.isEmpty || (labels[session.id] ?? "").localizedCaseInsensitiveContains(search))
             }
+            return filter == .peakPower ? matches.sorted { $0.peakPowerKw > $1.peakPowerKw } : matches
         }.value
         guard !Task.isCancelled else { return }
         filteredSessionRows = loaded
@@ -759,12 +968,12 @@ struct HistoryDashboardView: View {
             // 27 call sites share this readout, and it was the one numeric display in the app
             // without a content transition: a value that changes in place snapped while every
             // sibling rolled. The tabular figures were already here.
-            Text(value).hisType(.label, weight: .bold, design: .rounded).lineLimit(1)
-            .minimumScaleFactor(0.9)
+            Text(value).hisType(.body, weight: .bold, design: .rounded).lineLimit(1)
+            .minimumScaleFactor(0.8)
             .monospacedDigit()
             .hisTelemetryValue(value, reduceMotion: reduceMotion)
-            Text(title).hisType(.nano).foregroundStyle(.secondary).lineLimit(1)
-            .minimumScaleFactor(0.9)
+            Text(title).hisType(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .minimumScaleFactor(0.8)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title): \(value)")
@@ -809,8 +1018,8 @@ struct HistoryDashboardView: View {
         return Group {
             if coverage.confidence == .low || coverage.confidence == .insufficient {
                 Text(L10n.format("Limited data (%@ points): treat this trend as indicative, not conclusive.", "\(coverage.sampleCount)"))
-                    .hisType(.nano)
-                    .foregroundStyle(HisingenTheme.semanticWarning.opacity(0.85))
+                    .hisType(.caption)
+                    .foregroundStyle(HisingenTheme.semanticWarning)
             }
         }
     }

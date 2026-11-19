@@ -6,7 +6,6 @@ struct OpeningChipView: View {
     var onHoverChange: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
-    @State private var dotBreathing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isOpen: Bool { reading.state == .open || reading.state == .ajar }
@@ -49,15 +48,15 @@ struct OpeningChipView: View {
         // Hover, highlight and the open state all read through the wash alone; the row
         // draws no outline, so the fill has to carry the whole state ladder.
         if isHovered || isHighlighted {
-            return isOpen ? HisingenTheme.semanticWarning.opacity(0.16) : Color.primary.opacity(0.08)
+            return isOpen ? HisingenTheme.semanticWarning.opacity(0.16) : HisingenTheme.ink.opacity(0.08)
         }
-        return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : Color.primary.opacity(0.04)
+        return isOpen ? HisingenTheme.semanticWarning.opacity(0.12) : HisingenTheme.ink.opacity(0.04)
     }
 
     private var symbolView: some View {
         Image(systemName: symbol)
             .hisType(.micro)
-            .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : Color.secondary)
+            .foregroundStyle(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.inkMuted)
             .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
             .frame(width: 12)
     }
@@ -74,8 +73,6 @@ struct OpeningChipView: View {
         Circle()
             .fill(isOpen ? HisingenTheme.semanticWarning : HisingenTheme.semanticGood)
             .frame(width: 5, height: 5)
-            .opacity(dotBreathing ? 0.6 : 1)
-            .animation(reduceMotion ? nil : (isOpen ? Motion.livePulse : Motion.interaction), value: dotBreathing)
     }
 
     private var chipContent: some View {
@@ -96,7 +93,6 @@ struct OpeningChipView: View {
             RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
                 .fill(stateFill)
         )
-        .scaleEffect(active ? 1.02 : 1.0)
         // Open/close recolors icon, label and dot; the hover animation below
         // only owns the highlight, so this needs its own key.
         .hisAnimation(Motion.stateChange, value: isOpen)
@@ -104,13 +100,6 @@ struct OpeningChipView: View {
         .onHover { hovered in
             isHovered = hovered
             onHoverChange?(hovered)
-        }
-        .onAppear {
-            guard isOpen, !reduceMotion else { return }
-            dotBreathing = true
-        }
-        .onChange(of: isOpen) { _, open in
-            dotBreathing = open && !reduceMotion
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(reading.opening.displayName): \(isOpen ? L10n.text("Open") : L10n.text("Closed"))")
@@ -163,7 +152,7 @@ struct DoorsAndOpeningsCardView: View {
                     } else if let isLocked {
                         Pill(
                             text: isLocked ? L10n.text("All Closed & Locked") : L10n.text("All Closed"),
-                            color: isLocked ? HisingenTheme.semanticGood : .secondary,
+                            color: isLocked ? HisingenTheme.semanticGood : HisingenTheme.inkMuted,
                             symbol: isLocked ? "lock" : "lock.open"
                         )
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
@@ -293,7 +282,7 @@ struct TireStatusCardView: View {
         if reportedCount > 0 {
             return (L10n.text("No warnings reported"), HisingenTheme.semanticGood, "checkmark.circle.fill")
         }
-        return (L10n.text("Data unavailable"), Color.secondary, "questionmark.circle")
+        return (L10n.text("Data unavailable"), HisingenTheme.inkMuted, "questionmark.circle")
     }
 
     var body: some View {
@@ -316,12 +305,12 @@ struct TireStatusCardView: View {
                 if reportsWarningLevelOnly {
                     Text(L10n.text("This vehicle's indirect TPMS reports a warning level per tyre, not an exact pressure reading."))
                         .hisType(.micro)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                     Text(L10n.text("The status comes from the vehicle's API and only changes when an issue is reported. An unflagged tyre means the system has not detected an issue at its last check."))
                         .hisType(.micro)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HisingenTheme.inkMuted)
                         .hisCaptionLeading()
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -408,7 +397,7 @@ struct TirePillView: View {
     private var statusColor: Color {
         attention
             ? HisingenTheme.tyreWarningColor(warningState)
-            : (knownGood ? HisingenTheme.semanticGood : Color.secondary)
+            : (knownGood ? HisingenTheme.semanticGood : HisingenTheme.inkMuted)
     }
 
     private var activeHover: Bool { isHovered || isHighlighted }
@@ -418,7 +407,7 @@ struct TirePillView: View {
         if activeHover {
             return attention ? statusColor.opacity(0.14) : HisingenTheme.accent.opacity(0.10)
         }
-        return Color.primary.opacity(0.035)
+        return HisingenTheme.ink.opacity(0.035)
     }
 
     private var measuredColor: Color {
@@ -451,11 +440,11 @@ struct TirePillView: View {
             if let inferredText {
                 Text(inferredText)
                     .hisType(.micro, weight: .medium)
-                    .foregroundStyle(attention ? statusColor : Color.secondary)
+                    .foregroundStyle(attention ? statusColor : HisingenTheme.inkMuted)
             } else if let referenceText {
                 Text(referenceText)
                     .hisType(.micro, weight: .regular)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
             }
         }
     }
@@ -464,12 +453,11 @@ struct TirePillView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .hisType(.caption, weight: .medium)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HisingenTheme.inkMuted)
             HStack(spacing: 5) {
                 Circle()
                     .fill(statusColor)
                     .frame(width: 6.5, height: 6.5)
-                    .shadow(color: statusColor.opacity(activeHover ? 0.5 : 0), radius: 2)
                     .accessibilityHidden(true)
                 readingView
             }
@@ -484,7 +472,6 @@ struct TirePillView: View {
             RoundedRectangle(cornerRadius: HisingenTheme.statusChipRadius, style: .continuous)
                 .fill(tireFill)
         )
-        .scaleEffect(activeHover ? 1.02 : 1.0)
         // Severity changes recolor the dot and rewrite the status line; the
         // hover animation below only owns the highlight.
         .hisAnimation(Motion.stateChange, value: warningState)
@@ -513,6 +500,8 @@ struct LocationCardView: View {
     let isLive: Bool
     let freshnessText: String
     let reverseGeocoder: ReverseGeocoder
+    var compact = false
+    var onOpenDetails: (() -> Void)? = nil
 
     @State private var streetAddress: String? = nil
     /// True while the reverse geocode is in flight, so the card can say it is looking rather than
@@ -534,6 +523,47 @@ struct LocationCardView: View {
     }
 
     var body: some View {
+        if preferences.privacyRedactionEnabled {
+            Card {
+                Label(L10n.text("Screenshot Privacy Mode"), systemImage: "location.slash")
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+            }
+        } else if compact {
+            compactLocation
+        } else {
+            detailedLocation
+        }
+    }
+
+    private var compactLocation: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                CardHeader(symbol: "location", title: L10n.text("Parking Location"), color: HisingenTheme.inkMuted)
+                Text(streetAddress ?? statusLine)
+                    .hisType(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                if streetAddress != nil && !isLive {
+                    Text(statusLine).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
+                }
+                compactActions
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: "\(lat),\(lon)") { await resolveStreetAddress() }
+    }
+
+    @ViewBuilder
+    private var compactActions: some View {
+        if let url = MapLinks.appleMapsPin(latitude: lat, longitude: lon) {
+            NavigationRow(title: L10n.text("Open in Maps")) { NSWorkspace.shared.open(url) }
+        }
+        if let onOpenDetails {
+            NavigationRow(title: L10n.text("Details"), action: onOpenDetails)
+        }
+    }
+
+    private var detailedLocation: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -555,7 +585,7 @@ struct LocationCardView: View {
                     }
                     Pill(
                         text: isMoving ? L10n.text("Moving") : L10n.text("Parked"),
-                        color: isMoving ? HisingenTheme.semanticActive : .secondary,
+                        color: isMoving ? HisingenTheme.semanticActive : HisingenTheme.inkMuted,
                         symbol: isMoving ? "arrow.up.right.circle" : "parkingsign.circle"
                     )
                 }
@@ -564,7 +594,7 @@ struct LocationCardView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(statusLine)
                             .hisType(.caption, weight: .semibold)
-                            .foregroundStyle(isLive ? .secondary : HisingenTheme.semanticWarning)
+                            .foregroundStyle(isLive ? HisingenTheme.inkMuted : HisingenTheme.semanticWarning)
                             .hisTelemetryValue(statusLine, reduceMotion: reduceMotion)
 
                         if let streetAddress, !streetAddress.isEmpty {
@@ -582,7 +612,7 @@ struct LocationCardView: View {
                                 ProgressView().controlSize(.mini)
                                 Text(L10n.text("Finding the address…"))
                                     .hisType(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(HisingenTheme.inkMuted)
                             }
                             .transition(.opacity)
                         }
@@ -619,7 +649,7 @@ struct LocationCardView: View {
                                             .hisType(.micro, weight: .semibold)
                                     }
                                 }
-                                .foregroundStyle(copiedCoordinates ? HisingenTheme.semanticGood : .secondary)
+                                .foregroundStyle(copiedCoordinates ? HisingenTheme.semanticGood : HisingenTheme.inkMuted)
                             }
                             .buttonStyle(.pressable)
                             .help(L10n.text("Copy Coordinates"))
@@ -641,7 +671,7 @@ struct LocationCardView: View {
                                 if let hum = weather.relativeHumidity {
                                     Text("· \(hum)%")
                                         .hisType(.micro)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(HisingenTheme.inkMuted)
                                 }
                             }
                             .padding(.top, 2)
@@ -651,11 +681,11 @@ struct LocationCardView: View {
                             HStack(spacing: 6) {
                                 Text("\(L10n.text("Speed")): \(Format.speed(kmH: Int(speed.rounded()), unit: preferences.distanceUnit))")
                                     .hisType(.micro)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(HisingenTheme.inkMuted)
                                 if let heading {
                                     Text("· \(Int(heading))°")
                                         .hisType(.micro)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(HisingenTheme.inkMuted)
                                 }
                             }
                         }
@@ -665,12 +695,12 @@ struct LocationCardView: View {
                                 if let altitude {
                                     Text(String(format: "%.0f m %@", locale: L10n.displayLocale, altitude, L10n.text("elevation")))
                                         .hisType(.micro)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(HisingenTheme.inkMuted)
                                 }
                                 if let accuracy {
                                     Text(String(format: "±%.1f m", locale: L10n.displayLocale, accuracy))
                                         .hisType(.micro)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(HisingenTheme.inkMuted)
                                 }
                             }
                         }
@@ -719,10 +749,14 @@ struct LocationCardView: View {
         }
         // Keyed on the coordinates so live-telemetry moves re-geocode; the geocoder's
         // cache keeps repeats at the same spot cheap.
-        .task(id: "\(lat),\(lon)") {
-            isResolvingAddress = true
-            defer { isResolvingAddress = false }
-            streetAddress = await reverseGeocoder.geocode(latitude: lat, longitude: lon)
-        }
+        .task(id: "\(lat),\(lon)") { await resolveStreetAddress() }
+    }
+
+    private func resolveStreetAddress() async {
+        isResolvingAddress = true
+        streetAddress = nil
+        defer { isResolvingAddress = false }
+        let address = await reverseGeocoder.geocode(latitude: lat, longitude: lon)
+        if !Task.isCancelled { streetAddress = address }
     }
 }

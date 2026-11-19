@@ -3,12 +3,7 @@ import Foundation
 /// Times shown for the home charger are the home's, whatever zone the Mac is in.
 enum HomeChargingTime {
     static func time(_ date: Date, in zone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.displayLocale
-        formatter.timeZone = zone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        Format.shortTime(date: date, timeZone: zone)
     }
 
     /// `02:15–04:45`, with the day named when the window is not today in the home's zone.
@@ -24,17 +19,12 @@ enum HomeChargingTime {
     }
 
     static func dateTime(_ date: Date, in zone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.displayLocale
-        formatter.timeZone = zone
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        Format.localizedDateFormatter(dateStyle: .medium, timeZone: zone).string(from: date)
     }
 
     static func range(_ range: DateInterval, in zone: TimeZone) -> String {
         let formatter = DateIntervalFormatter()
-        formatter.locale = L10n.displayLocale
+        formatter.locale = L10n.clockLocale
         formatter.timeZone = zone
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -490,7 +480,7 @@ struct HomeChargingCardModel: Equatable {
             if let plan, plan.isHeld {
                 actions.append(Action(kind: .resume, title: L10n.text("Resume"), isProminent: true, isEnabled: !pending, pendingTitle: nil))
             }
-            actions.append(Action(kind: .chargeNow, title: L10n.text("Charge now"), isProminent: plan?.isHeld != true, isEnabled: canStart,
+            actions.append(Action(kind: .chargeNow, title: L10n.text("Charge Now"), isProminent: plan?.isHeld != true, isEnabled: canStart,
                                   pendingTitle: input.command.kindIs(.start) && pending ? L10n.text("Starting…") : nil))
         case .noCable, .unavailable, .stale, .fault:
             break

@@ -37,6 +37,7 @@ struct WholeRowDisclosureStyle: DisclosureGroupStyle {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
+            .accessibilityValue(configuration.isExpanded ? L10n.text("Expanded") : L10n.text("Collapsed"))
 
             if configuration.isExpanded {
                 configuration.content

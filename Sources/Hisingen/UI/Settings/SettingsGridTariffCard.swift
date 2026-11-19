@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 struct SettingsGridTariffCard: View {
     @ObservedObject var model: HomeChargingModel
+    var onOpenSupplier: (() -> Void)? = nil
 
     @State private var flatText = ""
     @State private var peakText = ""
@@ -42,6 +43,13 @@ struct SettingsGridTariffCard: View {
             }
             .onAppear(perform: loadFields)
             .task(id: comparisonKey) { await loadComparison() }
+        } else if let onOpenSupplier {
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    CardHeader(symbol: "bolt.horizontal", title: L10n.text("Grid Tariff"), color: HisingenTheme.semanticWarning)
+                    NavigationRow(title: L10n.text("Electricity Supplier"), action: onOpenSupplier)
+                }
+            }
         }
     }
 
@@ -59,7 +67,7 @@ struct SettingsGridTariffCard: View {
 
     private var regionPicker: some View {
         HStack {
-            Text(L10n.text("Country")).hisType(.body, weight: .medium).foregroundStyle(HisingenTheme.ink)
+            Text(L10n.text("Grid Tariff Country")).hisType(.body, weight: .medium).foregroundStyle(HisingenTheme.ink)
             Spacer(minLength: 8)
             Picker("", selection: regionBinding) {
                 ForEach(GridTariffRegion.allCases) { region in
@@ -67,7 +75,7 @@ struct SettingsGridTariffCard: View {
                 }
             }
             .labelsHidden()
-            .accessibilityLabel(L10n.text("Country"))
+            .accessibilityLabel(L10n.text("Grid Tariff Country"))
             .controlSize(.small)
             .frame(maxWidth: 200)
         }

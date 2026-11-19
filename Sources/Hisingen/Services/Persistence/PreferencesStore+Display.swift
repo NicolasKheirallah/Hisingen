@@ -4,6 +4,7 @@ import SwiftUI
 
 extension PreferencesStore {
     func lastVehicleLabel(for brand: VehicleBrand) -> String {
+        guard !privacyRedactionEnabled else { return brand.displayName }
         let value = vin(for: brand); guard !value.isEmpty else { return brand.displayName }
         let nick = vehicleNickname(for: value); return nick.isEmpty ? value : nick
     }
@@ -20,6 +21,7 @@ extension PreferencesStore {
         let model = modelName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let year = modelYear?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let modelAndYear = [model.isEmpty ? nil : model, year.isEmpty ? nil : year].compactMap { $0 }.joined(separator: " · ")
+        if privacyRedactionEnabled { return model.isEmpty ? brand.displayName : model }
         let both: String?
         let order: [String]
         switch selected {
@@ -100,6 +102,11 @@ extension PreferencesStore {
         set { d.set(newValue.rawValue, forKey: "energy_consumption_unit") }
     }
 
+    var timeFormat: AppTimeFormat {
+        get { d.string(forKey: AppTimeFormat.storageKey).flatMap(AppTimeFormat.init(rawValue:)) ?? .twentyFourHour }
+        set { d.set(newValue.rawValue, forKey: AppTimeFormat.storageKey) }
+    }
+
     var interfaceLanguage: InterfaceLanguage { get { InterfaceLanguage(rawValue: d.string(forKey: "interface_language") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "interface_language") } }
     var tintMenuBarIcon: Bool { get { d.object(forKey: "tint_menu_bar_icon") == nil || d.bool(forKey: "tint_menu_bar_icon") } set { d.set(newValue, forKey: "tint_menu_bar_icon") } }
     var launchAtLogin: Bool { get { d.bool(forKey: "launch_at_login") } set { d.set(newValue, forKey: "launch_at_login") } }
@@ -118,6 +125,24 @@ extension PreferencesStore {
         }
         let targetBrand = brand ?? activeBrand
         ThemeChoice.assign(theme, scope: .brand(targetBrand), defaults: d)
+    }
+
+    func brandTheme(for brand: VehicleBrand) -> AppTheme {
+        ThemeChoice.brandDefault(for: brand, defaults: d, allowsLegacyTheme: vin(for: brand).isEmpty && brand == activeBrand)
+    }
+
+    func setBrandTheme(_ theme: AppTheme, for brand: VehicleBrand) {
+        d.set(theme.rawValue, forKey: "theme_for_\(brand.rawValue)")
+        syncAppThemeStorageKey()
+    }
+
+    func vehicleThemeOverride(for vin: String) -> AppTheme? {
+        ThemeChoice.vehicleOverride(for: vin, defaults: d)
+    }
+
+    func setVehicleTheme(_ theme: AppTheme?, for vin: String) {
+        ThemeChoice.setVehicleOverride(theme, for: vin, defaults: d)
+        syncAppThemeStorageKey()
     }
 
     var appTheme: AppTheme {

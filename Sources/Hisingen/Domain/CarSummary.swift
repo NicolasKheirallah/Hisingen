@@ -26,10 +26,12 @@ struct CarSummary: Codable, Equatable, Sendable {
         // The store is created inside the isolated body: Swift 6 rejects actor-isolated
         // default-argument expressions, which are evaluated in the caller's context.
         let resolvedPreferences = preferences ?? PreferencesStore()
+        let parts = title.components(separatedBy: " · ")
+        let canUseTitle = !resolvedPreferences.privacyRedactionEnabled
         return resolvedPreferences.formattedVehicleTitle(
             vin: vin,
-            modelName: modelName ?? (title.contains(" · ") ? title.components(separatedBy: " · ").first : title),
-            modelYear: modelYear ?? (title.contains(" · ") ? title.components(separatedBy: " · ").last : nil),
+            modelName: modelName ?? (canUseTitle ? parts.first : nil),
+            modelYear: modelYear ?? (canUseTitle && parts.count > 1 ? parts.last : nil),
             registrationNo: registrationNo,
             format: format
         )

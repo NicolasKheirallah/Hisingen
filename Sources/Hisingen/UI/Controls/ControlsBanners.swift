@@ -10,6 +10,7 @@ struct ControlsBanners: View {
     let isBrandVolvo: Bool
     let showRestrictedNotice: Bool
     var showsVehicleOffline = true
+    var showsCommandReceipts = false
     /// Runs the authorization step a refused command asked for. The banner is where the refusal is
     /// read, so the fix belongs beside it instead of in a sentence about another screen.
     var onAuthorizeRemoteCommands: (() -> Void)? = nil
@@ -34,6 +35,14 @@ struct ControlsBanners: View {
               feedback.targetVIN.map({ $0.caseInsensitiveCompare(state.identity.vin) == .orderedSame }) ?? true,
               feedback.id != dismissedFeedbackID,
               now.timeIntervalSince(feedback.issuedAt) < 45 else {
+            return nil
+        }
+        if showsCommandReceipts, feedback.success, feedback.followUp == nil, feedback.remedy == nil,
+           let commandIdentifier = feedback.commandIdentifier,
+           state.commandState.receipts.contains(where: {
+               $0.commandIdentifier == commandIdentifier
+                   && abs($0.issuedAt.timeIntervalSince(feedback.issuedAt)) <= 5
+           }) {
             return nil
         }
         return feedback
@@ -70,10 +79,10 @@ struct ControlsBanners: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(feedback.title)
                     .hisType(.label, weight: .semibold)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(HisingenTheme.ink)
                 Text(feedback.message)
                     .hisType(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 4)
@@ -104,21 +113,15 @@ struct ControlsBanners: View {
                 .controlSize(.small)
                 .fixedSize()
             }
-            Button {
+            DismissButton {
                 withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
-            } label: {
-                Image(systemName: "xmark")
-                    .hisType(.caption, weight: .bold)
-                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.pressable)
-            .accessibilityLabel(L10n.text("Dismiss"))
         }
         .padding(10)
         .padding(.leading, 2)
         .hisNotice(feedback.success ? HisingenTheme.semanticGood : HisingenTheme.semanticWarning)
         .transition(.move(edge: .top).combined(with: .opacity))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .task(id: feedback.id) {
             guard feedback.success else { return }
             // An undo is only useful while the reader can still act on the result they just saw.
@@ -138,7 +141,7 @@ struct ControlsBanners: View {
                     .hisType(.label, weight: .semibold)
                 Text(L10n.text("Commands may not be delivered until it reconnects."))
                     .hisType(.micro)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HisingenTheme.inkMuted)
             }
             Spacer()
         }
@@ -220,7 +223,7 @@ extension ControlsCommandGate {
                 Text(reason)
                     .hisType(.micro)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(HisingenTheme.inkMuted)
         }
     }
 

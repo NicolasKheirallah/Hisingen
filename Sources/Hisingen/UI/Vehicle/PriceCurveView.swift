@@ -268,10 +268,7 @@ struct PriceCurveView: View {
         if calendar.component(.hour, from: date) == 0 {
             return date.formatted(Date.FormatStyle().weekday(.abbreviated).locale(L10n.displayLocale))
         }
-        let formatter = DateFormatter()
-        formatter.locale = L10n.displayLocale
-        formatter.setLocalizedDateFormatFromTemplate("j")
-        return formatter.string(from: date)
+        return Format.localizedDateFormatter(timeZone: calendar.timeZone, hourOnly: true).string(from: date)
     }
 
     /// The hour and price of one bar, in the unit the caption already names. Says so when the

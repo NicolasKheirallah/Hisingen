@@ -20,18 +20,15 @@ struct SettingsHouseMeterCard: View {
     @State private var selection = ""
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "gauge", title: L10n.text("House Meter"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger."))
-                    .hisType(.caption)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let chosen = meter.meter {
-                    connectedView(chosen)
-                } else {
-                    setupView
-                }
+        SettingsConnectedServiceCard(
+            title: "House Meter",
+            symbol: "gauge",
+            detail: "Optional. Reads your home's electricity use from a Perific monitor, so charging can be shown against the whole house. Hisingen only reads it. Perific keeps balancing the charger."
+        ) {
+            if let chosen = meter.meter {
+                connectedView(chosen)
+            } else {
+                setupView
             }
         }
     }

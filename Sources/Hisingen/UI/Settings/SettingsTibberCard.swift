@@ -7,27 +7,28 @@ import SwiftUI
 @MainActor
 struct SettingsTibberCard: View {
     @ObservedObject var model: HomeChargingModel
-    let binder: PreferenceBinder
 
     @State private var token = ""
     @State private var isConnecting = false
+    @State private var isReplacingToken = false
     @State var homes: [TibberHome]?
     @State var selection = ""
     @State private var failure: String?
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                CardHeader(symbol: "bolt", title: L10n.text("Electricity Supplier"), color: HisingenTheme.semanticGood)
-                Text(L10n.text("Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant."))
-                    .hisType(.caption)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let home = model.tibberHome {
-                    connectedView(home)
-                } else {
+        SettingsConnectedServiceCard(
+            title: "Electricity Supplier",
+            symbol: "bolt",
+            detail: "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant."
+        ) {
+            if let home = model.tibberHome {
+                connectedView(home)
+                if isReplacingToken {
+                    PanelRule()
                     setupView
                 }
+            } else {
+                setupView
             }
         }
     }
@@ -94,36 +95,35 @@ struct SettingsTibberCard: View {
                 KVRow(L10n.text("Prices"), model.tibberProblem ?? L10n.text("Used for the planner and charging sessions"),
                       valueWarning: model.tibberProblem != nil)
             }
-            if let zone = suggestedZone(for: home) {
-                HStack(spacing: 6) {
-                    Image(systemName: "mappin.and.ellipse").hisType(.caption).foregroundStyle(HisingenTheme.accent)
-                    Text(L10n.format("Tibber puts this home in %@", zone.title))
-                        .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted)
-                    Button(L10n.text("Use")) {
-                        binder.preferences.electricityPriceZone = zone
-                        binder.bump()
-                        binder.notify(.presentation)
-                    }
-                    .buttonStyle(.pressable)
-                    .controlSize(.small)
-                    .accessibilityLabel(L10n.format("Use %@", zone.title))
-                }
-            }
-            Text(L10n.text("Tibber's price includes energy, taxes and its markup but not the grid fee. Set your grid tariff in the card below; a paired charger can set its own."))
+            Text(L10n.text("Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff."))
                 .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
-            Button { model.disconnectTibber(); token = ""; homes = nil } label: {
-                Text(L10n.text("Disconnect Tibber")).frame(minHeight: 24)
+            HStack(spacing: 8) {
+                Button(isReplacingToken ? L10n.text("Cancel") : L10n.text("Reconnect Tibber")) {
+                    isReplacingToken.toggle()
+                    if !isReplacingToken { clearDraft() }
+                }
+                .buttonStyle(.hisSecondary)
+                .disabled(isConnecting)
+
+                Button {
+                    model.disconnectTibber()
+                    isReplacingToken = false
+                    clearDraft()
+                } label: {
+                    Text(L10n.text("Disconnect Tibber"))
+                }
+                .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
+                .disabled(isConnecting)
             }
-            .buttonStyle(.hisSecondary(HisingenTheme.semanticCritical))
+            .controlSize(.small)
         }
     }
 
-    /// The zone Tibber reports for the home, when it differs from the one the planner reads market
-    /// prices for. Only offered where Hisingen reads market prices at all.
-    private func suggestedZone(for home: TibberHome) -> ElspotZone? {
-        guard binder.preferences.marketCountry.offersMarketPricing,
-              let zone = home.elspotZone, zone != binder.preferences.electricityPriceZone else { return nil }
-        return zone
+    private func clearDraft() {
+        token = ""
+        homes = nil
+        selection = ""
+        failure = nil
     }
 
     // MARK: Actions
@@ -146,9 +146,8 @@ struct SettingsTibberCard: View {
         guard let home = homes.first(where: { $0.id == selection }) else { return }
         do {
             try model.connectTibber(token: token, home: home)
-            token = ""
-            self.homes = nil
-            failure = nil
+            isReplacingToken = false
+            clearDraft()
         } catch {
             failure = error.localizedDescription
         }

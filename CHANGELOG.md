@@ -3,9 +3,16 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.1] - 2026-11-18
+## [3.0.1] - 2026-11-19
 
 ### Added
+
+- The home charger is a card of its own. It sits right after Charging on Now and Plan by default, and
+  Car or a tab of your own can take it from Add Cards, so you can move, hide or reorder it like any
+  other card. It shows only while you are signed in to the charger's service (the saved NexBlue,
+  Easee or Zaptec login, or the Home Assistant token). Without one it does not draw and Add Cards
+  does not offer it. A card you placed earlier reads "Sign in required" in Settings until you sign
+  in, and a tab you had arranged keeps the charger beside Charging after the update.
 
 - The Charging Planner now follows the contract set in Settings → Electricity instead of always
   planning in whole hours. A 15-minute contract plans in quarter-hour steps, so a charge that needs
@@ -87,7 +94,83 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Show missing prices on the planner's chart. Once tomorrow's prices are due and have not arrived,
   the chart keeps room for them and marks it "Not published yet", where it used to end early.
 
+- Log keeps three more readings and draws them. Battery level is stored whenever it moves a point,
+  when the plug state changes, or after half an hour of quiet, and Battery Health now shows it with
+  the stretches spent plugged in shaded and any software update marked. **Lost While Parked** gives
+  the average loss per day, counted only between two unplugged readings with no trip in between, so
+  it is a floor. The software version is logged when it changes. The energy used since the last
+  charge, split into driving, climate, battery and other, is stored hourly and charted as **Energy
+  Use by Month**. All of it follows the charging-history switch except the software version, and
+  all of it is erased and pruned with the rest of the vehicle's history (a year, or your sample
+  retention).
+- The charging curve card is rebuilt around one shared time axis. Charge level, power, current and
+  voltage are separate charts with the same plot width and one scrub cursor through all four, a
+  charge-target line, an average-power line, a shaded 10 to 80% span, shaded observation gaps and
+  shaded stretches where the car reported zero power. A voltage reading far from the rest stays on
+  the chart as a labelled dot instead of stretching the axis. The figures (energy, added, duration,
+  peak, price) now sit above the charts, and what the charger itself measured and billed is
+  shown with the battery-side energy, any unpriced energy and the cost assumptions.
+- The charging curve card draws the price per kWh through the session as a stepped line on the
+  shared time axis, with the scrub cursor reading it out. A dashed line marks the average weighted
+  by the energy that flowed in each slot, so idle time costs nothing. With Tibber connected the price
+  is Tibber's 15-minute price plus the grid transfer fee, as the session cost uses. Without Tibber,
+  or past the month Tibber keeps, it is the spot price for your zone, with your rate settings added
+  when the rate is automatic. A line under the chart names which one it is.
+- A charging session the home charger measured now leads with **Total Price**: the charger's energy
+  priced at Tibber's rate with the grid fee. It replaces **Tariff Cost**, which priced the
+  battery-side energy at the typed-in rate and could show half the real amount. Sessions with no
+  charger reading say **Estimated Cost** instead. The sessions list shows the same figure. A
+  **Pricing** row says whether the price was worked out per 15 minutes or from the session total.
+- Overlay previous session now has a legend and compares power as well as charge level.
+- When a home charger is paired, the power it reports is stored once a minute during a session and
+  drawn over the car's own power curve.
+- Each charging session takes a short note, shown in the sessions list.
+- Charging Trends adds **Saved vs Fixed Rate** (market-priced sessions against your fixed rate), a
+  peak-power-by-session chart and energy by time of day. Efficiency adds **Cost per 100 km or
+  mi**. Distance adds consumption against temperature, and consumption normalised to 15 °C by
+  month. Each trip shows its energy in kWh. Overview adds **Recording Coverage**, the hours per
+  day Hisingen was running, so a quiet day is not mistaken for an idle car. This Month vs Last
+  shows what the month comes to at the current pace, and Odometer shows battery warranty
+  distance remaining and when the limit is reached at your pace.
+
 ### Changed
+
+- Now puts actionable warnings above the vehicle and the departure link directly below the quick
+  controls. Live charging power and the estimated finish appear together on the Charging control.
+  Open Vehicle details for the latest charging session, the planner, parking and other readings.
+- Plan starts with departure and schedules. Log moves charging sessions and recent activity above
+  longer-term trends. Car puts parking, access, tyres and service ahead of specifications.
+
+- The links on Now that take you to another place (Open in Plan, Battery Diagnostics, Latest
+  Charging Session, the departure check, Details, Open in Maps) are rows with a chevron, like
+  Charger Details, instead of outlined boxes in four widths. Outlined boxes are kept for buttons
+  that act. "Open Charging Controls" and "Open Charging Planner" both said "Controls" or "Planner"
+  for a tab called Plan, and now read "Open in Plan".
+  The same rows now serve Car, Plan and Settings, and "Open History" reads "Open in Log".
+- Command receipts show the green check only when a reading matches; an acknowledged command gets a
+  plain outline. A finished charge says "Charging complete" instead of "Not charging". The charger's
+  Pause, Charge Now and Resume stay on Now beside the link to Plan, and Edit plan is a row. The car
+  chips mark the chosen car with an underline and no longer shift on selection, and the footer's
+  vehicle menu steps aside on Now while the chips list every car. The temperature shows beside the
+  weather symbol. Disclosure rows say whether they are expanded, the footer's update button reads
+  "Update to v…" in the panel's button style, and open doors no longer pulse.
+- Now keeps live readings and quick controls together. Open the full charging planner or departure
+  check in Plan, the latest saved charging session in Log, and parking or battery details in Car.
+  Custom tabs use the same vehicle overview as Now. The tyre schematic defaults to Car. If you
+  placed it on Now or a custom tab, it stays there.
+- Plan puts vehicle timers, Home Assistant charging plans and NexBlue schedules in one list, labelled
+  by where they run. Vehicle and home charger controls keep their own status and actions. Calendar
+  preconditioning, charging auto-start and command routines sit together under Automation.
+- Log groups charging, driving, energy and fuel, cabin readings, and activity. Open a charging
+  session from the list to see its curve, or open the sessions behind a location summary. The export
+  menu distinguishes the selected period, full history and samples from the selected session.
+- Car groups parking and access, vehicle software, battery details, specifications and service.
+  Recent activity opens the full record in Log.
+- Settings search shows the matching cards. Account permissions, sign-out and per-car
+  preferences are under Accounts. Electricity has one price-zone picker, and planner alerts are
+  under Notifications. Tabs & Cards holds layout choices, including Controls on Now. Privacy & Data
+  holds redaction, command authentication, retention and backups. Hiding a card now leaves its
+  data-fetch preference alone.
 
 - Start the main fuse on a Vattenfall grid tariff from the fuse your Tibber home reports, instead
   of the usual 25 A. It can still be changed, and the fixed yearly fee follows it.
@@ -145,7 +228,25 @@ backup files keep their columns, number formats and quoting.
 - Share one cancellation check across the Polestar provider's catch blocks and map an
   unrecognized error without a per-brand switch whose two branches were identical.
 
+- Every Log chart uses one time axis that follows the Time Format setting (it printed bare hour
+  numbers before), one trailing value axis with the unit above it, flat fills and square bars. The
+  scrub cursor is on most time-series charts instead of four, and it no longer redraws the whole
+  dashboard.
+- The charging curve draws every series as a step that holds its last reported value. Power used to
+  be drawn linearly, which drew dips to zero between two samples that looked like real events.
+- Consumption and fuel charts plot in the unit you chose. They plotted kWh/100 km and L/100 km
+  under a header already converted to mi/kWh or mpg.
+- The Charge level trace draws each charge from where it started to where it ended and fits its
+  range to the data when the charges cover less than 60 points.
+- Tyre lines draw rear tyres dashed and front solid, and the tyre the leak check suspects heavier,
+  because two of the four theme colours are near-identical greys in Monochrome Precision.
+- Charging charts use one colour per quantity (charge level, power, current, voltage).
+
 ### Fixed
+
+- Daily charging timers now appear on Plan and save without sending weekday selections the car
+  rejects.
+- The sign-out confirmation now says when signing out will erase local vehicle history.
 
 - Fixed a sign-in prompt that could appear after a restart or app update while Hisingen restored
   a saved Polestar or Volvo session. If you open the menu bar panel while it connects, it shows
@@ -181,6 +282,13 @@ backup files keep their columns, number formats and quoting.
   every row each second, searches large payloads without copying them, and filters off the main
   thread. Requests that share a timestamp are separate rows, so expanding one no longer opens the
   others.
+
+- The "Limited data" warning no longer appears on every charging curve. It judged a session of a
+  few hours by a rule that needs two weeks.
+- Cabin temperature breaks at stretches with no readings, as its caption says, and its setpoint has
+  a legend.
+- The hour-of-day histogram no longer cuts its first and last bars in half.
+- Chart legends and the data-confidence note moved up from 8pt to 10pt.
 
 ### Removed
 

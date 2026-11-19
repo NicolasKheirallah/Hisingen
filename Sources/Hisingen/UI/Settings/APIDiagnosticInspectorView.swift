@@ -70,6 +70,7 @@ struct APIDiagnosticInspectorFilter: Equatable, Sendable {
 /// broaden what the application retains.
 @MainActor
 struct APIDiagnosticInspectorView: View {
+    @AppStorage(AppTimeFormat.storageKey) private var timeFormat: AppTimeFormat = .twentyFourHour
     let store: APIDiagnosticLogStore
 
     @Environment(\.dismiss) private var dismiss
@@ -248,7 +249,8 @@ struct APIDiagnosticInspectorView: View {
                             } else if entry.errorType != nil {
                                 Image(systemName: "wifi.exclamationmark").foregroundStyle(HisingenTheme.semanticWarning)
                             }
-                            Text(entry.timestamp, style: .time)
+                            Text(Format.localizedDateFormatter(locale: timeFormat.locale(basedOn: L10n.displayLocale))
+                                .string(from: entry.timestamp))
                                 .hisType(.caption, design: .monospaced).monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }

@@ -20,6 +20,24 @@ struct TabCompositionTests {
     }
 
     @Test
+    func sharedCardMigrationKeepsOrderAndTabVisibility() {
+        var stored = TabComposition()
+        stored.version = 3
+        stored.tabContents[TabRef.vehicle.storageKey] = [
+            .vehicleHero, .vehicleChargingPlanner, .controlsChargingPlanner, .vehicleReceipts
+        ]
+        stored.hiddenItems = [.vehicleChargingPlanner, .controlsReceipts]
+        let migrated = stored.normalized()
+
+        #expect(migrated.items(for: .vehicle) == [.vehicleHero, .controlsChargingPlanner, .vehicleReceipts])
+        #expect(migrated.isHidden(.controlsChargingPlanner, on: .vehicle))
+        #expect(!migrated.isHidden(.controlsChargingPlanner, on: .controls))
+        #expect(migrated.isHidden(.vehicleReceipts, on: .controls))
+        #expect(!migrated.isHidden(.vehicleReceipts, on: .vehicle))
+        #expect(migrated.normalized() == migrated)
+    }
+
+    @Test
     func everyShippedTabLayoutOnlyNamesCataloguedItemsAndListsEachOnce() {
         for tab in BuiltInTab.allCases {
             let layout = TabItemCatalog.defaultItems(for: tab)
@@ -27,7 +45,7 @@ struct TabCompositionTests {
             for id in layout {
                 let entry = TabItemCatalog.item(id)
                 #expect(entry != nil, "\(tab.rawValue) names uncatalogued item \(id.rawValue)")
-                #expect(entry?.sourceTab == tab,
+                #expect(entry?.sourceTab == tab || TabItemCatalog.isStandalone(id),
                         "\(id.rawValue) is in \(tab.rawValue)'s shipped layout but claims \(entry?.sourceTab.rawValue ?? "nothing")")
             }
         }
@@ -39,8 +57,8 @@ struct TabCompositionTests {
         // by accident, and one the composition cannot be tested against.
         for item in TabItemCatalog.all {
             let layout = TabItemCatalog.defaultItems(for: item.sourceTab)
-            #expect(layout.contains(item.id),
-                    "\(item.id.rawValue) is not in the shipped \(item.sourceTab.rawValue) layout")
+            #expect(layout.contains(item.id) || TabItemCatalog.isStandalone(item.id),
+                    "\(item.id.rawValue) is neither placed by default nor available to add")
         }
     }
 
@@ -83,8 +101,8 @@ struct TabCompositionTests {
                         "\(id.rawValue) is on \(tab.rawValue) but that tab cannot render it")
             }
             for item in TabItemCatalog.items(in: tab) {
-                #expect(layout.contains(item.id),
-                        "\(item.id.rawValue) has no place in \(tab.rawValue)'s shipped layout")
+                #expect(layout.contains(item.id) || TabItemCatalog.canRender(item.id, on: reference),
+                        "\(item.id.rawValue) has no renderer on \(tab.rawValue)")
             }
         }
     }
@@ -730,7 +748,33 @@ struct TabCompositionTests {
         #expect(!migrated.items(for: .controls).contains(.controlsAccess))
         #expect(!migrated.items(for: .controls).contains(.controlsWindowsLocate))
         #expect(!migrated.items(for: .controls).contains(.controlsOTA))
-        #expect(migrated.version == 3)
+        #expect(migrated.version == 5)
+    }
+
+    @Test
+    func anArrangedTabKeepsTheHomeChargerBesideCharging() {
+        var composition = TabComposition.default
+        composition.version = 4
+        composition.tabContents[TabRef.vehicle.storageKey] = [.vehicleHero, .vehicleCharging, .vehicleReadiness]
+        composition.tabContents[TabRef.controls.storageKey] = [.controlsClimate, .controlsCharging]
+        composition.tabContents["custom:mine"] = [.vehicleCharging, .vehicleHero]
+        composition.customTabs = [CustomTab(id: "mine", name: "Mine", symbol: "square.grid.2x2")]
+        let migrated = composition.normalized()
+        #expect(migrated.items(for: .vehicle) == [.vehicleHero, .vehicleCharging, .vehicleHomeCharger, .vehicleReadiness])
+        #expect(migrated.items(for: .controls) == [.controlsClimate, .controlsCharging, .vehicleHomeCharger])
+        #expect(migrated.items(for: .custom("mine")) == [.vehicleCharging, .vehicleHomeCharger, .vehicleHero])
+        #expect(migrated.version == 5)
+    }
+
+    @Test
+    func aSwitchedOffChargingCardTakesTheHomeChargerWithIt() {
+        var composition = TabComposition.default
+        composition.version = 4
+        composition.hiddenItems = [.vehicleCharging, .controlsCharging]
+        let migrated = composition.normalized()
+        #expect(migrated.isHidden(.vehicleHomeCharger, on: .vehicle))
+        #expect(migrated.isHidden(.vehicleHomeCharger, on: .controls))
+        #expect(!migrated.visibleItems(for: .vehicle).contains(.vehicleHomeCharger))
     }
 
     @Test
@@ -756,7 +800,7 @@ struct TabCompositionTests {
 
         let repaired = composition.normalized()
         #expect(repaired.items(for: .vehicle) == [.vehicleHero])
-        #expect(repaired.items(for: .controls) == [.controlsBanners, .controlsReceipts])
+        #expect(repaired.items(for: .controls) == [.controlsBanners, .vehicleReceipts])
     }
 
     @Test
@@ -793,6 +837,21 @@ struct TabCompositionTests {
         // Everything else is where it always was.
         #expect(composition.shows(.vehicleTyres))
         #expect(composition.items(for: .vehicle) == TabItemCatalog.defaultItems(for: .vehicle))
+    }
+
+    @Test
+    func optingIntoThePlannerKeepsBothDefaultPlacements() {
+        let scoped = ScopedPreferences(label: "tab-opt-in-planner")
+        let store = scoped.store
+        #expect(!store.features.contains(.smartChargingPlanner))
+        store.tabComposition = store.tabComposition
+
+        var features = store.features
+        features.set(.smartChargingPlanner, enabled: true)
+        store.features = features
+
+        #expect(store.tabComposition.visibleItems(for: .controls).contains(.controlsChargingPlanner))
+        #expect(store.tabComposition.visibleItems(for: .vehicle).contains(.controlsChargingPlanner))
     }
 
     @Test
@@ -955,13 +1014,14 @@ struct TabCompositionTests {
         // shipped card would come straight back.
         var composition = TabComposition.default
         let shipped = composition.items(for: .vehicle)
-        for item in shipped { composition.setItem(item, shown: false) }
+        for item in shipped { composition.setItem(item, shown: false, on: .vehicle) }
 
         let layout = TabLayout.resolve(composition, for: .vehicle)
         #expect(layout.items.isEmpty)
         for item in shipped { #expect(!layout.draws(item)) }
         // The arrangement survives, so "Show All" is a filter away rather than a rebuild.
         #expect(composition.items(for: .vehicle) == shipped)
+        #expect(composition.shows(.controlsChargingPlanner, on: .controls))
     }
 
     @Test
@@ -1122,5 +1182,69 @@ struct TabCompositionTests {
         // A value that no longer decodes falls back to the shipped layout rather than the memo.
         scoped.defaults.set(Data("not json".utf8), forKey: PreferencesStore.tabCompositionKey)
         #expect(store.tabComposition == .default)
+    }
+
+    // MARK: - Updates keep the reader's arrangement
+
+    @Test
+    func unknownCardIDsDropOutAloneInsteadOfResettingTheLayout() throws {
+        let json = """
+        {"version":3,
+         "tabContents":{"builtin:vehicle":["vehicle-hero","cardFromTheFuture","vehicle-charging"]},
+         "hiddenItems":["vehicle-weather","cardFromTheFuture"],
+         "hiddenPlacements":{"builtin:info":["info-weather","cardFromTheFuture"]},
+         "hiddenTabs":["history","tabFromTheFuture"],
+         "customTabs":[{"id":"mine","name":"Mine"}],
+         "tabOrder":["custom:mine","builtin:vehicle"]}
+        """
+        let decoded = try JSONDecoder().decode(TabComposition.self, from: Data(json.utf8)).normalized()
+
+        #expect(decoded.items(for: .vehicle) == [.vehicleHero, .vehicleCharging, .vehicleHomeCharger])
+        #expect(decoded.hiddenItems.contains(.vehicleWeather))
+        #expect(decoded.hiddenTabs == [.history])
+        #expect(decoded.customTabs.map(\.id) == ["mine"])
+        #expect(decoded.customTabs.first?.symbol == "square.grid.2x2")
+        #expect(decoded.tabOrder == ["custom:mine", "builtin:vehicle"])
+    }
+
+    @Test
+    func aStoredArrangementSurvivesAReadAndWriteByANewerBuild() throws {
+        let scoped = ScopedPreferences(label: "tab-update")
+        let store = scoped.store
+
+        var mine = TabComposition()
+        mine.version = 3
+        mine.tabContents[TabRef.history.storageKey] = [.historyOverview, .historyTrips, .historyMonth]
+        mine.hiddenItems = [.historyWarnings]
+        mine.hiddenTabs = [.info]
+        let custom = mine.addCustomTab(name: "Garage")
+        mine.setItems([.vehicleHero, .vehicleCharging], for: custom)
+        scoped.defaults.set(try JSONEncoder().encode(mine), forKey: PreferencesStore.tabCompositionKey)
+
+        let read = store.tabComposition
+        #expect(read.items(for: .history) == [.historyOverview, .historyTrips, .historyMonth])
+        #expect(read.hiddenItems.contains(.historyWarnings))
+        #expect(read.hiddenTabs == [.info])
+        #expect(read.items(for: custom) == [.vehicleHero, .vehicleCharging, .vehicleHomeCharger])
+
+        store.tabComposition = read
+        #expect(store.tabComposition == read, "writing the migrated layout back changes nothing")
+        #expect(store.tabComposition.version == TabComposition().version)
+    }
+
+    @Test
+    func aLayoutThatCannotBeReadIsKeptBeforeTheShippedOneReplacesIt() {
+        let scoped = ScopedPreferences(label: "tab-unreadable")
+        let store = scoped.store
+        let original = Data("{\"tabContents\": 7}".utf8)
+        scoped.defaults.set(original, forKey: PreferencesStore.tabCompositionKey)
+
+        #expect(store.tabComposition == .default)
+        #expect(scoped.defaults.data(forKey: PreferencesStore.unreadableTabCompositionKey) == original)
+
+        var edited = TabComposition()
+        edited.hiddenTabs = [.history]
+        store.tabComposition = edited
+        #expect(scoped.defaults.data(forKey: PreferencesStore.unreadableTabCompositionKey) == original)
     }
 }

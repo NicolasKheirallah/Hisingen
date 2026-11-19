@@ -20,7 +20,7 @@ struct PlanDeparture: View {
                 set: { checkedDeparture = $0 })
     }
 
-    private func dayText(_ date: Date) -> String {
+    static func dayText(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return L10n.text("Today") }
         if calendar.isDateInTomorrow(date) { return L10n.text("Tomorrow") }
@@ -45,7 +45,7 @@ struct PlanDeparture: View {
                     .monospacedDigit()
                     .foregroundStyle(HisingenTheme.ink)
                     .contentTransition(.numericText())
-                Text(dayText(when))
+                Text(Self.dayText(when))
                     .hisType(.subhead)
                     .foregroundStyle(HisingenTheme.inkMuted)
                 Spacer(minLength: 0)
@@ -118,13 +118,6 @@ struct PlanDayTimeline: View {
         }
     }
 
-    private var hourFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.displayLocale
-        formatter.setLocalizedDateFormatFromTemplate("j")
-        return formatter
-    }
-
     private var spokenSummary: String {
         entries.compactMap { entry -> String? in
             guard let next = entry.next, next.timeIntervalSince(now) < Self.span else { return nil }
@@ -170,7 +163,7 @@ struct PlanDayTimeline: View {
                 ZStack(alignment: .topLeading) {
                     ForEach([0, 6, 12, 18, 24], id: \.self) { hours in
                         let date = now.addingTimeInterval(Double(hours) * 3_600)
-                        Text(hours == 0 ? L10n.text("Now") : hourFormatter.string(from: date))
+                        Text(hours == 0 ? L10n.text("Now") : Format.localizedDateFormatter(hourOnly: true).string(from: date))
                             .hisType(.micro)
                             .monospacedDigit()
                             .foregroundStyle(HisingenTheme.inkMuted)

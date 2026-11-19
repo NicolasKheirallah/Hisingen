@@ -262,18 +262,18 @@ final class AccountConnectionModel: ObservableObject {
     /// nothing to do: an unvalidated Polestar form or an empty portal client ID
     /// short-circuits without touching feedback or the shell.
     @discardableResult
-    func savePolestar(mode: PolestarConnectionMode) -> PolestarSaveOutcome? {
+    func savePolestar(mode: PolestarConnectionMode, saveNickname: Bool = true) -> PolestarSaveOutcome? {
         switch mode {
         case .augmented:
             preferences.polestarConnectionMode = .augmented
-            let outcome = combining(savePolestarIDCredentials(savingAs: .augmented),
-                                    saveDataPortalCredentials(savingAs: .augmented))
+            let outcome = combining(savePolestarIDCredentials(savingAs: .augmented, saveNickname: saveNickname),
+                                    saveDataPortalCredentials(savingAs: .augmented, saveNickname: saveNickname))
             preferences.polestarConnectionMode = .augmented
             return outcome
         case .dataPortal:
-            return saveDataPortalCredentials(savingAs: .dataPortal)
+            return saveDataPortalCredentials(savingAs: .dataPortal, saveNickname: saveNickname)
         case .polestarID:
-            return savePolestarIDCredentials(savingAs: .polestarID)
+            return savePolestarIDCredentials(savingAs: .polestarID, saveNickname: saveNickname)
         }
     }
 
@@ -291,7 +291,7 @@ final class AccountConnectionModel: ObservableObject {
         }
     }
 
-    private func savePolestarIDCredentials(savingAs mode: PolestarConnectionMode) -> PolestarSaveOutcome? {
+    private func savePolestarIDCredentials(savingAs mode: PolestarConnectionMode, saveNickname: Bool) -> PolestarSaveOutcome? {
         let trimmedEmail = draft.polestarEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         // Clearing the email field is a removal, not a no-op: previously an empty
         // email failed validation and left the Keychain untouched, so "deleting
@@ -347,14 +347,14 @@ final class AccountConnectionModel: ObservableObject {
         preferences.email = normalizedEmail
         preferences.setVin(upperVIN, for: .polestar)
         preferences.clearExplicitSignOut(for: .polestar)
-        if !nicknameVIN.isEmpty {
+        if saveNickname, !nicknameVIN.isEmpty {
             preferences.setVehicleNickname(draft.polestarNickname, for: nicknameVIN)
         }
         return PolestarSaveOutcome(saved: true, keychainError: nil,
                                    effect: credentialsChanged ? .credentialsChanged : .presentationOnly)
     }
 
-    private func saveDataPortalCredentials(savingAs mode: PolestarConnectionMode) -> PolestarSaveOutcome? {
+    private func saveDataPortalCredentials(savingAs mode: PolestarConnectionMode, saveNickname: Bool) -> PolestarSaveOutcome? {
         let trimmedID = draft.polestarDataPortalClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSecret = draft.polestarDataPortalClientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAccountID = draft.polestarDataPortalAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -415,7 +415,7 @@ final class AccountConnectionModel: ObservableObject {
         preferences.setVin(upperVIN, for: .polestar)
         preferences.clearExplicitSignOut(for: .polestar)
         let nickVIN = !upperVIN.isEmpty ? upperVIN : preferences.vin(for: .polestar)
-        if !nickVIN.isEmpty {
+        if saveNickname, !nickVIN.isEmpty {
             preferences.setVehicleNickname(draft.polestarNickname, for: nickVIN)
         }
         return PolestarSaveOutcome(saved: true, keychainError: nil, effect: .credentialsChanged)
@@ -434,7 +434,7 @@ final class AccountConnectionModel: ObservableObject {
     /// developer keys), records the identity fields, and drops the plaintext secrets
     /// from the draft so they do not outlive the handoff. nil when the VIN does not
     /// pass validation.
-    func beginVolvoSignIn() -> VolvoSignInRequest? {
+    func beginVolvoSignIn(saveNickname: Bool = true) -> VolvoSignInRequest? {
         guard SettingsValidation.isValidOptionalVIN(draft.volvoVIN) else { return nil }
         let upperVIN = draft.volvoVIN.normalizedVIN
         let trimmedClientID = draft.volvoClientID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -442,16 +442,15 @@ final class AccountConnectionModel: ObservableObject {
         preferences.volvoClientID = trimmedClientID
         preferences.setVin(upperVIN, for: .volvo)
         preferences.clearExplicitSignOut(for: .volvo)
-        if !upperVIN.isEmpty {
-            preferences.setVehicleNickname(draft.volvoNickname, for: upperVIN)
-        } else if !oldVIN.isEmpty {
-            preferences.setVehicleNickname(draft.volvoNickname, for: oldVIN)
+        let nicknameVIN = upperVIN.isEmpty ? oldVIN : upperVIN
+        if saveNickname, !nicknameVIN.isEmpty {
+            preferences.setVehicleNickname(draft.volvoNickname, for: nicknameVIN)
         }
         let request = VolvoSignInRequest(
             clientID: !trimmedClientID.isEmpty ? trimmedClientID : builtinCredentials.volvoClientID,
             clientSecret: !draft.volvoClientSecret.isEmpty ? draft.volvoClientSecret : builtinCredentials.volvoClientSecret,
             vccApiKey: !draft.volvoApiKey.isEmpty ? draft.volvoApiKey : builtinCredentials.volvoAPIKey,
-            nickname: draft.volvoNickname)
+            nickname: saveNickname ? draft.volvoNickname : "")
         draft.volvoClientSecret = ""
         draft.volvoApiKey = ""
         return request

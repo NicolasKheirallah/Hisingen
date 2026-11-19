@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The home charger's part of the charging card: what the charger itself reports, next to what the
+/// The home charger's section: what the charger itself reports, next to what the
 /// car reports, with the plan Home Assistant is running and the two actions that matter.
 ///
 /// Design read: a spec-sheet section for a desk instrument, flat and square on the panel, ink for
@@ -12,6 +12,8 @@ import SwiftUI
 struct HomeChargerSection: View {
     let state: VehicleState
     @ObservedObject var model: HomeChargingModel
+    var showsScheduleActions = true
+    var onOpenPlan: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsPlanEditor = false
@@ -84,13 +86,26 @@ struct HomeChargerSection: View {
                 .hisType(.micro)
                 .foregroundStyle(HisingenTheme.inkMuted)
         }
-        if !card.actions.isEmpty {
+        // The buttons that act on the charger stay where the reader is, with or without a link to
+        // Plan. Editing the plan is a place to go, so it is a row, not another command box.
+        let commands = card.actions.filter { $0.kind != .editPlan }
+        if !commands.isEmpty {
             HStack(spacing: 8) {
-                ForEach(card.actions) { action in actionButton(action) }
+                ForEach(commands) { action in actionButton(action) }
             }
             .padding(.top, 2)
         }
-        if input.pairing.source == .nexBlue, input.pairing.canControlSchedule {
+        if showsScheduleActions, card.actions.contains(where: { $0.kind == .editPlan }) {
+            NavigationRow(title: L10n.text("Edit plan")) { showsPlanEditor = true }
+        }
+        if let onOpenPlan {
+            NavigationRow(
+                title: L10n.text("Open in Plan"),
+                accessibilityName: "\(L10n.text("Open in Plan")), \(card.title)",
+                action: onOpenPlan
+            )
+        }
+        if showsScheduleActions, input.pairing.source == .nexBlue, input.pairing.canControlSchedule {
             Button(L10n.text("Cheapest overnight charge")) { showsNexBlueTimer = true }
                 .buttonStyle(.hisSecondary)
                 .disabled(input.link != .live)
@@ -145,21 +160,12 @@ struct HomeChargerSection: View {
             }
             Spacer(minLength: 0)
             if dismissable {
-                Button { model.dismissCommandResult() } label: {
-                    Image(systemName: "xmark")
-                        .hisType(.caption, weight: .semibold)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.pressable)
-                .foregroundStyle(HisingenTheme.inkMuted)
-                .accessibilityLabel(L10n.text("Dismiss"))
-                .help(L10n.text("Dismiss"))
+                DismissButton { model.dismissCommandResult() }
             }
         }
         .padding(9)
         .hisNotice(tint)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -186,6 +192,29 @@ struct HomeChargerSection: View {
         case .pause: Task { await model.send(.pause) }
         case .resume: Task { try? await model.resumePlan() }
         case .editPlan: showsPlanEditor = true
+        }
+    }
+}
+
+
+/// The catalogued Home charger card, so it is placed, ordered and hidden like any other card.
+///
+/// It draws only for a signed-in, paired charger that belongs on this car (`shouldShow`), so on an
+/// install without one it leaves no gap.
+@MainActor
+struct HomeChargerCard: View {
+    let state: VehicleState
+    /// Where the schedule actions live. A card that links to Plan leaves them there.
+    var onOpenPlan: (() -> Void)? = nil
+
+    @Environment(\.homeCharging) private var homeCharging
+
+    var body: some View {
+        if let homeCharging {
+            HomeChargerSection(
+                state: state, model: homeCharging,
+                showsScheduleActions: onOpenPlan == nil, onOpenPlan: onOpenPlan
+            )
         }
     }
 }

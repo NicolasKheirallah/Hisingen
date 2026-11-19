@@ -8,8 +8,16 @@ import SwiftUI
 @MainActor
 struct SettingsElectricityCard: View {
     let binder: PreferenceBinder
+    var state: VehicleState? = nil
+    var tibberZone: ElspotZone? = nil
 
     private var preferences: PreferencesStore { binder.preferences }
+
+    private var suggestedZone: ElspotZone? {
+        guard let latitude = state?.location?.latitude else { return nil }
+        let zone = ChargingPlannerSupport.suggestedZone(latitude: latitude)
+        return zone == preferences.electricityPriceZone ? nil : zone
+    }
 
     var body: some View {
         Card {
@@ -38,14 +46,78 @@ struct SettingsElectricityCard: View {
                     .frame(maxWidth: 160)
                 }
 
+                if preferences.marketCountry.offersMarketPricing {
+                    priceZoneSection
+                }
+
                 Divider().opacity(HisingenTheme.dividerOpacity)
 
                 SettingsElectricityRateSection(
                     binder: binder,
                     offersAutomatic: preferences.marketCountry.offersMarketPricing
                 )
+
+                Divider().opacity(HisingenTheme.dividerOpacity)
+                SettingsGridCarbonSection(binder: binder)
             }
         }
         .hisAnimation(Motion.layout, value: preferences.marketCountry)
+    }
+    @ViewBuilder
+    private var priceZoneSection: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L10n.text("Price Zone"))
+                    .hisType(.body, weight: .medium)
+                Text(L10n.text("Used for spot prices and when Tibber prices are unavailable."))
+                    .hisType(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Picker(L10n.text("Electricity price zone"), selection: binder(\.electricityPriceZone, .features)) {
+                ForEach(ElspotZone.allCases) { zone in
+                    Text(zone.title).tag(zone)
+                }
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(maxWidth: 160)
+        }
+
+        if let tibberZone, tibberZone != preferences.electricityPriceZone {
+            zoneSuggestion(tibberZone, message: L10n.format("Tibber puts this home in %@", tibberZone.title))
+        }
+        if let suggestedZone, suggestedZone != tibberZone {
+            zoneSuggestion(suggestedZone, message: L10n.format("The vehicle's location suggests %@", suggestedZone.title))
+        }
+    }
+
+    private func zoneSuggestion(_ zone: ElspotZone, message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "location")
+                .hisType(.caption)
+                .accessibilityHidden(true)
+            Text(message)
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+            Button(L10n.text("Use")) {
+                binder(\.electricityPriceZone, .features).wrappedValue = zone
+            }
+            .buttonStyle(.hisSecondary)
+            .controlSize(.small)
+            .accessibilityLabel(L10n.format("Use %@", zone.title))
+        }
+    }
+}
+
+@MainActor
+struct SettingsElectricityWithSupplier: View {
+    @ObservedObject var model: HomeChargingModel
+    let binder: PreferenceBinder
+    let state: VehicleState?
+
+    var body: some View {
+        SettingsElectricityCard(binder: binder, state: state, tibberZone: model.tibberHome?.elspotZone)
     }
 }

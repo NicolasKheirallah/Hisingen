@@ -1,5 +1,69 @@
 import SwiftUI
 
+struct NowWeatherButton: View {
+    let state: VehicleState
+    let weather: VehicleWeather
+
+    @Environment(\.preferencesStore) private var preferences
+    @State private var showsDetails = false
+
+    private var symbol: String {
+        switch weather.condition?.lowercased() {
+        case "clear": "sun.max"
+        case "overcast", "cloudy": "cloud"
+        case "fog": "cloud.fog"
+        case "drizzle": "cloud.drizzle"
+        case "rain", "rain showers": "cloud.rain"
+        case "freezing rain", "freezing drizzle": "cloud.sleet"
+        case "snow", "snow grains", "snow showers": "cloud.snow"
+        case "thunderstorm": "cloud.bolt.rain"
+        default: "cloud.sun"
+        }
+    }
+
+    /// The figure the symbol stands for, so the reader does not have to open the popover for it.
+    private var temperatureText: String? {
+        weather.temperatureCelsius.map { Format.temperature(celsius: $0, unit: preferences.temperatureUnit) }
+    }
+
+    private var summary: String {
+        let condition = weather.condition.flatMap { $0.isEmpty ? nil : L10n.text($0) }
+        let temperature = weather.temperatureCelsius.map {
+            Format.temperature(celsius: $0, unit: preferences.temperatureUnit)
+        }
+        let values = [condition, temperature].compactMap { $0 }
+        let context = state.hasLastKnownWeather ? [L10n.text("Last known readings")] : []
+        return (context + values).joined(separator: " · ")
+    }
+
+    var body: some View {
+        Button {
+            showsDetails.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .hisType(.title)
+                if let temperatureText {
+                    Text(temperatureText)
+                        .hisType(.subhead)
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .frame(minWidth: 36, minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(L10n.text("Ambient Conditions"))
+        .accessibilityValue(summary)
+        .help(summary.isEmpty ? L10n.text("Ambient Conditions") : summary)
+        .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
+            NowWeatherReadout(state: state)
+                .frame(width: 310)
+        }
+    }
+}
+
 struct NowWeatherReadout: View {
     let state: VehicleState
 
