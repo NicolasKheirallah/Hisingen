@@ -29,6 +29,18 @@ struct URLCommandRouterHardeningTests {
 
     @Test
     @MainActor
+    func reducedGuardAndHornHaveTheirOwnRoutes() {
+        // `honk` stays an alias for honk-and-flash; `horn` is the horn-only link, and reduced
+        // guard used to have no route at all even though the command exists for Volvo.
+        let context = HardeningRouterContext(activeBrand: .volvo)
+        let router = URLCommandRouter(context: context)
+        router.route(URL(string: "hisingen://lock-reduced-guard")!)
+        router.route(URL(string: "hisingen://horn")!)
+        #expect(context.commands == [.lockReducedGuard, .honkHorn])
+    }
+
+    @Test
+    @MainActor
     func unknownHisingenCommandsAreRefusedWithANotice() {
         let context = HardeningRouterContext(activeBrand: .volvo)
         let router = URLCommandRouter(context: context)

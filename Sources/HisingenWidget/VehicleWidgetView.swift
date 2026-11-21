@@ -111,6 +111,7 @@ struct VehicleWidgetEntryView: View {
     private var content: some View {
         switch family {
         case .systemMedium: medium
+        case .systemLarge: large
         default: small
         }
     }
@@ -168,6 +169,42 @@ struct VehicleWidgetEntryView: View {
                     FigureOverLabel(figure: departure, label: departureLabel, size: 15, alignment: .trailing)
                 }
             }
+            Hairline()
+            if let charging = chargingText {
+                ChargingLine(text: charging, isLive: isChargingLive)
+            }
+        }
+    }
+
+    // MARK: systemLarge
+
+    /// The large family exists for readers who keep the widget on the desktop and want the
+    /// charging line plus the departure without hovering. It is the medium layout with room to
+    /// breathe, not a second information model: every value still comes from the app's snapshot.
+    private var large: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                titleRow
+                Spacer(minLength: 8)
+                if let status = statusLine {
+                    Text(status)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .foregroundStyle(WidgetPalette.muted(colorScheme))
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(alignment: .bottom, spacing: 24) {
+                FigureOverLabel(figure: batteryFigure, label: batteryLabel, size: 44)
+                if let range = entry.snapshot?.rangeText {
+                    FigureOverLabel(figure: range, label: rangeLabel, size: 44)
+                }
+                Spacer(minLength: 0)
+                if let departure = entry.snapshot?.departureText {
+                    FigureOverLabel(figure: departure, label: departureLabel, size: 18, alignment: .trailing)
+                }
+            }
+            Spacer(minLength: 0)
             Hairline()
             if let charging = chargingText {
                 ChargingLine(text: charging, isLive: isChargingLive)

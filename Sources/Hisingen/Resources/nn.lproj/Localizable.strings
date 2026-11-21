@@ -4004,3 +4004,10 @@
 "The command expired before the vehicle acted on it." = "Kommandoen gjekk ut før bilen rakk å utføre han.";
 "The vehicle reported a problem with this command." = "Bilen rapporterte eit problem med denne kommandoen.";
 "This vehicle does not support this command." = "Denne bilen støttar ikkje denne kommandoen.";
+
+// English fallback values pending translation
+"Services" = "Tenester";
+"Help" = "Hjelp";
+"Hisingen Help" = "Hisingen-hjelp";
+"Minimize" = "Minimer";
+"Bring All to Front" = "Legg alle framfor";

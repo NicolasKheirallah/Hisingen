@@ -1,4 +1,5 @@
 import AppKit
+import CoreSpotlight
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -234,10 +235,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         _ = flushed.wait(timeout: .now() + 2)
     }
 
-    /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen.
+    /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen on that
+    /// car. The index key is a digest, never the VIN, so the match is resolved against the
+    /// vehicles this Mac already knows — otherwise two indexed cars both landed on whichever
+    /// one happened to be active.
     func application(_ application: NSApplication, continue userActivity: NSUserActivity,
                      restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
         guard SpotlightIndexer.isHisingenActivity(userActivity) else { return false }
+        let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+        let known = VehicleBrand.allCases.flatMap { preferences.knownVINs(for: $0) }
+        if let identifier,
+           let vin = SpotlightIndexer.vin(forActivityIdentifier: identifier, among: known) {
+            NSApp.activate(ignoringOtherApps: true)
+            selectVehicle(vin: vin)
+        }
         statusController.togglePopover()
         return true
     }

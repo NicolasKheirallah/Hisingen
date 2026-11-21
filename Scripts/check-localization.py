@@ -47,7 +47,9 @@ UNIT_WORDS = {
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}
 # Exact values that are intentionally identical to English. "Tariff" is the word in Swedish,
 # Norwegian bokmål and Nynorsk as well, so translating it would mean inventing a different one.
-ALLOWED_VALUES = {"Hisingen Glass", "Tariff"}
+# "Services" and "Help" are the macOS menu-bar terms; French keeps "Services" and Dutch keeps
+# "Help", and inventing a synonym for a standard menu label would be worse than the match.
+ALLOWED_VALUES = {"Hisingen Glass", "Tariff", "Services", "Help"}
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.
 PLACEHOLDER_VALUE = "undefined"

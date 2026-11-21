@@ -4024,3 +4024,8 @@
 "The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
 "No active Volvo subscription" = "No active Volvo subscription";
 "Remote commands need an active subscription on this car." = "Remote commands need an active subscription on this car.";
+"Services" = "Services";
+"Help" = "Help";
+"Hisingen Help" = "Hisingen Help";
+"Minimize" = "Minimize";
+"Bring All to Front" = "Bring All to Front";

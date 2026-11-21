@@ -5,8 +5,22 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- The desktop widget has a **large** size. It is the medium layout with room to breathe — the
+  same battery, range, charging and departure values the app last read, not a second model.
+- Hisingen's main menu now carries **Services**, **Window** and **Help**. Text selected in a
+  Settings field can be handed to another app, the Settings window gets the standard Minimize and
+  Bring All to Front items, and Help opens the published help page.
+- `hisingen://` links gain **`lock-reduced-guard`** and **`horn`**. The existing `honk` link stays
+  an alias for honk-and-flash, so older links keep working; `horn` is the horn-only action that
+  previously had no route.
+
 ### Fixed
 
+- A **Spotlight** result now opens the car it was indexed from. The index stores a digest rather
+  than a VIN, and activation used to ignore it, so two indexed cars both landed on whichever car
+  was already active.
 - A Volvo sign-in that falls back to **data and climate** now clears the **Approved Volvo
   permissions** state, so lock, unlock, engine start and honk/flash show as unavailable with the
   explanation the sign-in notice already gave, instead of staying enabled and failing with 403 on

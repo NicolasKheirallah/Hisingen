@@ -11,7 +11,7 @@ struct VehicleWidget: Widget {
         }
         .configurationDisplayName("Vehicle status")
         .description("Battery, range, charging and the next departure, as the app last read them.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 

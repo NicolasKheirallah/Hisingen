@@ -4012,3 +4012,10 @@
 "The command expired before the vehicle acted on it." = "De opdracht verliep voordat de auto hem uitvoerde.";
 "The vehicle reported a problem with this command." = "De auto meldde een probleem met deze opdracht.";
 "This vehicle does not support this command." = "Deze auto ondersteunt deze opdracht niet.";
+
+// English fallback values pending translation
+"Services" = "Voorzieningen";
+"Help" = "Help";
+"Hisingen Help" = "Hisingen-hulp";
+"Minimize" = "Minimaliseer";
+"Bring All to Front" = "Alles naar voren";

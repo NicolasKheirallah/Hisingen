@@ -68,6 +68,19 @@ enum SpotlightIndexer {
         activity.activityType == CSSearchableItemActionType
     }
 
+    /// Resolves a Spotlight activation identifier back to the vehicle it indexes. The index
+    /// itself never stores the VIN, so the match is computed from the vehicles this Mac
+    /// already knows rather than from anything the system holds.
+    static func vin(forActivityIdentifier identifier: String, among knownVINs: [String]) -> String? {
+        knownVINs.first { opaqueVehicleIdentifier($0) == identifier }
+    }
+
+    /// The identifier an index write uses. Internal so the activation round-trip is testable
+    /// without exposing the digest itself.
+    static func activityIdentifier(for vin: String) -> String {
+        opaqueVehicleIdentifier(vin)
+    }
+
     /// Stable, non-reversible index key. The VIN was the `uniqueIdentifier`, which put the
     /// full identifier into the system index despite the README promising it stays out.
     /// A salted-per-install value would break updates, so a plain digest is the right

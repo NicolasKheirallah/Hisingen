@@ -4004,3 +4004,10 @@
 "The command expired before the vehicle acted on it." = "차량이 실행하기 전에 명령이 만료되었습니다.";
 "The vehicle reported a problem with this command." = "차량이 이 명령에서 문제를 보고했습니다.";
 "This vehicle does not support this command." = "이 차량은 이 명령을 지원하지 않습니다.";
+
+// English fallback values pending translation
+"Services" = "서비스";
+"Help" = "도움말";
+"Hisingen Help" = "Hisingen 도움말";
+"Minimize" = "최소화";
+"Bring All to Front" = "모두 앞으로 가져오기";

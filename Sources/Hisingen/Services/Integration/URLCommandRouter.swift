@@ -134,6 +134,9 @@ final class URLCommandRouter: NSObject {
         case "lock":
             dispatch(.lock, targetVIN: targetVIN)
 
+        case "lock-reduced-guard", "lock-reduced":
+            dispatch(.lockReducedGuard, targetVIN: targetVIN)
+
         case "unlock":
             dispatch(.unlock, targetVIN: targetVIN)
 
@@ -142,6 +145,10 @@ final class URLCommandRouter: NSObject {
 
         case "honk-flash", "honk":
             dispatch(.honkAndFlash, targetVIN: targetVIN)
+
+        case "horn":
+            // Horn only. `honk` stays an alias for honk-and-flash so existing links keep working.
+            dispatch(.honkHorn, targetVIN: targetVIN)
 
         case "precleaning/start":
             dispatch(.startPreCleaning, targetVIN: targetVIN)

@@ -4004,3 +4004,10 @@
 "The command expired before the vehicle acted on it." = "指令在车辆执行前已过期。";
 "The vehicle reported a problem with this command." = "车辆报告此指令出现问题。";
 "This vehicle does not support this command." = "此车辆不支持此指令。";
+
+// English fallback values pending translation
+"Services" = "服务";
+"Help" = "帮助";
+"Hisingen Help" = "Hisingen 帮助";
+"Minimize" = "最小化";
+"Bring All to Front" = "前置全部窗口";
