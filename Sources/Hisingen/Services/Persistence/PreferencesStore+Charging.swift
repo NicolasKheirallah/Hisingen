@@ -49,9 +49,25 @@ extension PreferencesStore {
         }
         set { d.set(newValue.rawValue, forKey: "electricity_market_country") }
     }
-    /// The planner needs Swedish spot prices, so the feature switch alone is not enough.
+    /// True when a Tibber home is connected. The home id is the non-secret marker; the token
+    /// lives in the Keychain and `HomeChargingStore.clearTibber()` removes both together.
+    var hasConnectedTibberHome: Bool {
+        d.data(forKey: HomeChargingStore.tibberHomeKey) != nil
+    }
+
+    /// Whether any price series can be read at all. The selected supplier decides it: Tibber when
+    /// the reader connected a home, otherwise the Swedish spot series. A supplier that publishes
+    /// no series leaves this false, and the planner and price UI stay off rather than showing a
+    /// number the app cannot source. This replaces the old "country is Sweden" question, which
+    /// hid the planner from a Tibber home in Norway even though Tibber already returned its prices.
+    var hasPriceSource: Bool {
+        if electricityProvider == .tibber, hasConnectedTibberHome { return true }
+        return marketCountry.offersMarketPricing
+    }
+
+    /// The planner needs a price series, so the feature switch alone is not enough.
     var smartChargingPlannerAvailable: Bool {
-        marketCountry.offersMarketPricing && features.contains(.smartChargingPlanner)
+        hasPriceSource && features.contains(.smartChargingPlanner)
     }
     /// Fixed rate (the typed-in price per kWh) or automatic (spot price plus provider markup).
     /// Fixed by default so existing installs keep their figures until the user opts in.
@@ -81,7 +97,7 @@ extension PreferencesStore {
     var electricityIncludesVAT: Bool { get { boolDefaultTrue("electricity_includes_vat") } set { d.set(newValue, forKey: "electricity_includes_vat") } }
     var electricityRatePolicy: ElectricityRatePolicy {
         ElectricityRatePolicy(
-            mode: marketCountry.offersMarketPricing ? electricityRateMode : .fixed, provider: electricityProvider, contract: electricityPriceContract,
+            mode: hasPriceSource ? electricityRateMode : .fixed, provider: electricityProvider, contract: electricityPriceContract,
             markupOrePerKwh: electricityMarkupOrePerKwh, otherChargesOrePerKwh: electricityOtherChargesOrePerKwh,
             includesVAT: electricityIncludesVAT
         )

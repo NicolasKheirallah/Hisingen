@@ -4011,3 +4011,4 @@
 "Hisingen Help" = "Hisingen 도움말";
 "Minimize" = "최소화";
 "Bring All to Front" = "모두 앞으로 가져오기";
+"Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Tibber를 연결하거나 스웨덴을 선택하면 시장 가격과 충전 계획을 사용할 수 있습니다. 가격 소스가 없으면 입력한 요금이 사용됩니다.";

@@ -99,7 +99,7 @@ struct SettingsView: View {
     private var availableDestinations: [SettingsDestination] {
         SettingsDestination.allCases.filter {
             switch $0 {
-            case .plannerSettings, .plannerAlerts: preferences.marketCountry.offersMarketPricing
+            case .plannerSettings, .plannerAlerts: preferences.hasPriceSource
             case .homeCharging, .electricitySupplier, .gridTariff, .houseMeter: homeCharging != nil
             default: true
             }

@@ -33,7 +33,7 @@ struct SettingsNotificationsCard: View {
                         if !plannerAlertsOnly {
                             chargingAlertRows
                         }
-                        if prefs.marketCountry.offersMarketPricing {
+                        if prefs.hasPriceSource {
                             if plannerAlertsOnly {
                                 plannerAlertRows
                             } else {

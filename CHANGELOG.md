@@ -16,6 +16,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   an alias for honk-and-flash, so older links keep working; `horn` is the horn-only action that
   previously had no route.
 
+### Changed
+
+- Market prices, the automatic rate and the **Charging Planner** now follow the selected
+  electricity supplier instead of the country. A connected Tibber home is a price source in every
+  market Tibber serves, and the Swedish spot series remains one when Sweden is selected. With
+  neither, the planner and automatic pricing stay off and the Electricity page says what to
+  connect; a saved Tibber home does not silently price a different supplier.
+
 ### Fixed
 
 - A **Spotlight** result now opens the car it was indexed from. The index stores a digest rather

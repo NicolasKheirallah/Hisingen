@@ -27,6 +27,39 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func plannerAvailabilityFollowsThePriceSourceNotTheCountry() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var selection = FeatureSelection.default
+        selection.set(.smartChargingPlanner, enabled: true)
+        preferences.features = selection
+
+        // Nothing selected anywhere: no source, so no planner and no automatic rate.
+        preferences.marketCountry = .other
+        preferences.electricityProvider = .other
+        #expect(!preferences.hasPriceSource)
+        #expect(!preferences.smartChargingPlannerAvailable)
+
+        // The Swedish spot series is a source.
+        preferences.marketCountry = .sweden
+        #expect(preferences.hasPriceSource)
+        #expect(preferences.smartChargingPlannerAvailable)
+
+        // A Tibber home outside Sweden is a source too, once the home is on file.
+        preferences.marketCountry = .other
+        preferences.electricityProvider = .tibber
+        #expect(!preferences.hasPriceSource)
+        defaults.set(Data("{}".utf8), forKey: HomeChargingStore.tibberHomeKey)
+        #expect(preferences.hasPriceSource)
+        #expect(preferences.smartChargingPlannerAvailable)
+
+        // A connected home does not price another supplier, and outside Sweden that supplier
+        // publishes no series of its own.
+        preferences.electricityProvider = .vattenfall
+        #expect(!preferences.hasPriceSource)
+    }
+
+    @Test
     func savedFeatureOptOutsSurviveAReadAndRelaunch() throws {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }
