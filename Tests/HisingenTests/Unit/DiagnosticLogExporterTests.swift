@@ -3,7 +3,8 @@ import Testing
 @testable import Hisingen
 
 struct DiagnosticLogExporterTests {
-    private func makeEntry(vin: String = "YV1XZEHR2R2371256") -> APILogEntry {
+    private func makeEntry(vin: String = "YV1XZEHR2R2371256",
+                           scope: VehicleLogScope? = nil) -> APILogEntry {
         APILogEntry(
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
             provider: .volvo,
@@ -12,7 +13,31 @@ struct DiagnosticLogExporterTests {
             operation: "vehicle \(vin) poll 123e4567-e89b-12d3-a456-426614174000",
             statusCode: 200, responseBytes: 42,
             responsePayloadJSON: #"{"batteryPercentage":82}"#,
-            durationMilliseconds: 120, errorType: nil)
+            durationMilliseconds: 120, errorType: nil,
+            scopePartition: scope?.logPartition)
+    }
+
+    @Test
+    func reportCarriesTheLogPartitionWithoutAVIN() throws {
+        let data = try DiagnosticLogExporter.makeReport(
+            meta: ["appVersion": "test"],
+            unifiedLog: [],
+            apiEntries: [makeEntry(scope: .vehicle("YV1XZEHR2R2371256"))])
+        let output = String(decoding: data, as: UTF8.self)
+
+        // The digest names the partition, and the identifier it was derived from stays out.
+        #expect(output.contains("\"scopePartition\""))
+        #expect(output.contains(VehicleLogScope.vehicle("YV1XZEHR2R2371256").logPartition))
+        #expect(!output.contains("YV1XZEHR2R2371256"))
+    }
+
+    @Test
+    func reportOmitsThePartitionForRowsRecordedBeforeItExisted() throws {
+        let data = try DiagnosticLogExporter.makeReport(
+            meta: ["appVersion": "test"], unifiedLog: [], apiEntries: [makeEntry()])
+        let output = String(decoding: data, as: UTF8.self)
+
+        #expect(!output.contains("\"scopePartition\""))
     }
 
     @Test

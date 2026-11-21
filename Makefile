@@ -45,7 +45,7 @@ NOTARYTOOL_PROFILE ?= hisingen-notary
 export NOTARIZE
 export NOTARYTOOL_PROFILE
 
-.PHONY: all dist ci doctor build universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets
+.PHONY: all dist ci doctor build universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets hooks
 
 ## Default target: build both .app bundle and .dmg installer
 all: dmg
@@ -67,6 +67,11 @@ inject-secrets:
 
 setup-cert:
 	sh Scripts/setup-dev-cert.sh
+
+## Install this repository's git hooks (a pre-commit gate for localization and docs links).
+## Hooks are per clone, so a fresh checkout runs this once; re-run after a hook changes.
+hooks:
+	sh Scripts/install-hooks.sh
 
 ## Build the release binary
 build: doctor inject-secrets

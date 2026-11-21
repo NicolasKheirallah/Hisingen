@@ -200,6 +200,43 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(result == nil)
     }
 
+    // The numbers below are the ones the readout's information button states, so a change to a
+    // threshold has to change its explanation too.
+
+    @Test("The coverage window ends exactly two hours before departure")
+    func coverageWindowEndsTwoHoursBeforeDeparture() {
+        // 07:30 departure: a 05:30 timer starts exactly two hours before it and covers the
+        // frost; a 05:29 timer is a minute too early and does not.
+        let covered = advice(schedules: [departure()],
+                             climate: [climateTimer(hour: 5, minute: 30)],
+                             forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -2))
+        #expect(covered == nil)
+
+        let tooEarly = advice(schedules: [departure()],
+                              climate: [climateTimer(hour: 5, minute: 29)],
+                              forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -2))
+        #expect(tooEarly?.needsClimateTimer == true)
+    }
+
+    @Test("Freezing starts at exactly 0 °C and the wind line at exactly 40 km/h")
+    func thresholdEdgesAreInclusive() throws {
+        let atZero = try #require(advice(schedules: [departure()],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 0)))
+        #expect(atZero.needsClimateTimer)
+
+        #expect(advice(schedules: [departure()],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 0.1)) == nil)
+
+        let atForty = try #require(advice(schedules: [departure()],
+                                          forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                                             gustsKmh: 40)))
+        #expect(atForty.windy)
+
+        #expect(advice(schedules: [departure()],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                          gustsKmh: 39.9)) == nil)
+    }
+
     @Test("A climate timer that covers the departure quiets the rain advice too")
     func coveredTimerQuietsFrostAndRainTogether() {
         // The timer starts inside the coverage lead before the 7:30 departure, so it covers

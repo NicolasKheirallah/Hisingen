@@ -358,6 +358,18 @@ struct VolvoCapabilityFlag: Decodable, Sendable {
     let isSupported: Bool?
 }
 
+/// `GET /energy/v2/vehicles/{vin}/voc-subscription`. The Energy family answers without the
+/// `data` envelope the Connected Vehicle endpoints use, so this decodes the root object.
+struct VolvoVOCSubscriptionDTO: Decodable, Sendable {
+    struct Subscription: Decodable, Sendable {
+        let hasPremiumSubscription: Bool?
+    }
+
+    let vocSubscription: Subscription?
+
+    var hasPremiumSubscription: Bool? { vocSubscription?.hasPremiumSubscription }
+}
+
 extension ChargingState {
 
 
@@ -887,17 +899,23 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     var text: String? { message?.blankAsNil }
 
     /// Volvo's documented `invokeStatus` values, upper-cased before comparison because the
-    /// API has been observed returning both cases. The Connected Vehicle API v2 command docs
-    /// enumerate exactly: RUNNING, WAITING, COMPLETED, REJECTED, UNKNOWN, TIMEOUT,
-    /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, DELIVERED, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
-    /// NOT_ALLOWED_WRONG_USAGE_MODE. The extra values below (`SUCCESS`, `NOT_ALLOWED`,
-    /// `UNLOCK_TIME_FRAME_PASSED`, `UNABLE_TO_LOCK_DOOR_OPEN`, `FAILED`) are tolerated
-    /// defensively – older captures and sibling APIs have returned them.
+    /// API has been observed returning both cases. The Connected Vehicle API v2 `Invoke` schema
+    /// enumerates all 22: RUNNING, WAITING, COMPLETED, REJECTED, UNKNOWN, TIMEOUT,
+    /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, CAR_IN_SLEEP_MODE, UNLOCK_TIME_FRAME_PASSED,
+    /// UNABLE_TO_LOCK_DOOR_OPEN, EXPIRED, SENT, NOT_SUPPORTED, DELIVERED, DELIVERY_TIMEOUT,
+    /// SUCCESS, CAR_TIMEOUT, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
+    /// NOT_ALLOWED_WRONG_USAGE_MODE, INVOCATION_SPECIFIC_ERROR.
+    ///
+    /// Every one of them now maps to an outcome or a reason. Anything that fell through used to
+    /// reach `dispatchCommand`'s final fallback and be reported to the reader as *accepted*, so
+    /// `NOT_SUPPORTED` or `CAR_IN_SLEEP_MODE` read as a command the car had taken. The extras
+    /// (`ACCEPTED`, `NOT_ALLOWED`, `FAILED`) are tolerated defensively: older captures and
+    /// sibling APIs have returned them.
     var outcome: RemoteCommandOutcome? {
         switch invokeStatus?.uppercased() {
         case "COMPLETED", "SUCCESS": return .completed
         case "DELIVERED": return .delivered
-        case "RUNNING", "WAITING", "ACCEPTED": return .accepted
+        case "RUNNING", "WAITING", "ACCEPTED", "SENT": return .accepted
         default: return nil
         }
     }
@@ -909,12 +927,18 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
         switch invokeStatus?.uppercased() {
         case "REJECTED", "NOT_ALLOWED", "FAILED":
             return L10n.text("The vehicle rejected the command.")
-        case "TIMEOUT":
+        case "TIMEOUT", "DELIVERY_TIMEOUT", "CAR_TIMEOUT":
             return L10n.text("The vehicle did not respond in time. It may be parked somewhere with no reception.")
         case "CONNECTION_FAILURE":
             return L10n.text("Hisingen could not reach the vehicle. It may be in an area with no connectivity.")
-        case "VEHICLE_IN_SLEEP":
+        case "VEHICLE_IN_SLEEP", "CAR_IN_SLEEP_MODE":
             return L10n.text("The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.")
+        case "NOT_SUPPORTED":
+            return L10n.text("This vehicle does not support this command.")
+        case "EXPIRED":
+            return L10n.text("The command expired before the vehicle acted on it.")
+        case "INVOCATION_SPECIFIC_ERROR":
+            return L10n.text("The vehicle reported a problem with this command.")
         case "CAR_ERROR":
             return L10n.text("The vehicle reported an internal error while handling the command.")
         case "NOT_ALLOWED_PRIVACY_ENABLED":

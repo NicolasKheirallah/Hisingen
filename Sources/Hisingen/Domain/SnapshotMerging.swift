@@ -175,7 +175,10 @@ extension VehicleIdentitySnapshot {
             unavailableReason: unavailableReason ?? {
                 if case .unavailable = availability { return previous.unavailableReason }
                 return nil
-            }()
+            }(),
+            // A narrow fetch (a command confirmation tick, a trip-meter refresh) never asks for the
+            // subscription, so an absent answer here is "not asked", not "no longer known".
+            hasPremiumSubscription: hasPremiumSubscription ?? previous.hasPremiumSubscription
         )
     }
 }

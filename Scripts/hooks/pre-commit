@@ -1,0 +1,81 @@
+#!/bin/sh
+set -eu
+# Pre-commit gate for the checks a review or CI would otherwise catch later: a string used in
+# code but absent from the English table, an unkeyed literal, a broken docs link, or a locale
+# that fell out of key parity. It runs only the checks the staged files can affect, so a normal
+# commit costs about two seconds.
+#
+# Install it with `make hooks`. `HISINGEN_SKIP_HOOKS=1 git commit …` bypasses it for a commit
+# that intentionally leaves a check red (a fixup, say), and the same checks still run in CI.
+
+if [ "${HISINGEN_SKIP_HOOKS:-}" = "1" ]; then
+    exit 0
+fi
+
+root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -z "$root" ]; then
+    exit 0
+fi
+cd "$root"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$staged" ]; then
+    exit 0
+fi
+
+failed=0
+
+has_source=0
+has_docs=0
+case "$staged" in
+    *"Sources/"*.swift*|*"Sources/"*.strings*|*"Tests/"*.swift*) has_source=1 ;;
+esac
+# Match on the staged list as newline-separated records rather than on the joined string, so a
+# path merely containing "Sources/" elsewhere cannot turn the check on by accident.
+if printf '%s\n' "$staged" | grep -Eq '^(Sources|Tests)/.*\.(swift|strings)$'; then
+    has_source=1
+fi
+if printf '%s\n' "$staged" | grep -Eq '(^|/)docs/.*\.md$|^[^/]*README\.md$|^[^/]*CHANGELOG\.md$'; then
+    has_docs=1
+fi
+
+if [ "$has_source" = 1 ]; then
+    # The usage check is the one that matters at write time: a missing key compiles and then
+    # shows English in every language, which is only visible in a support bundle otherwise.
+    if ! node Scripts/verify-l10n-usage.mjs; then
+        echo ""
+        echo "A string used through L10n has no key in Sources/Hisingen/Resources/en.lproj/Localizable.strings."
+        echo "Add it to en and to every locale, then stage those files. Run"
+        echo "  node Scripts/verify-l10n-usage.mjs --update-baseline"
+        echo "only for a literal that cannot be keyed yet; that baseline may only shrink."
+        failed=1
+    fi
+    if ! node Scripts/audit-l10n-literals.mjs; then
+        echo ""
+        echo "A user-facing literal is neither keyed nor in the literals baseline. Key it, or record"
+        echo "it with the audit's own update flag if it is deliberately unkeyed."
+        failed=1
+    fi
+    if ! python3 Scripts/check-localization.py > /tmp/hisingen-hook-l10n.log 2>&1; then
+        cat /tmp/hisingen-hook-l10n.log
+        echo "Localization parity failed; see the report above."
+        failed=1
+    fi
+fi
+
+if [ "$has_docs" = 1 ]; then
+    if ! python3 Scripts/check-docs-links.py; then
+        echo ""
+        echo "A Markdown link points at a file that does not exist, or at a file git ignores."
+        echo "A new published page also needs its allowlist entry in .gitignore."
+        failed=1
+    fi
+fi
+
+if [ "$failed" = 1 ]; then
+    echo ""
+    echo "Pre-commit checks failed. Nothing was committed."
+    echo "Fix the item above, or bypass once with HISINGEN_SKIP_HOOKS=1 git commit ..."
+    exit 1
+fi
+exit 0

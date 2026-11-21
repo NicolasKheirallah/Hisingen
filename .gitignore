@@ -12,6 +12,7 @@ docs/*
 !docs/development/
 docs/development/*
 !docs/development/widgets-and-controls.md
+!docs/development/app-intents-metadata.md
 !docs/operations/
 docs/operations/*
 !docs/operations/l10n-native-review.md

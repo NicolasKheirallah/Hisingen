@@ -107,10 +107,15 @@ struct NowWeatherReadout: View {
                         }
                     }
                     if let departureAdviceLine {
-                        Text(departureAdviceLine)
-                            .hisType(.micro)
-                            .foregroundStyle(HisingenTheme.inkMuted)
-                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(departureAdviceLine)
+                                .hisType(.micro)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            InformationButton(
+                                message: L10n.text("The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet."),
+                                subject: L10n.text("Departure"))
+                        }
                     }
                 }
             }

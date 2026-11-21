@@ -95,6 +95,9 @@ actor VolvoAPI {
     var sessionEpoch = 0
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
+    /// Last `voc-subscription` answer per vehicle. A subscription changes when the customer
+    /// renews or lets it lapse, not between polls, so an hour matches the capability list.
+    var subscriptionCache: [String: (value: Bool, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
     /// Where the durable per-endpoint stand-downs live: one owner for both providers, so an
     /// erase reaches them and a test can inject one over an in-memory database.

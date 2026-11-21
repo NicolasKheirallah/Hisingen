@@ -191,6 +191,10 @@ enum DiagnosticLogExporter {
                 row["grpcMessage"] = DiagnosticRedaction.redact(grpcMessage)
             }
             if entry.transportError == true { row["transportError"] = true }
+            // Which log partition the exchange belonged to: `account` or a `vehicle-` digest.
+            // The digest is already opaque, so the row never carries a VIN, and the field is
+            // absent for rows recorded before partitioning existed.
+            if let partition = entry.scopePartition { row["scopePartition"] = partition }
             // Rows survive in the 24 h ring across an upgrade, so an older row can predate
             // the provenance fields. Say "unknown" rather than leaving a blank that reads
             // as "not applicable" when triaging a mixed-version bundle.

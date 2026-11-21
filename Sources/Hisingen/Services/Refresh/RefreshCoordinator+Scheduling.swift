@@ -52,8 +52,16 @@ extension RefreshCoordinator {
         return portalPacedInterval(RefreshPolicy.interval(
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
-            isVehicleAvailable: state.identity.availability.isAvailable
+            isVehicleAvailable: state.identity.availability.isAvailable,
+            availabilityAge: availabilityAge(of: state)
         ))
+    }
+
+    /// How long ago the vehicle last reported its availability. `nil` when the frame carried no
+    /// timestamp, which keeps the old behaviour rather than guessing.
+    func availabilityAge(of state: VehicleState) -> TimeInterval? {
+        guard let reportedAt = state.identity.availabilityReportedAt else { return nil }
+        return max(0, now().timeIntervalSince(reportedAt))
     }
 
     /// Stretches a scheduled cadence so the Data Portal's daily meter lasts until midnight UTC.

@@ -65,7 +65,8 @@ extension RefreshCoordinator {
         let interval = RefreshPolicy.interval(
             isCharging: latest.isCharging,
             isClimateActive: latest.isClimateActive,
-            isVehicleAvailable: latest.identity.availability.isAvailable
+            isVehicleAvailable: latest.identity.availability.isAvailable,
+            availabilityAge: availabilityAge(of: latest)
         )
         if now().timeIntervalSince(latest.freshness.fetchedAt) >= interval { refreshNow() }
     }

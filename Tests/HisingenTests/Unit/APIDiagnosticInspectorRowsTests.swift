@@ -6,10 +6,11 @@ struct APIDiagnosticInspectorRowsTests {
     private let second = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func entry(_ operation: String, at date: Date, status: Int = 200,
-                       payload: String? = nil) -> APILogEntry {
+                       payload: String? = nil, scope: VehicleLogScope? = nil) -> APILogEntry {
         APILogEntry(timestamp: date, provider: .polestar, method: "POST", endpoint: "https://example.test/x",
                     operation: operation, statusCode: status, responseBytes: payload?.utf8.count,
-                    responsePayloadJSON: payload, durationMilliseconds: 10, errorType: nil)
+                    responsePayloadJSON: payload, durationMilliseconds: 10, errorType: nil,
+                    scopePartition: scope?.logPartition)
     }
 
     @Test("Requests that share a timestamp get distinct row identities")
@@ -55,5 +56,23 @@ struct APIDiagnosticInspectorRowsTests {
         let filter = APIDiagnosticInspectorFilter(outcome: .clientError)
 
         #expect(filter.apply(to: entries).map(\.operation) == ["b"])
+    }
+
+    @Test("A search finds an exchange by its log partition, account or vehicle digest")
+    func searchMatchesTheLogPartition() {
+        let vin = "YV1XZEHR2R2371256"
+        let entries = [
+            entry("token grant", at: second, scope: .account),
+            entry("GetBattery", at: second.addingTimeInterval(1), scope: .vehicle(vin)),
+            entry("legacy row", at: second.addingTimeInterval(2)),
+        ]
+        func found(_ query: String) -> [String] {
+            APIDiagnosticInspectorView.rows(from: entries, matching: .init(query: query)).map(\.entry.operation)
+        }
+
+        #expect(found("account") == ["token grant"])
+        #expect(found(VehicleLogScope.vehicle(vin).logPartition) == ["GetBattery"])
+        // The partition is a digest, so searching the raw VIN must not match it.
+        #expect(found(vin).isEmpty)
     }
 }

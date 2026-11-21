@@ -1,0 +1,13 @@
+[
+  "All notifications",
+  "Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading.",
+  "Muted",
+  "Oldest reading %@",
+  "Sign in again to keep this up to date",
+  "Sign in again: Hisingen cannot refresh",
+  "Some readings are from an earlier report",
+  "Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart.",
+  "The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current.",
+  "Volvo connected, but not saved",
+  "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings."
+]

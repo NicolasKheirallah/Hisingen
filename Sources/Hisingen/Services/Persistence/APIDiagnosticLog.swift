@@ -353,10 +353,40 @@ actor APIDiagnosticLogStore {
         if containsSemanticValue("AUTHENTICATIONFAILURE", in: object) {
             return "authentication:failure"
         }
-        if containsSemanticValue("PROPERTY_NOT_FOUND", in: object) {
-            return "property:unavailable"
+        // A body that also carries readable values is a successful request with optional fields
+        // this vehicle lacks, not a failed one. `/energy/v2/…/state` answers 200 with the battery
+        // and range filled in and `chargingPower` in error, which used to stamp every poll as a
+        // failure: 86 of them in one day, all of them healthy.
+        guard containsAnyPropertyError(in: object), !containsUsableReading(in: object) else { return nil }
+        return "property:unavailable"
+    }
+
+    /// The same concept ships under three spellings: the specification documents `NOT_SUPPORTED`,
+    /// while live responses use `PROPERTY_NOT_FOUND` (energy state) and `PROPERTY_NOT_SUPPORTED`
+    /// (transfer limit). Matching one of them made the label a coin flip.
+    private static func containsAnyPropertyError(in value: Any) -> Bool {
+        containsSemanticValue("PROPERTY_NOT_FOUND", in: value)
+            || containsSemanticValue("PROPERTY_NOT_SUPPORTED", in: value)
+            || containsSemanticValue("NOT_SUPPORTED", in: value)
+    }
+
+    /// A field that came back readable: status `OK` next to a value or a timestamp. The API marks
+    /// errors with `status: ERROR` and a `code` in place of the value, so this is the exact
+    /// complement of the error shape.
+    private static func containsUsableReading(in value: Any) -> Bool {
+        if let dictionary = value as? [String: Any] {
+            if let status = dictionary["status"] as? String,
+               status.uppercased() == "OK",
+               dictionary["value"] != nil || dictionary["updatedAt"] != nil
+                   || dictionary["timestamp"] != nil {
+                return true
+            }
+            return dictionary.values.contains { containsUsableReading(in: $0) }
         }
-        return nil
+        if let array = value as? [Any] {
+            return array.contains { containsUsableReading(in: $0) }
+        }
+        return false
     }
 
     private static func containsSemanticValue(_ expected: String, in value: Any) -> Bool {

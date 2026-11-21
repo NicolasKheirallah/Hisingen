@@ -3993,3 +3993,14 @@
 "Opens Hisingen with the lock command ready to confirm." = "打开 Hisingen 并等待确认锁车指令。";
 "Start climate" = "启动空调";
 "Opens Hisingen with the climate command ready to confirm." = "打开 Hisingen 并等待确认空调指令。";
+
+// The diagnostic inspector: which partition of the API log an exchange belongs to.
+"Log partition" = "日志分区";
+"The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "当出发时段气温为 0 °C 或更低、有雨雪，或风速或阵风达到 40 km/h 时显示。若在出发前两小时内启动空调定时，则视为已覆盖，此行不再显示。";
+
+// Volvo remote-command and subscription failures.
+"No active Volvo subscription" = "没有有效的 Volvo 订阅";
+"Remote commands need an active subscription on this car." = "远程指令需要此车辆有有效订阅。";
+"The command expired before the vehicle acted on it." = "指令在车辆执行前已过期。";
+"The vehicle reported a problem with this command." = "车辆报告此指令出现问题。";
+"This vehicle does not support this command." = "此车辆不支持此指令。";

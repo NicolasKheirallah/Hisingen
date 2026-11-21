@@ -18,6 +18,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   Prices (CSV)** exports one row per price slot, and the charging-sessions export has a charger
   average-price column.
 
+- The API request log in Settings now shows which partition an exchange belonged to, `account` or
+  a vehicle digest, and the support export carries the same field. The digest is opaque, so the
+  VIN still never appears in either.
 - Volvo vehicle details now fill in Drive Type, Engine Power, Gross Weight and Seats on the Info
   tab, from the specifications Volvo already sent. Gross Weight shows only when the over-the-air
   weight row is absent, since both are the same figure.
@@ -25,44 +28,41 @@ All notable changes to Hisingen are documented in this file. The project follows
   changed" with that date on the charging card. On one car the target of 100% dated from May 2025
   and the 32 A limit from July 2026, and both looked like fresh readings. A value you just sent
   shows no note.
-- A desktop widget now shows battery, range, charging state and the next departure in small and
-  medium sizes. The app writes a snapshot into a shared App Group container after each completed
+- A desktop widget shows battery, range, charging state and the next departure in small and medium
+  sizes. The app writes a snapshot into a shared App Group container after each completed
   refresh, the widget shows the reading's age and draws a placeholder when nothing is on file,
   and tapping it opens the car in Hisingen: the widget itself never sends a command. Lock and
-  Start Climate buttons in Control Center ship for macOS 26 and also open Hisingen with the
-  command ready to confirm. The extension is a new SwiftPM target the Makefile assembles into
-  PlugIns and signs with the App Group entitlements; `make app` builds and signs it with the app.
-- A Tibber home with a production metering point now gets a **House Production** row in Log,
-  Charging Trends, from the hourly production Tibber reports over the same hours; a home that
-  reports no production gets no row. A home with a Pulse or Watty reader gets a live house-load
-  line on the charging card, plus the production the stream reports while the home is producing,
-  under the same three-minute last-known rule as the Perific lines; with a Perific meter
-  connected its house lines stay and only the production line comes from Tibber, because the
-  meter's HAN port sees no production. Without a reader the line stays absent and Settings,
-  Electricity Supplier says **No Pulse paired**. The live stream follows Tibber's documented
-  subscription protocol and has not been checked against a real Pulse here; the live checks in
-  docs/home-charging.md say what to confirm.
-- The service, tyre and low-battery warning cards each offer an **Add Reminder** action that
-  writes to macOS Reminders with a default due date, and the plug-in alert can create its
-  reminder automatically once you opt in under its notification row and grant Reminders access;
-  the prompt never appears on its own from a background check. On the Plan tab, a schedule's
-  details offer **Add to Calendar…**, which places the schedule's next occurrence on a calendar
-  you can write to, one event per schedule, kept from landing twice by a note Hisingen writes
-  into the event. Hisingen never deletes the events or reminders it creates, because a schedule
-  can be removed by the car with no local signal. Reminders and calendar writes stay on your
-  Mac through EventKit and are never sent anywhere.
-- The report menu on the Car tab gains **Share Vehicle Report…**, which shares the report as a
-  PDF through the macOS share sheet. The PDF follows Screenshot Privacy exactly as the text
-  report does: the VIN is masked, the registration and parking location are left out, and the
-  shared file's name carries the model and date, never the VIN. The report rows moved into one
-  builder so the text and the PDF stay the same content.
-- The weather readout now shows wind, gusts and precipitation from Open-Meteo beside the
-  temperature, fetched in the same request as before. Under them it adds one line of climate
-  advice before a departure it can name, when the forecast hour is cold, wet or windy: the
-  departure comes from the car's own timers or from the calendar preconditioning schedule,
-  whichever is sooner, and a climate timer that already covers it keeps the line quiet. The
-  advice has not been watched against a live forecast; its thresholds are named in the code and
-  covered by tests.
+  Start Climate controls in Control Center open Hisingen with the command ready to confirm. The
+  extension is a new SwiftPM target that `make app` assembles into PlugIns and signs with its App
+  Group entitlement.
+- A Tibber home with a production metering point gets a **House Production** row in Log, Charging
+  Trends, from the hourly production Tibber reports over the same hours; a home that reports none
+  gets no row. A home with a Pulse or Watty reader gets a live house-load line on the charging
+  card, and the production the stream reports while the home produces, under the same
+  three-minute last-known rule as the Perific lines. A connected Perific meter keeps its house
+  lines, because its HAN port sees no production. Without a reader the line stays absent and
+  Settings, Electricity Supplier says **No Pulse paired**. The stream follows Tibber's documented
+  subscription protocol and has not been checked against a real Pulse here.
+- The service, tyre and low-battery warning cards each offer an **Add Reminder** action, and the
+  plug-in alert can write its reminder automatically once you opt in under its notification row
+  and grant Reminders access; the prompt never appears on its own from a background check. A
+  schedule on the Plan tab offers **Add to Calendar…**, one event per schedule, kept from landing
+  twice by a note Hisingen writes into the event. Hisingen never deletes the events or reminders
+  it creates, because the car can remove a schedule with no local signal. Reminders and calendar
+  writes stay on your Mac through EventKit and are never sent anywhere.
+- The report menu on the Car tab gains **Share Vehicle Report…**, which shares the report as a PDF
+  through the macOS share sheet. The PDF follows Screenshot Privacy exactly as the text report
+  does: the VIN is masked, the registration and parking location left out, and the file name
+  carries the model and date. Both formats come from one builder, so they cannot drift.
+- The weather readout shows wind, gusts and precipitation from Open-Meteo beside the temperature,
+  fetched in the same request as before, and adds one line of climate advice before a departure
+  it can name when the forecast hour is cold, wet or windy. The departure is the sooner of the
+  car's own timers and the calendar preconditioning schedule, and a climate timer that covers it
+  keeps the line quiet. An information button names the thresholds.
+
+- Volvo premium subscription state is read from the Energy API's `voc-subscription` endpoint and
+  shown as a Controls banner when the car has no active subscription, which is one refusal reason
+  nothing else on screen accounted for.
 
 ### Changed
 
@@ -126,44 +126,56 @@ All notable changes to Hisingen are documented in this file. The project follows
   into the thirteen other languages; every new value is listed for a native read in
   `docs/operations/l10n-native-review.md`, alongside the Swedish the owner should verify himself.
   Swedish stays with its owner: the home-charging strings that still read English in Swedish are
-  listed there too. Eleven string literals remain unkeyed, from the parallel sign-out and
-  credential work and the Focus filter's two AppIntents titles; they are recorded in the literals
-  baseline so the literals audit stays green, and `verify-l10n-usage.mjs` still reports them
-  until they gain keys with their Swedish.
-- The Polestar Data Portal sends the charge target's own mode, Daily, Long trip or Custom, and
-  the time the target was set; Hisingen decoded both and showed neither. The mode now shows beside
-  the charge target on the charging card, and its timestamp fills the same slot Volvo's target
-  date uses, so the "Last changed" note works for Polestar too. The note itself now appears
-  wherever the two settings show, the Charge Limit and Current Limit steppers, the Charging
-  Controls card and the Info tab's vehicle report, with the same 30-day threshold and wording,
-  so a months-old setting no longer reads as fresh on one surface only.
-- Volvo's energy-capabilities response says, per car, which energy fields the car can report,
-  and Hisingen probed only the charge target and the current limit of the ten flags it decodes.
-  Every flag is probed now, so a field the car does not report hides its charging-card row
-  instead of showing whatever happened to decode, and the Info capabilities sheet lists each
-  field with the car's own answer.
-- Zaptec chargers now fill the Charger details list from the states Zaptec documents: voltage
-  and current of each phase, the cable rating, the phases in use, and how the charger reaches
-  the cloud. Easee adds the cable rating, the phase mode and its connection type. Neither vendor
-  documents a session start or end reason, a circuit fuse, or an Easee phase reading it names,
-  so those rows stay off for them, and docs/home-charging.md lists the live checks to confirm
-  on a real charger.
-- Several readings Polestar sends were decoded and never shown: the main climate's own running
-  word, whether a timer fired the last climate start, the connectivity network and signal
-  strength behind the bars, the air quality's started and last-completed cycle times, and the
-  warranty's status beside its dates. Each now has its row, in the plain style of its
-  neighbours. The charge-limit's own set time also fills the current-limit's "Last changed"
-  note, and a nested light failure above the ones with names, or an air-quality field Hisingen
-  has no wording for, is kept raw with its field number instead of being dropped, so a new
-  backend field is seen rather than silently lost.
-- Polestar's driving-journal flags were investigated and the read stays unimplemented: no
-  public source documents a cloud method for it, and the journal is now an app installed in the
-  car that emails CSV or XLSX exports. A research note records every candidate read path
-  checked, with sources, and the owner-authorized capture that would settle it.
-- A Focus filter intent exists for macOS Focus settings: it applies the chosen vehicle and that
-  vehicle's notification mute when a Focus turns on. Shortcuts and Focus cannot discover it yet,
-  the same App Intents metadata gap tracked separately, so it compiles and its mapping is
-  unit-tested, dormant until that metadata ships.
+  listed there too. Eleven literals remain unkeyed: nine from the parallel sign-out and
+  credential work, which need their Swedish from the owner, and the Focus filter's two AppIntents
+  titles, which localize through the App Intents lane instead. They are recorded in a usage
+  baseline that only shrinks, so the check now passes at commit time and fails only on a new
+  unkeyed literal.
+- The Polestar Data Portal sends the charge target's mode, Daily, Long trip or Custom, and when it
+  was set; Hisingen decoded both and showed neither. The mode now sits beside the charge target,
+  and its timestamp fills the slot Volvo's target date uses, so the "Last changed" note works for
+  Polestar too. That note now appears wherever the two settings show: both Limit steppers, the
+  Charging Controls card and the Info tab's report, with the same 30-day rule, so a months-old
+  setting no longer reads as fresh on one surface only.
+- Volvo's energy-capabilities response says, per car, which energy fields it can report, and
+  Hisingen probed two of the ten flags it decodes. Every flag is probed now, so a field the car
+  does not report hides its charging-card row instead of showing whatever happened to decode, and
+  the Info capabilities sheet lists each field with the car's own answer.
+- Zaptec chargers fill the Charger details list from the states Zaptec documents: voltage and
+  current of each phase, cable rating, phases in use, and how the charger reaches the cloud.
+  Easee adds cable rating, phase mode and connection type. Neither vendor documents a session
+  start or end reason, a circuit fuse, or a named Easee phase reading, so those rows stay off and
+  docs/home-charging.md lists the live checks for a real charger.
+- Several Polestar readings were decoded and never shown: the main climate's running word, whether
+  a timer fired the last climate start, the network and signal strength behind the bars, the air
+  quality's cycle times, and the warranty status beside its dates. Each has its row now. The
+  charge limit's own set time fills the current-limit "Last changed" note, and a light failure
+  above the named IDs, or an air-quality field Hisingen has no wording for, is kept raw with its
+  field number instead of being dropped, so a new backend field is seen rather than lost.
+- Polestar's driving-journal flags were investigated and the read stays unimplemented: no public
+  source documents a cloud method, and the journal is now an app in the car that emails CSV or
+  XLSX exports. A research note records every candidate read path, with sources, and the
+  owner-authorized capture that would settle it.
+- A Focus filter intent applies the chosen vehicle and that vehicle's notification mute when a
+  Focus turns on. Shortcuts and Focus cannot discover it yet, the same App Intents metadata gap
+  below, so it compiles and its mapping is unit-tested but stays dormant.
+- The weather advice line states its thresholds in an information button: the departure hour at
+  or below 0 °C, any rain or snow, wind or gusts from 40 km/h, and a climate timer starting within
+  two hours before the departure counting as cover. Tests pin those same numbers.
+- Committing now runs the checks that used to fail only in review. `make hooks` installs the
+  tracked pre-commit gate, which catches a string used through `L10n` with no key in the English
+  table, a new unkeyed literal, a parity break and a broken documentation link. The usage check
+  gained a baseline for keys that genuinely cannot be keyed yet, and that baseline refuses to
+  grow, so a new literal has to be keyed rather than waived.
+- When the shared test target will not compile, `sh Scripts/test-compile-check.sh` names the
+  offending files and their errors in one step. SwiftPM compiles the whole target at once, so one
+  half-written test file blocks every suite; the script turns that wait into a readable list,
+  optionally filtered to one file.
+- App Intents metadata still does not ship. A SwiftPM build produces no compiler const values,
+  and the extractor says so itself before writing nothing; Shortcuts, Siri and the Focus filter
+  therefore see no intents. The measurements, the reproduction and the two ways out are in
+  `docs/development/app-intents-metadata.md`, and `Scripts/appintents-metadata-status.sh`
+  re-checks the state in one step.
 
 ### Fixed
 
@@ -244,6 +256,19 @@ All notable changes to Hisingen are documented in this file. The project follows
 - A command sent for a named vehicle (a link with a VIN, a Shortcut, or a notification button) is
   held back with "The target vehicle could not be loaded." if a different vehicle is loaded when
   it is about to send.
+
+- A Volvo command result of `NOT_SUPPORTED`, `EXPIRED`, `CAR_IN_SLEEP_MODE`, `DELIVERY_TIMEOUT`,
+  `CAR_TIMEOUT` or `INVOCATION_SPECIFIC_ERROR` fell through to the accepted fallback and read as a
+  command the car had taken. All 22 documented statuses now map to an outcome or a reason, and
+  `SENT` counts as in progress.
+- Every Volvo request now carries `traceparent` and `vcc-api-operationid`, and the local request
+  log records the same id, so a log line can be quoted to Volvo support instead of described.
+- A Volvo response that came back with readable values no longer records a `property:unavailable`
+  semantic error for an optional field the car lacks. The energy state answers every poll with the
+  battery filled in and `chargingPower` missing, which used to flag all of them.
+- Polling a sleeping car backs off to the 30 minute interval once its availability frame is more
+  than 30 minutes old. A parked Volvo keeps answering with the frame it last sent, and the app
+  spent about 100 requests in 8 hours learning nothing new.
 
 ## [3.0.1] - 2026-11-19
 

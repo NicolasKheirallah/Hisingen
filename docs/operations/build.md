@@ -68,6 +68,12 @@ every signing option to all nested content and would stamp the app's entitlement
 extension's. Sparkle keeps its own valid signature instead of being re-signed. The final
 `codesign --verify --deep --strict` still checks the whole tree.
 
+The widget, and the app itself, ship no `Metadata.appintents`: a SwiftPM build cannot produce the
+compiler const values the extractor needs, so the app's intents are invisible to Shortcuts, Siri
+and Focus. The measurements, the reproduction steps and the two ways out are in
+[app-intents-metadata.md](../development/app-intents-metadata.md); run
+`sh Scripts/appintents-metadata-status.sh` to re-check the current state.
+
 ## Validation interfaces
 
 ```sh

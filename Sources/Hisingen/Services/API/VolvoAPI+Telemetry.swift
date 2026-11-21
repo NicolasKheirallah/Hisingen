@@ -88,6 +88,10 @@ extension VolvoAPI {
             enabled: needsCommandCapabilities, key: "commands", vin: vin
         ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands", scope: .vehicle(vin)) }
 
+        // Premium VOC subscription. The answer changes when a customer renews or lapses, not
+        // between polls, and the fetch caches for an hour, so this costs one request per hour.
+        async let subscriptionTask: Bool? = fetchVOCSubscription(vin: vin)
+
         let fuel = try await fuelTask
         let energy = try await energyTask
         let doors = try await doorsTask
@@ -103,6 +107,7 @@ extension VolvoAPI {
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
         let commands = try await commandsTask
+        let hasPremiumSubscription = await subscriptionTask
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -447,6 +452,7 @@ extension VolvoAPI {
         state.identity.grossWeightKg = details.specifications?.grossWeightKg
         state.identity.numberOfSeats = details.specifications?.numberOfSeats
         state.identity.availabilityReportedAt = commandAccessibility?.availabilityStatus?.updatedAt
+        state.identity.hasPremiumSubscription = hasPremiumSubscription
         state.maintenance.service.trigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
         state.tripComputer.electricRangeKm = statistics?.distanceToEmptyBatteryKm
         state.energy.currentLimitAmps = currentLimitAmps

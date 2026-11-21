@@ -3993,3 +3993,14 @@
 "Opens Hisingen with the lock command ready to confirm." = "Ouvre Hisingen avec la commande de verrouillage prête à confirmer.";
 "Start climate" = "Démarrer la climatisation";
 "Opens Hisingen with the climate command ready to confirm." = "Ouvre Hisingen avec la commande de climatisation prête à confirmer.";
+
+// The diagnostic inspector: which partition of the API log an exchange belongs to.
+"Log partition" = "Partition du journal";
+"The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "La ligne apparaît lorsque l'heure de départ est à 0 °C ou moins, comporte de la pluie ou de la neige, ou que le vent ou les rafales atteignent 40 km/h. Un minuteur de climatisation qui démarre dans les deux heures précédant le départ est considéré comme couvrant, et la ligne reste alors silencieuse.";
+
+// Volvo remote-command and subscription failures.
+"No active Volvo subscription" = "Aucun abonnement Volvo actif";
+"Remote commands need an active subscription on this car." = "Les commandes à distance nécessitent un abonnement actif pour cette voiture.";
+"The command expired before the vehicle acted on it." = "La commande a expiré avant que la voiture ne l'exécute.";
+"The vehicle reported a problem with this command." = "La voiture a signalé un problème avec cette commande.";
+"This vehicle does not support this command." = "Cette voiture ne prend pas en charge cette commande.";

@@ -56,7 +56,8 @@ struct APIDiagnosticInspectorFilter: Equatable, Sendable {
         // Only the short fields are joined and lowercased. The payload can be 256 KB, so it is
         // searched in place instead of copied and lowercased for every entry on every keystroke.
         let head = [entry.method, entry.endpoint, entry.operation,
-                    entry.statusCode.map(String.init), entry.errorType, entry.semanticErrorType]
+                    entry.statusCode.map(String.init), entry.errorType, entry.semanticErrorType,
+                    entry.scopePartition]
             .compactMap { $0 }
             .joined(separator: " ")
             .lowercased()
@@ -212,6 +213,14 @@ struct APIDiagnosticInspectorView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             diagnosticDetail(L10n.text("Endpoint"), entry.endpoint)
                             diagnosticDetail(L10n.text("Operation"), entry.operation)
+                            if let partition = entry.scopePartition {
+                                diagnosticDetail(
+                                    L10n.text("Log partition"),
+                                    partition == VehicleLogScope.account.logPartition
+                                        ? L10n.text("Account")
+                                        : partition
+                                )
+                            }
                             diagnosticDetail(L10n.text("Duration"), "\(entry.durationMilliseconds) ms")
                             if let error = entry.errorType { diagnosticDetail(L10n.text("Error"), error) }
                             if let error = entry.semanticErrorType {

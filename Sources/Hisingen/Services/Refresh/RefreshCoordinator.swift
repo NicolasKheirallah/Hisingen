@@ -142,6 +142,12 @@ enum RefreshPolicy {
     /// hammering the backend buys nothing; 30 minutes still recovers promptly on wake.
     static let vehicleAsleepInterval: TimeInterval = 1_800
 
+    /// How old an `AVAILABLE` frame may be before it stops describing the car. A parked vehicle
+    /// answers every poll with the same availability frame it last sent, so keying the cadence on
+    /// the value alone kept polling a sleeping car at the awake rate: on 2026-11-21 the frame was
+    /// 8.5 hours old and the app spent roughly 100 requests learning what it already knew.
+    static let availabilityStaleAfter: TimeInterval = 30 * 60
+
     static func regularInterval(isCharging: Bool, isClimateActive: Bool = false) -> TimeInterval {
         (isCharging || isClimateActive) ? 120 : 600
     }
@@ -149,10 +155,17 @@ enum RefreshPolicy {
     /// Effective interval combines the activity-based cadence with vehicle availability:
     /// an asleep vehicle stretches toward `vehicleAsleepInterval`, never shortening the
     /// charging cadence below its normal value.
+    ///
+    /// A stale availability frame counts as asleep, but only while the car is neither charging
+    /// nor climatising. Those two states are the car proving it is awake, so they keep their own
+    /// cadence no matter how old the availability reading is.
     static func interval(isCharging: Bool, isClimateActive: Bool,
-                         isVehicleAvailable: Bool?) -> TimeInterval {
+                         isVehicleAvailable: Bool?,
+                         availabilityAge: TimeInterval? = nil) -> TimeInterval {
         let base = regularInterval(isCharging: isCharging, isClimateActive: isClimateActive)
-        guard isVehicleAvailable == false else { return base }
+        let staleAvailability = (availabilityAge ?? 0) > availabilityStaleAfter
+            && !isCharging && !isClimateActive
+        guard isVehicleAvailable == false || staleAvailability else { return base }
         return max(base, vehicleAsleepInterval)
     }
 
