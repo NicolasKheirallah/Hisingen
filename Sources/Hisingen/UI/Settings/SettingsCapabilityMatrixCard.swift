@@ -114,6 +114,23 @@ struct SettingsCapabilityMatrixCard: View {
                             .padding(.vertical, 8)
                     }
 
+                    // Volvo answers a per-VIN `/commands` list. The app still refuses anything
+                    // outside its catalog, so this read-only diagnostic names what the car offers
+                    // beyond what Hisingen can send — the evidence needed before adding a command
+                    // such as sunroof or window control.
+                    if let reported = state.probedCapabilities?.reportedCommandNames, !reported.isEmpty {
+                        Divider().opacity(HisingenTheme.dividerOpacity)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.text("Commands Reported by the Vehicle"))
+                                .hisType(.label, weight: .semibold)
+                            Text(reported.joined(separator: ", "))
+                                .hisType(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
                     Text(L10n.text("\"Direct tyre-pressure values\" means numeric kPa readings. Many vehicles report a warning level per tyre instead (indirect TPMS); those warnings still appear on the vehicle overview and in notifications."))
                         .hisType(.micro)
                         .foregroundStyle(.secondary)

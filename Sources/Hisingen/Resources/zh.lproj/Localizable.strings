@@ -4012,3 +4012,4 @@
 "Minimize" = "最小化";
 "Bring All to Front" = "前置全部窗口";
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "连接 Tibber 或选择瑞典即可使用市场价格和充电计划。没有价格来源时，将使用手动输入的费率。";
+"Commands Reported by the Vehicle" = "车辆报告的指令";

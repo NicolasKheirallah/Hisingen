@@ -16,6 +16,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   an alias for honk-and-flash, so older links keep working; `horn` is the horn-only action that
   previously had no route.
 
+### Added
+
+- Settings → Features → Vehicle Capability Matrix now lists the **commands the vehicle reports**
+  in its own command list. It is a read-only diagnostic: Hisingen still refuses anything outside
+  the commands it implements, and the list is what tells us which extra ones (such as a sunroof or
+  window command) a particular car actually offers.
+
 ### Changed
 
 - Market prices, the automatic rate and the **Charging Planner** now follow the selected

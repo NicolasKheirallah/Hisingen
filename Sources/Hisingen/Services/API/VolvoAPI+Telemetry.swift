@@ -239,6 +239,7 @@ extension VolvoAPI {
         }
         if let commands {
             let names = Set(commands.compactMap(\.normalizedName))
+            probes.reportedCommandNames = names.sorted()
             let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
             let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
             let supportsLocate = names.contains("honk") || names.contains("flash")

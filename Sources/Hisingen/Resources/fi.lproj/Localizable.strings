@@ -4012,3 +4012,4 @@
 "Minimize" = "Pienennä";
 "Bring All to Front" = "Tuo kaikki eteen";
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Yhdistä Tibber tai valitse Ruotsi käyttääksesi markkinahintoja ja lataussuunnittelijaa. Ilman hintalähdettä käytetään syötettyä hintaa.";
+"Commands Reported by the Vehicle" = "Ajoneuvon ilmoittamat komennot";

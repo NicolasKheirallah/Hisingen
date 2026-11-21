@@ -454,6 +454,11 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
 struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
     private var results: [VehicleCapability: VehicleCapabilitySupport]
     let probedAt: Date
+    /// Command names the vehicle's own `/commands` list advertises, normalized and sorted.
+    /// Optional so snapshots persisted before this field still decode. Volvo is the only provider
+    /// that reports a list; the app still refuses anything outside its catalog, so this is a
+    /// read-only diagnostic: it says what the car offers that Hisingen cannot send yet.
+    var reportedCommandNames: [String]? = nil
 
     static let stalenessInterval: TimeInterval = 6 * 3_600
 
