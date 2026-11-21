@@ -52,7 +52,8 @@ struct PolestarSessionHardeningTests {
             session: session, diagnosticLog: diagnostics, appVersion: "test",
             refresh: { _ in "new-sensitive-token" })
         let result: GraphQLResponse<RetryFixturePayload> = try await client.query(
-            "query { ok }", variables: NoVariables?.none, token: "old-sensitive-token", operation: "fixture")
+            "query { ok }", variables: NoVariables?.none, token: "old-sensitive-token", operation: "fixture",
+            scope: .account)
         #expect(result.data?.ok == true)
         let entries = await diagnostics.snapshot()
         try #require(entries.count == 2)

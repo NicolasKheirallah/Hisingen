@@ -581,7 +581,7 @@ extension PolestarGRPC {
            let lat = location.latitude, let lon = location.longitude,
            lat.isFinite, lon.isFinite, (-90...90).contains(lat), (-180...180).contains(lon) {
             if let weather = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
-                .weatherWithForecast(latitude: lat, longitude: lon) {
+                .weatherWithForecast(latitude: lat, longitude: lon, scope: .vehicle(vin)) {
                 return weather
             }
         }

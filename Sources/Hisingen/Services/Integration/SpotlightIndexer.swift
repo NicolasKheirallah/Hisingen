@@ -1,5 +1,4 @@
 import CoreSpotlight
-import CryptoKit
 import Foundation
 import OSLog
 import UniformTypeIdentifiers
@@ -53,11 +52,10 @@ enum SpotlightIndexer {
 
     /// Stable, non-reversible index key. The VIN was the `uniqueIdentifier`, which put the
     /// full identifier into the system index despite the README promising it stays out.
-    /// A salted-per-install value would break updates, so a plain digest is the right
-    /// trade: stable across launches, useless as a VIN.
+    /// The digest rule lives beside the VIN type so the diagnostic log's partition keys use
+    /// the same scheme rather than inventing a second one.
     private static func opaqueVehicleIdentifier(_ vin: String) -> String {
-        let digest = SHA256.hash(data: Data(vin.utf8))
-        return "vehicle-" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        VehicleOpaqueIdentifier.value(for: vin, byteCount: 16)
     }
 
     private static func attributeSet(for state: VehicleState,

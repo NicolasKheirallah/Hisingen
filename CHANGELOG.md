@@ -7,6 +7,19 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- The API diagnostic log is now kept per vehicle instead of as one list. Each car gets its own
+  log, and account-level traffic (sign-in, token grants, vehicle discovery) gets its own, so a
+  busy car can no longer push another car's requests out of the 24-hour window. Settings → SQLite
+  Storage & Data → Inspect Live API Log opens on the car you are looking at, switches between
+  every car, All, Account, and Unknown, keeps its filters inside the chosen log, and its Clear
+  button clears only what is on screen. A car that made no requests reads "No API requests
+  recorded" rather than being missing. The diagnostic bundle groups `apiRequests` by the same
+  partitions and adds an `apiRequestPartitions` index of counts and time windows, so a report
+  from a two-car account can be read one car at a time; `schemaVersion` is now 5. The archive
+  stays bounded per car (10,000 rows, 8 MB of payloads, 24 hours) and in total (30,000 rows,
+  32 MB, 16 cars). The VIN never reaches the file or the export: a car is named by a truncated
+  SHA-256 digest, the same opaque identifier Spotlight already uses.
+
 - A charging session the home charger measured now shows its **Average Price** (kr/kWh) beside the
   total, **Plugged In** when the cable stayed in well beyond the charge, and **Charging Loss**: the
   charger's energy minus the battery-side energy, as a share, left out when the battery side is a
@@ -27,6 +40,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   shows no note.
 
 ### Changed
+
+- Erasing a vehicle's local data also erases its diagnostic log partition. A plain sign-out keeps
+  it, because the log is the evidence for why the session ended and the 24-hour window retires it
+  without help.
+- The system unified log is still one stream under `io.kheirallah.hisingen`. A vehicle is request
+  data, not a logging category, so the per-car narrative lives in the API diagnostic log rather
+  than in a subsystem per car.
 
 - NexBlue sessions are now priced by when their energy flowed. The session list gives only a total,
   so each session used to be priced at the average price over every hour the cable was in, idle

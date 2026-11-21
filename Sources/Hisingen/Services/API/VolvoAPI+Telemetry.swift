@@ -29,42 +29,42 @@ extension VolvoAPI {
 
         let needsFuel = Self.needsFuelRead(powertrain: powertrain, fuelType: details.fuelType)
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
-            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel")
+            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel", scope: .vehicle(vin))
         }
 
         async let energyTask: VolvoEnergyStateDTO? = optional(enabled: needsEnergy, key: "energy-state", vin: vin) {
-            try await self.get("/energy/v2/vehicles/\(vin)/state")
+            try await self.get("/energy/v2/vehicles/\(vin)/state", scope: .vehicle(vin))
         }
         async let doorsTask: VolvoDoorsDTO? = optional(
             enabled: features.contains(.exteriorStatus) || features.contains(.remoteLocks), key: "doors", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/doors") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/doors", scope: .vehicle(vin)) }
         async let windowsTask: VolvoWindowsDTO? = optional(
             enabled: features.contains(.exteriorStatus) || features.contains(.remoteWindows), key: "windows", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/windows") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/windows", scope: .vehicle(vin)) }
         async let tyresTask: VolvoTyresDTO? = optional(
             enabled: features.contains(.tyreAndWarnings), key: "tyres", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/tyres") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/tyres", scope: .vehicle(vin)) }
         async let diagnosticsTask: VolvoDiagnosticsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "diagnostics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/diagnostics") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/diagnostics", scope: .vehicle(vin)) }
         async let engineDiagnosticsTask: VolvoDiagnosticsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "engine-diagnostics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine", scope: .vehicle(vin)) }
         async let odometerTask: VolvoOdometerDTO? = optional(
             enabled: features.contains(.vehicleHealth), key: "odometer", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/odometer") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/odometer", scope: .vehicle(vin)) }
         async let statisticsTask: VolvoStatisticsDTO? = optional(
             enabled: needsStatistics, key: "statistics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics", scope: .vehicle(vin)) }
         async let locationTask: VolvoLocationDTO? = optional(
             enabled: features.contains(.vehicleLocation), key: "location", vin: vin
-        ) { try await self.get("/location/v1/vehicles/\(vin)/location") }
+        ) { try await self.get("/location/v1/vehicles/\(vin)/location", scope: .vehicle(vin)) }
         async let brakesTask: VolvoBrakesDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/brakes") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/brakes", scope: .vehicle(vin)) }
         async let warningsTask: VolvoWarningsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "warnings", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings", scope: .vehicle(vin)) }
         // engine-status only feeds `fuelSystem.isEngineRunning`, so fetch it when the
         // fuel/powertrain information is actually part of the requested features instead of
         // paying two round trips on every narrow fetch (garage scans, trip-meters-only).
@@ -75,18 +75,18 @@ extension VolvoAPI {
                 && powertrain != .bev)
         async let engineStatusTask: VolvoEngineStatusDTO? = optional(
             enabled: needsEngineStatus, key: "engine-status", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status", scope: .vehicle(vin)) }
         // command-accessibility backs the availability badge and the remote-control cards;
         // its results are TTL-throttled, so fetch it only when one of those is requested.
         let needsCommandAccessibility = features.contains(.vehicleAvailability)
             || !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: needsCommandAccessibility, key: "command-accessibility", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility", scope: .vehicle(vin)) }
         let needsCommandCapabilities = !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
         async let commandsTask: [VolvoCommandDTO]? = optional(
             enabled: needsCommandCapabilities, key: "commands", vin: vin
-        ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands") }
+        ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands", scope: .vehicle(vin)) }
 
         let fuel = try await fuelTask
         let energy = try await energyTask
@@ -453,7 +453,9 @@ extension VolvoAPI {
     private func fetchCarImage(vin: String, imageUrlString: String?) async {
         if carImageData[vin] != nil || imageCache.image(for: vin) != nil { return }
         guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
-        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle image"),
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000,
+                                                        operation: "vehicle image",
+                                                        scope: .vehicle(vin)),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         carImageData[vin] = bytes
@@ -463,7 +465,9 @@ extension VolvoAPI {
     private func fetchInteriorImage(vin: String, imageUrlString: String?) async {
         if interiorImageData[vin] != nil || imageCache.interiorImage(for: vin) != nil { return }
         guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
-        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle interior image"),
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000,
+                                                        operation: "vehicle interior image",
+                                                        scope: .vehicle(vin)),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         interiorImageData[vin] = bytes

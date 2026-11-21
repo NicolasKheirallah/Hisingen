@@ -162,7 +162,8 @@ extension VolvoAPI {
     private func scheduleRevocation(_ request: URLRequest) {
         Task {
             do {
-                let (_, response) = try await perform(request, operation: "Volvo token revocation")
+                let (_, response) = try await perform(request, operation: "Volvo token revocation",
+                                                      scope: .account)
                 if !(200..<300).contains(response.statusCode) {
                     logger.debug("Volvo token revocation returned HTTP \(response.statusCode, privacy: .public)")
                 }

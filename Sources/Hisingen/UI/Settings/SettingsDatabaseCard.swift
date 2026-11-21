@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 @MainActor
 struct SettingsDatabaseCard: View {
     let state: VehicleState?
+    /// The garage, so the per-vehicle log picker can name every car rather than only the
+    /// partitions that happen to hold rows.
+    var fleet = FleetSnapshot()
     let database: VehicleDatabase
     /// The tier the maintenance actions must drop alongside the rows. This is the app's cache,
     /// not `CarImageCache.shared` – the two are different instances and dropping the wrong one
@@ -97,7 +100,7 @@ struct SettingsDatabaseCard: View {
                 await loadStats()
             }
             .sheet(isPresented: $showAPIDiagnosticInspector) {
-                APIDiagnosticInspectorView()
+                APIDiagnosticInspectorView(fleet: fleet, activeVIN: state?.identity.vin)
             }
         )
     }

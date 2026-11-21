@@ -17,7 +17,7 @@ struct APIDiagnosticLogTests {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 1_024,
             operation: "bounded exchange test", provider: .polestar,
-            diagnosticLog: diagnosticLog
+            scope: .account, diagnosticLog: diagnosticLog
         )
 
         #expect(response.statusCode == 200)
@@ -41,7 +41,7 @@ struct APIDiagnosticLogTests {
             _ = try await HTTPExchange.data(
                 for: request, using: session, limit: 64,
                 operation: "bounded exchange test", provider: .polestar,
-                diagnosticLog: diagnosticLog
+                scope: .account, diagnosticLog: diagnosticLog
             )
             Issue.record("Oversized body was accepted")
         } catch let error as PolestarError {
@@ -55,7 +55,7 @@ struct APIDiagnosticLogTests {
     @Test
     func recordRedactsVehicleIdentifiersAndSecrets() async throws {
         let store = APIDiagnosticLogStore()
-        await store.clear()
+        await store.clearAll()
         var request = URLRequest(url: URL(string: "https://api.example.test/vehicles/YV1XZEHR2R2371256/state?token=secret")!)
         request.httpMethod = "POST"
         request.setValue("Bearer do-not-export", forHTTPHeaderField: "Authorization")
@@ -95,7 +95,7 @@ struct APIDiagnosticLogTests {
         #expect(entry.responsePayloadJSON == nil)
         #expect(entry.payloadOmissionReason == "sensitive")
 
-        await store.clear()
+        await store.clearAll()
         await store.record(
             provider: .polestar, request: nil, operation: "profile",
             statusCode: 200, responseBytes: 80,
@@ -218,7 +218,7 @@ struct APIDiagnosticLogTests {
     @Test
     func errorTypeCarriesEnumPayloadsAndCodes() async throws {
         let store = APIDiagnosticLogStore()
-        await store.clear()
+        await store.clearAll()
         let startedAt = Date().addingTimeInterval(-0.05)
         await store.record(provider: .volvo, request: nil, operation: "poll",
                            startedAt: startedAt,
@@ -237,7 +237,7 @@ struct APIDiagnosticLogTests {
     @Test
     func cancelledRequestsAreNotRecorded() async throws {
         let store = APIDiagnosticLogStore()
-        await store.clear()
+        await store.clearAll()
 
         // Raw URLError.cancelled, and the shape the providers actually hand in: their own
         // error enum whose description carries the -999 code.
@@ -260,7 +260,7 @@ struct APIDiagnosticLogTests {
     @Test
     func exportIsBoundedByCountAndAge() async throws {
         let store = APIDiagnosticLogStore()
-        await store.clear()
+        await store.clearAll()
         // Span ends before the retention cutoff so *every* entry is too old.
         let old = Date().addingTimeInterval(-APIDiagnosticLogStore.retentionInterval - 700)
         for index in 0..<600 {
@@ -279,7 +279,7 @@ struct APIDiagnosticLogTests {
     @Test
     func totalPayloadBudgetDropsOldestBodies() async throws {
         let store = APIDiagnosticLogStore(totalPayloadBudget: 5_000)
-        await store.clear()
+        await store.clearAll()
         let base = Date()
         let body = Data(#"{"blob":"\#(String(repeating: "x", count: 900))"}"#.utf8)
         for index in 0..<10 {
@@ -299,7 +299,7 @@ struct APIDiagnosticLogTests {
     @Test
     func countCapTrimsOldestFirst() async throws {
         let store = APIDiagnosticLogStore()
-        await store.clear()
+        await store.clearAll()
         // Recent timestamps: this exercises the count cap, not the age window.
         let base = Date()
         for index in 0..<(APIDiagnosticLogStore.maximumEntries + 100) {

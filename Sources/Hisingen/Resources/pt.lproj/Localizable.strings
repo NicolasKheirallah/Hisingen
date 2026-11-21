@@ -3882,3 +3882,7 @@
 "Last changed %@" = "Última alteração em %@";
 "%d kW" = "%d kW";
 "%d kg" = "%d kg";
+
+// English fallback values pending translation
+"Vehicle %@" = "Vehicle %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ entries will be discarded. New requests are recorded again as they happen.";

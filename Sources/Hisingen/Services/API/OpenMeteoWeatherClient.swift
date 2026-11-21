@@ -8,30 +8,34 @@ struct OpenMeteoWeatherClient: Sendable {
     let session: URLSession
     let diagnosticLog: APIDiagnosticLogStore
 
-    func weather(latitude: Double, longitude: Double) async -> VehicleWeather? {
+    func weather(latitude: Double, longitude: Double,
+                 scope: VehicleLogScope) async -> VehicleWeather? {
         guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude),
-              let json = await fetch(url, operation: "Open-Meteo vehicle weather") else { return nil }
+              let json = await fetch(url, operation: "Open-Meteo vehicle weather", scope: scope)
+        else { return nil }
         return Self.currentWeather(from: json)
     }
 
     /// Current conditions with the hourly forecast attached, from one request so the coordinates
     /// leave the Mac once per refresh. A response without a usable `hourly` block still returns
     /// the current reading, so the forecast can only add to what `weather` returns.
-    func weatherWithForecast(latitude: Double, longitude: Double) async -> VehicleWeather? {
+    func weatherWithForecast(latitude: Double, longitude: Double,
+                             scope: VehicleLogScope) async -> VehicleWeather? {
         guard let url = Self.hourlyForecastURL(latitude: latitude, longitude: longitude),
-              let json = await fetch(url, operation: "Open-Meteo vehicle weather"),
+              let json = await fetch(url, operation: "Open-Meteo vehicle weather", scope: scope),
               var current = Self.currentWeather(from: json) else { return nil }
         current.hourlyTemperatures = Self.hourlyTemperatures(from: json)
         return current
     }
 
-    private func fetch(_ url: URL, operation: String) async -> [String: Any]? {
+    private func fetch(_ url: URL, operation: String,
+                       scope: VehicleLogScope) async -> [String: Any]? {
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         guard let (data, response) = try? await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: operation, provider: .polestar,
-            diagnosticLog: diagnosticLog
+            scope: scope, diagnosticLog: diagnosticLog
         ), response.statusCode == 200 else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
