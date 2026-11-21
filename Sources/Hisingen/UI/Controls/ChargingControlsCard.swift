@@ -408,9 +408,25 @@ struct ChargingControlsCard: View {
                     ? L10n.text("Charge now queued · applies when the car wakes")
                     : L10n.text("Resume schedule queued · applies when the car wakes"))
             }
+            if let note = chargeOverrideStateNote {
+                Text(note)
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .hisAnimation(Motion.stateChange, value: state.energy.chargeNowActive)
         .hisAnimation(Motion.layout, value: state.energy.pendingChargeNowOverride)
+    }
+
+    /// The Polestar ID path can send an override but cannot read one back, so the card would
+    /// otherwise say nothing after the reader pressed Charge Now. The note names the action and
+    /// the gap; it never claims the override is still active. It appears only within the note
+    /// window, so it explains a recent press instead of nagging permanently.
+    private var chargeOverrideStateNote: String? {
+        guard state.energy.chargeNowActive == nil,
+              ChargeOverrideEvidence.hasRecentOverride(state.commandState.receipts) else { return nil }
+        return L10n.text("Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active.")
     }
 
     @ViewBuilder

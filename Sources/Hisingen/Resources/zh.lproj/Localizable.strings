@@ -4013,3 +4013,4 @@
 "Bring All to Front" = "前置全部窗口";
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "连接 Tibber 或选择瑞典即可使用市场价格和充电计划。没有价格来源时，将使用手动输入的费率。";
 "Commands Reported by the Vehicle" = "车辆报告的指令";
+"Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen 已发送“立即充电”，但提供商不会报告计划覆盖是否仍处于活动状态。";

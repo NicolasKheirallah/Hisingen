@@ -4013,3 +4013,4 @@
 "Bring All to Front" = "Tout amener au premier plan";
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Connectez Tibber ou choisissez la Suède pour utiliser les prix du marché et le planificateur de recharge. Sans source de prix, un tarif saisi est utilisé.";
 "Commands Reported by the Vehicle" = "Commandes signalées par le véhicule";
+"Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen a envoyé Recharger maintenant, mais le fournisseur n'indique pas si le remplacement du planning est toujours actif.";

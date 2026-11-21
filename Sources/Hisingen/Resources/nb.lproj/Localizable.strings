@@ -4021,3 +4021,4 @@
 "Bring All to Front" = "Legg alle foran";
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Koble til Tibber eller velg Sverige for å bruke markedspriser og ladeplanleggeren. Uten en priskilde brukes en angitt takst.";
 "Commands Reported by the Vehicle" = "Kommandoer kjøretøyet rapporterer";
+"Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen sendte Lad nå, men leverandøren rapporterer ikke om overstyringen av tidsplanen fortsatt er aktiv.";

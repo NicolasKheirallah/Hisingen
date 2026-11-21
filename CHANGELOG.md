@@ -23,6 +23,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   the commands it implements, and the list is what tells us which extra ones (such as a sunroof or
   window command) a particular car actually offers.
 
+### Fixed
+
+- The charging card now says what happened when **Charge Now** was sent on a provider that cannot
+  report the override back, instead of going silent. The note names the action and the gap — it
+  never claims the override is still active — and appears only within 12 hours of a sent start or
+  stop, so it explains a recent press rather than nagging permanently.
+
 ### Changed
 
 - Market prices, the automatic rate and the **Charging Planner** now follow the selected
