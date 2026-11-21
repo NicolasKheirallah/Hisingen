@@ -7,6 +7,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- A Volvo sign-in that falls back to **data and climate** now clears the **Approved Volvo
+  permissions** state, so lock, unlock, engine start and honk/flash show as unavailable with the
+  explanation the sign-in notice already gave, instead of staying enabled and failing with 403 on
+  every tap. Previously only the narrowest fallback cleared it.
+- A Volvo sign-in no longer requests `conve:connectivity_status` or `conve:environment`. Nothing
+  reads either endpoint, and Volvo rejects the whole authorization when one requested scope is
+  unapproved, so an unread scope could push a valid sign-in down a tier.
 - Polestar no longer claims **remote engine start** or **lock with reduced guard**. Both used to
   read as supported — engine start fell through the Polestar model table's default branch, and a
   car reporting `lock_type` 3 advertised reduced guard — even though no invocation exists for

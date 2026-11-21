@@ -204,7 +204,11 @@ final class SignInCoordinator {
                         previousClientID: prevClientID
                     )
                     if tier != .full {
-                        if tier == .core { preferences.volvoRestrictedScopesEnabled = false }
+                        // Any narrowed tier means the approved scopes were not granted. Only
+                        // `.core` used to clear this, so a `.standard` sign-in left the flag on:
+                        // the notice correctly said lock/unlock/engine/locate were unavailable,
+                        // while the gate kept those buttons enabled and every send ended in 403.
+                        preferences.volvoRestrictedScopesEnabled = false
                         context?.presentSignInNotice(
                             title: tier == .standard
                                 ? L10n.text("Volvo connected – data & climate")

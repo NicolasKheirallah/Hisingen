@@ -23,7 +23,7 @@ struct VolvoIdentityProviderTests {
         #expect(VolvoIdentityProvider.legacy.revocationURL == nil)
     }
 
-    @Test("A new-system client authorizes at the new server and asks for its extra scopes")
+    @Test("A new-system client authorizes at the new server and asks for no unread scopes")
     @MainActor
     func newClientAuthorizesAtTheNewServer() async throws {
         let api = await makeAPI(clientID: newClient).api
@@ -36,10 +36,16 @@ struct VolvoIdentityProviderTests {
 
         let full = try await query(.full)
         #expect(full.host == "auth.volvocars.com")
-        #expect(full.scopes.contains("conve:connectivity_status"))
-        #expect(full.scopes.contains("conve:environment"))
+        // `conve:connectivity_status` and `conve:environment` were requested until 2026-11-21
+        // with nothing reading either endpoint. Volvo rejects the whole authorization when one
+        // requested scope is unapproved, so an unread scope can push a valid sign-in down a tier.
+        #expect(!full.scopes.contains("conve:connectivity_status"))
+        #expect(!full.scopes.contains("conve:environment"))
         #expect(!full.scopes.contains("conve:navigation"))
-        #expect(try await query(.standard).scopes.contains("conve:environment"))
+
+        let standard = try await query(.standard)
+        #expect(!standard.scopes.contains("conve:environment"))
+        #expect(!standard.scopes.contains("conve:connectivity_status"))
 
         // The floor must stay something the application is always granted.
         let core = try await query(.core).scopes
