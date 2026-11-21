@@ -2,6 +2,16 @@ import Foundation
 import OSLog
 import SwiftUI
 
+/// A vehicle the reader signed out of a multi-vehicle account. The account session is still
+/// live, so this records what to hide and how to label it in Settings → Garage.
+struct DetachedVehicle: Codable, Equatable, Sendable {
+    let vin: String
+    let brand: VehicleBrand
+    /// The label as it read when the vehicle was signed out. Empty when privacy redaction was
+    /// on at that moment; the row then falls back to the brand name.
+    let title: String
+}
+
 extension PreferencesStore {
     enum PolestarConnectionMode: String, Codable, Sendable, CaseIterable {
         case polestarID
@@ -219,5 +229,105 @@ extension PreferencesStore {
     /// this too instead of offering a browser round-trip whose grant would be discarded.
     var hasPolestarIDCredentials: Bool {
         keychain.hasStoredPolestarSession || keychain.hasStoredPolestarPassword
+    }
+
+    // MARK: - Vehicles signed out of a connected account
+
+    private var detachedVehiclesByVIN: [String: DetachedVehicle] {
+        guard let data = d.data(forKey: Self.detachedVehiclesKey),
+              let decoded = try? JSONDecoder().decode([String: DetachedVehicle].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private func storeDetachedVehicles(_ values: [String: DetachedVehicle]) {
+        if values.isEmpty {
+            d.removeObject(forKey: Self.detachedVehiclesKey)
+        } else if let data = try? JSONEncoder().encode(values) {
+            d.set(data, forKey: Self.detachedVehiclesKey)
+        } else {
+            d.removeObject(forKey: Self.detachedVehiclesKey)
+        }
+    }
+
+    func detachedVehicles(for brand: VehicleBrand) -> [DetachedVehicle] {
+        detachedVehiclesByVIN.values
+            .filter { $0.brand == brand }
+            .sorted { $0.vin.normalizedVIN < $1.vin.normalizedVIN }
+    }
+
+    func detachedVehicle(for vin: String) -> DetachedVehicle? {
+        detachedVehiclesByVIN[vin.normalizedVIN]
+    }
+
+    func isVehicleDetached(_ vin: String) -> Bool {
+        let key = vin.normalizedVIN
+        return !key.isEmpty && detachedVehiclesByVIN[key] != nil
+    }
+
+    func detachedVehicleVINs(for brand: VehicleBrand) -> Set<String> {
+        Set(detachedVehicles(for: brand).map { $0.vin.normalizedVIN })
+    }
+
+    func detachVehicle(vin: String, brand: VehicleBrand, title: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        var values = detachedVehiclesByVIN
+        values[key] = DetachedVehicle(vin: key, brand: brand, title: title)
+        storeDetachedVehicles(values)
+    }
+
+    func reconnectVehicle(vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        var values = detachedVehiclesByVIN
+        values.removeValue(forKey: key)
+        storeDetachedVehicles(values)
+    }
+
+    /// Clears the whole brand: a full account sign-out, a fresh credential save, or a successful
+    /// interactive sign-in all mean the account's vehicles are registered again.
+    func clearDetachedVehicles(for brand: VehicleBrand) {
+        let values = detachedVehiclesByVIN.filter { $0.value.brand != brand }
+        storeDetachedVehicles(values)
+    }
+
+    // MARK: - Known vehicles per account
+
+    private func knownVINsKey(for brand: VehicleBrand) -> String {
+        brand == .volvo ? "volvo_known_vins_v1" : "polestar_known_vins_v1"
+    }
+
+    /// The VINs this Mac has discovered for the account, persisted across launches. The selected
+    /// VIN alone is not enough: a second car is discovered only after a session restore or a
+    /// garage scan, and a sign-out before either would otherwise look like a single-car account.
+    func knownVINs(for brand: VehicleBrand) -> [String] {
+        var stored = d.stringArray(forKey: knownVINsKey(for: brand)) ?? []
+        let selected = vin(for: brand)
+        if !selected.isEmpty { stored.append(selected) }
+        let detached = detachedVehicleVINs(for: brand)
+        var seen = Set<String>()
+        return stored
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty && !detached.contains($0) && seen.insert($0).inserted }
+    }
+
+    /// Adds to the account's known set. Union, not replacement: a dormant scan can add a car
+    /// while the foreground discovery is still reporting an older list.
+    func rememberKnownVINs(_ vins: [String], for brand: VehicleBrand) {
+        let detached = detachedVehicleVINs(for: brand)
+        var seen = Set<String>()
+        var values = (d.stringArray(forKey: knownVINsKey(for: brand)) ?? [])
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+        for vin in vins.map({ $0.normalizedVIN }) where !vin.isEmpty && !detached.contains(vin) {
+            if seen.insert(vin).inserted { values.append(vin) }
+        }
+        d.set(values, forKey: knownVINsKey(for: brand))
+    }
+
+    func clearKnownVINs(for brand: VehicleBrand) {
+        d.removeObject(forKey: knownVINsKey(for: brand))
     }
 }

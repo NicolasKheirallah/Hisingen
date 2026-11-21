@@ -115,6 +115,34 @@ vehicle and passes the same capability and feature checks as the manual control;
 preconfigured automation with nobody at the Mac to answer a prompt, it does not raise the
 device-owner confirmation even when that is required for the manual controls.
 
+### Reminders
+
+The cards that report a service inspection warning, tyre-pressure warnings, or a battery at
+or below the plug-in threshold each offer an Add Reminder action. The reminder is written
+through macOS Reminders (EventKit) to your default list; it stays on your Mac and is never
+sent anywhere. Its due date is a default you can change in Reminders: the plug-in reminder
+is due half an hour out, the service reminder at 09:00 on the day the vehicle says service
+is due, the tyre reminder at 09:00 tomorrow. Tapping again on the same day adds nothing,
+because the note carries a Hisingen key that says the reminder already exists.
+
+The Plug-In Reminder alert can also write the reminder for you. Switch on "Also Add to
+Reminders" under Notifications; Hisingen asks for Reminders access when you enable it, and
+the automated reminder is created only while that access is granted. It never raises the
+Reminders permission prompt on its own. The battery figure in its note follows the Private
+Notification Banners setting.
+
+### Calendar write-back
+
+A schedule on the Plan tab can be placed on a calendar: open its details, or right-click
+the row, and choose Add to Calendar. Hisingen asks for the same full calendar access the
+preconditioning feature uses, offers only calendars you can write to, and creates one
+event on the schedule's next start. A charging window keeps its reported end, also past
+midnight; a schedule without one becomes a 30-minute event. Each event's note carries a
+Hisingen schedule key, so adding the same schedule to the same calendar again does nothing.
+Hisingen never deletes events it created: a schedule can also be removed on the vehicle's
+side with no signal reaching the app, so removing the event is left to you, and the key
+line makes it easy to find.
+
 ### Apple Shortcuts
 
 Hisingen exposes cached vehicle information and command handoffs to Apple Shortcuts using
@@ -331,6 +359,12 @@ for credentials.
 * **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
   The export menu on the Log tab also offers a **Full Backup (JSON)**, and Settings can export
   your settings (see [Make it yours](#make-it-yours)).
+* **Vehicle report.** The report menu on the Car tab offers **Copy Vehicle Report**, which
+  puts the whole report on the clipboard, and **Share Vehicle Report…**, which shares it as a
+  PDF through the share sheet. Both follow Screenshot Privacy: with privacy on, the VIN is
+  masked and the registration and parking location are left out, and the shared file's name
+  never carries the VIN either way. **Export Vehicle Report…** saves the same report as
+  plain text.
 * **Handover pack.** **Car → Export Handover Pack…** writes a folder for a sale or trade: a
   summary, charging and trip CSVs without locations, an optional VIN (a checkbox in the save
   panel) and a checklist of the steps that still happen in the manufacturer app or in the car.
@@ -339,8 +373,19 @@ for credentials.
   Recording stays paused for the affected vehicles until the cleanup finishes, so queued writes
   cannot bring erased data back. A failure in local erasure is reported separately from a
   failure to clear credential storage.
-* **Sign out stays signed out.** Signing out clears the email, portal IDs, Volvo custom app, VIN
-  and Keychain items for that brand and the memory cache. An explicit per-brand flag stops
+* **Sign out keeps you on another registered car.** Signing out an account with more than one
+  car signs out only the active car. The car leaves Garage & Fleet, keeps the same local-history
+  rules, and the next car becomes active while the account stays signed in. Settings → Accounts →
+  Garage & Fleet lists the car under Signed Out Vehicles with Bring Back; its nickname and theme
+  survive, while its snapshot, command receipts and charging baseline are cleared. The same
+  confirmation offers Sign Out Entire Account… if you want to remove the whole account. A charger
+  paired to the signed-out car is unpaired, so Home Charging does not report a hidden vehicle.
+  Links, old notifications and Shortcuts naming the car do not bring it back on their own.
+* **Signing out the last car** removes that account's credentials; if another brand is connected,
+  Hisingen resumes its stored car instead of showing the login screen. With no other car
+  registered, it returns to the login screen and closes Settings.
+* **Sign out stays signed out.** Signing out an account clears its email, portal IDs, Volvo
+  custom app, VIN and Keychain items, and the memory cache. An explicit per-brand flag stops
   Hisingen from signing back in on relaunch from built-in developer credentials plus a lingering
   server-side grant. Saving credentials or signing in again lifts it. A cancelled or failed
   sign-in keeps your previous session.
@@ -365,7 +410,8 @@ In practical terms:
 | **Vehicle cache**                | Stored locally                                            |
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
-| **Calendar events**              | Read locally from calendars you select; never sent anywhere |
+| **Calendar events**              | Read locally from calendars you select; events you ask for are written back; never sent anywhere |
+| **Reminders**                    | Written locally through macOS Reminders when you ask Hisingen to; never sent anywhere |
 | **Map integration**              | Uses Apple services where applicable                      |
 | **Update checks**                | Uses Hisingen's signed Sparkle update feed                |
 

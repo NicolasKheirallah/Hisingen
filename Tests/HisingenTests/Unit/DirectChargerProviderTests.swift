@@ -174,6 +174,29 @@ struct EaseeProviderTests {
         #expect(telemetry.freshness(now: now) == .current(age: 0))
     }
 
+    @Test("Cable rating, phase mode and the connection type fill the charger's detail rows")
+    func supplyDetails() throws {
+        let data = observations([(109, "3"), (120, "7.31"), (48, "16"), (104, "32"), (38, "3"), (141, "1"), (250, "true")])
+        let telemetry = try EaseeProvider.telemetry(from: data, now: now)
+        #expect(telemetry.cableLimitAmps?.value == 32)
+        #expect(telemetry.phaseMode?.value == .threePhase)
+        #expect(telemetry.network?.value == .wifi)
+        // Easee measures input terminals and the documentation does not map them to phases, and it
+        // publishes no circuit fuse, so those rows stay off.
+        #expect(telemetry.phases == nil)
+        #expect(telemetry.circuitFuseAmps == nil)
+
+        let cellular = try EaseeProvider.telemetry(from: observations([(109, "3"), (38, "1"), (141, "0")]), now: now)
+        #expect(cellular.phaseMode?.value == .singlePhase)
+        #expect(cellular.network?.value == .mobile)
+
+        // Values the documentation does not name read as nothing, never as a guess.
+        let undocumented = try EaseeProvider.telemetry(from: observations([(109, "3"), (38, "2"), (141, "5"), (104, "0")]), now: now)
+        #expect(undocumented.phaseMode == nil)
+        #expect(undocumented.network == nil)
+        #expect(undocumented.cableLimitAmps == nil)
+    }
+
     @Test("A charger the cloud reports offline is unavailable, never a stale reading of its last state")
     func offline() throws {
         let byMode = try EaseeProvider.telemetry(from: observations([(109, "0"), (120, "7")]), now: now)
@@ -193,7 +216,7 @@ struct EaseeProviderTests {
         let telemetry = try await easee(transport).telemetry(chargerID: "EH1", now: now)
         #expect(telemetry.status?.value == .unplugged)
         let query = try #require(transport.requests(path: "/state/EH1/observations").first?.url?.query)
-        #expect(query.hasPrefix("ids=109%2C103%2C120"))
+        #expect(query == "ids=109%2C103%2C120%2C121%2C124%2C48%2C96%2C250%2C104%2C38%2C141")
     }
 
     @Test("Pause, resume, a delayed start and an authorisation-only start each use their own command")
@@ -315,6 +338,46 @@ struct ZaptecProviderTests {
         #expect(telemetry.sessionEnergyKwh?.value == 5.5)
         #expect(telemetry.currentLimitAmps?.value == 16)
         #expect(telemetry.status?.timestamp == now)
+    }
+
+    @Test("Phase voltages and currents, the cable rating, the phases in use and the network mode fill the detail rows")
+    func supplyDetails() throws {
+        let data = zaptecState([(710, "3"), (513, "7360"), (708, "16"),
+                                (501, "230"), (502, "231"), (503, "229"),
+                                (507, "16"), (508, "15.5"), (509, "16.2"),
+                                (714, "32"), (519, "4"), (150, "Wifi")])
+        let telemetry = try ZaptecProvider.telemetry(from: data, now: now)
+        #expect(telemetry.phases?.value.map(\.volts) == [230, 231, 229])
+        #expect(telemetry.phases?.value.map(\.amps) == [16, 15.5, 16.2])
+        #expect(telemetry.cableLimitAmps?.value == 32)
+        #expect(telemetry.phaseMode?.value == .threePhase)
+        #expect(telemetry.network?.value == .wifi)
+        // Zaptec publishes no circuit-fuse state, so that row stays off.
+        #expect(telemetry.circuitFuseAmps == nil)
+    }
+
+    @Test("A phase missing one of its two readings is left out, and undocumented values read as nothing")
+    func partialAndUnknown() throws {
+        // Phase 2 has a voltage and no current; pairing it with a neighbour would invent a reading.
+        let partial = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (501, "230"), (502, "231"),
+                                                                      (503, "229"), (507, "16"), (509, "16")]), now: now)
+        #expect(partial.phases?.value.count == 2)
+        #expect(partial.phases?.value.map(\.volts) == [230, 229])
+
+        // SetPhases 1 is one TN phase and 9 is all three IT phases (Zaptec's constants, PhaseIdMap).
+        let single = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (519, "1")]), now: now)
+        #expect(single.phaseMode?.value == .singlePhase)
+        let itThreePhase = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (519, "9")]), now: now)
+        #expect(itThreePhase.phaseMode?.value == .threePhase)
+
+        let lte = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (150, "LTE")]), now: now)
+        #expect(lte.network?.value == .mobile)
+        // PLC and a SetPhases value outside Zaptec's table are left out rather than guessed.
+        let plc = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (150, "PLC")]), now: now)
+        #expect(plc.network == nil)
+        let unknown = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (519, "7"), (714, "0")]), now: now)
+        #expect(unknown.phaseMode == nil)
+        #expect(unknown.cableLimitAmps == nil)
     }
 
     @Test("Paused, scheduled and full are told apart, and offline is unavailable")

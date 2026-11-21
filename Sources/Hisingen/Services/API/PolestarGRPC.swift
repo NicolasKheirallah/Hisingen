@@ -261,10 +261,10 @@ actor PolestarGRPC {
             if transport.supportsTrailers, result.status == nil {
                 throw PolestarError.invalidResponse(operation: "live gRPC missing final status")
             }
-            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
+            await recordExchange(state: result, request: request, path: path, vin: vin, startedAt: startedAt)
         } catch {
             await recordExchange(state: await state.snapshot(), request: request, path: path,
-                                 startedAt: startedAt, error: error)
+                                 vin: vin, startedAt: startedAt, error: error)
             throw error
         }
     }
@@ -285,11 +285,15 @@ actor PolestarGRPC {
         }
     }
 
+    /// `vin` is the vehicle the request addressed. Every gRPC read and command carries one, so
+    /// the partition follows the request rather than a separate scope parameter that could
+    /// disagree with it.
     private func recordExchange(
         state: PolestarGRPCExchangeState.Snapshot, request: URLRequest, path: String,
-        startedAt: Date, error: (any Error)? = nil
+        vin: String, startedAt: Date, error: (any Error)? = nil
     ) async {
         await diagnosticLog.record(provider: .polestar, request: request, operation: "gRPC \(path)",
+            scope: .vehicle(vin),
             grpcStatus: state.grpcCode, grpcMessage: state.grpcMessage,
             statusCode: state.head?.httpStatus, responseBytes: state.lastMessage?.count,
             responseData: state.lastMessage, startedAt: startedAt, error: error)
@@ -551,7 +555,7 @@ actor PolestarGRPC {
                         isLast ? nil : Self.expectedDiscoveryRetry
                     let (data, response) = try await HTTPExchange.data(
                         for: request, using: session, limit: 256_000, operation: "C3 discovery",
-                        provider: .polestar, diagnosticLog: diagnosticLog,
+                        provider: .polestar, scope: .account, diagnosticLog: diagnosticLog,
                         semanticError: classifier
                     )
                     if let failure = PolestarError.httpFailure(
@@ -701,11 +705,11 @@ actor PolestarGRPC {
             guard let body = result.firstMessage else {
                 throw PolestarError.invalidResponse(operation: "empty gRPC response")
             }
-            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
+            await recordExchange(state: result, request: request, path: path, vin: vin, startedAt: startedAt)
             return body
         } catch {
             await recordExchange(state: await state.snapshot(), request: request, path: path,
-                                 startedAt: startedAt, error: error)
+                                 vin: vin, startedAt: startedAt, error: error)
             throw error
         }
     }
@@ -784,7 +788,7 @@ actor PolestarGRPC {
                   !transport.supportsTrailers || result.status?.code == 0 || closedByDeadline else {
                 throw PolestarError.commandOutcomeUnknown(operation: path)
             }
-            await recordExchange(state: result, request: request, path: path, startedAt: startedAt)
+            await recordExchange(state: result, request: request, path: path, vin: vin, startedAt: startedAt)
             return body
         } catch {
             let snapshot = await state.snapshot()
@@ -795,7 +799,8 @@ actor PolestarGRPC {
             } else {
                 finalError = PolestarError.commandOutcomeUnknown(operation: path)
             }
-            await recordExchange(state: snapshot, request: request, path: path, startedAt: startedAt, error: finalError)
+            await recordExchange(state: snapshot, request: request, path: path, vin: vin,
+                             startedAt: startedAt, error: finalError)
             throw finalError
         }
     }

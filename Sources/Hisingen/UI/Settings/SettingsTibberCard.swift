@@ -7,6 +7,13 @@ import SwiftUI
 @MainActor
 struct SettingsTibberCard: View {
     @ObservedObject var model: HomeChargingModel
+    /// Observed directly, so the live-status row follows the stream and not just the supplier.
+    @ObservedObject private var live: TibberLiveModel
+
+    init(model: HomeChargingModel) {
+        self.model = model
+        self.live = model.tibberLive
+    }
 
     @State private var token = ""
     @State private var isConnecting = false
@@ -94,6 +101,8 @@ struct SettingsTibberCard: View {
                 }
                 KVRow(L10n.text("Prices"), model.tibberProblem ?? L10n.text("Used for the planner and charging sessions"),
                       valueWarning: model.tibberProblem != nil)
+                KVRow(L10n.text("Live House Power"), liveStatusText,
+                      info: L10n.text("Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one."))
             }
             Text(L10n.text("Tibber's price includes energy, taxes and its markup but not the grid fee. Set the grid tariff under Electricity. A paired charger can use its own tariff."))
                 .hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
@@ -116,6 +125,16 @@ struct SettingsTibberCard: View {
                 .disabled(isConnecting)
             }
             .controlSize(.small)
+        }
+    }
+
+    private var liveStatusText: String {
+        switch live.link {
+        case .notConfigured, .connecting: return L10n.text("Connecting…")
+        case .live: return L10n.text("Reading live")
+        case .noPulse: return L10n.text("No Pulse paired")
+        case .reconnecting: return L10n.text("Reconnecting")
+        case .unauthorized: return L10n.text("Sign-in refused")
         }
     }
 

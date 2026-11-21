@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// What the reader asked the sign-out button to do when an account has more than one car.
+/// The automatic path prefers a sibling; this only matters when they deliberately choose the
+/// whole account.
+enum SignOutSelection {
+    case vehicle
+    case account
+}
+
 enum SettingsChange {
     case credentials
     case features
@@ -21,6 +29,8 @@ enum SettingsChange {
     case reauthenticate(VehicleBrand)
     case switchToBrand(VehicleBrand)
     case selectVehicle(String)
+    /// Bring back a vehicle signed out of a still-connected account.
+    case reconnectVehicle(String)
     case closeSettings
     /// Builds the redacted diagnostic report and offers a save panel – reachable directly
     /// from sign-in failure surfaces so a broken login can be attached to a bug report.

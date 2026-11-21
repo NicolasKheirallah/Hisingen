@@ -13,7 +13,10 @@ struct SettingsView: View {
     /// with no snapshot yet — because there is no bar to leave by.
     var showsHeaderBar = true
     let onSettingsChanged: (SettingsChange) -> Void
-    let onSignOut: () -> Void
+    let onSignOut: (SignOutSelection) -> Void
+    /// A live fleet read for the sign-out confirmation. The `fleet` value is a snapshot taken
+    /// when the window was built; a car discovered later must still change the copy.
+    var liveFleet: (@MainActor () -> FleetSnapshot)? = nil
     let accountConnection: AccountConnectionModel
     var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
         ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
@@ -337,7 +340,11 @@ struct SettingsView: View {
                     model: accountConnection
                 )
                 Divider().opacity(HisingenTheme.dividerOpacity)
-                SettingsSignOutButton(binder: binder, onSignOut: onSignOut)
+                SettingsSignOutButton(
+                    binder: binder,
+                    onSignOut: onSignOut,
+                    fleetProvider: liveFleet ?? { fleet }
+                )
             }
         }
     }

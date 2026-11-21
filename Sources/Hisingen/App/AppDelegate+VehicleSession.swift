@@ -31,6 +31,17 @@ extension AppDelegate: VehicleSessionControllerContext {
         notifier.authenticationSucceeded()
     }
 
+    func signOutRevocationFailed(brand: VehicleBrand) {
+        notifier.notifyCommandNotice(
+            title: L10n.text("Sign out did not finish"),
+            body: L10n.format(
+                "Hisingen could not finish signing out of %@. The account was removed from this Mac, but the service did not confirm revocation. Sign in and out again to retry.",
+                brand.displayName
+            ),
+            subtitle: brand.displayName
+        )
+    }
+
     func vehicleSwitchDidPause() {
         guard !statusController.isPopoverVisible else { return }
         notifier.notifyCommandNotice(

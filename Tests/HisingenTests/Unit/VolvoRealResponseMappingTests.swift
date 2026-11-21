@@ -21,12 +21,15 @@ private let mappingWindowsJSON = #"{"frontLeftWindow":{"timestamp":"2026-11-21T0
 
 private let mappingAccessibilityJSON = #"{"availabilityStatus":{"timestamp":"2026-11-21T08:39:12.650Z","value":"AVAILABLE"}}"#
 
+private let mappingCapabilitiesJSON = #"{"data":{"getEnergyState":{"isSupported":true,"batteryChargeLevel":{"isSupported":true},"electricRange":{"isSupported":true},"chargerConnectionStatus":{"isSupported":true},"chargingSystemStatus":{"isSupported":true},"chargingType":{"isSupported":true},"chargerPowerStatus":{"isSupported":true},"chargingPower":{"isSupported":true},"chargingCurrentLimit":{"isSupported":true},"estimatedChargingTimeToTargetBatteryChargeLevel":{"isSupported":true},"targetBatteryChargeLevel":{"isSupported":false}}}}"#
+
 private let mappingTokenJSON = #"{"access_token":"fake-access-token","refresh_token":"fake-refresh-token","expires_in":3600,"token_type":"Bearer"}"#
 
 private let mappingRoutes: [String: String] = [
     "/connected-vehicle/v2/vehicles/\(mappingVIN)": mappingDetailsJSON,
     "/connected-vehicle/v2/vehicles/\(mappingVIN)/statistics": mappingStatisticsJSON,
     "/energy/v2/vehicles/\(mappingVIN)/state": mappingEnergyJSON,
+    "/energy/v2/vehicles/\(mappingVIN)/capabilities": mappingCapabilitiesJSON,
     "/connected-vehicle/v2/vehicles/\(mappingVIN)/doors": mappingDoorsJSON,
     "/connected-vehicle/v2/vehicles/\(mappingVIN)/windows": mappingWindowsJSON,
     "/location/v1/vehicles/\(mappingVIN)/location": mappingLocationJSON,
@@ -165,6 +168,66 @@ struct VolvoRealResponseMappingTests {
         // Newest of the door and window readings, which here is a window.
         #expect(isWithinCentisecond(state.exteriorStatus?.reportedAt, of: 1_795_242_700.1))
         #expect(isWithinCentisecond(state.identity.availabilityReportedAt, of: 1_795_250_352.65))
+    }
+
+    /// Live Volvo refreshes each resource on its own schedule. These payloads carry the real
+    /// spread from one account: the doors reported at 06:20 and the energy state at 08:24, while
+    /// the location sat at 06:08 the previous day. Collapsing them into one `vehicleReportedAt`
+    /// made the day-old location read as the newest thing in the sweep.
+    @Test("A reading keeps its own report time instead of the sweep's newest")
+    func readingDatesFollowEachEndpoint() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        defer { try? keychain.deleteVolvoSessionToken() }
+        let api = await makeReplayAPI(keychain: keychain)
+        await api.seedReplayRefreshToken("fake-stored-refresh-token")
+
+        let state = try await api.fetchVehicleState(
+            vin: mappingVIN,
+            features: FeatureSelection(enabled: [
+                .chargingDetails, .tripMeters, .vehicleLocation, .exteriorStatus, .vehicleAvailability
+            ])
+        )
+
+        #expect(state.reportedDate(for: .battery) == Date(timeIntervalSince1970: 1_795_249_446))
+        #expect(isWithinCentisecond(state.reportedDate(for: .locks), of: 1_795_242_006.337))
+        #expect(isWithinCentisecond(state.reportedDate(for: .location), of: 1_795_154_932.6))
+        #expect(isWithinCentisecond(state.reportedDate(for: .availability), of: 1_795_250_352.65))
+        // The vehicle as a whole is as fresh as its newest reading, which must not stand in for
+        // the older ones: the location is more than a day behind it.
+        let newest = try #require(state.freshness.vehicleReportedAt)
+        let location = try #require(state.reportedDate(for: .location))
+        #expect(newest.timeIntervalSince(location) > 86_400)
+    }
+
+
+    /// The capabilities response is the car's own statement of what it can report. Every
+    /// decoded flag has to reach the probe record in both directions: a `false` flag is
+    /// what hides a charging-card row the car cannot report, so losing it would put the
+    /// blank right back.
+    @Test("Every energy-capability flag reaches the probe record")
+    func energyCapabilityFlagsProbePerVIN() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        defer { try? keychain.deleteVolvoSessionToken() }
+        let api = await makeReplayAPI(keychain: keychain)
+        await api.seedReplayRefreshToken("fake-stored-refresh-token")
+
+        let state = try await api.fetchVehicleState(
+            vin: mappingVIN,
+            features: FeatureSelection(enabled: [.chargingDetails])
+        )
+
+        let probes = try #require(state.probedCapabilities)
+        #expect(probes.support(for: .batteryChargeLevel) == .supported)
+        #expect(probes.support(for: .electricRange) == .supported)
+        #expect(probes.support(for: .chargerConnectionStatus) == .supported)
+        #expect(probes.support(for: .chargingSystemStatus) == .supported)
+        #expect(probes.support(for: .chargingType) == .supported)
+        #expect(probes.support(for: .chargerPowerStatus) == .supported)
+        #expect(probes.support(for: .chargingPower) == .supported)
+        #expect(probes.support(for: .estimatedChargingTimeToTarget) == .supported)
+        #expect(probes.support(for: .chargingCurrentLimit) == .supported)
+        // The one flag the fixture says is false: the car cannot report a charge target.
+        #expect(probes.support(for: .chargeTarget) == .unavailable)
     }
 
     // MARK: - Harness

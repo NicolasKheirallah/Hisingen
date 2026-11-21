@@ -36,6 +36,10 @@ struct APILogEntry: Codable, Equatable, Sendable {
     /// connection loss, cancellation-adjacent teardown). Separates "the server returned no
     /// status" from "the status was not recorded".
     let transportError: Bool?
+    /// Which log partition the exchange belongs to: `account`, or `vehicle-` plus a digest of
+    /// the VIN (never the VIN itself; see `VehicleLogScope.logPartition`). Optional so rows
+    /// persisted before the field existed keep decoding.
+    let scopePartition: String?
     /// Provenance belongs to each row because the ring buffer survives relaunches.
     let appVersion: String?
     let appBuild: String?
@@ -49,7 +53,8 @@ struct APILogEntry: Codable, Equatable, Sendable {
          grpcStatus: String? = nil, grpcMessage: String? = nil, transportError: Bool? = nil,
          appVersion: String? = nil, appBuild: String? = nil,
          processIdentifier: Int32? = nil, launchIdentifier: String? = nil,
-         logicalOperationID: String? = nil, attempt: Int? = nil) {
+         logicalOperationID: String? = nil, attempt: Int? = nil,
+         scopePartition: String? = nil) {
         self.timestamp = timestamp
         self.provider = provider
         self.method = method
@@ -71,6 +76,7 @@ struct APILogEntry: Codable, Equatable, Sendable {
         self.appBuild = appBuild
         self.processIdentifier = processIdentifier
         self.launchIdentifier = launchIdentifier
+        self.scopePartition = scopePartition
     }
 
     var payloadOmitted: Bool { responsePayloadJSON == nil && responseBytes != nil }
@@ -87,7 +93,8 @@ struct APILogEntry: Codable, Equatable, Sendable {
             grpcMessage: grpcMessage, transportError: transportError,
             appVersion: appVersion, appBuild: appBuild,
             processIdentifier: processIdentifier, launchIdentifier: launchIdentifier,
-            logicalOperationID: logicalOperationID, attempt: attempt)
+            logicalOperationID: logicalOperationID, attempt: attempt,
+            scopePartition: scopePartition)
     }
 }
 
@@ -127,6 +134,7 @@ actor APIDiagnosticLogStore {
     }
 
     func record(provider: APILogProvider, request: URLRequest?, operation: String,
+                scope: VehicleLogScope = .account,
                 grpcStatus: String? = nil, grpcMessage: String? = nil,
                 statusCode: Int? = nil, responseBytes: Int? = nil, responseData: Data? = nil,
                 startedAt: Date, error: Error? = nil, timestamp overrideTimestamp: Date? = nil,
@@ -175,7 +183,8 @@ actor APIDiagnosticLogStore {
             processIdentifier: ProcessInfo.processInfo.processIdentifier,
             launchIdentifier: Self.launchIdentifier,
             logicalOperationID: logicalOperationID,
-            attempt: attempt
+            attempt: attempt,
+            scopePartition: scope.logPartition
         )
         entries.append(entry)
         trimIfNeeded()

@@ -9,6 +9,7 @@ enum HTTPExchange {
         limit: Int,
         operation: String,
         provider: VehicleBrand,
+        scope: VehicleLogScope = .account,
         diagnosticLog: APIDiagnosticLogStore = .shared,
         logicalOperationID: UUID? = nil,
         attempt: Int? = nil,
@@ -53,6 +54,7 @@ enum HTTPExchange {
             }
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
+                scope: scope,
                 statusCode: http.statusCode, responseBytes: data.count,
                 responseData: data, startedAt: startedAt,
                 semanticErrorType: semanticError?(data, http.statusCode),
@@ -62,6 +64,7 @@ enum HTTPExchange {
             let mapped = (error as? URLError).map { Self.network($0, provider: provider) } ?? error
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
+                scope: scope,
                 statusCode: receivedStatus, startedAt: startedAt, error: mapped,
                 logicalOperationID: logicalOperationID?.uuidString, attempt: attempt)
             throw mapped

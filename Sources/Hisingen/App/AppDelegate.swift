@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         }
         statusController.onOpenUpdate = { [weak self] in self?.updateController.checkNow() }
         statusController.onSettingsChanged = { [weak self] change in self?.settingsChanged(change) }
-        statusController.onSignOut = { [weak self] in self?.signOut() }
+        statusController.onSignOut = { [weak self] selection in self?.signOut(selection: selection) }
         statusController.onTestConnection = { [weak self] brand in
             guard let self else { return ConnectionCheck(success: false, message: L10n.text("Hisingen is no longer running."), failureKind: nil) }
             return await self.connectionTester.test(brand: brand)
@@ -174,7 +174,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             restoreDormantSession: { [sessionManager, providerRegistry, preferences] brand in
                 let provider = providerRegistry.provider(for: brand)
                 try await sessionManager.restore(api: provider, preferences: preferences)
-            })
+            },
+            isVehicleDetached: { [preferences] vin in preferences.isVehicleDetached(vin) })
         urlRouter = URLCommandRouter(context: self)
         // Composition is complete: Shortcuts intents may now dispatch in-process. They
         // await this install, so a cold-launch intent waits here instead of round-tripping

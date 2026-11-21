@@ -296,6 +296,7 @@ actor PolestarDataPortalAPI {
             limit: 256 * 1024,
             operation: "Polestar Data Portal token grant",
             provider: .polestar,
+            scope: .account,
             diagnosticLog: diagnosticLog,
             logicalOperationID: UUID(),
             attempt: 1
@@ -339,9 +340,9 @@ actor PolestarDataPortalAPI {
     }
 
 
-    private func portalExchange(for request: URLRequest, using session: URLSession, limit: Int, operation: String, provider: VehicleBrand, diagnosticLog: APIDiagnosticLogStore, logicalOperationID: UUID? = nil, attempt: Int? = nil) async throws -> (Data, HTTPURLResponse) {
+    private func portalExchange(for request: URLRequest, using session: URLSession, limit: Int, operation: String, provider: VehicleBrand, scope: VehicleLogScope, diagnosticLog: APIDiagnosticLogStore, logicalOperationID: UUID? = nil, attempt: Int? = nil) async throws -> (Data, HTTPURLResponse) {
         do {
-            return try await HTTPExchange.data(for: request, using: session, limit: limit, operation: operation, provider: provider, diagnosticLog: diagnosticLog, logicalOperationID: logicalOperationID, attempt: attempt)
+            return try await HTTPExchange.data(for: request, using: session, limit: limit, operation: operation, provider: provider, scope: scope, diagnosticLog: diagnosticLog, logicalOperationID: logicalOperationID, attempt: attempt)
         } catch let error as PolestarError {
             switch error {
             case .network(let cause):
@@ -392,12 +393,16 @@ actor PolestarDataPortalAPI {
             let request = try makeRequest(token: attempt == 0 ? token : (try await refreshFor401(replacing: token)))
             try checkEpoch(epoch)
             try reserveApiCall()
+            // `expectedVIN` names the vehicle this read is for; it is the same fact the
+            // diagnostic partition needs, so the scope is derived from it rather than taken
+            // as a second parameter that could disagree.
             let (data, response) = try await portalExchange(
                 for: request,
                 using: session,
                 limit: 1_000_000,
                 operation: "Data Portal: \(path)",
                 provider: .polestar,
+                scope: expectedVIN.map(VehicleLogScope.vehicle) ?? .account,
                 diagnosticLog: diagnosticLog,
                 logicalOperationID: logicalOperationID,
                 attempt: attempt + 1
@@ -741,7 +746,7 @@ actor PolestarDataPortalAPI {
         }
         let epoch = sessionEpoch
         let value = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
-            .weatherWithForecast(latitude: latitude, longitude: longitude)
+            .weatherWithForecast(latitude: latitude, longitude: longitude, scope: .vehicle(vin))
         if let value, sessionEpoch == epoch, !Task.isCancelled {
             weatherCache[vin] = (value, now())
         }

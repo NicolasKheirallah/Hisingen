@@ -43,6 +43,9 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
     /// When the car last reported `targetPercentage`. Lets a screen tell a current target from one
     /// the car has not refreshed.
     var targetPercentageReportedAt: Date? = nil
+    /// The car's own mode for `targetPercentage`: Daily, Long trip or Custom. Reported by the
+    /// Polestar Data Portal only; Volvo has no mode, and `nil` means the car said nothing.
+    var chargeTargetSettingMode: ChargeTargetSettingMode? = nil
     var powerWatts: Int?
     var currentAmps: Int?
     var voltageVolts: Int?
@@ -91,6 +94,7 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         estimatedTimeToTargetMinutes: Int? = nil,
         targetPercentage: Int? = nil,
         targetPercentageReportedAt: Date? = nil,
+        chargeTargetSettingMode: ChargeTargetSettingMode? = nil,
         powerWatts: Int? = nil,
         currentAmps: Int? = nil,
         voltageVolts: Int? = nil,
@@ -121,6 +125,7 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         self.estimatedTimeToTargetMinutes = estimatedTimeToTargetMinutes
         self.targetPercentage = targetPercentage
         self.targetPercentageReportedAt = targetPercentageReportedAt
+        self.chargeTargetSettingMode = chargeTargetSettingMode
         self.powerWatts = powerWatts
         self.currentAmps = currentAmps
         self.voltageVolts = voltageVolts

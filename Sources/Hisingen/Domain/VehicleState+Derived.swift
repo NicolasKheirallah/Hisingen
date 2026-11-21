@@ -476,4 +476,25 @@ extension VehicleState {
         if date.timeIntervalSince(fetchedAt) < 120 { return false }
         return hasOldData(at: date)
     }
+
+    /// Readings whose own report time is older than `maximumAge`, oldest first.
+    ///
+    /// `hasOldData()` judges the whole snapshot by its newest timestamp. That cannot express what
+    /// providers actually do: Volvo refreshes each resource on its own schedule, so one successful
+    /// refresh can carry today's doors and yesterday's odometer. Per-reading dates make the
+    /// difference visible, and this names the domains it affects.
+    ///
+    /// Readings with no report time are omitted rather than guessed at; a provider that does not
+    /// timestamp a domain is not evidence that the domain is stale.
+    func staleReadings(maximumAge: TimeInterval = 12 * 60 * 60,
+                       at date: Date = Date()) -> [VehicleReading] {
+        VehicleReading.allCases
+            .compactMap { reading -> (reading: VehicleReading, reportedAt: Date)? in
+                guard let reportedAt = reportedDate(for: reading) else { return nil }
+                return (reading, reportedAt)
+            }
+            .filter { date.timeIntervalSince($0.reportedAt) > maximumAge }
+            .sorted { $0.reportedAt < $1.reportedAt }
+            .map(\.reading)
+    }
 }

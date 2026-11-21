@@ -75,7 +75,7 @@ final class StatusItemController: NSObject {
     var onCommandBrand: () -> VehicleBrand = { .polestar }
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
-    var onSignOut: () -> Void = {}
+    var onSignOut: (SignOutSelection) -> Void = { _ in }
     var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
         ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
@@ -751,7 +751,8 @@ final class StatusItemController: NSObject {
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
         let model = PanelModel(display: currentPanelDisplay(), actions: makePanelActions(),
                                history: history, accountConnection: accountConnection,
-                               reverseGeocoder: reverseGeocoder, imageCache: imageCache)
+                               reverseGeocoder: reverseGeocoder, imageCache: imageCache,
+                               fleetStore: fleetStore)
         panelModel = model
         let root = AnyView(PopoverRootView(model: model) { [weak self] panel in
             self?.makeRootView(panel: panel) ?? AnyView(EmptyView())
@@ -1007,6 +1008,11 @@ final class StatusItemController: NSObject {
             let prefix = isCurrent ? "● " : "○ "
             lines.append(prefix + parts.joined(separator: " · "))
         }
+        // The tooltip is the only menu-bar statement that does not depend on notification
+        // permission or on the panel being opened, so the stand-down belongs here too.
+        if signInRequired {
+            lines.insert(L10n.text("Sign in again: Hisingen cannot refresh"), at: 0)
+        }
         statusItem.button?.toolTip = lines.isEmpty ? "Hisingen" : lines.joined(separator: "\n")
     }
 
@@ -1099,7 +1105,7 @@ final class StatusItemController: NSObject {
                 self?.onDismissCommandReceipt(id)
             },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
-            onSignOut: { [weak self] in self?.onSignOut() },
+            onSignOut: { [weak self] selection in self?.onSignOut(selection) },
             onTestConnection: { [weak self] brand in
                 await self?.onTestConnection(brand) ?? ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
             },

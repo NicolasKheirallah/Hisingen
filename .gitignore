@@ -9,6 +9,12 @@ docs/*
 !docs/remote-controls.md
 !docs/using-hisingen.md
 !docs/vehicle-features.md
+!docs/development/
+docs/development/*
+!docs/development/widgets-and-controls.md
+!docs/operations/
+docs/operations/*
+!docs/operations/l10n-native-review.md
 !docs/api/
 docs/api/*
 !docs/api/field-mappings.md
@@ -65,3 +71,9 @@ Internal_Design.md
 # Python bytecode from the docs/QA checkers
 __pycache__/
 api_dump.json
+
+# Per-agent UI string drafts, merged by the translations agent
+l10n-drafts/
+
+# Per-agent coordination scratch logs, never published
+agent-progress/

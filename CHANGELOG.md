@@ -25,6 +25,44 @@ All notable changes to Hisingen are documented in this file. The project follows
   changed" with that date on the charging card. On one car the target of 100% dated from May 2025
   and the 32 A limit from July 2026, and both looked like fresh readings. A value you just sent
   shows no note.
+- A desktop widget now shows battery, range, charging state and the next departure in small and
+  medium sizes. The app writes a snapshot into a shared App Group container after each completed
+  refresh, the widget shows the reading's age and draws a placeholder when nothing is on file,
+  and tapping it opens the car in Hisingen: the widget itself never sends a command. Lock and
+  Start Climate buttons in Control Center ship for macOS 26 and also open Hisingen with the
+  command ready to confirm. The extension is a new SwiftPM target the Makefile assembles into
+  PlugIns and signs with the App Group entitlements; `make app` builds and signs it with the app.
+- A Tibber home with a production metering point now gets a **House Production** row in Log,
+  Charging Trends, from the hourly production Tibber reports over the same hours; a home that
+  reports no production gets no row. A home with a Pulse or Watty reader gets a live house-load
+  line on the charging card, plus the production the stream reports while the home is producing,
+  under the same three-minute last-known rule as the Perific lines; with a Perific meter
+  connected its house lines stay and only the production line comes from Tibber, because the
+  meter's HAN port sees no production. Without a reader the line stays absent and Settings,
+  Electricity Supplier says **No Pulse paired**. The live stream follows Tibber's documented
+  subscription protocol and has not been checked against a real Pulse here; the live checks in
+  docs/home-charging.md say what to confirm.
+- The service, tyre and low-battery warning cards each offer an **Add Reminder** action that
+  writes to macOS Reminders with a default due date, and the plug-in alert can create its
+  reminder automatically once you opt in under its notification row and grant Reminders access;
+  the prompt never appears on its own from a background check. On the Plan tab, a schedule's
+  details offer **Add to Calendar…**, which places the schedule's next occurrence on a calendar
+  you can write to, one event per schedule, kept from landing twice by a note Hisingen writes
+  into the event. Hisingen never deletes the events or reminders it creates, because a schedule
+  can be removed by the car with no local signal. Reminders and calendar writes stay on your
+  Mac through EventKit and are never sent anywhere.
+- The report menu on the Car tab gains **Share Vehicle Report…**, which shares the report as a
+  PDF through the macOS share sheet. The PDF follows Screenshot Privacy exactly as the text
+  report does: the VIN is masked, the registration and parking location are left out, and the
+  shared file's name carries the model and date, never the VIN. The report rows moved into one
+  builder so the text and the PDF stay the same content.
+- The weather readout now shows wind, gusts and precipitation from Open-Meteo beside the
+  temperature, fetched in the same request as before. Under them it adds one line of climate
+  advice before a departure it can name, when the forecast hour is cold, wet or windy: the
+  departure comes from the car's own timers or from the calendar preconditioning schedule,
+  whichever is sooner, and a climate timer that already covers it keeps the line quiet. The
+  advice has not been watched against a live forecast; its thresholds are named in the code and
+  covered by tests.
 
 ### Changed
 
@@ -60,15 +98,115 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Signing out of Volvo on the new system now revokes the session at Volvo as well as deleting it
   here. The revocation is best effort and never delays sign-out. The original system has no
   revocation endpoint we could confirm, so signing out there only deletes the local session.
+- Signing out no longer drops you at the login screen while another car can carry the session.
+  On an account with more than one car, the active car is signed out and the next car becomes
+  active; the account stays signed in, and Settings → Accounts → Garage & Fleet lists the
+  signed-out car with **Bring Back**. Bring Back keeps the car's name and colour; its snapshot,
+  command receipts and charging baseline were cleared because that session ended. The same
+  confirmation offers **Sign Out Entire Account…** when more than one car is connected, and the
+  last car falls back to another connected brand. Only when no other vehicle is registered does
+  Hisingen show the login screen, with Settings closed.
 
 - A `hisingen://` link now asks you to confirm before it sends any command, including routine ones
   such as lock, close windows, close tailgate, climate and charging. Until now only unlock, trunk,
   tailgate open, windows open, horn, engine start and software commands asked, so any app or web
   page that opened a link could close the windows or lower the charge target without a prompt.
   Commands you send from the panel, from a notification button or from Shortcuts behave as before.
+- The home-charger card, its sign-in flow, the charger details and the Perific house meter no longer
+  fall back to English in the other thirteen languages. The charger status and error notes, the
+  pairing, import and entity-mapping controls, the circuit fuse and per-phase rows, and the house
+  meter readouts were translated into da, de, es, fi, fr, it, ko, nb, nl, nn, pl, pt and zh, about
+  170 strings per language, and the untranslated ratchet was re-baselined from 424/420/401/394/427/
+  412/379/413/428/413/405/402/382 down to 255/251/232/225/259/243/211/244/260/244/236/233/214. The
+  Circuit Blue theme name was translated where the other theme names already are; ko and zh keep
+  their shipped names. Two slips in the morning's drafts were fixed (Danish "login-system" and its
+  passive voice, Finnish "Kirjaudu uudelleen sisään" word order), and a Norwegian "Book service
+  for %@" that had shipped as the English words now reads "Bestill service for %@". The feature
+  work added seventy more keys, drafted in English and Swedish by each feature and translated
+  into the thirteen other languages; every new value is listed for a native read in
+  `docs/operations/l10n-native-review.md`, alongside the Swedish the owner should verify himself.
+  Swedish stays with its owner: the home-charging strings that still read English in Swedish are
+  listed there too. Eleven string literals remain unkeyed, from the parallel sign-out and
+  credential work and the Focus filter's two AppIntents titles; they are recorded in the literals
+  baseline so the literals audit stays green, and `verify-l10n-usage.mjs` still reports them
+  until they gain keys with their Swedish.
+- The Polestar Data Portal sends the charge target's own mode, Daily, Long trip or Custom, and
+  the time the target was set; Hisingen decoded both and showed neither. The mode now shows beside
+  the charge target on the charging card, and its timestamp fills the same slot Volvo's target
+  date uses, so the "Last changed" note works for Polestar too. The note itself now appears
+  wherever the two settings show, the Charge Limit and Current Limit steppers, the Charging
+  Controls card and the Info tab's vehicle report, with the same 30-day threshold and wording,
+  so a months-old setting no longer reads as fresh on one surface only.
+- Volvo's energy-capabilities response says, per car, which energy fields the car can report,
+  and Hisingen probed only the charge target and the current limit of the ten flags it decodes.
+  Every flag is probed now, so a field the car does not report hides its charging-card row
+  instead of showing whatever happened to decode, and the Info capabilities sheet lists each
+  field with the car's own answer.
+- Zaptec chargers now fill the Charger details list from the states Zaptec documents: voltage
+  and current of each phase, the cable rating, the phases in use, and how the charger reaches
+  the cloud. Easee adds the cable rating, the phase mode and its connection type. Neither vendor
+  documents a session start or end reason, a circuit fuse, or an Easee phase reading it names,
+  so those rows stay off for them, and docs/home-charging.md lists the live checks to confirm
+  on a real charger.
+- Several readings Polestar sends were decoded and never shown: the main climate's own running
+  word, whether a timer fired the last climate start, the connectivity network and signal
+  strength behind the bars, the air quality's started and last-completed cycle times, and the
+  warranty's status beside its dates. Each now has its row, in the plain style of its
+  neighbours. The charge-limit's own set time also fills the current-limit's "Last changed"
+  note, and a nested light failure above the ones with names, or an air-quality field Hisingen
+  has no wording for, is kept raw with its field number instead of being dropped, so a new
+  backend field is seen rather than silently lost.
+- Polestar's driving-journal flags were investigated and the read stays unimplemented: no
+  public source documents a cloud method for it, and the journal is now an app installed in the
+  car that emails CSV or XLSX exports. A research note records every candidate read path
+  checked, with sources, and the owner-authorized capture that would settle it.
+- A Focus filter intent exists for macOS Focus settings: it applies the chosen vehicle and that
+  vehicle's notification mute when a Focus turns on. Shortcuts and Focus cannot discover it yet,
+  the same App Intents metadata gap tracked separately, so it compiles and its mapping is
+  unit-tested, dormant until that metadata ships.
 
 ### Fixed
 
+- Signing out before the first refresh could remove a second car on the same account. The
+  account's discovered VINs are now stored per brand, so the sign-out decision knows the siblings
+  even when no session has refreshed yet.
+- A remote revocation failure during a fallback sign-out was dropped by the brand switch. It now
+  produces a notice naming the account, so a server-side grant that survived is not silent.
+- A deep link, notification or Shortcut that named a signed-out car used to re-add it silently.
+  Selecting a signed-out VIN now does nothing; Bring Back is the explicit path.
+- A charger paired to a car that was signed out kept the Home Charging card pointed at a hidden
+  vehicle. Signing out one car now unpairs that charger and says so; its credentials stay, so you
+  can pair it again after Bring Back.
+- The panel header said "Checked 5 min ago" whenever Hisingen had fetched, even when the car's own
+  data was hours old. It now reports the vehicle's time instead once that trails the fetch by more
+  than ten minutes, so the line above the readings describes the readings.
+- The shared reading age now includes odometer, location and health. It used to cover only locks,
+  climate, battery, charging and range, so it could agree on "3 hr ago" beside an odometer from the
+  previous day. Readings a provider does not timestamp no longer count as a disagreement.
+- A new banner names the readings the vehicle reported hours ago, with the oldest of them, when the
+  newest refresh carried them but their own report time is old. The existing last-known banner
+  covers only fields the refresh left out, which is why a day-old odometer went unlabelled.
+- A session that stopped polling now says so in the panel, above the last-known values, and in the
+  menu-bar tooltip. Before, the failure was drawn only in the empty-state placeholder, so once a
+  snapshot existed the panel kept showing it with nothing to say the account had stopped
+  refreshing.
+- A Volvo reading no longer shows the newest timestamp in the refresh instead of its own. Volvo
+  updates each resource on its own schedule, and on one account the doors carried today's time
+  while the odometer, tyres and diagnostics sat a day behind and the location two. Every card took
+  the newest of them, so a day-old odometer read as fresh. Each reading now reports the age of the
+  value it shows.
+- Volvo refusing the app's own client ID now says so. Hisingen reported "Add your Volvo Developer
+  Portal client ID…" as if nothing had been entered, which sent you back to retype the same
+  credentials after Volvo retired the original `dc-` applications, and the retry loop continued
+  until the new sign-in system was used.
+- A Volvo sign-in that completed no longer reports "sign-in failed" when macOS cannot store the
+  credentials. The token and the vehicles were already live at that point, and the browser flow had
+  succeeded; a full disk returning ENOSPC on the Keychain write discarded a working session. The
+  session is now kept, and the notice says the credentials were not saved and a restart will ask
+  for sign-in again.
+- Signing in again with the Volvo credentials already on file no longer rewrites the Keychain item
+  for nothing. The write can fail for reasons that have nothing to do with sign-in, and skipping it
+  removes a needless way to lose a completed session.
 - Volvo's manual trip average speed was dropped and the automatic one showed in its place. Both
   now fill their own fields, and the combined figure still prefers the automatic trip.
 - Altitude no longer reads "0 m" for a Volvo that has none to report. Volvo fills the third

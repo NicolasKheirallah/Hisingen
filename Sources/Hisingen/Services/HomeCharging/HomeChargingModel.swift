@@ -70,6 +70,8 @@ final class HomeChargingModel: ObservableObject {
         var transport: any HomeAssistantTransport = URLSessionHomeAssistantTransport()
         /// `nil` runs on polling alone, which is also what happens when the WebSocket cannot be opened.
         var socketConnector: (any HomeAssistantSocketConnecting)? = URLSessionSocketConnector()
+        /// `nil` leaves Tibber's live stream off, which is also what happens when it cannot be opened.
+        var tibberSocketConnector: (any TibberSocketConnecting)? = URLSessionTibberSocketConnector()
         var now: @Sendable () -> Date = { Date() }
         var wait: AsyncTimerLoop.Wait = AsyncTimerLoop.realWait
         var spotPrices: @Sendable (ElspotZone) async -> [ElectricityPricePoint] = { zone in
@@ -101,6 +103,7 @@ final class HomeChargingModel: ObservableObject {
     /// house-load costs and for sessions whose charger has no fee of its own.
     @Published private(set) var gridTariff: GridTariff = .none
     private var consumptionCache: (homeID: String, from: Date, fetchedAt: Date, hours: [TibberConsumptionHour])?
+    private var productionCache: (homeID: String, from: Date, fetchedAt: Date, hours: [TibberProductionHour])?
     @Published private(set) var lastNexBlueImport: HomeSessionSync.ImportReceipt?
     /// Bumped whenever a sync changed history, so the charging card reloads its sessions.
     @Published private(set) var historyRevision = 0
@@ -112,6 +115,9 @@ final class HomeChargingModel: ObservableObject {
     /// The optional Perific house meter. It lives beside the charger, not inside the pairing: it reads
     /// the whole house and needs no charger, no vehicle and no Home Assistant.
     let houseMeter: HouseMeterModel
+    /// Tibber's live stream, when the connected home has a Pulse (or Watty) reader paired. It reads
+    /// the house the Perific meter would, and the production a grid meter cannot see.
+    let tibberLive: TibberLiveModel
 
     private let preferences: PreferencesStore
     private let database: VehicleDatabase
@@ -145,6 +151,7 @@ final class HomeChargingModel: ObservableObject {
         self.database = database
         self.dependencies = dependencies
         self.houseMeter = HouseMeterModel(preferences: preferences, dependencies: dependencies)
+        self.tibberLive = TibberLiveModel(preferences: preferences, dependencies: dependencies)
         self.store = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
         self.pairing = store.pairing
         self.planRecord = store.planRecord
@@ -163,6 +170,7 @@ final class HomeChargingModel: ObservableObject {
             return receipt
         }
         if pairing != nil { link = .connecting }
+        if tibberHome != nil { tibberLive.start() }
         eraseObserver = NotificationCenter.default.addObserver(
             forName: .homeChargingDataErased, object: nil, queue: .main
         ) { [weak self] _ in
@@ -176,6 +184,7 @@ final class HomeChargingModel: ObservableObject {
         stop()
         pairingRevision &+= 1
         tibberHome = store.tibberHome
+        tibberLive.reset()
         pairing = nil
         lastNexBlueImport = nil
         syncState = .idle
@@ -626,6 +635,8 @@ final class HomeChargingModel: ObservableObject {
         store.tibberHome = home
         tibberHome = home
         tibberProblem = nil
+        tibberLive.reset()
+        tibberLive.start()
         seedRegionIfUnset(for: home)
         // Sessions already imported were priced without it; the next import prices them again.
         lastSyncAt = nil
@@ -672,15 +683,41 @@ final class HomeChargingModel: ObservableObject {
 
     static let consumptionCacheLifetime: TimeInterval = 30 * 60
 
+    /// Hourly production from the connected Tibber home's production metering point for `[from,
+    /// to]`, or `nil` when Tibber is not connected or does not answer. Cached beside the
+    /// consumption answer, because a completed hour never changes.
+    func houseProduction(from: Date, to: Date) async -> [TibberProductionHour]? {
+        guard let home = store.tibberHome, let token = (try? store.tibberToken()) ?? nil, !token.isEmpty else { return nil }
+        let now = Date()
+        if let cache = productionCache, cache.homeID == home.id, cache.from <= from,
+           now.timeIntervalSince(cache.fetchedAt) < Self.consumptionCacheLifetime {
+            return cache.hours.filter { $0.end > from && $0.start < to }
+        }
+        let client = TibberClient(token: token, transport: dependencies.transport)
+        // Fetch the widest window the client reads, so a narrower period later is served from this.
+        let widest = now.addingTimeInterval(-Double(TibberClient.productionPageSize * TibberClient.maximumProductionPages) * 3_600)
+        let fetchFrom = min(from, widest)
+        guard let hours = try? await client.production(homeID: home.id, from: fetchFrom, to: now.addingTimeInterval(3_600)),
+              store.tibberHome?.id == home.id else { return nil }
+        productionCache = (home.id, fetchFrom, now, hours)
+        return hours.filter { $0.end > from && $0.start < to }
+    }
+
     /// Whether any whole-house meter is connected, so the car-share rows have something to read.
     var hasHouseMeterSource: Bool { tibberHome != nil || houseMeter.isConnected }
 
     /// The car's share of the house's metered electricity. Tibber's hourly readings are used when
     /// they answer, because they carry what Tibber billed; otherwise the Perific meter's hourly
-    /// import. The share says which one it came from.
+    /// import. The share says which one it came from. Production is Tibber's alone to report, so it
+    /// rides along only with the Tibber share.
     func houseLoadShare(from: Date, to: Date, sessions: [HistoricalChargingSession]) async -> HouseLoadShare? {
         if tibberHome != nil, let hours = await houseConsumption(from: from, to: to),
            let share = HouseLoad.share(hours: hours, sessions: sessions, gridTariff: gridTariff) {
+            var share = share
+            // An empty answer is a home without a production metering point, so the row stays out.
+            if let production = await houseProduction(from: from, to: to), !production.isEmpty {
+                share.productionKwh = production.reduce(0) { $0 + $1.kwh }
+            }
             return share
         }
         guard houseMeter.isConnected, let hours = await houseMeter.hourlyImport(from: from, to: to),
@@ -709,8 +746,10 @@ final class HomeChargingModel: ObservableObject {
     func disconnectTibber() {
         store.clearTibber()
         consumptionCache = nil
+        productionCache = nil
         tibberHome = nil
         tibberProblem = nil
+        tibberLive.reset()
     }
 
     /// The connected Tibber home as the charging planner's price source, or `nil` when none is

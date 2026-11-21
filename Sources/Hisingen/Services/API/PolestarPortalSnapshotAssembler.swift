@@ -61,7 +61,7 @@ enum PolestarPortalSnapshotAssembler {
     ) -> [VehicleReading: Date] {
         var received: [VehicleReading: Date] = [:]
         func ingest(_ raw: String?, for reading: VehicleReading) {
-            guard let raw, let date = Self.parseMetaReceivedAt(raw) else { return }
+            guard let raw, let date = Self.parseRFC3339(raw) else { return }
             received[reading] = date
         }
         ingest(bundle.battery?.metaReceivedAt, for: .battery)
@@ -93,7 +93,7 @@ enum PolestarPortalSnapshotAssembler {
         ]
         return laggyDomains.compactMap { (domain: String, reportedAt: Date?, receivedAt: String?) -> String? in
             guard let reportedAt, let receivedAt,
-                  let ingestedAt = Self.parseMetaReceivedAt(receivedAt) else { return nil }
+                  let ingestedAt = Self.parseRFC3339(receivedAt) else { return nil }
             let interval = ingestedAt.timeIntervalSince(reportedAt)
             guard interval >= Self.pipelineLagWarningThreshold else { return nil }
             guard let lag = portalRoundedInt(interval / 60, range: 0...1_000_000_000) else { return nil }
@@ -104,8 +104,8 @@ enum PolestarPortalSnapshotAssembler {
     }
 
     /// Wire form is RFC 3339, with fractional seconds on the live portal and without in
-    /// recorded payloads.
-    private static func parseMetaReceivedAt(_ value: String) -> Date? {
+    /// recorded payloads. Used for both ingest times and setting timestamps.
+    private static func parseRFC3339(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: value) { return date }
@@ -116,7 +116,20 @@ enum PolestarPortalSnapshotAssembler {
     static func assembleVehicleState(vin: String, bundle: PolestarPortalTelemetryBundle, weather: VehicleWeather?, failedFeatures: [AppFeature] = [], now: Date, timeZone: TimeZone) -> VehicleState {
         var energy = bundle.battery?.toEnergySnapshot() ?? EnergyAndChargingSnapshot()
         if let target = bundle.targetSoc?.targetSocPercentage { energy.targetPercentage = target }
+        if let mode = bundle.targetSoc?.chargeTargetLevelSettingMode {
+            energy.chargeTargetSettingMode = mode
+        }
+        // The target value's own `updatedAt` is the time the target was set, the same slot
+        // Volvo's target timestamp fills, so the "Last changed" note works here too.
+        if let setAt = bundle.targetSoc?.targetSoc?.updatedAt.flatMap(Self.parseRFC3339) {
+            energy.targetPercentageReportedAt = setAt
+        }
         if let amp = bundle.ampLimit?.ampLimit { energy.currentLimitAmps = amp }
+        // The synced amp limit's own `updatedAt` fills the current limit's slot the same
+        // way, so its "Last changed" note works on the portal path too.
+        if let setAt = bundle.ampLimit?.syncedAmpLimit?.updatedAt.flatMap(Self.parseRFC3339) {
+            energy.currentLimitReportedAt = setAt
+        }
         if let locs = bundle.chargeLocations { energy.locations = locs.toChargeLocations(timeZone: timeZone, now: now) }
         if let timers = bundle.globalChargeTimer { energy.schedules = timers.toSchedules(timeZone: timeZone, now: now) }
         if let syncedOverride = bundle.chargeNow?.syncedOverrideChargeTimer {

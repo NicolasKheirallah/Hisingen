@@ -41,26 +41,71 @@ final class FleetStore {
         self.preferences = preferences
     }
 
-    func updateCars(_ cars: [CarSummary]) { carsByBrand[preferences.activeBrand] = cars }
+    func updateCars(_ cars: [CarSummary]) {
+        preferences.rememberKnownVINs(cars.map(\.vin), for: preferences.activeBrand)
+        let detached = preferences.detachedVehicleVINs(for: preferences.activeBrand)
+        carsByBrand[preferences.activeBrand] = cars.filter { !detached.contains($0.vin.normalizedVIN) }
+    }
 
-    func retain(_ state: VehicleState) { snapshots[state.identity.vin] = state }
+    func retain(_ state: VehicleState) {
+        guard !preferences.isVehicleDetached(state.identity.vin) else { return }
+        snapshots[state.identity.vin] = state
+    }
 
     func snapshot(for vin: String) -> VehicleState? {
+        guard !preferences.isVehicleDetached(vin) else { return nil }
         if let state = snapshots[vin] { return state }
         let state = stateStore.snapshot(for: vin)
         snapshots[vin] = state
         return state
     }
 
+    /// The VINs this app knows for one brand, without the vehicles the reader signed out of it.
+    /// A connected account can name a vehicle the garage scan has not reached yet, and a scan can
+    /// retain one the reader never selected; both belong here.
+    func knownVINs(for brand: VehicleBrand) -> [String] {
+        var values = preferences.knownVINs(for: brand)
+        values += carsByBrand[brand, default: []].map(\.vin)
+        let selected = preferences.vin(for: brand)
+        if !selected.isEmpty { values.append(selected) }
+        values += snapshots.values.filter { $0.model.brand == brand }.map(\.identity.vin)
+        let detached = preferences.detachedVehicleVINs(for: brand)
+        var seen = Set<String>()
+        return values
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty && !detached.contains($0) && seen.insert($0).inserted }
+    }
+
     func snapshot(activeState: VehicleState? = nil) -> FleetSnapshot {
-        let configured = VehicleBrand.allCases.map { preferences.vin(for: $0) }
-        let knownVINs = VehicleBrand.allCases.flatMap { carsByBrand[$0, default: []].map(\.vin) }
+        let detached = Set(VehicleBrand.allCases.flatMap { preferences.detachedVehicleVINs(for: $0) })
+        let configured = VehicleBrand.allCases
+            .map { preferences.vin(for: $0) }
+            .filter { !detached.contains($0.normalizedVIN) }
+        let persistedVINs = VehicleBrand.allCases.flatMap { preferences.knownVINs(for: $0) }
+        let knownVINs = (VehicleBrand.allCases.flatMap { carsByBrand[$0, default: []].map(\.vin) }
+            + persistedVINs)
+            .filter { !detached.contains($0.normalizedVIN) }
         for vin in knownVINs + configured where !vin.isEmpty {
             _ = snapshot(for: vin)
         }
+        let visibleSnapshots = snapshots.filter { !detached.contains($0.key.normalizedVIN) }
+        let visibleActiveState = activeState.flatMap {
+            detached.contains($0.identity.vin.normalizedVIN) ? nil : $0
+        }
         return FleetSnapshot(cars: carsByBrand[preferences.activeBrand, default: []],
                              configuredVINs: configured + knownVINs,
-                             snapshots: snapshots, activeState: activeState)
+                             snapshots: visibleSnapshots, activeState: visibleActiveState)
+    }
+
+    /// Drops one vehicle from the in-memory fleet, for a per-vehicle sign-out. Persistence is
+    /// cleared by `VehicleStateStore.clear` before this.
+    func forget(vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        snapshots.removeValue(forKey: key)
+        for brand in VehicleBrand.allCases {
+            carsByBrand[brand]?.removeAll { $0.vin.normalizedVIN == key }
+        }
     }
 
     /// Persistence is cleared by the session lifecycle before this in-memory invalidation.
@@ -68,6 +113,7 @@ final class FleetStore {
         let removedVINs = Set(carsByBrand[brand, default: []].map(\.vin) + [preferences.vin(for: brand)])
         snapshots = snapshots.filter { !removedVINs.contains($0.key) && $0.value.model.brand != brand }
         carsByBrand[brand] = nil
+        preferences.clearKnownVINs(for: brand)
     }
 }
 

@@ -29,7 +29,10 @@ extension AppDelegate {
                     self.settingsChanged(change)
                 }
             },
-            onSignOut: { [weak self] in self?.signOut() },
+            onSignOut: { [weak self] selection in self?.signOut(selection: selection) },
+            liveFleet: { [weak self] in
+                self?.fleetStore.snapshot(activeState: self?.vehicleSession.latest) ?? FleetSnapshot()
+            },
             accountConnection: statusController.accountConnection,
             onTestConnection: { [weak self] brand in
                 guard let self else {
@@ -126,6 +129,9 @@ extension AppDelegate {
         case .selectVehicle(let vin):
             selectVehicle(vin: vin)
             closeSettingsWindow()
+        case .reconnectVehicle(let vin):
+            vehicleSession.reconnectVehicle(vin: vin)
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
         case .closeSettings:
             closeSettingsWindow()
         case .exportDiagnosticLogs:

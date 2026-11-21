@@ -56,4 +56,29 @@ struct SnapshotAssemblyTests {
         #expect(merged.batteryPercentage == 78.0)
         #expect(merged.rangeKm == 420)
     }
+
+    @Test
+    func chargeTargetModeFollowsItsOwnFrameThroughTheMerge() {
+        let previous = EnergyAndChargingSnapshot(targetPercentage: 80, chargeTargetSettingMode: .daily)
+        let policy = SnapshotMergePolicy(
+            features: FeatureSelection(enabled: AppFeature.permittedFeatures),
+            refreshedFeatures: nil,
+            failedFeatures: [],
+            isCommandLocked: false,
+            fetchedAt: Date()
+        )
+
+        // A refresh that did not read charging keeps the previous target and its mode together.
+        let incrementalSnapshot = EnergyAndChargingSnapshot(batteryPercentage: 78.0)
+        let merged = incrementalSnapshot.merging(previous: previous, policy: policy)
+        #expect(merged.targetPercentage == 80)
+        #expect(merged.chargeTargetSettingMode == .daily)
+
+        // A new target frame carries its own mode, and one that omits the field drops the
+        // label rather than keeping the old one beside a new value.
+        let retargeted = EnergyAndChargingSnapshot(targetPercentage: 90, chargeTargetSettingMode: .custom)
+        #expect(retargeted.merging(previous: previous, policy: policy).chargeTargetSettingMode == .custom)
+        let unmoded = EnergyAndChargingSnapshot(targetPercentage: 90)
+        #expect(unmoded.merging(previous: previous, policy: policy).chargeTargetSettingMode == nil)
+    }
 }

@@ -64,7 +64,7 @@ private extension PolestarAPI {
     func probeGraphQL(token: String) async throws {
         let _: GraphQLResponse<ConsumerCarsPayloadDTO> = try await graphQL(
             query: "query GetConsumerCarsV2 { getConsumerCarsV2 { vin } }",
-            token: token, operation: "test discovery")
+            token: token, operation: "test discovery", scope: .account)
     }
 
     func installRetryTestSession(_ testSession: URLSession) {

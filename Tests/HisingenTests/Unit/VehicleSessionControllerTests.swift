@@ -240,6 +240,7 @@ private final class SessionTestContext: VehicleSessionControllerContext {
         authentication.yield(())
     }
     func authenticationSucceeded() {}
+    func signOutRevocationFailed(brand: VehicleBrand) {}
     func vehicleSwitchDidPause() {}
     func sessionDidEstablish() {}
     func sessionCredentialsDidChange() {

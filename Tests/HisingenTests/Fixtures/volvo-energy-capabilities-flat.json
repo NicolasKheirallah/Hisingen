@@ -1,0 +1,16 @@
+{
+  "data": {
+    "batteryChargeLevel": { "isSupported": true },
+    "electricRange": { "isSupported": false },
+    "chargerConnectionStatus": { "isSupported": true },
+    "chargingSystemStatus": { "isSupported": false },
+    "chargingStatus": { "isSupported": true },
+    "chargingType": { "isSupported": true },
+    "chargerPowerStatus": { "isSupported": false },
+    "chargingPower": { "isSupported": true },
+    "chargingCurrentLimit": { "isSupported": false },
+    "estimatedChargingTimeToTargetBatteryChargeLevel": { "isSupported": true },
+    "targetBatteryChargeLevel": { "isSupported": true },
+    "targetBatteryLevel": { "isSupported": false }
+  }
+}

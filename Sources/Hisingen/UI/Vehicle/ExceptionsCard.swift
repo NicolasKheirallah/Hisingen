@@ -6,6 +6,26 @@ struct ExceptionsCard: View {
     let features: FeatureSelection
     let dismissedSoftwareEventIdentifier: String?
 
+    @Environment(\.preferencesStore) private var preferences
+    /// One long-lived EventKit store for the card's Add Reminder actions.
+    @State private var reminderWriter = ReminderWriter()
+
+    /// The name the reminder carries: the reader's nickname, or the brand fallback
+    /// the notification copy already uses.
+    private var reminderVehicleName: String {
+        let nickname = preferences.vehicleNickname(for: state.identity.vin)
+        return nickname.isEmpty ? state.model.brand.displayName : nickname
+    }
+
+    private var showsServiceReminder: Bool {
+        features.contains(.vehicleHealth) && state.maintenance.service.serviceWarning
+    }
+
+    private var showsTyreReminder: Bool {
+        features.contains(.tyreAndWarnings)
+            && (state.maintenance.details?.tyres.contains { $0.warning.needsAttention } ?? false)
+    }
+
     static func make(state: VehicleState, features: FeatureSelection, dismissedSoftwareEventIdentifier: String?) -> AnyView? {
         let card = Self(state: state, features: features, dismissedSoftwareEventIdentifier: dismissedSoftwareEventIdentifier)
         guard !card.rows.isEmpty else { return nil }
@@ -96,6 +116,24 @@ struct ExceptionsCard: View {
                 CardHeader(symbol: "exclamationmark.triangle.fill", title: L10n.text("Needs Attention"), color: HisingenTheme.semanticWarning, isSemantic: true,
                            detail: L10n.format("%d", rows.count))
                 VStack(spacing: 6) { ForEach(rows.indices, id: \.self) { rows[$0] } }
+                // Reminder actions sit under the rows that raised them, so the offer
+                // appears exactly where the warning was read.
+                if showsServiceReminder {
+                    ReminderActionRow(title: "Add Service Reminder") {
+                        await reminderWriter.addServiceReminder(
+                            vehicleName: reminderVehicleName,
+                            service: state.maintenance.service
+                        )
+                    }
+                }
+                if showsTyreReminder {
+                    ReminderActionRow(title: "Add Tyre Reminder") {
+                        await reminderWriter.addTyreReminder(
+                            vehicleName: reminderVehicleName,
+                            tyres: state.maintenance.details?.tyres ?? []
+                        )
+                    }
+                }
             }
         }
     }

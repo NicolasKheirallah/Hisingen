@@ -53,6 +53,11 @@ final class PreferencesStore {
     /// receipt and everything the reader authored are untouched by a location change.
     static let snapshotMirrorKey = "cached_vehicle_snapshots_v1"
 
+    /// Vehicles the reader signed out of a connected multi-vehicle account. They stay on the
+    /// account, so their credentials remain valid; Hisingen hides them until the reader brings
+    /// one back or signs the account in again.
+    static let detachedVehiclesKey = "detached_vehicles_v1"
+
     /// Every `UserDefaults` store keyed by VIN, each with the ownership that decides which
     /// fleet-wide erase may take it and the removal that matches the shape its accessors write:
     /// a JSON `Codable` payload, a property-list dictionary, or – for the mute list – a
@@ -62,6 +67,9 @@ final class PreferencesStore {
         key: String, ownership: Ownership, remove: @Sendable (UserDefaults, String, String) -> Void
     )] = [
         (snapshotMirrorKey, .vehicleDerived, removeSnapshotMirrorEntry),
+        (detachedVehiclesKey, .vehicleDerived, { d, key, vin in
+            removeJSONEntry(DetachedVehicle.self, key: key, vin: vin, from: d)
+        }),
         ("command_receipts_v1", .vehicleDerived, { d, key, vin in
             removeJSONEntry(StoredCommandReceipts.self, key: key, vin: vin, from: d)
         }),

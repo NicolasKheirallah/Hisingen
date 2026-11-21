@@ -39,6 +39,14 @@ struct TibberConsumptionHour: Equatable, Sendable {
     var currency: String? = nil
 }
 
+/// One hour of production from the home's production metering point, as Tibber reports it. A home
+/// without one answers with no hours at all, which stays an empty answer and never becomes zeros.
+struct TibberProductionHour: Equatable, Sendable {
+    var start: Date
+    var end: Date
+    var kwh: Double
+}
+
 /// Tibber's own API (developer.tibber.com), read with the reader's personal access token. It is
 /// the electricity-supplier side of Home Charging: it prices charger sessions, and needs neither a
 /// charger nor Home Assistant.
@@ -231,6 +239,72 @@ struct TibberClient: Sendable {
             let currency = (node["currency"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             return ConsumptionEdge(cursor: cursor, hour: TibberConsumptionHour(start: start, end: end, kwh: kwh, cost: cost, currency: currency))
         }
+    }
+
+    // MARK: Production
+
+    /// Hourly production from the home's production metering point. A page is 744 hours, 31 days,
+    /// the cap the schema sets for HOURLY, and two pages reach about two months back.
+    static let productionQuery = """
+    query ($homeId: ID!, $last: Int!, $before: String) { viewer { home(id: $homeId) { \
+    production(resolution: HOURLY, last: $last, before: $before) { \
+    edges { cursor node { from to production } } } } } }
+    """
+    static let productionPageSize = 744
+    static let maximumProductionPages = 2
+
+    /// Hourly production covering `[from, to]`, read back from the newest hour the same way
+    /// consumption is. An hour without a reading is left out, so a gap stays a gap.
+    func production(homeID: String, from: Date, to: Date) async throws -> [TibberProductionHour] {
+        var collected: [Date: TibberProductionHour] = [:]
+        var before: String?
+        for _ in 0..<Self.maximumProductionPages {
+            var variables: [String: Any] = ["homeId": homeID, "last": Self.productionPageSize]
+            if let before { variables["before"] = before }
+            let object = try await run(Self.productionQuery, variables: variables)
+            let page = Self.productionEdges(in: object)
+            guard !page.isEmpty else { break }
+            for edge in page { collected[edge.hour.start] = edge.hour }
+            guard let oldest = page.min(by: { $0.hour.start < $1.hour.start }), oldest.cursor != before else { break }
+            if oldest.hour.start <= from { break }
+            before = oldest.cursor
+        }
+        return collected.values
+            .filter { $0.end > from && $0.start < to }
+            .sorted { $0.start < $1.start }
+    }
+
+    private struct ProductionEdge {
+        var cursor: String
+        var hour: TibberProductionHour
+    }
+
+    private static func productionEdges(in object: [String: Any]) -> [ProductionEdge] {
+        let home = (object["viewer"] as? [String: Any])?["home"] as? [String: Any]
+        let rows = ((home?["production"] as? [String: Any])?["edges"]) as? [[String: Any]] ?? []
+        return rows.compactMap { row in
+            guard let cursor = row["cursor"] as? String, let node = row["node"] as? [String: Any],
+                  let start = LooseJSON.date(node["from"]), let end = LooseJSON.date(node["to"]), end > start else { return nil }
+            // A null `production` is an hour without a reading, not an hour of zero.
+            guard let kwh = LooseJSON.double(node["production"]), kwh.isFinite, kwh >= 0 else { return nil }
+            return ProductionEdge(cursor: cursor, hour: TibberProductionHour(start: start, end: end, kwh: kwh))
+        }
+    }
+
+    // MARK: Live stream
+
+    /// What the API names for the live stream: whether the home has a live reader (the schema calls
+    /// it a Pulse or Watty device) paired, and the URL websocket subscriptions go to.
+    static let liveStreamQuery = """
+    query ($homeId: ID!) { viewer { websocketSubscriptionUrl home(id: $homeId) { features { realTimeConsumptionEnabled } } } }
+    """
+
+    func liveStream(homeID: String) async throws -> TibberLiveStream {
+        let object = try await run(Self.liveStreamQuery, variables: ["homeId": homeID])
+        let viewer = object["viewer"] as? [String: Any]
+        let enabled = LooseJSON.bool(((viewer?["home"] as? [String: Any])?["features"] as? [String: Any])?["realTimeConsumptionEnabled"]) ?? false
+        let url = (viewer?["websocketSubscriptionUrl"] as? String).flatMap(URL.init(string:))
+        return TibberLiveStream(realTimeEnabled: enabled, url: url)
     }
 
     // MARK: GraphQL

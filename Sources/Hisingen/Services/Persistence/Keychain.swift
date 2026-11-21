@@ -74,7 +74,7 @@ private final class TestSecretStore: @unchecked Sendable {
     }
 }
 
-private struct VolvoSecretBundle: Codable {
+private struct VolvoSecretBundle: Codable, Equatable {
     var clientSecret: String?
     var apiKey: String?
     var sessionToken: String?
@@ -361,7 +361,15 @@ struct KeychainStore: Sendable {
         volvoBundleLock.lock()
         defer { volvoBundleLock.unlock() }
         var bundle = try readVolvoBundle()
+        let before = bundle
         mutate(&bundle)
+        // Re-signing in with the credentials already on file writes the same values back. Skipping
+        // that no-op matters: the write can fail for reasons unrelated to the sign-in (a full disk
+        // returns ENOSPC), and it used to turn an otherwise completed sign-in into a failure.
+        guard bundle != before else {
+            Self.updateVolvoPresenceFlags(bundle)
+            return
+        }
         try saveVolvoBundle(bundle)
     }
 

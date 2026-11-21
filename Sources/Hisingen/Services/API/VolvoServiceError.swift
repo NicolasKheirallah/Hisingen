@@ -6,6 +6,11 @@ enum VolvoError: Error, LocalizedError {
 
 
     case appNotConfigured
+    /// Volvo's identity provider refused the application's own client ID and secret
+    /// (`invalid_client` / `unauthorized_client`). Distinct from `appNotConfigured`, which means
+    /// nothing was entered: here the values are present and Volvo has stopped accepting them,
+    /// as it did when it retired the original `dc-` applications.
+    case appCredentialsRejected
     case network(URLError)
     case rateLimited(retryAfter: TimeInterval?)
     case server(statusCode: Int)
@@ -39,6 +44,8 @@ enum VolvoError: Error, LocalizedError {
             return L10n.text("Sign in is required.")
         case .appNotConfigured:
             return L10n.text("Add your Volvo Developer Portal client ID, client secret, and VCC API key in Settings first.")
+        case .appCredentialsRejected:
+            return L10n.text("Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings.")
         case .network(let error):
             switch error.code {
             case .notConnectedToInternet, .networkConnectionLost:
@@ -75,7 +82,7 @@ enum VolvoError: Error, LocalizedError {
 
     var requiresAuthentication: Bool {
         switch self {
-        case .authenticationRequired, .appNotConfigured: return true
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected: return true
         default: return false
         }
     }
@@ -98,6 +105,7 @@ enum VolvoError: Error, LocalizedError {
         switch self {
         case .authenticationRequired(let reason): return .authenticationRequired(provider: .volvo, reason: reason)
         case .appNotConfigured: return .notConfigured
+        case .appCredentialsRejected: return .appCredentialsRejected(provider: .volvo)
         case .network(let error): return .network(error)
         case .rateLimited(let retryAfter): return .rateLimited(retryAfter: retryAfter)
         case .server(let statusCode): return .server(statusCode: statusCode)

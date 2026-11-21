@@ -78,7 +78,7 @@ struct PanelInspectionTests {
         let actions = PanelActions(
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {}, onOpenUpdate: {},
             onRemoteCommand: { _ in }, onSelectCar: { _ in }, onDismissCommandReceipt: { _ in },
-            onSettingsChanged: { _ in }, onSignOut: {},
+            onSettingsChanged: { _ in }, onSignOut: { _ in },
             onTestConnection: { _ in ConnectionCheck(success: false, message: "Fixture", failureKind: nil) },
             onCompleteSetup: {}
         )

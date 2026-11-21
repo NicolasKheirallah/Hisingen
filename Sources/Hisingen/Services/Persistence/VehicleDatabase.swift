@@ -48,7 +48,8 @@ final class VehicleDatabase: @unchecked Sendable {
     func beginHistoryErase(scope: LocalDataEraser.Scope) -> VehicleScope? {
         let vehicles: VehicleScope
         switch scope {
-        case .everything(let target), .locations(let target), .session(let target): vehicles = target
+        case .everything(let target), .locations(let target), .session(let target), .detach(let target):
+            vehicles = target
         case .samples, .compact: return nil
         }
         historyAdmission.lock()

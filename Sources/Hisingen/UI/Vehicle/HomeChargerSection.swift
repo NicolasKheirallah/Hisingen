@@ -65,7 +65,7 @@ struct HomeChargerSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .hisTelemetryValue(phases, reduceMotion: reduceMotion)
         }
-        HouseMeterLines(meter: model.houseMeter, carKw: currentCarKw(input))
+        HouseMeterLines(meter: model.houseMeter, tibber: model.tibberLive, carKw: currentCarKw(input))
         if let plan = card.planLine {
             Text(plan)
                 .hisType(.label)

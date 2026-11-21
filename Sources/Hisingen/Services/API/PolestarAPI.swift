@@ -286,7 +286,7 @@ actor PolestarAPI {
         }
         var request = URLRequest(url: url)
         request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await perform(request)
+        let (data, response) = try await perform(request, scope: .account)
         logger.info("Authorization page returned status \(response.statusCode, privacy: .public)")
 
         let authorizationCallback = redirectDelegate.takeCallback() ?? response.url
@@ -325,7 +325,8 @@ actor PolestarAPI {
 
         let (data, response) = try await postForm(
             to: loginURL,
-            fields: ["pf.username": email, "pf.pass": password]
+            fields: ["pf.username": email, "pf.pass": password],
+            scope: .account
         )
         logger.info("Polestar sign-in returned status \(response.statusCode, privacy: .public)")
         let loginCallback = redirectDelegate.takeCallback() ?? response.url
@@ -335,7 +336,8 @@ actor PolestarAPI {
         if let uid = Self.queryValue("uid", from: response.url) {
             let (_, confirmation) = try await postForm(
                 to: loginURL,
-                fields: ["pf.submit": "true", "subject": uid]
+                fields: ["pf.submit": "true", "subject": uid],
+                scope: .account
             )
             let confirmationCallback = redirectDelegate.takeCallback() ?? confirmation.url
             if let code = try extractValidatedCode(from: confirmationCallback, expectedState: expectedState,
@@ -732,7 +734,7 @@ actor PolestarAPI {
         let (data, response) = try await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: "Polestar token request", provider: .polestar,
-            diagnosticLog: diagnosticLog,
+            scope: .account, diagnosticLog: diagnosticLog,
             semanticError: { data, _ in Self.oauthErrorCode(in: data) }
         )
         if response.statusCode == 400 {
@@ -798,15 +800,18 @@ actor PolestarAPI {
 
 
     /// A query that takes no variables.
-    func graphQL<Payload: Decodable>(query: String, token: String, operation: String) async throws
-        -> GraphQLResponse<Payload> {
-        try await graphQL(query: query, variables: NoVariables?.none, token: token, operation: operation)
+    func graphQL<Payload: Decodable>(query: String, token: String, operation: String,
+                                     scope: VehicleLogScope) async throws -> GraphQLResponse<Payload> {
+        try await graphQL(query: query, variables: NoVariables?.none, token: token,
+                          operation: operation, scope: scope)
     }
 
     func graphQL<Payload: Decodable, Variables: Encodable>(
-        query: String, variables: Variables?, token: String, operation: String
+        query: String, variables: Variables?, token: String, operation: String,
+        scope: VehicleLogScope
     ) async throws -> GraphQLResponse<Payload> {
-        return try await makeGraphQLClient().query(query, variables: variables, token: token, operation: operation)
+        return try await makeGraphQLClient().query(query, variables: variables, token: token,
+                                                   operation: operation, scope: scope)
     }
 
     private func makeGraphQLClient() -> PolestarGraphQLClient {
@@ -975,7 +980,8 @@ actor PolestarAPI {
         request.setValue(PolestarAppIdentity.version, forHTTPHeaderField: "X-Polestar-Force-Update-Version")
         request.setValue(PolestarAppIdentity.userAgent, forHTTPHeaderField: "User-Agent")
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await perform(request, operation: "VDMS vehicle discovery")
+        let (data, response) = try await perform(request, operation: "VDMS vehicle discovery",
+                                                 scope: .account)
         try validateHTTP(response, operation: "VDMS vehicle discovery")
         let decoded = try PolestarDecoding.decode(GraphQLResponse<AppBackendCarsPayloadDTO>.self,
             from: data, operation: "VDMS vehicle discovery", logger: logger)
@@ -1060,7 +1066,8 @@ actor PolestarAPI {
         guard let token = accessToken, let userinfoEndpoint else { return }
         var request = URLRequest(url: userinfoEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, _) = await optionalBody(for: request, limit: 256_000, operation: "user information"),
+        guard let (data, _) = await optionalBody(for: request, limit: 256_000,
+                                                operation: "user information", scope: .account),
               let info = optionalDecode(UserInfoDTO.self, from: data, operation: "user information")
         else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
@@ -1085,7 +1092,8 @@ actor PolestarAPI {
             return
         }
         guard let (data, _) = await optionalBody(for: request, limit: Self.maxImageMetadataBytes,
-                                                 operation: "vehicle image metadata"),
+                                                 operation: "vehicle image metadata",
+                                                 scope: .vehicle(vin)),
               let images = optionalDecode(GraphQLResponse<CarImagesPayloadDTO>.self, from: data,
                                           operation: "vehicle image metadata")?.data?.getCarImages
         else { return }
@@ -1095,7 +1103,8 @@ actor PolestarAPI {
 
         if artwork.needsImage(vin: vin, angle: requestedAngle), let url = pick?.httpsURL {
             if let (bytes, imageResponse) = await optionalBody(
-                   for: URLRequest(url: url), limit: Self.maxImageBytes, operation: "vehicle image"),
+                   for: URLRequest(url: url), limit: Self.maxImageBytes, operation: "vehicle image",
+                   scope: .vehicle(vin)),
                imageResponse.mimeType?.hasPrefix("image/") == true {
                 guard epoch == sessionEpoch, !Task.isCancelled,
                       artwork.adopt(bytes, vin: vin, angle: requestedAngle, request: requestID) else { return }
@@ -1115,7 +1124,8 @@ actor PolestarAPI {
             enqueueImageDownload(
                 key: "\(vin)-angle-\(otherAngle)",
                 request: URLRequest(url: otherUrl),
-                operation: "vehicle angle image"
+                operation: "vehicle angle image",
+                scope: .vehicle(vin)
             ) { data in
                 self.imageCache.save(data, for: vin, angle: otherAngle)
             }
@@ -1127,11 +1137,12 @@ actor PolestarAPI {
     /// is logged at debug level so a missing render or name can be diagnosed. Cancellation is
     /// expected when the session or selected vehicle changes and stays silent.
     private func optionalBody(for request: URLRequest, limit: Int,
-                              operation: String) async -> (Data, HTTPURLResponse)? {
+                              operation: String,
+                              scope: VehicleLogScope) async -> (Data, HTTPURLResponse)? {
         do {
             let (data, response) = try await HTTPExchange.data(
                 for: request, using: session, limit: limit, operation: operation,
-                provider: .polestar, diagnosticLog: diagnosticLog)
+                provider: .polestar, scope: scope, diagnosticLog: diagnosticLog)
             guard response.statusCode == 200 else {
                 logger.debug("Optional \(operation, privacy: .public) returned HTTP \(response.statusCode, privacy: .public)")
                 return nil
@@ -1163,6 +1174,7 @@ actor PolestarAPI {
         key: String,
         request: URLRequest,
         operation: String,
+        scope: VehicleLogScope,
         save: @escaping @Sendable (Data) -> Void
     ) {
         guard imageDownloadTasks[key] == nil, imageDownloadTasks.count < 4 else { return }
@@ -1172,7 +1184,7 @@ actor PolestarAPI {
             do {
                 let (data, response) = try await HTTPExchange.data(
                     for: request, using: session, limit: Self.maxImageBytes, operation: operation,
-                    provider: .polestar, diagnosticLog: diagnosticLog
+                    provider: .polestar, scope: scope, diagnosticLog: diagnosticLog
                 )
                 if response.statusCode == 200, response.mimeType?.hasPrefix("image/") == true,
                    !Task.isCancelled {

@@ -232,6 +232,14 @@ final class RefreshCoordinator {
     /// registry: this class no longer asks whether its adapter happens to conform.
     let streaming: (any VehicleLiveStreaming)?
     var task: Task<Void, Never>?
+    /// The provider sign-out and token revocation. Kept apart from `task` so a brand switch
+    /// that retires this coordinator does not cancel the one operation that must still delete
+    /// the account's credentials and revoke its grant.
+    var revocationTask: Task<Void, Never>?
+    /// Called when a sign-out that falls back to another vehicle cannot confirm revocation.
+    /// The fallback session owns the UI by then, so the error cannot ride the old coordinator's
+    /// `onEvent` channel; the shell needs a separate notice path.
+    var onSignOutRevocationFailure: ((VehicleBrand) -> Void)?
     var generation: UInt64 = 0
     /// Orders diagnostics publishes for `LatestDiagnosticsStore`, which may receive them late.
     var diagnosticsSequence: UInt64 = 0
@@ -290,6 +298,12 @@ final class RefreshCoordinator {
     var lastLatency: TimeInterval?
 
     var onEvent: ((RefreshCoordinatorEvent) -> Void)?
+
+    /// Publishes each completed refresh's display snapshot to the desktop widget's App Group
+    /// file. Defaults to the app-side writer, which disables itself outside the real app
+    /// bundle so test runs and unbundled builds stay side-effect free. `nil` (the sign-out
+    /// path) removes the file.
+    var publishWidgetSnapshot: (@MainActor (VehicleState?) -> Void)? = WidgetSnapshotWriter.publisher
 
     /// True while a network operation owned by this coordinator is in flight. The background
     /// garage scan checks this so it never competes with (or flips shared provider state

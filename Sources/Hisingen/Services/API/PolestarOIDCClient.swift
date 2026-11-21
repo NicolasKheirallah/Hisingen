@@ -30,7 +30,8 @@ struct PolestarOIDCClient: Sendable {
     func discover() async throws -> PolestarOIDCConfiguration {
         let url = providerURL.appendingPathComponent(".well-known/openid-configuration")
         let (data, response) = try await HTTPExchange.data(for: URLRequest(url: url), using: session,
-            limit: 2_000_000, operation: "HTTP request", provider: .polestar, diagnosticLog: diagnosticLog)
+            limit: 2_000_000, operation: "HTTP request", provider: .polestar,
+            scope: .account, diagnosticLog: diagnosticLog)
         if let failure = PolestarError.httpFailure(statusCode: response.statusCode,
             retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: "request") { throw failure }
         let discovery: Discovery

@@ -33,6 +33,7 @@ Readings and controls vary by vehicle, region and account. [Supported models](do
 ### Vehicle status
 
 - Check battery charge, fuel level, estimated range, charging power and time remaining. Show the status you want in the menu bar.
+- Add the desktop widget (macOS 15 or later) to see battery, range, charging state and the next departure on your desktop, and add lock and climate buttons to Control Center on macOS 26 or later. Tapping either opens Hisingen with the command ready to confirm; the widget itself never sends a command.
 - See which doors or windows are open, whether the car is locked, and where it last parked. Open the location in Maps or check the weather there.
 - Review tyre pressure and warnings, service intervals, software status, battery diagnostics and reading timestamps.
 - Switch between Polestar and Volvo cars in one garage.

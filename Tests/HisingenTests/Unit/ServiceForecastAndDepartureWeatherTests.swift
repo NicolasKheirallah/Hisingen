@@ -94,13 +94,17 @@ struct ServiceForecastAndDepartureWeatherTests {
     /// Sunday evening, so the Monday 07:30 departure is the next one.
     private var sundayEvening: Date { utcDate(2026, 11, 1, 20) }
 
-    private func forecast(at date: Date, celsius: Double) -> [HourlyTemperature] {
-        [HourlyTemperature(time: date, temperatureCelsius: celsius)]
+    private func forecast(at date: Date, celsius: Double,
+                          windKmh: Double? = nil, gustsKmh: Double? = nil, precipitationMm: Double? = nil) -> [HourlyTemperature] {
+        [HourlyTemperature(time: date, temperatureCelsius: celsius,
+                           windSpeedKmh: windKmh, windGustsKmh: gustsKmh, precipitationMm: precipitationMm)]
     }
 
     private func advice(schedules: [VehicleSchedule], climate: [VehicleSchedule] = [],
-                        forecast: [HourlyTemperature], now: Date? = nil) -> DepartureWeatherAdvice? {
-        DepartureWeatherAdvice.advice(schedules: schedules, climateTimers: climate, forecast: forecast,
+                         calendarDeparture: Date? = nil,
+                         forecast: [HourlyTemperature], now: Date? = nil) -> DepartureWeatherAdvice? {
+        DepartureWeatherAdvice.advice(schedules: schedules, climateTimers: climate,
+                                      calendarDeparture: calendarDeparture, forecast: forecast,
                                       now: now ?? sundayEvening, calendar: Self.utc)
     }
 
@@ -175,6 +179,82 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(result.departure == utcDate(2026, 11, 2, 7, 30))
     }
 
+    @Test("Rain at an uncovered departure advises climate")
+    func rainWithoutClimateTimerAdvises() throws {
+        let result = try #require(advice(schedules: [departure()],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                                            precipitationMm: 0.6)))
+        #expect(result.departure == utcDate(2026, 11, 2, 7, 30))
+        #expect(!result.needsClimateTimer)
+        #expect(result.wet)
+        #expect(!result.windy)
+        #expect(!result.coldBattery)
+        #expect(result.precipitationMm == 0.6)
+    }
+
+    @Test("A climate timer before a rainy departure covers it")
+    func climateTimerCoversRain() {
+        let result = advice(schedules: [departure()],
+                            climate: [climateTimer(hour: 6, minute: 0)],
+                            forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9, precipitationMm: 0.6))
+        #expect(result == nil)
+    }
+
+    @Test("A climate timer that covers the departure quiets the rain advice too")
+    func coveredTimerQuietsFrostAndRainTogether() {
+        // The timer starts inside the coverage lead before the 7:30 departure, so it covers
+        // the glass; advising another timer for the rain would contradict the advice's own
+        // wording ("a climate timer would warm the cabin") when one is already scheduled.
+        let result = advice(schedules: [departure()],
+                            climate: [climateTimer(hour: 6, minute: 0)],
+                            forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -2,
+                                               precipitationMm: 0.4))
+        #expect(result == nil)
+    }
+
+    @Test("Gusts at the strong-breeze line make the departure windy")
+    func gustyDepartureIsWindy() throws {
+        let result = try #require(advice(schedules: [departure()],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                                            windKmh: 20, gustsKmh: 45)))
+        #expect(result.windy)
+        #expect(!result.wet)
+        #expect(result.windGustsKmh == 45)
+    }
+
+    @Test("Mean wind alone can make the departure windy")
+    func steadyWindIsWindyWithoutGusts() throws {
+        let result = try #require(advice(schedules: [departure()],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9, windKmh: 42)))
+        #expect(result.windy)
+        #expect(result.windSpeedKmh == 42)
+        #expect(result.windGustsKmh == nil)
+    }
+
+    @Test("Calm dry weather gives no advice even at a known departure")
+    func calmDepartureIsSilent() {
+        #expect(advice(schedules: [departure()],
+                      forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                         windKmh: 30, gustsKmh: 35)) == nil)
+    }
+
+    @Test("The calendar preconditioning event is the departure when it comes first")
+    func calendarDepartureIsUsedWhenEarlier() throws {
+        let result = try #require(advice(schedules: [departure()],
+                                         calendarDeparture: utcDate(2026, 11, 2, 7),
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 9,
+                                                            precipitationMm: 0.2)))
+        #expect(result.departure == utcDate(2026, 11, 2, 7))
+    }
+
+    @Test("A vehicle departure earlier than the calendar event wins")
+    func vehicleDepartureIsUsedWhenEarlier() throws {
+        let result = try #require(advice(schedules: [departure(hour: 6, minute: 0)],
+                                         calendarDeparture: utcDate(2026, 11, 2, 7),
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 6), celsius: -1)))
+        #expect(result.departure == utcDate(2026, 11, 2, 6))
+    }
+
     @Test("Occurrence skips weekdays the timer does not list")
     func occurrenceRespectsWeekdays() {
         // Sunday maps to VehicleWeekday.sunday (7), not to Monday's 1.
@@ -191,12 +271,14 @@ struct ServiceForecastAndDepartureWeatherTests {
     func currentURLIsUnchanged() throws {
         let url = try #require(OpenMeteoWeatherClient.openMeteoURL(latitude: 57.7089, longitude: 11.9746))
         let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
-        #expect(query.contains(URLQueryItem(name: "current",
-                                            value: "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature")))
+        #expect(query.contains(URLQueryItem(
+            name: "current",
+            value: "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,precipitation"
+        )))
         #expect(!query.contains { $0.name == "hourly" })
     }
 
-    @Test("Forecast URL requests current conditions and two days of hourly temperature in local time")
+    @Test("Forecast URL requests current conditions and two days of hourly readings in local time")
     func hourlyURLShape() throws {
         let url = try #require(OpenMeteoWeatherClient.hourlyForecastURL(latitude: 57.7089, longitude: 11.9746))
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
@@ -204,7 +286,8 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(components.host == "api.open-meteo.com")
         #expect(components.path == "/v1/forecast")
         let query = try #require(components.queryItems)
-        #expect(query.contains(URLQueryItem(name: "hourly", value: "temperature_2m")))
+        #expect(query.contains(URLQueryItem(name: "hourly",
+                                            value: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation")))
         #expect(query.contains(URLQueryItem(name: "forecast_days", value: "2")))
         #expect(query.contains(URLQueryItem(name: "timezone", value: "auto")))
         #expect(query.contains(URLQueryItem(name: "latitude", value: "57.7089")))
@@ -218,13 +301,38 @@ struct ServiceForecastAndDepartureWeatherTests {
             "hourly": [
                 "time": ["2026-11-02T07:00", "2026-11-02T08:00", "2026-11-02T09:00"],
                 "temperature_2m": [-1.5, NSNull(), 2.0],
+                "wind_speed_10m": [12.4, 8.1, 6.0],
+                "wind_gusts_10m": [27.1, NSNull(), 9.4],
+                "precipitation": [0.4, 0.0, NSNull()],
             ],
         ]
         let hours = try #require(OpenMeteoWeatherClient.hourlyTemperatures(from: json))
         #expect(hours.count == 2)
         #expect(hours[0].time == utcDate(2026, 11, 2, 6, 0))
         #expect(hours[0].temperatureCelsius == -1.5)
+        #expect(hours[0].windSpeedKmh == 12.4)
+        #expect(hours[0].windGustsKmh == 27.1)
+        #expect(hours[0].precipitationMm == 0.4)
         #expect(hours[1].time == utcDate(2026, 11, 2, 8, 0))
+        #expect(hours[1].windSpeedKmh == 6.0)
+        #expect(hours[1].windGustsKmh == 9.4)
+        #expect(hours[1].precipitationMm == nil)
+    }
+
+    @Test("Hourly response without wind or precipitation arrays keeps the hours")
+    func hourlyResponseWithoutWindArrays() throws {
+        let json: [String: Any] = [
+            "utc_offset_seconds": 0,
+            "hourly": [
+                "time": ["2026-11-02T07:00"],
+                "temperature_2m": [3.0],
+            ],
+        ]
+        let hours = try #require(OpenMeteoWeatherClient.hourlyTemperatures(from: json))
+        #expect(hours.count == 1)
+        #expect(hours[0].windSpeedKmh == nil)
+        #expect(hours[0].windGustsKmh == nil)
+        #expect(hours[0].precipitationMm == nil)
     }
 
     @Test("Hourly response without an hourly block is rejected")

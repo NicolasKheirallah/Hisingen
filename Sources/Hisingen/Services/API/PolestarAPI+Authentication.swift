@@ -331,7 +331,7 @@ extension PolestarAPI {
                 _ = try? await HTTPExchange.data(
                     for: request, using: revocationSession, limit: 64_000,
                     operation: "session revocation", provider: .polestar,
-                    diagnosticLog: diagnosticLog)
+                    scope: .account, diagnosticLog: diagnosticLog)
             }
         }
         if let storageError { throw storageError }
@@ -402,7 +402,7 @@ extension PolestarAPI {
             let (data, response) = try await HTTPExchange.data(
                 for: request, using: session, limit: 64_000,
                 operation: "account verification", provider: .polestar,
-                diagnosticLog: diagnosticLog)
+                scope: .account, diagnosticLog: diagnosticLog)
             try validateHTTP(response, operation: "account verification")
             let identity = try PolestarDecoding.decode(AccountIdentity.self, from: data,
                 operation: "account verification", logger: logger)

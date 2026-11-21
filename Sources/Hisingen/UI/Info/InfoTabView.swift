@@ -540,9 +540,14 @@ struct InfoTabView: View {
                     Label(L10n.text("Copy Vehicle Report"), systemImage: "doc.on.doc")
                 }
                 Button {
+                    shareVehicleReport()
+                } label: {
+                    Label(L10n.text("Share Vehicle Report…"), systemImage: "square.and.arrow.up")
+                }
+                Button {
                     exportVehicleReport()
                 } label: {
-                    Label(L10n.text("Export Vehicle Report…"), systemImage: "square.and.arrow.up")
+                    Label(L10n.text("Export Vehicle Report…"), systemImage: "square.and.arrow.down")
                 }
                 Button {
                     exportHandoverPack()
@@ -668,85 +673,75 @@ struct InfoTabView: View {
 
     // MARK: - Vehicle report
 
+    /// The plain values both report formats are written from. Filling this from the live
+    /// state here keeps the builder free of stores, panels and files.
+    private func reportInput() -> VehicleReportInput {
+        let identity = state.identity
+        return VehicleReportInput(
+            modelName: identity.modelName,
+            modelYear: identity.modelYear,
+            vin: identity.vin,
+            registrationNo: identity.registrationNo,
+            internalVehicleIdentifier: identity.internalVehicleIdentifier,
+            powertrainName: state.powertrain.displayName,
+            chargingStateName: state.powertrain.hasElectricRange ? state.energy.chargingState.displayName : nil,
+            chargeTargetPercent: state.energy.targetPercentage,
+            chargeTargetNote: VehicleChargingCard.staleSettingNote(
+                reportedAt: state.energy.targetPercentageReportedAt
+            ),
+            odometerKm: state.maintenance.odometerKm,
+            distanceUnit: preferences.distanceUnit,
+            batteryPercent: state.energy.batteryPercentage,
+            rangeKm: state.primaryRangeKm,
+            exteriorPaint: identity.externalColour,
+            upholstery: identity.upholstery,
+            buildWeek: state.formattedBuildWeek ?? identity.structureWeek,
+            pno34: identity.pno34,
+            marketDelivery: state.otaCapabilities?.identity?.market ?? identity.accountMarket,
+            softwareVersion: state.softwareInfo?.installedVersion ?? state.softwareInfo?.version,
+            serviceDueInDays: state.maintenance.service.daysToService,
+            inServiceDate: preferences.warrantyInServiceDate(for: identity.vin),
+            factoryWarrantyValidUntil: state.maintenance.warranty?.factoryWarrantyValidUntil,
+            batteryEstimate: batteryHealthEstimate,
+            parkingAddress: addressText,
+            latitude: state.location?.latitude,
+            longitude: state.location?.longitude,
+            dataTimestamp: state.dataTimestamp,
+            generatedAt: Date(),
+            redacted: preferences.privacyRedactionEnabled
+        )
+    }
+
     private func buildVehicleReport() -> String {
-        // A report is easy to paste into an email or forum thread, so honour the same
+        // A report is easy to paste into an email or forum thread, so it honours the same
         // screenshot-privacy switch that redacts the VIN, plate, and coordinates on screen.
-        let redacted = preferences.privacyRedactionEnabled
-        var lines: [String] = []
-        func row(_ key: String, _ value: String?) {
-            guard let value, !value.isEmpty else { return }
-            lines.append("\(key): \(value)")
-        }
+        VehicleReportBuilder.textReport(reportInput())
+    }
 
-        lines.append(L10n.text("Vehicle Report"))
-        lines.append(String(repeating: "=", count: 44))
-        row(L10n.text("Generated"), Format.dateTimeFormatter.string(from: Date()))
-        row(L10n.text("Data From"), Format.relativeAge(since: state.dataTimestamp))
-        if redacted {
-            row(L10n.text("Privacy"), L10n.text("VIN, plate, and location redacted"))
-        }
-        lines.append("")
-
-        row(L10n.text("Model"), [state.identity.modelName, state.identity.modelYear].compactMap { $0 }.joined(separator: " "))
-        row(L10n.text("VIN"), redacted
-            ? String(repeating: "•", count: max(0, state.identity.vin.count - 4)) + state.identity.vin.suffix(4)
-            : state.identity.vin)
-        if !redacted { row(L10n.text("Registration"), state.identity.registrationNo) }
-        row(L10n.text("Vehicle ID"), state.identity.internalVehicleIdentifier)
-        row(L10n.text("Architecture"), state.powertrain.displayName)
-        if let odo = state.maintenance.odometerKm {
-            row(L10n.text("Odometer"), Format.distance(km: odo, grouped: true, unit: preferences.distanceUnit))
-        }
-        if let battery = state.energy.batteryPercentage {
-            row(L10n.text("Battery"), String(format: "%.0f%%", locale: L10n.displayLocale, battery))
-        }
-        if let range = state.primaryRangeKm {
-            row(L10n.text("Range"), Format.distance(km: range, unit: preferences.distanceUnit))
-        }
-        if state.powertrain.hasElectricRange {
-            row(L10n.text("Charging"), state.energy.chargingState.displayName)
-            if let target = state.energy.targetPercentage {
-                row(L10n.text("Charge Target"), "\(target)%")
+    /// Shares the vehicle report as a PDF through the system share sheet. The PDF follows
+    /// the same screenshot-privacy gate as the text report, and its file name never carries
+    /// the VIN: a shared file sits in the recipient's folders under its own name.
+    private func shareVehicleReport() {
+        let input = reportInput()
+        let name = VehicleReportBuilder.pdfFileName(model: input.modelName, generatedAt: input.generatedAt)
+        do {
+            let data = VehicleReportBuilder.pdfData(input)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+            try data.write(to: url, options: .atomic)
+            // The share sheet needs the file to outlive this call: Mail and AirDrop read it
+            // after the picker closes, so it stays in the temporary directory for the system
+            // to purge rather than being deleted here.
+            let anchor = NSApp.keyWindow?.contentView ?? NSApp.mainWindow?.contentView
+            guard let anchor else {
+                reportError = L10n.text("The vehicle report could not be created.")
+                return
             }
+            let bounds = anchor.bounds
+            let rect = CGRect(x: bounds.maxX - 32, y: bounds.maxY - 34, width: 32, height: 28)
+            NSSharingServicePicker(items: [url]).show(relativeTo: rect, of: anchor, preferredEdge: .minY)
+        } catch {
+            reportError = L10n.format("Could not write %@: %@", name, error.localizedDescription)
         }
-        row(L10n.text("Exterior Paint"), state.identity.externalColour)
-        row(L10n.text("Interior Trim"), state.identity.upholstery)
-        row(L10n.text("Factory Build Week"), state.formattedBuildWeek ?? state.identity.structureWeek)
-        row(L10n.text("Factory Spec (PNO34)"), state.identity.pno34)
-        row(L10n.text("Market Delivery"), state.otaCapabilities?.identity?.market ?? state.identity.accountMarket)
-        row(L10n.text("Backend-Reported Software"), state.softwareInfo?.installedVersion ?? state.softwareInfo?.version)
-
-        if let days = state.maintenance.service.daysToService {
-            row(L10n.text("Service Due"), L10n.format("in %d days", days))
-        }
-        if let inService = preferences.warrantyInServiceDate(for: state.identity.vin) {
-            row(L10n.text("In-Service Date"), Format.dateFormatter.string(from: inService))
-        }
-        if let warranty = state.maintenance.warranty?.factoryWarrantyValidUntil {
-            row(L10n.text("Manufacturer Warranty"), Format.dateFormatter.string(from: warranty))
-        }
-
-        if let estimate = batteryHealthEstimate {
-            lines.append("")
-            row(L10n.text("Calculated SoH"), String(format: "%.1f%%", locale: L10n.displayLocale, estimate.stateOfHealthPercent))
-            row(L10n.text("Calculation Method"), L10n.text("Full-charge range estimate"))
-            row(L10n.text("Last 100% calculation"), Format.dateTimeFormatter.string(from: estimate.recordedAt))
-            row(L10n.text("Calculated Degradation"), String(format: "%.1f%%", locale: L10n.displayLocale, estimate.degradationPercent))
-        }
-
-        if !redacted {
-            if let address = addressText {
-                lines.append("")
-                row(L10n.text("Parking Address"), address)
-            }
-            if let lat = state.location?.latitude, let lon = state.location?.longitude {
-                row(L10n.text("Coordinates"), String(format: "%.5f, %.5f", locale: L10n.displayLocale, lat, lon))
-            }
-        }
-
-        lines.append("")
-        lines.append(L10n.text("Generated by Hisingen. Calculated values are estimates, not vehicle telemetry."))
-        return lines.joined(separator: "\n")
     }
 
     private func copyVehicleReport() {

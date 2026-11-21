@@ -204,6 +204,14 @@ extension VehicleState {
         if energy.rangeKm == nil { merged.freshness.readingDates[.range] = previous.reportedDate(for: .range) }
         if maintenance.odometerKm == nil { merged.freshness.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
         if maintenance.details == nil { merged.freshness.readingDates[.health] = previous.reportedDate(for: .health) }
+        // A narrow poll (trip meters only, or a garage scan) fetches none of the exterior or fuel
+        // resources. Their values are carried forward above, so their dates must be too – otherwise
+        // the card loses the age it had and falls back to the whole snapshot's newest timestamp.
+        if exteriorStatus == nil {
+            merged.freshness.readingDates[.locks] = previous.reportedDate(for: .locks)
+            merged.freshness.readingDates[.openings] = previous.reportedDate(for: .openings)
+        }
+        if fuelSystem.levelPercent == nil { merged.freshness.readingDates[.fuel] = previous.reportedDate(for: .fuel) }
 
         // A retained mark means "the newest refresh did not include this, and the reading we
         // kept is still recent enough to stand in for a live one". Data past the horizon is

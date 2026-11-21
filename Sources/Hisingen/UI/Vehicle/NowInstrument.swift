@@ -60,8 +60,20 @@ struct NowInstrument: View {
     private var modelName: String { state.identity.modelName ?? state.model.displayName }
 
     private var ageLine: String {
-        L10n.format("Checked %@", Format.relativeAge(since: state.fetchedAt))
+        // The panel used to report only when Hisingen fetched. On a car whose cloud data is hours
+        // old that read "Checked just now" above an odometer from the previous day, which is the
+        // one line a reader trusts to judge everything below it. When the vehicle's own report is
+        // materially behind the fetch, say so and give its time instead.
+        guard let reportedAt = state.vehicleReportedAt,
+              state.fetchedAt.timeIntervalSince(reportedAt) > Self.reportLagThreshold else {
+            return L10n.format("Checked %@", Format.relativeAge(since: state.fetchedAt))
+        }
+        return L10n.format("Reported %@", Format.relativeAge(since: reportedAt))
     }
+
+    /// How far the vehicle's own report may trail the fetch before the header quotes it instead
+    /// of quoting the fetch. Ten minutes covers ordinary delivery lag without alarming on it.
+    static let reportLagThreshold: TimeInterval = 600
 
     static func readingAge(_ reading: VehicleReading, in state: VehicleState, now: Date = Date()) -> String? {
         guard let reportedAt = state.reportedDate(for: reading) else {
@@ -80,8 +92,13 @@ struct NowInstrument: View {
     private var sharedReadingAge: String? {
         var readings: [VehicleReading] = [.locks, .climateStatus]
         if state.powertrain.hasElectricRange { readings += [.battery, .charging] }
-        readings.append(.range)
-        let ages = Set(readings.map { Self.readingAge($0, in: state) ?? "" })
+        // Odometer, location and health are on the panel too, and providers refresh them far less
+        // often than the doors. Leaving them out meant the shared line could agree on "3 hr ago"
+        // while the odometer beside it was a day old.
+        readings += [.range, .odometer, .location, .health]
+        // A reading with no report time is not a disagreement: it has nothing to say about age.
+        let ages = Set(readings.filter { state.reportedDate(for: $0) != nil }
+            .map { Self.readingAge($0, in: state) ?? "" })
         guard ages.count == 1, let only = ages.first, !only.isEmpty else { return nil }
         return only
     }
@@ -626,6 +643,7 @@ struct NowInstrument: View {
             name: L10n.text("Charge Limit"),
             unit: "%", range: chargeBounds.targetRange, current: current,
             queued: state.energy.diagnostics?.unappliedTargetPercentage(current: current),
+            changedAt: state.energy.targetPercentageReportedAt,
             format: { Format.percent(Double($0)) },
             command: { .setChargeTarget($0) }
         )
@@ -638,9 +656,23 @@ struct NowInstrument: View {
             name: L10n.text("Current Limit"),
             unit: "A", range: chargeBounds.amperageRange, current: current,
             queued: state.energy.diagnostics?.unappliedLimitAmps(current: current),
+            changedAt: state.energy.currentLimitReportedAt,
             format: Format.amps,
             command: { .setAmpLimit($0) }
         )
+    }
+
+    /// The note line under a limit stepper's value. A queued change says what is coming, the
+    /// top of the range says why the verb reads "Lower", and otherwise a setting the car has
+    /// not touched for over a month says when it was last set, with the same wording the
+    /// charging card's rows carry. Static so tests can pin the choice without rendering.
+    static func limitControlNote(
+        queued: Int?, base: Int?, upperBound: Int, changedAt: Date?,
+        format: (Int) -> String, now: Date = Date()
+    ) -> String? {
+        if let queued { return L10n.format("%@ queued · applies when the car wakes", format(queued)) }
+        if base.map({ $0 >= upperBound }) == true { return L10n.text("Maximum") }
+        return VehicleChargingCard.staleSettingNote(reportedAt: changedAt, now: now)
     }
 
     private func limitControl(
@@ -650,14 +682,17 @@ struct NowInstrument: View {
         range: ClosedRange<Int>,
         current: Int?,
         queued: Int?,
+        changedAt: Date? = nil,
         format: (Int) -> String,
         command: @escaping (Int) -> RemoteCommand
     ) -> some View {
         // Step from the queued value so repeated presses advance before the car applies them.
         let base = queued ?? current
         let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
-        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", format($0)) }
-            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
+        let note = Self.limitControlNote(
+            queued: queued, base: base, upperBound: range.upperBound,
+            changedAt: changedAt, format: format
+        )
         let action = press.map {
             $0.restarts
                 ? L10n.format("Lower to %@", format($0.value))

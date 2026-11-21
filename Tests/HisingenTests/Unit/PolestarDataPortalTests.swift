@@ -582,6 +582,10 @@ struct PolestarDataPortalTests {
         let draw = state.liveChargingDraw(now: chargingReport)
         #expect(draw == "\(Format.kilowatts(watts: 48_500)) · \(Format.amps(125))")
         #expect(state.energy.targetPercentage == 80)
+        // The fixture's target names its own mode (DAILY) and the time it was set; both
+        // now flow into the snapshot instead of being decoded and dropped.
+        #expect(state.energy.chargeTargetSettingMode == .daily)
+        #expect(state.energy.targetPercentageReportedAt == Date(timeIntervalSince1970: 1_716_299_900))
         #expect(state.energy.currentLimitAmps == 16)
         #expect(state.energy.locations.count == 1)
         #expect(state.energy.chargeNowActive == true)
@@ -642,7 +646,7 @@ struct PolestarDataPortalTests {
     /// Open-Meteo's forecast payload carries `current` in the same shape the client parses.
     private static func openMeteoBody(temperature: Double) -> Data {
         Data("""
-        {"current":{"temperature_2m":\(temperature),"weather_code":3,"apparent_temperature":11.5,"relative_humidity_2m":76}}
+        {"current":{"temperature_2m":\(temperature),"weather_code":3,"apparent_temperature":11.5,"relative_humidity_2m":76,"wind_speed_10m":12.4,"wind_gusts_10m":27.1,"precipitation":0.30}}
         """.utf8)
     }
 
@@ -677,6 +681,9 @@ struct PolestarDataPortalTests {
         #expect(state.weather?.condition == "Overcast")
         #expect(state.weather?.apparentTemperatureCelsius == 11.5)
         #expect(state.weather?.relativeHumidity == 76)
+        #expect(state.weather?.windSpeedKmh == 12.4)
+        #expect(state.weather?.windGustsKmh == 27.1)
+        #expect(state.weather?.precipitationMm == 0.3)
         // The weather must key on the portal location reading's coordinates.
         #expect(openMeteoQueries.count == 1)
         #expect(openMeteoQueries.first?.contains("latitude=57.70887") == true)

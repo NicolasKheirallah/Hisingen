@@ -81,6 +81,24 @@ let package = Package(
             resources: [.process("Fixtures")],
             swiftSettings: testSwiftSettings,
             linkerSettings: testLinkerSettings
+        ),
+        .executableTarget(
+            name: "HisingenWidget",
+            // WidgetKit extension. The .appex bundle is hand-assembled by the Makefile the
+            // same way the app is; SwiftPM only produces the binary here. Display-only by
+            // design: interactive widget buttons need App Intents metadata emission, which
+            // a SwiftPM build cannot produce yet, so taps deep-link on hisingen://.
+            path: "Sources/HisingenWidget"
+        ),
+        .testTarget(
+            name: "HisingenWidgetTests",
+            // Round-trip tests need both sides: the app's snapshot writer and the widget's
+            // snapshot reader live in separate targets with no shared module between them,
+            // so this suite imports both and pins the JSON they exchange.
+            dependencies: ["HisingenWidget", "Hisingen"],
+            path: "Tests/HisingenWidgetTests",
+            swiftSettings: testSwiftSettings,
+            linkerSettings: testLinkerSettings
         )
     ]
 )

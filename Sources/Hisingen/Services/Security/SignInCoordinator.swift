@@ -200,7 +200,8 @@ final class SignInCoordinator {
                 do {
                     try await self.runVolvoInteractiveSignIn(
                         clientID: trimmedClientID, clientSecret: effectiveSecret,
-                        vccApiKey: effectiveApiKey, nickname: trimmedNickname, tier: tier
+                        vccApiKey: effectiveApiKey, nickname: trimmedNickname, tier: tier,
+                        previousClientID: prevClientID
                     )
                     if tier != .full {
                         if tier == .core { preferences.volvoRestrictedScopesEnabled = false }
@@ -246,17 +247,30 @@ final class SignInCoordinator {
     /// One full browser OAuth round trip: authorize → callback → token exchange → discovery,
     /// then persist the credentials and adopt the brand. `tier` narrows the requested scope set.
     private func runVolvoInteractiveSignIn(clientID: String, clientSecret: String, vccApiKey: String,
-                                           nickname: String, tier: VolvoAPI.ScopeTier) async throws {
+                                           nickname: String, tier: VolvoAPI.ScopeTier,
+                                           previousClientID: String) async throws {
         let authorizeURL = try await volvoAPI.beginSignIn(tier: tier)
         let callbackURL = try await volvoPresenter.signIn(
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
         try await volvoAPI.completeSignIn(callbackURL: callbackURL, preferredVIN: nil)
         // Keychain first: a denied save must not leave a client ID on file that points at
-        // secrets which were never stored.
-        try Keychain.saveVolvoClientSecret(clientSecret)
-        try Keychain.saveVolvoApiKey(vccApiKey)
-        preferences.volvoClientID = clientID
+        // secrets which were never stored. That ordering is kept, but a storage failure no
+        // longer aborts the sign-in: the token is already live and the vehicles are discovered,
+        // so throwing here discarded a working session. A full disk returning ENOSPC did exactly
+        // that, and the owner saw "Volvo sign-in failed" while the next poll was succeeding.
+        var credentialsPersisted = true
+        do {
+            try Keychain.saveVolvoClientSecret(clientSecret)
+            try Keychain.saveVolvoApiKey(vccApiKey)
+        } catch {
+            credentialsPersisted = false
+            logger.error("Volvo credentials could not be saved after sign-in: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
+        }
+        // Only claim the new client ID once its secret is on file. Left unguarded, a new ID paired
+        // with the previous secret fails the next launch with `invalid_client` – the same signature
+        // as a retired application, which is a confusing way to learn the save did not stick.
+        preferences.volvoClientID = credentialsPersisted ? clientID : previousClientID
         preferences.clearExplicitSignOut(for: .volvo)
         // Awaited inline, before the brand switch, so the first `CarSummary` the switch builds
         // already carries the user's nickname.
@@ -266,11 +280,19 @@ final class SignInCoordinator {
         // A reduced tier gets its own explanatory notice from the caller; don't also fire the
         // generic success toast.
         if tier == .full {
-            resultPresenter.present(
-                title: L10n.text("Volvo sign-in successful"),
-                message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
-                success: true
-            )
+            if credentialsPersisted {
+                resultPresenter.present(
+                    title: L10n.text("Volvo sign-in successful"),
+                    message: L10n.text("Successfully connected to your Volvo account! Fetching telemetry…"),
+                    success: true
+                )
+            } else {
+                resultPresenter.present(
+                    title: L10n.text("Volvo connected, but not saved"),
+                    message: L10n.text("Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart."),
+                    success: false
+                )
+            }
         }
     }
 

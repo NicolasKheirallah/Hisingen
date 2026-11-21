@@ -211,7 +211,8 @@ actor VolvoAPI {
         let data: Data
         let response: HTTPURLResponse
         do {
-            (data, response) = try await perform(request, operation: "command: \(commandName)")
+            (data, response) = try await perform(request, operation: "command: \(commandName)",
+                                                 scope: .vehicle(vin))
         } catch VolvoError.network(let urlError) where !Self.commandNeverLeftTheMac(urlError) {
             // A timeout or a dropped connection can land after Volvo already acted. Reporting it
             // as a plain network failure reads as "nothing happened" and invites a second send.
@@ -325,7 +326,8 @@ actor VolvoAPI {
             await MainActor.run { preferences.vin(for: .volvo) }
         }
         do {
-            let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
+            let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles",
+                                                                   scope: .account)
             var summaries: [CarSummary] = []
             for entry in list {
                 let details: VolvoVehicleDetailsDTO?
@@ -378,7 +380,8 @@ actor VolvoAPI {
 
     func vehicleDetails(vin: String) async throws -> VolvoVehicleDetailsDTO {
         if let cached = vehicleDetailsCache[vin] { return cached }
-        let details: VolvoVehicleDetailsDTO = try await get("/connected-vehicle/v2/vehicles/\(vin)")
+        let details: VolvoVehicleDetailsDTO = try await get("/connected-vehicle/v2/vehicles/\(vin)",
+                                                            scope: .vehicle(vin))
         vehicleDetailsCache[vin] = details
         return details
     }
@@ -490,6 +493,7 @@ actor VolvoAPI {
         let isRefreshGrant = (request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? "")
             .contains("grant_type=refresh_token")
         let (data, response) = try await perform(request, operation: "Volvo token request",
+                                                 scope: .account,
                                                  semanticError: { data, _ in Self.oauthErrorCode(in: data) })
         if response.statusCode == 400 || response.statusCode == 401 {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -502,7 +506,11 @@ actor VolvoAPI {
                 // users to re-enter a password that was never the issue.
                 switch err {
                 case "invalid_client", "unauthorized_client":
-                    throw VolvoError.appNotConfigured
+                    // The application's own credentials are refused, not the owner's account. It
+                    // is what Volvo returned once it retired the original `dc-` applications, and
+                    // reporting "add your client ID" there sent the owner to re-enter the same
+                    // dead values.
+                    throw VolvoError.appCredentialsRejected
                 case let code where OAuthErrorBody.deadGrantCodes.contains(code):
                     if isRefreshGrant { throw TokenRequestFailure.deadRefreshToken }
                     throw VolvoError.authenticationRequired(.invalidCredentials)
@@ -526,7 +534,7 @@ actor VolvoAPI {
         return decoded
     }
 
-    private func authenticatedGET(_ path: String) async throws -> (Data, HTTPURLResponse) {
+    private func authenticatedGET(_ path: String, scope: VehicleLogScope) async throws -> (Data, HTTPURLResponse) {
         try await refreshTokenIfNeeded()
         guard var token = accessToken, let vccApiKey else {
             throw VolvoError.authenticationRequired(.expiredSession)
@@ -536,7 +544,7 @@ actor VolvoAPI {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
             request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
-            let (data, response) = try await perform(request, operation: path)
+            let (data, response) = try await perform(request, operation: path, scope: scope)
             if response.statusCode == 401 {
                 let bodyString = String(data: data, encoding: .utf8) ?? ""
                 if bodyString.localizedCaseInsensitiveContains("VCC-API-KEY") || bodyString.localizedCaseInsensitiveContains("API-KEY") {
@@ -556,8 +564,8 @@ actor VolvoAPI {
         throw VolvoError.authenticationRequired(.expiredSession)
     }
 
-    func get<T: Decodable & Sendable>(_ path: String) async throws -> T {
-        let (data, response) = try await authenticatedGET(path)
+    func get<T: Decodable & Sendable>(_ path: String, scope: VehicleLogScope) async throws -> T {
+        let (data, response) = try await authenticatedGET(path, scope: scope)
         if response.statusCode == 403 {
             // Only per-vehicle telemetry GETs route through this helper, and for those a 403
             // is empirically a market/model gate rather than a token problem: the same token
@@ -586,8 +594,8 @@ actor VolvoAPI {
         }
     }
 
-    func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
-        let (data, response) = try await authenticatedGET(path)
+    func getList<T: Decodable & Sendable>(_ path: String, scope: VehicleLogScope) async throws -> [T] {
+        let (data, response) = try await authenticatedGET(path, scope: scope)
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {
             return list
@@ -672,7 +680,7 @@ actor VolvoAPI {
     private static func isGlobalFailure(_ error: Error) -> Bool {
         guard let error = error as? VolvoError else { return false }
         switch error {
-        case .authenticationRequired, .appNotConfigured, .rateLimited: return true
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected, .rateLimited: return true
         default: return false
         }
     }
@@ -681,7 +689,7 @@ actor VolvoAPI {
     /// auth problems, rate limiting, server outages, transport breakdowns.
     static func isRequestLevelFailure(_ error: Error) -> Bool {
         switch error as? VolvoError {
-        case .authenticationRequired, .appNotConfigured, .rateLimited, .server,
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected, .rateLimited, .server,
              .network, .invalidResponse, .responseTooLarge:
             return true
         default:

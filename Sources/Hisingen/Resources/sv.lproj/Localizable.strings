@@ -3898,3 +3898,114 @@
 "Last changed %@" = "Senast ändrad %@";
 "%d kW" = "%d kW";
 "%d kg" = "%d kg";
+
+// Vehicles signed out of a connected multi-vehicle account
+
+"Sign Out This Vehicle" = "Logga ut detta fordon";
+"This removes this vehicle from Hisingen. Your %@ account stays signed in for your other vehicles." = "Det här fordonet tas bort från Hisingen. Ditt %@-konto förblir inloggat för dina andra fordon.";
+"Signed Out Vehicles" = "Utloggade fordon";
+"Bring Back" = "Hämta tillbaka";
+"Bring back %@" = "Hämta tillbaka %@";
+
+// Sign-out fallback, larger accounts, and charger recovery
+
+"Sign Out Entire Account…" = "Logga ut hela kontot…";
+"These vehicles stay on your account. Bring one back to use it here." = "De här fordonen stannar på ditt konto. Hämta tillbaka ett för att använda det här.";
+"Sign out did not finish" = "Utloggningen slutfördes inte";
+"Hisingen could not finish signing out of %@. The account was removed from this Mac, but the service did not confirm revocation. Sign in and out again to retry." = "Hisingen kunde inte slutföra utloggningen av %@. Den sparade sessionen finns kanske kvar här eller hos tjänsten. Logga in och ut igen för att försöka på nytt.";
+"Home charger unpaired" = "Hemmaladdaren är frånkopplad";
+"The charger was paired to this vehicle. Pair it again from Settings after you bring the vehicle back." = "Laddaren var parkopplad med det här fordonet. Parkoppla den igen i Inställningar när du har hämtat tillbaka fordonet.";
+
+// Charge-target mode label
+
+"Long trip" = "Långresa";
+
+// EventKit reminders and calendar write-back
+
+"Plug in %@" = "Koppla in %@";
+"Battery at %.0f%% and unplugged when Hisingen created this reminder." = "Batteriet var på %.0f%% och bilen urkopplad när Hisingen skapade den här påminnelsen.";
+"Battery below the plug-in threshold and unplugged when Hisingen created this reminder." = "Batteriet var under inkopplingsgränsen och bilen urkopplad när Hisingen skapade den här påminnelsen.";
+"Book service for %@" = "Boka service för %@";
+"The vehicle reported a service inspection warning." = "Fordonet rapporterade en servicevarning.";
+"%d km" = "%d km";
+"Service inspection due." = "Dags för servicebesiktning.";
+"Check tyre pressures on %@" = "Kontrollera däcktrycket på %@";
+"Add Plug-In Reminder" = "Lägg till laddpåminnelse";
+"Add Service Reminder" = "Lägg till servicepåminnelse";
+"Add Tyre Reminder" = "Lägg till däckpåminnelse";
+"Added to Reminders." = "Tillagd i Påminnelser.";
+"Already in Reminders." = "Finns redan i Påminnelser.";
+"Reminders access is denied. Allow Hisingen in System Settings → Privacy & Security → Reminders." = "Åtkomst till Påminnelser är nekad. Ge Hisingen åtkomst i Systeminställningar → Integritet och säkerhet → Påminnelser.";
+"No default Reminders list is available." = "Ingen standardlista för Påminnelser finns.";
+"The reminder could not be saved." = "Påminnelsen kunde inte sparas.";
+"Also Add to Reminders" = "Lägg även till i Påminnelser";
+"Write a Reminder through macOS Reminders each time the plug-in alert fires" = "Skapa en påminnelse via macOS Påminnelser varje gång laddpåminnelsen utlöses";
+"Add to Calendar…" = "Lägg till i kalender…";
+"Loading writable calendars…" = "Läser in skrivbara kalendrar…";
+"No writable calendars are available." = "Inga skrivbara kalendrar finns.";
+"Destination" = "Destination";
+"Added to %@." = "Tillagd i %@.";
+"Already on %@." = "Finns redan i %@.";
+"The schedule has no upcoming start." = "Schemat har ingen kommande starttid.";
+"The event could not be saved." = "Evenemanget kunde inte sparas.";
+"Add to %@" = "Lägg till i %@";
+"Created by Hisingen from a vehicle schedule." = "Skapad av Hisingen från ett fordonschema.";
+
+// Polestar info-tab fields: climate, warranty, air-quality, raw IDs
+
+"Main Climate" = "Huvudklimat";
+"Warranty Status" = "Garantistatus";
+"Cycle Started" = "Cykel startad";
+"Last Cycle Finished" = "Senaste cykel avslutad";
+"Light %d" = "Ljus %d";
+"The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does." = "Leverantörens eget ord för garantins status, visas precis som det rapporterades. Ingen ansluten leverantör skickar ett sådant idag, så raden syns inte förrän någon gör det.";
+"A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports." = "Ett ljus som servern rapporterar med sitt fält-ID. Hisingen har inget namn för det än så länge, så ID:t visas rått och rapporteras oförändrat i supportexporter.";
+"Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports." = "Luftkvalitetsfält från portalen som Hisingen ännu inte har tolkat. Visas råa så att ny data från servern syns. Rapporteras oförändrat i supportexporter.";
+
+// Share vehicle report and Focus filter
+
+"Share Vehicle Report…" = "Dela fordonsrapport…";
+"The vehicle report could not be created." = "Fordonsrapporten kunde inte skapas.";
+"Data from %@." = "Data från %@.";
+"Vehicle and notifications" = "Fordon och aviseringar";
+"%@: notifications muted" = "%@: aviseringar tystade";
+"%@: notifications on" = "%@: aviseringar på";
+
+// Tibber live house power and production
+
+"Production %@" = "Produktion %@";
+"Pulse last read %@ ago" = "Pulse lästes senast för %@ sedan";
+"House Production" = "Husets produktion";
+"Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out." = "Timvis produktion som Tibber rapporterar för husets produktionsmätare under samma period. Ett hus utan produktion rapporterar inget, och raden lämnas bort.";
+"Live House Power" = "Husets effekt just nu";
+"Reading live" = "Läser live";
+"No Pulse paired" = "Ingen Pulse kopplad";
+"Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one." = "Tibber strömmar live-effekt från en Pulse- eller Watty-läsare som är kopplad till hemmet. Laddkortet visar då husets förbrukning just nu, och produktion medan huset producerar. Timpriser och mätaravläsningar fungerar utan en sådan.";
+
+// Volvo energy-capability rows
+
+"Battery charge level" = "Batteriladdnivå";
+"Electric range" = "Elräckvidd";
+"Charger connection status" = "Laddaranslutning";
+"Charging system status" = "Laddningsstatus";
+"Charging type" = "Laddtyp";
+"Charger power status" = "Laddarens effektstatus";
+"Charging power" = "Laddeffekt";
+"Estimated charging time to target" = "Uppskattad laddtid till mål";
+
+// Weather readout and climate-timer advice
+
+"Wind" = "Vind";
+"Gusts" = "Vindbyar";
+"Precipitation" = "Nederbörd";
+"Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin." = "Nederbörd väntas kl. %@ (%@ mm). En klimattimer skulle värma kupén.";
+"Strong wind forecast at %@ (%@). A climate timer would warm the cabin." = "Stark vind väntas kl. %@ (%@). En klimattimer skulle värma kupén.";
+
+// Widget controls
+
+"Vehicle status" = "Fordonsstatus";
+"Battery, range, charging and the next departure, as the app last read them." = "Batteri, räckvidd, laddning och nästa avresa, precis som appen senast läste dem.";
+"Lock car" = "Lås bilen";
+"Opens Hisingen with the lock command ready to confirm." = "Öppnar Hisingen med låskommandot klart att bekräftas.";
+"Start climate" = "Starta klimatet";
+"Opens Hisingen with the climate command ready to confirm." = "Öppnar Hisingen med klimatkommandot klart att bekräftas.";

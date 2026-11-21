@@ -279,6 +279,8 @@ struct SettingsNotificationsCard: View {
                 label: { "\($0)%" }
             )
             .transition(Self.dependentRowTransition)
+            pluginReminderAutomationRow
+                .transition(Self.dependentRowTransition)
         }
 
         notificationRow(
@@ -488,6 +490,37 @@ struct SettingsNotificationsCard: View {
     }
 
     // MARK: - Row builders
+
+    /// Opt-in for the Reminders write-back on the plug-in alert. The preference rides
+    /// with the Reminders integration rather than in `PreferencesStore` because the
+    /// persistence layer is being reworked in another session; the key follows the
+    /// same UserDefaults pattern and should move to the notifications preferences
+    /// with the rest.
+    private var pluginReminderAutomationRow: some View {
+        notificationRow(
+            symbol: "reminder",
+            title: "Also Add to Reminders",
+            detail: "Write a Reminder through macOS Reminders each time the plug-in alert fires",
+            isOn: Binding(
+                get: { ReminderWriter.pluginAutomationEnabled(in: UserDefaults.standard) },
+                set: { enabled in
+                    ReminderWriter.setPluginAutomation(enabled, in: UserDefaults.standard)
+                    if enabled {
+                        // The toggle press is the user gesture EventKit needs for its
+                        // access prompt; a refusal snaps the toggle back off.
+                        Task { @MainActor in
+                            guard await ReminderWriter.shared.requestAccessIfNeeded() else {
+                                ReminderWriter.setPluginAutomation(false, in: UserDefaults.standard)
+                                binder.bump()
+                                return
+                            }
+                            binder.bump()
+                        }
+                    }
+                }
+            )
+        )
+    }
 
     private func notificationRow(
         symbol: String,

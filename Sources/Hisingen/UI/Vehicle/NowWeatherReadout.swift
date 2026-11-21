@@ -1,3 +1,4 @@
+import EventKit
 import SwiftUI
 
 struct NowWeatherButton: View {
@@ -64,11 +65,16 @@ struct NowWeatherButton: View {
     }
 }
 
+@MainActor
 struct NowWeatherReadout: View {
     let state: VehicleState
 
     @Environment(\.preferencesStore) private var preferences
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// One store while the popover is open, the same arrangement the calendar settings card uses.
+    @State private var eventStore = EKEventStore()
+    @State private var calendarDeparture: Date?
+    @State private var calendarTask: Task<Void, Never>?
 
     private struct Reading {
         let label: String
@@ -100,8 +106,15 @@ struct NowWeatherReadout: View {
                             stackedReadings(readings)
                         }
                     }
+                    if let departureAdviceLine {
+                        Text(departureAdviceLine)
+                            .hisType(.micro)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
+            .task { refreshCalendarDeparture() }
         }
     }
 
@@ -122,7 +135,90 @@ struct NowWeatherReadout: View {
         if let humidity = weather.relativeHumidity {
             readings.append(Reading(label: L10n.text("Humidity"), value: Format.percent(Double(humidity))))
         }
+        if let wind = weather.windSpeedKmh {
+            readings.append(Reading(label: L10n.text("Wind"),
+                                    value: Format.speed(kmH: Int(wind.rounded()), unit: preferences.distanceUnit)))
+        }
+        // Gusts only earn their own figure when they stand clear of the mean wind.
+        if let gusts = weather.windGustsKmh, gusts > (weather.windSpeedKmh ?? 0) {
+            readings.append(Reading(label: L10n.text("Gusts"),
+                                    value: Format.speed(kmH: Int(gusts.rounded()), unit: preferences.distanceUnit)))
+        }
+        if let precipitation = weather.precipitationMm {
+            readings.append(Reading(label: L10n.text("Precipitation"), value: Format.number(precipitation) + " mm"))
+        }
         return readings
+    }
+
+    /// One line of climate timing advice before the next departure the app can name: the
+    /// calendar preconditioning schedule's next event, or the car's own departure timers.
+    /// Silent when the forecast or the departure time is missing, when the hour is calm and
+    /// dry, or when a climate timer the car will run already covers it.
+    private var departureAdviceLine: String? {
+        guard let advice = DepartureWeatherAdvice.advice(
+            schedules: state.energy.schedules,
+            climateTimers: state.climateTimers,
+            calendarDeparture: calendarDeparture,
+            forecast: state.weather?.hourlyTemperatures ?? []
+        ) else { return nil }
+        if advice.needsClimateTimer {
+            return L10n.format(
+                "Frost forecast at %@ (%@). A climate timer would clear the windows.",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
+            )
+        }
+        if advice.wet {
+            return L10n.format(
+                "Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.number(advice.precipitationMm ?? 0)
+            )
+        }
+        if advice.windy {
+            let gusts = advice.windGustsKmh ?? advice.windSpeedKmh ?? 0
+            return L10n.format(
+                "Strong wind forecast at %@ (%@). A climate timer would warm the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.speed(kmH: Int(gusts.rounded()), unit: preferences.distanceUnit)
+            )
+        }
+        return nil
+    }
+
+    /// Snapshots the Sendable calendar inputs and mirrors the controller's next-trigger fetch
+    /// off the main thread, the same hand-off the calendar settings card uses. The window is
+    /// 48 hours: the forecast the advice draws on only reaches two days.
+    private func refreshCalendarDeparture() {
+        calendarTask?.cancel()
+        guard preferences.calendarPreconditioningEnabled,
+              CalendarPreconditioningController.hasCalendarAccess,
+              !preferences.calendarPreconditioningCalendarIDs.isEmpty else { return }
+        let calendarIDs = preferences.calendarPreconditioningCalendarIDs
+        let lead = TimeInterval(preferences.calendarPreconditioningLeadTimeMinutes * 60)
+        let fired = Set(preferences.calendarPreconditioningFiredOccurrences.keys)
+        nonisolated(unsafe) let store = eventStore
+        calendarTask = Task {
+            let next = await Task.detached(priority: .utility) { () -> Date? in
+                let now = Date()
+                let calendars = store.calendars(for: .event).filter {
+                    calendarIDs.contains($0.calendarIdentifier)
+                }
+                guard !calendars.isEmpty else { return nil }
+                let predicate = store.predicateForEvents(
+                    withStart: now, end: now.addingTimeInterval(48 * 3_600), calendars: calendars)
+                return store.events(matching: predicate)
+                    .filter { !$0.isAllDay && $0.startDate > now }
+                    .compactMap { event -> (Date, Date)? in
+                        let key = "\(event.calendarItemIdentifier)|\(Int(event.startDate.timeIntervalSince1970))"
+                        guard !fired.contains(key) else { return nil }
+                        return (event.startDate, max(event.startDate.addingTimeInterval(-lead), now))
+                    }
+                    .min { $0.1 < $1.1 }?.0
+            }.value
+            guard !Task.isCancelled else { return }
+            calendarDeparture = next
+        }
     }
 
     private func observation(_ timestamp: Date?) -> some View {

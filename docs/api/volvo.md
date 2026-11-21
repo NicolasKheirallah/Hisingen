@@ -26,7 +26,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 |---|---|---|---|
 | Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour (flat `externalColour` string or `externalColours` array), gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
 | Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status/type, charger connection/power state, current limit, power in watts, target SOC, time to target | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingType`, `chargingPowerWatts`, etc. |
-| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes; see [architecture/capabilities.md](../architecture/capabilities.md) |
+| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Every decoded flag probes its matching `VehicleCapability` (battery level, range, connection, charging status, charging type, charger power status, charging power, estimated time to target, current limit, charge target), which gates the charging card's rows and the Info capabilities sheet; see [architecture/capabilities.md](../architecture/capabilities.md) |
 | Doors | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock, door/hood/tailgate/charge-lid state | `exteriorStatus` |
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
 | Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure); `NO_SENSOR` / `SYSTEM_FAULT` map to a distinct `.sensorFault` state | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
@@ -72,9 +72,12 @@ Both fields live inside the single vehicle-details response (`GET /connected-veh
 
 `GET /energy/v2/vehicles/{vin}/capabilities` returns a nested `getEnergyState` capability whose
 children describe individual energy fields. Hisingen decodes that documented nested shape (and
-the older flat shape defensively), caches it for one hour, and feeds charge-target and
-charging-current-limit probes. The Connected Vehicle command list supplies the equivalent
-per-VIN probes for remote controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
+the older flat shape defensively), caches it for one hour, and probes every decoded flag into the
+per-VIN capability record: a `false` flag reads as "this car does not report that", so the
+charging card hides a row the car cannot report instead of showing whatever happened to decode,
+and the Info capabilities sheet shows each flag's support with "Recent service response" as its
+source. The Connected Vehicle command list supplies the equivalent per-VIN probes for remote
+controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
 
 ## Remote commands
 

@@ -11,8 +11,8 @@ the pinned hosted configuration.
 | `make ci` | Runs shared portable/macOS phases against the working tree, with isolated artifact output. |
 | `sh Scripts/ci-local.sh --committed` | Validates an isolated archive of HEAD. |
 | `make build` | Generates configuration and builds a native release binary. |
-| `make universal` | Builds arm64 and x86_64 in separate scratch directories and combines them with lipo. |
-| `make app` | Builds a native binary, assembles resources/frameworks, configures Sparkle and signs the app. |
+| `make universal` | Builds arm64 and x86_64 in separate scratch directories and combines them with lipo. The widget binary is lipo'd the same way. |
+| `make app` | Builds a native binary, assembles resources/frameworks and the widget extension into `Contents/PlugIns`, configures Sparkle and signs the app. |
 | `make app-universal` | Assembles and signs the universal binary without replacing it with a native build. |
 | `make dmg` | Builds the native app and packages it. Use `package-dmg` to preserve an existing universal app. |
 | `make package-dmg` | Packages an existing signed app without rebuilding it. |
@@ -51,6 +51,22 @@ requires an imported Developer ID identity and never falls back to ad-hoc signin
 builds without credentials to skip it; `NOTARIZE=require` fails instead. Supply the
 Apple ID/team/app-password variables or a `NOTARYTOOL_PROFILE`, default
 `hisingen-notary`. See [releases.md](releases.md) for production handling.
+
+## Widget extension
+
+`make build` compiles the `HisingenWidget` extension binary beside the app.
+`make app` then assembles `Contents/PlugIns/HisingenWidget.appex` by hand: the binary, the
+linted plist from `Resources/HisingenWidget-Info.plist` with its version strings synced
+from the app's plist, and the app's `.lproj` folders so the widget resolves the same
+language tables. See [widgets-and-controls.md](../development/widgets-and-controls.md) for
+what the extension does and does not ship.
+
+Signing is two steps on purpose: the `.appex` signs first with
+`Resources/HisingenWidget.entitlements`, then the app signs with
+`Resources/Hisingen.entitlements`, both without `--deep`, because `codesign --deep` applies
+every signing option to all nested content and would stamp the app's entitlements over the
+extension's. Sparkle keeps its own valid signature instead of being re-signed. The final
+`codesign --verify --deep --strict` still checks the whole tree.
 
 ## Validation interfaces
 

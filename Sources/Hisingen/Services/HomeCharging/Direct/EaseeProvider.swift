@@ -23,8 +23,12 @@ struct EaseeProvider: DirectChargerProvider {
         static let dynamicChargerCurrent = 48
         static let reasonForNoCurrent = 96
         static let connectedToCloud = 250
+        static let cableRating = 104
+        static let phaseMode = 38
+        static let currentConnection = 141
         static let all = [opMode, cableLocked, totalPowerKw, sessionEnergyKwh, lifetimeEnergyKwh,
-                          dynamicChargerCurrent, reasonForNoCurrent, connectedToCloud]
+                          dynamicChargerCurrent, reasonForNoCurrent, connectedToCloud,
+                          cableRating, phaseMode, currentConnection]
     }
 
     init(credentials: DirectChargerCredentials, transport: any HomeAssistantTransport,
@@ -136,8 +140,38 @@ struct EaseeProvider: DirectChargerProvider {
         if let locked = LooseJSON.bool(values[Observation.cableLocked]) {
             telemetry.cableLocked = HomeChargerReading(value: locked, timestamp: now)
         }
+        if let cable = LooseJSON.double(values[Observation.cableRating]), cable > 0 {
+            telemetry.cableLimitAmps = HomeChargerReading(value: cable, timestamp: now)
+        }
+        if let mode = Self.phaseMode(values[Observation.phaseMode]) {
+            telemetry.phaseMode = HomeChargerReading(value: mode, timestamp: now)
+        }
+        if let network = Self.network(values[Observation.currentConnection]) {
+            telemetry.network = HomeChargerReading(value: network, timestamp: now)
+        }
         telemetry.chargingEnabled = HomeChargerReading(value: status.isChargingEnabled, timestamp: now)
         return telemetry
+    }
+
+    /// Observation 38, PHASE MODE: "phase mode ==1 --> one phase, phase mode==3 --> 3 phase"
+    /// (developer.easee.com, Charger Observation Ids). No value for a charger that picks the
+    /// phases itself is documented, so any other code reads as `nil` and the row stays off.
+    static func phaseMode(_ value: Any?) -> HomeChargerPhaseMode? {
+        switch LooseJSON.double(value).map({ Int($0) }) {
+        case 1: return .singlePhase
+        case 3: return .threePhase
+        default: return nil
+        }
+    }
+
+    /// Observation 141, CURRENT CONNECTION: "Radio access technology in use: 0 = cellular, 1 = wifi"
+    /// (developer.easee.com, Charger Observation Ids).
+    static func network(_ value: Any?) -> HomeChargerNetwork? {
+        switch LooseJSON.double(value).map({ Int($0) }) {
+        case 0: return .mobile
+        case 1: return .wifi
+        default: return nil
+        }
     }
 
     // MARK: Commands

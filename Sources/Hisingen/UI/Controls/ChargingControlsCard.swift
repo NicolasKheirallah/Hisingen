@@ -237,6 +237,10 @@ struct ChargingControlsCard: View {
             }
             if let queued = state.energy.diagnostics?.unappliedTargetPercentage(current: chargeTarget) {
                 pendingSyncLine(Format.percent(Double(queued)))
+            } else if let note = VehicleChargingCard.staleSettingNote(
+                reportedAt: state.energy.targetPercentageReportedAt
+            ) {
+                staleSettingNoteLine(note)
             }
         }
         .hisAnimation(Motion.layout, value: chargeTarget)
@@ -260,6 +264,16 @@ struct ChargingControlsCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.format("%@ queued · applies when the car wakes", queuedValue))
         .transition(.opacity)
+    }
+
+    /// The same "Last changed" note the charging card's detail rows carry: a setting the car
+    /// has not touched for over a month should not read as fresh on the sliders either.
+    private func staleSettingNoteLine(_ note: String) -> some View {
+        Text(note)
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .transition(.opacity)
     }
 
     private func amperageEntry(title: String, current: Int?, command: @escaping (Int) -> RemoteCommand) -> LimitEntry {
@@ -340,6 +354,10 @@ struct ChargingControlsCard: View {
             }
             if let queued = state.energy.diagnostics?.unappliedLimitAmps(current: ampLimit) {
                 pendingSyncLine(Format.amps(queued))
+            } else if let note = VehicleChargingCard.staleSettingNote(
+                reportedAt: state.energy.currentLimitReportedAt
+            ) {
+                staleSettingNoteLine(note)
             }
         }
         .hisAnimation(Motion.layout, value: ampLimit)

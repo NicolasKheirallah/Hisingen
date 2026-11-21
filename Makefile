@@ -1,6 +1,11 @@
 OUTPUT_DIR ?= releases
 APP     ?= $(OUTPUT_DIR)/Hisingen.app
 BINARY  = .build/release/Hisingen
+# The widget extension binary SwiftPM builds beside the app; the .appex bundle is
+# hand-assembled from it inside $(APP)/Contents/PlugIns the same way the .app is.
+WIDGET_BINARY = .build/release/HisingenWidget
+WIDGET_APPEX = $(APP)/Contents/PlugIns/HisingenWidget.appex
+WIDGET_INFO_PLIST = Resources/HisingenWidget-Info.plist
 DMG     ?= $(OUTPUT_DIR)/Hisingen.dmg
 ZIP     ?= $(OUTPUT_DIR)/Hisingen.zip
 DMG_STAGING ?= $(OUTPUT_DIR)/dmg-staging
@@ -78,6 +83,11 @@ universal: doctor inject-secrets
 		"$$(swift build -c release --arch x86_64 --scratch-path .build-x86_64 --show-bin-path)/Hisingen" \
 		-output $(BINARY)
 	lipo $(BINARY) -verify_arch arm64 x86_64
+	lipo -create \
+		"$$(swift build -c release --arch arm64 --scratch-path .build-arm64 --show-bin-path)/HisingenWidget" \
+		"$$(swift build -c release --arch x86_64 --scratch-path .build-x86_64 --show-bin-path)/HisingenWidget" \
+		-output $(WIDGET_BINARY)
+	lipo $(WIDGET_BINARY) -verify_arch arm64 x86_64
 
 ## Assemble a proper .app bundle (needed for launch-at-login) and sign it
 app: $(if $(SKIP_BUILD),,build)
@@ -105,8 +115,26 @@ app: $(if $(SKIP_BUILD),,build)
 	@if ! otool -l "$(APP)/Contents/MacOS/Hisingen" | grep -Fq '@executable_path/../Frameworks'; then \
 		install_name_tool -add_rpath '@executable_path/../Frameworks' "$(APP)/Contents/MacOS/Hisingen"; \
 	fi
+	plutil -lint $(WIDGET_INFO_PLIST)
+	mkdir -p $(WIDGET_APPEX)/Contents/MacOS $(WIDGET_APPEX)/Contents/Resources
+	cp $(WIDGET_BINARY) $(WIDGET_APPEX)/Contents/MacOS/HisingenWidget
+	cp $(WIDGET_INFO_PLIST) $(WIDGET_APPEX)/Contents/Info.plist
+	@# Keep the appex version strings in lockstep with the app's, so no validation ever
+	@# sees a pair that disagrees.
+	@v=$$(plutil -extract CFBundleShortVersionString raw -o - Resources/Info.plist); \
+	b=$$(plutil -extract CFBundleVersion raw -o - Resources/Info.plist); \
+	plutil -replace CFBundleShortVersionString -string "$$v" $(WIDGET_APPEX)/Contents/Info.plist; \
+	plutil -replace CFBundleVersion -string "$$b" $(WIDGET_APPEX)/Contents/Info.plist
+	@# The widget resolves its strings against its own bundle, so it carries the same
+	@# language tables the app ships.
+	cp -R Sources/Hisingen/Resources/*.lproj $(WIDGET_APPEX)/Contents/Resources/
+	@# The extension signs first with its own entitlements, then the app signs without
+	@# --deep so this signature survives: codesign's --deep would push the app's
+	@# entitlements into every nested bundle ("almost never what you want" per its man
+	@# page), and Sparkle ships a valid signature of its own that is preserved instead.
 ifeq ($(IDENTITY),-)
-	codesign --force --deep -s - $(APP)
+	codesign --force -s - --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force -s - --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "⚠️  Self-signed (ad-hoc) build — this identity changes on every rebuild, so macOS will re-prompt for Keychain/Accessibility access each time you rebuild. Pass IDENTITY=\"<your cert name>\" or run 'make setup-cert' to avoid repeated prompts."
 else
 	@if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$(IDENTITY)\""; then \
@@ -114,11 +142,13 @@ else
 		else echo "Requested signing identity is unavailable: $(IDENTITY)" >&2; exit 1; fi; \
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
-	codesign --force --deep --options runtime --timestamp -s "$(IDENTITY)" $(APP)
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing."
 	sh Scripts/notarize.sh $(APP)
 else
-	codesign --force --deep -s "$(IDENTITY)" $(APP)
+	codesign --force -s "$(IDENTITY)" --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force -s "$(IDENTITY)" --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "✅ Signed with stable local identity \"$(IDENTITY)\" — persistent across rebuilds (Keychain & Accessibility permissions remembered)."
 endif
 endif

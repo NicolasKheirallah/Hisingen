@@ -35,14 +35,19 @@ final class LocalDataEraser {
     /// and SQLite's `PRAGMA` have no per-vehicle form, so they carry no `VehicleScope` and never
     /// touch a per-VIN tier.
     enum Scope: Equatable {
-        /// What a sign-out or an account change drops: the cached snapshot, the mirrors, the
-        /// command receipts, the in-memory image tier and the in-memory per-VIN caches. Durable
-        /// history survives.
+        /// What an account sign-out or an account change drops: the cached snapshot, the
+        /// mirrors, the command receipts, the in-memory image tier and the in-memory per-VIN
+        /// caches. Durable history survives.
         ///
         /// The fleet-wide form is the narrower case of the two: knowing no vehicle, a sign-out
         /// takes only the stores the vehicles reported, so a name or a colour the reader chose
         /// for a vehicle of an untouched brand is not a session casualty.
         case session(VehicleScope)
+        /// One vehicle signed out of an account that stays connected. The vehicle-derived
+        /// stores go, so no stale snapshot, receipt, baseline or planner latch survives; the
+        /// reader-authored nickname, theme, mute and related stores stay for Bring Back, and
+        /// so does the artwork the garage will draw again.
+        case detach(VehicleScope)
         /// Coordinates and charging-location labels only.
         case locations(VehicleScope)
         /// High-volume samples older than the retention window.
@@ -97,7 +102,7 @@ final class LocalDataEraser {
     /// mirrors must not be dropped before the delete they mirror has committed.
     private nonisolated static func runSQL(_ scope: Scope, database: VehicleDatabase) throws {
         switch scope {
-        case .session(let vehicles):
+        case .session(let vehicles), .detach(let vehicles):
             try database.db.withTransaction {
                 let tables = ["vehicle_snapshots", "charging_baselines", "command_receipts", "provider_backoff"]
                 for table in tables {
@@ -138,6 +143,9 @@ final class LocalDataEraser {
             clearSessionDefaults(vehicles)
             memoryCaches.drop(vehicles)
             dropImageTier(vehicles)
+        case .detach(let vehicles):
+            clearVehicleDerivedDefaults(vehicles)
+            memoryCaches.drop(vehicles)
         case .everything(let vehicles):
             clearLocalDefaults(vehicles)
             memoryCaches.drop(vehicles)
@@ -164,6 +172,17 @@ final class LocalDataEraser {
         switch vehicles {
         case .vehicle(let vin):
             preferences.clearLocalVehicleDefaults(for: vin)
+        case .all:
+            preferences.clearAllVehicleDerivedDefaults()
+        }
+    }
+
+    /// The vehicle-derived half for a vehicle that stays on its account. The reader-authored
+    /// stores stay: Bring Back should return the name and colour the reader gave the car.
+    private func clearVehicleDerivedDefaults(_ vehicles: VehicleScope) {
+        switch vehicles {
+        case .vehicle(let vin):
+            preferences.clearVehicleDerivedDefaults(for: vin)
         case .all:
             preferences.clearAllVehicleDerivedDefaults()
         }

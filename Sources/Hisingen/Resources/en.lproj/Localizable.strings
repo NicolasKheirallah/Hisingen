@@ -3901,3 +3901,114 @@
 "Last changed %@" = "Last changed %@";
 "%d kW" = "%d kW";
 "%d kg" = "%d kg";
+
+// Vehicles signed out of a connected multi-vehicle account
+
+"Sign Out This Vehicle" = "Sign Out This Vehicle";
+"This removes this vehicle from Hisingen. Your %@ account stays signed in for your other vehicles." = "This removes this vehicle from Hisingen. Your %@ account stays signed in for your other vehicles.";
+"Signed Out Vehicles" = "Signed Out Vehicles";
+"Bring Back" = "Bring Back";
+"Bring back %@" = "Bring back %@";
+
+// Sign-out fallback, larger accounts, and charger recovery
+
+"Sign Out Entire Account…" = "Sign Out Entire Account…";
+"These vehicles stay on your account. Bring one back to use it here." = "These vehicles stay on your account. Bring one back to use it here.";
+"Sign out did not finish" = "Sign out did not finish";
+"Hisingen could not finish signing out of %@. The account was removed from this Mac, but the service did not confirm revocation. Sign in and out again to retry." = "Hisingen could not finish signing out of %@. The saved session may still exist here or at the service. Sign in and out again to retry.";
+"Home charger unpaired" = "Home charger unpaired";
+"The charger was paired to this vehicle. Pair it again from Settings after you bring the vehicle back." = "The charger was paired to this vehicle. Pair it again from Settings after you bring the vehicle back.";
+
+// Charge-target mode label
+
+"Long trip" = "Long trip";
+
+// EventKit reminders and calendar write-back
+
+"Plug in %@" = "Plug in %@";
+"Battery at %.0f%% and unplugged when Hisingen created this reminder." = "Battery at %.0f%% and unplugged when Hisingen created this reminder.";
+"Battery below the plug-in threshold and unplugged when Hisingen created this reminder." = "Battery below the plug-in threshold and unplugged when Hisingen created this reminder.";
+"Book service for %@" = "Book service for %@";
+"The vehicle reported a service inspection warning." = "The vehicle reported a service inspection warning.";
+"%d km" = "%d km";
+"Service inspection due." = "Service inspection due.";
+"Check tyre pressures on %@" = "Check tyre pressures on %@";
+"Add Plug-In Reminder" = "Add Plug-In Reminder";
+"Add Service Reminder" = "Add Service Reminder";
+"Add Tyre Reminder" = "Add Tyre Reminder";
+"Added to Reminders." = "Added to Reminders.";
+"Already in Reminders." = "Already in Reminders.";
+"Reminders access is denied. Allow Hisingen in System Settings → Privacy & Security → Reminders." = "Reminders access is denied. Allow Hisingen in System Settings → Privacy & Security → Reminders.";
+"No default Reminders list is available." = "No default Reminders list is available.";
+"The reminder could not be saved." = "The reminder could not be saved.";
+"Also Add to Reminders" = "Also Add to Reminders";
+"Write a Reminder through macOS Reminders each time the plug-in alert fires" = "Write a Reminder through macOS Reminders each time the plug-in alert fires";
+"Add to Calendar…" = "Add to Calendar…";
+"Loading writable calendars…" = "Loading writable calendars…";
+"No writable calendars are available." = "No writable calendars are available.";
+"Destination" = "Destination";
+"Added to %@." = "Added to %@.";
+"Already on %@." = "Already on %@.";
+"The schedule has no upcoming start." = "The schedule has no upcoming start.";
+"The event could not be saved." = "The event could not be saved.";
+"Add to %@" = "Add to %@";
+"Created by Hisingen from a vehicle schedule." = "Created by Hisingen from a vehicle schedule.";
+
+// Polestar info-tab fields: climate, warranty, air-quality, raw IDs
+
+"Main Climate" = "Main Climate";
+"Warranty Status" = "Warranty Status";
+"Cycle Started" = "Cycle Started";
+"Last Cycle Finished" = "Last Cycle Finished";
+"Light %d" = "Light %d";
+"The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does." = "The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does.";
+"A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports." = "A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports.";
+"Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports." = "Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.";
+
+// Share vehicle report and Focus filter
+
+"Share Vehicle Report…" = "Share Vehicle Report…";
+"The vehicle report could not be created." = "The vehicle report could not be created.";
+"Data from %@." = "Data from %@.";
+"Vehicle and notifications" = "Vehicle and notifications";
+"%@: notifications muted" = "%@: notifications muted";
+"%@: notifications on" = "%@: notifications on";
+
+// Tibber live house power and production
+
+"Production %@" = "Production %@";
+"Pulse last read %@ ago" = "Pulse last read %@ ago";
+"House Production" = "House Production";
+"Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out." = "Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out.";
+"Live House Power" = "Live House Power";
+"Reading live" = "Reading live";
+"No Pulse paired" = "No Pulse paired";
+"Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one." = "Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one.";
+
+// Volvo energy-capability rows
+
+"Battery charge level" = "Battery charge level";
+"Electric range" = "Electric range";
+"Charger connection status" = "Charger connection status";
+"Charging system status" = "Charging system status";
+"Charging type" = "Charging type";
+"Charger power status" = "Charger power status";
+"Charging power" = "Charging power";
+"Estimated charging time to target" = "Estimated charging time to target";
+
+// Weather readout and climate-timer advice
+
+"Wind" = "Wind";
+"Gusts" = "Gusts";
+"Precipitation" = "Precipitation";
+"Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin." = "Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin.";
+"Strong wind forecast at %@ (%@). A climate timer would warm the cabin." = "Strong wind forecast at %@ (%@). A climate timer would warm the cabin.";
+
+// Widget controls
+
+"Vehicle status" = "Vehicle status";
+"Battery, range, charging and the next departure, as the app last read them." = "Battery, range, charging and the next departure, as the app last read them.";
+"Lock car" = "Lock car";
+"Opens Hisingen with the lock command ready to confirm." = "Opens Hisingen with the lock command ready to confirm.";
+"Start climate" = "Start climate";
+"Opens Hisingen with the climate command ready to confirm." = "Opens Hisingen with the climate command ready to confirm.";

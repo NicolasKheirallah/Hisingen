@@ -3,11 +3,12 @@ import Foundation
 extension VolvoAPI {
     func perform(_ request: URLRequest, limit: Int = 2_000_000,
                  operation: String = "HTTP request",
+                 scope: VehicleLogScope,
                  semanticError: (@Sendable (Data, Int) -> String?)? = nil)
     async throws -> (Data, HTTPURLResponse) {
         try await HTTPExchange.data(
             for: request, using: session, limit: limit, operation: operation, provider: .volvo,
-            semanticError: semanticError
+            scope: scope, semanticError: semanticError
         )
     }
 

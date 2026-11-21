@@ -24,7 +24,7 @@ struct PanelModelTests {
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {},
             onOpenUpdate: {}, onRemoteCommand: { _ in }, onSelectCar: { _ in },
             onDismissCommandReceipt: { _ in }, onSettingsChanged: { _ in },
-            onSignOut: {}, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
+            onSignOut: { _ in }, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
     }
 
     /// A store and keychain scoped to this test, paired into the connection model and the
@@ -68,7 +68,7 @@ struct PanelModelTests {
             onRefresh: {}, onSettings: {}, onClose: {}, onCheckForUpdates: {},
             onOpenUpdate: {}, onRemoteCommand: { _ in }, onSelectCar: { selectedVIN = $0 },
             onDismissCommandReceipt: { _ in }, onSettingsChanged: { _ in },
-            onSignOut: {}, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
+            onSignOut: { _ in }, onTestConnection: { _ in ConnectionCheck(success: false, message: "", failureKind: nil) }, onCompleteSetup: {})
         let services = makeAccountServices(database: VehicleDatabase(database: raw))
         let model = PanelModel(display: makeDisplay(), actions: actions,
                                history: services.history,

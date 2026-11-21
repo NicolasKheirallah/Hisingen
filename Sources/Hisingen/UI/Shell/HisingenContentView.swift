@@ -18,6 +18,23 @@ struct RetainedDataNoticeID: Hashable {
     }
 }
 
+/// Identifies the "these readings are from a previous report" banner. Separate from
+/// `RetainedDataNoticeID`, which speaks about fields the newest refresh *omitted*: this one is
+/// about fields the provider did send, but with a report time from hours or days ago.
+struct StaleReadingNoticeID: Hashable {
+    let vin: String
+    let oldest: Date?
+    let readings: [String]
+
+    init?(state: VehicleState) {
+        let stale = state.staleReadings()
+        guard !stale.isEmpty else { return nil }
+        vin = state.identity.vin
+        oldest = stale.compactMap { state.reportedDate(for: $0) }.min()
+        readings = stale.map(\.rawValue).sorted()
+    }
+}
+
 @MainActor
 struct HisingenContentView: View {
     let state: VehicleState?
@@ -45,7 +62,7 @@ struct HisingenContentView: View {
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
-    let onSignOut: () -> Void
+    let onSignOut: (SignOutSelection) -> Void
     let onTestConnection: (VehicleBrand) async -> ConnectionCheck
     /// One-time post-sign-in pass. Rendered full-panel like Settings; cleared only through
     /// `onCompleteSetup`, which also persists `hasCompletedSetupPass`.
@@ -55,6 +72,7 @@ struct HisingenContentView: View {
     let accountConnection: AccountConnectionModel
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
+    let fleetStore: FleetStore?
 
     @State private var selectedTab: TabRef
     @State private var historyJumpTarget: String?
@@ -67,6 +85,8 @@ struct HisingenContentView: View {
     private let tabSelection: Binding<TabRef>
     @State private var refreshRotation: Double = 0
     @State private var dismissedRetainedDataNotice: RetainedDataNoticeID?
+    @State private var dismissedStaleReadingNotice: StaleReadingNoticeID?
+    @State private var dismissedSignInNotice: String?
     @State private var firstLaunchCardDismissed = false
     /// Per-frame gesture physics (scroll offset, pull, swipe). Lives in its own observable so
     /// drags do not re-run this shell body; see ``PanelGestureState``.
@@ -158,6 +178,9 @@ struct HisingenContentView: View {
                 onSettingsChanged(change)
             },
             onSignOut: onSignOut,
+            liveFleet: { [fleetStore, fleet, state] in
+                fleetStore?.snapshot(activeState: state) ?? fleet
+            },
             accountConnection: accountConnection,
             onTestConnection: onTestConnection,
             destination: settingsDestination,
@@ -194,6 +217,7 @@ struct HisingenContentView: View {
         self.onDismissCommandReceipt = actions.onDismissCommandReceipt
         self.onSettingsChanged = actions.onSettingsChanged
         self.onSignOut = actions.onSignOut
+        self.fleetStore = panel.fleetStore
         self.onTestConnection = actions.onTestConnection
         self.setupMode = display.setupMode
         self.onCompleteSetup = actions.onCompleteSetup
@@ -274,6 +298,20 @@ struct HisingenContentView: View {
                                     if let noticeID = RetainedDataNoticeID(state: state),
                                        noticeID != dismissedRetainedDataNotice {
                                         retainedDataNotice(state, id: noticeID)
+                                            .transition(retainedDataTransition)
+                                    }
+                                    if let noticeID = StaleReadingNoticeID(state: state),
+                                       noticeID != dismissedStaleReadingNotice {
+                                        staleReadingNotice(state, id: noticeID)
+                                            .transition(retainedDataTransition)
+                                    }
+                                    // An expired or refused session used to be invisible once a
+                                    // snapshot existed: the panel drew last-known values and the
+                                    // error only appeared in the empty-state placeholder. That is
+                                    // how a Volvo account can stay dark for weeks while the panel
+                                    // still looks populated.
+                                    if signInRequired, let error, dismissedSignInNotice != error {
+                                        signInNotice(error)
                                             .transition(retainedDataTransition)
                                     }
                                     selectedTabContent(state: state, tab: tab)
@@ -767,6 +805,39 @@ struct HisingenContentView: View {
             tint: HisingenTheme.semanticWarning,
             containerHelp: L10n.text("The newest provider refresh did not include these fields. Hisingen retained the previous successful readings and labels them here instead of presenting them as live."),
             onDismiss: { dismissedRetainedDataNotice = id }
+        )
+    }
+
+    /// Names the domains the provider itself reported hours ago. The retained-data banner cannot
+    /// say this: nothing was omitted there, the newest refresh carried these values, they are just
+    /// not recent.
+    private func staleReadingNotice(_ state: VehicleState, id: StaleReadingNoticeID) -> some View {
+        let titles = id.readings.compactMap { VehicleReading(rawValue: $0)?.title }
+        return DismissibleNoticeBanner(
+            icon: "clock.arrow.circlepath",
+            title: L10n.text("Some readings are from an earlier report"),
+            details: [titles.joined(separator: ", ")],
+            footnote: id.oldest.map {
+                L10n.format("Oldest reading %@", Format.relativeAge(since: $0))
+            },
+            tint: HisingenTheme.semanticWarning,
+            containerHelp: L10n.text("The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current."),
+            onDismiss: { dismissedStaleReadingNotice = id }
+        )
+    }
+
+    /// The reason the session stopped polling, kept on screen while values are still drawn from
+    /// the last successful refresh. Dismissal is keyed by the message, so a new failure reopens it
+    /// and a relaunch shows it again.
+    private func signInNotice(_ message: String) -> some View {
+        DismissibleNoticeBanner(
+            icon: "person.crop.circle.badge.exclamationmark",
+            title: L10n.text("Sign in again to keep this up to date"),
+            details: [message],
+            footnote: nil,
+            tint: HisingenTheme.semanticWarning,
+            containerHelp: L10n.text("Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading."),
+            onDismiss: { dismissedSignInNotice = message }
         )
     }
 

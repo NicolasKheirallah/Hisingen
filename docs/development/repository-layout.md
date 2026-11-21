@@ -12,14 +12,17 @@
 │   │   ├── Notifications/ Notifier, ChargingTransitionDetector
 │   │   ├── Security/     RemoteActionAuthorizer, VolvoSignInPresenter
 │   │   ├── Location/     ReverseGeocoder
-│   │   └── Updates/      UpdateService (Sparkle)
+│   │   ├── Updates/      UpdateService (Sparkle)
+│   │   └── Widget/       Desktop-widget snapshot writer (App Group file)
 │   ├── Support/          Format, L10n, PKCE: small stateless helpers
 │   ├── Resources/        Assets.xcassets, .lproj localization bundles
 │   └── UI/               StatusItemController (AppKit) + SwiftUI views
+├── Sources/HisingenWidget/  WidgetKit extension target: desktop widget + Control Center controls
 ├── Tests/HisingenTests/
 │   ├── Unit/             18 files, Swift Testing, no network
 │   ├── Integration/      2 files, real network calls, credential-gated
 │   └── Fixtures/         26 sanitized JSON response fixtures
+├── Tests/HisingenWidgetTests/  Snapshot round-trip tests importing both the app and widget targets
 ├── docs/                 This documentation set (+ oauth-callback.html, the Volvo redirect bridge)
 ├── Scripts/              doctor.sh, test.sh, check-localization.py (translation coverage/duplicate-key check)
 ├── .github/
@@ -27,7 +30,7 @@
 │   ├── dependabot.yml      Weekly updates for pinned GitHub Actions SHAs and (future) SwiftPM dependencies
 │   ├── ISSUE_TEMPLATE/     bug_report.md, feature_request.md, vehicle_compatibility.md, config.yml
 │   └── pull_request_template.md
-├── Package.swift         SPM manifest: pinned Sparkle updater dependency
+├── Package.swift         SPM manifest: app + widget targets, pinned Sparkle updater dependency
 ├── Makefile              build/test/package/release orchestration
 ├── README.md             User-facing project README
 ├── SECURITY.md           Vulnerability reporting policy: see security/overview.md

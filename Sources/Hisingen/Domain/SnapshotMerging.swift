@@ -69,6 +69,10 @@ extension EnergyAndChargingSnapshot {
             estimatedTimeToTargetMinutes: estimatedTimeToTargetMinutes ?? (keepCharging ? previous.estimatedTimeToTargetMinutes : nil),
             targetPercentage: mergedTarget,
             targetPercentageReportedAt: mergedTargetReadAt,
+            // The mode rides the target's own frame, so it follows the same new-vs-previous
+            // decision as the value and its report time: a frame without it drops the label
+            // rather than keeping the old one beside a new value.
+            chargeTargetSettingMode: targetFromNew ? chargeTargetSettingMode : previous.chargeTargetSettingMode,
             powerWatts: powerWatts ?? (keepCharging ? previous.powerWatts : nil),
             currentAmps: policy.commandLockedValue(new: currentAmps, previous: previous.currentAmps, keepPrevious: keepCharging),
             voltageVolts: voltageVolts ?? (keepCharging ? previous.voltageVolts : nil),

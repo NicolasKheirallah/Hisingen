@@ -356,6 +356,37 @@ struct PolestarPortalRequestHardeningTests {
         #expect(result.freshness.fetchedAt == now)
     }
 
+    @Test func assemblerMapsChargeTargetModeAndSetTime() throws {
+        let dto = try JSONDecoder().decode(
+            PolestarTargetSocDTO.self,
+            from: Data(#"{"vin":"VIN","targetSoc":{"batteryChargeTargetLevel":80,"chargeTargetLevelSettingType":"LONG_TRIP","updatedAt":"2024-05-21T13:58:20.5Z"}}"#.utf8)
+        )
+        let bundle = PolestarPortalTelemetryBundle(battery: nil, exterior: nil, health: nil, availability: nil, odometer: nil, location: nil, parkingClimatization: nil, preCleaning: nil, targetSoc: dto, ampLimit: nil, chargeLocations: nil, globalChargeTimer: nil, parkingClimateTimer: nil, chargeNow: nil)
+        let result = PolestarPortalSnapshotAssembler.assembleVehicleState(
+            vin: "VIN", bundle: bundle, weather: nil,
+            now: Date(timeIntervalSince1970: 1_700_000_000), timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+        #expect(result.energy.targetPercentage == 80)
+        #expect(result.energy.chargeTargetSettingMode == .longTrip)
+        // The mode's own `updatedAt` is the time the target was set; fractional seconds
+        // parse, and the slot the "Last changed" note reads is one the portal never filled.
+        #expect(result.energy.targetPercentageReportedAt == Date(timeIntervalSince1970: 1_716_299_900.5))
+
+        // A token outside the vocabulary and a read without the field both stay nil;
+        // a mode is never guessed.
+        let unknown = try JSONDecoder().decode(
+            PolestarTargetSocDTO.self,
+            from: Data(#"{"vin":"VIN","targetSoc":{"batteryChargeTargetLevel":80,"chargeTargetLevelSettingType":"FUTURE_MODE"}}"#.utf8)
+        )
+        #expect(unknown.chargeTargetLevelSettingMode == nil)
+        let unmoded = try JSONDecoder().decode(
+            PolestarTargetSocDTO.self,
+            from: Data(#"{"vin":"VIN","targetSoc":{"batteryChargeTargetLevel":80}}"#.utf8)
+        )
+        #expect(unmoded.chargeTargetLevelSettingMode == nil)
+        #expect(unmoded.targetSocPercentage == 80)
+    }
+
     @Test func planHonorsBudgetAndSelection() {
         let location = PolestarPortalFetchPlan(features: FeatureSelection(enabled: [.vehicleLocation]), budget: 5)
         #expect(location.needsLocation)

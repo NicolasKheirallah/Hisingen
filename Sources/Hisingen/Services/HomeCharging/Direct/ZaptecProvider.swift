@@ -22,6 +22,15 @@ struct ZaptecProvider: DirectChargerProvider {
         static let finalStopActive = 718
         static let nextScheduleEvent = 763
         static let isOnline = -2
+        static let communicationMode = 150
+        static let voltagePhase1 = 501
+        static let voltagePhase2 = 502
+        static let voltagePhase3 = 503
+        static let currentPhase1 = 507
+        static let currentPhase2 = 508
+        static let currentPhase3 = 509
+        static let setPhases = 519
+        static let cableType = 714
     }
 
     /// Command IDs from Zaptec's `sendCommand` documentation.
@@ -131,8 +140,60 @@ struct ZaptecProvider: DirectChargerProvider {
         if let amps = values[State.chargeCurrentSet].flatMap({ LooseJSON.double($0) }) {
             telemetry.currentLimitAmps = HomeChargerReading(value: amps, timestamp: now)
         }
+        if let phases = Self.phases(from: values) {
+            telemetry.phases = HomeChargerReading(value: phases, timestamp: now)
+        }
+        if let cable = values[State.cableType].flatMap({ LooseJSON.double($0) }), cable > 0 {
+            telemetry.cableLimitAmps = HomeChargerReading(value: cable, timestamp: now)
+        }
+        if let phaseSetting = Self.phaseMode(values[State.setPhases]) {
+            telemetry.phaseMode = HomeChargerReading(value: phaseSetting, timestamp: now)
+        }
+        if let network = Self.network(values[State.communicationMode]) {
+            telemetry.network = HomeChargerReading(value: network, timestamp: now)
+        }
         telemetry.chargingEnabled = HomeChargerReading(value: status.isChargingEnabled, timestamp: now)
         return telemetry
+    }
+
+    /// Zaptec reports the voltage and the current of each phase as two states (docs.zaptec.com,
+    /// State Observation Reference: 501 to 503 and 507 to 509). A phase missing either reading is
+    /// left out; pairing it with a neighbour would invent one.
+    static func phases(from values: [Int: String]) -> [HomeChargerPhase]? {
+        var phases: [HomeChargerPhase] = []
+        for (voltsID, ampsID) in [(State.voltagePhase1, State.currentPhase1),
+                                  (State.voltagePhase2, State.currentPhase2),
+                                  (State.voltagePhase3, State.currentPhase3)] {
+            guard let volts = values[voltsID].flatMap({ LooseJSON.double($0) }),
+                  let amps = values[ampsID].flatMap({ LooseJSON.double($0) }),
+                  volts.isFinite, amps.isFinite, volts >= 0, amps >= 0 else { continue }
+            phases.append(HomeChargerPhase(volts: volts, amps: amps))
+        }
+        return phases.isEmpty ? nil : phases
+    }
+
+    /// State 519, SetPhases. Zaptec's constants map every value to a phase set
+    /// (api.zaptec.com/api/constants, PhaseIdMap): 1, 2, 3, 5, 6 and 8 are one phase on the TN or
+    /// the IT grid, 4 and 9 are all three. A value outside the table reads as `nil`, not a guess.
+    static func phaseMode(_ raw: String?) -> HomeChargerPhaseMode? {
+        guard let value = raw.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) else { return nil }
+        switch value {
+        case 1, 2, 3, 5, 6, 8: return .singlePhase
+        case 4, 9: return .threePhase
+        default: return nil
+        }
+    }
+
+    /// State 150, Network communication mode: "Wifi, LTE, PLC, or none" (docs.zaptec.com, State
+    /// Observation Reference). PLC has no wording of its own, so it is left out with any value the
+    /// documentation does not name.
+    static func network(_ raw: String?) -> HomeChargerNetwork? {
+        switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "wifi": return .wifi
+        case "lte": return .mobile
+        case "none": return .none
+        default: return nil
+        }
     }
 
     /// Whether Zaptec holds a schedule event. The value is a time when there is one; an empty

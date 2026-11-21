@@ -54,6 +54,9 @@ extension InfoTabView {
             if let ventilation = climate.ventilationName, climate.activity.isActiveSession {
                 rows.append(KVRow(L10n.text("Ventilation"), ventilation, symbol: "wind"))
             }
+            if let main = climate.mainClimateRunningName {
+                rows.append(KVRow(L10n.text("Main Climate"), main, symbol: "thermostat"))
+            }
             if let interior = climate.interiorTemperatureCelsius {
                 rows.append(KVRow(L10n.text("Cabin Temperature"),
                                   Format.temperature(celsius: interior, unit: preferences.temperatureUnit),
@@ -82,6 +85,11 @@ extension InfoTabView {
             if let reason = climate.startReason,
                climate.activity != .idle && climate.activity != .unknown {
                 rows.append(KVRow(L10n.text("Started By"), reason.displayName, symbol: "play.circle"))
+            } else if climate.timerTriggered,
+               climate.activity != .idle && climate.activity != .unknown {
+                // The gRPC surface keeps reporting the timer origin through
+                // `timerTriggered` when no named start reason is available.
+                rows.append(KVRow(L10n.text("Started By"), VehicleStartReason.timer.displayName, symbol: "play.circle"))
             }
             if let startedAt = climate.sessionStartedAt,
                climate.activity != .idle && climate.activity != .unknown {
@@ -460,6 +468,15 @@ extension InfoTabView {
                             Format.dateFormatter.string(from: userInServiceDate),
                             symbol: "calendar.badge.checkmark",
                             info: L10n.text("User-entered from warranty or delivery documents. The vehicle API does not provide this date.")
+                        )
+                    }
+
+                    if let status = warranty?.status, !status.isEmpty {
+                        KVRow(
+                            L10n.text("Warranty Status"),
+                            status,
+                            symbol: "checkmark.shield",
+                            info: L10n.text("The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does.")
                         )
                     }
 

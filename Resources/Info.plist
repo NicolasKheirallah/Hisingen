@@ -47,6 +47,12 @@
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Hisingen writes reminders you ask for, such as plugging in at a low battery, booking service, or checking tyre pressures.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Hisingen writes reminders you ask for, such as plugging in at a low battery, booking service, or checking tyre pressures.</string>
+	<key>NSSupportsWidgets</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

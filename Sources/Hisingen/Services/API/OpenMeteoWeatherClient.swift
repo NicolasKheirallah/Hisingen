@@ -8,30 +8,34 @@ struct OpenMeteoWeatherClient: Sendable {
     let session: URLSession
     let diagnosticLog: APIDiagnosticLogStore
 
-    func weather(latitude: Double, longitude: Double) async -> VehicleWeather? {
+    func weather(latitude: Double, longitude: Double,
+                 scope: VehicleLogScope) async -> VehicleWeather? {
         guard let url = Self.openMeteoURL(latitude: latitude, longitude: longitude),
-              let json = await fetch(url, operation: "Open-Meteo vehicle weather") else { return nil }
+              let json = await fetch(url, operation: "Open-Meteo vehicle weather", scope: scope)
+        else { return nil }
         return Self.currentWeather(from: json)
     }
 
     /// Current conditions with the hourly forecast attached, from one request so the coordinates
     /// leave the Mac once per refresh. A response without a usable `hourly` block still returns
     /// the current reading, so the forecast can only add to what `weather` returns.
-    func weatherWithForecast(latitude: Double, longitude: Double) async -> VehicleWeather? {
+    func weatherWithForecast(latitude: Double, longitude: Double,
+                             scope: VehicleLogScope) async -> VehicleWeather? {
         guard let url = Self.hourlyForecastURL(latitude: latitude, longitude: longitude),
-              let json = await fetch(url, operation: "Open-Meteo vehicle weather"),
+              let json = await fetch(url, operation: "Open-Meteo vehicle weather", scope: scope),
               var current = Self.currentWeather(from: json) else { return nil }
         current.hourlyTemperatures = Self.hourlyTemperatures(from: json)
         return current
     }
 
-    private func fetch(_ url: URL, operation: String) async -> [String: Any]? {
+    private func fetch(_ url: URL, operation: String,
+                       scope: VehicleLogScope) async -> [String: Any]? {
         var request = URLRequest(url: url)
         request.timeoutInterval = 8
         guard let (data, response) = try? await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
             operation: operation, provider: .polestar,
-            diagnosticLog: diagnosticLog
+            scope: scope, diagnosticLog: diagnosticLog
         ), response.statusCode == 200 else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
@@ -43,6 +47,9 @@ struct OpenMeteoWeatherClient: Sendable {
             condition: (current["weather_code"] as? Int).map(Self.wmoDescription),
             apparentTemperatureCelsius: current["apparent_temperature"] as? Double,
             relativeHumidity: current["relative_humidity_2m"] as? Int,
+            windSpeedKmh: current["wind_speed_10m"] as? Double,
+            windGustsKmh: current["wind_gusts_10m"] as? Double,
+            precipitationMm: current["precipitation"] as? Double,
             timestamp: Date()
         )
     }
@@ -56,7 +63,7 @@ struct OpenMeteoWeatherClient: Sendable {
             URLQueryItem(name: "latitude", value: String(latitude)),
             URLQueryItem(name: "longitude", value: String(longitude)),
             URLQueryItem(name: "current", value: currentFields),
-            URLQueryItem(name: "hourly", value: "temperature_2m"),
+            URLQueryItem(name: "hourly", value: hourlyFields),
             URLQueryItem(name: "forecast_days", value: "2"),
             // Local wall-clock times, so a 07:30 departure lines up with the forecast hour.
             URLQueryItem(name: "timezone", value: "auto")
@@ -66,7 +73,9 @@ struct OpenMeteoWeatherClient: Sendable {
 
     /// Parses the `hourly` block. Open-Meteo gives wall-clock strings in the location's zone and
     /// reports that zone's offset, so the offset is subtracted to get an absolute instant.
-    /// Missing or null readings are skipped rather than read as zero.
+    /// Missing or null readings are skipped rather than read as zero. Wind and precipitation
+    /// arrive as further arrays aligned to `time`; an array the response omits leaves those
+    /// fields nil rather than dropping the hour.
     static func hourlyTemperatures(from json: [String: Any]) -> [HourlyTemperature]? {
         guard let hourly = json["hourly"] as? [String: Any],
               let times = hourly["time"] as? [String],
@@ -74,12 +83,30 @@ struct OpenMeteoWeatherClient: Sendable {
         let offsetSeconds = (json["utc_offset_seconds"] as? NSNumber)?.doubleValue ?? 0
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        let windSpeeds = hourly["wind_speed_10m"] as? [Any]
+        let windGusts = hourly["wind_gusts_10m"] as? [Any]
+        let precipitation = hourly["precipitation"] as? [Any]
 
-        return zip(times, values).compactMap { time, value -> HourlyTemperature? in
-            guard let celsius = (value as? NSNumber)?.doubleValue,
-                  let wallClock = wallClockDate(time, calendar: calendar) else { return nil }
-            return HourlyTemperature(time: wallClock.addingTimeInterval(-offsetSeconds), temperatureCelsius: celsius)
+        var hours: [HourlyTemperature] = []
+        for (index, time) in times.enumerated() {
+            guard index < values.count,
+                  let celsius = (values[index] as? NSNumber)?.doubleValue,
+                  let wallClock = wallClockDate(time, calendar: calendar) else { continue }
+            hours.append(HourlyTemperature(
+                time: wallClock.addingTimeInterval(-offsetSeconds),
+                temperatureCelsius: celsius,
+                windSpeedKmh: alignedHourlyValue(at: index, in: windSpeeds),
+                windGustsKmh: alignedHourlyValue(at: index, in: windGusts),
+                precipitationMm: alignedHourlyValue(at: index, in: precipitation)
+            ))
         }
+        return hours
+    }
+
+    /// An aligned hourly reading, nil when the response left the array or the entry out.
+    private static func alignedHourlyValue(at index: Int, in values: [Any]?) -> Double? {
+        guard let values, index < values.count else { return nil }
+        return (values[index] as? NSNumber)?.doubleValue
     }
 
     /// Reads `yyyy-MM-ddTHH:mm` as if it were UTC. The caller applies the real offset.
@@ -90,7 +117,11 @@ struct OpenMeteoWeatherClient: Sendable {
                                                   hour: parts[3], minute: parts[4]))
     }
 
-    private static let currentFields = "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
+    /// Wind and precipitation ride the same requests as temperature: Open-Meteo's forecast
+    /// endpoint accepts them in both the `current` and the `hourly` block, in km/h and mm.
+    private static let currentFields =
+        "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,precipitation"
+    private static let hourlyFields = "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation"
 
     static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
         var components = URLComponents()

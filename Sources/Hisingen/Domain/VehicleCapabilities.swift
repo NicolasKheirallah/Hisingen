@@ -387,6 +387,17 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case tyrePressureValues
     case serviceWarnings
     case tripMeters
+    // Energy-field read flags. Volvo answers these per VIN in its energy-capabilities
+    // response; no static model table can know them, so they stay at the honest unknown
+    // in `support(for:)` until a probe records what the car itself said.
+    case batteryChargeLevel
+    case electricRange
+    case chargerConnectionStatus
+    case chargingSystemStatus
+    case chargingType
+    case chargerPowerStatus
+    case chargingPower
+    case estimatedChargingTimeToTarget
     case connectivity
     case softwareStatus
     case softwareInstallControl
@@ -415,6 +426,14 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .tyrePressureValues: return L10n.text("Direct tyre-pressure values")
         case .serviceWarnings: return L10n.text("Service and vehicle warnings")
         case .tripMeters: return L10n.text("Trip meters")
+        case .batteryChargeLevel: return L10n.text("Battery charge level")
+        case .electricRange: return L10n.text("Electric range")
+        case .chargerConnectionStatus: return L10n.text("Charger connection status")
+        case .chargingSystemStatus: return L10n.text("Charging system status")
+        case .chargingType: return L10n.text("Charging type")
+        case .chargerPowerStatus: return L10n.text("Charger power status")
+        case .chargingPower: return L10n.text("Charging power")
+        case .estimatedChargingTimeToTarget: return L10n.text("Estimated charging time to target")
         case .connectivity: return L10n.text("Connectivity diagnostics")
         case .softwareStatus: return L10n.text("Vehicle software status")
         case .softwareInstallControl: return L10n.text("Software installation control")
@@ -507,6 +526,16 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             return observed
         }
         if advertised[capability] == true { return .supported }
+        // Volvo's energy-capabilities response answers these per VIN, and no other
+        // provider reports them, so no model family gets to guess: the table's honest
+        // answer stays "ask the backend" until the probe lands.
+        switch capability {
+        case .batteryChargeLevel, .electricRange, .chargerConnectionStatus, .chargingSystemStatus,
+             .chargingType, .chargerPowerStatus, .chargingPower, .estimatedChargingTimeToTarget:
+            return .backendDependent
+        default:
+            break
+        }
         switch model {
         case .polestar2:
             switch capability {

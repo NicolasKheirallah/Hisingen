@@ -146,6 +146,7 @@ extension RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(authoritative)
         SpotlightIndexer.indexVehicle(authoritative, nickname: preferences.vehicleNickname(for: authoritative.identity.vin))
+        publishWidgetSnapshot?(authoritative)
         let confirmed = confirmations.observe(authoritative, vin: latest?.identity.vin)
         let displayed = commandPresentation(
             authoritative: authoritative,

@@ -14,6 +14,8 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 
 **Regression tests** (`RegressionFixTests.swift`): named after specific past bugs (update-checker URL pointing at the right fork, "available" vs. "installed" software-version semantics not being conflated, Digital Twin climate-off never misreported as ventilating/heating, service warnings surviving a transient health-fetch failure but clearing on a genuinely clean response, rain/evening-unlocked condition detection). This is where "we broke this once, don't break it again" lives.
 
+**Widget snapshot tests** (`Tests/HisingenWidgetTests/`): a second test target importing both the app and the extension binary, because the widget's snapshot decoder and the app's writer live in separate targets with no shared module; `WidgetSnapshotRoundTripTests` pins the JSON they exchange end to end.
+
 ## What belongs in each layer
 
 - **Pure logic** (formatting, model classification, merge rules, capability resolution, error mapping) → unit test, no fixture needed.
@@ -37,6 +39,7 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 | GraphQL decoding, error handling | ✓ | ✓ (`GraphQLDecodingTests`) | | |
 | Volvo REST decoding | | ✓ (`VolvoDecodingTests`, 26 tests) | | ✓ (read path only) |
 | Input boundary validation | ✓ (`InputBoundaryTests`) | | | |
+| Desktop widget snapshot (writer, reader, staleness) | ✓ (`WidgetSnapshotWriterTests`, `WidgetSnapshotRoundTripTests`) | | | |
 | UI rendering | | | | none, manual verification only |
 
 ## Known gaps

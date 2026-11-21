@@ -38,11 +38,28 @@ enum SpotlightIndexer {
         }
     }
 
-    /// Removes every Hisingen entry – used on sign-out so a signed-out vehicle never keeps
-    /// surfacing stale telemetry in search.
+    /// Removes every Hisingen entry. Used when an account signs out, so none of its vehicles
+    /// keep surfacing stale telemetry in search.
     static func removeAll() {
         guard CSSearchableIndex.isIndexingAvailable() else { return }
         CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { _ in }
+    }
+
+    /// Removes one vehicle, for a sign-out that leaves the account connected.
+    static func removeVehicle(_ vin: String) {
+        removeVehicles([vin])
+    }
+
+    /// Removes the signed-out account's vehicles without clearing another brand's entries.
+    static func removeVehicles(_ vins: [String]) {
+        let identifiers = vins
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty }
+            .map(opaqueVehicleIdentifier)
+        guard CSSearchableIndex.isIndexingAvailable(), !identifiers.isEmpty else { return }
+        CSSearchableIndex.default().deleteSearchableItems(
+            withIdentifiers: identifiers
+        ) { _ in }
     }
 
     /// True when an incoming user activity is one of ours; lets the app delegate decide to
@@ -56,7 +73,9 @@ enum SpotlightIndexer {
     /// A salted-per-install value would break updates, so a plain digest is the right
     /// trade: stable across launches, useless as a VIN.
     private static func opaqueVehicleIdentifier(_ vin: String) -> String {
-        let digest = SHA256.hash(data: Data(vin.utf8))
+        // Normalized so a removal names the same entry an index write created; providers
+        // already report uppercase VINs, but callers are not required to.
+        let digest = SHA256.hash(data: Data(vin.normalizedVIN.utf8))
         return "vehicle-" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 

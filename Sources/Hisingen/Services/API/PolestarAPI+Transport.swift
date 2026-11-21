@@ -1,11 +1,15 @@
 import Foundation
 
 extension PolestarAPI {
+    /// `scope` names the partition of the diagnostic log this exchange belongs to. Every caller
+    /// declares it: a vehicle request passes its VIN, and an account-level flow (sign-in,
+    /// token, discovery) says `.account` rather than inheriting the wrong log by omission.
     func perform(_ request: URLRequest, limit: Int = 2_000_000,
-                 operation: String = "HTTP request") async throws -> (Data, HTTPURLResponse) {
+                 operation: String = "HTTP request",
+                 scope: VehicleLogScope) async throws -> (Data, HTTPURLResponse) {
         try await HTTPExchange.data(
             for: request, using: session, limit: limit, operation: operation, provider: .polestar,
-            diagnosticLog: diagnosticLog
+            scope: scope, diagnosticLog: diagnosticLog
         )
     }
 
@@ -17,11 +21,12 @@ extension PolestarAPI {
         ) { throw failure }
     }
 
-    func postForm(to url: URL, fields: [String: String]) async throws -> (Data, HTTPURLResponse) {
+    func postForm(to url: URL, fields: [String: String],
+                  scope: VehicleLogScope) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.formBody(fields)
-        return try await perform(request)
+        return try await perform(request, scope: scope)
     }
 }
