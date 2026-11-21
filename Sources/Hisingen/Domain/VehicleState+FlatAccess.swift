@@ -40,6 +40,10 @@ extension VehicleState {
     var accountMarket: String? { identity.accountMarket }
     var upholstery: String? { identity.upholstery }
     var steeringOrientation: String? { identity.steeringOrientation }
+    var driveType: String? { identity.driveType }
+    var enginePowerKw: Double? { identity.enginePowerKw }
+    var grossWeightKg: Int? { identity.grossWeightKg }
+    var numberOfSeats: Int? { identity.numberOfSeats }
     var imageData: Data? { identity.imageData }
     var interiorImageData: Data? { identity.interiorImageData }
 

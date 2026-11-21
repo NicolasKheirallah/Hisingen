@@ -3093,7 +3093,7 @@
 "The previous sign-in was still waiting in the browser, so it was cancelled and a fresh window was opened." = "이전 로그인이 아직 브라우저에서 대기 중이어서 취소하고 새 창을 열었습니다.";
 "Volvo sign-in restarted" = "Volvo 로그인을 다시 시작했습니다";
 "Projected by midnight UTC: %d calls" = "자정(UTC)까지 예상: %d회 호출";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window." = "developer.volvocars.com에서 무료 API 애플리케이션을 등록해 Client ID, Client Secret, VCC API Key를 발급받은 다음, 아래에서 Volvo ID로 로그인하세요. 로그인은 시스템 브라우저 창에서 이루어지므로 Hisingen은 Volvo ID 비밀번호를 직접 보지 않습니다.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-." = "developer.volvocars.com에서 무료 API 애플리케이션을 등록해 Client ID, Client Secret, VCC API Key를 발급받은 다음, 아래에서 Volvo ID로 로그인하세요. 로그인은 시스템 브라우저 창에서 이루어지므로 Hisingen은 Volvo ID 비밀번호를 직접 보지 않습니다. Volvo 개발자 포털에서 새로 만든 애플리케이션은 vid-로 시작하는 Client ID를 받습니다.";
 "The vehicle will delete “%@” and its per-location charge limits." = "차량에서 “%@”과(와) 위치별 충전 한도가 삭제됩니다.";
 "At %@" = "%@에";
 "At %@ since %@" = "%@ 기준, %@ 이후";
@@ -3857,7 +3857,28 @@
 "No charger measured this session, so the battery-side energy is priced with your rate settings." = "이 세션은 충전기가 측정하지 않아 배터리 측 에너지를 요금 설정으로 계산합니다.";
 "Pricing" = "가격 계산";
 "Session total at the average price" = "세션 합계를 평균 가격으로 계산";
-"Per 15 minutes" = "15분 단위";
 "Tibber's price per 15 minutes with the grid transfer fee added." = "15분 단위 Tibber 가격에 송전 요금을 더한 값입니다.";
 "Spot price with the markup, other charges and VAT from your rate settings." = "요금 설정의 마진, 기타 요금, 부가세를 더한 현물 가격입니다.";
 "Spot price only. Taxes and grid fees are not included." = "현물 가격만 표시합니다. 세금과 송전 요금은 포함되지 않습니다.";
+"Average Price" = "평균 가격";
+"Charging Loss" = "충전 손실";
+"Could Have Saved" = "절약할 수 있었던 금액";
+"Plugged In" = "연결됨";
+"Cheapest slots" = "가장 저렴한 구간";
+"%d of the cheapest slots fall outside this chart" = "가장 저렴한 구간 중 %d개가 이 차트 밖에 있습니다";
+"No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices." = "이 세션을 다루는 가격이 없습니다. 전기 설정에서 Tibber를 연결하면 Tibber 가격으로 계산합니다.";
+"No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days." = "이 세션을 다루는 가격이 없습니다. Tibber는 약 한 달치 가격만 보관하며, 이 기간의 시장 가격도 읽을 수 없었습니다.";
+"Selected Session Prices (CSV)" = "선택한 세션 가격 (CSV)";
+"By when the energy flowed" = "에너지가 흐른 시점 기준";
+"The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger." = "충전기 에너지에서 배터리 측 에너지를 뺀 값을 충전기가 공급한 양에 대한 비율로 나타냅니다. 배터리 측도 추정치이므로 평소와 크게 다른 값은 충전기만큼 추정치를 가리키기도 합니다.";
+"The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that." = "케이블이 연결된 동안 가장 저렴한 구간에서 같은 에너지를 최대 %1$@로 충전했다면 %2$@가 들었을 것입니다. 이는 하한선입니다. 가격에 따라 충전기를 필요한 만큼 멈추는 것을 전제로 하며, 정해진 시간까지 준비되어야 하는 차는 항상 그럴 수는 없습니다.";
+
+// Added 2026-11-21: Volvo sign-in notice, specification labels, and change time.
+"Volvo moved to a new sign-in system. Sign in again to keep your vehicle data." = "Volvo가 새 로그인 시스템으로 바뀌었습니다. 차량 데이터를 유지하려면 다시 로그인하세요.";
+"Drive Type" = "구동 방식";
+"Engine Power" = "엔진 출력";
+"Gross Weight" = "총 중량";
+"Seats" = "좌석";
+"Last changed %@" = "마지막 변경: %@";
+"%d kW" = "%d kW";
+"%d kg" = "%d kg";

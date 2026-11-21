@@ -165,7 +165,51 @@ struct NexBlueProvider: DirectChargerProvider {
             candidates += batch.filter { $0.endedAt >= start && (end == to || $0.endedAt < end) }
             start = end
         }
-        return candidates
+        return await withHourlyProfiles(candidates, chargerID: chargerID)
+    }
+
+    /// The session list gives each session's total only. The charger's hourly energy says when it
+    /// arrived, so a session is priced for the hours that drew energy rather than for every hour the
+    /// cable was in. Best effort: without the readings a session keeps its total and is priced as an
+    /// estimate, as before.
+    private func withHourlyProfiles(_ candidates: [HomeChargingSessionCandidate], chargerID: String) async -> [HomeChargingSessionCandidate] {
+        guard let first = candidates.map(\.startedAt).min(), let last = candidates.map(\.endedAt).max() else { return candidates }
+        guard let hours = try? await hourlyEnergy(chargerID: chargerID, from: first, to: last), !hours.isEmpty else { return candidates }
+        return candidates.map { candidate in
+            guard candidate.intervals.isEmpty,
+                  let intervals = HomeEnergyProfile.intervals(from: hours, startedAt: candidate.startedAt,
+                                                              endedAt: candidate.endedAt, energyKwh: candidate.energyKwh)
+            else { return candidate }
+            var profiled = candidate
+            profiled.intervals = intervals
+            profiled.energyProfileNote = HomeEnergyProfile.note
+            return profiled
+        }
+    }
+
+    /// `GET /measurement/chargers/{id}`: energy per UTC hour across all sessions, only for the hours
+    /// that drew any. The API allows 60 days a request.
+    func hourlyEnergy(chargerID: String, from: Date, to: Date) async throws -> [HomeEnergyProfile.Hour] {
+        let path = Self.root + "/measurement/chargers/" + Self.pathComponent(chargerID)
+        let window: TimeInterval = 59 * 86_400
+        var hours: [HomeEnergyProfile.Hour] = []
+        var start = from
+        while start < to {
+            try Task.checkCancellation()
+            let end = min(start.addingTimeInterval(window), to)
+            let query = [
+                URLQueryItem(name: "from_date", value: DirectChargerDates.format(start)),
+                URLQueryItem(name: "to_date", value: DirectChargerDates.format(end)),
+                URLQueryItem(name: "granularity", value: "hourly")
+            ]
+            let data = try await session.data("GET", path: path, query: query)
+            hours += try Self.decode(HourlyEnergy.self, from: data).data.compactMap { item in
+                guard let kwh = item.consumption, kwh.isFinite, let date = DirectChargerDates.parse(item.date) else { return nil }
+                return HomeEnergyProfile.Hour(start: date, kwh: kwh)
+            }
+            start = end
+        }
+        return hours
     }
 
     private func sessionBatch(chargerID: String, from: Date, to: Date) async throws -> [HomeChargingSessionCandidate] {
@@ -255,6 +299,13 @@ struct NexBlueProvider: DirectChargerProvider {
         let role: Int?
     }
     private struct ChargerProfile: Decodable { let productName: String? }
+    private struct HourlyEnergy: Decodable {
+        struct Item: Decodable {
+            let date: String
+            let consumption: Double?
+        }
+        let data: [Item]
+    }
     private struct APIError: Decodable { let code: Int }
 
     private struct TokenResponse: Decodable {

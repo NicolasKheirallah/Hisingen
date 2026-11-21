@@ -3,7 +3,17 @@ import LocalAuthentication
 
 @MainActor
 protocol RemoteActionAuthorizing: AnyObject {
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool
+    /// `origin` is who asked. A `.deepLink` command always needs the person's confirmation,
+    /// whatever its risk: a URL another app or page opened says nothing about what the person
+    /// at the Mac wanted.
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool
+}
+
+extension RemoteActionAuthorizing {
+    /// A command the person asked for in the app itself.
+    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
+        await authorize(command, vehicle: vehicle, origin: .userInitiated)
+    }
 }
 
 @MainActor
@@ -37,8 +47,10 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         self.reportAuthenticationFailure = reportAuthenticationFailure ?? Self.showAuthenticationFailure
     }
 
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
-        let requiresConfirmation = command.risk != .routine || preferences.requireBiometricsForRemoteControls
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool {
+        let requiresConfirmation = origin == .deepLink
+            || command.risk != .routine
+            || preferences.requireBiometricsForRemoteControls
         if requiresConfirmation {
             guard confirm(command, vehicle) else { return false }
         }

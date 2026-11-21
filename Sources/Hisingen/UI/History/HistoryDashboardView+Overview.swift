@@ -253,6 +253,12 @@ extension HistoryDashboardView {
                 exportThroughWorkspace(.sessionSamples, name: "Charging-Samples")
             }
             .disabled(selectedSession == nil || selectedSessionSamples.isEmpty)
+            Button(L10n.text("Selected Session Prices (CSV)")) {
+                guard let series = selectedSessionPrices else { return }
+                let symbol = selectedSession?.wallbox?.currency ?? selectedSession?.currencySymbol ?? preferences.currencySymbol
+                exportCSV(series.csv(currency: symbol), name: "Charging-Prices")
+            }
+            .disabled(selectedSession == nil || selectedSessionPrices == nil || loadedSessionPricesID != selectedSession?.id)
             Button(L10n.text("Recent Completed Charging Sessions (JSON)")) {
                 Task { await exportRecentChargingSessions() }
             }

@@ -240,8 +240,80 @@ extension VehicleState {
         retained.formUnion(policy.failedFeatures.filter { features.contains($0) })
         merged.freshness.retainedDataCategories = retained.sorted { $0.title < $1.title }
         merged.freshness.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
+        merged.retainReadingsNewerThanIncoming(incoming: self, previous: previous)
         merged.setOptimisticLock(isCommandLocked ? previous.optimisticCommandLockUntil : nil)
         return merged
+    }
+
+    /// A poll that started before a live frame can finish after it. Merging "incoming over
+    /// previous" then rolls the display back to what the vehicle reported *before* the frame: a
+    /// lock that just engaged reads unlocked, and nothing corrects it until the next change.
+    /// Where both sides carry a report date and the held reading is strictly newer, the held
+    /// reading stays. A missing date on either side leaves the incoming value in place, as
+    /// before; the live path applies the same rule per reading in `shouldApplyLiveReading`.
+    fileprivate mutating func retainReadingsNewerThanIncoming(incoming: VehicleState, previous: VehicleState) {
+        func heldIsNewer(_ reading: VehicleReading) -> Bool {
+            guard let held = previous.reportedDate(for: reading),
+                  let arriving = incoming.reportedDate(for: reading) else { return false }
+            return held > arriving
+        }
+        func keepHeldDate(of reading: VehicleReading) {
+            if let held = previous.reportedDate(for: reading) {
+                freshness.readingDates[reading] = held
+            }
+            if let observation = previous.freshness.readingObservations?[reading] {
+                var observations = freshness.readingObservations ?? [:]
+                observations[reading] = observation
+                freshness.readingObservations = observations
+            }
+        }
+
+        var retainedAny = false
+        if heldIsNewer(.battery), incoming.energy.batteryPercentage != nil,
+           let held = previous.energy.batteryPercentage {
+            energy.batteryPercentage = held
+            keepHeldDate(of: .battery)
+            retainedAny = true
+        }
+        if heldIsNewer(.range), incoming.energy.rangeKm != nil, let held = previous.energy.rangeKm {
+            energy.rangeKm = held
+            keepHeldDate(of: .range)
+            retainedAny = true
+        }
+        if heldIsNewer(.charging) {
+            energy.chargingState = previous.energy.chargingState
+            energy.estimatedTimeToFullMinutes = previous.energy.estimatedTimeToFullMinutes
+            energy.connection = previous.energy.connection
+            energy.type = previous.energy.type
+            energy.powerWatts = previous.energy.powerWatts
+            energy.currentAmps = previous.energy.currentAmps
+            energy.voltageVolts = previous.energy.voltageVolts
+            keepHeldDate(of: .charging)
+            retainedAny = true
+        }
+        if var exterior = exteriorStatus, let heldExterior = previous.exteriorStatus {
+            var retainedExterior = false
+            if heldIsNewer(.locks) {
+                exterior.isLocked = heldExterior.isLocked
+                exterior.alarmTriggered = heldExterior.alarmTriggered
+                keepHeldDate(of: .locks)
+                retainedExterior = true
+            }
+            if heldIsNewer(.openings) {
+                exterior.openings = heldExterior.openings
+                exterior.isTailgateLocked = heldExterior.isTailgateLocked
+                keepHeldDate(of: .openings)
+                retainedExterior = true
+            }
+            if retainedExterior {
+                exterior.reportedAt = [exterior.reportedAt, heldExterior.reportedAt].compactMap { $0 }.max()
+                exteriorStatus = exterior
+                retainedAny = true
+            }
+        }
+        if retainedAny, let held = previous.freshness.vehicleReportedAt {
+            freshness.vehicleReportedAt = max(freshness.vehicleReportedAt ?? .distantPast, held)
+        }
     }
 
     /// Publishes the ledger's overlay. The receipts always come from that one producer, and the

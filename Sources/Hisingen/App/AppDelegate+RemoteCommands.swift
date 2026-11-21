@@ -5,7 +5,14 @@ extension AppDelegate {
         Task { _ = await commandCoordinator.perform(command) }
     }
 
+    /// The `URLCommandRouterContext` entry point: only a `hisingen://` URL reaches it, so the
+    /// command is a deep link and always asks the person to confirm. A notification action is
+    /// the person's own click and calls `performNotificationCommand` instead.
     func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?) {
+        Task { _ = await perform(command, targetVIN: targetVIN, origin: .deepLink) }
+    }
+
+    func performNotificationCommand(_ command: RemoteCommand, targetVIN: String) {
         Task { _ = await perform(command, targetVIN: targetVIN, origin: .userInitiated) }
     }
 }
@@ -29,7 +36,7 @@ extension AppDelegate {
                 return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
             }
         }
-        return await commandCoordinator.perform(command, origin: origin)
+        return await commandCoordinator.perform(command, origin: origin, expectedVIN: targetVIN)
     }
 }
 

@@ -3093,7 +3093,7 @@
 "The previous sign-in was still waiting in the browser, so it was cancelled and a fresh window was opened." = "之前的登录仍在浏览器中等待，因此已取消并打开了新窗口。";
 "Volvo sign-in restarted" = "已重新开始 Volvo 登录";
 "Projected by midnight UTC: %d calls" = "截至 UTC 午夜预计：%d 次调用";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window." = "请在 developer.volvocars.com 注册免费 API 应用，以获取 Client ID、Client Secret 和 VCC API 密钥，然后在下方使用您的 Volvo ID 登录。Hisingen 不会直接获取您的 Volvo ID 密码，因为登录在系统浏览器窗口中完成。";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-." = "请在 developer.volvocars.com 注册免费 API 应用，以获取 Client ID、Client Secret 和 VCC API 密钥，然后在下方使用您的 Volvo ID 登录。Hisingen 不会直接获取您的 Volvo ID 密码，因为登录在系统浏览器窗口中完成。 Volvo 开发者门户中新建的应用会获得以 vid- 开头的 Client ID。";
 "The vehicle will delete “%@” and its per-location charge limits." = "车辆将删除“%@”及其按地点设置的充电限额。";
 "At %@" = "于 %@";
 "At %@ since %@" = "于 %@，自 %@ 起";
@@ -3857,7 +3857,28 @@
 "No charger measured this session, so the battery-side energy is priced with your rate settings." = "没有充电桩测量这次充电，因此按你的电价设置计算电池侧电量的费用。";
 "Pricing" = "计价方式";
 "Session total at the average price" = "按平均价格计算整次充电";
-"Per 15 minutes" = "每 15 分钟";
 "Tibber's price per 15 minutes with the grid transfer fee added." = "Tibber 每 15 分钟的电价，已加上电网输电费。";
 "Spot price with the markup, other charges and VAT from your rate settings." = "现货价格，加上你电价设置中的加价、其他费用和增值税。";
 "Spot price only. Taxes and grid fees are not included." = "仅为现货价格，不含税费和电网费用。";
+"Average Price" = "平均价格";
+"Charging Loss" = "充电损耗";
+"Could Have Saved" = "本可节省";
+"Plugged In" = "已连接";
+"Cheapest slots" = "最便宜的时段";
+"%d of the cheapest slots fall outside this chart" = "最便宜的时段中有 %d 个在此图表之外";
+"No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices." = "没有价格覆盖这次充电。在电力设置中连接 Tibber，即可用 Tibber 的价格计价。";
+"No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days." = "没有价格覆盖这次充电。Tibber 只保留约一个月的价格，这些日子也读取不到市场价格。";
+"Selected Session Prices (CSV)" = "所选充电的价格 (CSV)";
+"By when the energy flowed" = "按能量流动的时间";
+"The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger." = "充电桩的电量减去电池侧电量，占充电桩供电量的比例。电池侧本身也是估算值，所以明显偏离常规的数字，既可能指向估算，也可能指向充电桩。";
+"The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that." = "电缆插着期间，同样的电量若集中在最便宜的时段、功率最高 %1$@，费用将为 %2$@。这是下限：它允许充电桩按价格需要随时暂停，而需要在固定时间前充满的车并不总能做到。";
+
+// Added 2026-11-21: Volvo sign-in notice, specification labels, and change time.
+"Volvo moved to a new sign-in system. Sign in again to keep your vehicle data." = "Volvo 已改用新的登录系统。请重新登录，以保留你的车辆数据。";
+"Drive Type" = "驱动方式";
+"Engine Power" = "发动机功率";
+"Gross Weight" = "总质量";
+"Seats" = "座位数";
+"Last changed %@" = "最后变更：%@";
+"%d kW" = "%d kW";
+"%d kg" = "%d kg";

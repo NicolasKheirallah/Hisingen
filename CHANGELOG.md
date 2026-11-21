@@ -3,6 +3,110 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2] - 2026-11-21
+
+### Added
+
+- A charging session the home charger measured now shows its **Average Price** (kr/kWh) beside the
+  total, **Plugged In** when the cable stayed in well beyond the charge, and **Charging Loss**: the
+  charger's energy minus the battery-side energy, as a share, left out when the battery side is a
+  low-confidence estimate. **Could Have Saved** appears when the session was priced per interval
+  from Tibber: the same energy in the cheapest slots while the cable was in, at the car's peak
+  rate, against what it cost. Those slots are shaded on the price chart, and a note counts any
+  that fall outside the time the chart covers. The price chart's scrub readout gives Tibber's own
+  rating of the slot (Cheap, Expensive), and an empty price chart now says why. **Selected Session
+  Prices (CSV)** exports one row per price slot, and the charging-sessions export has a charger
+  average-price column.
+
+- Volvo vehicle details now fill in Drive Type, Engine Power, Gross Weight and Seats on the Info
+  tab, from the specifications Volvo already sent. Gross Weight shows only when the over-the-air
+  weight row is absent, since both are the same figure.
+- A charge target or current limit that Volvo last changed more than 30 days ago now shows "Last
+  changed" with that date on the charging card. On one car the target of 100% dated from May 2025
+  and the 32 A limit from July 2026, and both looked like fresh readings. A value you just sent
+  shows no note.
+
+### Changed
+
+- NexBlue sessions are now priced by when their energy flowed. The session list gives only a total,
+  so each session used to be priced at the average price over every hour the cable was in, idle
+  hours included. The charger's hourly energy readings now place the energy in the hours that drew
+  it, spread evenly within each hour, and the cost note says so. If the readings are unavailable
+  or do not match the session (two sessions in one hour), the session keeps the old estimate.
+  Sessions from the last 30 days, the reach of Tibber's prices, are priced again once, the first
+  time the app imports after updating; the imported range shown in Settings is unchanged. On the
+  one session checked, 57.2 kWh on 18 November, the total fell from 173.83 to about 165.6 kr: the
+  prices were high all evening, so the idle hours moved it by about 5%.
+- The 15-minute or hourly price setting now applies to Tibber's prices in session costs and in the
+  price chart. It already applied to the planner and to market prices. An hourly contract is
+  billed at the hour's average, as the planner already read it.
+- Volvo sign-in works with Volvo's new Volvo ID system. Hisingen now ships keys for the new
+  system and picks the sign-in server from the client ID: `vid-` goes to the new server, `dc-`
+  to the original one, so a client ID you typed into Settings keeps working. Volvo says the
+  original system stops accepting applications after 31 January 2027, a date taken from the
+  community `volvo-cars-api` library because Volvo's developer portal would not load for us.
+  Everyone who was signed in to Volvo has to sign in again once after updating: a session from
+  the original system does not work on the new one, so Hisingen drops it without sending a
+  request. On the new system, tick "Remember me" when signing in or the session ends with the
+  browser login. Remote locks and locate still need the approval described in Settings.
+- A new-system sign-in also asks for the connectivity and environment read scopes. Nothing reads
+  them yet, because the endpoints behind them are not documented anywhere we could reach. They
+  are left out of the minimal fallback, so an application not approved for them still signs in
+  with vehicle data only. The navigation scope is not requested, since nothing would use it and
+  it may expose destinations.
+- When the saved Volvo session came from the original sign-in system, Hisingen now says "Volvo
+  moved to a new sign-in system. Sign in again to keep your vehicle data." instead of the generic
+  "Sign in is required.", and does not retry on its own.
+- Signing out of Volvo on the new system now revokes the session at Volvo as well as deleting it
+  here. The revocation is best effort and never delays sign-out. The original system has no
+  revocation endpoint we could confirm, so signing out there only deletes the local session.
+
+- A `hisingen://` link now asks you to confirm before it sends any command, including routine ones
+  such as lock, close windows, close tailgate, climate and charging. Until now only unlock, trunk,
+  tailgate open, windows open, horn, engine start and software commands asked, so any app or web
+  page that opened a link could close the windows or lower the charge target without a prompt.
+  Commands you send from the panel, from a notification button or from Shortcuts behave as before.
+
+### Fixed
+
+- Volvo's manual trip average speed was dropped and the automatic one showed in its place. Both
+  now fill their own fields, and the combined figure still prefers the automatic trip.
+- Altitude no longer reads "0 m" for a Volvo that has none to report. Volvo fills the third
+  coordinate with exactly 0.0 in that case, so a zero is treated as missing.
+- A Volvo reading's own timestamp, such as the time the doors or the availability were reported,
+  was dropped, and the availability time was lost on every refresh. Both are kept now.
+- Volvo timestamps with fractional seconds, such as 08:43:22.647Z, could decode as missing on
+  macOS releases whose date decoder rejects them, which also lost the whole location reading. They
+  decode on every release now.
+- A Volvo field that reports an error, such as charging power with PROPERTY_NOT_FOUND, now keeps
+  its error code as the reason instead of discarding the field entirely.
+- An endpoint Volvo answers with 410 Gone, as it does for removed API versions, now stands down for
+  an hour like a 404, instead of being retried every five minutes.
+- A Volvo command that Volvo answers with a 422 now shows Volvo's own reason, for example that the
+  car is already locked, instead of "Volvo rejected the request. Open Settings if this continues."
+  Settings cannot fix that kind of refusal.
+- A charging session the car was observed for only 70 to 90% of its length reported 70 to 90% of
+  its energy. The integrated power covers the observed time only, so the missing stretch counted
+  as zero. A session on 18 November showed 38.5 kWh for a charge that took 54.8 kWh from the
+  battery and 57.2 kWh from the charger. When the integration falls below 85% of what the change
+  in charge level implies, the charge-level figure is used. Sessions already stored with this
+  error are corrected on the next launch, their saved cost scaled with the energy and their
+  market-price cost cleared so it is worked out again.
+- A Volvo command that times out, loses its connection, gets a server error or returns an answer
+  Hisingen cannot read no longer says it failed and is "Retrying automatically." It now says the
+  command may have reached the vehicle and to check its status before trying again, as it already
+  did for Polestar. Commands are never retried automatically, so the old wording was wrong and
+  invited a second horn or flash.
+- A reading from an older poll no longer replaces a newer one that arrived over the live stream.
+  Before, the lock, doors, battery or charging state could show its earlier value, for example
+  "Unlocked" after a confirmed lock, until the next change. A reading is kept only when both
+  carry a report time and the one already shown is later.
+- A command that finishes after you sign out no longer files a receipt for the vehicle you signed
+  out of, and adds no history row when "Erase history on sign out" is on.
+- A command sent for a named vehicle (a link with a VIN, a Shortcut, or a notification button) is
+  held back with "The target vehicle could not be loaded." if a different vehicle is loaded when
+  it is about to send.
+
 ## [3.0.1] - 2026-11-19
 
 ### Added

@@ -40,12 +40,17 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
     var estimatedTimeToFullMinutes: Int?
     var estimatedTimeToTargetMinutes: Int?
     var targetPercentage: Int?
+    /// When the car last reported `targetPercentage`. Lets a screen tell a current target from one
+    /// the car has not refreshed.
+    var targetPercentageReportedAt: Date? = nil
     var powerWatts: Int?
     var currentAmps: Int?
     var voltageVolts: Int?
     var type: ChargingType
     var connection: ChargerConnection
     var currentLimitAmps: Int?
+    /// When the car last reported `currentLimitAmps`. Same purpose as `targetPercentageReportedAt`.
+    var currentLimitReportedAt: Date? = nil
     var reportedBatteryCapacityKwh: Double?
     var diagnostics: BatteryDiagnostics?
     var schedules: [VehicleSchedule]
@@ -85,12 +90,14 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         estimatedTimeToFullMinutes: Int? = nil,
         estimatedTimeToTargetMinutes: Int? = nil,
         targetPercentage: Int? = nil,
+        targetPercentageReportedAt: Date? = nil,
         powerWatts: Int? = nil,
         currentAmps: Int? = nil,
         voltageVolts: Int? = nil,
         type: ChargingType = .unknown,
         connection: ChargerConnection = .unknown,
         currentLimitAmps: Int? = nil,
+        currentLimitReportedAt: Date? = nil,
         reportedBatteryCapacityKwh: Double? = nil,
         diagnostics: BatteryDiagnostics? = nil,
         schedules: [VehicleSchedule] = [],
@@ -113,12 +120,14 @@ struct EnergyAndChargingSnapshot: Codable, Equatable, Sendable {
         self.estimatedTimeToFullMinutes = estimatedTimeToFullMinutes
         self.estimatedTimeToTargetMinutes = estimatedTimeToTargetMinutes
         self.targetPercentage = targetPercentage
+        self.targetPercentageReportedAt = targetPercentageReportedAt
         self.powerWatts = powerWatts
         self.currentAmps = currentAmps
         self.voltageVolts = voltageVolts
         self.type = type
         self.connection = connection
         self.currentLimitAmps = currentLimitAmps
+        self.currentLimitReportedAt = currentLimitReportedAt
         self.reportedBatteryCapacityKwh = reportedBatteryCapacityKwh
         self.diagnostics = diagnostics
         self.schedules = schedules

@@ -20,6 +20,10 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var accountMarket: String?
     var upholstery: String?
     var steeringOrientation: String?
+    var driveType: String?
+    var enginePowerKw: Double?
+    var grossWeightKg: Int?
+    var numberOfSeats: Int?
     var imageData: Data?
     var interiorImageData: Data?
     var usageMode: String?
@@ -59,6 +63,10 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         accountMarket: String? = nil,
         upholstery: String? = nil,
         steeringOrientation: String? = nil,
+        driveType: String? = nil,
+        enginePowerKw: Double? = nil,
+        grossWeightKg: Int? = nil,
+        numberOfSeats: Int? = nil,
         imageData: Data? = nil,
         interiorImageData: Data? = nil,
         usageMode: String? = nil,
@@ -80,6 +88,10 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         self.accountMarket = accountMarket
         self.upholstery = upholstery
         self.steeringOrientation = steeringOrientation
+        self.driveType = driveType
+        self.enginePowerKw = enginePowerKw
+        self.grossWeightKg = grossWeightKg
+        self.numberOfSeats = numberOfSeats
         self.imageData = imageData
         self.interiorImageData = interiorImageData
         self.usageMode = usageMode

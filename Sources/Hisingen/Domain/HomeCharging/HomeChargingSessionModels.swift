@@ -52,6 +52,8 @@ struct HomeChargingSessionCandidate: Codable, Equatable, Sendable {
     /// The vendor's own tokens for how the session began and ended, when its session list gives them.
     var startReason: String?
     var stopReason: String?
+    /// How `intervals` were reached when the charger gave no per-reading profile, for the cost note.
+    var energyProfileNote: String?
 
     init(key: String, keyKind: KeyKind, chargerID: String, startedAt: Date, endedAt: Date,
          energyKwh: Double, energySource: String, measuredAt: Date, intervals: [HomeEnergyInterval] = [],

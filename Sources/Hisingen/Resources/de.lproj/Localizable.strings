@@ -3103,7 +3103,7 @@
 "The previous sign-in was still waiting in the browser, so it was cancelled and a fresh window was opened." = "Die vorherige Anmeldung wartete noch im Browser, daher wurde sie abgebrochen und ein neues Fenster geöffnet.";
 "Volvo sign-in restarted" = "Volvo-Anmeldung neu gestartet";
 "Projected by midnight UTC: %d calls" = "Hochgerechnet bis Mitternacht UTC: %d Aufrufe";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window." = "Registriere eine kostenlose API-Anwendung auf developer.volvocars.com, um eine Client-ID, ein Client-Secret und einen VCC-API-Schlüssel zu erhalten, und melde dich dann unten mit deiner Volvo ID an. Hisingen sieht dein Volvo-ID-Passwort nie direkt, weil die Anmeldung in einem Systemfenster des Browsers stattfindet.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-." = "Registriere eine kostenlose API-Anwendung auf developer.volvocars.com, um eine Client-ID, ein Client-Secret und einen VCC-API-Schlüssel zu erhalten, und melde dich dann unten mit deiner Volvo ID an. Hisingen sieht dein Volvo-ID-Passwort nie direkt, weil die Anmeldung in einem Systemfenster des Browsers stattfindet. Neue Anwendungen im Volvo Developer Portal erhalten eine Client ID, die mit vid- beginnt.";
 "The vehicle will delete “%@” and its per-location charge limits." = "Das Fahrzeug löscht „%@“ und dessen Ladegrenzen pro Standort.";
 "At %@" = "Bei %@";
 "At %@ since %@" = "Bei %@ seit %@";
@@ -3867,7 +3867,28 @@
 "No charger measured this session, so the battery-side energy is priced with your rate settings." = "Keine Ladestation hat diese Sitzung gemessen, daher wird die batterieseitige Energie mit den Tarifeinstellungen berechnet.";
 "Pricing" = "Preisberechnung";
 "Session total at the average price" = "Sitzungssumme zum Durchschnittspreis";
-"Per 15 minutes" = "Pro 15 Minuten";
 "Tibber's price per 15 minutes with the grid transfer fee added." = "Tibber-Preis pro 15 Minuten zuzüglich Netzentgelt.";
 "Spot price with the markup, other charges and VAT from your rate settings." = "Spotpreis mit Aufschlag, weiteren Gebühren und MwSt. aus den Tarifeinstellungen.";
 "Spot price only. Taxes and grid fees are not included." = "Nur Spotpreis. Steuern und Netzentgelte sind nicht enthalten.";
+"Average Price" = "Durchschnittspreis";
+"Charging Loss" = "Ladeverlust";
+"Could Have Saved" = "Hätte sparen können";
+"Plugged In" = "Angesteckt";
+"Cheapest slots" = "Günstigste Zeitfenster";
+"%d of the cheapest slots fall outside this chart" = "%d der günstigsten Zeitfenster liegen außerhalb dieses Diagramms";
+"No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices." = "Kein Preis deckt diesen Ladevorgang ab. Verbinde Tibber unter Strom, damit er mit den Preisen von Tibber berechnet wird.";
+"No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days." = "Kein Preis deckt diesen Ladevorgang ab. Tibber speichert etwa einen Monat an Preisen, und für diese Tage ließen sich keine Marktpreise lesen.";
+"Selected Session Prices (CSV)" = "Preise des ausgewählten Ladevorgangs (CSV)";
+"By when the energy flowed" = "Nach dem Energiefluss";
+"The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger." = "Die Energie der Ladestation minus die batterieseitige Energie, als Anteil dessen, was die Ladestation geliefert hat. Die Batterieseite ist selbst eine Schätzung, ein ungewöhnlicher Wert deutet also ebenso oft auf die Schätzung wie auf die Ladestation.";
+"The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that." = "Dieselbe Energie in den günstigsten Zeitfenstern, während das Kabel steckte, hätte bei bis zu %1$@ %2$@ gekostet. Eine Untergrenze: Sie lässt die Ladestation so oft pausieren, wie die Preise es verlangen, und ein Auto, das zu einer festen Zeit bereit sein muss, kann das nicht immer.";
+
+// Added 2026-11-21: Volvo sign-in notice, specification labels, and change time.
+"Volvo moved to a new sign-in system. Sign in again to keep your vehicle data." = "Volvo hat auf ein neues Anmeldesystem umgestellt. Melde dich erneut an, damit deine Fahrzeugdaten erhalten bleiben.";
+"Drive Type" = "Antriebsart";
+"Engine Power" = "Motorleistung";
+"Gross Weight" = "Gesamtgewicht";
+"Seats" = "Sitze";
+"Last changed %@" = "Zuletzt geändert: %@";
+"%d kW" = "%d kW";
+"%d kg" = "%d kg";

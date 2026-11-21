@@ -123,6 +123,12 @@ extension PreferencesStore {
         get { d.string(forKey: "volvo_client_id").flatMap { $0.isEmpty ? nil : $0 } ?? BuiltinVolvoSecrets.clientID }
         set { d.set(newValue, forKey: "volvo_client_id"); cachedHasResumableSession[.volvo] = nil }
     }
+    /// The Volvo ID system that issued the stored session. Absent means the original one: every
+    /// session saved before the new system was supported came from it.
+    var volvoSessionIdentity: VolvoIdentityProvider {
+        get { d.string(forKey: "volvo_session_identity").flatMap(VolvoIdentityProvider.init(rawValue:)) ?? .legacy }
+        set { d.set(newValue.rawValue, forKey: "volvo_session_identity") }
+    }
     var volvoRestrictedScopesEnabled: Bool {
         get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
         set { d.set(newValue, forKey: "volvo_restricted_scopes_enabled") }

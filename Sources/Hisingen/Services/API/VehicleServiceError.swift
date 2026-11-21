@@ -36,6 +36,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
                 "%@ requested an additional or changed sign-in step. Open Settings and try again.",
                 provider.displayName
             )
+        case .authenticationRequired(_, .signInSystemChanged):
+            return L10n.text("Volvo moved to a new sign-in system. Sign in again to keep your vehicle data.")
         case .authenticationRequired:
             return L10n.text("Sign in is required.")
         case .network(let error):
@@ -108,6 +110,7 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         switch self {
         case .authenticationRequired(_, .invalidCredentials),
              .authenticationRequired(_, .callbackRejected),
+             .authenticationRequired(_, .signInSystemChanged),
              .notConfigured,
              .secureStorage,
              .commandOutcomeUnknown,

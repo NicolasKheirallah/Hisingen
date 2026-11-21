@@ -313,7 +313,7 @@ final class HomeChargingModel: ObservableObject {
 
     private func poll(generation current: Int, read: () async throws -> Void) async throws {
         while !Task.isCancelled, current == generation {
-            if shouldSyncSessions() { Task { await syncSessions() } }
+            if shouldSyncSessions() { Task { await syncAndReprice() } }
             let interval = command.isPending ? Self.pendingPollInterval : Self.pollInterval
             await sleepForPoll(interval)
             guard !Task.isCancelled, current == generation else { return }
@@ -629,7 +629,7 @@ final class HomeChargingModel: ObservableObject {
         seedRegionIfUnset(for: home)
         // Sessions already imported were priced without it; the next import prices them again.
         lastSyncAt = nil
-        if pairing != nil { Task { await syncSessions() } }
+        if pairing != nil { Task { await syncAndReprice() } }
     }
 
     /// Reads the connected home again for the price area and grid company, which a home saved by an
@@ -729,7 +729,8 @@ final class HomeChargingModel: ObservableObject {
         let fee = pairing?.networkFeeOrePerKwh ?? 0
         let tariff = fee > 0 ? GridTariff.flat(orePerKwh: fee) : gridTariff
         guard let points = try? await fetch(start.addingTimeInterval(-900), end.addingTimeInterval(900)) else { return nil }
-        return SessionPriceSeries.tibber(points, gridTariff: tariff, from: start, to: end)
+        return SessionPriceSeries.tibber(points, gridTariff: tariff, contract: preferences.electricityRatePolicy.contract,
+                                         from: start, to: end)
     }
 
     /// Tibber's own price source for a sync, or `nil` when none is connected.
@@ -1139,7 +1140,30 @@ final class HomeChargingModel: ObservableObject {
     }
 
     /// Imports the charger's completed sessions into charging history. Safe to call at any time.
-    func syncSessions(backfill: DateInterval? = nil) async {
+    /// How far back the one-time re-price reaches: Tibber keeps about a month of prices, and a
+    /// session older than that would be priced from a weaker source than it has now.
+    static let repriceReach: TimeInterval = 30 * 86_400
+
+    /// The regular import, then once per install a second pass over the NexBlue sessions already
+    /// stored, so they are priced by when their energy flowed (the hourly readings) and not by the
+    /// time the cable was in. A session already stored keeps its key, so the pass rewrites the cost.
+    func syncAndReprice() async {
+        await syncSessions()
+        guard let pairing, pairing.source == .nexBlue, !store.nexBlueRepriced, preferences.storeChargingHistory,
+              case .finished = syncState else { return }
+        let now = dependencies.now()
+        guard let earliest = database.charging.earliestWallboxStart(chargerID: pairing.chargerID) else {
+            store.nexBlueRepriced = true
+            return
+        }
+        let start = max(earliest.addingTimeInterval(-86_400), now.addingTimeInterval(-Self.repriceReach))
+        await syncSessions(backfill: DateInterval(start: start, end: now), recordsReceipt: false)
+        if case .finished = syncState { store.nexBlueRepriced = true }
+    }
+
+    /// `recordsReceipt` is false for the re-price, which rewrites costs and imports nothing new, so the
+    /// range Settings reports as imported stays the reader's own.
+    func syncSessions(backfill: DateInterval? = nil, recordsReceipt: Bool = true) async {
         guard let pairing, !syncInFlight else { return }
         let now = dependencies.now()
         if let backfill {
@@ -1169,7 +1193,7 @@ final class HomeChargingModel: ObservableObject {
             tibberProblem = summary.tibberProblem
             let importedAt = dependencies.now()
             if backfill == nil { lastSyncAt = importedAt }
-            if pairing.source == .nexBlue, !summary.skippedByPrivacy,
+            if pairing.source == .nexBlue, recordsReceipt, !summary.skippedByPrivacy,
                let start = summary.windowStart, let end = summary.windowEnd {
                 let receipt = HomeSessionSync.ImportReceipt(chargerID: pairing.chargerID, vin: pairing.vin,
                                                            importedAt: importedAt, range: DateInterval(start: start, end: end))

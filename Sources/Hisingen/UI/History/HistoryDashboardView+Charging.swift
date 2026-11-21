@@ -106,6 +106,12 @@ extension HistoryDashboardView {
                 ?? (stored.summaryVersion < 2 ? preferences.electricityPricePerKwh * stored.energyDeliveredKwh : nil)
         }
         let costFigure = session.flatMap { sessionCostFigure($0, estimate: estimatedCost) }
+        let cheapest = session.flatMap { cheapestOption(for: $0) }
+        let pluggedMinutes: Int? = session.flatMap { stored -> Int? in
+            guard let from = stored.wallbox?.startedAt, let to = stored.wallbox?.endedAt else { return nil }
+            let minutes = Int(to.timeIntervalSince(from) / 60)
+            return minutes > (durationMinutes ?? 0) + 10 ? minutes : nil
+        }
         let tariffSplit = tariffSplitForSelectedSession()
         let isAnomalous = session.map { snapshot.anomalousSessionIDs.contains($0.id) } ?? false
         let curveGapCount = zip(curve, curve.dropFirst()).filter {
@@ -169,8 +175,11 @@ extension HistoryDashboardView {
                 }
                 curveStatsRow(session: session, socGain: socGain, durationMinutes: durationMinutes, peak: peak,
                               cost: costFigure)
-                if tenToEighty != nil || idleTail != nil || lossPct != nil {
+                if tenToEighty != nil || idleTail != nil || lossPct != nil || pluggedMinutes != nil {
                     HStack(spacing: 12) {
+                        if let pluggedMinutes {
+                            curveStat(L10n.text("Plugged In"), Format.shortDuration(minutes: pluggedMinutes))
+                        }
                         if let tenToEighty {
                             curveStat("10→80%", Format.shortDuration(minutes: max(1, Int(tenToEighty / 60))))
                         }
@@ -189,9 +198,18 @@ extension HistoryDashboardView {
                                        record.value.map { (record.timestamp, $0) }
                                    },
                                    prices: loadedSessionPricesID == session?.id ? selectedSessionPrices : nil,
+                                   cheapestSlots: cheapest?.slots ?? [],
                                    currencySymbol: session?.wallbox?.currency ?? session?.currencySymbol ?? preferences.currencySymbol,
                                    chartHeight: chartHeight, animationKey: sessionCurveKey)
-                if let session { wallboxRows(session) }
+                if let session, session.endedAt != nil, loadedSessionPricesID == session.id, selectedSessionPrices == nil {
+                    Text(homeCharging?.tibberHome == nil
+                         ? L10n.text("No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices.")
+                         : L10n.text("No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days."))
+                        .hisType(.micro).foregroundStyle(.secondary)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let session { wallboxRows(session, cheapest: cheapest) }
                 if let tariffSplit, tariffSplit.nightEnergyKwh > 0 {
                     HStack(spacing: 12) {
                         curveStat(L10n.text("Day Energy"), Format.energyKwh(tariffSplit.dayEnergyKwh))
@@ -292,6 +310,28 @@ extension HistoryDashboardView {
         var label: String
         var value: String
         var note: String?
+        /// The total over the energy it paid for, e.g. "2.07 kr/kWh".
+        var average: String?
+    }
+
+    /// The same energy drawn in the cheapest slots of the time the cable was in.
+    struct CheapestOption {
+        var cost: Double
+        var saving: Double
+        var slots: [HomePricePoint]
+        var rateKw: Double
+    }
+
+    /// Only for a session priced slot by slot from Tibber: against an estimate or a spot basis the
+    /// two figures would not be on the same footing.
+    func cheapestOption(for session: HistoricalChargingSession) -> CheapestOption? {
+        guard let wallbox = session.wallbox, let paid = wallbox.cost, wallbox.energyKwh > 0,
+              wallbox.costMethod == HomeSessionCost.Method.intervalTibber.rawValue,
+              loadedSessionPricesID == session.id, let series = selectedSessionPrices,
+              series.basis == .tibberWithGridFee else { return nil }
+        let rate = session.peakPowerKw > 0 ? session.peakPowerKw : preferences.electricityChargerPowerKw
+        guard let best = series.cheapest(energyKwh: wallbox.energyKwh, rateKw: rate) else { return nil }
+        return CheapestOption(cost: best.cost, saving: paid - best.cost, slots: best.slots, rateKw: rate)
     }
 
     /// The charger's own energy priced at Tibber's rate with the grid fee when the charger measured
@@ -301,7 +341,10 @@ extension HistoryDashboardView {
             let symbol = wallbox.currency ?? session.currencySymbol ?? preferences.currencySymbol
             let note = wallbox.costAssumptions.isEmpty ? nil : wallbox.costAssumptions.joined(separator: ". ") + "."
             if let cost = wallbox.cost {
-                return SessionCostFigure(label: L10n.text("Total Price"), value: Format.currency(cost, symbol: symbol), note: note)
+                return SessionCostFigure(
+                    label: L10n.text("Total Price"), value: Format.currency(cost, symbol: symbol), note: note,
+                    average: wallbox.energyKwh > 0
+                        ? Format.currency(cost / wallbox.energyKwh, symbol: "\(symbol)/kWh") : nil)
             }
             if let partial = wallbox.partialCost {
                 return SessionCostFigure(label: L10n.text("Priced So Far"), value: Format.currency(partial, symbol: symbol), note: note)
@@ -332,6 +375,9 @@ extension HistoryDashboardView {
                 Spacer(minLength: 12)
                 curveStat(cost.label, cost.value)
                     .help(cost.note ?? "")
+                if let average = cost.average {
+                    curveStat(L10n.text("Average Price"), average)
+                }
             }
         }
     }

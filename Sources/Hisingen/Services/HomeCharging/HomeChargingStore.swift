@@ -14,6 +14,7 @@ struct HomeChargingStore {
     static let gridTariffKey = "home_charging_grid_tariff_v1"
     static let tibberVendor = "tibber"
     private static let nexBlueImportKey = "home_charging_nexblue_import_v1"
+    private static let nexBlueRepriceKey = "home_charging_nexblue_reprice_v1"
 
     private let defaults: UserDefaults
     private let keychain: KeychainStore
@@ -70,6 +71,12 @@ struct HomeChargingStore {
         nonmutating set {
             defaults.set(newValue.flatMap { try? JSONEncoder.sortedISO.encode($0) }, forKey: Self.nexBlueImportKey)
         }
+    }
+
+    /// Set once the sessions imported before hourly energy was read have been priced again.
+    var nexBlueRepriced: Bool {
+        get { defaults.bool(forKey: Self.nexBlueRepriceKey) }
+        nonmutating set { defaults.set(newValue, forKey: Self.nexBlueRepriceKey) }
     }
 
     var hasToken: Bool { keychain.hasStoredHomeAssistantToken }
@@ -168,6 +175,7 @@ struct HomeChargingStore {
         defaults.removeObject(forKey: Self.pairingKey)
         defaults.removeObject(forKey: Self.planRecordKey)
         defaults.removeObject(forKey: Self.nexBlueImportKey)
+        defaults.removeObject(forKey: Self.nexBlueRepriceKey)
     }
 
     /// Everything Home Charging holds, token included.

@@ -186,9 +186,11 @@ extension RefreshCoordinator {
             }
             if !preserved.contains(.chargeTarget) {
                 optimistic.energy.targetPercentage = authoritative.energy.targetPercentage
+                optimistic.energy.targetPercentageReportedAt = authoritative.energy.targetPercentageReportedAt
             }
             if !preserved.contains(.chargingCurrentLimit) {
                 optimistic.energy.currentLimitAmps = authoritative.energy.currentLimitAmps
+                optimistic.energy.currentLimitReportedAt = authoritative.energy.currentLimitReportedAt
             }
             if !preserved.contains(.chargingState) {
                 optimistic.energy.chargingState = authoritative.energy.chargingState

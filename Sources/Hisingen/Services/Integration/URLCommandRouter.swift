@@ -17,6 +17,8 @@ protocol URLCommandRouterContext: AnyObject {
     func toggleSettings()
     func togglePopover()
     func refreshNow()
+    /// Every command that arrives through a `hisingen://` URL. The conformer treats it as a deep
+    /// link and asks the person to confirm it, because the URL came from outside the app.
     func performRemoteCommand(_ command: RemoteCommand, targetVIN: String?)
     /// A "not available on this brand" notice for a deep-link command the active brand can't run.
     func notifyCommandNotice(title: String, body: String)

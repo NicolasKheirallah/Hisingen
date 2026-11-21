@@ -104,10 +104,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             guard self.preferences.hasResumableSession(for: targetBrand) else { return }
             switch action {
             case .lockVehicle:
-                self.performRemoteCommand(.lock, targetVIN: vin)
+                self.performNotificationCommand(.lock, targetVIN: vin)
             case .resumeChargeSchedule:
                 if targetBrand == .polestar {
-                    self.performRemoteCommand(.stopChargingOverride, targetVIN: vin)
+                    self.performNotificationCommand(.stopChargingOverride, targetVIN: vin)
                 }
             }
         }

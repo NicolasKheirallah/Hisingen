@@ -21,6 +21,10 @@ Polestar and Volvo authentication are also kept separate.
 
 Switching cars doesn't mean mixing their histories or cached information together.
 
+### Volvo sign-in
+
+Volvo has moved to a new sign-in system. After you update, sign in to Volvo once more in Hisingen Settings, because a session from the old system does not work on the new one. On the new system, tick *Remember me* on Volvo's login page, otherwise the session ends with the browser login. A client ID that starts with `vid-` uses the new system. One that starts with `dc-` still uses the original system, which Volvo has said stops working after 31 January 2027.
+
 ## Notifications
 
 Hisingen can let you know about useful vehicle events without requiring the app to stay open in front of you.
@@ -144,33 +148,36 @@ for local application navigation and automation. Recognized routes:
 | Route | Action | Brand |
 | --- | --- | --- |
 | `hisingen://lock` | Lock vehicle | Volvo, Polestar |
-| `hisingen://unlock` | Unlock vehicle (confirmation first) | Volvo, Polestar |
+| `hisingen://unlock` | Unlock vehicle | Volvo, Polestar |
 | `hisingen://climate/start?temp=21` | Start climate (temp optional, clamped to 16–30 °C) | Volvo, Polestar |
 | `hisingen://climate/stop` | Stop climate | Volvo, Polestar |
 | `hisingen://flash` | Flash lights | Volvo, Polestar |
 | `hisingen://honk-flash` | Honk + flash | Volvo, Polestar |
-| `hisingen://engine/start?minutes=15` | Start engine (`5`, `10` or `15` minutes, confirmation first) | Volvo |
+| `hisingen://engine/start?minutes=15` | Start engine (`5`, `10` or `15` minutes) | Volvo |
 | `hisingen://engine/stop` | Stop engine | Volvo |
 | `hisingen://precleaning/start` | Start cabin pre-cleaning | Polestar |
 | `hisingen://precleaning/stop` | Stop cabin pre-cleaning | Polestar |
-| `hisingen://windows/open` | Open all windows (confirmation first) | Polestar |
+| `hisingen://windows/open` | Open all windows | Polestar |
 | `hisingen://windows/close` | Close all windows | Polestar |
-| `hisingen://tailgate/open` | Open tailgate (confirmation first) | Polestar |
+| `hisingen://tailgate/open` | Open tailgate | Polestar |
 | `hisingen://tailgate/close` | Close tailgate | Polestar |
-| `hisingen://trunk/unlock` | Unlock trunk (confirmation first) | Polestar |
+| `hisingen://trunk/unlock` | Unlock trunk | Polestar |
 | `hisingen://charge-target?percent=80` | Set charge target (clamped to 40–100%) | Polestar |
 | `hisingen://charge-limit?amps=16` | Set charging current (clamped to 6–32 A) | Polestar |
 | `hisingen://charging/override-start` | Charge now, overriding the schedule | Polestar |
 | `hisingen://charging/override-stop` | Resume the charging schedule | Polestar |
 | `hisingen://ota/schedule?delay=120` | Schedule software installation (`120`, `480` or `720` minutes) | Polestar |
-| `hisingen://ota/install` | Install vehicle software now (confirmation first) | Polestar |
+| `hisingen://ota/install` | Install vehicle software now | Polestar |
 | `hisingen://ota/cancel` | Cancel software installation | Polestar |
 
 Links accept an optional `vin=` query to target a vehicle other than the selected one.
 
-Commands follow the same capability gates and confirmations as the in-app controls. A link
-never sends a command the active brand or the vehicle does not offer: it gets a local notice
-instead. Polestar commands also need a Polestar ID or Augmented connection; the Developer Portal
+Every link asks you to confirm before it sends a command. A link comes from outside the app, so
+nothing shows that you asked for it. The commands that are riskier in the app (unlock, trunk,
+tailgate open, windows open, horn, engine start and software install) also ask for your Mac
+password or Touch ID, as the in-app controls do. A link follows the same capability gates as the
+in-app controls and never sends a command the active brand or the vehicle does not offer: it gets
+a local notice instead. Polestar commands also need a Polestar ID or Augmented connection; the Developer Portal
 connection is read-only. Engine runtime and schedule delay must be one of the listed options,
 or the link is refused with a notice. Temperature, charge target and charging current are
 clamped to their ranges instead.

@@ -10,9 +10,8 @@ actor VolvoAPI {
     let logger = AppLog.logger("volvo-api")
 
 
-    private let identityHost = URL(string: "https://volvoid.eu.volvocars.com")!
-    let authorizationPath = "/as/authorization.oauth2"
-    private let tokenPath = "/as/token.oauth2"
+    /// Which Volvo ID system the configured client belongs to; see `VolvoIdentityProvider`.
+    var identityProvider: VolvoIdentityProvider { VolvoIdentityProvider(clientID: clientID) }
     private let apiBaseURL = URL(string: "https://api.volvocars.com")!
 
 
@@ -209,7 +208,15 @@ actor VolvoAPI {
         request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
-        let (data, response) = try await perform(request, operation: "command: \(commandName)")
+        let data: Data
+        let response: HTTPURLResponse
+        do {
+            (data, response) = try await perform(request, operation: "command: \(commandName)")
+        } catch VolvoError.network(let urlError) where !Self.commandNeverLeftTheMac(urlError) {
+            // A timeout or a dropped connection can land after Volvo already acted. Reporting it
+            // as a plain network failure reads as "nothing happened" and invites a second send.
+            throw VolvoError.commandOutcomeUnknown(operation: commandName)
+        }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: commandName) {
             if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
                let text = detail.text {
@@ -224,12 +231,23 @@ actor VolvoAPI {
                     (HTTP \(response.statusCode, privacy: .public)): \(DiagnosticRedaction.redact(text), privacy: .private)
                     """)
             }
+            // A 5xx does not say whether the vehicle acted; every 4xx is a refusal before it did.
+            if case .server = failure { throw VolvoError.commandOutcomeUnknown(operation: commandName) }
+            // 422 is Volvo understanding the request and declining it for this vehicle or state.
+            // Its own reason is the useful message; "rejected the request" sends the reader to
+            // Settings for a problem Settings cannot fix.
+            if response.statusCode == 422,
+               let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
+               let text = detail.text {
+                throw RemoteCommandError.rejected(text)
+            }
             throw failure
         }
         guard let envelope = try? JSONDecoder.volvo.decode(
             VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
         ), let payload = envelope.data else {
-            throw VolvoError.decoding(operation: "command: \(commandName)")
+            // Volvo answered 2xx, so it accepted the request. An unreadable body is not a refusal.
+            throw VolvoError.commandOutcomeUnknown(operation: commandName)
         }
         if let failureReason = payload.failureReason {
             throw RemoteCommandError.rejected(payload.text.map { "\(failureReason) (\($0))" } ?? failureReason)
@@ -249,6 +267,22 @@ actor VolvoAPI {
         // Connected Vehicle API v2 commands are synchronous and Volvo removed the old sent-
         // command status endpoints. Never poll /commands/{id}; it is not part of v2.
         return RemoteCommandResult(outcome: .accepted, message: payload.text)
+    }
+
+    /// URL errors raised before the request left the Mac, so the command cannot have run. Any
+    /// other transport error (a timeout, a lost connection, a cancelled request) may have
+    /// happened after Volvo received it.
+    private static func commandNeverLeftTheMac(_ error: URLError) -> Bool {
+        switch error.code {
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff,
+             .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
+             .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+             .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Serialises command POSTs to at most one per `minCommandInterval`. Concurrent callers
@@ -278,14 +312,6 @@ actor VolvoAPI {
     private func apiURL(path: String) throws -> URL {
         let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let url = URL(string: clean, relativeTo: apiBaseURL) else {
-            throw VolvoError.invalidResponse(operation: path)
-        }
-        return url.absoluteURL
-    }
-
-    func identityURL(path: String) throws -> URL {
-        let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        guard let url = URL(string: clean, relativeTo: identityHost) else {
             throw VolvoError.invalidResponse(operation: path)
         }
         return url.absoluteURL
@@ -360,7 +386,7 @@ actor VolvoAPI {
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
         let epoch = sessionEpoch
         guard let clientID, let clientSecret else { throw VolvoError.appNotConfigured }
-        var request = URLRequest(url: try identityURL(path: tokenPath))
+        var request = URLRequest(url: identityProvider.tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -378,6 +404,8 @@ actor VolvoAPI {
             accessToken: token.accessToken,
             refreshToken: token.refreshToken,
             expiresIn: TimeInterval(token.expiresIn)))
+        let issuer = identityProvider
+        await MainActor.run { preferences.volvoSessionIdentity = issuer }
     }
 
     /// The most recent successful grant is the freshest token obtainable, so a caller arriving
@@ -416,6 +444,7 @@ actor VolvoAPI {
         // the configuration guard lives inside it, where a grant already in flight is awaited
         // rather than failed. The lifecycle decides whether a grant is needed at all.
         let configuration = (clientID: clientID, secret: clientSecret, refresh: refreshToken)
+        let tokenURL = identityProvider.tokenURL
         let outcome = try await tokens.refresh(
             reason,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
@@ -425,9 +454,7 @@ actor VolvoAPI {
                       let refreshToken = configuration.refresh, !refreshToken.isEmpty else {
                     throw VolvoError.authenticationRequired(.noStoredSession)
                 }
-                let path = self.tokenPath
-                let url = try await self.identityURL(path: path)
-                var request = URLRequest(url: url)
+                var request = URLRequest(url: tokenURL)
                 request.httpMethod = "POST"
                 request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
                 Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -453,7 +480,7 @@ actor VolvoAPI {
     /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
     /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
-    private func discardDeadRefreshToken() async {
+    func discardDeadRefreshToken() async {
         tokens.reset()
         try? keychain.deleteVolvoSessionToken()
         await MainActor.run { preferences.invalidateSessionCache() }
@@ -603,9 +630,10 @@ actor VolvoAPI {
             switch error as? VolvoError {
             case .regionRestricted, .permissionDenied: isRestricted = true
             // A 404 is stable: the resource is simply not exposed for this vehicle/market
-            // (e.g. `/environment` on a model without the sensor). Back off long and persist
-            // it so it is not re-probed every few minutes for the life of the install.
-            case .client(let statusCode) where statusCode == 404: isRestricted = true
+            // (e.g. `/environment` on a model without the sensor). A 410 means Volvo removed the
+            // API version, which is just as permanent. Back off long and persist both so they
+            // are not re-probed every few minutes for the life of the install.
+            case .client(let statusCode) where statusCode == 404 || statusCode == 410: isRestricted = true
             default: isRestricted = false
             }
             // Both durations are durable now that the owner is one store: the 5-minute ones
@@ -662,7 +690,7 @@ actor VolvoAPI {
     }
 
 
-    private static func applyBasicAuth(_ request: inout URLRequest, clientID: String, clientSecret: String) {
+    static func applyBasicAuth(_ request: inout URLRequest, clientID: String, clientSecret: String) {
         let credentials = Data("\(clientID):\(clientSecret)".utf8).base64EncodedString()
         request.setValue("Basic \(credentials)", forHTTPHeaderField: "Authorization")
     }

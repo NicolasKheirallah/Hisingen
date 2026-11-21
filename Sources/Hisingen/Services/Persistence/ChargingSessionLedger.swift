@@ -73,6 +73,10 @@ enum ChargingSessionSummaryCalculator {
     /// as the chart curve's visual gap threshold, so what the summary integrated and what the
     /// curve displays agree by construction.
     static let maximumIntegratableGap = HistoryInsights.chargingCurveGapThreshold
+    /// Below this coverage an integration may leave out real energy.
+    static let partialCoverageLimit = 0.90
+    /// Integrated energy under this share of the charge-level estimate is read as undercounted.
+    static let undercountRatio = 0.85
 
     static func calculate(
         startSoc: Double, terminalSoc: Double, startedAt: Date, endedAt: Date,
@@ -106,7 +110,11 @@ enum ChargingSessionSummaryCalculator {
             }
         }
         let coverage = duration > 0 ? min(1, coveredSeconds / duration) : 0
-        if integratedKwh > 0, coverage >= 0.70 {
+        let socEnergy = max(0, endSoc - startSoc) / 100 * max(0, usableCapacityKwh)
+        // An integration only counts the time Hisingen observed. With a fifth of the session unseen
+        // it can fall a fifth short, so the charge-level gain is the better witness when it is far above.
+        let undercounts = coverage < partialCoverageLimit && integratedKwh < socEnergy * undercountRatio
+        if integratedKwh > 0, coverage >= 0.70, !undercounts {
             return ChargingSessionCalculatedSummary(
                 endSoc: endSoc, energyKwh: integratedKwh,
                 peakPowerKw: peak, averagePowerKw: average,
@@ -116,7 +124,6 @@ enum ChargingSessionSummaryCalculator {
             )
         }
 
-        let socEnergy = max(0, endSoc - startSoc) / 100 * max(0, usableCapacityKwh)
         let confidence: ChargingSessionConfidence = ordered.count >= 3 && endSoc - startSoc >= 1
             ? .medium : .low
         return ChargingSessionCalculatedSummary(

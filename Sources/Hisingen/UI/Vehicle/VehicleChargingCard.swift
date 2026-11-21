@@ -131,12 +131,37 @@ struct VehicleChargingCard: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var details: [KVRow] {
+    private var details: [(id: String, row: KVRow)] {
         taggedDetails.enumerated().sorted { lhs, rhs in
             let left = preferences.chargingStatOrder.firstIndex(of: lhs.element.id) ?? .max
             let right = preferences.chargingStatOrder.firstIndex(of: rhs.element.id) ?? .max
             return left == right ? lhs.offset < rhs.offset : left < right
-        }.map(\.element.row)
+        }.map(\.element)
+    }
+
+    private func detailRow(_ index: Int) -> some View {
+        let detail = details[index]
+        return VStack(alignment: .leading, spacing: 0) {
+            detail.row
+            if let note = staleSettingNote(forDetail: detail.id) {
+                Text(note)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private func staleSettingNote(forDetail id: String) -> String? {
+        let changedAt: Date?
+        switch id {
+        case "target": changedAt = state.energy.targetPercentageReportedAt
+        case "limit": changedAt = state.energy.currentLimitReportedAt
+        default: return nil
+        }
+        guard let reportedAt = changedAt, reportedAt < Date().addingTimeInterval(-30 * 86_400) else { return nil }
+        return L10n.format("Last changed %@", Format.dateFormatter.string(from: reportedAt))
     }
 
     private var taggedDetails: [(id: String, row: KVRow)] {
@@ -382,7 +407,7 @@ struct VehicleChargingCard: View {
                 if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: hasLastKnownChargingReadings ? nil : state.estimatedChargingCompletion, isLive: state.isCharging && !hasLastKnownChargingReadings, currentPowerWatts: hasLastKnownChargingReadings ? nil : state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
                     Text(state.chargingExplanation).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
-                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
+                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { detailRow($0) } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
                 }
                 if !persistentSessions.isEmpty { historySection }
                 batteryDetailsLink

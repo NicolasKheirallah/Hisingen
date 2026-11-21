@@ -3100,7 +3100,7 @@
 "The previous sign-in was still waiting in the browser, so it was cancelled and a fresh window was opened." = "Det tidligere login ventede stadig i browseren, så det blev annulleret, og et nyt vindue blev åbnet.";
 "Volvo sign-in restarted" = "Volvo-login blev genstartet";
 "Projected by midnight UTC: %d calls" = "Forventet ved midnat UTC: %d kald";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window." = "Registrér en gratis API-applikation på developer.volvocars.com for at få et klient-ID, en klienthemmelighed og en VCC API-nøgle, og log derefter ind med dit Volvo ID nedenfor. Hisingen ser aldrig din Volvo ID-adgangskode direkte, fordi login foregår i et systemvindue i browseren.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-." = "Registrér en gratis API-applikation på developer.volvocars.com for at få et klient-ID, en klienthemmelighed og en VCC API-nøgle, og log derefter ind med dit Volvo ID nedenfor. Hisingen ser aldrig din Volvo ID-adgangskode direkte, fordi login foregår i et systemvindue i browseren. Nye applikationer i Volvo Developer Portal får et Client ID, der begynder med vid-.";
 "The vehicle will delete “%@” and its per-location charge limits." = "Køretøjet sletter “%@” og dets ladegrænser pr. placering.";
 "At %@" = "Ved %@";
 "At %@ since %@" = "Ved %@ siden %@";
@@ -3864,7 +3864,28 @@
 "No charger measured this session, so the battery-side energy is priced with your rate settings." = "Ingen lader målte denne session, så energien på batterisiden prissættes med dine prisindstillinger.";
 "Pricing" = "Prisberegning";
 "Session total at the average price" = "Sessionens samlede energi til gennemsnitsprisen";
-"Per 15 minutes" = "Pr. kvarter";
 "Tibber's price per 15 minutes with the grid transfer fee added." = "Tibbers pris pr. kvarter med nettariffen lagt til.";
 "Spot price with the markup, other charges and VAT from your rate settings." = "Spotpris med tillæg, andre gebyrer og moms fra dine prisindstillinger.";
 "Spot price only. Taxes and grid fees are not included." = "Kun spotpris. Afgifter og nettarif er ikke med.";
+"Average Price" = "Gennemsnitspris";
+"Charging Loss" = "Ladetab";
+"Could Have Saved" = "Kunne have sparet";
+"Plugged In" = "Tilsluttet";
+"Cheapest slots" = "Billigste intervaller";
+"%d of the cheapest slots fall outside this chart" = "%d af de billigste intervaller ligger uden for diagrammet";
+"No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices." = "Ingen pris dækker denne session. Tilslut Tibber under Elektricitet, så prissættes den med Tibbers priser.";
+"No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days." = "Ingen pris dækker denne session. Tibber gemmer cirka en måneds priser, og der kunne ikke læses markedspriser for disse dage.";
+"Selected Session Prices (CSV)" = "Priser for valgt session (CSV)";
+"By when the energy flowed" = "Efter hvornår energien flød";
+"The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger." = "Opladerens energi minus energien på batterisiden som andel af det, opladeren leverede. Batterisiden er selv et skøn, så et tal langt fra det sædvanlige peger lige så ofte på skønnet som på opladeren.";
+"The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that." = "Samme energi i de billigste intervaller, mens kablet sad i, ville have kostet %2$@ ved op til %1$@. En nedre grænse: den lader opladeren pause, så ofte priserne kræver, og en bil, der skal være klar til et bestemt tidspunkt, kan ikke altid det.";
+
+// Added 2026-11-21: Volvo sign-in notice, specification labels, and change time.
+"Volvo moved to a new sign-in system. Sign in again to keep your vehicle data." = "Volvo er skiftet til et nyt login-system. Log ind igen for at beholde dine bildata.";
+"Drive Type" = "Drivtype";
+"Engine Power" = "Motoreffekt";
+"Gross Weight" = "Totalvægt";
+"Seats" = "Sæder";
+"Last changed %@" = "Sidst ændret %@";
+"%d kW" = "%d kW";
+"%d kg" = "%d kg";

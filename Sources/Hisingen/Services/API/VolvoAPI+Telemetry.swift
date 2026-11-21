@@ -15,7 +15,8 @@ extension VolvoAPI {
             if Self.isRequestLevelFailure(error) { throw error }
             details = VolvoVehicleDetailsDTO(
                 vin: vin, modelYear: nil, descriptions: nil,
-                fuelType: nil, externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil
+                fuelType: nil, externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil,
+                specifications: nil
             )
         }
         let powertrain = VolvoPowertrain.classify(fuelType: details.fuelType)
@@ -186,6 +187,15 @@ extension VolvoAPI {
         let exterior: ExteriorSnapshot? = (doors != nil || windows != nil)
             ? ExteriorSnapshot(openings: openings, isLocked: doors?.isLocked, alarmTriggered: nil)
             : nil
+
+        // Exterior timestamp: the newest reading across every door, lid and window field.
+        let exteriorFields: [VolvoField<String>?] = [
+            doors?.centralLock, doors?.frontLeftDoor, doors?.frontRightDoor, doors?.rearLeftDoor,
+            doors?.rearRightDoor, doors?.hood, doors?.tailgate, doors?.tankLid,
+            windows?.frontLeftWindow, windows?.frontRightWindow, windows?.rearLeftWindow,
+            windows?.rearRightWindow, windows?.sunroof
+        ]
+        let exteriorReportedAt: Date? = exteriorFields.compactMap { $0?.updatedAt }.max()
 
         let energyCaps = needsEnergy ? try? await fetchEnergyCapabilities(vin: vin) : nil
         var probes = VehicleProbedCapabilities()
@@ -381,15 +391,25 @@ extension VolvoAPI {
         state.identity.gearbox = details.gearbox.volvoMeaningful
         state.maintenance.service.engineHoursToService = diagnostics?.engineHoursToService?.value
         state.tripComputer.averageSpeedKmH = statistics?.averageSpeedKmH
+        state.tripComputer.manualAverageSpeedKmH = statistics?.averageSpeedManualKmH.map { Int($0.rounded()) }
+        state.tripComputer.automaticAverageSpeedKmH = statistics?.averageSpeedAutomaticKmH.map { Int($0.rounded()) }
         state.fuelSystem.amountLiters = fuelLiters
         state.fuelSystem.averageConsumptionLPer100Km = avgFuelConsumption
         state.fuelSystem.isEngineRunning = isEngineRunning
         state.fuelSystem.type = details.fuelType.volvoMeaningful
         state.identity.upholstery = details.descriptions?.upholstery.volvoMeaningful
         state.identity.steeringOrientation = details.descriptions?.steering.volvoMeaningful
+        state.identity.driveType = details.specifications?.driveType.volvoMeaningful
+        state.identity.enginePowerKw = details.specifications?.enginePowerKw
+        state.identity.grossWeightKg = details.specifications?.grossWeightKg
+        state.identity.numberOfSeats = details.specifications?.numberOfSeats
+        state.identity.availabilityReportedAt = commandAccessibility?.availabilityStatus?.updatedAt
         state.maintenance.service.trigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
         state.tripComputer.electricRangeKm = statistics?.distanceToEmptyBatteryKm
         state.energy.currentLimitAmps = currentLimitAmps
+        state.energy.currentLimitReportedAt = energy?.chargingCurrentLimit?.updatedAt
+        state.energy.targetPercentageReportedAt = energy?.targetBatteryChargeLevel?.updatedAt
+        state.exteriorStatus?.reportedAt = exteriorReportedAt
         state.identity.interiorImageData = interiorImg
         state.tripComputer.electricDistanceKm = statistics?.electricDistanceKm
         state.tripComputer.fuelDistanceKm = statistics?.fuelDistanceKm

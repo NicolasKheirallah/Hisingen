@@ -250,3 +250,14 @@ extension ChargingSession {
         return fallbackPricePerKwh.map { $0 * kwhDelivered }
     }
 }
+
+extension ElectricityPriceContract {
+    /// The same folding for an all-in series such as Tibber's: hourly contracts bill the hour's
+    /// time-weighted average, quarter-hour contracts keep the slots as published.
+    func settle(_ points: [HomePricePoint], calendar: Calendar = ElectricityPriceService.stockholmCalendar) -> [HomePricePoint] {
+        guard self == .hourly else { return points }
+        let folded = settle(points.map { ElectricityPricePoint(startDate: $0.start, endDate: $0.end, sekPerKwh: $0.pricePerKwh) },
+                            calendar: calendar)
+        return folded.map { HomePricePoint(start: $0.startDate, end: $0.endDate, pricePerKwh: $0.sekPerKwh) }
+    }
+}

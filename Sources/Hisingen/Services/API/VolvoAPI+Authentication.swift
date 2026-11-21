@@ -14,7 +14,8 @@ extension VolvoAPI {
         let verifier = try PKCE.randomURLSafeString()
         let state = try PKCE.randomURLSafeString()
         authorizationFlow.begin(verifier: verifier, state: state)
-        guard var components = URLComponents(url: try identityURL(path: authorizationPath),
+        let provider = identityProvider
+        guard var components = URLComponents(url: provider.authorizeURL,
                                              resolvingAgainstBaseURL: false) else {
             throw VolvoError.incompatibleAPI(operation: "authorization request")
         }
@@ -22,9 +23,10 @@ extension VolvoAPI {
         let scopes: [String]
         switch tier {
         case .full:
-            scopes = Self.readScopes + (restrictedScopesWanted ? Self.restrictedScopes : [])
+            scopes = Self.readScopes + provider.additionalReadScopes
+                + (restrictedScopesWanted ? Self.restrictedScopes : [])
         case .standard:
-            scopes = Self.readScopes
+            scopes = Self.readScopes + provider.additionalReadScopes
         case .core:
             scopes = Self.coreReadScopes
         }
@@ -76,6 +78,15 @@ extension VolvoAPI {
     func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
         guard !token.isEmpty else { throw VolvoError.authenticationRequired(.noStoredSession) }
         guard isConfigured else { throw VolvoError.appNotConfigured }
+        // A refresh token belongs to the sign-in system and client that issued it. One from the
+        // original system is useless against the new one, and replaying it only adds failed
+        // logins to Volvo's per-client lockout, so drop it and ask for a fresh sign-in. A session
+        // saved before this was recorded came from the original system.
+        let issuer = await MainActor.run { preferences.volvoSessionIdentity }
+        if issuer != identityProvider {
+            await discardDeadRefreshToken()
+            throw VolvoError.authenticationRequired(.signInSystemChanged)
+        }
         // Live-grant shortcut (mirrors Polestar): re-restoring the active session
         // must not rotate the refresh token on every retry. Only a cold restore
         // or a session whose access token is gone pays for a grant.
@@ -107,11 +118,17 @@ extension VolvoAPI {
         // Preserve persisted permission/market back-offs across a session reset. Re-signing
         // does not make an unapproved provider scope available and must not trigger a probe storm.
         remoteCommandsInFlight = []
+        // Rebuilt from the old configuration rather than makeSession(), so a reset keeps the
+        // transport the session was given. Sign-out's revocation runs on the replacement.
+        let configuration = session.configuration
         session.invalidateAndCancel()
-        session = Self.makeSession()
+        session = URLSession(configuration: configuration)
     }
 
     func signOut() async throws {
+        // Read before resetSession clears the token. The local deletes run first, so the session
+        // is off disk whatever the revocation does.
+        let revocation = revocationRequest()
         await resetSession()
         // Best-effort atomic deletes: attempt all three, report the first failure
         // without cascading destruction. Previously a session-token delete failure
@@ -121,7 +138,38 @@ extension VolvoAPI {
         do { try keychain.deleteVolvoSessionToken() } catch { firstError = firstError ?? error }
         do { try keychain.deleteVolvoClientSecret() } catch { firstError = firstError ?? error }
         do { try keychain.deleteVolvoApiKey() } catch { firstError = firstError ?? error }
+        if let revocation { scheduleRevocation(revocation) }
         if let firstError { throw firstError }
+    }
+
+    /// The revocation POST for the live refresh token. Nil when there is nothing to revoke: no
+    /// token in memory, or a sign-in system with no documented revocation endpoint. The keychain
+    /// is not read here, because a read can prompt for Keychain access during sign-out.
+    private func revocationRequest() -> URLRequest? {
+        guard let url = identityProvider.revocationURL,
+              let clientID, let clientSecret,
+              let token = refreshToken, !token.isEmpty else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
+        request.httpBody = Self.formBody(["token": token, "token_type_hint": "refresh_token"])
+        return request
+    }
+
+    /// Sends the revocation without waiting for it, so sign-out never waits on the network. The
+    /// outcome only reaches the debug log: the local state is already gone either way.
+    private func scheduleRevocation(_ request: URLRequest) {
+        Task {
+            do {
+                let (_, response) = try await perform(request, operation: "Volvo token revocation")
+                if !(200..<300).contains(response.statusCode) {
+                    logger.debug("Volvo token revocation returned HTTP \(response.statusCode, privacy: .public)")
+                }
+            } catch {
+                logger.debug("Volvo token revocation failed: \(String(describing: error), privacy: .private)")
+            }
+        }
     }
 
     func resolvedVIN(preferred: String?) -> String? {

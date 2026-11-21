@@ -20,6 +20,10 @@ enum VolvoError: Error, LocalizedError {
     case responseTooLarge(operation: String)
     case unsupported(service: String)
     case temporarilyUnavailable(service: String)
+    /// A command went out and the answer does not say whether the vehicle acted: a timeout or a
+    /// dropped connection after the request left, a 5xx, or a 2xx that could not be read.
+    /// Polestar's stack has the same case; both must keep the reader from repeating the command.
+    case commandOutcomeUnknown(operation: String)
     case secureStorage
     case notConfigured
 
@@ -29,6 +33,8 @@ enum VolvoError: Error, LocalizedError {
             return L10n.text("Sign in failed. Check your Volvo ID credentials.")
         case .authenticationRequired(.callbackRejected):
             return L10n.text("Volvo requested an additional or changed sign-in step. Open Settings and try again.")
+        case .authenticationRequired(.signInSystemChanged):
+            return L10n.text("Volvo moved to a new sign-in system. Sign in again to keep your vehicle data.")
         case .authenticationRequired:
             return L10n.text("Sign in is required.")
         case .appNotConfigured:
@@ -56,6 +62,8 @@ enum VolvoError: Error, LocalizedError {
             return L10n.text("This vehicle service is not available for your vehicle.")
         case .temporarilyUnavailable:
             return L10n.text("A vehicle service is temporarily unavailable. Retrying automatically.")
+        case .commandOutcomeUnknown:
+            return L10n.text("The command may have reached the vehicle. Check its status before trying again.")
         case .decoding, .incompatibleAPI, .invalidResponse, .responseTooLarge:
             return L10n.text("Volvo's vehicle service returned an unexpected response.")
         case .secureStorage:
@@ -102,6 +110,7 @@ enum VolvoError: Error, LocalizedError {
         case .responseTooLarge(let operation): return .responseTooLarge(operation: operation)
         case .unsupported(let service): return .unsupported(provider: .volvo, service: service)
         case .temporarilyUnavailable(let service): return .temporarilyUnavailable(provider: .volvo, service: service)
+        case .commandOutcomeUnknown(let operation): return .commandOutcomeUnknown(operation: operation)
         case .secureStorage: return .secureStorage
         case .notConfigured: return .notConfigured
         }

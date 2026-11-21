@@ -49,6 +49,17 @@ extension EnergyAndChargingSnapshot {
             return nil
         }()
         let keepCharging = policy.features.contains(.chargingDetails)
+        // Each reading time follows the value it describes. A command-locked or retained previous
+        // value keeps its own timestamp instead of inheriting the fresh reading's.
+        let targetFromNew = targetPercentage != nil && !(policy.isCommandLocked && previous.targetPercentage != nil)
+        let mergedTarget = policy.commandLockedValue(
+            new: targetPercentage, previous: previous.targetPercentage, keepPrevious: keepCharging)
+        let mergedTargetReadAt: Date? = mergedTarget == nil
+            ? nil
+            : (targetFromNew ? targetPercentageReportedAt : previous.targetPercentageReportedAt)
+        let mergedCurrentLimitReadAt: Date? = currentLimitAmps != nil
+            ? currentLimitReportedAt
+            : (keepCharging ? previous.currentLimitReportedAt : nil)
         var merged = EnergyAndChargingSnapshot(
             batteryPercentage: batteryPercentage ?? (keepCharging ? previous.batteryPercentage : nil),
             rangeKm: rangeKm ?? (keepCharging ? previous.rangeKm : nil),
@@ -56,13 +67,15 @@ extension EnergyAndChargingSnapshot {
             scheduleOutcome: scheduleOutcome ?? (keepCharging ? previous.scheduleOutcome : nil),
             estimatedTimeToFullMinutes: estimatedTimeToFullMinutes ?? (keepCharging ? previous.estimatedTimeToFullMinutes : nil),
             estimatedTimeToTargetMinutes: estimatedTimeToTargetMinutes ?? (keepCharging ? previous.estimatedTimeToTargetMinutes : nil),
-            targetPercentage: policy.commandLockedValue(new: targetPercentage, previous: previous.targetPercentage, keepPrevious: keepCharging),
+            targetPercentage: mergedTarget,
+            targetPercentageReportedAt: mergedTargetReadAt,
             powerWatts: powerWatts ?? (keepCharging ? previous.powerWatts : nil),
             currentAmps: policy.commandLockedValue(new: currentAmps, previous: previous.currentAmps, keepPrevious: keepCharging),
             voltageVolts: voltageVolts ?? (keepCharging ? previous.voltageVolts : nil),
             type: type == .unknown ? previous.type : type,
             connection: connection == .unknown ? previous.connection : connection,
             currentLimitAmps: currentLimitAmps ?? (keepCharging ? previous.currentLimitAmps : nil),
+            currentLimitReportedAt: mergedCurrentLimitReadAt,
             reportedBatteryCapacityKwh: reportedBatteryCapacityKwh ?? (keepCharging ? previous.reportedBatteryCapacityKwh : nil),
             diagnostics: diagnostics ?? (policy.features.contains(.batteryDiagnostics) ? previous.diagnostics : nil),
             schedules: !schedules.isEmpty ? schedules
@@ -114,14 +127,21 @@ extension EnergyAndChargingSnapshot {
 
 extension VehicleIdentitySnapshot {
     func merging(previous: Self, policy: SnapshotMergePolicy, imageBackfill: VehicleImageBackfill) -> Self {
-        let availability: VehicleAvailability = {
+        // The availability frame and its timestamp move together: when the previous availability
+        // is carried forward, its reporting time comes with it.
+        let carriesPreviousAvailability: Bool = {
             guard policy.features.contains(.vehicleAvailability), case .unknown = self.availability else {
-                return self.availability
+                return false
             }
-            return previous.availability
+            return true
         }()
+        let availability: VehicleAvailability = carriesPreviousAvailability ? previous.availability : self.availability
+        let availabilityReportedAt: Date? = carriesPreviousAvailability
+            ? previous.availabilityReportedAt
+            : self.availabilityReportedAt
         return VehicleIdentitySnapshot(
             availability: availability,
+            availabilityReportedAt: availabilityReportedAt,
             modelName: modelName ?? (policy.features.contains(.vehicleIdentity) ? previous.modelName : nil),
             modelYear: modelYear ?? (policy.features.contains(.vehicleIdentity) ? previous.modelYear : nil),
             registrationNo: registrationNo ?? (policy.features.contains(.vehicleIdentity) ? previous.registrationNo : nil),
@@ -135,6 +155,10 @@ extension VehicleIdentitySnapshot {
             accountMarket: accountMarket ?? previous.accountMarket,
             upholstery: upholstery ?? previous.upholstery,
             steeringOrientation: steeringOrientation ?? previous.steeringOrientation,
+            driveType: driveType ?? previous.driveType,
+            enginePowerKw: enginePowerKw ?? previous.enginePowerKw,
+            grossWeightKg: grossWeightKg ?? previous.grossWeightKg,
+            numberOfSeats: numberOfSeats ?? previous.numberOfSeats,
             imageData: imageData ?? (policy.features.contains(.vehicleImage)
                 ? (previous.imageData ?? imageBackfill.exterior) : nil),
             interiorImageData: interiorImageData ?? (policy.features.contains(.vehicleImage)

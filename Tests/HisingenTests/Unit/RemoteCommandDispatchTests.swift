@@ -541,5 +541,5 @@ private final class DispatchMock: RemoteCommandDispatching, CommandExecutionCont
 
 @MainActor
 private final class AlwaysAllowAuthorizer: RemoteActionAuthorizing {
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool { true }
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool { true }
 }

@@ -136,4 +136,59 @@ struct RemoteActionAuthorizerTests {
         #expect(RemoteCommand.unlock.risk.requiresDeviceOwnerAuthentication)
         #expect(!RemoteCommand.lock.risk.requiresDeviceOwnerAuthentication)
     }
+
+    @Test("A deep link asks for confirmation even for a routine command")
+    func deepLinkRoutineCommandAsksForConfirmation() async {
+        let scoped = preferences("authorizer-deeplink-routine", biometrics: false)
+        let recorder = Recorder()
+
+        for command in [RemoteCommand.lock, .closeWindows, .stopClimate, .setChargeTarget(30)] {
+            #expect(command.risk == .routine)
+            let allowed = await recorder.authorizer(preferences: scoped.store)
+                .authorize(command, vehicle: "Test Car", origin: .deepLink)
+            #expect(allowed)
+        }
+        #expect(recorder.confirmations == [.lock, .closeWindows, .stopClimate, .setChargeTarget(30)])
+        // The sheet is the whole requirement for a routine command; no owner check is added.
+        #expect(recorder.authenticationReasons.isEmpty)
+    }
+
+    @Test("A declined deep-link confirmation refuses the command")
+    func declinedDeepLinkIsRefused() async {
+        let scoped = preferences("authorizer-deeplink-declined", biometrics: false)
+        let recorder = Recorder()
+        recorder.confirmAnswer = false
+
+        let allowed = await recorder.authorizer(preferences: scoped.store)
+            .authorize(.closeWindows, vehicle: "Test Car", origin: .deepLink)
+
+        #expect(!allowed)
+        #expect(recorder.confirmations == [.closeWindows])
+        #expect(recorder.authenticationReasons.isEmpty)
+    }
+
+    @Test("A deep link for a security-sensitive command still runs both steps once")
+    func deepLinkSecuritySensitiveCommandRunsBothSteps() async {
+        let scoped = preferences("authorizer-deeplink-unlock", biometrics: false)
+        let recorder = Recorder()
+
+        let allowed = await recorder.authorizer(preferences: scoped.store)
+            .authorize(.unlock, vehicle: "Test Car", origin: .deepLink)
+
+        #expect(allowed)
+        #expect(recorder.confirmations == [.unlock])
+        #expect(recorder.authenticationReasons.count == 1)
+    }
+
+    @Test("The same routine command from the app itself is still silent")
+    func userInitiatedRoutineCommandStaysSilent() async {
+        let scoped = preferences("authorizer-user-routine", biometrics: false)
+        let recorder = Recorder()
+
+        let allowed = await recorder.authorizer(preferences: scoped.store)
+            .authorize(.closeWindows, vehicle: "Test Car", origin: .userInitiated)
+
+        #expect(allowed)
+        #expect(recorder.confirmations.isEmpty)
+    }
 }
