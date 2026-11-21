@@ -520,6 +520,16 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
     }
 
     func support(for capability: VehicleCapability) -> VehicleCapabilitySupport {
+        // A provider that cannot execute a capability does not support it, whatever the vehicle
+        // or a live probe reports. Polestar's C3 invocation surface has no engine command and no
+        // reduced-guard lock: `ProviderCommandCatalog` refuses both and `PolestarGRPCRemote`
+        // throws. `GetMyCars` advertising either (lock_type 3 does advertise reduced guard, and
+        // a module's field 27 engine flag is recorded the same way) would otherwise outrank the
+        // model table at the `advertised[capability] == true` branch below and promise a control
+        // that can only fail at dispatch.
+        if model.brand == .polestar, capability == .engineStart || capability == .reducedGuardLock {
+            return .unavailable
+        }
         if let supported = advertised[capability], !supported { return .unavailable }
         if let probed, !probed.isStale,
            let observed = probed.support(for: capability) {
@@ -590,7 +600,12 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .unavailable
-            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations:
+            // Climate timers and charging schedules are listed here for the same reason as
+            // windows and trunk: Volvo's public API exposes neither a timer resource nor a
+            // schedule write, so `.backendDependent` only rendered a control that could never
+            // succeed (the climate-timer button and a dimmed Charging Controls card).
+            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations,
+                 .climateTimers, .chargingSchedule:
                 return .unavailable
             // Volvo's public APIs expose no software/OTA resource at all – not a backend
             // that might answer on some vehicles, but an endpoint that does not exist.
@@ -623,7 +638,8 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             // No public write endpoint exists for these on this platform. Leaving them at
             // `.backendDependent` rendered controls that could only fail after the tap.
             case .windows, .trunk, .chargeTarget, .chargingCurrentLimit,
-                 .chargingScheduleOverride, .chargeLocations, .preCleaning:
+                 .chargingScheduleOverride, .chargeLocations, .preCleaning,
+                 .climateTimers, .chargingSchedule:
                 return .unavailable
             case .softwareInstallControl, .softwareStatus:
                 return .unavailable

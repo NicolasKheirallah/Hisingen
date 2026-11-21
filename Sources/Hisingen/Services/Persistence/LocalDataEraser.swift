@@ -63,14 +63,19 @@ final class LocalDataEraser {
     private let imageCache: CarImageCache
     private let memoryCaches: VehicleMemoryCacheRegistry
     private let beforeSQL: (@Sendable () -> Void)?
+    /// Removes the desktop widget's App Group mirror. Injectable so a test can assert the erase
+    /// reaches it without touching the real container.
+    private let clearWidgetSnapshot: @Sendable () -> Void
 
     init(database: VehicleDatabase, preferences: PreferencesStore, imageCache: CarImageCache,
-         memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil) {
+         memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil,
+         clearWidgetSnapshot: @escaping @Sendable () -> Void = { WidgetSnapshotWriter.remove() }) {
         self.database = database
         self.preferences = preferences
         self.imageCache = imageCache
         self.memoryCaches = memoryCaches
         self.beforeSQL = beforeSQL
+        self.clearWidgetSnapshot = clearWidgetSnapshot
     }
 
     /// The complete sequence on the calling actor. The session teardown path uses this: it must
@@ -134,6 +139,17 @@ final class LocalDataEraser {
     }
 
     private func applyLocalTiers(_ scope: Scope) {
+        // The widget mirrors the active car from an App Group file the database never touches.
+        // A wipe that covers that car, or the whole fleet, has to take it too: otherwise
+        // "erase local data" leaves the VIN, nickname, charge level and next departure readable
+        // in the container. A sign-out already clears it on its own path; this covers the
+        // Settings wipe, which never signs out.
+        switch scope {
+        case .session(let vehicles), .detach(let vehicles), .everything(let vehicles):
+            if vehicles.covers(preferences.vin) { clearWidgetSnapshot() }
+        case .locations, .samples, .compact:
+            break
+        }
         // Both full erases below move the mirror with the row it mirrors: an old snapshot or
         // command receipt reappears after relaunch if the mirror is left behind, and the
         // in-memory tiers have to move with the mirror or the erased snapshot keeps answering

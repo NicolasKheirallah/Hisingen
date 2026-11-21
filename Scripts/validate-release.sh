@@ -18,6 +18,21 @@ esac
 test -d "$APP_PATH" || { echo "Missing app: $APP_PATH" >&2; exit 1; }
 test -s "$DMG_PATH" || { echo "Missing or empty DMG: $DMG_PATH" >&2; exit 1; }
 test -x "$APP_PATH/Contents/MacOS/Hisingen"
+
+# The widget is a hand-assembled .appex, so nothing in Xcode's build checks its shape. An app
+# extension must be typed XPC! and declare the widget point, or pluginkit ignores it while every
+# other check here still passes. Assert it before the signature, so a missing/wrong bundle fails
+# the build instead of shipping a widget that never appears.
+appex="$APP_PATH/Contents/PlugIns/HisingenWidget.appex"
+test -d "$appex" || { echo "Missing widget appex: $appex" >&2; exit 1; }
+test -x "$appex/Contents/MacOS/HisingenWidget" || { echo "Missing widget binary" >&2; exit 1; }
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$appex/Contents/Info.plist" 2>/dev/null)" = 'XPC!' || {
+    echo 'Widget appex is not typed XPC!' >&2; exit 1; }
+test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$appex/Contents/Info.plist" 2>/dev/null)" = 'com.apple.widgetkit-extension' || {
+    echo 'Widget appex does not declare the WidgetKit extension point' >&2; exit 1; }
+plutil -lint "$appex/Contents/Info.plist" >/dev/null
+codesign --verify --strict --verbose=2 "$appex"
+
 plutil -lint "$APP_PATH/Contents/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP_PATH/Contents/Info.plist")" = true
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

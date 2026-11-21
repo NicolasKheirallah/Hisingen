@@ -51,10 +51,14 @@ extension InfoTabView {
                                   ? L10n.text("The vehicle reports plug and charge, but the backend returned no plug-and-charge ID for it.")
                                   : nil)
                     }
+                    // Polestar fits a fixed panoramic glass roof and this app has no sunroof
+                    // command, so the label deliberately omits "Remote Control": the row reports
+                    // the roof the car describes, never a control the app cannot offer. Volvo
+                    // models with an operable sunroof belong to the Volvo command-list path.
                     if let sunroof = caps.supportsSunroofControl {
-                        KVRow(L10n.text("Sunroof Remote Control"),
+                        KVRow(L10n.text("Sunroof"),
                               sunroof ? L10n.text("Reported supported") : L10n.text("Not reported"),
-                              symbol: "sun.max.trianglebadge.exclamationmark")
+                              symbol: "sun.max")
                     }
                     if let plate = caps.registrationPlate?.trimmingCharacters(in: .whitespacesAndNewlines), !plate.isEmpty {
                         KVRow(L10n.text("Backend Registration Plate"), plate, symbol: "rectangle.inset.filled.badge.record")

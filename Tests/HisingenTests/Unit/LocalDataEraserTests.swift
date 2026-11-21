@@ -98,6 +98,44 @@ struct LocalDataEraserTests {
         #expect(remaining == nil)
     }
 
+    @Test
+    func erasingTheActiveVehiclesDataRemovesTheWidgetSnapshot() throws {
+        let suite = "LocalDataEraserWidget.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.vin = "WIDGET-VIN"
+        let database = VehicleDatabase(database: try SQLiteDatabase.inMemory())
+        let recorder = WidgetClearRecorder()
+        let eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: CarImageCache(),
+            memoryCaches: VehicleMemoryCacheRegistry(),
+            clearWidgetSnapshot: { recorder.record() })
+
+        try eraser.perform(.everything(.vehicle("WIDGET-VIN")))
+
+        #expect(recorder.calls == 1)
+    }
+
+    @Test
+    func erasingAnotherVehiclesDataKeepsTheWidgetSnapshot() throws {
+        let suite = "LocalDataEraserWidgetOther.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.vin = "WIDGET-VIN"
+        let database = VehicleDatabase(database: try SQLiteDatabase.inMemory())
+        let recorder = WidgetClearRecorder()
+        let eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: CarImageCache(),
+            memoryCaches: VehicleMemoryCacheRegistry(),
+            clearWidgetSnapshot: { recorder.record() })
+
+        try eraser.perform(.everything(.vehicle("OTHER-VIN")))
+
+        #expect(recorder.calls == 0)
+    }
+
     private func makeEraser() throws -> (LocalDataEraser, VehicleDatabase, PreferencesStore, SQLiteDatabase, () -> Void) {
         let suite = "LocalDataEraserTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -114,5 +152,23 @@ struct LocalDataEraserTests {
         let sessionId = database.charging.startChargingSession(vin: vin, startSoc: 20)
         database.charging.recordChargingSample(
             sessionId: sessionId, vin: vin, soc: 20, powerKw: 10, voltage: 230, current: 16)
+    }
+}
+
+/// Counts widget-snapshot removals from the erase closure.
+private final class WidgetClearRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var calls: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func record() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }

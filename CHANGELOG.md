@@ -3,6 +3,36 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Polestar no longer claims **remote engine start** or **lock with reduced guard**. Both used to
+  read as supported — engine start fell through the Polestar model table's default branch, and a
+  car reporting `lock_type` 3 advertised reduced guard — even though no invocation exists for
+  either. The capability inspector and the Settings matrix now say not available, matching what
+  the command catalog and transport already refused.
+- Volvo no longer offers **climate timers** or **charging schedules**. Volvo's public API has
+  neither a timer resource nor a schedule write, so the climate-timer button and a permanently
+  dimmed Charging Controls card could only fail; the capability profile now marks both
+  unavailable.
+- The Polestar Info tab no longer presents the fixed panoramic glass roof as a **sunroof remote
+  control**. The row reports the roof the car describes, without promising a control the app
+  cannot offer.
+- The car-image loader falls back to the front three-quarter or side render when the car's pool
+  does not carry the requested angle. The fallback existed but was only exercised by tests, so a
+  partial pool rendered no image; bytes are cached under the angle actually served.
+- **Erase local data** now also removes the desktop widget's App Group snapshot. Previously only
+  the sign-out path removed it, so a Settings wipe could leave the VIN, nickname, charge level and
+  next departure readable by the widget.
+- The widget extension is declared as an `XPC!` app extension instead of an application. Release
+  validation now asserts the appex exists, is typed correctly, declares the WidgetKit extension
+  point and passes a strict signature check, so a hand-assembled bundle cannot ship with a widget
+  PlugInKit ignores.
+- `PRIVACY.md` now matches the code: signing out clears cached snapshots, charging baselines and
+  command receipts, and clears the vehicle-history database only when **Erase local history on
+  sign out** is enabled (off by default).
+
 ## [3.0.2] - 2026-11-21
 
 ### Added
