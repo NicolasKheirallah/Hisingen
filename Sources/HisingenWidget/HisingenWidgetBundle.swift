@@ -2,8 +2,9 @@ import SwiftUI
 import WidgetKit
 
 /// The desktop widget: battery, range, charging state and the next departure, exactly as
-/// the app's last completed refresh read them. Display only; a tap deep-links into the app
-/// on the existing `hisingen://` routes, and no command is ever sent from the widget.
+/// the app's last completed refresh read them. The data area deep-links into the app on the
+/// existing `hisingen://` routes. The action row's lock, unlock, climate and refresh buttons
+/// are App Intents that open the app and run there; the extension itself sends no command.
 struct VehicleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "io.kheirallah.hisingen.vehicle", provider: VehicleTimelineProvider()) { entry in

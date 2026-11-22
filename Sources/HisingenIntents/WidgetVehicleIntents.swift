@@ -5,55 +5,94 @@ import Foundation
 /// cannot import the app executable: the extension names the same types the app links, and
 /// `Metadata.appintents` for the extension is built from this module as a dependency.
 ///
-/// All three set `openAppWhenRun`: the app performs them through
+/// All four set `openAppWhenRun`: the app performs them through
 /// `VehicleWidgetCommandRouter`, so a button never reaches a vehicle backend from inside the
 /// extension and the command takes the app's confirmation and capability gates.
 
-struct WidgetLockVehicleIntent: AppIntent {
-    static let title: LocalizedStringResource = "Lock Vehicle"
-    static let description = IntentDescription("Locks the vehicle doors.")
-    static let openAppWhenRun = true
+public struct WidgetLockVehicleIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Lock Vehicle"
+    public static let description = IntentDescription("Locks the vehicle doors.")
+    public static let openAppWhenRun = true
 
     @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
-    var vehicle: String?
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
 
     @MainActor
-    func perform() async throws -> some ProvidesDialog {
+    public func perform() async throws -> some ProvidesDialog {
         try await WidgetVehicleIntentDialog.result(for: .lock, vehicle: vehicle)
     }
 }
 
-struct WidgetUnlockVehicleIntent: AppIntent {
-    static let title: LocalizedStringResource = "Unlock Vehicle"
-    static let description = IntentDescription("Unlocks the vehicle doors.")
-    static let openAppWhenRun = true
+public struct WidgetUnlockVehicleIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Unlock Vehicle"
+    public static let description = IntentDescription("Unlocks the vehicle doors.")
+    public static let openAppWhenRun = true
 
     @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
-    var vehicle: String?
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
 
     @MainActor
-    func perform() async throws -> some ProvidesDialog {
+    public func perform() async throws -> some ProvidesDialog {
         try await WidgetVehicleIntentDialog.result(for: .unlock, vehicle: vehicle)
     }
 }
 
-struct WidgetStartClimateIntent: AppIntent {
-    static let title: LocalizedStringResource = "Start Cabin Climate"
-    static let description = IntentDescription("Starts cabin climate preconditioning.")
-    static let openAppWhenRun = true
+public struct WidgetStartClimateIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Start Cabin Climate"
+    public static let description = IntentDescription("Starts cabin climate preconditioning.")
+    public static let openAppWhenRun = true
 
     @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
-    var vehicle: String?
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
 
     @MainActor
-    func perform() async throws -> some ProvidesDialog {
+    public func perform() async throws -> some ProvidesDialog {
         try await WidgetVehicleIntentDialog.result(for: .startClimate, vehicle: vehicle)
     }
 }
 
-/// Shared dialog construction for the three intents. A missing handler is the one case the
-/// app cannot describe — it is not running — so that sentence is localised here and shipped
-/// in the same language tables the widget reads.
+/// Refresh has no vehicle parameter: the app refreshes the car its panel is showing, the same
+/// action the panel's refresh command and the Shortcuts intent use.
+public struct WidgetRefreshVehicleIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Refresh Vehicle Data"
+    public static let description = IntentDescription("Asks Hisingen to fetch fresh vehicle data from the provider now.")
+    public static let openAppWhenRun = true
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some ProvidesDialog {
+        try await WidgetVehicleIntentDialog.result(for: .refresh, vehicle: nil)
+    }
+}
+
+/// Shared dialog construction for the four intents. A missing handler is the one case the
+/// app cannot describe (it is not running), so that sentence is localised here and shipped in
+/// the same language tables the widget reads.
 @MainActor
 private enum WidgetVehicleIntentDialog {
     static func result(for command: VehicleWidgetCommand,

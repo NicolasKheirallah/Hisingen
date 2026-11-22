@@ -7,8 +7,9 @@ struct VehicleWidgetEntry: TimelineEntry, Equatable, Sendable {
     let date: Date
     let snapshot: VehicleWidgetSnapshot?
 
-    /// Where a tap takes the reader: the car's own view when a snapshot exists, the panel
-    /// toggle when it does not. The widget never sends a command itself.
+    /// Where a tap on the data area takes the reader: the car's own view when a snapshot
+    /// exists, the panel toggle when it does not. Command buttons carry their own intents, so
+    /// the extension never sends a command itself.
     var link: URL {
         guard let snapshot else { return URL(string: "hisingen://status")! }
         let vin = snapshot.vin.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? snapshot.vin

@@ -1,7 +1,7 @@
 # App Intents metadata
 
 Hisingen ships 33 App Intents, 10 `AppShortcut` groups and a Focus filter in the app, plus
-the three widget-facing intents in the shared `HisingenIntents` target. The build produces
+the four widget-facing intents in the shared `HisingenIntents` target. The build produces
 `Metadata.appintents` for the app and a second bundle inside `HisingenWidget.appex`, so Shortcuts,
 Siri, the Focus filter and interactive widget buttons can discover what they run.
 
@@ -61,9 +61,10 @@ either the app or the extension, so a missing bundle cannot ship silently.
 
 ## What this unblocks
 
-- **Interactive widget buttons** and **real Control Center actions** now have the extension-side
-  metadata they need: the shared intents are discoverable from `HisingenWidget.appex`, and each runs
-  with `openAppWhenRun`, so the app performs it through the registered handler.
+- **Interactive widget buttons** have the extension-side metadata they need: the vehicle
+  status widget's lock, unlock, start-climate and refresh buttons name the shared intents from
+  `HisingenWidget.appex`, and each runs with `openAppWhenRun`, so the app performs it through the
+  registered handler and its normal capability gates.
+- **Real Control Center actions** can reuse the same intents; the current controls remain deep
+  links, so the metadata is the part that is ready.
 - The Focus filter and the `AppShortcut` phrases are discoverable from the app bundle.
-- No widget button uses these intents yet. The foundation is the shared target, its registration
-  seam and both metadata bundles; wiring a `Button(intent:)` is the next change.
