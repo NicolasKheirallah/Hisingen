@@ -4004,3 +4004,9 @@
 "This vehicle does not support this command." = "이 차량은 이 명령을 지원하지 않습니다.";
 
 "This vehicle service reports this value but cannot change it." = "이 차량 서비스는 이 값을 표시하지만 변경할 수는 없습니다.";
+
+"Volvo connected – location unavailable" = "Volvo 연결됨: 위치 사용 불가";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo 개발자 애플리케이션이 차량 위치 권한에 대해 승인되지 않았습니다. 잠금, 엔진 시동, 경적 및 조명 깜빡임은 정상적으로 연결되었습니다. 지도에서 차량을 보려면 developer.volvocars.com에서 위치 권한을 요청하세요.";
+"Granted on the current session: %@" = "현재 세션에 허용됨: %@";
+"None of the approved permissions are granted on the current session." = "현재 세션에서 승인된 권한이 하나도 허용되지 않았습니다.";
+"Engine start" = "엔진 시동";

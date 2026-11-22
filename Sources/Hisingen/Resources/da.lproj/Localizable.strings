@@ -4011,3 +4011,9 @@
 "This vehicle does not support this command." = "Denne bil understøtter ikke kommandoen.";
 
 "This vehicle service reports this value but cannot change it." = "Denne køretøjstjeneste kan vise værdien, men ikke ændre den.";
+
+"Volvo connected – location unavailable" = "Volvo tilsluttet – position utilgængelig";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Din Volvo-udviklerapplikation er ikke godkendt til køretøjets position. Låsning, motorstart og tud/blink blev tilsluttet som normalt; anmod om position på developer.volvocars.com for at se bilen på kortet.";
+"Granted on the current session: %@" = "Godkendt på den aktuelle session: %@";
+"None of the approved permissions are granted on the current session." = "Ingen af de godkendte tilladelser er godkendt på den aktuelle session.";
+"Engine start" = "Motorstart";

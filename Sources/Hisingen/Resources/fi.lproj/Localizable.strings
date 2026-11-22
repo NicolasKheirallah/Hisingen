@@ -4004,3 +4004,9 @@
 "This vehicle does not support this command." = "Tämä auto ei tue tätä komentoa.";
 
 "This vehicle service reports this value but cannot change it." = "Tämä ajoneuvopalvelu näyttää tämän arvon mutta ei voi muuttaa sitä.";
+
+"Volvo connected – location unavailable" = "Volvo yhdistetty: sijainti ei ole käytettävissä";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo-kehittäjäsovellusta ei ole hyväksytty ajoneuvon sijaintiin. Lukitus, moottorin käynnistys ja tööttäys/vilkutus yhdistettiin tavalliseen tapaan; pyydä sijainti osoitteessa developer.volvocars.com, jotta näet auton kartalla.";
+"Granted on the current session: %@" = "Myönnetty nykyisessä istunnossa: %@";
+"None of the approved permissions are granted on the current session." = "Mikään hyväksytyistä oikeuksista ei ole myönnetty nykyisessä istunnossa.";
+"Engine start" = "Moottorin käynnistys";

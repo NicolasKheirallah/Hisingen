@@ -40,7 +40,8 @@ struct ControlsCommandGate {
             polestarConnectionMode: preferences.polestarConnectionMode,
             enabledFeatures: features,
             commandInProgress: ignoreBusy ? false : remoteCommandInProgress,
-            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
+            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled,
+            volvoGrantedScopes: Set(preferences.volvoGrantedScopes)
         )
     }
 
