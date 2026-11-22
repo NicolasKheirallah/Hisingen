@@ -5,6 +5,7 @@ import Testing
 /// Reading Freshness now names the transport that answered, but only when that transport is
 /// not the usual one. These pins hold both halves of that rule: portal-mode rows explain
 /// themselves, Polestar ID rows stay quiet.
+@MainActor
 struct FreshnessSourceWordTests {
 
     private func value(source: VehicleReadingSource?) -> String {
