@@ -54,11 +54,18 @@ extension VolvoAPI {
     }
 
     func completeSignIn(callbackURL: URL, preferredVIN: String?) async throws {
-        // The flow validates scheme, host, path, and state against the pending values and only
-        // then consumes them, so a stray or forged callback cannot break the genuine sign-in.
-        let appCallbackURI = URL(string: "hisingen://oauth/volvo/callback")!
-        let callbackRedirectURI = callbackURL.scheme == appCallbackURI.scheme ? appCallbackURI : redirectURI
-        let completion = try authorizationFlow.consume(callbackURL: callbackURL, redirectURL: callbackRedirectURI)
+        // The presenter refuses a misrouted callback, but the exchange must not depend on that.
+        // Both ask `VolvoCallback`, so a crafted redirect that reaches this method is refused
+        // before its code is sent anywhere, and the refusal is logged without the query.
+        guard let registered = VolvoCallback.registration(for: callbackURL) else {
+            let refusal = VolvoCallback.refusal(for: callbackURL)
+            logger.notice("\(refusal?.logMessage ?? "Refused Volvo sign-in callback", privacy: .public)")
+            throw VolvoError.authenticationRequired(.callbackRejected)
+        }
+        // The flow then validates scheme, host, path, and state against the pending values and
+        // consumes them only once they match, so a stray or forged callback cannot break the
+        // genuine sign-in: a refusal here leaves the pending attempt retryable.
+        let completion = try authorizationFlow.consume(callbackURL: callbackURL, redirectURL: registered)
         try await exchangeCodeForToken(completion.code, verifier: completion.verifier)
         try await discoverVehicles(preferredVIN: preferredVIN)
     }
