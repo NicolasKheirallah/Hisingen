@@ -17,6 +17,7 @@
 │   ├── Support/          Format, L10n, PKCE: small stateless helpers
 │   ├── Resources/        Assets.xcassets, .lproj localization bundles
 │   └── UI/               StatusItemController (AppKit) + SwiftUI views
+├── Sources/HisingenIntents/  Shared AppIntent types + command router linked by the app and widget
 ├── Sources/HisingenWidget/  WidgetKit extension target: desktop widget + Control Center controls
 ├── Tests/HisingenTests/
 │   ├── Unit/             18 files, Swift Testing, no network
@@ -30,7 +31,7 @@
 │   ├── dependabot.yml      Weekly updates for pinned GitHub Actions SHAs and (future) SwiftPM dependencies
 │   ├── ISSUE_TEMPLATE/     bug_report.md, feature_request.md, vehicle_compatibility.md, config.yml
 │   └── pull_request_template.md
-├── Package.swift         SPM manifest: app + widget targets, pinned Sparkle updater dependency
+├── Package.swift         SPM manifest: app, shared intents and widget targets, pinned Sparkle updater dependency
 ├── Makefile              build/test/package/release orchestration
 ├── README.md             User-facing project README
 ├── SECURITY.md           Vulnerability reporting policy: see security/overview.md

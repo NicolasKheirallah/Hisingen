@@ -657,6 +657,7 @@
 "Open Hisingen Settings to reconnect your %@ account." = "%@ 계정을 다시 연결하려면 Hisingen 설정을 여세요.";
 "Open Hisingen Settings to reconnect your Polestar account." = "Hisingen 설정을 열어 Polestar 계정을 다시 연결하세요.";
 "Open Hisingen for details." = "자세한 내용은 Hisingen을 여세요.";
+"Open Hisingen to send this command." = "이 명령을 보내려면 Hisingen을 여세요.";
 "Open Release Page" = "릴리스 페이지 열기";
 "Open Settings" = "설정 열기";
 "Open Settings & Sign In" = "설정 열고 로그인";

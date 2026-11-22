@@ -1,7 +1,9 @@
 # App Intents metadata
 
-Hisingen ships 24 App Intents, 10 `AppShortcut` groups and a Focus filter. The build produces
-`Metadata.appintents`, so Shortcuts, Siri and the Focus filter can discover all of them.
+Hisingen ships 33 App Intents, 10 `AppShortcut` groups and a Focus filter in the app, plus
+the three widget-facing intents in the shared `HisingenIntents` target. The build produces
+`Metadata.appintents` for the app and a second bundle inside `HisingenWidget.appex`, so Shortcuts,
+Siri, the Focus filter and interactive widget buttons can discover what they run.
 
 Check a built bundle in one step:
 
@@ -20,19 +22,28 @@ Xcode asks for them through the `SWIFT_ENABLE_EMIT_CONST_VALUES` build setting, 
 `Scripts/generate-appintents-metadata.sh` provides one:
 
 1. Read the module's own compile command from SwiftPM's verbose output (`swift build -c release -v`).
-   The command is cached per dependency graph, so a clean checkout pays for it once.
+   The command is cached per module and dependency graph, so a clean checkout pays for it once.
 2. Replay it in the same batch shape SwiftPM uses — `-filelist` plus `-output-filelist`, one object
    per source — with `-const-gather-protocols-file` and `-emit-const-values-path` added, writing the
    objects into a throwaway directory. `-O` becomes `-Onone`: optimisation is irrelevant to
    compile-time constants and roughly halves the run.
 3. Run `appintentsmetadataprocessor` over those values and write `Metadata.appintents`.
 
-`make app` runs this step and installs the bundle at `Contents/Resources/Metadata.appintents`.
-`SKIP_APPINTENTS=1 make app` leaves it out for a quick bundle-only iteration; the app still runs,
-and Shortcuts then lists nothing.
+The script takes `--module` and `--source-directory`, so the same mechanism covers the app, the
+shared intent module and the widget extension.
 
-`Scripts/validate-release.sh --artifacts` fails a release that carries no populated metadata, so a
-missing bundle cannot ship silently. `REQUIRE_APPINTENTS=false` opts out for a deliberate build.
+`make app` runs this step and installs the app bundle at `Contents/Resources/Metadata.appintents`.
+For the extension, `Scripts/generate-widget-appintents-metadata.sh` builds
+`HisingenIntents.appintents`, then asks the processor to fold it into the widget module's bundle
+through `--static-metadata-file-list`; the result lands at
+`HisingenWidget.appex/Contents/Resources/Metadata.appintents`. The shared target is a static SwiftPM
+dependency, which is why it belongs in the static list: a normal dependency list leaves its actions
+out. `SKIP_APPINTENTS=1 make app` leaves both bundles out for a quick bundle-only iteration; the app
+still runs, and Shortcuts then lists nothing.
+
+`Scripts/validate-release.sh --artifacts` fails a release that carries no populated metadata in
+either the app or the extension, so a missing bundle cannot ship silently.
+`REQUIRE_APPINTENTS=false` opts out for a deliberate build.
 
 ## Facts worth keeping
 
@@ -42,10 +53,17 @@ missing bundle cannot ship silently. `REQUIRE_APPINTENTS=false` opts out for a d
 - The extractor matches source paths exactly; it wants the same relative paths the compiler was
   given, not absolute ones.
 - `-O` versus `-Onone` does not change the extracted values, only the time it takes.
+- Intent metadata records a **module-qualified** type name. The extension's bundle must keep the
+  shared types qualified as `HisingenIntents.WidgetLockVehicleIntent`; copying the shared bundle
+  under the widget's module name would name a type that does not exist in the binary.
+- `--metadata-file-list` is for dynamic dependencies; `--static-metadata-file-list` is for static
+  ones. SwiftPM target dependencies are static.
 
 ## What this unblocks
 
-- **Interactive widget buttons** and **real Control Center actions** still need the widget target's
-  own `Metadata.appintents`, built the same way from that module.
-- The Focus filter and the `AppShortcut` phrases are discoverable now that the app bundle carries
-  metadata.
+- **Interactive widget buttons** and **real Control Center actions** now have the extension-side
+  metadata they need: the shared intents are discoverable from `HisingenWidget.appex`, and each runs
+  with `openAppWhenRun`, so the app performs it through the registered handler.
+- The Focus filter and the `AppShortcut` phrases are discoverable from the app bundle.
+- No widget button uses these intents yet. The foundation is the shared target, its registration
+  seam and both metadata bundles; wiring a `Button(intent:)` is the next change.

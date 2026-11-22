@@ -1,5 +1,6 @@
 import AppKit
 import CoreSpotlight
+import HisingenIntents
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -196,6 +197,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // through a URL open and polling the command audit table.
         AutomationHandoff.install(self)
         AutomationHandoff.installRefreshAction { [weak self] in self?.refreshNow() }
+        // The shared widget intents run in this process (openAppWhenRun), so they need the
+        // app's dispatcher registered before a button tap can perform one.
+        VehicleWidgetCommandRouter.install(WidgetIntentCommandHandler())
         updateController = UpdateController(context: self, preferences: preferences)
         vehicleSession.primeDisplayState()
         // Before any sign-in flow can run: installs upgrading from earlier versions carry

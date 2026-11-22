@@ -18,7 +18,23 @@ The widget is display only. Tapping it opens the app on the existing `hisingen:/
 `select-car?vin=…` when a snapshot names a car, `status` when nothing is on file. The
 Control Center buttons open `lock?vin=…` and `climate/start?vin=…`, which the app treats
 as any other deep link and asks for confirmation before sending. Nothing in the extension
-talks to a vehicle backend, and no App Intents metadata is required for this design.
+talks to a vehicle backend.
+
+## Shared intent foundation
+
+The extension and the app both link `HisingenIntents` (`Sources/HisingenIntents/`), a small
+SwiftPM target holding the widget-facing `AppIntent` types and
+`VehicleWidgetCommandRouter`. An extension cannot link the app executable, so the types
+cannot live in the app; the app instead installs
+`VehicleWidgetCommandHandler` at launch, and each shared intent sets `openAppWhenRun` so the
+command runs in the app through the same capability gates, confirmation and audit path as
+the panel. The router awaits the install, so a button tapped during launch queues instead of
+failing on an empty registry.
+
+`make app` builds the extension's `Metadata.appintents` from that module as a static
+dependency (see [app-intents-metadata.md](app-intents-metadata.md)), so the intent types are
+discoverable from the extension. No widget button uses them yet: this is the platform the
+next change builds on, and the existing deep links remain the interaction model until then.
 
 ## How data reaches the widget
 
@@ -61,15 +77,17 @@ staleness thresholds are pinned widget side.
 The Makefile copies the app's `.lproj` folders into the `.appex`, so the widget resolves
 the same English-key tables. The keys the widget needs (Battery, Estimated Range,
 Charging, Departure, Checked %@, the age strings, No vehicle data yet) already exist in
-every shipped language. The keys this work adds travel in
-`l10n-drafts/widget-controls.strings` until they are merged into the tables; until then
-the widget falls back to the English keys, exactly as `L10n` does for an untranslated key.
+every shipped language. The shared intents reuse the app's existing intent titles, and the
+one sentence only they own — "Open Hisingen to send this command." — is translated in every
+shipped language table. A missing translation falls back to the English key, exactly as
+`L10n` does for an untranslated key.
 
 ## Packaging and signing
 
 `make build` compiles the extension alongside the app. `make app` additionally lints the
 extension's plist, assembles `HisingenWidget.appex` (binary, plist with version strings
-synced from the app's, `.lproj` copies), and signs the extension first with
+synced from the app's, `.lproj` copies, the extension's `Metadata.appintents`), and signs
+the extension first with
 `Resources/HisingenWidget.entitlements`, then the app with
 `Resources/Hisingen.entitlements`, without `--deep`: codesign's man page warns that
 `--deep` applies every signing option to all nested content, which would stamp the app's
@@ -79,9 +97,9 @@ binary beside the app's.
 
 ## Deliberate limits
 
-- **No interactive buttons in the widget.** App Intents metadata emission is not available
-  to a SwiftPM build (a separate work item), so interactive widget buttons cannot be
-  produced here; `widgetURL` deep links are the whole interaction model instead.
+- **No interactive buttons yet.** The shared intents and the extension's metadata are in
+  place, but no `Button(intent:)` uses them; `widgetURL` deep links are still the whole
+  interaction model. Wiring the first button is a separate change.
 - **The live colour is amber, not the reader's theme accent.** Reader-made themes live in
   the app's database, which the App Group container does not carry.
 - **One car.** The snapshot is the active car's; there is no per-car widget yet.
@@ -99,6 +117,11 @@ Honesty ledger for what was verified against what was assumed:
    `OpenURLIntent` compiles and links against the macOS 26.5 SDK, and needs no custom
    App Intents metadata. Live check: install a signed build on macOS 26 and confirm both
    controls appear in Control Center's customization list and open the app.
-3. **App Group container access.** Both processes declare the group in entitlements;
+3. **Widget intent metadata.** `make app` produces
+   `HisingenWidget.appex/Contents/Resources/Metadata.appintents` with the three shared
+   intents, qualified as `HisingenIntents.*`; `Scripts/validate-release.sh --artifacts`
+   checks it. Live check: install a signed build and confirm the intents resolve from the
+   extension once a button uses them.
+4. **App Group container access.** Both processes declare the group in entitlements;
    macOS also honours the container for unsandboxed processes. Live check: run the signed
    pair and confirm the widget renders the app's snapshot bytes.

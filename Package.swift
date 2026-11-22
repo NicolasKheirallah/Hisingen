@@ -60,9 +60,17 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.5"),
     ],
     targets: [
+        // Shared with the widget extension: the widget-facing AppIntent types and the seam the
+        // app registers at launch. An extension cannot link the app executable, so the types
+        // and the dispatch protocol must live in a module both targets can depend on.
+        .target(
+            name: "HisingenIntents",
+            path: "Sources/HisingenIntents"
+        ),
         .executableTarget(
             name: "Hisingen",
             dependencies: [
+                "HisingenIntents",
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport")
@@ -85,9 +93,11 @@ let package = Package(
         .executableTarget(
             name: "HisingenWidget",
             // WidgetKit extension. The .appex bundle is hand-assembled by the Makefile the
-            // same way the app is; SwiftPM only produces the binary here. Display-only by
-            // design: interactive widget buttons need App Intents metadata emission, which
-            // a SwiftPM build cannot produce yet, so taps deep-link on hisingen://.
+            // same way the app is; SwiftPM only produces the binary here. It links the shared
+            // intent module so the widget and the app register the same intent types; the
+            // extension's Metadata.appintents is assembled from that dependency by
+            // Scripts/generate-widget-appintents-metadata.sh.
+            dependencies: ["HisingenIntents"],
             path: "Sources/HisingenWidget"
         ),
         .testTarget(

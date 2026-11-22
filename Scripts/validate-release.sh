@@ -52,6 +52,24 @@ if not shortcuts:
     raise SystemExit("App Intents metadata lists no App Shortcuts")
 print(f"App Intents metadata: {len(intents)} intents, {len(shortcuts)} shortcut groups")
 ' "$metadata/extract.actionsdata"
+
+    # The widget extension carries its own metadata: its intents live in the shared
+    # HisingenIntents module, and a missing bundle makes every interactive button inert
+    # without failing any other build step.
+    widget_metadata="$appex/Contents/Resources/Metadata.appintents"
+    test -d "$widget_metadata" || { echo "Missing widget App Intents metadata: $widget_metadata" >&2; exit 1; }
+    test -s "$widget_metadata/version.json" || { echo 'Widget App Intents metadata has no version.json' >&2; exit 1; }
+    test -s "$widget_metadata/extract.actionsdata" || { echo 'Widget App Intents metadata has no actions data' >&2; exit 1; }
+    python3 -c '
+import json, sys
+document = json.load(open(sys.argv[1], encoding="utf-8"))
+intents = document.get("actions") or {}
+expected = {"WidgetLockVehicleIntent", "WidgetUnlockVehicleIntent", "WidgetStartClimateIntent"}
+missing = sorted(expected - intents.keys())
+if missing:
+    raise SystemExit("Widget App Intents metadata is missing: " + ", ".join(missing))
+print(f"Widget App Intents metadata: {len(intents)} intents")
+' "$widget_metadata/extract.actionsdata"
 fi
 
 plutil -lint "$APP_PATH/Contents/Info.plist"

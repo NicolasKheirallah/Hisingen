@@ -141,6 +141,14 @@ app: $(if $(SKIP_BUILD),,build)
 	@# The widget resolves its strings against its own bundle, so it carries the same
 	@# language tables the app ships.
 	cp -R Sources/Hisingen/Resources/*.lproj $(WIDGET_APPEX)/Contents/Resources/
+	@# App Intents metadata for the extension. The widget-facing intents live in the shared
+	@# HisingenIntents target, which both binaries link; the processor folds that module's
+	@# metadata into the extension bundle so a button can resolve the same intent the app runs.
+	@if [ -n "$(SKIP_APPINTENTS)" ]; then \
+		echo "note: widget App Intents metadata skipped; interactive buttons will not run" >&2; \
+	else \
+		sh Scripts/generate-widget-appintents-metadata.sh --appex "$(WIDGET_APPEX)"; \
+	fi
 	@# The extension signs first with its own entitlements, then the app signs without
 	@# --deep so this signature survives: codesign's --deep would push the app's
 	@# entitlements into every nested bundle ("almost never what you want" per its man
