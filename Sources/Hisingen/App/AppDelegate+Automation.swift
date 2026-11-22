@@ -58,7 +58,8 @@ extension AppDelegate {
     ///
     /// `targetVIN` names a vehicle for the fleet broadcast; `nil` means the active one, which is
     /// what a schedule and a location trigger act on.
-    func sendAutomationCommand(_ command: RemoteCommand, to targetVIN: String?) async -> AutomationSendResult {
+    func sendAutomationCommand(_ template: RemoteCommand, to targetVIN: String?) async -> AutomationSendResult {
+        let command = AutomationCommandPolicy.resolved(template, saved: savedClimate())
         // The schedule and trigger editors only offer routine actions, but the check belongs on
         // the path itself: a decoded schedule or a Shortcut could still carry anything.
         guard AutomationCommandPolicy.allows(command) else {
@@ -79,6 +80,16 @@ extension AppDelegate {
             return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
         }
         return await automationDispatcher.send(command, to: vin)
+    }
+
+    private func savedClimate() -> AutomationCommandPolicy.SavedClimate {
+        AutomationCommandPolicy.SavedClimate(
+            temperatureCelsius: Float(preferences.remoteClimateTemperature),
+            frontLeftSeat: preferences.remoteDriverSeatHeating,
+            frontRightSeat: preferences.remoteFrontRightSeatHeating,
+            rearLeftSeat: preferences.remoteRearLeftSeatHeating,
+            rearRightSeat: preferences.remoteRearRightSeatHeating,
+            steeringWheel: preferences.remoteSteeringWheelHeating)
     }
 
     /// Sends one command to every vehicle the connected account has, then puts the reader back

@@ -32,4 +32,32 @@ enum AutomationCommandPolicy {
             .stopChargingOverride,
         ].filter(allows)
     }
+
+    /// The climate settings the reader saved for remote starts.
+    struct SavedClimate: Equatable, Sendable {
+        var temperatureCelsius: Float
+        var frontLeftSeat: HeatingLevel
+        var frontRightSeat: HeatingLevel
+        var rearLeftSeat: HeatingLevel
+        var rearRightSeat: HeatingLevel
+        var steeringWheel: HeatingLevel
+    }
+
+    /// The climate start a schedule or a trigger stores is a neutral template: no temperature and
+    /// no heating. Sent as it is, the car would run on its own defaults and ignore the settings
+    /// the reader saved, which the calendar preconditioning does use. A template becomes the
+    /// saved settings here; a command that already names a temperature or a heating level is sent
+    /// unchanged.
+    static func resolved(_ command: RemoteCommand, saved: SavedClimate) -> RemoteCommand {
+        guard case .startClimate(let temperature, let frontLeft, let frontRight,
+                                 let rearLeft, let rearRight, let steeringWheel) = command,
+              temperature == 0,
+              [frontLeft, frontRight, rearLeft, rearRight, steeringWheel].allSatisfy({ $0 == .unspecified })
+        else { return command }
+        return .startClimate(
+            temperatureCelsius: saved.temperatureCelsius,
+            frontLeftSeat: saved.frontLeftSeat, frontRightSeat: saved.frontRightSeat,
+            rearLeftSeat: saved.rearLeftSeat, rearRightSeat: saved.rearRightSeat,
+            steeringWheel: saved.steeringWheel)
+    }
 }
