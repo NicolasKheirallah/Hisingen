@@ -4065,3 +4065,6 @@
 "This vehicle service reports this value but cannot change it." = "이 차량 서비스는 이 값을 표시하지만 변경할 수는 없습니다.";
 "No active Volvo subscription" = "활성 Volvo 구독 없음";
 "Remote commands need an active subscription on this car." = "원격 명령을 사용하려면 이 차량에 활성 구독이 필요합니다.";
+"Timers" = "타이머";
+"No timers reported." = "보고된 타이머가 없습니다.";
+"Save Current Location…" = "현재 위치 저장…";

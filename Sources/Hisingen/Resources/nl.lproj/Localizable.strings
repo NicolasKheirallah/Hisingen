@@ -4073,3 +4073,6 @@
 "This vehicle service reports this value but cannot change it." = "Deze voertuigdienst toont deze waarde, maar kan die niet wijzigen.";
 "No active Volvo subscription" = "Geen actief Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Opdrachten op afstand vereisen een actief abonnement voor deze auto.";
+"Timers" = "Timers";
+"No timers reported." = "Geen timers gemeld.";
+"Save Current Location…" = "Huidige locatie opslaan…";

@@ -4065,3 +4065,6 @@
 "This vehicle service reports this value but cannot change it." = "Tämä ajoneuvopalvelu näyttää tämän arvon mutta ei voi muuttaa sitä.";
 "No active Volvo subscription" = "Ei aktiivista Volvo-tilausta";
 "Remote commands need an active subscription on this car." = "Etäkomennot edellyttävät aktiivista tilausta tähän autoon.";
+"Timers" = "Ajastimet";
+"No timers reported." = "Ajastimia ei ilmoitettu.";
+"Save Current Location…" = "Tallenna nykyinen sijainti…";

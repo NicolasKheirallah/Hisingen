@@ -54,6 +54,10 @@ ALLOWED_VALUES = {
     # Product and service names that are written the same in every locale on purpose. Translating
     # them would invent a name the vendor does not use.
     "Polestar GraphQL",
+    # Swedish and Dutch spell the plural of "timer" exactly as English does, and the locales
+    # already use it ("Aktiva timers", "Actieve timers"). A synonym here would split the app's
+    # own vocabulary rather than translate it.
+    "Timers",
 }
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.

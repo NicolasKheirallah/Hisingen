@@ -4065,3 +4065,6 @@
 "This vehicle service reports this value but cannot change it." = "Ta usługa pojazdu zgłasza tę wartość, ale nie może jej zmienić.";
 "No active Volvo subscription" = "Brak aktywnej subskrypcji Volvo";
 "Remote commands need an active subscription on this car." = "Polecenia zdalne wymagają aktywnej subskrypcji dla tego samochodu.";
+"Timers" = "Timery";
+"No timers reported." = "Nie zgłoszono timerów.";
+"Save Current Location…" = "Zapisz bieżącą lokalizację…";

@@ -7,6 +7,15 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- The menu bar's right-click menu gains **Timers**, **Software Updates** and **Charge Locations**.
+  A reported charging window or cabin timer can be paused and resumed, an update the car has
+  already downloaded can be installed now or scheduled for two, eight or twelve hours, a
+  scheduled installation can be cancelled, the car's current position can be saved as a charge
+  location, and optimised charging can be switched at a saved location. Every row is built from
+  the same capability gate as the Controls tab, so it is dimmed with that gate's reason instead
+  of failing after the click, and the rows are reachable with the keyboard and through the
+  VoiceOver Actions rotor. Values that need typing or a slider stay in the Controls tab.
+
 ### Added
 
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging

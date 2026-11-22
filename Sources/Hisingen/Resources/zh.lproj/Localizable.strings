@@ -4065,3 +4065,6 @@
 "This vehicle service reports this value but cannot change it." = "此车辆服务可报告该值，但无法更改。";
 "No active Volvo subscription" = "没有有效的 Volvo 订阅";
 "Remote commands need an active subscription on this car." = "远程指令需要该车辆具有有效订阅。";
+"Timers" = "定时器";
+"No timers reported." = "未报告任何定时器。";
+"Save Current Location…" = "保存当前位置…";
