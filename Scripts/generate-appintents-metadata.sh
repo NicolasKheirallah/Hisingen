@@ -82,6 +82,9 @@ fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/hisingen-appintents.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 
+# Builds to attempt before giving up on reading the compile command.
+CAPTURE_ATTEMPTS=2
+
 # The compile flags are identical for every run of the same module and dependency graph, so they
 # are cached under the scratch path. Without the cache a clean checkout would pay for one extra
 # module rebuild just to read a command line. Each module keeps its own cache: the same build log
@@ -98,30 +101,42 @@ flags_are_current() {
 }
 
 if ! flags_are_current; then
-    # SwiftPM prints a module's compile command only when it compiles something. Touching one
-    # source guarantees the line is there; content and checksum are unchanged.
     FIRST_SOURCE=$(find "$SOURCE_DIRECTORY" -name '*.swift' | sort | head -n 1)
     [ -n "$FIRST_SOURCE" ] || {
         echo "generate-appintents-metadata: no Swift sources in $SOURCE_DIRECTORY" >&2
         exit 1
     }
-    touch "$FIRST_SOURCE"
-    if ! swift build -c release -v --scratch-path "$SCRATCH" >"$WORK/build.log" 2>&1; then
-        echo "generate-appintents-metadata: swift build failed" >&2
-        tail -n 20 "$WORK/build.log" >&2
+    # SwiftPM prints a module's compile command only when it compiles something, so each attempt
+    # touches one source (content and checksum are unchanged) to guarantee the line is there.
+    # Another build in this checkout can compile the module between the touch and this build;
+    # SwiftPM then finds nothing stale and prints no command. A second touch and build recovers
+    # from that, so one attempt is not enough.
+    COMMAND=''
+    attempt=1
+    while [ "$attempt" -le "$CAPTURE_ATTEMPTS" ]; do
+        touch "$FIRST_SOURCE"
+        if ! swift build -c release -v --scratch-path "$SCRATCH" >"$WORK/build.log" 2>&1; then
+            echo "generate-appintents-metadata: swift build failed" >&2
+            tail -n 20 "$WORK/build.log" >&2
+            exit 1
+        fi
+        if COMMAND=$(python3 Scripts/appintents-capture-flags.py "$WORK/build.log" "$MODULE" "$SOURCE_DIRECTORY" 2>"$WORK/capture.err"); then
+            break
+        fi
+        COMMAND=''
+        attempt=$((attempt + 1))
+    done
+    if [ -z "$COMMAND" ]; then
+        cat "$WORK/capture.err" >&2
+        echo "generate-appintents-metadata: could not read the $MODULE module compile command after $CAPTURE_ATTEMPTS builds; another build in this checkout may be compiling it" >&2
         exit 1
     fi
-    if COMMAND=$(python3 Scripts/appintents-capture-flags.py "$WORK/build.log" "$MODULE" "$SOURCE_DIRECTORY"); then
-        {
-            printf 'graph=%s\n' "$GRAPH_KEY"
-            printf 'module=%s\n' "$MODULE"
-            printf 'sources=%s\n' "$SOURCE_DIRECTORY"
-            printf '%s\n' "$COMMAND"
-        } >"$FLAGS_CACHE"
-    else
-        echo "generate-appintents-metadata: could not read the $MODULE module compile command" >&2
-        exit 1
-    fi
+    {
+        printf 'graph=%s\n' "$GRAPH_KEY"
+        printf 'module=%s\n' "$MODULE"
+        printf 'sources=%s\n' "$SOURCE_DIRECTORY"
+        printf '%s\n' "$COMMAND"
+    } >"$FLAGS_CACHE"
 fi
 
 COMMAND=$(tail -n 1 "$FLAGS_CACHE")

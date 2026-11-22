@@ -13,6 +13,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   with no countdown, until that check ran. A running climate session now keeps the two-minute
   refresh while the stream is open.
 
+- **`make app` no longer fails when another build compiles the widget first.** Reading the
+  App Intents compile command needs a build that actually compiles the module. When a second
+  build in the same checkout compiled it between the script's touch and its own build, SwiftPM
+  printed nothing and the step stopped with "no HisingenWidget module compile command found".
+  The script now touches and builds once more before giving up, and the final error says another
+  build may be compiling the module.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added
