@@ -47,6 +47,22 @@ struct ChargerCurrentLimitTests {
     }
 
     @Test
+    func theRangeComesFromTheEntityTheModelAlreadyPolled() {
+        let table = ["number.limit": HAEntityState(
+            entityID: "number.limit", state: "10", attributes: ["min": .number(6), "max": .number(16)])]
+
+        #expect(HomeChargingModel.currentLimitRange(in: table, entity: "number.limit") == 6...16)
+    }
+
+    @Test
+    func anEntityThePollHasNotReadYetGetsTheOuterBound() {
+        let table = ["number.other": HAEntityState(entityID: "number.other", state: "10")]
+
+        #expect(HomeChargingModel.currentLimitRange(in: table, entity: "number.limit") == 6...32)
+        #expect(HomeChargingModel.currentLimitRange(in: table, entity: nil) == 6...32)
+    }
+
+    @Test
     func theWritableEntityIsCarriedInTheMap() {
         let map = HomeChargerEntityMap(currentLimit: "sensor.limit", currentLimitNumber: "number.limit")
         #expect(map.allEntityIDs.contains("number.limit"))
