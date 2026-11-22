@@ -4068,3 +4068,9 @@
 "Timers" = "타이머";
 "No timers reported." = "보고된 타이머가 없습니다.";
 "Save Current Location…" = "현재 위치 저장…";
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "충전은 시간대가 끝나면 중지되어, 차량이 다음의 더 비싼 시간대까지 계속 충전하지 않습니다.";
+"Keep the Mac Awake for the Window" = "시간대 동안 Mac을 깨어 있게 유지";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "계획된 시간대가 끝날 때까지 잠자기 방지를 유지하여 Hisingen이 시작 및 중지 명령을 보낼 수 있게 합니다. 이미 잠든 Mac은 깨울 수 없습니다.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "기본적으로 꺼져 있습니다. 충전 시간대를 기다리거나 진행하는 동안 이 Mac을 깨어 있게 유지하며, 잠든 Mac은 깨울 수 없습니다.";
+"Turn on Auto-Start Charging in the Window to use this." = "이 기능을 사용하려면 ‘지정 시간대에 자동 충전 시작’을 켜세요.";

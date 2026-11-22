@@ -114,6 +114,37 @@ extension PreferencesStore {
     /// through settings archives and not part of any bulk-enable action.
     var plannerAutoStartEnabled: Bool { get { d.bool(forKey: "planner_auto_start_enabled") } set { d.set(newValue, forKey: "planner_auto_start_enabled") } }
 
+    /// Opt-in sleep prevention. Off by default, and off unless auto-start is also on: with no
+    /// command to send at the window, there is nothing to stay awake for. Not transferable
+    /// with settings archives, like the auto-start consent it belongs to.
+    var plannerKeepAwakeEnabled: Bool { get { d.bool(forKey: "planner_keep_awake_enabled") } set { d.set(newValue, forKey: "planner_keep_awake_enabled") } }
+
+    /// The window the planner's auto-start is running for a vehicle. Its end is fixed when the
+    /// start command is acknowledged, so slower-than-planned charging stops there instead of
+    /// extending the plan. Persisted so a relaunch inside the window still ends it.
+    func plannerWindow(for vin: String) -> DateInterval? {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "planner_windows_v1") as? [String: [Double]],
+              let pair = all[key], pair.count == 2 else { return nil }
+        let start = Date(timeIntervalSince1970: pair[0])
+        let end = Date(timeIntervalSince1970: pair[1])
+        guard end > start else { return nil }
+        return DateInterval(start: start, end: end)
+    }
+
+    func setPlannerWindow(_ window: DateInterval?, for vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        var all = d.dictionary(forKey: "planner_windows_v1") as? [String: [Double]] ?? [:]
+        if let window {
+            all[key] = [window.start.timeIntervalSince1970, window.end.timeIntervalSince1970]
+        } else {
+            all.removeValue(forKey: key)
+        }
+        d.set(all, forKey: "planner_windows_v1")
+    }
+
     /// Well-to-wheel grid carbon intensity used only for the History tab's indicative
     /// "emissions avoided vs petrol" figure. Defaults to a middle-of-the-road European blend;
     /// a Nordic grid is far cleaner, a coal-heavy one dirtier, hence it is user-adjustable.

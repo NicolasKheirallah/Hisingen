@@ -4068,3 +4068,9 @@
 "Timers" = "Ajastimet";
 "No timers reported." = "Ajastimia ei ilmoitettu.";
 "Save Current Location…" = "Tallenna nykyinen sijainti…";
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Lataus pysähtyy latausikkunan päättyessä, jotta auto ei jatka lataamista seuraavien, kalliimpien tuntien aikana.";
+"Keep the Mac Awake for the Window" = "Pidä Mac hereillä latausikkunan ajan";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Pitää unen estoa yllä, kunnes suunniteltu latausikkuna päättyy, jotta Hisingen voi lähettää aloitus- ja pysäytyskomennot. Jo nukkuvaa Macia ei voi herättää.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Oletuksena pois. Pitää tämän Macin hereillä, kun latausikkuna odottaa tai on käynnissä; nukkuvaa Macia ei voi herättää.";
+"Turn on Auto-Start Charging in the Window to use this." = "Ota käyttöön ”Käynnistä lataus automaattisesti ikkunassa”, jotta voit käyttää tätä.";

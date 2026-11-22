@@ -4068,3 +4068,9 @@
 "Timers" = "Minuteurs";
 "No timers reported." = "Aucun minuteur signalé.";
 "Save Current Location…" = "Enregistrer la position actuelle…";
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "La recharge s'arrête à la fin de la plage de charge, pour que la voiture ne continue pas à charger pendant les heures suivantes, plus chères.";
+"Keep the Mac Awake for the Window" = "Garder le Mac éveillé pendant la plage de charge";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Maintient une assertion de veille jusqu'à la fin de la plage de charge prévue, pour qu'Hisingen puisse envoyer les commandes de démarrage et d'arrêt. Il ne peut pas réveiller un Mac déjà endormi.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Désactivé par défaut. Garde ce Mac éveillé pendant qu'une plage de charge attend ou est en cours ; il ne peut pas réveiller un Mac endormi.";
+"Turn on Auto-Start Charging in the Window to use this." = "Activez « Démarrer la recharge automatiquement dans la plage horaire » pour utiliser cette option.";

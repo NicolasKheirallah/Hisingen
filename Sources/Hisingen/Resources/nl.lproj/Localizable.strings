@@ -4076,3 +4076,9 @@
 "Timers" = "Timers";
 "No timers reported." = "Geen timers gemeld.";
 "Save Current Location…" = "Huidige locatie opslaan…";
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Het laden stopt aan het einde van het laadvenster, zodat de auto niet doorlaadt in de volgende, duurdere uren.";
+"Keep the Mac Awake for the Window" = "Houd de Mac wakker tijdens het laadvenster";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Houdt een slaapblokkering aan tot het geplande laadvenster eindigt, zodat Hisingen de start- en stopopdrachten kan sturen. Een Mac die al slaapt, kan niet worden gewekt.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Standaard uit. Houdt deze Mac wakker terwijl een laadvenster wacht of loopt; een slapende Mac kan niet worden gewekt.";
+"Turn on Auto-Start Charging in the Window to use this." = "Schakel ‘Automatisch laden starten binnen het venster’ in om dit te gebruiken.";

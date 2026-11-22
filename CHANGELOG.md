@@ -7,14 +7,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
-- The menu bar's right-click menu gains **Timers**, **Software Updates** and **Charge Locations**.
-  A reported charging window or cabin timer can be paused and resumed, an update the car has
-  already downloaded can be installed now or scheduled for two, eight or twelve hours, a
-  scheduled installation can be cancelled, the car's current position can be saved as a charge
-  location, and optimised charging can be switched at a saved location. Every row is built from
-  the same capability gate as the Controls tab, so it is dimmed with that gate's reason instead
-  of failing after the click, and the rows are reachable with the keyboard and through the
-  VoiceOver Actions rotor. Values that need typing or a slider stay in the Controls tab.
+- **The Charging Planner stops at the end of its cheap window.** When auto-start sends the
+  charge-now override, the window's end is recorded at that moment. If the car is still charging
+  when the window closes, Hisingen resumes the charging schedule instead of letting the override
+  run on to the charge limit in the next, more expensive hours. The window's end stays fixed even
+  when a slower-than-planned charge would otherwise push a recomputed plan past it.
+- **Opt-in sleep prevention for the Charging Planner.** A new toggle in the planner's automation
+  settings keeps the Mac from going to idle sleep while a planned window is waiting or running,
+  so the minute tick can send the start and the stop. It is off by default, only applies while
+  Auto-Start Charging in the Window is on, and the UI says plainly that Hisingen cannot wake a Mac
+  that is already asleep — scheduling a wake needs root and a privileged helper, which this app
+  does not ship.
 
 ### Added
 

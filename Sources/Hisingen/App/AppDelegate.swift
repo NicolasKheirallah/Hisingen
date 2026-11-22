@@ -171,6 +171,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
                     return .deferred(reason: L10n.text("Hisingen is no longer running."))
                 }
                 return await self.startPlannerCharging(targetVIN: vin)
+            },
+            stopCharging: { [weak self] vin in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.stopPlannerCharging(targetVIN: vin)
             }
         )
         vehicleSession = VehicleSessionController(
