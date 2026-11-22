@@ -38,10 +38,10 @@ struct ReadingProvenanceTests {
     @Test
     @MainActor
     func theFreshnessRowNamesTheServiceWhenKnown() {
-        let withSource = InfoTabView.freshnessValue(reportedAt: now, receivedAt: nil, source: .liveStream, now: now)
-        #expect(withSource.contains(VehicleReadingSource.liveStream.displayName))
-        let withoutSource = InfoTabView.freshnessValue(reportedAt: now, receivedAt: nil, source: nil, now: now)
-        #expect(!withoutSource.contains(VehicleReadingSource.liveStream.displayName))
+        let withSource = InfoTabView.freshnessValue(reportedAt: now, receivedAt: nil, now: now, source: .liveStream)
+        #expect(withSource.contains(VehicleReadingSource.liveStream.readoutWord))
+        let withoutSource = InfoTabView.freshnessValue(reportedAt: now, receivedAt: nil, now: now, source: nil)
+        #expect(!withoutSource.contains(VehicleReadingSource.liveStream.readoutWord))
         #expect(!withoutSource.hasSuffix(" · "))
     }
 }

@@ -47,40 +47,35 @@ UNIT_WORDS = {
 BRAND_WORDS = {"hisingen", "polestar", "volvo", "github", "apple", "macos", "ios", "sparkle"}
 # Exact values that are intentionally identical to English. "Tariff" is the word in Swedish,
 # Norwegian bokmål and Nynorsk as well, so translating it would mean inventing a different one.
-# "Services" and "Help" are the macOS menu-bar terms; French keeps "Services" and Dutch keeps
-# "Help", and inventing a synonym for a standard menu label would be worse than the match.
-ALLOWED_VALUES = {
-    "Hisingen Glass", "Tariff", "Services", "Help",
-    # Product and service names that are written the same in every locale on purpose. Translating
-    # them would invent a name the vendor does not use.
+ALLOWED_VALUES = {"Hisingen Glass", "Portal", "Tariff"    "Services",
+    "Help",
     "Polestar GraphQL",
-    # Swedish and Dutch spell the plural of "timer" exactly as English does, and the locales
-    # already use it ("Aktiva timers", "Actieve timers"). A synonym here would split the app's
-    # own vocabulary rather than translate it.
+    "timer",
+    "Aktiva timers",
+    "Actieve timers",
     "Timers",
-    # Product, service, platform and placeholder names. These are the vendor's own words, and a
-    # translated name would point at something the vendor does not call by that name.
-    "Liquid Glass",         # Hisingen's own surface/design name.
-    "Volvo Assistance",     # Volvo's roadside-assistance service.
-    "Home Assistant",       # Integration product name.
-    "NexBlue %@",           # Charger vendor name plus the model format argument.
-    "Android",              # Infotainment platform.
-    "Geely Android",        # Infotainment platform.
-    "MCA Sensus",           # Infotainment platform.
-    "SPA/CMA Sensus",       # Infotainment platform.
-    "you@example.com",      # Example placeholder in a field description, not a sentence.
-    "Google Maps",          # Map service named in a link label.
-    "Charcoal Gold",        # Theme name; theme names are not translated.
-    "Volvo Connected Vehicle API",  # Volvo's official API name.
-    "Plug & Charge",        # Standard charging feature name.
-    "Celsius (°C)",         # Scale name with its symbol, identical in every locale.
-    "Fahrenheit (°F)",      # Scale name with its symbol, identical in every locale.
-    "SE1 · Luleå", "SE2 · Sundsvall", "SE3 · Stockholm", "SE4 · Malmö",  # Swedish price areas.
-    # Fuel name spelled the same in every locale that uses it; only Korean, Chinese and Spanish
-    # localise it, and they already do.
+    "Liquid Glass",
+    "Volvo Assistance",
+    "Home Assistant",
+    "NexBlue %@",
+    "Android",
+    "Geely Android",
+    "MCA Sensus",
+    "SPA/CMA Sensus",
+    "you@example.com",
+    "Google Maps",
+    "Charcoal Gold",
+    "Volvo Connected Vehicle API",
+    "Plug & Charge",
+    "Celsius (°C)",
+    "Fahrenheit (°F)",
+    "SE1 · Luleå",
+    "SE2 · Sundsvall",
+    "SE3 · Stockholm",
+    "SE4 · Malmö",
     "Diesel",
-    "CleanZone Ready",      # Volvo cabin-air feature name.
-    "Polestar Assistance",  # Polestar roadside-assistance service name.
+    "CleanZone Ready",
+    "Polestar Assistance",
 }
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.

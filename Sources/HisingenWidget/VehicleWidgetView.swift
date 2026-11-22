@@ -178,16 +178,28 @@ struct VehicleWidgetEntryView: View {
         return WidgetL10n.text("No vehicle data yet", languageCode)
     }
 
+    /// The muted note under the status line when the configured car is missing and the
+    /// active car stands in. Only the substitution names a different car than the one the
+    /// reader chose, so this is the only place the widget says so.
+    private var fallbackNoteLine: String? { entry.fallbackNote }
+
+    private func mutedLine(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .lineLimit(1)
+            .foregroundStyle(WidgetPalette.muted(colorScheme))
+    }
+
     // MARK: systemSmall
 
     private var small: some View {
         VStack(alignment: .leading, spacing: 5) {
             titleRow
             if let status = statusLine {
-                Text(status)
-                    .font(.system(size: 11))
-                    .lineLimit(1)
-                    .foregroundStyle(WidgetPalette.muted(colorScheme))
+                mutedLine(status)
+            }
+            if let note = fallbackNoteLine {
+                mutedLine(note)
             }
             Spacer(minLength: 0)
             FigureOverLabel(figure: batteryFigure, label: batteryLabel)
@@ -207,11 +219,11 @@ struct VehicleWidgetEntryView: View {
                 titleRow
                 Spacer(minLength: 8)
                 if let status = statusLine {
-                    Text(status)
-                        .font(.system(size: 11))
-                        .lineLimit(1)
-                        .foregroundStyle(WidgetPalette.muted(colorScheme))
+                    mutedLine(status)
                 }
+            }
+            if let note = fallbackNoteLine {
+                mutedLine(note)
             }
             Spacer(minLength: 0)
             HStack(alignment: .bottom, spacing: 14) {
@@ -311,6 +323,7 @@ struct VehicleWidgetEntryView: View {
         if let charging = snapshot.chargingText { parts.append(charging) }
         if let departure = snapshot.departureText { parts.append(departure) }
         if let checked = entry.checkedLine { parts.append(checked) }
+        if let note = entry.fallbackNote { parts.append(note) }
         return parts.joined(separator: ", ")
     }
 }

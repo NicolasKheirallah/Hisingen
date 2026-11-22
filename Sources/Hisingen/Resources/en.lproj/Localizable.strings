@@ -132,6 +132,12 @@
 "Battery Warranty Remaining" = "Battery Warranty Remaining";
 "Battery and Power" = "Battery and Power";
 "Battery and Range" = "Battery and Range";
+"Available optimised charging" = "Available optimised charging";
+"Bidirectional charging" = "Bidirectional charging";
+"Dock icon" = "Dock icon";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Show Hisingen in the Dock, the app switcher and the warning badge";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Show a dock badge while any vehicle reports warnings or an alarm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.";
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
@@ -231,6 +237,8 @@
 "Unlocks the vehicle." = "Unlocks the vehicle.";
 "Locks the vehicle." = "Locks the vehicle.";
 "Lock State Not Reported" = "Lock State Not Reported";
+"Portal" = "Portal";
+"Weather" = "Weather";
 "Window State Not Reported" = "Window State Not Reported";
 "Windows Closed" = "Windows Closed";
 "Windows Open" = "Windows Open";
@@ -3634,6 +3642,18 @@
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
 
+/* Electricity supplier: house energy */
+"By Day" = "By Day";
+"By Month" = "By Month";
+"House Energy" = "House Energy";
+"Hours" = "Hours";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Hours at each of Tibber's price levels in the prices published for today and tomorrow.";
+"Level" = "Level";
+"Price Levels" = "Price Levels";
+"Production" = "Production";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "What Tibber billed for these days of energy, taxes included. The grid fee is not in it.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours.";
+
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
 "By an administrator" = "By an administrator";
@@ -4021,6 +4041,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Opens Hisingen with the lock command ready to confirm.";
 "Start climate" = "Start climate";
 "Opens Hisingen with the climate command ready to confirm." = "Opens Hisingen with the climate command ready to confirm.";
+"Choose which car the widget shows." = "Choose which car the widget shows.";
+"Vehicle not on file — showing %@" = "Vehicle not on file — showing %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Log partition";
@@ -4259,3 +4281,45 @@
 "Show this charger's readings and commands." = "Show this charger's readings and commands.";
 "Last read %@" = "Last read %@";
 "Elvia day and night tariff" = "Elvia day and night tariff";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "All notifications";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Asks Hisingen to fetch fresh vehicle data from the provider now.";
+"Charge Target (%)" = "Charge Target (%)";
+"Charging Status" = "Charging Status";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Ends a charging override so the vehicle returns to its charging schedule.";
+"Hisingen Focus Filter" = "Hisingen Focus Filter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading.";
+"Locks the vehicle doors." = "Locks the vehicle doors.";
+"Muted" = "Muted";
+"Oldest reading %@" = "Oldest reading %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Overrides the active charging schedule so the vehicle charges immediately.";
+"Recent Trips" = "Recent Trips";
+"Returns charging state, power, target, and time remaining." = "Returns charging state, power, target, and time remaining.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returns locally derived trip distance and driving time for the last seven days.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returns lock, opening, and attention status from the latest Hisingen snapshot.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returns the battery level, range, and charging status of a vehicle.";
+"Returns the current tire pressures and statuses for all wheels." = "Returns the current tire pressures and statuses for all wheels.";
+"Returns the last reported parking position of the active vehicle." = "Returns the last reported parking position of the active vehicle.";
+"Returns the status of all vehicles in your garage." = "Returns the status of all vehicles in your garage.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.";
+"Runtime (minutes)" = "Runtime (minutes)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on.";
+"Sets the vehicle's charging current limit in amperes." = "Sets the vehicle's charging current limit in amperes.";
+"Sets the vehicle's target charge level percentage." = "Sets the vehicle's target charge level percentage.";
+"Sign in again to keep this up to date" = "Sign in again to keep this up to date";
+"Sign in again: Hisingen cannot refresh" = "Sign in again: Hisingen cannot refresh";
+"Some readings are from an earlier report" = "Some readings are from an earlier report";
+"Starts cabin climate preconditioning." = "Starts cabin climate preconditioning.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starts the cabin pre-cleaning cycle that purifies the interior air before departure.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support).";
+"Stops a remotely started combustion engine." = "Stops a remotely started combustion engine.";
+"Stops a running cabin pre-cleaning cycle." = "Stops a running cabin pre-cleaning cycle.";
+"Stops cabin climate preconditioning." = "Stops cabin climate preconditioning.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current.";
+"Unlocks the vehicle doors." = "Unlocks the vehicle doors.";
+"Vehicle Battery" = "Vehicle Battery";
+"Vehicle nickname or VIN (optional)" = "Vehicle nickname or VIN (optional)";
+"Volvo connected, but not saved" = "Volvo connected, but not saved";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings.";

@@ -80,7 +80,15 @@ let package = Package(
         ),
         .testTarget(
             name: "HisingenTests",
-            dependencies: ["Hisingen", "HisingenIntents",
+            dependencies: [
+                "Hisingen",
+                // The widget and the app register the same intent types, so the suites that
+                // exercise widget routing link the shared module.
+                "HisingenIntents",
+                // The per-car widget's selection resolver and garage reader live in the widget
+                // target, so the fixture suites import it the same way HisingenWidgetTests
+                // already imports both binaries. No new external products.
+                "HisingenWidget",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
@@ -96,7 +104,9 @@ let package = Package(
             // same way the app is; SwiftPM only produces the binary here. It links the shared
             // intent module so the widget and the app register the same intent types; the
             // extension's Metadata.appintents is assembled from that dependency by
-            // Scripts/generate-widget-appintents-metadata.sh.
+            // Scripts/generate-widget-appintents-metadata.sh. The Edit-sheet car picker also uses
+            // a `WidgetConfigurationIntent`, which resolves inside this extension process and so
+            // needs no metadata of its own.
             dependencies: ["HisingenIntents"],
             path: "Sources/HisingenWidget"
         ),

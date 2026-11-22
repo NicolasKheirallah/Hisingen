@@ -136,6 +136,12 @@
 "Battery Warranty Remaining" = "电池保修（剩余里程）";
 "Battery and Power" = "电池与动力";
 "Battery and Range" = "电池与续航";
+"Available optimised charging" = "可用的优化充电";
+"Bidirectional charging" = "双向充电";
+"Dock icon" = "Dock 图标";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "在程序坞、应用切换器和警告标记中显示 Hisingen";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "当任一车辆报告警告或警报时显示程序坞标记";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "当任一车辆报告警告或警报时显示程序坞标记。打开 Dock 图标（外观 → 菜单栏）后标记才会显示。";
 "Position relative to car" = "相对于车辆的位置";
 "First reading" = "首项读数";
 "Above" = "上方";
@@ -1199,6 +1205,8 @@
 "Washer Fluid" = "玻璃水 / 洗涤液";
 "Washer fluid" = "洗涤液";
 "Washer fluid level" = "洗涤液液位";
+"Portal" = "门户";
+"Weather" = "天气";
 "Wed" = "周三";
 "Welcome to Hisingen" = "欢迎使用 Hisingen";
 "Window Controls" = "车窗控制";
@@ -3605,6 +3613,17 @@
 "Tibber is unavailable. Market price plus your markup." = "Tibber 不可用。使用市场价格加您的加价。";
 "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "可选。无需 Home Assistant，即可连接 Tibber，用其 15 分钟价格规划充电和价格会话。";
 "Used for the planner and charging sessions" = "用于规划器和充电会话";
+/* Electricity supplier: house energy */
+"By Day" = "按天";
+"By Month" = "按月";
+"House Energy" = "家庭能源";
+"Hours" = "小时";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "在今天和明天已公布的价格中，Tibber 各价格档位的小时数。";
+"Level" = "档位";
+"Price Levels" = "价格档位";
+"Production" = "发电";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Tibber 对这几天电量的收费，含税。不含输电费。";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "每个时期的家庭能源。电表未上报的时期不计入，仍在进行中的月份比相邻月份短。";
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber 价格包含电量、税费及其利润，但不包含电网费用。请在此添加您的费用；已配对的充电器可单独设置。";
 "Added to Tibber prices in the planner and for charger sessions." = "在计划器和充电器会话中计入 Tibber 价格。";
 
@@ -4002,6 +4021,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "打开 Hisingen 并等待确认锁车指令。";
 "Start climate" = "启动空调";
 "Opens Hisingen with the climate command ready to confirm." = "打开 Hisingen 并等待确认空调指令。";
+"Choose which car the widget shows." = "选择小组件显示的车辆。";
+"Vehicle not on file — showing %@" = "车辆不在记录中——正在显示 %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "日志分区";
@@ -4242,3 +4263,45 @@
 "Show this charger's readings and commands." = "显示这台充电器的读数和命令。";
 "Last read %@" = "上次读取 %@";
 "Elvia day and night tariff" = "Elvia 日间与夜间电价";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "所有通知";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "让 Hisingen 立即从服务商获取最新车辆数据。";
+"Charge Target (%)" = "目标电量（%）";
+"Charging Status" = "充电状态";
+"Ends a charging override so the vehicle returns to its charging schedule." = "结束充电覆盖，让车辆恢复按充电计划充电。";
+"Hisingen Focus Filter" = "Hisingen 专注模式过滤器";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "账户重新连接前 Hisingen 无法刷新，以下内容均为最近一次成功读取的数据。";
+"Locks the vehicle doors." = "锁定车门。";
+"Muted" = "已静音";
+"Oldest reading %@" = "最早的读取数据 %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "覆盖当前充电计划，让车辆立即开始充电。";
+"Recent Trips" = "近期行程";
+"Returns charging state, power, target, and time remaining." = "返回充电状态、充电功率、目标和剩余时间。";
+"Returns locally derived trip distance and driving time for the last seven days." = "返回最近七天本地推算的行程距离和行驶时间。";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "从最新的 Hisingen 快照返回锁定、开闭和需注意状态。";
+"Returns the battery level, range, and charging status of a vehicle." = "返回车辆的电量、续航和充电状态。";
+"Returns the current tire pressures and statuses for all wheels." = "返回所有车轮的当前胎压和状态。";
+"Returns the last reported parking position of the active vehicle." = "返回当前车辆最近上报的停车位置。";
+"Returns the status of all vehicles in your garage." = "返回车库中所有车辆的状态。";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "返回车辆电耗在行驶、空调和电池温控之间的明细。";
+"Runtime (minutes)" = "运行时长（分钟）";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "在专注模式开启时设置当前车辆，以及是否静音该车辆的通知。";
+"Sets the vehicle's charging current limit in amperes." = "设置车辆的充电电流限制（安培）。";
+"Sets the vehicle's target charge level percentage." = "设置车辆的目标充电电量百分比。";
+"Sign in again to keep this up to date" = "重新登录以保持最新状态";
+"Sign in again: Hisingen cannot refresh" = "重新登录：Hisingen 无法刷新";
+"Some readings are from an earlier report" = "部分读取数据来自较早的报告";
+"Starts cabin climate preconditioning." = "启动车厢空调预调节。";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "启动车厢预净化循环，在出发前净化车内空气。";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "启动内燃机以预调节车厢（支持发动机远程启动的 Volvo 车辆）。";
+"Stops a remotely started combustion engine." = "停止远程启动的内燃机。";
+"Stops a running cabin pre-cleaning cycle." = "停止正在运行的车厢预净化循环。";
+"Stops cabin climate preconditioning." = "停止车厢空调预调节。";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "遥测数据现已正常传输，但 macOS 无法存储凭据。请检查可用磁盘空间，然后重新登录，让会话在重启后仍然保留。";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "车辆是在所示时间上报这些数值的，而非本次刷新时。Hisingen 会为此加注说明，而不将其显示为当前值。";
+"Unlocks the vehicle doors." = "解锁车门。";
+"Vehicle Battery" = "车辆电池";
+"Vehicle nickname or VIN (optional)" = "车辆昵称或 VIN（可选）";
+"Volvo connected, but not saved" = "Volvo 已连接，但未保存";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo 不再接受本应用的客户端 ID。请使用你的 Volvo ID 登录，或在设置中输入新登录系统的凭据。";

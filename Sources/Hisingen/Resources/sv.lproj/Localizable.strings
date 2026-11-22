@@ -136,6 +136,12 @@
 "Battery Warranty Remaining" = "Batterigaranti (återstående)";
 "Battery and Power" = "Batteri och effekt";
 "Battery and Range" = "Batteri och räckvidd";
+"Available optimised charging" = "Tillgänglig optimerad laddning";
+"Bidirectional charging" = "Dubbelriktad laddning";
+"Dock icon" = "Dockikon";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Visa Hisingen i Docken, programväxlaren och som varningsmärke";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Visa ett Dock-märke medan någon bil rapporterar varningar eller larm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Visa ett Dock-märke medan någon bil rapporterar varningar eller larm. Slå på Dock-ikonen (Utseende → Menyrad) för att märket ska visas.";
 "Position relative to car" = "Placering i förhållande till bilen";
 "First reading" = "Första värdet";
 "Above" = "Ovanför";
@@ -1202,6 +1208,8 @@
 "Washer Fluid" = "Spolarvätska";
 "Washer fluid" = "Spolarvätska";
 "Washer fluid level" = "Spolarvätskenivå";
+"Portal" = "Portalen";
+"Weather" = "Väder";
 "Wed" = "Ons";
 "Welcome to Hisingen" = "Välkommen till Hisingen";
 "Window Controls" = "Rutreglage";
@@ -3626,6 +3634,18 @@
 "Tibber access token" = "Tibber-åtkomsttoken";
 "Use this home" = "Använd det här hemmet";
 
+/* Electricity supplier: house energy */
+"By Day" = "Per dag";
+"By Month" = "Per månad";
+"House Energy" = "Husets energi";
+"Hours" = "Timmar";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Timmar på var och en av Tibbers prisnivåer i de priser som publicerats för idag och imorgon.";
+"Level" = "Nivå";
+"Price Levels" = "Prisnivåer";
+"Production" = "Produktion";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Vad Tibber fakturerat för dessa dagars energi, skatter inkluderade. Nätavgiften ingår inte.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Husets energi per period. En period mätaren inte rapporterat lämnas ut, och månaden som fortfarande pågår är kortare än sina grannar.";
+
 "At the charger" = "Vid laddboxen";
 "Remotely" = "På distans";
 "By an administrator" = "Av en administratör";
@@ -4018,6 +4038,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Öppnar Hisingen med låskommandot klart att bekräftas.";
 "Start climate" = "Starta klimatet";
 "Opens Hisingen with the climate command ready to confirm." = "Öppnar Hisingen med klimatkommandot klart att bekräftas.";
+"Choose which car the widget shows." = "Välj vilken bil widgeten visar.";
+"Vehicle not on file — showing %@" = "Fordonet saknas — visar %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Loggpartition";
@@ -4258,3 +4280,45 @@
 "Show this charger's readings and commands." = "Visa den här laddarens avläsningar och kommandon.";
 "Last read %@" = "Senast läst %@";
 "Elvia day and night tariff" = "Elvia dag- och nattariff";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Alla aviseringar";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Ber Hisingen hämta färska fordonsdata från leverantören nu.";
+"Charge Target (%)" = "Laddmål (%)";
+"Charging Status" = "Laddstatus";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Avslutar en laddningsöverstyrning så att fordonet återgår till sitt laddningsschema.";
+"Hisingen Focus Filter" = "Hisingens fokusfilter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen kan inte uppdatera förrän kontot återkopplats, så allt nedan är den senaste lyckade avläsningen.";
+"Locks the vehicle doors." = "Låser fordonets dörrar.";
+"Muted" = "Tystade";
+"Oldest reading %@" = "Äldsta avläsning %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Åsidosätter det aktiva laddningsschemat så att fordonet laddar omedelbart.";
+"Recent Trips" = "Senaste resor";
+"Returns charging state, power, target, and time remaining." = "Returnerar laddstatus, effekt, mål och återstående tid.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returnerar lokalt beräknad resesträcka och körtid för de senaste sju dagarna.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returnerar lås-, öppnings- och uppmärksamhetsstatus från Hisingens senaste ögonblicksbild.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returnerar batterinivå, räckvidd och laddstatus för ett fordon.";
+"Returns the current tire pressures and statuses for all wheels." = "Returnerar aktuella däcktryck och status för alla hjul.";
+"Returns the last reported parking position of the active vehicle." = "Returnerar den senast rapporterade parkeringspositionen för det aktiva fordonet.";
+"Returns the status of all vehicles in your garage." = "Returnerar statusen för alla fordon i ditt garage.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returnerar fördelningen av fordonets elektriska energiförbrukning på körning, klimat och batterikonditionering.";
+"Runtime (minutes)" = "Körtid (minuter)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Ställer in aktivt fordon och om fordonets aviseringar ska tystas när ett fokus slås på.";
+"Sets the vehicle's charging current limit in amperes." = "Ställer in fordonets laddströmsgräns i ampere.";
+"Sets the vehicle's target charge level percentage." = "Ställer in fordonets målladdnivå i procent.";
+"Sign in again to keep this up to date" = "Logga in igen för att hålla detta uppdaterat";
+"Sign in again: Hisingen cannot refresh" = "Logga in igen: Hisingen kan inte uppdatera";
+"Some readings are from an earlier report" = "Vissa avläsningar kommer från en tidigare rapport";
+"Starts cabin climate preconditioning." = "Startar förklimatisering av kupén.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Startar kupéns förrengöringscykel som renar luften i interiören före avresa.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Startar förbränningsmotorn för att förklimatisera kupén (Volvo-bilar med stöd för motorstart).";
+"Stops a remotely started combustion engine." = "Stoppar en fjärrstartad förbränningsmotor.";
+"Stops a running cabin pre-cleaning cycle." = "Stoppar en pågående förrengöringscykel i kupén.";
+"Stops cabin climate preconditioning." = "Stoppar förklimatisering av kupén.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetrin fungerar nu, men macOS kunde inte lagra autentiseringsuppgifterna. Kontrollera ledigt diskutrymme och logga sedan in igen så att sessionen överlever en omstart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Fordonet rapporterade dessa värden vid den visade tidpunkten, inte vid den här uppdateringen. Hisingen märker dem i stället för att visa dem som aktuella.";
+"Unlocks the vehicle doors." = "Låser upp fordonets dörrar.";
+"Vehicle Battery" = "Fordonsbatteri";
+"Vehicle nickname or VIN (optional)" = "Smeknamn eller VIN (valfritt)";
+"Volvo connected, but not saved" = "Volvo ansluten, men inte sparad";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo accepterar inte längre den här appens klient-ID. Logga in med ditt Volvo-ID, eller ange autentiseringsuppgifter för det nya inloggningssystemet i Inställningar.";

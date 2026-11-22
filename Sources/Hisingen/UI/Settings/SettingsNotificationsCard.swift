@@ -435,7 +435,11 @@ struct SettingsNotificationsCard: View {
         notificationRow(
             symbol: "app.badge.fill",
             title: "Warning Badge",
-            detail: "Show a dock badge while any vehicle reports warnings or an alarm",
+            // A badge on a hidden tile paints nothing, so the row says what it needs instead
+            // of reading as broken. The badge shows once the Dock icon is on.
+            detail: prefs.showDockIcon
+                ? "Show a dock badge while any vehicle reports warnings or an alarm"
+                : "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.",
             \.showWarningBadge
         )
 

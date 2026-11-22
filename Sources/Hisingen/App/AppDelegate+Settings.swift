@@ -161,6 +161,9 @@ extension AppDelegate {
             break
         case .launchAtLogin:
             launchAtLoginController.reconcile(userInitiated: true)
+        case .dockIcon:
+            applyDockIconPolicy()
+            dockWarningBadge.refresh()
         case .updater:
             updateController.applyConfiguration()
         case .checkForUpdates:
@@ -179,5 +182,14 @@ extension AppDelegate {
             locationTriggers.resetObservations()
         }
         render()
+    }
+
+
+    /// Applies the Dock icon preference. The bundle declares LSUIElement, so macOS starts the
+    /// process as an accessory app and only this policy change can summon the Dock tile while
+    /// running. The warning badge rides the same switch: a badge on a hidden tile paints
+    /// nothing, and a freshly visible tile needs the current count.
+    func applyDockIconPolicy() {
+        NSApp.setActivationPolicy(preferences.showDockIcon ? .regular : .accessory)
     }
 }

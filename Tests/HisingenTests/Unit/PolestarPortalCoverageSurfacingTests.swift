@@ -144,6 +144,16 @@ struct PolestarPortalCoverageSurfacingTests {
         await api.setSessionForTesting(session)
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
         await api.setAccessTokenForTesting("test-token")
+        // The quota counter backs onto process-global defaults when no store is injected, so
+        // every portal test run all day shares one number. Past a few thousand calls the
+        // refresh plan starts rotating endpoints out and this suite fails on whichever
+        // domain the hour puts last. A private always-fresh store keeps the plan at full
+        // breadth and keeps this suite's calls off the shared counter.
+        let quotaBox = QuotaBox()
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { quotaBox.value },
+            set: { count, date in quotaBox.value = (count, date) })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
 
         CoverageSurfacingTransport.requestHandler = { request in
             let path = request.url?.path ?? ""
@@ -517,7 +527,7 @@ struct PolestarPortalCoverageSurfacingTests {
     }
 }
 
-private final class CoverageSurfacingTransport: URLProtocol, @unchecked Sendable {
+final class CoverageSurfacingTransport: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (Int, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }

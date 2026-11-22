@@ -136,6 +136,12 @@
 "Battery Warranty Remaining" = "Akkutakuu (jäljellä)";
 "Battery and Power" = "Akku ja teho";
 "Battery and Range" = "Akku ja toimintamatka";
+"Available optimised charging" = "Saatavilla oleva optimoitu lataus";
+"Bidirectional charging" = "Kaksisuuntainen lataus";
+"Dock icon" = "Dock-kuvake";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Näytä Hisingen Dockissa, sovellusvaihtajassa ja varoitusmerkkinä";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen. Kytke Dock-kuvake päälle (Ulkoasu → Valikkorivi), jotta merkki näkyy.";
 "Position relative to car" = "Sijainti auton suhteen";
 "First reading" = "Ensimmäinen lukema";
 "Above" = "Yläpuolella";
@@ -1199,6 +1205,8 @@
 "Washer Fluid" = "Lasinpesuneste";
 "Washer fluid" = "Pesuneste";
 "Washer fluid level" = "Pesunesteen taso";
+"Portal" = "Portaali";
+"Weather" = "Sää";
 "Wed" = "Ke";
 "Welcome to Hisingen" = "Tervetuloa Hisingeniin";
 "Window Controls" = "Ikkunoiden hallinta";
@@ -3605,6 +3613,17 @@
 "Tibber is unavailable. Market price plus your markup." = "Tibber ei ole käytettävissä. Markkinahinta plus katteesi.";
 "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "Valinnainen. Yhdistää Tibberin suunnittelemaan latauksen ja hintaistunnot sen omista 15 minuutin hinnoista ilman Home Assistantia.";
 "Used for the planner and charging sessions" = "Käytetään suunnittelijassa ja latausistunnoissa";
+/* Electricity supplier: house energy */
+"By Day" = "Päivittäin";
+"By Month" = "Kuukausittain";
+"House Energy" = "Talon energia";
+"Hours" = "Tuntia";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Tunnit kullakin Tibberin hintatasolla päivän ja huomisen julkaistuissa hinnoissa.";
+"Level" = "Taso";
+"Price Levels" = "Hintatasot";
+"Production" = "Tuotanto";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Mitä Tibber on näiden päivien energiasta laskuttanut, verot mukaan lukien. Verkkomaksu ei sisälly.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Talon energia jaksoittain. Jakso, jolta mittari ei ole raportoinut, jätetään pois, ja kesken oleva kuukausi on lyhyempi kuin naapurinsa.";
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibberin hinta sisältää energian, verot ja oman katteen, mutta ei verkkosiirtohintaa. Lisää omasi tähän; yhdistetty laturi voi asettaa omansa.";
 "Added to Tibber prices in the planner and for charger sessions." = "Lisätään Tibberin hintoihin suunnittelussa ja laturi-istuntojen hinnoittelussa.";
 
@@ -4002,6 +4021,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Avaa Hisingenin lukituskomento vahvistettavaksi.";
 "Start climate" = "Käynnistä ilmastointi";
 "Opens Hisingen with the climate command ready to confirm." = "Avaa Hisingenin ilmastointikomento vahvistettavaksi.";
+"Choose which car the widget shows." = "Valitse, minkä auton widget näyttää.";
+"Vehicle not on file — showing %@" = "Ajoneuvoa ei löydy — näytetään %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Lokin osio";
@@ -4242,3 +4263,45 @@
 "Show this charger's readings and commands." = "Näytä tämän laturin lukemat ja komennot.";
 "Last read %@" = "Viimeksi luettu %@";
 "Elvia day and night tariff" = "Elvian päivä- ja yötariffi";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Kaikki ilmoitukset";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Pyytää Hisingeniä hakemaan tuoreet ajoneuvotiedot palveluntarjoajalta nyt.";
+"Charge Target (%)" = "Latauksen tavoite (%)";
+"Charging Status" = "Latauksen tila";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Lopettaa latauksen ohituksen, jolloin ajoneuvo palaa latausaikatauluunsa.";
+"Hisingen Focus Filter" = "Hisingen Focus -suodatin";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen ei voi päivittää, ennen kuin tili on yhdistetty uudelleen, joten kaikki alla oleva on viimeisin onnistunut lukema.";
+"Locks the vehicle doors." = "Lukitsee ajoneuvon ovet.";
+"Muted" = "Mykistetty";
+"Oldest reading %@" = "Vanhin lukema %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Ohittaa voimassa olevan latausaikataulun, jolloin ajoneuvo lataa heti.";
+"Recent Trips" = "Viimeisimmät matkat";
+"Returns charging state, power, target, and time remaining." = "Palauttaa latauksen tilan, tehon, tavoitteen ja jäljellä olevan ajan.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Palauttaa paikallisesti lasketun matkan pituuden ja ajoajan viimeiseltä seitsemältä päivältä.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Palauttaa lukituksen, ovien tilan ja huomiotiedot Hisingenin viimeisimmästä tilannekuvasta.";
+"Returns the battery level, range, and charging status of a vehicle." = "Palauttaa ajoneuvon akkutason, toimintamatkan och lataustilan.";
+"Returns the current tire pressures and statuses for all wheels." = "Palauttaa kaikkien renkaiden ajankohtaiset paineet ja tilat.";
+"Returns the last reported parking position of the active vehicle." = "Palauttaa aktiivisen ajoneuvon viimeksi ilmoitetun pysäköintisijainnin.";
+"Returns the status of all vehicles in your garage." = "Palauttaa kaikkien autotallin ajoneuvien tilan.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Palauttaa ajoneuvon sähköenergian kulutuksen jaon ajolle, ilmastoinnille ja akun esikäsittelylle.";
+"Runtime (minutes)" = "Käyntiaika (minuuttia)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Asettaa aktiivisen ajoneuvon ja sen, mykistetäänkö ajoneuvon ilmoitukset, kun Focus-tila aktivoituu.";
+"Sets the vehicle's charging current limit in amperes." = "Asettaa ajoneuvon latausvirran ylärajan ampeereina.";
+"Sets the vehicle's target charge level percentage." = "Asettaa ajoneuvon lataustavoitteen prosentteina.";
+"Sign in again to keep this up to date" = "Kirjaudu uudelleen sisään pitääksesi tämän ajan tasalla";
+"Sign in again: Hisingen cannot refresh" = "Kirjaudu uudelleen sisään: Hisingen ei voi päivittää";
+"Some readings are from an earlier report" = "Osa lukemista on peräisin aiemmasta raportista";
+"Starts cabin climate preconditioning." = "Käynnistää matkustamon ilmastoinnin esilämmityksen.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Käynnistää matkustamon esipuhdistusjakson, joka puhdistaa sisäilman ennen lähtöä.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Käynnistää polttomoottorin matkustamon esilämmittämiseksi (Volvo-ajoneuvot, jotka tukevat moottorin käynnistystä).";
+"Stops a remotely started combustion engine." = "Pysäyttää etänä käynnistetyn polttomoottorin.";
+"Stops a running cabin pre-cleaning cycle." = "Pysäyttää käynnissä olevan matkustamon esipuhdistusjakson.";
+"Stops cabin climate preconditioning." = "Pysäyttää matkustamon ilmastoinnin esilämmityksen.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetria toimii nyt, mutta macOS ei voinut tallentaa tunnistetietoja. Tarkista vapaa levytila ja kirjaudu sitten uudelleen sisään, jotta istunto säilyy uudelleenkäynnistyksessä.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Ajoneuvo raportoi nämä arvot näytettynä ajankohtana, ei tämän päivityksen yhteydessä. Hisingen merkitsee ne sen sijaan, että esittäisi ne ajantasaisina.";
+"Unlocks the vehicle doors." = "Avaa ajoneuvon ovien lukot.";
+"Vehicle Battery" = "Ajoneuvon akku";
+"Vehicle nickname or VIN (optional)" = "Ajoneuvon lempinimi tai VIN (valinnainen)";
+"Volvo connected, but not saved" = "Volvo yhdistetty, mutta ei tallennettu";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo ei enää hyväksy tämän sovelluksen client-ID:tä. Kirjaudu sisään Volvo-ID:lläsi tai anna uuden kirjautumisjärjestelmän tunnistetiedot asetuksissa.";

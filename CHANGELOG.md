@@ -213,6 +213,23 @@ All notable changes to Hisingen are documented in this file. The project follows
   neither, the planner and automatic pricing stay off and the Electricity page says what to
   connect; a saved Tibber home does not silently price a different supplier.
 
+- **Dock Icon** (Appearance → Menu Bar) shows Hisingen in the Dock and the app switcher. The
+  warning badge needed this switch: it sat in Notifications while the Dock tile it paints was
+  permanently hidden by the bundle, so a reader could turn on a badge that never appeared. The
+  badge row now names what it needs, the tile stays blank while the Dock icon is off, and the
+  count returns the moment the icon is back.
+- The Electricity Supplier card now shows the house's energy next to the connection: the last 30
+  days of whole-home consumption and production by day, the twelve months up to now by month, and
+  the price levels of the prices published for today and tomorrow as hours at each of Tibber's five
+  levels. Days and months the meter has not reported stay out instead of reading as zero, a home
+  without a production metering point shows no production, and a read that fails keeps the last
+  good answer and names the reason.
+- Saved charge locations now say what the backend offers at each place: the optimised
+  charging mode it can run while the switch is still off, in the same words the active mode
+  uses, and whether the location supports bidirectional charging when the vehicle reports it.
+- Reading Freshness names the transport that answered each reading — Portal, gRPC, Live or
+  Weather — whenever it is not the usual Polestar app transport, and stays silent when it is.
+  In Developer Portal mode this explains a stale domain sitting next to a fresh one.
 - Volvo's approved permissions are now tracked per scope instead of all-or-nothing. When Volvo
   rejects a sign-in over one unapproved scope, Hisingen first retries without `location:read` —
   the permission developer applications most often lack — so a car without location approval
@@ -289,6 +306,32 @@ All notable changes to Hisingen are documented in this file. The project follows
 - `PRIVACY.md` now matches the code: signing out clears cached snapshots, charging baselines and
   command receipts, and clears the vehicle-history database only when **Erase local history on
   sign out** is enabled (off by default).
+
+- The desktop widget is now configurable per car. Its Edit sheet lists every car the app has
+  readings for, and a widget pinned to one car keeps showing that car even when another is
+  active in the app; the choice is WidgetKit-persisted per widget instance. If the chosen car
+  later leaves the account, the widget falls back to the active car and says so in a line under
+  its status; an unconfigured widget behaves exactly as before, following the active car. The
+  car list comes from a garage snapshot the app writes beside the single-car snapshot after
+  each completed refresh, in the same shared App Group container as before. The per-widget
+  picker uses a `WidgetConfigurationIntent`, which resolves inside the extension process and
+  so ships without the App Intents metadata a SwiftPM build cannot emit — that metadata remains
+  parked for Shortcuts and Siri discovery only.
+
+### Changed
+
+- A release now opens a reviewable PR that syncs the checked-in `site/updates/appcast.xml`
+  seed with the feed the release just published. The seed had stayed behind since 2.0.10,
+  and the fallback Pages path could have served it after a rollback or a new checkout. The
+  live feed itself already deploys from the release artifact and needs no merge.
+
+- The App Intents surface resolves through `L10n` like every other part of the app: the
+  intent titles and descriptions, the parameter titles, the Focus filter's display strings
+  and the Shortcuts short titles read the selected interface language instead of English
+  (MAINT-02). The eleven known-unkeyed literals — the Focus filter's two AppIntents strings
+  plus nine sign-in and data-freshness strings — gained keys and translations in all 14
+  locales and left the usage baseline, so the commit-time localization gates now run at zero
+  known-unkeyed. `AppShortcuts.strings` stays parked on the `Metadata.appintents` blocker.
 
 ## [3.0.2] - 2026-11-21
 

@@ -136,6 +136,12 @@
 "Battery Warranty Remaining" = "Batterigaranti (resterende)";
 "Battery and Power" = "Batteri og effekt";
 "Battery and Range" = "Batteri og rækkevidde";
+"Available optimised charging" = "Tilgængelig optimeret opladning";
+"Bidirectional charging" = "Tokvejsopladning";
+"Dock icon" = "Dockikon";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Vis Hisingen i Dock'en, programskifteren og som advarselsmærke";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Vis et Dock-mærke, mens en bil rapporterer advarsler eller alarm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Vis et Dock-mærke, mens en bil rapporterer advarsler eller alarm. Slå Dock-ikonet til (Udseende → Menulinje), før mærket vises.";
 "Position relative to car" = "Placering i forhold til bilen";
 "First reading" = "Første aflæsning";
 "Above" = "Ovenfor";
@@ -1199,6 +1205,8 @@
 "Washer Fluid" = "Sprinklervæske";
 "Washer fluid" = "Sprinklervæske";
 "Washer fluid level" = "Sprinklervæskeniveau";
+"Portal" = "Portal";
+"Weather" = "Vejr";
 "Wed" = "Ons";
 "Welcome to Hisingen" = "Velkommen til Hisingen";
 "Window Controls" = "Vinduesstyring";
@@ -3612,6 +3620,17 @@
 "Tibber is unavailable. Market price plus your markup." = "Tibber er utilgængelig. Markedspris plus dit tillæg.";
 "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "Valgfrit. Forbinder Tibber til at planlægge opladning og prissessioner ud fra sine egne 15-minutterspriser, uden Home Assistant.";
 "Used for the planner and charging sessions" = "Bruges af planlæggeren og opladningssessionerne";
+/* Electricity supplier: house energy */
+"By Day" = "Per dag";
+"By Month" = "Per måned";
+"House Energy" = "Husets energi";
+"Hours" = "Timer";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Timer på hver af Tibbers prisniveauer i de priser der er offentliggjort for i dag og i morgen.";
+"Level" = "Niveau";
+"Price Levels" = "Prisniveauer";
+"Production" = "Produktion";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Hvad Tibber har faktureret for disse dages energi, skatter medregnet. Nettariffen er ikke med.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Husets energi per periode. En periode måleren ikke har rapporteret udelades, og måneden der stadig varer er kortere end sine naboer.";
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibbers pris indeholder energi, afgifter og deres egen avance, men ikke gebyret til elnettet. Tilføj dit her; en parret oplader kan selv angive sit eget.";
 "Added to Tibber prices in the planner and for charger sessions." = "Lægges til Tibbers priser i planlæggeren og ved prisning af opladersessioner.";
 
@@ -4009,6 +4028,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Åbner Hisingen med låsekommandoen klar til at bekræfte.";
 "Start climate" = "Start klimaanlægget";
 "Opens Hisingen with the climate command ready to confirm." = "Åbner Hisingen med klimakommandoen klar til at bekræfte.";
+"Choose which car the widget shows." = "Vælg hvilken bil widgeten viser.";
+"Vehicle not on file — showing %@" = "Køretøjet mangler — viser %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Logpartition";
@@ -4249,3 +4270,45 @@
 "Show this charger's readings and commands." = "Vis denne laders aflæsninger og kommandoer.";
 "Last read %@" = "Sidst læst %@";
 "Elvia day and night tariff" = "Elvia dag- og nattarif";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Alle notifikationer";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Beder Hisingen hente friske køretøjsdata fra udbyderen nu.";
+"Charge Target (%)" = "Opladningsmål (%)";
+"Charging Status" = "Opladningsstatus";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Afslutter en opladningsoverstyring, så køretøjet vender tilbage til sin opladningsplan.";
+"Hisingen Focus Filter" = "Hisingen-fokusfilter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen kan ikke opdatere, før kontoen er tilsluttet igen, så alt nedenfor er den seneste vellykkede aflæsning.";
+"Locks the vehicle doors." = "Låser køretøjets døre.";
+"Muted" = "Dæmpet";
+"Oldest reading %@" = "Ældste aflæsning %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Tilsidesætter den aktive opladningsplan, så køretøjet oplader med det samme.";
+"Recent Trips" = "Seneste ture";
+"Returns charging state, power, target, and time remaining." = "Returnerer opladningsstatus, effekt, mål og resterende tid.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returnerer lokalt udledt turafstand og køretid for de seneste syv dage.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returnerer låse-, åbnings- og opmærksomhedsstatus fra det seneste Hisingen-øjebliksbillede.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returnerer batteriniveau, rækkevidde og opladningsstatus for et køretøj.";
+"Returns the current tire pressures and statuses for all wheels." = "Returnerer aktuelle dæktryk og status for alle hjul.";
+"Returns the last reported parking position of the active vehicle." = "Returnerer den senest rapporterede parkeringsposition for det aktive køretøj.";
+"Returns the status of all vehicles in your garage." = "Returnerer status for alle køretøjer i din garage.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returnerer fordelingen af køretøjets elektriske energiforbrug på kørsel, klima og batterikonditionering.";
+"Runtime (minutes)" = "Køretid (minutter)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Angiver det aktive køretøj og om dets notifikationer skal dæmpes, når et fokus aktiveres.";
+"Sets the vehicle's charging current limit in amperes." = "Angiver køretøjets grænseværdi for ladestrøm i ampere.";
+"Sets the vehicle's target charge level percentage." = "Angiver køretøjets målopladningsniveau i procent.";
+"Sign in again to keep this up to date" = "Log ind igen for at holde dette opdateret";
+"Sign in again: Hisingen cannot refresh" = "Log ind igen: Hisingen kan ikke opdatere";
+"Some readings are from an earlier report" = "Nogle aflæsninger stammer fra en tidligere rapport";
+"Starts cabin climate preconditioning." = "Starter forkonditionering af kabineklimaet.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starter forrensningscyklus for kabinen, som renser luften før afgang.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starter forbrændingsmotoren for at forkonditionere kabinen (Volvo-biler med understøttelse af motorstart).";
+"Stops a remotely started combustion engine." = "Stopper en fjernstartet forbrændingsmotor.";
+"Stops a running cabin pre-cleaning cycle." = "Stopper en igangværende forrensningscyklus i kabinen.";
+"Stops cabin climate preconditioning." = "Stopper forkonditionering af kabineklimaet.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetrien kører nu, men macOS kunne ikke gemme loginoplysningerne. Tjek den ledige diskplads og log ind igen, så sessionen overlever en genstart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Køretøjet rapporterede disse værdier på det viste tidspunkt, ikke ved denne opdatering. Hisingen mærker dem i stedet for at vise dem som aktuelle.";
+"Unlocks the vehicle doors." = "Låser køretøjets døre op.";
+"Vehicle Battery" = "Køretøjsbatteri";
+"Vehicle nickname or VIN (optional)" = "Køretøjets kaldenavn eller VIN (valgfri)";
+"Volvo connected, but not saved" = "Volvo tilsluttet, men ikke gemt";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo accepterer ikke længere denne apps klient-ID. Log ind med dit Volvo-ID, eller angiv loginoplysninger til det nye loginsystem i Indstillinger.";

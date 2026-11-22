@@ -282,6 +282,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // session material and must never be greeted by the first-run setup pass.
         preferences.seedSetupPassForExistingInstall()
         launchAtLoginController.reconcile(userInitiated: false)
+        // Restores the Dock tile before the session resumes, so a reader who turned the icon on
+        // sees it in the first second instead of after the first visit to Appearance.
+        applyDockIconPolicy()
         if !preferences.isDemoMode { updateController.applyConfiguration() }
         vehicleSession.resume()
         urlRouter.startHandlingAppleEvents()

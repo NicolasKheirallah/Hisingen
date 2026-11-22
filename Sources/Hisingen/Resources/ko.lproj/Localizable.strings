@@ -136,6 +136,12 @@
 "Battery Warranty Remaining" = "배터리 보증 (잔여)";
 "Battery and Power" = "배터리 및 전력";
 "Battery and Range" = "배터리 및 주행 가능 거리";
+"Available optimised charging" = "사용 가능한 최적화 충전";
+"Bidirectional charging" = "양방향 충전";
+"Dock icon" = "Dock 아이콘";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Dock, 앱 전환기 및 경고 배지에 Hisingen 표시";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "차량이 경고나 알람을 보고하는 동안 Dock 배지 표시";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "차량이 경고나 알람을 보고하는 동안 Dock 배지 표시. 배지가 나타나려면 Dock 아이콘을 켜십시오(화면 표시 → 메뉴 막대).";
 "Position relative to car" = "차량 기준 위치";
 "First reading" = "첫 번째 표시 항목";
 "Above" = "위";
@@ -1199,6 +1205,8 @@
 "Washer Fluid" = "워셔액";
 "Washer fluid" = "워셔액";
 "Washer fluid level" = "워셔액 수위";
+"Portal" = "포털";
+"Weather" = "날씨";
 "Wed" = "수";
 "Welcome to Hisingen" = "Hisingen에 오신 것을 환영합니다";
 "Window Controls" = "창문 제어";
@@ -3605,6 +3613,17 @@
 "Tibber is unavailable. Market price plus your markup." = "Tibber를 사용할 수 없습니다. 시장 가격에 마크업을 더합니다.";
 "Optional. Connects Tibber to plan charging and price sessions from its own 15-minute prices, without Home Assistant." = "선택 사항. Home Assistant 없이 Tibber의 15분 단위 요금으로 충전과 요금 세션을 계획하도록 연결합니다.";
 "Used for the planner and charging sessions" = "플래너와 충전 세션에 사용됩니다";
+/* Electricity supplier: house energy */
+"By Day" = "일별";
+"By Month" = "월별";
+"House Energy" = "가정 에너지";
+"Hours" = "시간";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "오늘과 내일로 발표된 가격에서 Tibber의 각 가격 수준별 시간입니다.";
+"Level" = "수준";
+"Price Levels" = "가격 수준";
+"Production" = "생산";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "이 며칠의 에너지에 대해 Tibber가 청구한 금액으로, 세금이 포함됩니다. 전력망 요금은 포함되지 않습니다.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "기간별 가정 에너지. 계량기가 보고하지 않은 기간은 제외되며, 진행 중인 달은 이웃한 달보다 짧습니다.";
 "Tibber's price includes energy, taxes and its markup but not the grid fee. Add yours here; a paired charger can set its own." = "Tibber 가격에는 에너지, 세금, Tibber 마진이 포함되지만 계통 요금은 제외됩니다. 여기에 직접 입력하세요. 연동된 충전기는 자체 요금을 설정할 수 있습니다.";
 "Added to Tibber prices in the planner and for charger sessions." = "플래너와 충전기 세션에서 Tibber 가격에 추가됩니다.";
 
@@ -4002,6 +4021,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "확인할 잠금 명령과 함께 Hisingen을 엽니다.";
 "Start climate" = "공조 시작";
 "Opens Hisingen with the climate command ready to confirm." = "확인할 공조 명령과 함께 Hisingen을 엽니다.";
+"Choose which car the widget shows." = "위젯에 표시할 차량을 선택합니다.";
+"Vehicle not on file — showing %@" = "차량 정보 없음 — %@ 표시 중";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "기록 구획";
@@ -4242,3 +4263,45 @@
 "Show this charger's readings and commands." = "이 충전기의 판독값과 명령을 표시합니다.";
 "Last read %@" = "마지막 판독 %@";
 "Elvia day and night tariff" = "Elvia 주간·야간 요금제";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "모든 알림";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Hisingen에게 지금 공급자로부터 최신 차량 데이터를 가져오도록 요청합니다.";
+"Charge Target (%)" = "충전 목표(%)";
+"Charging Status" = "충전 상태";
+"Ends a charging override so the vehicle returns to its charging schedule." = "충전 재정의를 종료하여 차량이 충전 일정으로 돌아가도록 합니다.";
+"Hisingen Focus Filter" = "Hisingen 집중 모드 필터";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "계정이 다시 연결될 때까지 Hisingen은 새로 고칠 수 없으므로 아래 내용은 마지막으로 성공한 측정 값입니다.";
+"Locks the vehicle doors." = "차량 문을 잠급니다.";
+"Muted" = "무음";
+"Oldest reading %@" = "가장 오래된 측정 값 %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "활성 충전 일정을 재정의하여 차량이 즉시 충전되도록 합니다.";
+"Recent Trips" = "최근 주행";
+"Returns charging state, power, target, and time remaining." = "충전 상태, 충전 전력, 목표 및 남은 시간을 반환합니다.";
+"Returns locally derived trip distance and driving time for the last seven days." = "최근 7일 동안 로컬에서 추정한 주행 거리와 운전 시간을 반환합니다.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "최신 Hisingen 스냅샷의 잠금, 개폐 및 주의 상태를 반환합니다.";
+"Returns the battery level, range, and charging status of a vehicle." = "차량의 배터리 수준, 주행거리 및 충전 상태를 반환합니다.";
+"Returns the current tire pressures and statuses for all wheels." = "모든 바퀴의 현재 타이어 공기압과 상태를 반환합니다.";
+"Returns the last reported parking position of the active vehicle." = "활성 차량의 마지막 보고된 주차 위치를 반환합니다.";
+"Returns the status of all vehicles in your garage." = "차고에 있는 모든 차량의 상태를 반환합니다.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "주행, 공조, 배터리 컨디셔닝별 차량 전기 에너지 소비 내역을 반환합니다.";
+"Runtime (minutes)" = "작동 시간(분)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "집중 모드가 켜질 때 활성 차량과 해당 차량의 알림 무음 여부를 설정합니다.";
+"Sets the vehicle's charging current limit in amperes." = "차량의 충전 전류 한도를 암페어 단위로 설정합니다.";
+"Sets the vehicle's target charge level percentage." = "차량의 목표 충전 수준을 백분율로 설정합니다.";
+"Sign in again to keep this up to date" = "최신 상태를 유지하려면 다시 로그인하세요";
+"Sign in again: Hisingen cannot refresh" = "다시 로그인: Hisingen은 새로 고칠 수 없음";
+"Some readings are from an earlier report" = "일부 측정 값은 이전 보고에서 가져온 것입니다";
+"Starts cabin climate preconditioning." = "실내 공조 사전 조절을 시작합니다.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "출발 전 실내 공기를 정화하는 사전 청소 사이클을 시작합니다.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "실내를 사전 조절하기 위해 내연기관을 시동합니다(엔진 시동을 지원하는 Volvo 차량).";
+"Stops a remotely started combustion engine." = "원격으로 시동한 내연기관을 중지합니다.";
+"Stops a running cabin pre-cleaning cycle." = "실행 중인 실내 사전 청소 사이클을 중지합니다.";
+"Stops cabin climate preconditioning." = "실내 공조 사전 조절을 중지합니다.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "이제 텔레메트리가 작동하지만 macOS가 자격 증명을 저장하지 못했습니다. 여유 디스크 공간을 확인한 후 다시 로그인하여 세션이 재시동 후에도 유지되도록 하세요.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "차량은 이 값을 표시된 시점에 보고했으며, 이번 새로 고침 때가 아닙니다. Hisingen은 이를 현재 값으로 표시하는 대신 라벨을 붙입니다.";
+"Unlocks the vehicle doors." = "차량 문 잠금을 해제합니다.";
+"Vehicle Battery" = "차량 배터리";
+"Vehicle nickname or VIN (optional)" = "차량 별명 또는 VIN(선택 사항)";
+"Volvo connected, but not saved" = "Volvo 연결됨, 하지만 저장되지 않음";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo에서 이 앱의 클라이언트 ID를 더 이상 허용하지 않습니다. Volvo ID로 로그인하거나 설정에서 새 로그인 시스템의 자격 증명을 입력하세요.";
