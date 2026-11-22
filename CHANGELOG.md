@@ -3,6 +3,18 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- A release now attaches only what a person downloads: `Hisingen.dmg`, `Hisingen.app.zip` and
+  `SHA256SUMS`, which covers both. The duplicate `Hisingen.zip`, `release-manifest.json`, `appcast.xml`
+  and `Hisingen.app.md` are no longer release assets. Sparkle's feed and its signed release notes are
+  served from the Pages site, and the manifest stays in the release run's artifact. Publishing deletes
+  any other asset from the draft and stops if one remains. The release body opens with the commands to
+  check a download: checksum, build attestation, signature and notarization ticket. Installed copies
+  keep updating, because feeds already published still point at the notes attached to their release.
+
 ## [3.0.1] - 2026-11-19
 
 ### Added

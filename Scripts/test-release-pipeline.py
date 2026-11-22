@@ -148,6 +148,70 @@ class IdentityTests(unittest.TestCase):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_release_publishes_only_installer_archive_and_checksums(self):
+        self.assertEqual(release.PUBLIC_ASSETS, ("Hisingen.dmg", "Hisingen.app.zip", "SHA256SUMS"))
+
+    def test_draft_drops_stale_assets_and_uploads_only_public_files(self):
+        with repository():
+            names = ("a.zip", "SUMS")
+            for name in (*names, "extra.json"):
+                Path(name).write_bytes(name.encode())
+            release.create_manifest("release-manifest.json", "v1.1.0", [*names, "extra.json"])
+            calls = []
+            original_run = release.run
+
+            def api(*args, **kwargs):
+                calls.append(args)
+                if args[:3] == ("gh", "release", "view"):
+                    return result('{"isDraft":true,"assets":[{"name":"a.zip"},{"name":"Hisingen.zip"},{"name":"release-manifest.json"}]}')
+                if args[:3] == ("gh", "release", "download"):
+                    out = Path(args[args.index("--dir") + 1])
+                    for name in names:
+                        (out / name).write_bytes(Path(name).read_bytes())
+                    return result()
+                if args[:2] == ("gh", "release"):
+                    return result()
+                return original_run(*args, **kwargs)
+
+            with patch.object(release, "PUBLIC_ASSETS", names), patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
+                release.publish("v1.1.0")
+            deleted = {c[4] for c in calls if c[:3] == ("gh", "release", "delete-asset")}
+            self.assertEqual(deleted, {"Hisingen.zip", "release-manifest.json"})
+            upload = next(c for c in calls if c[:3] == ("gh", "release", "upload"))
+            self.assertEqual(set(upload[4:]) - {"--clobber"}, set(names))
+
+    def test_draft_with_an_unexpected_downloaded_asset_is_not_published(self):
+        with repository():
+            Path("artifact.zip").write_bytes(b"verified")
+            release.create_manifest("release-manifest.json", "v1.1.0", ["artifact.zip"])
+            calls = []
+            original_run = release.run
+
+            def api(*args, **kwargs):
+                calls.append(args)
+                if args[:3] == ("gh", "release", "view"):
+                    return result('{"isDraft":true,"assets":[]}')
+                if args[:3] == ("gh", "release", "download"):
+                    out = Path(args[args.index("--dir") + 1])
+                    (out / "artifact.zip").write_bytes(b"verified")
+                    (out / "Hisingen.zip").write_bytes(b"stray")
+                    return result()
+                if args[:2] == ("gh", "release"):
+                    return result()
+                return original_run(*args, **kwargs)
+
+            with patch.object(release, "PUBLIC_ASSETS", ("artifact.zip",)), patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
+                with self.assertRaisesRegex(ValueError, "unexpected assets"):
+                    release.publish("v1.1.0")
+            self.assertFalse(any(c[:3] == ("gh", "release", "edit") for c in calls))
+
+    def test_manifest_without_a_public_asset_cannot_publish(self):
+        with repository():
+            Path("artifact.zip").write_bytes(b"verified")
+            release.create_manifest("release-manifest.json", "v1.1.0", ["artifact.zip"])
+            with patch.object(release, "monotonic"), self.assertRaisesRegex(ValueError, "missing public assets"):
+                release.publish("v1.1.0")
+
     def test_older_completion_cannot_overwrite_newer_release(self):
         with patch.object(release, "published_versions", return_value=["v2.0.1", "v2.1.0"]):
             with self.assertRaisesRegex(ValueError, "rollback"):
@@ -168,12 +232,11 @@ class PublicationTests(unittest.TestCase):
                     return result('{"isDraft":false}')
                 if args[:3] == ("gh", "release", "download"):
                     out = Path(args[args.index("--dir") + 1])
-                    for name in ["artifact.zip", "release-manifest.json"]:
-                        (out / name).write_bytes(Path(name).read_bytes())
+                    (out / "artifact.zip").write_bytes(Path("artifact.zip").read_bytes())
                     return result()
                 return original_run(*args, **kwargs)
 
-            with patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
+            with patch.object(release, "PUBLIC_ASSETS", ("artifact.zip",)), patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
                 release.publish("v1.1.0")
             self.assertFalse(any("upload" in c or "edit" in c for c in calls))
 
@@ -196,7 +259,7 @@ class PublicationTests(unittest.TestCase):
                     return result()
                 return original_run(*args, **kwargs)
 
-            with patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
+            with patch.object(release, "PUBLIC_ASSETS", ("artifact.zip",)), patch.object(release, "run", side_effect=api), patch.object(release, "monotonic"):
                 with self.assertRaisesRegex(ValueError, "differs"):
                     release.publish("v1.1.0")
             self.assertFalse(any("edit" in c for c in calls))

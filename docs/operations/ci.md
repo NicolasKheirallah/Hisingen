@@ -114,9 +114,10 @@ contains no credentials.
 Pages serves the Volvo OAuth callback and the signed Sparkle appcast. Release
 calls the reusable Pages workflow with its verified release artifact and waits
 for deployment. The deployment verifier checks byte equality over HTTPS and
-availability/length of referenced release assets. A callback-only main deployment
-preserves the latest published release feed instead of restoring a stale source
-copy.
+availability/length of referenced release assets. The feed's release notes ship in
+the same Pages artifact, so the verifier also compares their bytes. A callback-only
+main deployment preserves the live feed and its notes instead of restoring a stale
+source copy.
 
 Live integration remains manual and separate from deterministic CI. Hosted soak
 duration must be 60 through 1800 seconds; longer soaks run locally. Polestar

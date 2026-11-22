@@ -261,7 +261,6 @@ jobs:
           name: release-ready-${{ env.TAG }}
           path: |
             Hisingen.dmg
-            Hisingen.zip
             Hisingen.app.zip
             SHA256SUMS
             release-manifest.json
@@ -319,9 +318,8 @@ jobs:
         with:
           subject-path: |
             Hisingen.dmg
-            Hisingen.zip
             Hisingen.app.zip
-            release-manifest.json
+            SHA256SUMS
       - name: Draft, upload, download-verify and publish release
         env:
           GH_TOKEN: ${{ github.token }}

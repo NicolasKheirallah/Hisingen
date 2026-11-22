@@ -95,6 +95,28 @@ class PagesContractTests(unittest.TestCase):
             with self.subTest(invalid=invalid[:40]), self.assertRaises((ValueError, ci.ET.ParseError)):
                 ci.appcast_version(invalid)
 
+    def test_notes_may_live_on_pages_but_nowhere_else(self):
+        legacy = b"releases/download/v" + self.version.encode() + b"/Hisingen.app.md"
+        self.assertIn(legacy, self.feed)
+        pages = self.feed.replace(b"https://github.com/NicolasKheirallah/Hisingen/" + legacy, ci.UPDATES_PREFIX.encode() + b"Hisingen.app.md")
+        self.assertEqual(ci.appcast_version(pages)[0], self.version)
+        elsewhere = self.feed.replace(b"https://github.com/NicolasKheirallah/Hisingen/" + legacy, b"https://example.test/Hisingen.app.md")
+        with self.assertRaises(ValueError):
+            ci.appcast_version(elsewhere)
+
+    def test_pages_hosted_notes_must_ship_with_the_site(self):
+        legacy = b"https://github.com/NicolasKheirallah/Hisingen/releases/download/v" + self.version.encode() + b"/Hisingen.app.md"
+        pages = self.feed.replace(legacy, ci.UPDATES_PREFIX.encode() + b"Hisingen.app.md")
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "updates").mkdir()
+            (root / "updates/appcast.xml").write_bytes(pages)
+            (root / "oauth-callback.html").write_bytes((ROOT / "site/oauth-callback.html").read_bytes())
+            with self.assertRaisesRegex(ValueError, "missing the release notes"):
+                ci.validate_site(root)
+            (root / "updates/Hisingen.app.md").write_text("Notes\n")
+            self.assertEqual(ci.validate_site(root)[0], self.version)
+
     def test_missing_callback_forwarding_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -246,7 +268,8 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertIn("release_artifact:", workflow)
         self.assertIn("python3 Scripts/ci-summary.py deployed", workflow)
         self.assertIn("'pages-production'", workflow)
-        self.assertIn("gh release download", workflow)
+        self.assertIn("Preserve the live feed and its notes", workflow)
+        self.assertNotIn("gh release download", workflow)
 
 
 if __name__ == "__main__":

@@ -61,16 +61,28 @@ jobs:
           set -euo pipefail
           test -f release-input/site/oauth-callback.html
           test -f release-input/site/updates/appcast.xml
+          test -f release-input/site/updates/Hisingen.app.md
           rm -rf site
           cp -R release-input/site site
-      - name: Preserve the latest published feed for callback deployments
+      - name: Preserve the live feed and its notes for callback deployments
         if: inputs.release_artifact == '' && github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
-          gh release download --repo "$GITHUB_REPOSITORY" --pattern appcast.xml --dir site/updates --clobber
+          base=https://nicolaskheirallah.github.io/Hisingen/updates
+          mkdir -p site/updates
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 -o site/updates/appcast.xml "$base/appcast.xml"
+          notes=$(python3 - "$base/" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          ns = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
+          link = ET.parse("site/updates/appcast.xml").getroot().find(f"./channel/item/{ns}releaseNotesLink")
+          url = (link.text or "") if link is not None else ""
+          print(url[len(sys.argv[1]):] if url.startswith(sys.argv[1]) else "")
+          PY
+          )
+          if [ -n "$notes" ]; then
+            curl --fail --silent --show-error --location --retry 3 --max-time 60 -o "site/updates/$notes" "$base/$notes"
+          fi
       - name: Validate deployment entry points
         env:
           EXPECTED_VERSION: ${{ inputs.expected_version }}

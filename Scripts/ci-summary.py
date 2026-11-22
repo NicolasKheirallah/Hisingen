@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 
 SPARKLE = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
 RELEASE_PREFIX = "https://github.com/NicolasKheirallah/Hisingen/releases/download/"
+UPDATES_PREFIX = "https://nicolaskheirallah.github.io/Hisingen/updates/"
 
 
 def normalize_queue_extension(text):
@@ -110,8 +111,10 @@ def appcast_version(data, expected_version=None):
         raise ValueError("Appcast archive is not the expected HTTPS release asset")
     if not enclosure.get("length", "").isdecimal() or int(enclosure.get("length")) <= 0:
         raise ValueError("Appcast archive length is invalid")
-    if notes is None or notes.text != prefix + "Hisingen.app.md":
-        raise ValueError("Appcast notes are not the expected HTTPS release asset")
+    # New releases serve notes from Pages beside the feed; older feeds, including the
+    # checked-in seed, still point at the notes file attached to that release.
+    if notes is None or notes.text not in (UPDATES_PREFIX + "Hisingen.app.md", prefix + "Hisingen.app.md"):
+        raise ValueError("Appcast notes are not at the expected HTTPS location")
     for element in (enclosure, notes):
         try:
             signature = base64.b64decode(element.get(f"{SPARKLE}edSignature", ""), validate=True)
@@ -129,7 +132,11 @@ def validate_site(directory, expected_version=None):
         if required not in callback:
             raise ValueError("OAuth callback no longer forwards the authorization result")
     feed = (directory / "updates/appcast.xml").read_bytes()
-    return appcast_version(feed, expected_version)
+    version, assets = appcast_version(feed, expected_version)
+    for url, _ in assets:
+        if url.startswith(UPDATES_PREFIX) and not (directory / "updates" / url[len(UPDATES_PREFIX):]).is_file():
+            raise ValueError(f"Site is missing the release notes the feed links to: {url}")
+    return version, assets
 
 
 def request_bytes(url):
@@ -149,12 +156,16 @@ def verify_deployed(base_url, directory, expected_version=None):
     last_error = None
     for attempt in range(8):
         try:
-            for relative in ("oauth-callback.html", "updates/appcast.xml"):
+            pages_assets = [url for url, _ in assets if url.startswith(UPDATES_PREFIX)]
+            relatives = ["oauth-callback.html", "updates/appcast.xml"] + ["updates/" + url[len(UPDATES_PREFIX):] for url in pages_assets]
+            for relative in relatives:
                 actual = request_bytes(base_url.rstrip("/") + "/" + relative)
                 expected = (pathlib.Path(directory) / relative).read_bytes()
                 if hashlib.sha256(actual).digest() != hashlib.sha256(expected).digest():
                     raise ValueError(f"Deployed {relative} differs from the deployment artifact")
             for url, length in assets:
+                if url in pages_assets:
+                    continue
                 request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Hisingen-CI"})
                 with urllib.request.urlopen(request, timeout=20) as response:
                     if response.status != 200:
