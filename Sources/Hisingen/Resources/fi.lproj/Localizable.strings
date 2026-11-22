@@ -1,4 +1,9 @@
 "" = "";
+"\"%@\" is a switch and takes no value." = "\"%@\" on kytkin eikä ota arvoa.";
+"\"%@\" is not a valid value." = "\"%@\" ei ole kelvollinen arvo.";
+"\"%@\" is not an option of \"%@\"." = "\"%@\" ei ole komennon \"%@\" valitsin.";
+"\"%@\" needs a value." = "\"%@\" tarvitsee arvon.";
+"\"%@\" takes a different number of values." = "\"%@\" ottaa eri määrän arvoja.";
 "%.0f °C" = "%.0f °C";
 "%.1f kWh High-Voltage Pack" = "%.1f kWh korkeajänniteakku";
 "%.1f kWh Lithium-ion Pack" = "%.1f kWh litiumioniakku";
@@ -49,6 +54,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "Ohjelmiston asennus voidaan ajoittaa vain %d minuutin ja %d päivän päähän tästä hetkestä.";
 "A software update is available. The vehicle downloads it automatically." = "Ohjelmistopäivitys on saatavilla. Ajoneuvo lataa sen automaattisesti.";
 "A software update is ready to install." = "Ohjelmistopäivitys on valmis asennettavaksi.";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "Ajastin tarvitsee --start- ja --stop-ajat, esimerkiksi --start 07:30 --stop 17:00.";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "Ajoneuvopalvelu ei ole väliaikaisesti käytettävissä. Yritetään uudelleen automaattisesti.";
 "AQI & particulate matter sensors" = "AQI ja hiukkasanturit";
 "About Hisingen" = "Tietoja Hisingenistä";
@@ -138,7 +144,15 @@
 "Battery and Range" = "Akku ja toimintamatka";
 "Available optimised charging" = "Saatavilla oleva optimoitu lataus";
 "Bidirectional charging" = "Kaksisuuntainen lataus";
+"Blocked:" = "Estetty:";
+"Commands:" = "Komennot:";
 "Dock icon" = "Dock-kuvake";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Poistumiskoodit: 0 lähetetty, 2 kelvottomat argumentit, 3 hylätty, 4 ei valtuutettu, 5 ei lähetetty ja turvallista yrittää uudelleen.";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen kysyy ennen kuin lähettää komennon %@. Lisää --confirm lähettääksesi silti.";
+"Hisingen command line" = "Hisingen-komentorivi";
+"Name the command to send, for example \"hisingen cli send lock\"." = "Nimeä lähetettävä komento, esimerkiksi \"hisingen cli send lock\".";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "Hisingeniin ei ole määritetty ajoneuvoa. Kirjaudu ensin sisään tälle Macille.";
+"Ready: %@" = "Valmis: %@";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Näytä Hisingen Dockissa, sovellusvaihtajassa ja varoitusmerkkinä";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen";
 "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen. Kytke Dock-kuvake päälle (Ulkoasu → Valikkorivi), jotta merkki näkyy.";
@@ -1021,6 +1035,7 @@
 "Temporarily unavailable" = "Tilapäisesti ei saatavilla";
 "Temporarily unavailable: %@" = "Tilapäisesti ei saatavilla: %@";
 "Test" = "Testaa";
+"The charge level must be between %d%% and %d%%." = "Lataustason on oltava välillä %d%%–%d%%.";
 "The command was delivered to the vehicle." = "Komento toimitettiin ajoneuvolle.";
 "The last refresh could not read: %@" = "Viimeisintä päivitystä ei voitu lukea: %@";
 "The last software update failed." = "Viimeisin ohjelmistopäivitys epäonnistui.";
@@ -1095,7 +1110,9 @@
 "Unknown" = "Tuntematon";
 "Unknown (%@)" = "Tuntematon (%@)";
 "Unknown Volvo model" = "Tuntematon Volvo-malli";
+"Unknown command \"%@\"." = "Tuntematon komento \"%@\".";
 "Unknown model" = "Tuntematon malli";
+"Unknown option \"%@\"." = "Tuntematon valitsin \"%@\".";
 "Unlock" = "Avaa lukitus";
 "Unlock Doors" = "Avaa ovien lukitus";
 "Unlock Trunk" = "Avaa tavaratila";
@@ -1112,6 +1129,7 @@
 "Updated" = "Päivitetty";
 "Updated %@" = "Päivitetty %@";
 "Usable Pack Capacity" = "Käytettävissä oleva akkukapasiteetti";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "Käyttö: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "Use Default Developer Keys" = "Käytä oletuskehittäjäavaimia";
 "User Setting. Max AC charging current limit configured in vehicle charging settings." = "Käyttäjän asetus. Vaihtovirran enimmäislatausvirran raja, joka on määritetty ajoneuvon latausasetuksissa.";
 "User Setting. Selected high-voltage battery charge limit target." = "Käyttäjän asetus. Valittu korkeajännitteisen akun latausrajan tavoite.";

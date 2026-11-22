@@ -1,4 +1,9 @@
 "" = "";
+"\"%@\" is a switch and takes no value." = "\"%@\" is een schakelaar en neemt geen waarde aan.";
+"\"%@\" is not a valid value." = "\"%@\" is geen geldige waarde.";
+"\"%@\" is not an option of \"%@\"." = "\"%@\" is geen optie van \"%@\".";
+"\"%@\" needs a value." = "\"%@\" heeft een waarde nodig.";
+"\"%@\" takes a different number of values." = "\"%@\" krijgt een ander aantal waarden.";
 "%.0f °C" = "%.0f °C";
 "%.1f kWh High-Voltage Pack" = "%.1f kWh hoogspanningsaccu";
 "%.1f kWh Lithium-ion Pack" = "%.1f kWh lithium-ion-accu";
@@ -49,6 +54,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "Een software-installatie kan alleen tussen %d minuten en %d dagen vanaf nu worden ingepland.";
 "A software update is available. The vehicle downloads it automatically." = "Er is een software-update beschikbaar. Het voertuig downloadt hem automatisch.";
 "A software update is ready to install." = "Er is een software-update klaar om te installeren.";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "Een timer heeft --start en --stop nodig, bijvoorbeeld --start 07:30 --stop 17:00.";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "Een voertuigdienst is tijdelijk niet beschikbaar. Wordt automatisch opnieuw geprobeerd.";
 "AQI & particulate matter sensors" = "Luchtkwaliteitsindex en fijnstofsensoren";
 "About Hisingen" = "Over Hisingen";
@@ -138,7 +144,15 @@
 "Battery and Range" = "Batterij en actieradius";
 "Available optimised charging" = "Beschikbare geoptimaliseerde lading";
 "Bidirectional charging" = "Bidirectioneel laden";
+"Blocked:" = "Geblokkeerd:";
+"Commands:" = "Commando's:";
 "Dock icon" = "Dock-pictogram";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Afsluitcodes: 0 verstuurd, 2 onbruikbare argumenten, 3 geweigerd, 4 niet geautoriseerd, 5 niet verstuurd en veilig om opnieuw te proberen.";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen vraagt het voordat het %@ verstuurt. Voeg --confirm toe om het toch te versturen.";
+"Hisingen command line" = "Hisingen-opdrachtregel";
+"Name the command to send, for example \"hisingen cli send lock\"." = "Geef de commando op die verstuurd moet worden, bijvoorbeeld \"hisingen cli send lock\".";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "Er is geen voertuig ingesteld in Hisingen. Meld je eerst aan op deze Mac.";
+"Ready: %@" = "Gereed: %@";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Hisingen tonen in het Dock, de app-wisselaar en als waarschuwingsbadge";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Toon een Dock-badge zolang een voertuig waarschuwingen of alarm meldt";
 "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Toon een Dock-badge zolang een voertuig waarschuwingen of alarm meldt. Schakel het Dock-pictogram in (Weergave → Menubalk) om de badge te tonen.";
@@ -1021,6 +1035,7 @@
 "Temporarily unavailable" = "Tijdelijk niet beschikbaar";
 "Temporarily unavailable: %@" = "Tijdelijk niet beschikbaar: %@";
 "Test" = "Testen";
+"The charge level must be between %d%% and %d%%." = "Het laadniveau moet tussen %d%% en %d%% liggen.";
 "The command was delivered to the vehicle." = "De opdracht is afgeleverd bij het voertuig.";
 "The last refresh could not read: %@" = "Laatste vernieuwing kon niet lezen: %@";
 "The last software update failed." = "De laatste software-update is mislukt.";
@@ -1095,7 +1110,9 @@
 "Unknown" = "Onbekend";
 "Unknown (%@)" = "Onbekend (%@)";
 "Unknown Volvo model" = "Onbekend Volvo-model";
+"Unknown command \"%@\"." = "Onbekend commando \"%@\".";
 "Unknown model" = "Onbekend model";
+"Unknown option \"%@\"." = "Onbekende optie \"%@\".";
 "Unlock" = "Ontgrendelen";
 "Unlock Doors" = "Deuren ontgrendelen";
 "Unlock Trunk" = "Kofferbak ontgrendelen";
@@ -1112,6 +1129,7 @@
 "Updated" = "Bijgewerkt";
 "Updated %@" = "Bijgewerkt %@";
 "Usable Pack Capacity" = "Bruikbare accucapaciteit";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "Gebruik: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "Use Default Developer Keys" = "Standaard ontwikkelaarssleutels gebruiken";
 "User Setting. Max AC charging current limit configured in vehicle charging settings." = "Gebruikersinstelling. Maximale wisselstroom-laadstroomlimiet, ingesteld in de laadinstellingen van het voertuig.";
 "User Setting. Selected high-voltage battery charge limit target." = "Gebruikersinstelling. Gekozen doel voor de laadlimiet van de hoogspanningsbatterij.";
