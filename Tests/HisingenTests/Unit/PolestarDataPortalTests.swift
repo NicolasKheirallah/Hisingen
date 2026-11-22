@@ -684,10 +684,12 @@ struct PolestarDataPortalTests {
         #expect(state.weather?.windSpeedKmh == 12.4)
         #expect(state.weather?.windGustsKmh == 27.1)
         #expect(state.weather?.precipitationMm == 0.3)
-        // The weather must key on the portal location reading's coordinates.
+        // The weather must key on the portal location reading's coordinates, rounded to two
+        // decimals before they leave the app.
         #expect(openMeteoQueries.count == 1)
-        #expect(openMeteoQueries.first?.contains("latitude=57.70887") == true)
-        #expect(openMeteoQueries.first?.contains("longitude=11.97456") == true)
+        #expect(openMeteoQueries.first?.contains("latitude=57.71") == true)
+        #expect(openMeteoQueries.first?.contains("longitude=11.97") == true)
+        #expect(openMeteoQueries.first?.contains("57.70887") == false)
     }
 
     @Test
