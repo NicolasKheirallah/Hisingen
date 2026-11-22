@@ -7,6 +7,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+### Added
+
+- A **Norway grid-tariff preset** for Elvia: day 46.40 and night 31.40 øre per kWh, weekdays
+  06–22 as the day window, with VAT, elavgift and Enova included exactly as on the invoice.
+  Research into the other three markets says they cannot be expressed by this model at all — Denmark
+  needs three periods and seasonal rates, Germany has no national tariff, and the Netherlands bills
+  capacity rather than energy — so those keep custom entry and the existing notice.
 - **The Charging Planner stops at the end of its cheap window.** When auto-start sends the
   charge-now override, the window's end is recorded at that moment. If the car is still charging
   when the window closes, Hisingen resumes the charging schedule instead of letting the override
