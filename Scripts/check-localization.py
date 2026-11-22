@@ -79,6 +79,8 @@ ALLOWED_VALUES = {
     # Fuel name spelled the same in every locale that uses it; only Korean, Chinese and Spanish
     # localise it, and they already do.
     "Diesel",
+    "CleanZone Ready",      # Volvo cabin-air feature name.
+    "Polestar Assistance",  # Polestar roadside-assistance service name.
 }
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.
