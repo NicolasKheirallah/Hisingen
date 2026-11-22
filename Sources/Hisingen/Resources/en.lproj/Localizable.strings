@@ -4232,7 +4232,6 @@
 "Log a public charge from a receipt, or add a missing session." = "Log a public charge from a receipt, or add a missing session.";
 "Stored cost: %@" = "Stored cost: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Entered from a receipt: the energy and price are your figures, not a measurement.";
-
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Solar forecast";
 "Solar forecast chart" = "Solar forecast chart";
@@ -4251,3 +4250,11 @@
 "Source: %@" = "Source: %@";
 "No charger was found. Map the entities by hand below." = "No charger was found. Map the entities by hand below.";
 "Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee and Zaptec chargers are found through the device list, so they need an administrator token.";
+// Home Charging: a second paired charger.
+"Add another charger" = "Add another charger";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading.";
+"Chargers" = "Chargers";
+"Live connection" = "Live connection";
+"This charger holds the live connection." = "This charger holds the live connection.";
+"Show this charger's readings and commands." = "Show this charger's readings and commands.";
+"Last read %@" = "Last read %@";

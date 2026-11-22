@@ -205,11 +205,20 @@ struct HomeChargerSection: View {
     }
 
     private func perform(_ kind: HomeChargingCardModel.Action.Kind) {
+        // The card shows one charger; a second pairing must be commanded on its own reading, not
+        // through whichever charger happens to hold the live connection.
+        let identity = model.cardInput(for: state)?.pairing.identity
         switch kind {
-        case .chargeNow: Task { await model.send(.start) }
-        case .pause: Task { await model.send(.pause) }
-        case .resume: Task { try? await model.resumePlan() }
-        case .editPlan: showsPlanEditor = true
+        case .chargeNow:
+            if let identity { Task { await model.send(.start, for: identity) } }
+        case .pause:
+            if let identity { Task { await model.send(.pause, for: identity) } }
+        case .resume:
+            if let identity { model.selectCharger(identity: identity) }
+            Task { try? await model.resumePlan() }
+        case .editPlan:
+            if let identity { model.selectCharger(identity: identity) }
+            showsPlanEditor = true
         }
     }
 }

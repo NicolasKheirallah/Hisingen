@@ -33,6 +33,8 @@ struct SettingsHomeChargingCard: View {
     @State var isSigningIn = false
     @State var isResuming = false
     @State private var seededSource = false
+    /// Reveals the setup form below an existing pairing, for a second charger.
+    @State private var isAddingCharger = false
 
     var body: some View {
         SettingsConnectedServiceCard(
@@ -40,10 +42,28 @@ struct SettingsHomeChargingCard: View {
             symbol: "powerplug",
             detail: "Connect a charger to view its status, control charging, and import sessions."
         ) {
-            if let pairing = model.pairing {
-                pairedView(pairing)
-            } else {
+            if model.pairings.isEmpty {
                 setupView
+            } else {
+                chargerList
+                if let pairing = model.pairing {
+                    PanelRule()
+                    pairedView(pairing)
+                }
+                if isAddingCharger {
+                    PanelRule()
+                    setupView
+                    Button { isAddingCharger = false } label: {
+                        Text(L10n.text("Cancel")).frame(minHeight: 24)
+                    }
+                    .buttonStyle(.hisSecondary)
+                } else {
+                    Button { isAddingCharger = true; discovery = nil; failure = nil } label: {
+                        Text(L10n.text("Add another charger")).frame(minHeight: 24)
+                    }
+                    .buttonStyle(.hisSecondary)
+                    .accessibilityHint(L10n.text("Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading."))
+                }
             }
         }
         .onAppear {
@@ -194,6 +214,57 @@ struct SettingsHomeChargingCard: View {
         Button { pair(discovery) } label: { Text(L10n.text("Pair charger")).frame(minHeight: 24) }
             .buttonStyle(.hisProminent)
             .disabled(!map.isUsable || vin.isEmpty)
+    }
+
+    // MARK: - Every paired charger
+
+    /// Both chargers, with the one that holds the live connection marked. Selecting a row switches
+    /// the connection to it; the other keeps its last reading, with the time it was read.
+    private var chargerList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.text("Chargers"))
+                .hisType(.caption, weight: .semibold)
+                .foregroundStyle(HisingenTheme.inkMuted)
+            ForEach(model.pairings, id: \.identity) { candidate in
+                let isLive = candidate.identity == model.pairing?.identity
+                Button { model.selectCharger(identity: candidate.identity) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(candidate.chargerName)
+                                .hisType(.label, weight: .medium)
+                                .foregroundStyle(HisingenTheme.ink)
+                            Text(chargerDetail(candidate, isLive: isLive))
+                                .hisType(.micro)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                        Spacer(minLength: 6)
+                        if isLive {
+                            Text(L10n.text("Live connection"))
+                                .hisType(.micro, weight: .medium)
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help(isLive
+                      ? L10n.text("This charger holds the live connection.")
+                      : L10n.text("Show this charger's readings and commands."))
+                .accessibilityAddTraits(isLive ? .isSelected : [])
+            }
+        }
+    }
+
+    private func chargerDetail(_ candidate: HomeChargingPairing, isLive: Bool) -> String {
+        let vehicle = vehicleTitle(candidate.vin)
+        let place = candidate.locationAlias.isEmpty ? L10n.text("None") : candidate.locationAlias
+        var parts = [vehicle, place]
+        if isLive {
+            parts.append(linkText)
+        } else if let contact = model.lastContact(for: candidate) {
+            parts.append(L10n.format("Last read %@", HomeChargingTime.time(contact, in: candidate.timeZone)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Paired

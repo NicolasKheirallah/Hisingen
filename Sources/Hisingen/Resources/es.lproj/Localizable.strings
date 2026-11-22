@@ -4215,7 +4215,6 @@
 "Log a public charge from a receipt, or add a missing session." = "Registra una carga pública desde un recibo o añade una sesión que falte.";
 "Stored cost: %@" = "Coste guardado: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Introducido desde un recibo: la energía y el precio son tus datos, no una medición.";
-
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Previsión solar";
 "Solar forecast chart" = "Gráfico de previsión solar";
@@ -4234,3 +4233,11 @@
 "Source: %@" = "Fuente: %@";
 "No charger was found. Map the entities by hand below." = "No se ha encontrado ningún cargador. Asigna las entidades manualmente abajo.";
 "Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Los cargadores Easee y Zaptec se encuentran en la lista de dispositivos, por lo que necesitan un token de administrador.";
+// Home Charging: a second paired charger.
+"Add another charger" = "Añadir otro cargador";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Empareja un segundo cargador. Ambos siguen en la lista; uno mantiene la conexión en vivo y el otro conserva su última lectura.";
+"Chargers" = "Cargadores";
+"Live connection" = "Conexión en vivo";
+"This charger holds the live connection." = "Este cargador mantiene la conexión en vivo.";
+"Show this charger's readings and commands." = "Mostrar las lecturas y los comandos de este cargador.";
+"Last read %@" = "Última lectura %@";

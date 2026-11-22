@@ -67,6 +67,15 @@ All notable changes to Hisingen are documented in this file. The project follows
   of failing after the click, and the rows are reachable with the keyboard and through the
   VoiceOver Actions rotor. Values that need typing or a slider stay in the Controls tab.
 
+- **A second charger.** An install can now hold two pairings: pair another charger from Settings →
+  Home Charging → Add another charger. Both are listed with their own vehicle, saved location, last
+  reading and plan record; one holds the live connection (the other keeps its last reading, aged,
+  and is read every few minutes), selecting a row switches the connection, and the charging card
+  follows the car — it shows the charger at that car's saved location and its commands switch to
+  that charger first. An existing single pairing loads unchanged; its stored value is read as a list
+  of one and the per-charger plan record is adopted by the charger that wrote it.
+### Added
+
 - **Reports.** History gains a **Period Report** card: pick a week or a month (and step back through
   past windows) and read distance, energy, trip cost, charging cost, the maintenance log and
   depreciation, then copy or export it as text. Trip costs are distance × the consumption the car

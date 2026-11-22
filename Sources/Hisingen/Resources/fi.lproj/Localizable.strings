@@ -4215,7 +4215,6 @@
 "Log a public charge from a receipt, or add a missing session." = "Kirjaa julkinen lataus kuitista tai lisää puuttuva istunto.";
 "Stored cost: %@" = "Tallennettu hinta: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Syötetty kuitista: energia ja hinta ovat omia lukujasi, eivät mittaus.";
-
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Aurinkoennuste";
 "Solar forecast chart" = "Aurinkoennustekaavio";
@@ -4234,3 +4233,11 @@
 "Source: %@" = "Lähde: %@";
 "No charger was found. Map the entities by hand below." = "Laturia ei löytynyt. Yhdistä entiteetit käsin alla.";
 "Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee- ja Zaptec-laturit löytyvät laiteluettelosta, joten ne vaativat pääkäyttäjän tokenin.";
+// Home Charging: a second paired charger.
+"Add another charger" = "Lisää toinen laturi";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Liittää toisen laturin. Molemmat pysyvät listalla: yhdellä on reaaliaikainen yhteys ja toinen säilyttää viimeisimmän lukemansa.";
+"Chargers" = "Laturit";
+"Live connection" = "Reaaliaikainen yhteys";
+"This charger holds the live connection." = "Tällä laturilla on reaaliaikainen yhteys.";
+"Show this charger's readings and commands." = "Näytä tämän laturin lukemat ja komennot.";
+"Last read %@" = "Viimeksi luettu %@";

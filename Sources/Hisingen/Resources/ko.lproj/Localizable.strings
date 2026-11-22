@@ -4215,7 +4215,6 @@
 "Log a public charge from a receipt, or add a missing session." = "영수증에서 공용 충전을 기록하거나 누락된 세션을 추가하세요.";
 "Stored cost: %@" = "저장된 비용: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "영수증에서 입력: 에너지와 가격은 측정값이 아니라 직접 입력한 값입니다.";
-
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "태양광 예보";
 "Solar forecast chart" = "태양광 예보 차트";
@@ -4234,3 +4233,11 @@
 "Source: %@" = "출처: %@";
 "No charger was found. Map the entities by hand below." = "충전기를 찾을 수 없습니다. 아래에서 엔터티를 수동으로 연결하세요.";
 "Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee 및 Zaptec 충전기는 기기 목록에서 찾으므로 관리자 토큰이 필요합니다.";
+// Home Charging: a second paired charger.
+"Add another charger" = "충전기 추가";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "두 번째 충전기를 연결합니다. 둘 다 목록에 남으며, 하나는 실시간 연결을 유지하고 다른 하나는 마지막 판독값을 보관합니다.";
+"Chargers" = "충전기";
+"Live connection" = "실시간 연결";
+"This charger holds the live connection." = "이 충전기가 실시간 연결을 유지합니다.";
+"Show this charger's readings and commands." = "이 충전기의 판독값과 명령을 표시합니다.";
+"Last read %@" = "마지막 판독 %@";

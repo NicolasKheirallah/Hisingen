@@ -4215,7 +4215,6 @@
 "Log a public charge from a receipt, or add a missing session." = "Registrer ei offentleg lading frå ein kvittering, eller legg til ei manglande økt.";
 "Stored cost: %@" = "Lagra pris: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Skriven inn frå ein kvittering: energien og prisen er tala dine, ikkje ei måling.";
-
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Solprognose";
 "Solar forecast chart" = "Solprognosediagram";
@@ -4234,3 +4233,11 @@
 "Source: %@" = "Kjelde: %@";
 "No charger was found. Map the entities by hand below." = "Ingen ladar vart funnen. Knyt saman einingane manuelt nedanfor.";
 "Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee- og Zaptec-ladarar blir funne via eininglista og krev derfor eit administratortoken.";
+// Home Charging: a second paired charger.
+"Add another charger" = "Legg til endå ein ladar";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Parar ein andre ladar. Begge blir ståande i lista; éin har den levande tilkoplinga og den andre held si siste avlesing.";
+"Chargers" = "Ladarar";
+"Live connection" = "Levande tilkopling";
+"This charger holds the live connection." = "Denne ladaren har den levande tilkoplinga.";
+"Show this charger's readings and commands." = "Vis avlesingane og kommandoane til denne ladaren.";
+"Last read %@" = "Sist lese %@";
