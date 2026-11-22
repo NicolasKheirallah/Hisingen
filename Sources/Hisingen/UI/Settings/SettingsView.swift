@@ -230,7 +230,7 @@ struct SettingsView: View {
                 }
             }
         case .electricitySupplier:
-            if let homeCharging { SettingsTibberCard(model: homeCharging) }
+            if let homeCharging { SettingsTibberCard(model: homeCharging, preferences: binder.preferences) }
         case .gridTariff:
             if let homeCharging {
                 SettingsGridTariffCard(

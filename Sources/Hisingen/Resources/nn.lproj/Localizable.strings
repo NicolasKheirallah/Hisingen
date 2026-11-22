@@ -3583,6 +3583,18 @@
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
+
+/* Electricity supplier: house energy */
+"By Day" = "Per dag";
+"By Month" = "Per månad";
+"House Energy" = "Husets energi";
+"Hours" = "Timar";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Timar på kvart av Tibbers prisnivå i prisane som er publiserte for i dag og i morgon.";
+"Level" = "Nivå";
+"Price Levels" = "Prisnivå";
+"Production" = "Produksjon";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Kva Tibber har fakturert for desse dagane sin energi, skattar inkludert. Nettoavgifta er ikkje med.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Husets energi per periode. Ein periode målaren ikkje har rapportert for blir utelaten, og månaden som framleis pågår er kortare enn naboane sine.";
 "Tibber prices include taxes, not grid fees" = "Tibber prices include taxes, not grid fees";
 "Tibber prices include taxes and your network fee" = "Tibber prices include taxes and your network fee";
 "%@ · fetched %@" = "%@ · fetched %@";

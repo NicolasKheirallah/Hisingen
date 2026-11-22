@@ -3583,6 +3583,18 @@
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
+
+/* Electricity supplier: house energy */
+"By Day" = "Par jour";
+"By Month" = "Par mois";
+"House Energy" = "Énergie de la maison";
+"Hours" = "Heures";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Heures à chacun des niveaux de prix de Tibber dans les prix publiés pour aujourd'hui et demain.";
+"Level" = "Niveau";
+"Price Levels" = "Niveaux de prix";
+"Production" = "Énergie produite";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Ce que Tibber a facturé pour l'énergie de ces jours, taxes comprises. Les frais de réseau ne sont pas inclus.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Énergie de la maison par période. Une période que le compteur n'a pas rapportée est laissée de côté, et le mois en cours est plus court que ses voisins.";
 "Tibber prices include taxes, not grid fees" = "Tibber prices include taxes, not grid fees";
 "Tibber prices include taxes and your network fee" = "Tibber prices include taxes and your network fee";
 "%@ · fetched %@" = "%@ · fetched %@";

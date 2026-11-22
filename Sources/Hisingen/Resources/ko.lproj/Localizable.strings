@@ -3583,6 +3583,18 @@
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
+
+/* Electricity supplier: house energy */
+"By Day" = "일별";
+"By Month" = "월별";
+"House Energy" = "가정 에너지";
+"Hours" = "시간";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "오늘과 내일로 발표된 가격에서 Tibber의 각 가격 수준별 시간입니다.";
+"Level" = "수준";
+"Price Levels" = "가격 수준";
+"Production" = "생산";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "이 며칠의 에너지에 대해 Tibber가 청구한 금액으로, 세금이 포함됩니다. 전력망 요금은 포함되지 않습니다.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "기간별 가정 에너지. 계량기가 보고하지 않은 기간은 제외되며, 진행 중인 달은 이웃한 달보다 짧습니다.";
 "Tibber prices include taxes, not grid fees" = "Tibber prices include taxes, not grid fees";
 "Tibber prices include taxes and your network fee" = "Tibber prices include taxes and your network fee";
 "%@ · fetched %@" = "%@ · fetched %@";

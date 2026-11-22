@@ -3625,6 +3625,18 @@
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
 
+/* Electricity supplier: house energy */
+"By Day" = "By Day";
+"By Month" = "By Month";
+"House Energy" = "House Energy";
+"Hours" = "Hours";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Hours at each of Tibber's price levels in the prices published for today and tomorrow.";
+"Level" = "Level";
+"Price Levels" = "Price Levels";
+"Production" = "Production";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "What Tibber billed for these days of energy, taxes included. The grid fee is not in it.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours.";
+
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
 "By an administrator" = "By an administrator";
