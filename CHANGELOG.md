@@ -294,7 +294,8 @@ All notable changes to Hisingen are documented in this file. The project follows
   Hisingen quit or a write failed in between, the account stayed active with empty slots, and
   switching to it again did nothing. Hisingen now restores the saved credentials at launch and when
   the active account is selected again. An account the reader signed out of, and one with no saved
-  credentials, is left as it is.
+  credentials, is left as it is. An account whose saved credentials cannot be read starts signed
+  out instead of keeping the previous account's session.
 
 - **A widget button or Shortcut no longer hangs when the app never finishes launching.** An intent
   performed while Hisingen was still starting waited for the app to install its command handler,

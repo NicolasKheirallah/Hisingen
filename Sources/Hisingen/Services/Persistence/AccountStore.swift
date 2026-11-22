@@ -343,6 +343,9 @@ final class AccountStore {
     private func restoreCredentials(for account: StoredAccount) throws {
         guard let data = try keychain.readAccountCredentialBundle(accountID: account.id),
               let bundle = try? JSONDecoder().decode(AccountCredentials.self, from: data) else {
+            // No usable bundle: the slots must not keep the previous account's secrets under this
+            // account's name, so the account starts signed out.
+            try clearCredentials(for: account.brand)
             return
         }
         try clearCredentials(for: account.brand)

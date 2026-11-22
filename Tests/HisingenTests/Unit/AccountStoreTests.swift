@@ -116,6 +116,28 @@ struct AccountStoreTests {
     }
 
     @Test
+    func switchingToAnAccountWithAnUnreadableBundleDoesNotKeepTheOtherAccountsSession() throws {
+        let scoped = ScopedPreferences(label: "accounts-bad-bundle")
+        let preferences = scoped.store
+        preferences.email = "first@example.invalid"
+        preferences.vin = "YSMBADBUNDLE0001"
+        try scoped.keychain.saveSessionToken("token-first")
+        let store = preferences.accountStore
+        let first = try #require(store.activeAccount(for: .polestar))
+        let second = try store.addAccount(brand: .polestar, label: "Second")
+        preferences.email = "second@example.invalid"
+        try scoped.keychain.saveSessionToken("token-second")
+        store.commitActiveAccount()
+        try store.switchTo(accountID: first.id)
+        try scoped.keychain.saveAccountCredentialBundle(Data("not json".utf8), accountID: second.id)
+
+        try store.switchTo(accountID: second.id)
+
+        #expect(store.activeAccountID(for: .polestar) == second.id)
+        #expect(try scoped.keychain.readSessionToken() == nil)
+    }
+
+    @Test
     func eraseClearsEveryAccountAndItsBundle() throws {
         let scoped = ScopedPreferences(label: "accounts-erase")
         let preferences = scoped.store
