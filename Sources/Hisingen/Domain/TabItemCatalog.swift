@@ -74,6 +74,7 @@ enum TabItemID: String, CaseIterable, Codable, Hashable, Sendable {
     case historyDrivingPatterns = "history-driving-patterns"
     case historyDistance = "history-distance"
     case historyMonthlyMileage = "history-monthly-mileage"
+    case historyReports = "history-reports"
     case historyTrips = "history-trips"
     case historyChargingSessions = "history-charging-sessions"
     case historyChargingCurve = "history-charging-curve"
@@ -286,6 +287,9 @@ enum TabItemCatalog {
         TabItem(id: .historyMonthlyMileage, title: L10n.text("Monthly Mileage"), symbol: "calendar.badge.clock",
                 sourceTab: .history, kind: .card,
                 detail: "Distance per month across the whole record.", feature: nil),
+        TabItem(id: .historyReports, title: L10n.text("Period Report"), symbol: "doc.text",
+                sourceTab: .history, kind: .card,
+                detail: "Distance, energy, cost, maintenance and depreciation for a week or month.", feature: nil),
         TabItem(id: .historyTrips, title: L10n.text("Trips"), symbol: "point.topleft.down.to.point.bottomright.curvepath",
                 sourceTab: .history, kind: .card,
                 detail: "Segment list with search, sort and hiding.", feature: nil),
@@ -487,7 +491,7 @@ enum TabItemCatalog {
                 .historyChargingSessions, .historyChargingCurve,
                 .historyActivity, .historyWarnings, .historyAutomations, .historyMonth,
                 .historyChargingHistory, .historyMonthlyCharging, .historyChargeLocations, .historyTrips, .historyDrivingPatterns,
-                .historyDistance, .historyMonthlyMileage, .historyOdometer,
+                .historyDistance, .historyMonthlyMileage, .historyReports, .historyOdometer,
                 .historyEfficiency, .historyConsumption, .historyFuelEconomy, .historyRecentFills, .historyEmissions,
                 .historyAirCleaning, .historyAirQuality, .historyCabinClimate,
                 .historyBatteryHealth, .historyTyrePressure

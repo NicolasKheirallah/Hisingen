@@ -405,6 +405,31 @@ final class VehicleDatabase: @unchecked Sendable {
         );
         CREATE INDEX IF NOT EXISTS idx_fuel_vin ON fuel_entries(vin, date DESC);
 
+        -- The reader's own maintenance log. Nothing here comes from a provider: a service visit is
+        -- something they know and the car never reports. Additive table, so an existing install
+        -- picks it up on the next launch without a schema-version migration.
+        CREATE TABLE IF NOT EXISTS maintenance_entries (
+            id TEXT PRIMARY KEY NOT NULL,
+            vin TEXT NOT NULL,
+            date REAL NOT NULL,
+            odometer_km INTEGER,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            notes TEXT,
+            cost REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_maintenance_vin ON maintenance_entries(vin, date DESC);
+
+        -- The ownership assumption depreciation is derived from. One row per vehicle, entered by
+        -- the reader; there is deliberately no market value column, because Hisingen does not
+        -- estimate one.
+        CREATE TABLE IF NOT EXISTS vehicle_ownership (
+            vin TEXT PRIMARY KEY NOT NULL,
+            purchase_price REAL NOT NULL,
+            purchase_date REAL NOT NULL,
+            annual_decline_percent REAL NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS air_quality_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vin TEXT NOT NULL,
