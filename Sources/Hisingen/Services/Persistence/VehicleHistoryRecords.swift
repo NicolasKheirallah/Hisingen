@@ -18,6 +18,8 @@ enum ChargingSessionCompletionReason: String, Codable, Equatable, Sendable {
     case noEnergyAdded = "no_energy_added"
     case recordingDisabled = "recording_disabled"
     case legacy
+    /// The reader entered the session by hand rather than the app recording it.
+    case manualEntry = "manual_entry"
 }
 
 enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
@@ -27,6 +29,8 @@ enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
     /// A row created from the home charger's own record, with no battery-side reading behind it.
     /// `energy_delivered_kwh` stays zero; the metered energy lives in the wallbox columns.
     case wallboxOnly = "wallbox_only"
+    /// The reader typed the energy and price from a receipt.
+    case manualEntry = "manual_entry"
 
     var displayName: String {
         switch self {
@@ -34,6 +38,23 @@ enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
         case .socCapacityEstimate: return L10n.text("SoC and usable-capacity estimate")
         case .legacyEstimate: return L10n.text("Legacy estimate")
         case .wallboxOnly: return L10n.text("Charger measurement only")
+        case .manualEntry: return L10n.text("Entered by hand")
+        }
+    }
+}
+
+/// Where a charging session happened. Recorded sessions count as home until the reader
+/// changes them; a session entered by hand carries the place the reader picked.
+enum ChargingSessionPlace: String, Codable, Equatable, Hashable, CaseIterable, Sendable, Identifiable {
+    case home
+    case publicCharging = "public"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .home: return L10n.text("Home")
+        case .publicCharging: return L10n.text("Public")
         }
     }
 }
@@ -120,6 +141,9 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     var spotEstimatedCost: Double? = nil
     /// The home charger's measurement for this session, when a paired charger recorded one.
     var wallbox: WallboxMeasurement? = nil
+    /// Home or public. Recorded sessions count as home until the reader changes them; a
+    /// session entered by hand carries the place picked in the sheet.
+    var place: ChargingSessionPlace = .home
 
     init(
         id: String, vin: String, startedAt: Date, endedAt: Date?, startSoc: Double,
@@ -137,7 +161,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         lastObservedAt: Date? = nil, summaryVersion: Int = 1,
         pendingStopCount: Int = 0, estimatedCost: Double? = nil,
         spotEstimatedCost: Double? = nil,
-        wallbox: WallboxMeasurement? = nil
+        wallbox: WallboxMeasurement? = nil,
+        place: ChargingSessionPlace = .home
     ) {
         self.id = id
         self.vin = vin
@@ -169,6 +194,7 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         self.estimatedCost = estimatedCost
         self.spotEstimatedCost = spotEstimatedCost
         self.wallbox = wallbox
+        self.place = place
     }
 }
 

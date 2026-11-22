@@ -130,6 +130,33 @@ final class HistoryWorkspace {
                                       pricePerLiter: pricePerLiter, odometerKm: odometerKm)
     }
 
+    /// Adds a session the reader typed in. The ledger owns the insert; the view only passes
+    /// the figures through the workspace seam.
+    @discardableResult
+    func addManualChargingSession(
+        vin: String, startedAt: Date, endedAt: Date, locationName: String?,
+        place: ChargingSessionPlace, energyKwh: Double, totalCost: Double?,
+        pricePerKwh: Double?
+    ) -> String {
+        database.charging.addManualChargingSession(
+            vin: vin, startedAt: startedAt, endedAt: endedAt, locationName: locationName,
+            place: place, energyKwh: energyKwh, totalCost: totalCost,
+            pricePerKwh: pricePerKwh, currencySymbol: preferences.currencySymbol
+        )
+    }
+
+    func updateChargingSession(
+        id: String, vin: String, startedAt: Date, endedAt: Date, locationName: String?,
+        place: ChargingSessionPlace, energyKwh: Double, totalCost: Double?,
+        pricePerKwh: Double?
+    ) {
+        database.charging.updateChargingSessionDetails(
+            id: id, vin: vin, startedAt: startedAt, endedAt: endedAt,
+            locationName: locationName, place: place, energyKwh: energyKwh,
+            totalCost: totalCost, pricePerKwh: pricePerKwh
+        )
+    }
+
     func setSessionNote(_ note: String, sessionID: String, vin: String) {
         database.history.setSessionNote(note, sessionID: sessionID, vin: vin)
     }

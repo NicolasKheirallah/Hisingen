@@ -4189,3 +4189,23 @@
 "Recurring Report" = "Gjentakande rapport";
 "Recurring report" = "Gjentakande rapport";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Publiserer eit varsel når ei veke eller månad er over, med distanse, energi og kostnad. Heile rapporten ligg under Historikk, og alle tal kjem frå data som allereie finst på denne Macen.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Offentleg";
+"Add Session" = "Legg til økt";
+"Log Charging Session" = "Registrer ladeøkt";
+"Edit Charging Session" = "Rediger ladeøkt";
+"Charging place" = "Ladestad";
+"Energy (kWh)" = "Energi (kWh)";
+"Total price" = "Totalpris";
+"Enter the energy in kWh, greater than zero." = "Oppgje energien i kWh, større enn null.";
+"Enter the total price as a number." = "Oppgje totalprisen som eit tal.";
+"Enter the price per kWh as a number." = "Oppgje prisen per kWh som eit tal.";
+"Enter a total price or a price per kWh." = "Oppgje ein totalpris eller ein pris per kWh.";
+"The session must end after it starts." = "Økta må slutte etter at ho har byrja.";
+"Entered by hand" = "Skriven inn for hand";
+"Stored with the session and included in the home and public charging totals." = "Lagrast med økta og går inn i summen for heimelading og offentleg lading.";
+"Public Charging" = "Offentleg lading";
+"Includes every session recorded automatically until its place is changed." = "Tel kvar automatisk registrerte økt som heime til ladestaden blir endra.";
+"Log a public charge from a receipt, or add a missing session." = "Registrer ei offentleg lading frå ein kvittering, eller legg til ei manglande økt.";
+"Stored cost: %@" = "Lagra pris: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Skriven inn frå ein kvittering: energien og prisen er tala dine, ikkje ei måling.";

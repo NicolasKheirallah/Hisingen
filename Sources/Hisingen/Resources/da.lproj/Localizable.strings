@@ -4196,3 +4196,23 @@
 "Recurring Report" = "Tilbagevendende rapport";
 "Recurring report" = "Tilbagevendende rapport";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Sender en meddelelse, når en uge eller måned slutter, med distance, energi og pris. Hele rapporten ligger under Historik, og alle tal kommer fra data, der allerede findes på denne Mac.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Offentlig";
+"Add Session" = "Tilføj session";
+"Log Charging Session" = "Registrér opladningssession";
+"Edit Charging Session" = "Rediger opladningssession";
+"Charging place" = "Opladningssted";
+"Energy (kWh)" = "Energi (kWh)";
+"Total price" = "Samlet pris";
+"Enter the energy in kWh, greater than zero." = "Indtast energien i kWh, større end nul.";
+"Enter the total price as a number." = "Indtast den samlede pris som et tal.";
+"Enter the price per kWh as a number." = "Indtast prisen per kWh som et tal.";
+"Enter a total price or a price per kWh." = "Indtast en samlet pris eller en pris per kWh.";
+"The session must end after it starts." = "Sessionen skal slutte efter, at den er begyndt.";
+"Entered by hand" = "Indtastet i hånden";
+"Stored with the session and included in the home and public charging totals." = "Gemmes med sessionen og indgår i summen for hjemmeopladning og offentlig opladning.";
+"Public Charging" = "Offentlig opladning";
+"Includes every session recorded automatically until its place is changed." = "Tæller hver automatisk registreret session som hjemme, indtil dens opladningssted ændres.";
+"Log a public charge from a receipt, or add a missing session." = "Registrér en offentlig opladning fra en kvittering, eller tilføj en manglende session.";
+"Stored cost: %@" = "Gemt pris: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Indtastet fra en kvittering: energien og prisen er dine tal, ikke en måling.";

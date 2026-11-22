@@ -4189,3 +4189,23 @@
 "Recurring Report" = "Raport cykliczny";
 "Recurring report" = "Raport cykliczny";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Publikuje powiadomienie na koniec tygodnia lub miesiąca z dystansem, energią i kosztem. Pełny raport jest w Historii, a wszystkie liczby pochodzą z danych już zapisanych na tym Macu.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Publiczne";
+"Add Session" = "Dodaj sesję";
+"Log Charging Session" = "Zapisz sesję ładowania";
+"Edit Charging Session" = "Edytuj sesję ładowania";
+"Charging place" = "Miejsce ładowania";
+"Energy (kWh)" = "Energia (kWh)";
+"Total price" = "Cena łączna";
+"Enter the energy in kWh, greater than zero." = "Podaj energię w kWh, większą od zera.";
+"Enter the total price as a number." = "Podaj cenę łączną jako liczbę.";
+"Enter the price per kWh as a number." = "Podaj cenę za kWh jako liczbę.";
+"Enter a total price or a price per kWh." = "Podaj cenę łączną lub cenę za kWh.";
+"The session must end after it starts." = "Sesja musi zakończyć się po rozpoczęciu.";
+"Entered by hand" = "Wprowadzono ręcznie";
+"Stored with the session and included in the home and public charging totals." = "Zapisywane z sesją i wliczane do sum ładowania domowego i publicznego.";
+"Public Charging" = "Ładowanie publiczne";
+"Includes every session recorded automatically until its place is changed." = "Traktuje każdą automatycznie zapisaną sesję jako domową, dopóki nie zmienisz jej miejsca ładowania.";
+"Log a public charge from a receipt, or add a missing session." = "Zapisz publiczne ładowanie z paragonu lub dodaj brakującą sesję.";
+"Stored cost: %@" = "Zapisany koszt: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Wprowadzone z paragonu: energia i cena to Twoje dane, a nie pomiar.";

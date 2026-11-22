@@ -4189,3 +4189,23 @@
 "Recurring Report" = "Rapport récurrent";
 "Recurring report" = "Rapport récurrent";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Affiche une notification à la fin d'une semaine ou d'un mois, avec distance, énergie et coût. Le rapport complet se trouve dans l'historique, et chaque chiffre vient de données déjà présentes sur ce Mac.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "En public";
+"Add Session" = "Ajouter une session";
+"Log Charging Session" = "Enregistrer une session de recharge";
+"Edit Charging Session" = "Modifier la session de recharge";
+"Charging place" = "Lieu de recharge";
+"Energy (kWh)" = "Énergie (kWh)";
+"Total price" = "Prix total";
+"Enter the energy in kWh, greater than zero." = "Saisissez l'énergie en kWh, supérieure à zéro.";
+"Enter the total price as a number." = "Saisissez le prix total sous forme de nombre.";
+"Enter the price per kWh as a number." = "Saisissez le prix par kWh sous forme de nombre.";
+"Enter a total price or a price per kWh." = "Saisissez un prix total ou un prix par kWh.";
+"The session must end after it starts." = "La session doit se terminer après son début.";
+"Entered by hand" = "Saisie manuelle";
+"Stored with the session and included in the home and public charging totals." = "Enregistré avec la session et inclus dans les totaux de recharge à domicile et en public.";
+"Public Charging" = "Recharge publique";
+"Includes every session recorded automatically until its place is changed." = "Compte chaque session enregistrée automatiquement comme à domicile jusqu'à ce que son lieu soit modifié.";
+"Log a public charge from a receipt, or add a missing session." = "Enregistrez une recharge publique depuis un reçu, ou ajoutez une session manquante.";
+"Stored cost: %@" = "Coût enregistré : %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Saisie depuis un reçu : l'énergie et le prix sont vos chiffres, pas une mesure.";

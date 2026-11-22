@@ -4206,3 +4206,23 @@
 "Recurring Report" = "Recurring Report";
 "Recurring report" = "Recurring report";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Public";
+"Add Session" = "Add Session";
+"Log Charging Session" = "Log Charging Session";
+"Edit Charging Session" = "Edit Charging Session";
+"Charging place" = "Charging place";
+"Energy (kWh)" = "Energy (kWh)";
+"Total price" = "Total price";
+"Enter the energy in kWh, greater than zero." = "Enter the energy in kWh, greater than zero.";
+"Enter the total price as a number." = "Enter the total price as a number.";
+"Enter the price per kWh as a number." = "Enter the price per kWh as a number.";
+"Enter a total price or a price per kWh." = "Enter a total price or a price per kWh.";
+"The session must end after it starts." = "The session must end after it starts.";
+"Entered by hand" = "Entered by hand";
+"Stored with the session and included in the home and public charging totals." = "Stored with the session and included in the home and public charging totals.";
+"Public Charging" = "Public Charging";
+"Includes every session recorded automatically until its place is changed." = "Includes every session recorded automatically until its place is changed.";
+"Log a public charge from a receipt, or add a missing session." = "Log a public charge from a receipt, or add a missing session.";
+"Stored cost: %@" = "Stored cost: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Entered from a receipt: the energy and price are your figures, not a measurement.";

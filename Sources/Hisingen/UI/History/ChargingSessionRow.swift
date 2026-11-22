@@ -167,6 +167,8 @@ struct ChargingSessionRow: View {
             return L10n.text("Imported from an older Hisingen summary whose original calculation inputs were not retained.")
         case .wallboxOnly:
             return L10n.text("The charger recorded this session while no battery reading was available, so there is no battery-side estimate.")
+        case .manualEntry:
+            return L10n.text("Entered from a receipt: the energy and price are your figures, not a measurement.")
         }
     }
 }

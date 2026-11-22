@@ -4189,3 +4189,23 @@
 "Recurring Report" = "Informe recurrente";
 "Recurring report" = "Informe recurrente";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Publica un aviso al terminar una semana o un mes, con distancia, energía y coste. El informe completo está en el historial y todas las cifras proceden de datos que ya están en este Mac.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Público";
+"Add Session" = "Añadir sesión";
+"Log Charging Session" = "Registrar sesión de carga";
+"Edit Charging Session" = "Editar sesión de carga";
+"Charging place" = "Lugar de carga";
+"Energy (kWh)" = "Energía (kWh)";
+"Total price" = "Precio total";
+"Enter the energy in kWh, greater than zero." = "Introduce la energía en kWh, mayor que cero.";
+"Enter the total price as a number." = "Introduce el precio total como un número.";
+"Enter the price per kWh as a number." = "Introduce el precio por kWh como un número.";
+"Enter a total price or a price per kWh." = "Introduce un precio total o un precio por kWh.";
+"The session must end after it starts." = "La sesión debe terminar después de empezar.";
+"Entered by hand" = "Introducida a mano";
+"Stored with the session and included in the home and public charging totals." = "Se guarda con la sesión y se incluye en los totales de carga doméstica y pública.";
+"Public Charging" = "Carga pública";
+"Includes every session recorded automatically until its place is changed." = "Cuenta cada sesión registrada automáticamente como doméstica hasta que se cambie su lugar de carga.";
+"Log a public charge from a receipt, or add a missing session." = "Registra una carga pública desde un recibo o añade una sesión que falte.";
+"Stored cost: %@" = "Coste guardado: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Introducido desde un recibo: la energía y el precio son tus datos, no una medición.";

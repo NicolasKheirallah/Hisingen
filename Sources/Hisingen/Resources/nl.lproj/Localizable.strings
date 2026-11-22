@@ -4197,3 +4197,23 @@
 "Recurring Report" = "Terugkerend rapport";
 "Recurring report" = "Terugkerend rapport";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Plaatst een melding wanneer een week of maand eindigt, met afstand, energie en kosten. Het volledige rapport staat onder Geschiedenis, en elk cijfer komt uit gegevens die al op deze Mac staan.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Openbaar";
+"Add Session" = "Sessie toevoegen";
+"Log Charging Session" = "Laadsessie vastleggen";
+"Edit Charging Session" = "Laadsessie bewerken";
+"Charging place" = "Laadlocatie";
+"Energy (kWh)" = "Energie (kWh)";
+"Total price" = "Totaalprijs";
+"Enter the energy in kWh, greater than zero." = "Voer de energie in kWh in, groter dan nul.";
+"Enter the total price as a number." = "Voer de totaalprijs als getal in.";
+"Enter the price per kWh as a number." = "Voer de prijs per kWh als getal in.";
+"Enter a total price or a price per kWh." = "Voer een totaalprijs of een prijs per kWh in.";
+"The session must end after it starts." = "De sessie moet na het begin eindigen.";
+"Entered by hand" = "Handmatig ingevoerd";
+"Stored with the session and included in the home and public charging totals." = "Wordt met de sessie opgeslagen en meetelt in de totalen voor thuisladen en openbaar laden.";
+"Public Charging" = "Openbaar laden";
+"Includes every session recorded automatically until its place is changed." = "Telt elke automatisch vastgelegde sessie als thuis tot de laadlocatie wordt gewijzigd.";
+"Log a public charge from a receipt, or add a missing session." = "Leg een openbare laadsessie vast vanaf een bon, of voeg een ontbrekende sessie toe.";
+"Stored cost: %@" = "Opgeslagen kosten: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Ingevoerd vanaf een bon: de energie en prijs zijn jouw cijfers, geen meting.";
