@@ -199,10 +199,7 @@ final class SignInCoordinator {
             // remote climate) → core (telemetry only), so one unapproved scope never blocks
             // sign-in outright. Each step is one browser round trip; the drop-location
             // retry is the only extra prompt a partial grant can cost.
-            let cascade: [(tier: VolvoAPI.ScopeTier, dropsLocation: Bool)] = [
-                (.full, false), (.full, true), (.standard, false), (.core, false)
-            ]
-            for step in cascade {
+            for step in VolvoAPI.signInCascade {
                 do {
                     try await self.runVolvoInteractiveSignIn(
                         clientID: trimmedClientID, clientSecret: effectiveSecret,

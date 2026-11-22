@@ -69,6 +69,15 @@ struct VolvoGrantedScopeTests {
         #expect(dropped.contains("conve:honk_flash"))
     }
 
+    @Test func signInCascadeIsBoundedAndEndsAtCore() {
+        // Four attempts, each strictly narrower, ending at the tier every application is
+        // granted. A caller cannot loop: the sequence is a fixed list, not a while loop.
+        #expect(VolvoAPI.signInCascade.count == 4)
+        #expect(VolvoAPI.signInCascade.map(\.tier) == [.full, .full, .standard, .core])
+        #expect(VolvoAPI.signInCascade.map(\.dropsLocation) == [false, true, false, false])
+        #expect(VolvoAPI.signInCascade.last?.tier == .core)
+    }
+
     @Test func restrictedScopeListIsEmptyWhenNotWanted() {
         #expect(VolvoAPI.restrictedScopeList(wanted: false, dropsLocation: false).isEmpty)
         #expect(VolvoAPI.restrictedScopeList(wanted: false, dropsLocation: true).isEmpty)
