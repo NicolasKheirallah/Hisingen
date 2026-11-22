@@ -4059,3 +4059,6 @@
 "Live stream" = "실시간 스트림";
 "Weather service" = "날씨 서비스";
 "Volvo cloud" = "Volvo 클라우드";
+"Writable current limit" = "설정 가능한 전류 한도";
+"No writable current-limit entity is mapped for this charger." = "이 충전기에는 설정 가능한 전류 한도 항목이 연결되어 있지 않습니다.";
+"Hisingen is not connected to a charger yet." = "Hisingen이 아직 충전기에 연결되지 않았습니다.";

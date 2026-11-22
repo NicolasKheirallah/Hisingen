@@ -127,7 +127,10 @@ enum HomeChargerDiscovery {
         async let statesTask = client.states()
         let (config, states) = try await (configTask, statesTask)
         let serials = await deviceSerials(using: client)
-        let mappable: Set<String> = ["sensor", "switch", "binary_sensor"]
+        // `number` is here for the writable current limit: a charger integration exposes the
+        // settable ceiling as a number entity, and that is the only charger write Hisingen
+        // performs beyond charge/pause without a vendor API.
+        let mappable: Set<String> = ["sensor", "switch", "binary_sensor", "number"]
         let entities = states.filter { mappable.contains($0.domain) }
             .map { DiscoveredEntity(id: $0.entityID, name: $0.friendlyName ?? $0.entityID, domain: $0.domain) }
             .sorted { $0.id < $1.id }

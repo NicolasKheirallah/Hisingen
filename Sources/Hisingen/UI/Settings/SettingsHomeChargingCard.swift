@@ -158,6 +158,10 @@ struct SettingsHomeChargingCard: View {
                 entityPicker(L10n.text("Charging switch"), \.chargingSwitch, domain: "switch", discovery)
                 entityPicker(L10n.text("Lifetime energy"), \.lifetimeEnergy, domain: "sensor", discovery, optional: true)
                 entityPicker(L10n.text("Current limit"), \.currentLimit, domain: "sensor", discovery, optional: true)
+                // Reading and writing the limit are different entities in most integrations: a
+                // sensor reports it, a `number` entity changes it. Mapping the number is what
+                // enables the control on the charger card.
+                entityPicker(L10n.text("Writable current limit"), \.currentLimitNumber, domain: "number", discovery, optional: true)
                 entityPicker(L10n.text("Charging enabled"), \.chargingEnabled, domain: "binary_sensor", discovery, optional: true)
                 entityPicker(L10n.text("Cable lock"), \.cableLock, domain: "binary_sensor", discovery, optional: true)
             }

@@ -4059,3 +4059,6 @@
 "Live stream" = "实时数据流";
 "Weather service" = "天气服务";
 "Volvo cloud" = "Volvo 云";
+"Writable current limit" = "可写入的电流上限";
+"No writable current-limit entity is mapped for this charger." = "此充电器未映射可写入的电流上限实体。";
+"Hisingen is not connected to a charger yet." = "Hisingen 尚未连接充电器。";

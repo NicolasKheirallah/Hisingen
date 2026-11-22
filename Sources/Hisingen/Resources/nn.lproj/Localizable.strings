@@ -4059,3 +4059,6 @@
 "Live stream" = "Direktestraum";
 "Weather service" = "Vêrtjeneste";
 "Volvo cloud" = "Volvos sky";
+"Writable current limit" = "Skrivbar straumgrense";
+"No writable current-limit entity is mapped for this charger." = "Ingen skrivbar straumgrense er knytt til denne ladaren.";
+"Hisingen is not connected to a charger yet." = "Hisingen er ikkje kopla til ein ladar enno.";

@@ -4059,3 +4059,6 @@
 "Live stream" = "Flux direct";
 "Weather service" = "Service météo";
 "Volvo cloud" = "Cloud Volvo";
+"Writable current limit" = "Limite de courant modifiable";
+"No writable current-limit entity is mapped for this charger." = "Aucune limite de courant modifiable n'est associée à ce chargeur.";
+"Hisingen is not connected to a charger yet." = "Hisingen n'est pas encore connecté à un chargeur.";

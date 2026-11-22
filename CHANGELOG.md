@@ -9,6 +9,15 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Home charger current limit.** A charger mapped in Home Assistant can now have its charging
+  current set from the charger card: map the integration's writable `number` entity under
+  Settings → Home Charging → Entities → Writable current limit, and the card shows a stepper with
+  Apply. This is the only charger write beyond charge/pause, chosen because it needs no vendor API —
+  the spike that checked Easee, Zaptec and NexBlue found Zaptec warns against amp overrides and the
+  other two publish nothing usable. The entity is kept separate from the read-only current-limit
+  sensor, because reading and writing are different entities in most integrations.
+### Added
+
 - Shortcuts covers the rest of the command surface: **tailgate open/close**, **window
   open/close**, **install/cancel software update**, **set charging timer**, **set climate timer**
   and **list saved charge locations**. Timers take `HH:MM` strings and refuse anything else with a

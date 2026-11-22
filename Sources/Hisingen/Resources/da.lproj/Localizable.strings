@@ -4066,3 +4066,6 @@
 "Live stream" = "Direktestream";
 "Weather service" = "Vejrtjeneste";
 "Volvo cloud" = "Volvos cloud";
+"Writable current limit" = "Skrivbar strømgrænse";
+"No writable current-limit entity is mapped for this charger." = "Der er ikke knyttet nogen skrivbar strømgrænse til denne lader.";
+"Hisingen is not connected to a charger yet." = "Hisingen er ikke tilsluttet en lader endnu.";

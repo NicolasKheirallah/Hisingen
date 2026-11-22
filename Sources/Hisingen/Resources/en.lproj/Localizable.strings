@@ -4077,3 +4077,6 @@
 "Live stream" = "Live stream";
 "Weather service" = "Weather service";
 "Volvo cloud" = "Volvo cloud";
+"Writable current limit" = "Writable current limit";
+"No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
+"Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";

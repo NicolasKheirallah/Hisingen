@@ -1124,6 +1124,50 @@ final class HomeChargingModel: ObservableObject {
         nudgePoll()
     }
 
+    /// The range the app will write for a charger current limit. Chargers differ, but every Home
+    /// Assistant charger integration exposes a `number` entity whose own min/max is the authority;
+    /// this is the outer bound the app is willing to send at all.
+    static let chargerCurrentLimitRange = 6...32
+
+    static func clampedCurrentLimit(_ amps: Int) -> Int {
+        min(max(amps, chargerCurrentLimitRange.lowerBound), chargerCurrentLimitRange.upperBound)
+    }
+
+    /// Sets the charger's current limit through Home Assistant.
+    ///
+    /// This is the only charger write the app performs beyond charge/pause, and it exists because
+    /// it is the one that needs no vendor API: Home Assistant already models the limit as a
+    /// writable `number` entity. Returns the reason when it cannot send, and nil on success.
+    @discardableResult
+    func setChargerCurrentLimit(_ amps: Int) async -> String? {
+        guard let pairing else {
+            return L10n.text("Hisingen is not connected to a charger yet.")
+        }
+        guard let entity = pairing.entities.currentLimitNumber else {
+            return L10n.text("No writable current-limit entity is mapped for this charger.")
+        }
+        guard let client else {
+            return L10n.text("Hisingen is not connected to Home Assistant yet.")
+        }
+        let clamped = Self.clampedCurrentLimit(amps)
+        do {
+            _ = try await client.callService(
+                domain: "number",
+                service: "set_value",
+                data: .object([
+                    "entity_id": .string(entity),
+                    "value": .number(Double(clamped)),
+                ])
+            )
+            nudgePoll()
+            return nil
+        } catch let error as HomeAssistantError {
+            return Self.reasonText(error)
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     func resumePlan() async throws {
         guard let pairing else { throw HomeChargingPlanError.notPaired }
         if let status = try await planCall("resume_plan", .object(["charger_id": .string(pairing.chargerID)])) { planStatus = status }

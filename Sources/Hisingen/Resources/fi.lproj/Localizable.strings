@@ -4059,3 +4059,6 @@
 "Live stream" = "Suora virta";
 "Weather service" = "Sääpalvelu";
 "Volvo cloud" = "Volvon pilvi";
+"Writable current limit" = "Kirjoitettava virtaraja";
+"No writable current-limit entity is mapped for this charger." = "Tälle laturille ei ole liitetty kirjoitettavaa virtarajaa.";
+"Hisingen is not connected to a charger yet." = "Hisingen ei ole vielä yhdistetty laturiin.";
