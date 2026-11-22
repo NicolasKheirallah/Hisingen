@@ -3,8 +3,6 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [3.0.2] - 2026-11-21
 
 ### Added
