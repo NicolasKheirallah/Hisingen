@@ -304,6 +304,20 @@ struct ServiceForecastAndDepartureWeatherTests {
 
     // MARK: - Hourly Open-Meteo request
 
+    @Test("Weather requests carry the position rounded to two decimals")
+    func weatherURLsRoundTheCoordinates() throws {
+        let precise = (latitude: 57.708870123, longitude: 11.974559876)
+        for url in [
+            OpenMeteoWeatherClient.openMeteoURL(latitude: precise.latitude, longitude: precise.longitude),
+            OpenMeteoWeatherClient.hourlyForecastURL(latitude: precise.latitude, longitude: precise.longitude)
+        ] {
+            let query = try #require(url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems })
+            #expect(query.contains(URLQueryItem(name: "latitude", value: "57.71")))
+            #expect(query.contains(URLQueryItem(name: "longitude", value: "11.97")))
+            #expect(!(url?.absoluteString.contains("708870") ?? true))
+        }
+    }
+
     @Test("Current conditions URL does not request the hourly forecast")
     func currentURLIsUnchanged() throws {
         let url = try #require(OpenMeteoWeatherClient.openMeteoURL(latitude: 57.7089, longitude: 11.9746))
@@ -327,7 +341,7 @@ struct ServiceForecastAndDepartureWeatherTests {
                                             value: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation")))
         #expect(query.contains(URLQueryItem(name: "forecast_days", value: "2")))
         #expect(query.contains(URLQueryItem(name: "timezone", value: "auto")))
-        #expect(query.contains(URLQueryItem(name: "latitude", value: "57.7089")))
+        #expect(query.contains(URLQueryItem(name: "latitude", value: "57.71")))
         #expect(query.contains { $0.name == "current" })
     }
 
