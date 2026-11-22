@@ -50,6 +50,14 @@ struct SolarForecastLine: View {
                 .frame(height: 38)
                 .accessibilityLabel(L10n.text("Solar forecast chart"))
                 .accessibilityValue(summary)
+                // The pass that gave every chart a rotor descriptor ran before this line existed,
+                // and the guardrail in AccessibilityPassTests is what caught it.
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: L10n.text("Solar forecast chart"),
+                    yLabel: L10n.text("Watts per square metre"),
+                    points: points.map { ($0.time, Double($0.wattsPerSquareMeter)) },
+                    valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }
+                ))
                 Text(L10n.text("Open-Meteo radiation at the car's location; it is not panel output."))
                     .hisType(.micro)
                     .foregroundStyle(HisingenTheme.inkMuted)

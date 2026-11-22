@@ -4313,3 +4313,4 @@
 "Vehicle nickname or VIN (optional)" = "Kjøretøyets kallenavn eller VIN (valgfritt)";
 "Volvo connected, but not saved" = "Volvo tilkoblet, men ikke lagret";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo godtar ikke lenger denne appens klient-ID. Logg inn med Volvo-ID-en din, eller oppgi påloggingsinformasjon for det nye innloggingssystemet i Innstillinger.";
+"Watts per square metre" = "Watt per kvadratmeter";

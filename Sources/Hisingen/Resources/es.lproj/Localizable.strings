@@ -4305,3 +4305,4 @@
 "Vehicle nickname or VIN (optional)" = "Apodo del vehículo o VIN (opcional)";
 "Volvo connected, but not saved" = "Volvo conectado, pero sin guardar";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo ya no acepta el ID de cliente de esta aplicación. Inicia sesión con tu ID de Volvo o introduce las credenciales del nuevo sistema de inicio de sesión en Ajustes.";
+"Watts per square metre" = "Vatios por metro cuadrado";

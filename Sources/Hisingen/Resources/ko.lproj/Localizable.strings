@@ -4305,3 +4305,4 @@
 "Vehicle nickname or VIN (optional)" = "차량 별명 또는 VIN(선택 사항)";
 "Volvo connected, but not saved" = "Volvo 연결됨, 하지만 저장되지 않음";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo에서 이 앱의 클라이언트 ID를 더 이상 허용하지 않습니다. Volvo ID로 로그인하거나 설정에서 새 로그인 시스템의 자격 증명을 입력하세요.";
+"Watts per square metre" = "제곱미터당 와트";
