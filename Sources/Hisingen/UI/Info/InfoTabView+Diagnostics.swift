@@ -433,6 +433,12 @@ extension InfoTabView {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Signal strength history chart"))
                     .accessibilityValue(chartAccessibilityValue(points: signalHistory.map { Double($0.signalBars ?? 0) }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Signal strength history chart"),
+                        yLabel: L10n.text("Bars"),
+                        points: signalHistory.map { ($0.timestamp, Double($0.signalBars ?? 0)) },
+                        valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }
+                    ))
                     .hisAnimation(Motion.progress, value: signalHistoryChartKey)
                 }
                 let wakes = history.compactMap(\.wakeReason)

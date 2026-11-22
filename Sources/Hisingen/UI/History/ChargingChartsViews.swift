@@ -385,7 +385,9 @@ struct ChargingCurveView: View {
                     .onChange(of: readyDate) { _, _ in refreshGeometry(width: width, height: height) }
                     .onAppear {
                         guard isLive, !reduceMotion else { return }
-                        withAnimation(Motion.livePulse) { pulse = true }
+                        // `resolve` keeps this honest even if the guard above ever changes:
+                        // under Reduce Motion the pulse has no animation to start.
+                        withAnimation(Motion.resolve(Motion.livePulse)) { pulse = true }
                     }
                 }
                 .frame(height: curveHeight)

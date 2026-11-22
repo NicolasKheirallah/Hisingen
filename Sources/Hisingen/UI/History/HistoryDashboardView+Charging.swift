@@ -303,6 +303,20 @@ extension HistoryDashboardView {
         .historyYAxis(unit)
         .frame(height: chartHeight * 0.62)
         .accessibilityLabel("\(title): \(L10n.text("This session")), \(L10n.text("Previous"))")
+        .accessibilityValue(
+            L10n.format("%@: %@", L10n.text("This session"), chartAccessibilityValue(points: current.map(\.value)))
+            + " · "
+            + L10n.format("%@: %@", L10n.text("Previous"), chartAccessibilityValue(points: previous.map(\.value)))
+        )
+        .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+            title: title,
+            xLabel: L10n.text("Minutes"),
+            yLabel: unit,
+            series: [
+                .init(name: L10n.text("This session"), points: current.map { ($0.minutes, $0.value) }),
+                .init(name: L10n.text("Previous"), points: previous.map { ($0.minutes, $0.value) })
+            ]
+        ))
     }
 
     /// The cost a session card leads with, its label, and how it was reached.

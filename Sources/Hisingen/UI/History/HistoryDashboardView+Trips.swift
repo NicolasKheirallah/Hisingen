@@ -48,6 +48,15 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(L10n.text("Departures by hour of day chart"))
                 .accessibilityValue(chartAccessibilityValue(points: hours.map { Double($0.tripCount) }))
+                .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+                    title: L10n.text("Departures by hour of day chart"),
+                    xLabel: L10n.text("Hour"),
+                    yLabel: L10n.text("Trips"),
+                    series: [.init(name: L10n.text("Trips"),
+                                   points: hours.map { (Double($0.hour), Double($0.tripCount)) })],
+                    xFormat: { Format.clockTime(hour: Int($0.rounded())) },
+                    yFormat: { String(format: "%d", locale: L10n.displayLocale, Int($0.rounded())) }
+                ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 HStack(spacing: 12) {
                     curveStat(L10n.text("Weekday / day"),

@@ -24,6 +24,18 @@ enum LimitStepping {
         return min(range.upperBound, max(range.lowerBound, next))
     }
 
+    /// The limit after one step down, or `nil` at the floor.
+    ///
+    /// The card itself only ever climbs: its single button raises the limit and restarts it
+    /// from the bottom at the ceiling. A VoiceOver reader adjusting the same card needs the
+    /// other direction too, so the decrement shares this step size and stays inside the range
+    /// the car allows.
+    static func lowered(_ current: Int, within range: ClosedRange<Int>, step: LimitStep) -> Int? {
+        guard current > range.lowerBound else { return nil }
+        let next = current - size(upperBound: range.upperBound, step: step)
+        return max(range.lowerBound, next)
+    }
+
     /// Where a limit starts over once it has reached its ceiling: 40 % of the highest value the car
     /// allows, never below the lowest. That is 13 A of a 32 A cap, and 40 % for a charge target,
     /// which is also where most cars set its floor.
@@ -37,6 +49,26 @@ enum LimitStepping {
     static func pressed(_ current: Int, within range: ClosedRange<Int>, step: LimitStep) -> (value: Int, restarts: Bool) {
         if let value = raised(current, within: range, step: step) { return (value, false) }
         return (restartValue(within: range), true)
+    }
+
+    /// Which way one VoiceOver adjustment gesture moves a limit.
+    enum Direction: Sendable {
+        case up
+        case down
+    }
+
+    /// The limit after one adjustment gesture. Up matches the card's press, including the
+    /// restart at the ceiling; down steps the same distance back. `nil` when nothing moves.
+    static func adjusted(
+        _ current: Int,
+        within range: ClosedRange<Int>,
+        step: LimitStep,
+        direction: Direction
+    ) -> Int? {
+        switch direction {
+        case .up: return pressed(current, within: range, step: step).value
+        case .down: return lowered(current, within: range, step: step)
+        }
     }
 
     /// A value the reader typed: a whole number inside `range`, otherwise `nil`.

@@ -75,6 +75,44 @@ struct LimitSteppingTests {
         #expect((6...32).contains(value))
     }
 
+    // MARK: - VoiceOver increment and decrement
+
+    @Test func aDecrementMovesByTheSameStepTheCardUses() {
+        #expect(LimitStepping.lowered(80, within: 40...100, step: .five) == 75)
+        #expect(LimitStepping.lowered(80, within: 40...100, step: .ten) == 70)
+        #expect(LimitStepping.lowered(16, within: 6...32, step: .five) == 14)
+        #expect(LimitStepping.lowered(16, within: 6...32, step: .ten) == 13)
+    }
+
+    @Test func aDecrementNeverLeavesTheRange() {
+        #expect(LimitStepping.lowered(40, within: 40...100, step: .ten) == nil)
+        #expect(LimitStepping.lowered(6, within: 6...32, step: .ten) == nil)
+        // A reading below the floor still lands on the floor rather than going further down.
+        #expect(LimitStepping.lowered(8, within: 6...32, step: .ten) == 6)
+    }
+
+    @Test func incrementAndDecrementRoundTripAtTheSameStep() {
+        var value = 16
+        for _ in 0..<3 {
+            value = LimitStepping.lowered(value, within: 6...32, step: .ten) ?? value
+        }
+        #expect(value == 7)
+        for _ in 0..<3 {
+            value = LimitStepping.raised(value, within: 6...32, step: .ten) ?? value
+        }
+        // Three steps down from 16 then three up return the same value: one gesture, one step.
+        #expect(value == 16)
+    }
+
+    @Test func oneAdjustmentGestureMatchesThePointerDirections() {
+        // Up is the card's press, including the restart at the ceiling.
+        #expect(LimitStepping.adjusted(16, within: 6...32, step: .ten, direction: .up) == 19)
+        #expect(LimitStepping.adjusted(32, within: 6...32, step: .ten, direction: .up) == 13)
+        // Down is the same step back, and stops at the floor.
+        #expect(LimitStepping.adjusted(16, within: 6...32, step: .ten, direction: .down) == 13)
+        #expect(LimitStepping.adjusted(6, within: 6...32, step: .ten, direction: .down) == nil)
+    }
+
     @Test func aTypedValueMustBeAWholeNumberInsideTheRange() {
         #expect(LimitStepping.entry("16", within: 6...32) == 16)
         #expect(LimitStepping.entry(" 20 ", within: 6...32) == 20)

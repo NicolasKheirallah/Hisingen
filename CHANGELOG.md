@@ -26,6 +26,25 @@ All notable changes to Hisingen are documented in this file. The project follows
   folding that module in as a static dependency and installed in `HisingenWidget.appex`, so
   interactive widget buttons and real Control Center actions have something to resolve. No button
   uses the intents yet — this is the platform for that change.
+- Accessibility pass for VoiceOver and keyboard use. Every History, diagnostics and price chart
+  now exposes the chart rotor as well as its spoken summary, including the ones whose X axis is
+  minutes, temperature or an hour of day. The Now charge and current limit cards answer the
+  standard increment and decrement gestures (increment matches the card's press, decrement steps
+  back), joined by the heating steppers and live charging curve that already did. The panel and
+  Settings declare focus sections in the order they are drawn, so Tab moves through the tab bar,
+  the cards and the footer rather than jumping around, and the sidebar and destination column
+  keep their listed order. Chart motion resolves through Reduce Motion.
+
+### Added
+
+- The menu bar's right-click menu gains **Timers**, **Software Updates** and **Charge Locations**.
+  A reported charging window or cabin timer can be paused and resumed, an update the car has
+  already downloaded can be installed now or scheduled for two, eight or twelve hours, a
+  scheduled installation can be cancelled, the car's current position can be saved as a charge
+  location, and optimised charging can be switched at a saved location. Every row is built from
+  the same capability gate as the Controls tab, so it is dimmed with that gate's reason instead
+  of failing after the click, and the rows are reachable with the keyboard and through the
+  VoiceOver Actions rotor. Values that need typing or a slider stay in the Controls tab.
 
 ### Added
 

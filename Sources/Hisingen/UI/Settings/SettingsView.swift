@@ -62,6 +62,9 @@ struct SettingsView: View {
                         searchText: $settingsSearchText
                     )
                     .frame(width: HisingenTheme.layoutWidth < 600 ? 154 : 238)
+                    // The sidebar is one focus section read top to bottom, in the order the
+                    // sections are listed; the content column is the next one.
+                    .focusSection()
                     Divider()
                     settingsContent
                 }
@@ -71,6 +74,7 @@ struct SettingsView: View {
                     searchText: $settingsSearchText
                 )
                 .padding(.horizontal, HisingenTheme.sectionSpacing)
+                .focusSection()
                 settingsContent
             }
         }
@@ -183,6 +187,8 @@ struct SettingsView: View {
                 proxy.scrollTo(first, anchor: .top)
             }
         }
+        // The destination cards are the last focus section, in `SettingsDestination` order.
+        .focusSection()
     }
 
     @ViewBuilder
@@ -323,6 +329,8 @@ struct SettingsView: View {
         }
         .padding(.horizontal, HisingenTheme.sectionSpacing)
         .padding(.top, 2)
+        // Back and the title are the first focus section; the sidebar comes next.
+        .focusSection()
     }
 
     private var accountCard: some View {
