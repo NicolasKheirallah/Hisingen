@@ -206,14 +206,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // session material and must never be greeted by the first-run setup pass.
         preferences.seedSetupPassForExistingInstall()
         launchAtLoginController.reconcile(userInitiated: false)
-        updateController.applyConfiguration()
+        if !preferences.isDemoMode { updateController.applyConfiguration() }
         vehicleSession.resume()
-        garageScanner.startLoop()
         urlRouter.startHandlingAppleEvents()
-        calendarPreconditioning.start()
-        chargingPlannerController.reload()
-        homeCharging.start()
-        homeCharging.houseMeter.start()
+        if !preferences.isDemoMode {
+            // Demo mode is a local sample: no provider session, no garage scan, no price or
+            // charger traffic. The session controller already served the seeded snapshot.
+            garageScanner.startLoop()
+            calendarPreconditioning.start()
+            chargingPlannerController.reload()
+            homeCharging.start()
+            homeCharging.houseMeter.start()
+        }
         if vehicleSession.signInRequired {
             statusController.openPopover()
         }

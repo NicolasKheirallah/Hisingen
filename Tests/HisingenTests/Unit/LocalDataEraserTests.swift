@@ -59,6 +59,25 @@ struct LocalDataEraserTests {
     }
 
     @Test
+    func theWholeFleetEraseClearsEveryAccount() throws {
+        let scoped = ScopedPreferences(label: "eraser-accounts")
+        let preferences = scoped.store
+        preferences.vin = "YSMERASEACCOUNT01"
+        let accounts = preferences.accountStore
+        _ = try accounts.addAccount(brand: .polestar, label: "Second")
+        #expect(accounts.accounts.count == 2)
+
+        let database = try VehicleDatabase(database: .inMemory())
+        let eraser = LocalDataEraser(
+            database: database, preferences: preferences, imageCache: CarImageCache(),
+            memoryCaches: VehicleMemoryCacheRegistry())
+
+        try eraser.perform(.everything(.all))
+
+        #expect(accounts.accounts.isEmpty)
+    }
+
+    @Test
     func theSamplesScopeKeepsSessionHeaders() throws {
         let (eraser, database, _, _, cleanup) = try makeEraser()
         defer { cleanup() }

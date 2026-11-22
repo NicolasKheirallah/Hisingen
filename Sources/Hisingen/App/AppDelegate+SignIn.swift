@@ -3,7 +3,15 @@ import AppKit
 extension AppDelegate {
     func signOut(selection: SignOutSelection = .vehicle) {
         signInCoordinator.cancelPolestarSignIn()
+        let signedOutAccount = selection == .account
+            ? preferences.accountStore.activeAccount(for: preferences.activeBrand)
+            : nil
         let outcome = vehicleSession.signOut(forceAccount: selection == .account)
+        if let signedOutAccount {
+            // The provider revocation above already ran; this removes the account record and
+            // its exported bundle, so signing out of one account cannot leave it switchable.
+            try? preferences.accountStore.removeAccount(id: signedOutAccount.id)
+        }
         switch outcome {
         case .vehicleDisconnected(let vin):
             // The account stays connected; only this car's Spotlight entry is stale.
@@ -48,6 +56,7 @@ extension AppDelegate: SignInCoordinatorContext {
         // The browser flow has just written a new refresh token. Discard any earlier negative
         // presence result before the brand switch decides what the panel should show.
         preferences.invalidateSessionCache()
+        preferences.accountStore.commitActiveAccount()
         vehicleSession.adoptBrandAfterSignIn(brand)
     }
 

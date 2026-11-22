@@ -7,6 +7,15 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Multiple accounts per brand.** Accounts now have their own record and exported Keychain
+  credential bundle, so two Polestar accounts can be added and switched without re-entering the
+  other's session. The active account keeps the existing fixed Keychain slots, which means every
+  provider and sign-out path continues to read one account at a time; switching swaps the
+  bundles. Existing single-account installs migrate to their first account without a Keychain
+  prompt and without touching the stored session.
+- **Demo mode.** A local sample Polestar renders every tab with no provider session, no garage
+  scan, no price or charger traffic, and no remote commands sent. Settings → Accounts carries
+  the switch and says a relaunch applies it.
 - **Real Control Center actions.** Unlock, Honk and Flash, Charge Now and Start Cabin
   Pre-Cleaning are now controls that dispatch through Hisingen's shared intents. Each one opens
   the app and runs in its process, so the command takes the same capability gate, confirmation

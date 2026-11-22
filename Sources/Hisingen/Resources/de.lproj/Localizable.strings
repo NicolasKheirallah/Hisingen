@@ -1885,6 +1885,13 @@
 "Target temperature" = "Zieltemperatur";
 "Vehicle is offline" = "Fahrzeug ist offline";
 "Accounts" = "Konten";
+"Add Account" = "Konto hinzufügen";
+"Switch" = "Wechseln";
+"Demo mode" = "Demo-Modus";
+"Relaunch Hisingen to apply." = "Hisingen neu starten, um dies anzuwenden.";
+"The account could not be added." = "Das Konto konnte nicht hinzugefügt werden.";
+"The account could not be switched." = "Es konnte nicht zum Konto gewechselt werden.";
+"Demo mode: commands are not sent to a vehicle." = "Demo-Modus: Befehle werden nicht an ein Fahrzeug gesendet.";
 "Privacy & Data" = "Datenschutz & Daten";
 "Updates" = "Updates";
 "About" = "Info";

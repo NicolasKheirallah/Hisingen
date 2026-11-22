@@ -1875,6 +1875,13 @@
 "Target temperature" = "目标温度";
 "Vehicle is offline" = "车辆已离线";
 "Accounts" = "账户";
+"Add Account" = "添加账户";
+"Switch" = "切换";
+"Demo mode" = "演示模式";
+"Relaunch Hisingen to apply." = "重新启动 Hisingen 以应用。";
+"The account could not be added." = "无法添加账户。";
+"The account could not be switched." = "无法切换到该账户。";
+"Demo mode: commands are not sent to a vehicle." = "演示模式：命令不会发送到车辆。";
 "Privacy & Data" = "隐私与数据";
 "Updates" = "更新";
 "About" = "关于";

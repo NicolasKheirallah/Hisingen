@@ -10,6 +10,8 @@ enum SignOutSelection {
 
 enum SettingsChange {
     case credentials
+    case accountAdded
+    case accountSwitched
     case features
     case notifications
     case presentation

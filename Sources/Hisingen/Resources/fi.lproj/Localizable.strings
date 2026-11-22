@@ -1875,6 +1875,13 @@
 "Target temperature" = "Tavoitelämpötila";
 "Vehicle is offline" = "Ajoneuvo on offline-tilassa";
 "Accounts" = "Tilit";
+"Add Account" = "Lisää tili";
+"Switch" = "Vaihda";
+"Demo mode" = "Esittelytila";
+"Relaunch Hisingen to apply." = "Käynnistä Hisingen uudelleen, jotta muutos tulee voimaan.";
+"The account could not be added." = "Tiliä ei voitu lisätä.";
+"The account could not be switched." = "Tiliin ei voitu vaihtaa.";
+"Demo mode: commands are not sent to a vehicle." = "Esittelytila: komentoja ei lähetetä ajoneuvoon.";
 "Privacy & Data" = "Yksityisyys ja tiedot";
 "Updates" = "Päivitykset";
 "About" = "Tietoja";
