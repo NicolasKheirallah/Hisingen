@@ -131,4 +131,5 @@ optional. Volvo requires `HISINGEN_TEST_VOLVO_CLIENT_ID`,
 `HISINGEN_TEST_VOLVO_REFRESH_TOKEN`; its VIN is optional. If the identity provider
 rotates a refresh token, refresh the environment secret through the account's
 approved credential process. Disposable runner persistence does not update a saved
-GitHub secret. Tests clean their local account state even after failure.
+GitHub secret. The hosted workflow has not recorded a run yet: treat its
+first execution as the credentials check itself, not as a settled pipeline. Tests clean their local account state even after failure.
