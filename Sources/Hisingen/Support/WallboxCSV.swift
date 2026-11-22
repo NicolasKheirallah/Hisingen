@@ -5,7 +5,7 @@ import Foundation
 enum WallboxCSV {
     static let header: [String] = [
         "Charger Energy (kWh)", "Charger Energy Source", "Charger Measured At", "Charger ID", "Charger Session Key",
-        "Charger Cost", "Cost Method", "Price Source", "Cost Assumptions", "Missing Price Energy (kWh)", "Attribution"
+        "Charger Cost", "Charger Average Price (per kWh)", "Cost Method", "Price Source", "Cost Assumptions", "Missing Price Energy (kWh)", "Attribution"
     ]
 
     /// Columns that carry nothing sensitive and belong in a pack handed to someone else.
@@ -20,6 +20,7 @@ enum WallboxCSV {
             wallbox.chargerID,
             wallbox.sessionKey,
             wallbox.cost.map { String(format: "%.2f", $0) } ?? "",
+            wallbox.cost.flatMap { wallbox.energyKwh > 0 ? String(format: "%.4f", $0 / wallbox.energyKwh) : nil } ?? "",
             wallbox.costMethod ?? "",
             wallbox.priceSource ?? "",
             wallbox.costAssumptions.joined(separator: "; "),

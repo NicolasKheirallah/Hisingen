@@ -74,7 +74,7 @@ private final class TestSecretStore: @unchecked Sendable {
     }
 }
 
-private struct VolvoSecretBundle: Codable {
+private struct VolvoSecretBundle: Codable, Equatable {
     var clientSecret: String?
     var apiKey: String?
     var sessionToken: String?
@@ -110,6 +110,7 @@ struct KeychainStore: Sendable {
     private static let polestarDataPortalBundleAccount = "polestar-dataportal-credentials"
     private static let polestarDataPortalTokenAccount = "polestar-dataportal-token"
     private static let homeAssistantTokenAccount = "home-assistant-long-lived-token"
+    private static let electricityMapsKeyAccount = "electricity-maps-api-key"
 
     /// Non-secret mirrors used only to decide whether an explicit restore attempt is useful.
     /// Authentication still reads and validates the real Keychain values.
@@ -223,6 +224,24 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
     }
 
+    /// Stores one account's exported credential bundle. The active account continues to use the
+    /// fixed slots above, so every API and Keychain reader keeps its existing path; switching
+    /// accounts swaps which bundle occupies those slots. The payload is opaque JSON, base64
+    /// wrapped so it uses the same string Keychain path as every other secret.
+    func saveAccountCredentialBundle(_ data: Data, accountID: String) throws {
+        try save(data.base64EncodedString(), account: "account-credentials-\(accountID)")
+    }
+
+    func readAccountCredentialBundle(accountID: String) throws -> Data? {
+        guard let encoded = try read(account: "account-credentials-\(accountID)"),
+              let data = Data(base64Encoded: encoded) else { return nil }
+        return data
+    }
+
+    func deleteAccountCredentialBundle(accountID: String) throws {
+        try delete(account: "account-credentials-\(accountID)")
+    }
+
     func saveVolvoSessionToken(_ token: String) throws {
         try mutateVolvoBundle { $0.sessionToken = token }
     }
@@ -326,6 +345,33 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(false, forKey: "has_home_assistant_token")
     }
 
+    /// Electricity Maps API token for live grid carbon. Stored alone, like the other provider
+    /// secrets: it never joins a settings archive, an export or a log, and the presence mirror
+    /// lets the settings card say "key saved" without reading the Keychain.
+    var hasStoredElectricityMapsKey: Bool {
+        if isTestService {
+            return Self.testStore.get(cacheKey(account: Self.electricityMapsKeyAccount))?.isEmpty == false
+        }
+        return UserDefaults.standard.bool(forKey: "has_electricity_maps_key")
+    }
+    func saveElectricityMapsKey(_ key: String) throws {
+        try save(key, account: Self.electricityMapsKeyAccount)
+        guard !isTestService else { return }
+        UserDefaults.standard.set(!key.isEmpty, forKey: "has_electricity_maps_key")
+    }
+    func readElectricityMapsKey() throws -> String? {
+        let value = try read(account: Self.electricityMapsKeyAccount)
+        if !isTestService {
+            UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_electricity_maps_key")
+        }
+        return value
+    }
+    func deleteElectricityMapsKey() throws {
+        try delete(account: Self.electricityMapsKeyAccount)
+        guard !isTestService else { return }
+        UserDefaults.standard.set(false, forKey: "has_electricity_maps_key")
+    }
+
     /// One Keychain item per direct charger vendor. Easee and Zaptec use a login JSON payload,
     /// while NexBlue stores a refresh token.
     func hasStoredChargerCredentials(vendor: String) -> Bool {
@@ -361,7 +407,15 @@ struct KeychainStore: Sendable {
         volvoBundleLock.lock()
         defer { volvoBundleLock.unlock() }
         var bundle = try readVolvoBundle()
+        let before = bundle
         mutate(&bundle)
+        // Re-signing in with the credentials already on file writes the same values back. Skipping
+        // that no-op matters: the write can fail for reasons unrelated to the sign-in (a full disk
+        // returns ENOSPC), and it used to turn an otherwise completed sign-in into a failure.
+        guard bundle != before else {
+            Self.updateVolvoPresenceFlags(bundle)
+            return
+        }
         try saveVolvoBundle(bundle)
     }
 

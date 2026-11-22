@@ -114,6 +114,28 @@ extension VehicleState {
     /// the age instead.
     static let retainedDataHorizon: TimeInterval = 7 * 24 * 3600
 
+    /// Whether a snapshot holds a value for `feature`, so a retained mark has something to stand
+    /// in for. Without this a dwell on a domain the provider structurally never serves kept the
+    /// last-known banner alive indefinitely.
+    func hasRetainedValue(for feature: AppFeature) -> Bool {
+        switch feature {
+        case .softwareUpdates: return softwareInfo != nil
+        case .vehicleWeather: return weather != nil
+        case .chargingSchedule: return !energy.schedules.isEmpty || !climateTimers.isEmpty
+        case .exteriorStatus: return exteriorStatus != nil
+        case .tyreAndWarnings: return healthDetails != nil
+        case .tripMeters: return tripComputer.manualTripKm != nil || tripComputer.automaticTripKm != nil
+        case .connectivityDiagnostics: return connectivity != nil
+        case .airQuality: return airQuality != nil
+        case .batteryDiagnostics: return energy.diagnostics != nil
+        case .vehicleLocation: return location != nil
+        case .climateStatus: return climateStatus != nil
+        case .vehicleHealth: return healthDetails != nil
+        // Capabilities and write features have no reading of their own to retain.
+        default: return false
+        }
+    }
+
     /// The date a carried-forward domain's data is anchored to, for horizon checks.
     private func lastKnownAnchorDate(for reading: VehicleReading) -> Date? {
         reportedDate(for: reading) ?? freshness.retainedDataAt
@@ -188,6 +210,7 @@ extension VehicleState {
             weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),
             location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             probedCapabilities: mergedProbes,
+            providerReport: providerReport ?? previous.providerReport,
             powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
             fuelSystem: fuelSystem.merging(previous: previous.fuelSystem, policy: policy),
             // Capability data is static for a VIN and is not re-read on every refresh. Without
@@ -204,6 +227,14 @@ extension VehicleState {
         if energy.rangeKm == nil { merged.freshness.readingDates[.range] = previous.reportedDate(for: .range) }
         if maintenance.odometerKm == nil { merged.freshness.readingDates[.odometer] = previous.reportedDate(for: .odometer) }
         if maintenance.details == nil { merged.freshness.readingDates[.health] = previous.reportedDate(for: .health) }
+        // A narrow poll (trip meters only, or a garage scan) fetches none of the exterior or fuel
+        // resources. Their values are carried forward above, so their dates must be too – otherwise
+        // the card loses the age it had and falls back to the whole snapshot's newest timestamp.
+        if exteriorStatus == nil {
+            merged.freshness.readingDates[.locks] = previous.reportedDate(for: .locks)
+            merged.freshness.readingDates[.openings] = previous.reportedDate(for: .openings)
+        }
+        if fuelSystem.levelPercent == nil { merged.freshness.readingDates[.fuel] = previous.reportedDate(for: .fuel) }
 
         // A retained mark means "the newest refresh did not include this, and the reading we
         // kept is still recent enough to stand in for a live one". Data past the horizon is
@@ -237,11 +268,89 @@ extension VehicleState {
         markRetained(.batteryDiagnostics, currentIsMissing: batteryDiagnostics == nil, previousWasPresent: previous.batteryDiagnostics != nil)
         markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)
         markRetained(.vehicleLocation, currentIsMissing: location == nil, previousWasPresent: previous.location != nil)
-        retained.formUnion(policy.failedFeatures.filter { features.contains($0) })
+        // Only a feature this snapshot can actually show as last-known earns a retained mark.
+        // A provider that never serves a domain reports it unavailable on every refresh, and
+        // unioning those unconditionally pinned the "Showing last-known values" banner on data
+        // from hours earlier: it could never clear, because the feature could never be refreshed.
+        retained.formUnion(policy.failedFeatures.filter {
+            features.contains($0) && previous.hasRetainedValue(for: $0)
+        })
         merged.freshness.retainedDataCategories = retained.sorted { $0.title < $1.title }
         merged.freshness.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
+        merged.retainReadingsNewerThanIncoming(incoming: self, previous: previous)
         merged.setOptimisticLock(isCommandLocked ? previous.optimisticCommandLockUntil : nil)
         return merged
+    }
+
+    /// A poll that started before a live frame can finish after it. Merging "incoming over
+    /// previous" then rolls the display back to what the vehicle reported *before* the frame: a
+    /// lock that just engaged reads unlocked, and nothing corrects it until the next change.
+    /// Where both sides carry a report date and the held reading is strictly newer, the held
+    /// reading stays. A missing date on either side leaves the incoming value in place, as
+    /// before; the live path applies the same rule per reading in `shouldApplyLiveReading`.
+    fileprivate mutating func retainReadingsNewerThanIncoming(incoming: VehicleState, previous: VehicleState) {
+        func heldIsNewer(_ reading: VehicleReading) -> Bool {
+            guard let held = previous.reportedDate(for: reading),
+                  let arriving = incoming.reportedDate(for: reading) else { return false }
+            return held > arriving
+        }
+        func keepHeldDate(of reading: VehicleReading) {
+            if let held = previous.reportedDate(for: reading) {
+                freshness.readingDates[reading] = held
+            }
+            if let observation = previous.freshness.readingObservations?[reading] {
+                var observations = freshness.readingObservations ?? [:]
+                observations[reading] = observation
+                freshness.readingObservations = observations
+            }
+        }
+
+        var retainedAny = false
+        if heldIsNewer(.battery), incoming.energy.batteryPercentage != nil,
+           let held = previous.energy.batteryPercentage {
+            energy.batteryPercentage = held
+            keepHeldDate(of: .battery)
+            retainedAny = true
+        }
+        if heldIsNewer(.range), incoming.energy.rangeKm != nil, let held = previous.energy.rangeKm {
+            energy.rangeKm = held
+            keepHeldDate(of: .range)
+            retainedAny = true
+        }
+        if heldIsNewer(.charging) {
+            energy.chargingState = previous.energy.chargingState
+            energy.estimatedTimeToFullMinutes = previous.energy.estimatedTimeToFullMinutes
+            energy.connection = previous.energy.connection
+            energy.type = previous.energy.type
+            energy.powerWatts = previous.energy.powerWatts
+            energy.currentAmps = previous.energy.currentAmps
+            energy.voltageVolts = previous.energy.voltageVolts
+            keepHeldDate(of: .charging)
+            retainedAny = true
+        }
+        if var exterior = exteriorStatus, let heldExterior = previous.exteriorStatus {
+            var retainedExterior = false
+            if heldIsNewer(.locks) {
+                exterior.isLocked = heldExterior.isLocked
+                exterior.alarmTriggered = heldExterior.alarmTriggered
+                keepHeldDate(of: .locks)
+                retainedExterior = true
+            }
+            if heldIsNewer(.openings) {
+                exterior.openings = heldExterior.openings
+                exterior.isTailgateLocked = heldExterior.isTailgateLocked
+                keepHeldDate(of: .openings)
+                retainedExterior = true
+            }
+            if retainedExterior {
+                exterior.reportedAt = [exterior.reportedAt, heldExterior.reportedAt].compactMap { $0 }.max()
+                exteriorStatus = exterior
+                retainedAny = true
+            }
+        }
+        if retainedAny, let held = previous.freshness.vehicleReportedAt {
+            freshness.vehicleReportedAt = max(freshness.vehicleReportedAt ?? .distantPast, held)
+        }
     }
 
     /// Publishes the ledger's overlay. The receipts always come from that one producer, and the

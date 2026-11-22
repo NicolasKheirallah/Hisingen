@@ -10,7 +10,8 @@ struct PolestarVehicleDiscovery: Sendable {
         }
         """
         let response: GraphQLResponse<ConsumerCarsPayloadDTO> = try await client.query(
-            query, variables: NoVariables?.none, token: token, operation: "vehicle discovery")
+            query, variables: NoVariables?.none, token: token, operation: "vehicle discovery",
+            scope: .account)
         return response.data?.getConsumerCarsV2 ?? []
     }
 

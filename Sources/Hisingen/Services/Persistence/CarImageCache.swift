@@ -49,6 +49,56 @@ final class CarImageCache: @unchecked Sendable {
         return database.images.hasVehicleImage(for: parts.vin, angle: parts.angle)
     }
 
+    /// Everything the Car tab's hero draws from, read together so the view never queries the
+    /// image tier from inside `body`.
+    struct HeroArtwork: Sendable, Equatable {
+        /// The VIN the artwork was read for, so a view that has moved to another vehicle can
+        /// tell the bytes are not its own.
+        var vin = ""
+        var exterior: [Int: Data] = [:]
+        var interior: Data?
+        var isLoaded = false
+
+        /// Compares byte counts, as `VehiclePresentationRequest` does: the cache hands back the
+        /// same buffer, and comparing megabytes on every refresh would cost more than it saves.
+        static func == (lhs: HeroArtwork, rhs: HeroArtwork) -> Bool {
+            lhs.vin == rhs.vin
+                && lhs.isLoaded == rhs.isLoaded
+                && lhs.interior?.count == rhs.interior?.count
+                && lhs.exterior.mapValues(\.count) == rhs.exterior.mapValues(\.count)
+        }
+    }
+
+    /// Reads every stored exterior angle and the interior render for one vehicle on a
+    /// background task. Each read is a memory hit or a single SQLite lookup, none of it on the
+    /// caller's thread.
+    func heroArtwork(for vin: String) async -> HeroArtwork {
+        await Task.detached(priority: .userInitiated) { [self] in
+            loadHeroArtwork(for: vin)
+        }.value
+    }
+
+    /// The synchronous body of ``heroArtwork(for:)``, for callers already off the main thread
+    /// and for tests.
+    func loadHeroArtwork(for vin: String) -> HeroArtwork {
+        guard let cleanVIN = sanitizedVIN(vin) else { return HeroArtwork(vin: vin, isLoaded: true) }
+        var angles = Set(database.images.vehicleImageAngles(for: cleanVIN))
+        lock.lock()
+        let prefix = "\(cleanVIN)_angle"
+        for key in memoryCache.keys where key.hasPrefix(prefix) {
+            if let angle = Int(key.dropFirst(prefix.count)), angle >= 0 { angles.insert(angle) }
+        }
+        lock.unlock()
+        var exterior: [Int: Data] = [:]
+        for angle in angles.sorted() {
+            if let data = image(for: cleanVIN, angle: angle) { exterior[angle] = data }
+        }
+        return HeroArtwork(
+            vin: vin, exterior: exterior,
+            interior: interiorImage(for: cleanVIN), isLoaded: true
+        )
+    }
+
     func image(for vin: String, angle: Int? = nil) -> Data? {
         guard let cleanVIN = sanitizedVIN(vin) else { return nil }
         let key = angle.map { "\(cleanVIN)_angle\($0)" } ?? cleanVIN

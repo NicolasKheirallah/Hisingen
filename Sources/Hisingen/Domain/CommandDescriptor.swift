@@ -217,6 +217,8 @@ extension RemoteCommand {
                 isProvenBy: { $0.energy.targetPercentage == target },
                 optimisticPatch: { state, _, _ in
                     state.energy.targetPercentage = target
+                    // The old reading time would otherwise label the value just sent as stale.
+                    state.energy.targetPercentageReportedAt = nil
                 }
             )
         case .setAmpLimit(let amps):
@@ -227,6 +229,7 @@ extension RemoteCommand {
                 isProvenBy: { $0.energy.currentLimitAmps == amps },
                 optimisticPatch: { state, _, _ in
                     state.energy.currentLimitAmps = amps
+                    state.energy.currentLimitReportedAt = nil
                 }
             )
         case .startChargingOverride:

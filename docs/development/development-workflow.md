@@ -42,11 +42,16 @@ Read the specific doc for the area you're touching, not just this workflow page:
 ## Local validation, exactly what CI runs
 
 ```bash
+make hooks    # once per clone: the pre-commit gate
 make doctor
 swift build
 swift test --disable-xctest --enable-swift-testing --skip Live --no-parallel
 make app
 ```
+
+`make hooks` links `Scripts/hooks/pre-commit` into `.git/hooks`. Hooks are per clone, so a fresh checkout needs it once, and re-running it after a hook change is harmless. The hook runs only the checks the staged files can affect: a string used through `L10n` with no key in the English table, an unkeyed user-facing literal, localization key parity, and Markdown links. It takes about two seconds; `HISINGEN_SKIP_HOOKS=1 git commit …` bypasses it once, and CI runs the same checks regardless.
+
+If a check finds a literal that genuinely cannot gain a key yet, `node Scripts/verify-l10n-usage.mjs --update-baseline` records it in `Scripts/l10n-usage-baseline.json`. That baseline may only shrink; the update refuses to add a key it has not seen before, so a new literal has to be keyed instead of waived.
 
 Complete concurrency checking and the Swift 6 language mode are declared in `Package.swift`, so a plain `swift build` catches actor-isolation mistakes, no extra flags. CI runs the build-and-test matrix on `macos-15` (the deployment target); running it locally first is still worth it rather than finding out from CI. See [operations/ci.md](../operations/ci.md).
 

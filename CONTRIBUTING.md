@@ -18,11 +18,14 @@ Requirements: macOS 15+, Xcode 16 (or a compatible toolchain), Git.
 ```bash
 git clone https://github.com/NicolasKheirallah/Hisingen.git
 cd Hisingen
+make hooks    # install the pre-commit checks (once per clone)
 make doctor   # check your environment
 make test     # run the test suite
 make ci       # run the same validation CI performs
 make app      # build releases/Hisingen.app
 ```
+
+`make hooks` installs the tracked pre-commit gate in `Scripts/hooks/`. It runs the checks the staged files can affect — a string used through `L10n` with no key in the English table, an unkeyed user-facing literal, localization key parity, and Markdown links — so a problem shows up at commit time instead of in review or CI. It costs about two seconds. Bypass one commit with `HISINGEN_SKIP_HOOKS=1 git commit …` when the commit intentionally leaves a check red.
 
 Normal CI and the deterministic test suite never need access to a real Polestar or Volvo account. Without `.env.secrets`, build-time credential injection emits empty placeholders and the project compiles cleanly; live integration testing is kept separate and opt-in.
 

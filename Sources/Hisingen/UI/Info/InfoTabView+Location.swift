@@ -227,6 +227,10 @@ extension InfoTabView {
                         KVRow(L10n.text("Purification Time Left"),
                               Format.shortDuration(minutes: runtimeLeft), symbol: "timer")
                     }
+                    if let startedAt = air.startedAt, air.cleaningState == .on {
+                        KVRow(L10n.text("Cycle Started"), Format.timeFormatter.string(from: startedAt),
+                              symbol: "clock")
+                    }
                     if let endingAt = air.endingAt, air.cleaningState == .on,
                        endingAt.timeIntervalSinceNow > 0 {
                         KVRow(L10n.text("Cycle Ends"), Format.timeFormatter.string(from: endingAt),
@@ -245,6 +249,10 @@ extension InfoTabView {
                               lastValid ? L10n.text("Completed normally") : L10n.text("Did not complete"),
                               symbol: lastValid ? "checkmark.seal" : "exclamationmark.triangle",
                               valueWarning: !lastValid)
+                    }
+                    if let completedAt = air.lastCycleCompleted {
+                        KVRow(L10n.text("Last Cycle Finished"), Format.dateTimeFormatter.string(from: completedAt),
+                              symbol: "clock.arrow.circlepath")
                     }
                     if let errorKind = air.errorKind, errorKind != .none {
                         KVRow(L10n.text("Purifier Status"), errorKind.displayName,
@@ -295,6 +303,12 @@ extension InfoTabView {
                                   : L10n.format("Field %d", field.field),
                               field.value, symbol: "curlybraces",
                               info: L10n.text("Air-quality wire field the backend sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
+                    }
+                    // Same disclosure for the Data Portal's JSON: a key this build does not
+                    // decode stays visible instead of being dropped at decode.
+                    ForEach((air.unknownPortalFields ?? []).sorted { $0.key < $1.key }, id: \.key) { field in
+                        KVRow(L10n.format("Field %@ (raw)", field.key), field.value, symbol: "curlybraces",
+                              info: L10n.text("Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports."))
                     }
 
                     if let onNavigateToPlan, preferences.features.contains(.remotePreCleaning) {

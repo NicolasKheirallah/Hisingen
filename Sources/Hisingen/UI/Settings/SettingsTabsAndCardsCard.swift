@@ -357,6 +357,7 @@ struct SettingsTabsAndCardsCard: View {
                         var updated = composition
                         let shipped = TabItemCatalog.defaultItems(for: builtIn)
                         updated.setItems(shipped, for: selectedTab)
+                        updated.clearViewTypes(on: selectedTab)
                         for entry in shipped { updated.setItem(entry, shown: true, on: selectedTab) }
                         save(updated)
                     } label: {
@@ -610,6 +611,10 @@ struct SettingsTabsAndCardsCard: View {
                     historyPageSizePicker(for: item)
                         .padding(.top, 3)
                 }
+                if CardViewSupport.choices(for: item, on: selectedTab).count > 1 {
+                    cardViewPicker(for: item)
+                        .padding(.top, 3)
+                }
                 if let onOpenCardSettings {
                     if item == .vehicleHero {
                         cardSettingsButton(.nowControls, action: onOpenCardSettings)
@@ -727,6 +732,33 @@ struct SettingsTabsAndCardsCard: View {
         .controlSize(.small)
         .hisType(.label)
         .accessibilityLabel(L10n.format("%@ · %@", TabItemCatalog.title(item), L10n.text("Rows per page")))
+    }
+
+    /// The form this placement draws. Offered only where the tab can draw both forms; a card
+    /// whose summary links to the tab it is already on keeps the full form.
+    private func cardViewPicker(for item: TabItemID) -> some View {
+        HStack(spacing: 6) {
+            Text(L10n.text("Card view"))
+                .hisType(.micro)
+                .foregroundStyle(.secondary)
+            Picker(L10n.text("Card view"), selection: Binding(
+                get: { composition.viewType(for: item, on: selectedTab) },
+                set: { type in
+                    var updated = composition
+                    updated.setViewType(type, for: item, on: selectedTab)
+                    save(updated)
+                }
+            )) {
+                ForEach(CardViewSupport.choices(for: item, on: selectedTab), id: \.self) { type in
+                    Text(type.title).tag(type)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .controlSize(.small)
+            .hisType(.label)
+            .accessibilityLabel(L10n.format("%@ · %@", TabItemCatalog.title(item), L10n.text("Card view")))
+        }
     }
 
     private func reorderControls(item: TabItemID) -> some View {

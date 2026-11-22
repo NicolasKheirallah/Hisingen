@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 @MainActor
 struct SettingsDatabaseCard: View {
     let state: VehicleState?
+    /// The garage, so the per-vehicle log picker can name every car rather than only the
+    /// partitions that happen to hold rows.
+    var fleet = FleetSnapshot()
     let database: VehicleDatabase
     /// The tier the maintenance actions must drop alongside the rows. This is the app's cache,
     /// not `CarImageCache.shared` – the two are different instances and dropping the wrong one
@@ -54,6 +57,10 @@ struct SettingsDatabaseCard: View {
                     headerSection
                     statsSection(counts: counts, sizeStr: sizeStr)
 
+                    if let incompatibility = database.schemaIncompatibility {
+                        schemaIncompatibilityRow(incompatibility)
+                    }
+
                     Divider().opacity(HisingenTheme.dividerOpacity)
 
                     locationHistoryRow
@@ -97,12 +104,30 @@ struct SettingsDatabaseCard: View {
                 await loadStats()
             }
             .sheet(isPresented: $showAPIDiagnosticInspector) {
-                APIDiagnosticInspectorView()
+                APIDiagnosticInspectorView(fleet: fleet, activeVIN: state?.identity.vin)
             }
         )
     }
 
     // MARK: - Sections
+
+    /// The store was written by a newer build. This is where the reader learns why their
+    /// history looks empty and that nothing was deleted, above the controls that would
+    /// otherwise act on a database this build cannot read.
+    @ViewBuilder
+    private func schemaIncompatibilityRow(
+        _ incompatibility: VehicleDatabase.SchemaIncompatibility
+    ) -> some View {
+        Divider().opacity(HisingenTheme.dividerOpacity)
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(HisingenTheme.semanticWarning)
+            Text(incompatibility.message)
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
     @ViewBuilder
     private var headerSection: some View {

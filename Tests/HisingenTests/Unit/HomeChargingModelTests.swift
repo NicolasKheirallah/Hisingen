@@ -612,7 +612,9 @@ struct HomeChargingModelTests {
         let harness = try ModelHarness()
         await harness.connect()
         #expect(harness.model.hasToken)
-        let eraser = LocalDataEraser(database: harness.database, preferences: harness.scoped.store, imageCache: CarImageCache())
+        let eraser = LocalDataEraser(
+            database: harness.database, preferences: harness.scoped.store,
+            imageCache: CarImageCache(), clearAccounts: {})
         try eraser.perform(.everything(.all))
         await eventually { harness.model.pairing == nil }
         #expect(harness.model.pairing == nil)

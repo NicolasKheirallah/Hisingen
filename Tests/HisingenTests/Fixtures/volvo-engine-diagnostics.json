@@ -1,0 +1,8 @@
+{
+  "data": {
+    "engineCoolantLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "oilLevelWarning": { "value": "LOW", "timestamp": "2026-08-15T09:00:00Z" },
+    "engineHoursToService": { "value": 1200, "unit": "hours", "timestamp": "2026-08-15T09:00:00Z" },
+    "batteryChargeLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" }
+  }
+}

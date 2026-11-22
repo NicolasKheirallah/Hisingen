@@ -211,7 +211,7 @@ struct PolestarConsumerSnapshotAssembler {
                 vehicleReportedAt: [primaryReportedAt, extras?.reportedAt].compactMap { $0 }.max(),
                 dataWarnings: warnings,
                 unavailableFeatures: unavailable.features
-            ),
+            ).recordedSource(.polestarGRPC),
             exteriorStatus: exterior.value,
             softwareInfo: software.value,
             climateStatus: climate.value,

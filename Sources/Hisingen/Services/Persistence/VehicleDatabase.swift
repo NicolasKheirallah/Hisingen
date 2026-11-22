@@ -48,7 +48,8 @@ final class VehicleDatabase: @unchecked Sendable {
     func beginHistoryErase(scope: LocalDataEraser.Scope) -> VehicleScope? {
         let vehicles: VehicleScope
         switch scope {
-        case .everything(let target), .locations(let target), .session(let target): vehicles = target
+        case .everything(let target), .locations(let target), .session(let target), .detach(let target):
+            vehicles = target
         case .samples, .compact: return nil
         }
         historyAdmission.lock()
@@ -95,7 +96,29 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 9
+    static let latestSchemaVersion = 10
+
+    /// A store on disk whose `PRAGMA user_version` is past this build's ceiling. It was written
+    /// by a newer Hisingen, so its tables and columns are not what this build's SQL assumes.
+    /// The handle is closed instead of read: half-reading a newer store would return rows that
+    /// decode into wrong or missing readings, and the file must stay byte-identical for the
+    /// next launch of the build that wrote it.
+    struct SchemaIncompatibility: Equatable, Sendable {
+        let storeVersion: Int
+        let supportedVersion: Int
+
+        /// The sentence used by both the log fault and the settings card, so the refusal is
+        /// described the same way wherever a reader meets it.
+        var message: String {
+            L10n.format(
+                "A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it.",
+                storeVersion, supportedVersion)
+        }
+    }
+
+    /// Non-nil when this launch refused the store because a newer build wrote it. Every
+    /// persistence call then fails closed through the closed handle; nothing is deleted.
+    private(set) var schemaIncompatibility: SchemaIncompatibility?
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -132,8 +155,24 @@ final class VehicleDatabase: @unchecked Sendable {
         } else {
             (handle, filePreexisted) = Self.openDatabase(logger: logger)
         }
+
+        // Refuse a newer build's store before a single ledger reads it. This has to happen
+        // here rather than after `createTables()`: the baseline DDL and the migrator both
+        // assume they are looking at a schema at or below `latestSchemaVersion`.
+        var incompatibility: SchemaIncompatibility?
+        if let storedVersion = Self.storedSchemaVersion(in: handle),
+           storedVersion > Self.latestSchemaVersion {
+            let refusal = SchemaIncompatibility(
+                storeVersion: storedVersion, supportedVersion: Self.latestSchemaVersion)
+            logger.fault("Refusing a database from a newer build: \(refusal.message, privacy: .public)")
+            handle.close()
+            handle = .unavailable(path: handle.path)
+            incompatibility = refusal
+        }
+
         self.db = handle
         self.databaseFilePreexisted = filePreexisted
+        self.schemaIncompatibility = incompatibility
         let chargingLedger = ChargingSessionLedger(sql: handle)
         self.charging = chargingLedger
         self.history = VehicleHistoryLedger(sql: handle, charging: chargingLedger)
@@ -144,7 +183,18 @@ final class VehicleDatabase: @unchecked Sendable {
         self.commandReceipts = CommandReceiptStore(sql: handle)
         self.providerBackoffs = ProviderBackoffLedger(sql: handle)
         self.customThemes = CustomThemeLedger(sql: handle)
-        createTables()
+        if incompatibility == nil {
+            createTables()
+        }
+    }
+
+    /// `PRAGMA user_version` read before a handle is adopted. `nil` means the handle cannot be
+    /// read at all (closed or unavailable), which is not a downgrade.
+    static func storedSchemaVersion(in database: SQLiteDatabase) -> Int? {
+        guard database.isOpen else { return nil }
+        return try? database.query(sql: "PRAGMA user_version;") { _ in } process: { statement in
+            try statement.stepOrThrow() ? Int(statement.columnInt64(at: 0) ?? 0) : 0
+        }
     }
 
     /// Opens the default database location, creating the directory if needed. Returns the
@@ -185,25 +235,39 @@ final class VehicleDatabase: @unchecked Sendable {
         }
     }
 
-    /// Opens the database, and if a pre-existing file fails `PRAGMA quick_check`, moves it
-    /// (with its `-wal`/`-shm` siblings) aside to `hisingen.sqlite3.corrupt-<timestamp>` and
-    /// starts from a clean file. The data stays recoverable by hand instead of the schema
-    /// layer silently recreating an empty database over a corrupt one.
-    private static func openQuarantiningCorruption(
+    /// Opens the database, and if a pre-existing file is damaged, moves it (with its
+    /// `-wal`/`-shm` siblings) aside to `hisingen.sqlite3.corrupt-<timestamp>` and starts from a
+    /// clean file. Damage means either a failed `PRAGMA quick_check` on a file that still opens,
+    /// or a file that cannot be opened as a database at all (garbage, a truncated header).
+    /// The data stays recoverable by hand instead of the schema layer silently recreating an
+    /// empty database over it. Failures that may clear up on their own (a lock, a read-only
+    /// volume) leave the file alone and return an unavailable handle.
+    ///
+    /// Internal so `VehicleDatabaseOpenGuardTests` can drive this exact path against a
+    /// temporary file; it never runs against the real store from a test.
+    static func openQuarantiningCorruption(
         at dbURL: URL, preexisting: Bool, logger: Logger
     ) -> SQLiteDatabase {
+        var openFailure: Error?
         func openHandle() -> SQLiteDatabase? {
             do { return try SQLiteDatabase(path: dbURL.path) }
             catch {
+                openFailure = error
                 logger.fault("Could not open database at \(dbURL.path, privacy: .private): \(error, privacy: .public)")
                 return nil
             }
         }
-        guard let handle = openHandle() else { return .unavailable(path: dbURL.path) }
-        guard preexisting, !handle.passesQuickCheck() else { return handle }
-
-        logger.fault("Database failed PRAGMA quick_check; quarantining \(dbURL.lastPathComponent, privacy: .public) and starting fresh")
-        handle.close()
+        if let handle = openHandle() {
+            guard preexisting, !handle.passesQuickCheck() else { return handle }
+            logger.fault("Database failed PRAGMA quick_check; quarantining \(dbURL.lastPathComponent, privacy: .public) and starting fresh")
+            handle.close()
+        } else {
+            guard preexisting, let openFailure,
+                  Self.isDamagedStoreFailure(openFailure) else {
+                return .unavailable(path: dbURL.path)
+            }
+            logger.fault("Database is not a readable SQLite file; quarantining \(dbURL.lastPathComponent, privacy: .public) and starting fresh")
+        }
         let baseStamp = Format.iso8601.string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let uniqueSuffix: String = {
             let ms = Int(Date().timeIntervalSince1970 * 1000) % 1000
@@ -227,6 +291,14 @@ final class VehicleDatabase: @unchecked Sendable {
             }
         }
         return openHandle() ?? .unavailable(path: dbURL.path)
+    }
+
+    /// Whether an open failure says the bytes on disk are not a readable SQLite database, as
+    /// opposed to a condition that can clear (a lock, a read-only volume, no disk space).
+    private static func isDamagedStoreFailure(_ error: any Error) -> Bool {
+        let message = (error as NSError).localizedDescription.lowercased()
+        return message.contains("not a database") || message.contains("malformed")
+            || message.contains("corrupt") || message.contains("disk image")
     }
 
     /// Convenience for in-memory database instance for testing.
@@ -283,6 +355,7 @@ final class VehicleDatabase: @unchecked Sendable {
             peak_power_kw REAL DEFAULT 0.0,
             average_power_kw REAL DEFAULT 0.0,
             location_name TEXT,
+            charging_place TEXT NOT NULL DEFAULT 'home',
             created_at REAL NOT NULL,
             lifecycle_state TEXT NOT NULL DEFAULT 'active',
             completion_reason TEXT,
@@ -403,6 +476,31 @@ final class VehicleDatabase: @unchecked Sendable {
             odometer_km REAL
         );
         CREATE INDEX IF NOT EXISTS idx_fuel_vin ON fuel_entries(vin, date DESC);
+
+        -- The reader's own maintenance log. Nothing here comes from a provider: a service visit is
+        -- something they know and the car never reports. Additive table, so an existing install
+        -- picks it up on the next launch without a schema-version migration.
+        CREATE TABLE IF NOT EXISTS maintenance_entries (
+            id TEXT PRIMARY KEY NOT NULL,
+            vin TEXT NOT NULL,
+            date REAL NOT NULL,
+            odometer_km INTEGER,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            notes TEXT,
+            cost REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_maintenance_vin ON maintenance_entries(vin, date DESC);
+
+        -- The ownership assumption depreciation is derived from. One row per vehicle, entered by
+        -- the reader; there is deliberately no market value column, because Hisingen does not
+        -- estimate one.
+        CREATE TABLE IF NOT EXISTS vehicle_ownership (
+            vin TEXT PRIMARY KEY NOT NULL,
+            purchase_price REAL NOT NULL,
+            purchase_date REAL NOT NULL,
+            annual_decline_percent REAL NOT NULL
+        );
 
         CREATE TABLE IF NOT EXISTS air_quality_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

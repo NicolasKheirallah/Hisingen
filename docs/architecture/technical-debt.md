@@ -29,5 +29,9 @@ modifier gating, dead `Preferences` removal) landed in code.
    regression coverage. Still missing: Notifier privacy-body branches, Sparkle end-to-end
    signed-feed staging coverage, and AppIntents dialogs.
 
-5. **Localization of Shortcuts dialogs.** All `AppIntents` user-facing strings are English
-   only; every other surface resolves through `L10n`.
+5. **Localization of Shortcuts dialogs.** MAINT-02 is resolved for in-code strings: intent
+   titles, descriptions, parameter titles and dialogs, the Focus filter's display strings and
+   the Shortcuts short titles now resolve through `L10n` like every other surface, with keys
+   and translations in all 14 locales. What remains is `AppShortcuts.strings` — the Siri
+   phrases are still "undefined" in 13 locales and stay parked on the SwiftPM
+   `Metadata.appintents` blocker (docs/development/app-intents-metadata.md).

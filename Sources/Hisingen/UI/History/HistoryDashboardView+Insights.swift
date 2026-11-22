@@ -224,6 +224,18 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Consumption vs Temperature"))
                 .accessibilityValue(chartAccessibilityValue(points: points.map { unit.plotValue(kwhPer100Km: $0.consumption) }))
+                .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+                    title: L10n.text("Consumption vs Temperature"),
+                    xLabel: tempUnit.suffix,
+                    yLabel: unit.title,
+                    series: [.init(
+                        name: L10n.text("Consumption"),
+                        points: points.map {
+                            (tempUnit.convert(celsius: $0.temperature),
+                             unit.plotValue(kwhPer100Km: $0.consumption))
+                        }
+                    )]
+                ))
             }
         }
         let months = HistoryInsights.monthlyNormalisedConsumption(from: trips)
@@ -254,6 +266,16 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(normalisedName)
                 .accessibilityValue(chartAccessibilityValue(points: months.map { unit.plotValue(kwhPer100Km: $0.normalised) }))
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: normalisedName,
+                    yLabel: unit.title,
+                    series: [
+                        .init(name: L10n.text("Average consumption"),
+                              points: months.map { ($0.month, unit.plotValue(kwhPer100Km: $0.raw)) }),
+                        .init(name: normalisedName,
+                              points: months.map { ($0.month, unit.plotValue(kwhPer100Km: $0.normalised)) })
+                    ]
+                ))
                 HStack(spacing: 10) {
                     HistoryChartLegendItem(color: HisingenTheme.inkMuted, label: L10n.text("Average consumption"), dashed: true)
                     HistoryChartLegendItem(color: HisingenTheme.chartInfo, label: normalisedName)
@@ -320,6 +342,15 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight * 0.6)
                 .accessibilityLabel(L10n.text("Energy by Time of Day"))
                 .accessibilityValue(chartAccessibilityValue(points: buckets.map { byTimeOfDay[$0] ?? 0 }))
+                .accessibilityChartDescriptor(CategoricalSeriesAXDescriptor(
+                    title: L10n.text("Energy by Time of Day"),
+                    categoryLabel: L10n.text("Hour"),
+                    valueLabel: "kWh",
+                    categories: buckets.map { L10n.text($0.rawValue) },
+                    series: [.init(name: L10n.text("Energy"),
+                                   values: buckets.map { byTimeOfDay[$0] ?? 0 })],
+                    valueFormat: { String(format: "%.1f kWh", locale: L10n.displayLocale, $0) }
+                ))
             }
         }
     }
@@ -330,21 +361,41 @@ extension HistoryDashboardView {
     /// gained. The two answer different questions, and the difference is the loss. The price leads
     /// the stats row above; this row says how it was reached.
     @ViewBuilder
-    func wallboxRows(_ session: HistoricalChargingSession) -> some View {
+    func wallboxRows(_ session: HistoricalChargingSession, cheapest: CheapestOption? = nil) -> some View {
         if let wallbox = session.wallbox {
             VStack(alignment: .leading, spacing: 4) {
                 KVRow(L10n.text("Battery-side energy"), Format.energyKwh(session.energyDeliveredKwh))
                 KVRow(L10n.text("Energy delivered by charger"), Format.energyKwh(wallbox.energyKwh))
+                if let loss = chargingLoss(session, wallbox: wallbox) {
+                    KVRow(L10n.text("Charging Loss"), "\(Format.number(loss.share * 100, decimals: 1)) % · \(Format.energyKwh(loss.kwh))",
+                          info: L10n.text("The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger."))
+                }
                 if wallbox.cost != nil || wallbox.partialCost != nil {
                     KVRow(L10n.text("Pricing"),
-                          wallbox.isEstimatedCost ? L10n.text("Session total at the average price") : L10n.text("Per 15 minutes"),
+                          wallbox.isEstimatedCost ? L10n.text("Session total at the average price") : L10n.text("By when the energy flowed"),
                           info: wallbox.costAssumptions.isEmpty ? nil : wallbox.costAssumptions.joined(separator: ". ") + ".")
+                }
+                if let cheapest, cheapest.saving >= 1, let paid = wallbox.cost, cheapest.saving >= paid * 0.03 {
+                    let symbol = wallbox.currency ?? session.currencySymbol ?? preferences.currencySymbol
+                    KVRow(L10n.text("Could Have Saved"), Format.currency(cheapest.saving, symbol: symbol),
+                          info: L10n.format("The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that.",
+                                            Format.powerKw(cheapest.rateKw), Format.currency(cheapest.cost, symbol: symbol)))
                 }
                 if let missing = wallbox.missingKwh, missing > 0.05 {
                     KVRow(L10n.text("Unpriced Energy"), Format.energyKwh(missing), warning: true)
                 }
             }
         }
+    }
+
+    /// What the charger delivered that the battery did not take in. Only when the battery side is
+    /// trustworthy enough to subtract: a low-confidence estimate would put its own error in the figure.
+    func chargingLoss(_ session: HistoricalChargingSession, wallbox: WallboxMeasurement) -> (share: Double, kwh: Double)? {
+        guard session.energySource != .wallboxOnly, session.confidence != .low,
+              session.energyDeliveredKwh > 0, wallbox.energyKwh > session.energyDeliveredKwh else { return nil }
+        let kwh = wallbox.energyKwh - session.energyDeliveredKwh
+        let share = kwh / wallbox.energyKwh
+        return share <= 0.35 ? (share, kwh) : nil
     }
 
     /// One short note per session, saved when the field loses focus or the reader presses Return.

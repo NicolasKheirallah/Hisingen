@@ -1,0 +1,10 @@
+{
+  "data": {
+    "brakeLightCenterWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "brakeLightLeftWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "brakeLightRightWarning": { "value": "BRAKE_LIGHT_FAILURE", "timestamp": "2026-08-15T09:00:00Z" },
+    "lowBeamLeftWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "lowBeamRightWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "hazardLightsWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" }
+  }
+}

@@ -3,10 +3,23 @@ import Foundation
 
 @MainActor
 final class VolvoSignInPresenter: NSObject {
+    private let logger = AppLog.logger("volvo-sign-in")
     private var pendingContinuation: CheckedContinuation<URL, Error>?
+    private let openInBrowser: @MainActor (URL) -> Bool
+
+    /// `openInBrowser` is a seam for tests: the callback gate can be exercised without launching
+    /// the user's browser.
+    init(openInBrowser: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+        self.openInBrowser = openInBrowser
+        super.init()
+    }
+
+    /// Whether a browser round trip is still waiting for its callback.
+    var isWaitingForCallback: Bool { pendingContinuation != nil }
 
     func signIn(authorizeURL: URL, callbackScheme _: String) async throws -> URL {
-        NSApp.activate(ignoringOtherApps: true)
+        // Production always has an application; a unit test does not.
+        _ = NSApp?.activate(ignoringOtherApps: true)
 
         return try await withCheckedThrowingContinuation { continuation in
             if let existing = self.pendingContinuation {
@@ -15,7 +28,7 @@ final class VolvoSignInPresenter: NSObject {
             }
             self.pendingContinuation = continuation
 
-            let opened = NSWorkspace.shared.open(authorizeURL)
+            let opened = self.openInBrowser(authorizeURL)
             if !opened {
                 self.pendingContinuation = nil
                 continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
@@ -38,15 +51,19 @@ final class VolvoSignInPresenter: NSObject {
         continuation.resume(throwing: CancellationError())
     }
 
-    /// Only URLs matching Volvo's OAuth callback are accepted; strays are ignored
-    /// so a forged/mistyped `hisingen://` URL cannot break the genuine sign-in.
+    /// Only the registered Volvo callback is resumed to the token exchange. A stray or crafted
+    /// `hisingen://` URL is refused here as well as at the exchange, and the refusal names the
+    /// component that did not match, never the query that carries the authorization code.
     func handleCallbackURL(_ url: URL) {
-        guard let continuation = pendingContinuation else { return }
-        let scheme = url.scheme?.lowercased()
-        guard scheme == "hisingen" || scheme == "https" else { return }
-        if scheme == "hisingen" {
-            guard url.host?.lowercased() == "oauth",
-                  url.path.lowercased().hasPrefix("/volvo/callback") else { return }
+        if let refusal = VolvoCallback.refusal(for: url) {
+            logger.notice("\(refusal.logMessage, privacy: .public)")
+            return
+        }
+        guard let continuation = pendingContinuation else {
+            // A registered callback with nothing waiting means the round trip was already
+            // finished, cancelled, or timed out. Saying so beats a silent drop.
+            logger.notice("Volvo sign-in callback arrived with no sign-in waiting for it")
+            return
         }
         pendingContinuation = nil
         continuation.resume(returning: url)

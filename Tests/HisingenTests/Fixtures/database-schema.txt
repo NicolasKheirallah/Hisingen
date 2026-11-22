@@ -1,0 +1,227 @@
+user-version 10
+table air_quality_history
+  column air_quality_index real notnull=0 default=- pk=0
+  column filter_remaining_percent real notnull=0 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column particulate_matter_10 real notnull=0 default=- pk=0
+  column particulate_matter_25 real notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table battery_health_history
+  column degradation_pct real notnull=1 default=- pk=0
+  column effective_usable_kwh real notnull=1 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column measurement_source text notnull=1 default='legacy' pk=0
+  column odometer_km real notnull=1 default=- pk=0
+  column state_of_health_pct real notnull=1 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table cabin_climate_history
+  column id integer notnull=0 default=- pk=1
+  column interior_c real notnull=0 default=- pk=0
+  column requested_c real notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table charging_baselines
+  column payload blob notnull=1 default=- pk=0
+  column sampled_at real notnull=0 default=- pk=0
+  column vehicle_reported_at real notnull=0 default=- pk=0
+  column vin text notnull=1 default=- pk=1
+table charging_samples
+  column charging_type text notnull=0 default=- pk=0
+  column current_amps real notnull=0 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column power_kw real notnull=0 default=- pk=0
+  column session_id text notnull=1 default=- pk=0
+  column soc real notnull=1 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+  column voltage_volts real notnull=0 default=- pk=0
+table charging_sessions
+  column average_power_kw real notnull=0 default=0.0 pk=0
+  column charging_place text notnull=1 default='home' pk=0
+  column completion_reason text notnull=0 default=- pk=0
+  column confidence text notnull=1 default='low' pk=0
+  column created_at real notnull=1 default=- pk=0
+  column currency_symbol text notnull=0 default=- pk=0
+  column end_soc real notnull=0 default=- pk=0
+  column ended_at real notnull=0 default=- pk=0
+  column energy_delivered_kwh real notnull=0 default=0.0 pk=0
+  column energy_source text notnull=1 default='soc_capacity_estimate' pk=0
+  column estimated_cost real notnull=0 default=- pk=0
+  column id text notnull=1 default=- pk=1
+  column last_observed_at real notnull=0 default=- pk=0
+  column lifecycle_state text notnull=1 default='active' pk=0
+  column location_name text notnull=0 default=- pk=0
+  column night_tariff_enabled integer notnull=1 default=0 pk=0
+  column night_tariff_end_hour integer notnull=0 default=- pk=0
+  column night_tariff_price_per_kwh real notnull=0 default=- pk=0
+  column night_tariff_start_hour integer notnull=0 default=- pk=0
+  column peak_power_kw real notnull=0 default=0.0 pk=0
+  column pending_stop_count integer notnull=1 default=0 pk=0
+  column sample_coverage real notnull=0 default=- pk=0
+  column spot_estimated_cost real notnull=0 default=- pk=0
+  column start_soc real notnull=1 default=- pk=0
+  column started_at real notnull=1 default=- pk=0
+  column summary_version integer notnull=1 default=2 pk=0
+  column target_soc real notnull=0 default=- pk=0
+  column tariff_price_per_kwh real notnull=0 default=- pk=0
+  column usable_capacity_kwh real notnull=0 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+  column wallbox_attribution text notnull=0 default=- pk=0
+  column wallbox_charger_id text notnull=0 default=- pk=0
+  column wallbox_cost real notnull=0 default=- pk=0
+  column wallbox_cost_assumptions text notnull=0 default=- pk=0
+  column wallbox_cost_method text notnull=0 default=- pk=0
+  column wallbox_currency text notnull=0 default=- pk=0
+  column wallbox_ended_at real notnull=0 default=- pk=0
+  column wallbox_energy_kwh real notnull=0 default=- pk=0
+  column wallbox_energy_source text notnull=0 default=- pk=0
+  column wallbox_intervals text notnull=0 default=- pk=0
+  column wallbox_key_kind text notnull=0 default=- pk=0
+  column wallbox_measured_at real notnull=0 default=- pk=0
+  column wallbox_missing_kwh real notnull=0 default=- pk=0
+  column wallbox_partial_cost real notnull=0 default=- pk=0
+  column wallbox_peak_kw real notnull=0 default=- pk=0
+  column wallbox_price_source text notnull=0 default=- pk=0
+  column wallbox_session_key text notnull=0 default=- pk=0
+  column wallbox_start_reason text notnull=0 default=- pk=0
+  column wallbox_started_at real notnull=0 default=- pk=0
+  column wallbox_stop_reason text notnull=0 default=- pk=0
+table command_receipts
+  column payload blob notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=1
+table connectivity_history
+  column id integer notnull=0 default=- pk=1
+  column network_type text notnull=0 default=- pk=0
+  column signal_bars integer notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+  column wake_reason text notnull=0 default=- pk=0
+table custom_themes
+  column created_at real notnull=1 default=- pk=0
+  column definition text notnull=1 default=- pk=0
+  column id text notnull=0 default=- pk=1
+  column updated_at real notnull=1 default=- pk=0
+table electricity_price_fetches
+  column fetched_at real notnull=1 default=- pk=0
+  column zone text notnull=1 default=- pk=1
+table electricity_prices
+  column end_at real notnull=1 default=- pk=0
+  column sek_per_kwh real notnull=1 default=- pk=0
+  column start_at real notnull=1 default=- pk=2
+  column zone text notnull=1 default=- pk=1
+table fuel_entries
+  column date real notnull=1 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column liters real notnull=1 default=- pk=0
+  column odometer_km real notnull=0 default=- pk=0
+  column price_per_liter real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table maintenance_entries
+  column cost real notnull=0 default=- pk=0
+  column date real notnull=1 default=- pk=0
+  column id text notnull=1 default=- pk=1
+  column kind text notnull=1 default=- pk=0
+  column notes text notnull=0 default=- pk=0
+  column odometer_km integer notnull=0 default=- pk=0
+  column title text notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table provider_backoff
+  column blocked_until real notnull=1 default=- pk=0
+  column reason text notnull=0 default=- pk=0
+  column subject text notnull=1 default=- pk=1
+  column vin text notnull=0 default=- pk=0
+table remote_commands_log
+  column command_name text notnull=1 default=- pk=0
+  column duration_ms integer notnull=0 default=- pk=0
+  column error_message text notnull=0 default=- pk=0
+  column executed_at real notnull=1 default=- pk=0
+  column id text notnull=1 default=- pk=1
+  column status text notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table telemetry_logs
+  column ambient_temp_c real notnull=0 default=- pk=0
+  column avg_consumption real notnull=0 default=- pk=0
+  column avg_consumption_unit text notnull=0 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column latitude real notnull=0 default=- pk=0
+  column longitude real notnull=0 default=- pk=0
+  column odometer_km real notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column trip_auto_km real notnull=0 default=- pk=0
+  column trip_manual_km real notnull=0 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table trip_tags
+  column purpose text notnull=1 default=- pk=0
+  column trip_id text notnull=1 default=- pk=1
+  column updated_at real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=2
+table tyre_pressure_history
+  column id integer notnull=0 default=- pk=1
+  column kilopascals real notnull=1 default=- pk=0
+  column position text notnull=1 default=- pk=0
+  column reference_kpa real notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table vehicle_activity
+  column id text notnull=0 default=- pk=1
+  column payload blob notnull=1 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table vehicle_images
+  column angle integer notnull=1 default=- pk=2
+  column image_data blob notnull=1 default=- pk=0
+  column pixel_budget integer notnull=0 default=- pk=0
+  column thumbnail_data blob notnull=0 default=- pk=0
+  column updated_at real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=1
+table vehicle_metric_log
+  column id integer notnull=0 default=- pk=1
+  column metric text notnull=1 default=- pk=0
+  column ref text notnull=0 default=- pk=0
+  column text text notnull=0 default=- pk=0
+  column timestamp real notnull=1 default=- pk=0
+  column value real notnull=0 default=- pk=0
+  column vin text notnull=1 default=- pk=0
+table vehicle_ownership
+  column annual_decline_percent real notnull=1 default=- pk=0
+  column purchase_date real notnull=1 default=- pk=0
+  column purchase_price real notnull=1 default=- pk=0
+  column vin text notnull=1 default=- pk=1
+table vehicle_snapshots
+  column brand text notnull=1 default=- pk=0
+  column fetched_at real notnull=1 default=- pk=0
+  column is_cached_snapshot integer notnull=1 default=1 pk=0
+  column model_name text notnull=0 default=- pk=0
+  column payload blob notnull=1 default=- pk=0
+  column vehicle_reported_at real notnull=0 default=- pk=0
+  column vin text notnull=1 default=- pk=1
+table vehicle_warning_events
+  column cleared_at real notnull=0 default=- pk=0
+  column first_seen real notnull=1 default=- pk=0
+  column id integer notnull=0 default=- pk=1
+  column vin text notnull=1 default=- pk=0
+  column warning text notnull=1 default=- pk=0
+index idx_air_quality_vin on air_quality_history create index idx_air_quality_vin on air_quality_history(vin, timestamp desc)
+index idx_battery_health_vin on battery_health_history create index idx_battery_health_vin on battery_health_history(vin, timestamp desc)
+index idx_cabin_climate_vin on cabin_climate_history create index idx_cabin_climate_vin on cabin_climate_history(vin, timestamp desc)
+index idx_charging_samples_session on charging_samples create index idx_charging_samples_session on charging_samples(session_id, timestamp asc)
+index idx_charging_sessions_active on charging_sessions create index idx_charging_sessions_active on charging_sessions(vin, lifecycle_state, ended_at)
+index idx_charging_sessions_vin on charging_sessions create index idx_charging_sessions_vin on charging_sessions(vin, started_at desc)
+index idx_charging_sessions_wallbox_charger on charging_sessions create index idx_charging_sessions_wallbox_charger on charging_sessions(wallbox_charger_id, started_at desc) where wallbox_charger_id is not null
+index idx_charging_sessions_wallbox_key on charging_sessions create unique index idx_charging_sessions_wallbox_key on charging_sessions(wallbox_session_key) where wallbox_session_key is not null
+index idx_connectivity_vin on connectivity_history create index idx_connectivity_vin on connectivity_history(vin, timestamp desc)
+index idx_electricity_prices_zone on electricity_prices create index idx_electricity_prices_zone on electricity_prices(zone, start_at asc)
+index idx_fuel_vin on fuel_entries create index idx_fuel_vin on fuel_entries(vin, date desc)
+index idx_maintenance_vin on maintenance_entries create index idx_maintenance_vin on maintenance_entries(vin, date desc)
+index idx_metric_log on vehicle_metric_log create index idx_metric_log on vehicle_metric_log(vin, metric, timestamp desc)
+index idx_provider_backoff_vin on provider_backoff create index idx_provider_backoff_vin on provider_backoff(vin)
+index idx_remote_commands_vin on remote_commands_log create index idx_remote_commands_vin on remote_commands_log(vin, executed_at desc)
+index idx_telemetry_vin on telemetry_logs create index idx_telemetry_vin on telemetry_logs(vin, timestamp desc)
+index idx_trip_tags_vin on trip_tags create index idx_trip_tags_vin on trip_tags(vin, updated_at desc)
+index idx_tyre_pressure_vin on tyre_pressure_history create index idx_tyre_pressure_vin on tyre_pressure_history(vin, position, timestamp desc)
+index idx_vehicle_activity_vin on vehicle_activity create index idx_vehicle_activity_vin on vehicle_activity(vin, timestamp desc)
+index idx_vehicle_images_vin on vehicle_images create index idx_vehicle_images_vin on vehicle_images(vin)
+index idx_warning_events_open on vehicle_warning_events create index idx_warning_events_open on vehicle_warning_events(vin, warning) where cleared_at is null
+index idx_warning_events_vin on vehicle_warning_events create index idx_warning_events_vin on vehicle_warning_events(vin, first_seen desc)

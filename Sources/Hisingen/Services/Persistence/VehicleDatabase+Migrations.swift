@@ -358,5 +358,24 @@ extension VehicleDatabase {
                 logger.error("Wallbox reason schema migration remains incomplete; it will retry next launch")
             }
         }
+
+        // v10: where a session happened, for the home-versus-public cost split. Recorded
+        // sessions and every earlier row count as home; the edit sheet can change one, and a
+        // manually entered session carries the place the reader picked. Additive, so old
+        // totals read exactly as before.
+        if version == 9 {
+            addColumnIfMissing(table: "charging_sessions", column: "charging_place",
+                               declaration: "TEXT NOT NULL DEFAULT 'home'")
+            if columnExists(table: "charging_sessions", column: "charging_place") {
+                do {
+                    try db.execute(sql: "PRAGMA user_version = 10;")
+                    version = 10
+                } catch {
+                    logger.error("Charging-place migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
+            } else {
+                logger.error("Charging-place schema migration remains incomplete; it will retry next launch")
+            }
+        }
     }
 }

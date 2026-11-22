@@ -18,6 +18,11 @@ extension AppDelegate: VehicleSessionControllerContext {
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
         chargingPlannerController.vehicleStateDidUpdate()
+        // A refresh is the only thing that can carry a new position, so it is also the only thing
+        // that can turn into an arrival or a departure.
+        Task { @MainActor [weak self] in
+            await self?.locationTriggers.vehicleStateDidUpdate(state)
+        }
         if !state.commandState.hasAwaitingTelemetryConfirmation {
             fleetStore.retain(state)
         }
@@ -29,6 +34,17 @@ extension AppDelegate: VehicleSessionControllerContext {
 
     func authenticationSucceeded() {
         notifier.authenticationSucceeded()
+    }
+
+    func signOutRevocationFailed(brand: VehicleBrand) {
+        notifier.notifyCommandNotice(
+            title: L10n.text("Sign out did not finish"),
+            body: L10n.format(
+                "Hisingen could not finish signing out of %@. The account was removed from this Mac, but the service did not confirm revocation. Sign in and out again to retry.",
+                brand.displayName
+            ),
+            subtitle: brand.displayName
+        )
     }
 
     func vehicleSwitchDidPause() {

@@ -6,6 +6,11 @@ enum VolvoError: Error, LocalizedError {
 
 
     case appNotConfigured
+    /// Volvo's identity provider refused the application's own client ID and secret
+    /// (`invalid_client` / `unauthorized_client`). Distinct from `appNotConfigured`, which means
+    /// nothing was entered: here the values are present and Volvo has stopped accepting them,
+    /// as it did when it retired the original `dc-` applications.
+    case appCredentialsRejected
     case network(URLError)
     case rateLimited(retryAfter: TimeInterval?)
     case server(statusCode: Int)
@@ -20,6 +25,10 @@ enum VolvoError: Error, LocalizedError {
     case responseTooLarge(operation: String)
     case unsupported(service: String)
     case temporarilyUnavailable(service: String)
+    /// A command went out and the answer does not say whether the vehicle acted: a timeout or a
+    /// dropped connection after the request left, a 5xx, or a 2xx that could not be read.
+    /// Polestar's stack has the same case; both must keep the reader from repeating the command.
+    case commandOutcomeUnknown(operation: String)
     case secureStorage
     case notConfigured
 
@@ -29,10 +38,14 @@ enum VolvoError: Error, LocalizedError {
             return L10n.text("Sign in failed. Check your Volvo ID credentials.")
         case .authenticationRequired(.callbackRejected):
             return L10n.text("Volvo requested an additional or changed sign-in step. Open Settings and try again.")
+        case .authenticationRequired(.signInSystemChanged):
+            return L10n.text("Volvo moved to a new sign-in system. Sign in again to keep your vehicle data.")
         case .authenticationRequired:
             return L10n.text("Sign in is required.")
         case .appNotConfigured:
             return L10n.text("Add your Volvo Developer Portal client ID, client secret, and VCC API key in Settings first.")
+        case .appCredentialsRejected:
+            return L10n.text("Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings.")
         case .network(let error):
             switch error.code {
             case .notConnectedToInternet, .networkConnectionLost:
@@ -56,6 +69,8 @@ enum VolvoError: Error, LocalizedError {
             return L10n.text("This vehicle service is not available for your vehicle.")
         case .temporarilyUnavailable:
             return L10n.text("A vehicle service is temporarily unavailable. Retrying automatically.")
+        case .commandOutcomeUnknown:
+            return L10n.text("The command may have reached the vehicle. Check its status before trying again.")
         case .decoding, .incompatibleAPI, .invalidResponse, .responseTooLarge:
             return L10n.text("Volvo's vehicle service returned an unexpected response.")
         case .secureStorage:
@@ -67,7 +82,7 @@ enum VolvoError: Error, LocalizedError {
 
     var requiresAuthentication: Bool {
         switch self {
-        case .authenticationRequired, .appNotConfigured: return true
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected: return true
         default: return false
         }
     }
@@ -90,6 +105,7 @@ enum VolvoError: Error, LocalizedError {
         switch self {
         case .authenticationRequired(let reason): return .authenticationRequired(provider: .volvo, reason: reason)
         case .appNotConfigured: return .notConfigured
+        case .appCredentialsRejected: return .appCredentialsRejected(provider: .volvo)
         case .network(let error): return .network(error)
         case .rateLimited(let retryAfter): return .rateLimited(retryAfter: retryAfter)
         case .server(let statusCode): return .server(statusCode: statusCode)
@@ -102,6 +118,7 @@ enum VolvoError: Error, LocalizedError {
         case .responseTooLarge(let operation): return .responseTooLarge(operation: operation)
         case .unsupported(let service): return .unsupported(provider: .volvo, service: service)
         case .temporarilyUnavailable(let service): return .temporarilyUnavailable(provider: .volvo, service: service)
+        case .commandOutcomeUnknown(let operation): return .commandOutcomeUnknown(operation: operation)
         case .secureStorage: return .secureStorage
         case .notConfigured: return .notConfigured
         }

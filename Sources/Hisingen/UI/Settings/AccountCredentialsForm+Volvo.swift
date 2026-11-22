@@ -30,7 +30,7 @@ extension AccountCredentialsForm {
                 .hisNotice(HisingenTheme.semanticGood)
             } else {
                 Text(L10n.text(
-                    "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window."
+                    "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-."
                 ))
                 .hisType(.caption)
                 .foregroundStyle(.secondary)

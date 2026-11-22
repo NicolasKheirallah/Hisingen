@@ -7,8 +7,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const sourcesDir = path.join(root, 'Sources', 'Hisingen');
-const tablePath = path.join(sourcesDir, 'Resources', 'en.lproj', 'Localizable.strings');
+// Every target that ships user-facing copy is walked: the app, the widget extension and the
+// shared intents module. The widget and intents hold displayName/description strings and
+// LocalizedStringResource titles, and a gate that only looked at Sources/Hisingen could not
+// see a new one, so those literals silently escaped both checks.
+const sourceDirs = [
+    path.join(root, 'Sources', 'Hisingen'),
+    path.join(root, 'Sources', 'HisingenWidget'),
+    path.join(root, 'Sources', 'HisingenIntents'),
+];
+const appDir = sourceDirs[0];
+const tablePath = path.join(appDir, 'Resources', 'en.lproj', 'Localizable.strings');
 const KEY_RE = /^"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;\s*$/;
 
 function walkSwift(dir) {
@@ -62,7 +71,7 @@ if (mode === '--retention') {
     'Charging samples and telemetry older than %d days will be permanently removed. Summary sessions are kept.',
     'Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session.',
   ];
-  const resources = path.join(sourcesDir, 'Resources');
+  const resources = path.join(appDir, 'Resources');
   const locales = fs.readdirSync(resources).filter((d) => d.endsWith('.lproj') && !d.startsWith('en.'));
   let failures = 0;
   for (const locale of locales) {
@@ -82,7 +91,8 @@ if (mode === '--retention') {
 }
 
 const used = new Map(); // key -> first site
-for (const file of walkSwift(sourcesDir)) {
+for (const dir of sourceDirs) {
+for (const file of walkSwift(dir)) {
   const text = fs.readFileSync(file, 'utf8');
   const lines = text.split(/\r?\n/);
   const re = /\bL10n\.(?:text|format)\(\s*"((?:[^"\\]|\\.)*)"/g;
@@ -94,11 +104,54 @@ for (const file of walkSwift(sourcesDir)) {
     }
   });
 }
+}
 
 const missing = [...used.keys()].filter((k) => !table.has(k)).sort();
-for (const key of missing) console.error(`missing from en table: "${key}"  (used at ${used.get(key)})`);
-if (missing.length) {
-  console.error(`L10N USAGE FAILED (${missing.length} of ${used.size} keys)`);
+
+// A ratchet, in the same spirit as the untranslated and literals baselines: keys already
+// known to be unkeyed are listed in the baseline so this check can run at write time and
+// fail only on a regression, instead of staying red until every legacy literal is keyed.
+// The baseline may only shrink; `--update-baseline` refuses to grow it.
+const baselinePath = path.join(root, 'Scripts', 'l10n-usage-baseline.json');
+const readBaseline = () => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+if (mode === '--update-baseline') {
+  const exists = fs.existsSync(baselinePath);
+  const previous = readBaseline();
+  // Creating the baseline is always allowed; growing an existing one is not, because a
+  // new unkeyed literal should gain a key rather than silently join the waiver list.
+  const added = exists ? missing.filter((k) => !previous.includes(k)) : [];
+  if (added.length) {
+    console.error('These keys are not in the baseline yet; key them in en.lproj instead of baselining:');
+    for (const key of added) console.error(`  "${key}"  (used at ${used.get(key)})`);
+    console.error('l10n usage baseline not written.');
+    process.exit(1);
+  }
+  fs.writeFileSync(baselinePath, JSON.stringify(missing, null, 2) + '\n');
+  console.log(`L10N USAGE BASELINE UPDATED (${missing.length} known-unkeyed keys)`);
+  process.exit(0);
+}
+
+const baselined = readBaseline();
+const remaining = missing.filter((k) => !baselined.includes(k));
+const known = missing.filter((k) => baselined.includes(k));
+if (known.length) {
+  console.error(
+    `note: ${known.length} known-unkeyed key(s) in the baseline; ` +
+    'they need keys and Swedish before any locale carries them.'
+  );
+}
+for (const key of remaining) console.error(`missing from en table: "${key}"  (used at ${used.get(key)})`);
+if (remaining.length) {
+  console.error(`L10N USAGE FAILED (${remaining.length} new unkeyed key(s) of ${used.size} checked)`);
+  console.error('Add each to en.lproj and every locale, or run `node Scripts/verify-l10n-usage.mjs --update-baseline` only for keys you cannot key yet.');
   process.exit(1);
 }
-console.log(`L10N USAGE OK (${used.size} keys checked)`);
+console.log(`L10N USAGE OK (${used.size} keys checked, ${baselined.length} known-unkeyed)`);

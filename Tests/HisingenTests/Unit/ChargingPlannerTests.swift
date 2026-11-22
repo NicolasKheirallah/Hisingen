@@ -138,6 +138,126 @@ struct ChargingPlannerTests {
     }
 }
 
+struct ChargingPlannerWindowEndTests {
+    private var window: DateInterval {
+        DateInterval(start: fixtureDate(2026, 2, 10, 3), end: fixtureDate(2026, 2, 10, 5))
+    }
+
+    @Test
+    func aChargeStillRunningPastTheWindowEndIsStopped() {
+        #expect(ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 5),
+            connection: .connected,
+            chargingState: .charging
+        ))
+    }
+
+    @Test
+    func aChargeInsideTheWindowIsLeftAlone() {
+        #expect(!ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 4, 59),
+            connection: .connected,
+            chargingState: .charging
+        ))
+    }
+
+    @Test
+    func nothingIsSentWhenTheCarAlreadyStoppedOrIsUnplugged() {
+        #expect(!ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 5),
+            connection: .connected,
+            chargingState: .complete
+        ))
+        #expect(!ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 5),
+            connection: .disconnected,
+            chargingState: .charging
+        ))
+    }
+
+    @Test
+    func aWindowThatClosedLongAgoDoesNotJustifyAStop() {
+        // The app cannot say who started a charge an hour after the window it recorded; a late
+        // stop would more likely interrupt a manual charge than finish the plan.
+        #expect(!ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 6, 1),
+            connection: .connected,
+            chargingState: .charging
+        ))
+        #expect(ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 5, 59),
+            connection: .connected,
+            chargingState: .charging
+        ))
+    }
+
+    @Test
+    func withoutARecordedWindowThereIsNothingToStop() {
+        #expect(!ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+            window: nil,
+            now: fixtureDate(2026, 2, 10, 5),
+            connection: .connected,
+            chargingState: .charging
+        ))
+    }
+}
+
+struct ChargingPlannerSleepPreventionTests {
+    private var window: DateInterval {
+        DateInterval(start: fixtureDate(2026, 2, 10, 3), end: fixtureDate(2026, 2, 10, 5))
+    }
+
+    @Test
+    func theAssertionIsHeldForAPlannedOrRunningWindow() {
+        #expect(ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: fixtureDate(2026, 2, 9, 22),
+            autoStartEnabled: true,
+            keepAwakeEnabled: true
+        ))
+        #expect(ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 4),
+            autoStartEnabled: true,
+            keepAwakeEnabled: true
+        ))
+    }
+
+    @Test
+    func theAssertionIsReleasedWhenTheWindowEndsOrEitherConsentIsOff() {
+        #expect(!ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 5),
+            autoStartEnabled: true,
+            keepAwakeEnabled: true
+        ))
+        #expect(!ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 4),
+            autoStartEnabled: false,
+            keepAwakeEnabled: true
+        ))
+        #expect(!ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: fixtureDate(2026, 2, 10, 4),
+            autoStartEnabled: true,
+            keepAwakeEnabled: false
+        ))
+        #expect(!ChargingPlannerDecisions.shouldPreventSleep(
+            window: nil,
+            now: fixtureDate(2026, 2, 10, 4),
+            autoStartEnabled: true,
+            keepAwakeEnabled: true
+        ))
+    }
+}
+
 struct ElectricityPriceServiceDateTests {
     private var calendar: Calendar { plannerFixtureCalendar }
 

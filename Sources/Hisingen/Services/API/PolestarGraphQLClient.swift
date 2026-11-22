@@ -11,6 +11,7 @@ struct PolestarGraphQLClient: Sendable {
 
     func query<Payload: Decodable, Variables: Encodable>(
         _ query: String, variables: Variables?, token: String, operation: String,
+        scope: VehicleLogScope,
         isolation: isolated (any Actor)? = #isolation
     ) async throws -> GraphQLResponse<Payload> {
         var request = URLRequest(url: endpoint)
@@ -27,7 +28,7 @@ struct PolestarGraphQLClient: Sendable {
             request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await HTTPExchange.data(
                 for: request, using: session, limit: 2_000_000, operation: operation,
-                provider: .polestar, diagnosticLog: diagnosticLog,
+                provider: .polestar, scope: scope, diagnosticLog: diagnosticLog,
                 logicalOperationID: operationID, attempt: attempt + 1)
             if response.statusCode == 401 || response.statusCode == 403 {
                 if attempt == 0 {

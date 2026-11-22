@@ -375,6 +375,28 @@ extension InfoTabView {
         return rows
     }
 
+    /// The connectivity facts beyond the state row: why the car is awake, the network it
+    /// answers on, and the signal it reported. Rows appear only when the car sent them;
+    /// the strength word hides when the car's own word was "Unknown", since a bar count of
+    /// zero already says that.
+    static func connectivityDetailRows(_ connectivity: VehicleConnectivity?) -> [KVRow] {
+        var rows: [KVRow] = []
+        if let reason = connectivity?.wakeReason {
+            rows.append(KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max"))
+        }
+        if let network = connectivity?.networkType {
+            rows.append(KVRow(L10n.text("Network"), network, symbol: "dot.radiowaves.up.forward"))
+        }
+        if let bars = connectivity?.signalBars, (0...4).contains(bars) {
+            rows.append(KVRow(L10n.text("Signal"), "\(bars)/4", symbol: "signalbars"))
+        }
+        if let strength = connectivity?.signalStrength,
+           !strength.isEmpty, strength != L10n.text("Unknown") {
+            rows.append(KVRow(L10n.text("Signal Strength"), strength, symbol: "antenna.radiowaves.left.and.right"))
+        }
+        return rows
+    }
+
     var connectivityWakeCard: AnyView {
         let current = state.connectivity
         let rows = Self.connectivityStatusRows(identity: state.identity, connectivity: current)
@@ -394,15 +416,8 @@ extension InfoTabView {
                          : L10n.text("Connection data is old or has no timestamp. Current reachability is unknown."))
                         .hisType(.micro).foregroundStyle(.secondary)
                 }
-                if let reason = current?.wakeReason {
-                    KVRow(L10n.text("Awake Because"), reason, symbol: "sun.max")
-                }
-                if let network = current?.networkType {
-                    KVRow(L10n.text("Network"), network, symbol: "dot.radiowaves.up.forward")
-                }
-                if let bars = current?.signalBars, (0...4).contains(bars) {
-                    KVRow(L10n.text("Signal"), "\(bars)/4", symbol: "signalbars")
-                }
+                let detailRows = Self.connectivityDetailRows(current)
+                ForEach(detailRows.indices, id: \.self) { detailRows[$0] }
                 if signalHistory.count >= 3 {
                     Chart(signalHistory.reversed()) { record in
                         PointMark(
@@ -418,6 +433,12 @@ extension InfoTabView {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(L10n.text("Signal strength history chart"))
                     .accessibilityValue(chartAccessibilityValue(points: signalHistory.map { Double($0.signalBars ?? 0) }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Signal strength history chart"),
+                        yLabel: L10n.text("Bars"),
+                        points: signalHistory.map { ($0.timestamp, Double($0.signalBars ?? 0)) },
+                        valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }
+                    ))
                     .hisAnimation(Motion.progress, value: signalHistoryChartKey)
                 }
                 let wakes = history.compactMap(\.wakeReason)
@@ -471,6 +492,12 @@ extension InfoTabView {
             rows.append(KVRow(L10n.text("Exterior Lighting"), hasLight ? L10n.text("Bulb Failure Detected") : (lightsReported ? L10n.text("No warning reported") : L10n.text("Unavailable")), symbol: "lightbulb", valueWarning: hasLight, info: L10n.text("Warning status only; this is not a live electrical test of every exterior lamp.")))
             for entry in health.lightFailures {
                 rows.append(KVRow(VehicleLampFailureName.name(for: entry), L10n.text("Bulb failure"), valueWarning: true))
+            }
+            // Lights the car reports by a wire ID this build has not named. Raw label, so
+            // the report stays visible without dressing an unknown ID up as a named lamp.
+            for id in health.unnamedLightFailureIds {
+                rows.append(KVRow(L10n.format("Light %d", id), L10n.text("Bulb failure"), valueWarning: true,
+                                  info: L10n.text("A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports.")))
             }
 
             if !health.tyres.isEmpty {

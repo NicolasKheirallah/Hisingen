@@ -387,6 +387,17 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
     case tyrePressureValues
     case serviceWarnings
     case tripMeters
+    // Energy-field read flags. Volvo answers these per VIN in its energy-capabilities
+    // response; no static model table can know them, so they stay at the honest unknown
+    // in `support(for:)` until a probe records what the car itself said.
+    case batteryChargeLevel
+    case electricRange
+    case chargerConnectionStatus
+    case chargingSystemStatus
+    case chargingType
+    case chargerPowerStatus
+    case chargingPower
+    case estimatedChargingTimeToTarget
     case connectivity
     case softwareStatus
     case softwareInstallControl
@@ -415,6 +426,14 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
         case .tyrePressureValues: return L10n.text("Direct tyre-pressure values")
         case .serviceWarnings: return L10n.text("Service and vehicle warnings")
         case .tripMeters: return L10n.text("Trip meters")
+        case .batteryChargeLevel: return L10n.text("Battery charge level")
+        case .electricRange: return L10n.text("Electric range")
+        case .chargerConnectionStatus: return L10n.text("Charger connection status")
+        case .chargingSystemStatus: return L10n.text("Charging system status")
+        case .chargingType: return L10n.text("Charging type")
+        case .chargerPowerStatus: return L10n.text("Charger power status")
+        case .chargingPower: return L10n.text("Charging power")
+        case .estimatedChargingTimeToTarget: return L10n.text("Estimated charging time to target")
         case .connectivity: return L10n.text("Connectivity diagnostics")
         case .softwareStatus: return L10n.text("Vehicle software status")
         case .softwareInstallControl: return L10n.text("Software installation control")
@@ -435,6 +454,16 @@ enum VehicleCapability: String, Codable, CaseIterable, Sendable {
 struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
     private var results: [VehicleCapability: VehicleCapabilitySupport]
     let probedAt: Date
+    /// Command names the vehicle's own `/commands` list advertises, normalized and sorted.
+    /// Optional so snapshots persisted before this field still decode. Volvo is the only provider
+    /// that reports a list; the app still refuses anything outside its catalog, so this is a
+    /// read-only diagnostic: it says what the car offers that Hisingen cannot send yet.
+    var reportedCommandNames: [String]? = nil
+    /// Whether the list behind the command probes is the last known one: a refresh was due and
+    /// failed. The support answers built from it are the best available, and the capability
+    /// matrix says so instead of the app silently re-deciding from the model table. Nil when no
+    /// list has ever been read, which is a different fact from "the list is out of date".
+    var commandListIsStale: Bool? = nil
 
     static let stalenessInterval: TimeInterval = 6 * 3_600
 
@@ -501,12 +530,32 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
     }
 
     func support(for capability: VehicleCapability) -> VehicleCapabilitySupport {
+        // A provider that cannot execute a capability does not support it, whatever the vehicle
+        // or a live probe reports. Polestar's C3 invocation surface has no engine command and no
+        // reduced-guard lock: `ProviderCommandCatalog` refuses both and `PolestarGRPCRemote`
+        // throws. `GetMyCars` advertising either (lock_type 3 does advertise reduced guard, and
+        // a module's field 27 engine flag is recorded the same way) would otherwise outrank the
+        // model table at the `advertised[capability] == true` branch below and promise a control
+        // that can only fail at dispatch.
+        if model.brand == .polestar, capability == .engineStart || capability == .reducedGuardLock {
+            return .unavailable
+        }
         if let supported = advertised[capability], !supported { return .unavailable }
         if let probed, !probed.isStale,
            let observed = probed.support(for: capability) {
             return observed
         }
         if advertised[capability] == true { return .supported }
+        // Volvo's energy-capabilities response answers these per VIN, and no other
+        // provider reports them, so no model family gets to guess: the table's honest
+        // answer stays "ask the backend" until the probe lands.
+        switch capability {
+        case .batteryChargeLevel, .electricRange, .chargerConnectionStatus, .chargingSystemStatus,
+             .chargingType, .chargerPowerStatus, .chargingPower, .estimatedChargingTimeToTarget:
+            return .backendDependent
+        default:
+            break
+        }
         switch model {
         case .polestar2:
             switch capability {
@@ -561,7 +610,12 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
                 return .supported
             case .climateTemperature, .seatHeating, .steeringWheelHeating:
                 return .unavailable
-            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations:
+            // Climate timers and charging schedules are listed here for the same reason as
+            // windows and trunk: Volvo's public API exposes neither a timer resource nor a
+            // schedule write, so `.backendDependent` only rendered a control that could never
+            // succeed (the climate-timer button and a dimmed Charging Controls card).
+            case .preCleaning, .softwareInstallControl, .windows, .trunk, .chargeLocations,
+                 .climateTimers, .chargingSchedule:
                 return .unavailable
             // Volvo's public APIs expose no software/OTA resource at all – not a backend
             // that might answer on some vehicles, but an endpoint that does not exist.
@@ -594,7 +648,8 @@ struct VehicleCapabilityProfile: Equatable, Sendable {
             // No public write endpoint exists for these on this platform. Leaving them at
             // `.backendDependent` rendered controls that could only fail after the tap.
             case .windows, .trunk, .chargeTarget, .chargingCurrentLimit,
-                 .chargingScheduleOverride, .chargeLocations, .preCleaning:
+                 .chargingScheduleOverride, .chargeLocations, .preCleaning,
+                 .climateTimers, .chargingSchedule:
                 return .unavailable
             case .softwareInstallControl, .softwareStatus:
                 return .unavailable

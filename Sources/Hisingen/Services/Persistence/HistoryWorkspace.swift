@@ -85,6 +85,14 @@ final class HistoryWorkspace {
         }.value
     }
 
+    /// Recorded odometer/telemetry samples, newest first, for the since-charge estimate.
+    func recentTelemetry(for vin: String) async -> [HistoricalTelemetryRecord] {
+        let database = database
+        return await Task.detached(priority: .userInitiated) {
+            database.history.recentTelemetry(for: vin, limit: 500)
+        }.value
+    }
+
     /// Trips derived from recorded telemetry, for the handover pack. Entries carry coordinates;
     /// the caller decides what leaves the Mac.
     func tripHistory(vin: String) async -> [TripHistoryEntry] {
@@ -128,6 +136,33 @@ final class HistoryWorkspace {
                       pricePerLiter: Double, odometerKm: Double?) -> Bool {
         database.history.addFuelEntry(vin: vin, date: date, liters: liters,
                                       pricePerLiter: pricePerLiter, odometerKm: odometerKm)
+    }
+
+    /// Adds a session the reader typed in. The ledger owns the insert; the view only passes
+    /// the figures through the workspace seam.
+    @discardableResult
+    func addManualChargingSession(
+        vin: String, startedAt: Date, endedAt: Date, locationName: String?,
+        place: ChargingSessionPlace, energyKwh: Double, totalCost: Double?,
+        pricePerKwh: Double?
+    ) -> String {
+        database.charging.addManualChargingSession(
+            vin: vin, startedAt: startedAt, endedAt: endedAt, locationName: locationName,
+            place: place, energyKwh: energyKwh, totalCost: totalCost,
+            pricePerKwh: pricePerKwh, currencySymbol: preferences.currencySymbol
+        )
+    }
+
+    func updateChargingSession(
+        id: String, vin: String, startedAt: Date, endedAt: Date, locationName: String?,
+        place: ChargingSessionPlace, energyKwh: Double, totalCost: Double?,
+        pricePerKwh: Double?
+    ) {
+        database.charging.updateChargingSessionDetails(
+            id: id, vin: vin, startedAt: startedAt, endedAt: endedAt,
+            locationName: locationName, place: place, energyKwh: energyKwh,
+            totalCost: totalCost, pricePerKwh: pricePerKwh
+        )
     }
 
     func setSessionNote(_ note: String, sessionID: String, vin: String) {
@@ -197,6 +232,42 @@ final class HistoryWorkspace {
         }.value
     }
 
+    /// The CSV entry's workbook: the same rows, typed, plus a summary sheet. Built from the CSV
+    /// string so the two files cannot disagree about a value, and so every entry in the export
+    /// menu gains the format without a second row-building path.
+    func exportXLSX(_ kind: ExportKind, scope: ExportScope, vin: String, selectedSessionID: String?,
+                    periodTrips: [TripHistoryEntry], periodSessions: [HistoricalChargingSession],
+                    title: String, vehicle: String) async -> Data? {
+        let csv = await exportCSV(kind, scope: scope, vin: vin, selectedSessionID: selectedSessionID,
+                                  periodTrips: periodTrips, periodSessions: periodSessions)
+        guard !csv.isEmpty else { return nil }
+        let scopeLabel: String
+        switch scope {
+        case .selectedPeriod:
+            scopeLabel = L10n.text("Selected period")
+        case .fullHistory:
+            // The samples export is one session even though it is built by the full-history path.
+            scopeLabel = kind == .sessionSamples ? L10n.text("Selected session") : L10n.text("Full history")
+        }
+        return await Task.detached(priority: .userInitiated) {
+            HistoryWorkbook.workbook(csv: csv, title: title, vehicle: vehicle,
+                                     scope: scopeLabel)?.data()
+        }.value
+    }
+
+    /// GPX 1.1 for the trips in scope. A trip with no recorded position contributes no track.
+    func exportTripsGPX(scope: ExportScope, vin: String, periodTrips: [TripHistoryEntry],
+                        vehicleName: String) async -> Data {
+        let trips: [TripHistoryEntry]
+        switch scope {
+        case .selectedPeriod:
+            trips = periodTrips
+        case .fullHistory:
+            trips = await tripHistory(vin: vin)
+        }
+        return GPXExport.data(trips: trips, vehicleName: vehicleName)
+    }
+
     /// Prices uncosted sessions once spot-price coverage reaches them. Historical day files
     /// are fetched lazily, bounded to the seven most recent uncovered days so a long history
     /// cannot turn one card appearance into an unbounded fetch storm. Returns how many
@@ -227,6 +298,115 @@ final class HistoryWorkspace {
         let database = database
         return await Task.detached(priority: .userInitiated) {
             try? database.exportBackupJSON(includeCoordinates: includeCoordinates)
+        }.value
+    }
+}
+
+// MARK: - Reports, maintenance log and ownership
+
+/// S26's local data: the reader's own maintenance log and ownership assumption, and the report a
+/// period produces from history the app already stores. Nothing here calls a provider or asks for
+/// a price Hisingen does not have: the trip costs come from the car's reported consumption and the
+/// reader's rate settings, and depreciation is arithmetic on their stated assumption.
+extension HistoryWorkspace {
+    // MARK: Maintenance log
+
+    func maintenanceEntries(for vin: String) -> [MaintenanceEntry] {
+        database.maintenanceEntries(for: vin)
+    }
+
+    @discardableResult
+    func addMaintenanceEntry(_ entry: MaintenanceEntry) -> MaintenanceEntry? {
+        database.addMaintenanceEntry(entry)
+    }
+
+    func deleteMaintenanceEntry(id: String, vin: String) {
+        database.deleteMaintenanceEntry(id: id, vin: vin)
+    }
+
+    // MARK: Ownership
+
+    func ownership(for vin: String) -> VehicleOwnership? {
+        database.ownership(for: vin)
+    }
+
+    @discardableResult
+    func saveOwnership(_ ownership: VehicleOwnership) -> Bool {
+        database.saveOwnership(ownership)
+    }
+
+    // MARK: Period report
+
+    /// Builds one window's report from local data only. Trips and charging sessions come from the
+    /// history ledger, the rate policy from preferences, and the maintenance log from the reader's
+    /// own entries; a window with no readings still produces a report, because "no trips" is an
+    /// answer the reader asked for.
+    func periodReport(
+        vin: String,
+        vehicleName: String,
+        period: ReportPeriod,
+        redacted: Bool,
+        now: Date = Date()
+    ) async -> PeriodReportInput {
+        let policy = preferences.electricityRatePolicy
+        let fallbackPricePerKwh = preferences.electricityPricePerKwh
+        let currencySymbol = preferences.currencySymbol
+        let distanceUnit = preferences.distanceUnit
+        let spotAverage = policy.isAutomatic
+            ? ReportPricing.averageSpot(
+                database.electricityPrices.prices(zone: preferences.electricityPriceZone),
+                over: period)
+            : nil
+        let database = database
+        let upperBound = max(period.start, period.end.addingTimeInterval(-1))
+        let range = ClosedRange(uncheckedBounds: (lower: period.start, upper: upperBound))
+
+        return await Task.detached(priority: .userInitiated) {
+            let snapshot = database.history.dashboard(
+                vin: vin, range: range, rowCap: 4_000, tripLimit: 4_000, chargingCapacity: 0)
+            let price = ReportPricing.retailPricePerKwh(
+                policy: policy, fallbackPricePerKwh: fallbackPricePerKwh,
+                averageSpotSekPerKwh: spotAverage)
+            let trips = snapshot.trips.map { trip -> PeriodReportTrip in
+                let energy = TripCost.energyKwh(
+                    distanceKm: trip.distanceKm, consumptionKwhPer100Km: trip.averageConsumption)
+                return PeriodReportTrip(
+                    endedAt: trip.endedAt,
+                    distanceKm: trip.distanceKm,
+                    energyKwh: energy,
+                    cost: TripCost.cost(energyKwh: energy, pricePerKwh: price.price),
+                    priceUsedFallback: price.usedFallback)
+            }
+            let charges = snapshot.chargingSessions.map { session in
+                PeriodReportCharge(
+                    startedAt: session.startedAt,
+                    energyKwh: session.energyDeliveredKwh,
+                    cost: session.resolvedCost(
+                        policy: policy, fallbackPricePerKwh: fallbackPricePerKwh).amount)
+            }
+            let maintenance = database.maintenanceEntries(for: vin)
+                .filter { period.contains($0.date) }
+            let ownership = database.ownership(for: vin)
+            let figure = ownership.flatMap {
+                Depreciation.figure(
+                    assumption: $0.assumption, periodStart: period.start, periodEnd: period.end)
+            }
+            let basis = ownership.map {
+                Depreciation.basisText(assumption: $0.assumption, currencySymbol: currencySymbol)
+            }
+            return PeriodReportInput(
+                vehicleName: vehicleName,
+                vin: vin,
+                period: period,
+                trips: trips.sorted { $0.endedAt > $1.endedAt },
+                charges: charges.sorted { $0.startedAt > $1.startedAt },
+                maintenance: maintenance.sorted { $0.date > $1.date },
+                depreciation: figure,
+                depreciationBasis: basis,
+                currencySymbol: currencySymbol,
+                distanceUnit: distanceUnit,
+                generatedAt: now,
+                redacted: redacted)
         }.value
     }
 }

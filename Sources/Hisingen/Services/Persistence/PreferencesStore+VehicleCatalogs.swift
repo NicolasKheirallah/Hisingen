@@ -32,6 +32,17 @@ extension PreferencesStore {
         }
     }
 
+    /// The vehicle-derived half for one VIN. Used by a per-vehicle sign-out that keeps the
+    /// account connected: the car's snapshot, receipts, baseline and planner latch end with its
+    /// session, while the nickname, theme and other reader-authored data stay for Bring Back.
+    func clearVehicleDerivedDefaults(for vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        for store in Self.perVehicleStores where store.ownership == .vehicleDerived {
+            store.remove(d, store.key, key)
+        }
+    }
+
     /// The all-twelve fleet erase, for the reader-chosen "Erase All Local Vehicle Data" action:
     /// names, themes, baselines and receipts for every vehicle this Mac knows about. Its own
     /// member because "no VIN" used to mean this, and the reader asking for every vehicle to be

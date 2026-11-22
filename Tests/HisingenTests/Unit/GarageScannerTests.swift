@@ -89,6 +89,32 @@ struct GarageScannerTests {
         #expect(volvoSelections == [.garageScan, .garageScan])
     }
 
+    @Test
+    func aSignedOutVehicleIsNotScanned() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.activeBrand = .polestar
+        preferences.setVin("P1", for: .polestar)
+
+        let context = RecordingScanContext()
+        let polestar = StubProvider(brand: .polestar, vins: ["P1", "P2"])
+
+        let scanner = GarageScanner(
+            context: context,
+            preferences: preferences,
+            provider: { _ in polestar },
+            hasResumableSession: { $0 == .polestar },
+            restoreDormantSession: { _ in },
+            isVehicleDetached: { $0 == "P2" }
+        )
+
+        await scanner.scanNow()
+
+        #expect(context.capturedStates.isEmpty, "P1 is selected and P2 is signed out")
+        #expect(context.completePassCount == 1)
+    }
+
     /// A dormant brand whose provider is still warm is scanned without a restore round trip.
     @Test
     func warmDormantBrandIsScannedWithoutRestoring() async throws {

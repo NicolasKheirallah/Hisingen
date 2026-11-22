@@ -45,14 +45,44 @@ func chartSeriesIsDashed(index: Int, differentiateWithoutColor: Bool) -> Bool {
 }
 
 struct TimeSeriesAXDescriptor: AXChartDescriptorRepresentable {
+    struct Series {
+        let name: String
+        let points: [(date: Date, value: Double)]
+    }
+
     let title: String
     let yLabel: String
-    let points: [(date: Date, value: Double)]
-    var valueFormat: @Sendable (Double) -> String = { String(format: "%.1f", locale: L10n.displayLocale, $0) }
+    let series: [Series]
+    var valueFormat: @Sendable (Double) -> String
+
+    init(title: String,
+         yLabel: String,
+         points: [(date: Date, value: Double)],
+         valueFormat: @escaping @Sendable (Double) -> String = {
+             String(format: "%.1f", locale: L10n.displayLocale, $0)
+         }) {
+        self.title = title
+        self.yLabel = yLabel
+        self.series = [Series(name: title, points: points)]
+        self.valueFormat = valueFormat
+    }
+
+    /// The same rotor for a chart that draws more than one line over the same time axis.
+    init(title: String,
+         yLabel: String,
+         series: [Series],
+         valueFormat: @escaping @Sendable (Double) -> String = {
+             String(format: "%.1f", locale: L10n.displayLocale, $0)
+         }) {
+        self.title = title
+        self.yLabel = yLabel
+        self.series = series
+        self.valueFormat = valueFormat
+    }
 
     func makeChartDescriptor() -> AXChartDescriptor {
-        let dates = points.map { $0.date.timeIntervalSince1970 }
-        let values = points.map(\.value)
+        let dates = series.flatMap { $0.points.map { $0.date.timeIntervalSince1970 } }
+        let values = series.flatMap { $0.points.map(\.value) }
         let xLow = dates.min() ?? 0
         let xHigh = max(dates.max() ?? xLow + 1, xLow + 1)
         let yLow = values.min() ?? 0
@@ -70,14 +100,142 @@ struct TimeSeriesAXDescriptor: AXChartDescriptorRepresentable {
             gridlinePositions: []
         ) { [valueFormat] in valueFormat($0) }
 
-        let series = AXDataSeriesDescriptor(
-            name: title,
-            isContinuous: true,
-            dataPoints: points.map { AXDataPoint(x: $0.date.timeIntervalSince1970, y: $0.value) }
-        )
+        let descriptors = series.map { series in
+            AXDataSeriesDescriptor(
+                name: series.name,
+                isContinuous: true,
+                dataPoints: series.points.map {
+                    AXDataPoint(x: $0.date.timeIntervalSince1970, y: $0.value)
+                }
+            )
+        }
 
         return AXChartDescriptor(title: title, summary: nil, xAxis: xAxis, yAxis: yAxis,
-                                 additionalAxes: [], series: [series])
+                                 additionalAxes: [], series: descriptors)
+    }
+
+    func updateChartDescriptor(_ descriptor: AXChartDescriptor) {}
+}
+
+/// A chart whose X axis is a number rather than a date: minutes into a charging session,
+/// ambient temperature, or an hour of the day.
+///
+/// These charts carried a spoken summary but no rotor data, so a VoiceOver reader could hear
+/// "consumption vs temperature" and never the points it plots.
+struct NumericSeriesAXDescriptor: AXChartDescriptorRepresentable {
+    struct Series {
+        let name: String
+        let points: [(x: Double, y: Double)]
+    }
+
+    let title: String
+    let xLabel: String
+    let yLabel: String
+    let series: [Series]
+    var xFormat: @Sendable (Double) -> String
+    var yFormat: @Sendable (Double) -> String
+
+    init(title: String,
+         xLabel: String,
+         yLabel: String,
+         series: [Series],
+         xFormat: @escaping @Sendable (Double) -> String = {
+             String(format: "%.0f", locale: L10n.displayLocale, $0)
+         },
+         yFormat: @escaping @Sendable (Double) -> String = {
+             String(format: "%.1f", locale: L10n.displayLocale, $0)
+         }) {
+        self.title = title
+        self.xLabel = xLabel
+        self.yLabel = yLabel
+        self.series = series
+        self.xFormat = xFormat
+        self.yFormat = yFormat
+    }
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let xs = series.flatMap { $0.points.map(\.x) }
+        let ys = series.flatMap { $0.points.map(\.y) }
+        let xLow = xs.min() ?? 0
+        let xHigh = max(xs.max() ?? xLow + 1, xLow + 1)
+        let yLow = ys.min() ?? 0
+        let yHigh = max(ys.max() ?? yLow + 1, yLow + 1)
+
+        let xAxis = AXNumericDataAxisDescriptor(
+            title: xLabel, range: xLow...xHigh, gridlinePositions: []
+        ) { [xFormat] in xFormat($0) }
+        let yAxis = AXNumericDataAxisDescriptor(
+            title: yLabel, range: yLow...yHigh, gridlinePositions: []
+        ) { [yFormat] in yFormat($0) }
+
+        let descriptors = series.map { series in
+            AXDataSeriesDescriptor(
+                name: series.name,
+                isContinuous: true,
+                dataPoints: series.points.map { AXDataPoint(x: $0.x, y: $0.y) }
+            )
+        }
+        return AXChartDescriptor(title: title, summary: nil, xAxis: xAxis, yAxis: yAxis,
+                                 additionalAxes: [], series: descriptors)
+    }
+
+    func updateChartDescriptor(_ descriptor: AXChartDescriptor) {}
+}
+
+/// A chart whose X axis is a set of named buckets, like the energy-by-time-of-day bars.
+struct CategoricalSeriesAXDescriptor: AXChartDescriptorRepresentable {
+    struct Series {
+        let name: String
+        /// One value per category, in the same order as `categories`.
+        let values: [Double]
+    }
+
+    let title: String
+    let categoryLabel: String
+    let valueLabel: String
+    let categories: [String]
+    let series: [Series]
+    var valueFormat: @Sendable (Double) -> String
+
+    init(title: String,
+         categoryLabel: String,
+         valueLabel: String,
+         categories: [String],
+         series: [Series],
+         valueFormat: @escaping @Sendable (Double) -> String = {
+             String(format: "%.1f", locale: L10n.displayLocale, $0)
+         }) {
+        self.title = title
+        self.categoryLabel = categoryLabel
+        self.valueLabel = valueLabel
+        self.categories = categories
+        self.series = series
+        self.valueFormat = valueFormat
+    }
+
+    func makeChartDescriptor() -> AXChartDescriptor {
+        let values = series.flatMap(\.values)
+        let yLow = min(0, values.min() ?? 0)
+        let yHigh = max(values.max() ?? yLow + 1, yLow + 1)
+
+        let xAxis = AXCategoricalDataAxisDescriptor(
+            title: categoryLabel, categoryOrder: categories
+        )
+        let yAxis = AXNumericDataAxisDescriptor(
+            title: valueLabel, range: yLow...yHigh, gridlinePositions: []
+        ) { [valueFormat] in valueFormat($0) }
+
+        let descriptors = series.map { series in
+            AXDataSeriesDescriptor(
+                name: series.name,
+                isContinuous: false,
+                dataPoints: zip(categories, series.values).map {
+                    AXDataPoint(x: $0.0, y: $0.1)
+                }
+            )
+        }
+        return AXChartDescriptor(title: title, summary: nil, xAxis: xAxis, yAxis: yAxis,
+                                 additionalAxes: [], series: descriptors)
     }
 
     func updateChartDescriptor(_ descriptor: AXChartDescriptor) {}

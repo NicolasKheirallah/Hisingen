@@ -29,7 +29,10 @@ extension AppDelegate {
                     self.settingsChanged(change)
                 }
             },
-            onSignOut: { [weak self] in self?.signOut() },
+            onSignOut: { [weak self] selection in self?.signOut(selection: selection) },
+            liveFleet: { [weak self] in
+                self?.fleetStore.snapshot(activeState: self?.vehicleSession.latest) ?? FleetSnapshot()
+            },
             accountConnection: statusController.accountConnection,
             onTestConnection: { [weak self] brand in
                 guard let self else {
@@ -83,7 +86,15 @@ extension AppDelegate {
     func settingsChanged(_ change: SettingsChange) {
         switch change {
         case .credentials:
+            preferences.accountStore.commitActiveAccount()
             vehicleSession.credentialsDidChange(for: .polestar)
+        case .accountAdded:
+            // The new account is empty until the sign-in form below completes; do not resume a
+            // provider session for it, or the app would try to authenticate with no credentials.
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
+        case .accountSwitched:
+            vehicleSession.accountDidSwitch(to: preferences.activeBrand)
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             signInCoordinator.beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .polestarCommandAuthorization:
@@ -126,6 +137,9 @@ extension AppDelegate {
         case .selectVehicle(let vin):
             selectVehicle(vin: vin)
             closeSettingsWindow()
+        case .reconnectVehicle(let vin):
+            vehicleSession.reconnectVehicle(vin: vin)
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
         case .closeSettings:
             closeSettingsWindow()
         case .exportDiagnosticLogs:
@@ -137,23 +151,50 @@ extension AppDelegate {
             vehicleSession.reloadVehicleMetadata()
             dockWarningBadge.refresh()
             chargingPlannerController.reload()
+            priceAlertController.reload()
         case .notifications:
             notifier.requestAuthorizationIfAnyAlertEnabled()
             dockWarningBadge.refresh()
+            priceAlertController.reload()
         case .presentation:
             preferences.applyAppearance()
             vehicleSession.reloadVehicleMetadata()
+            // The rate mode decides what the price alert compares against, so a switch between
+            // automatic and fixed pricing arms or disarms it here.
+            priceAlertController.reload()
         case .panelLayout, .timeFormat:
             break
         case .launchAtLogin:
             launchAtLoginController.reconcile(userInitiated: true)
+        case .dockIcon:
+            applyDockIconPolicy()
+            dockWarningBadge.refresh()
         case .updater:
             updateController.applyConfiguration()
         case .checkForUpdates:
             updateController.checkNow()
+        case .broadcastCommand(let command):
+            Task { @MainActor [weak self] in
+                await self?.runFleetBroadcast(command)
+            }
+        case .reporting:
+            recurringReports.reload()
         case .automation:
             calendarPreconditioning.reload()
+            scheduledCommands.reload()
+            // The reader may have changed what a trigger watches; the next snapshot should
+            // establish where the car is rather than compare against a location they removed.
+            locationTriggers.resetObservations()
         }
         render()
+    }
+
+
+    /// Applies the Dock icon preference. The bundle declares LSUIElement, so macOS starts the
+    /// process as an accessory app and only this policy change can summon the Dock tile while
+    /// running. The warning badge rides the same switch: a badge on a hidden tile paints
+    /// nothing, and a freshly visible tile needs the current count.
+    func applyDockIconPolicy() {
+        NSApp.setActivationPolicy(preferences.showDockIcon ? .regular : .accessory)
     }
 }

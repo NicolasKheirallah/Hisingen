@@ -228,6 +228,12 @@ struct PriceCurveView: View {
             .accessibilityLabel(L10n.text("Electricity price outlook"))
             .accessibilityValue(accessibilitySummary(minimum: low, maximum: high)
                 + (missing ? " " + L10n.text("Later prices are not published yet.") : ""))
+            .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                title: L10n.text("Electricity price outlook"),
+                yLabel: L10n.text("kr per kWh"),
+                points: bars.map { ($0.start, $0.price) },
+                valueFormat: { String(format: "%.2f", locale: L10n.displayLocale, $0) }
+            ))
 
             legend
         }

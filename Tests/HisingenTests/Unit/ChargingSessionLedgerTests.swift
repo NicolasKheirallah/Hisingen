@@ -200,6 +200,42 @@ let raw = try SQLiteDatabase.inMemory()
         #expect(abandonedAt == start)
     }
 
+    @Test("A stored integration over part of a session is repaired to the charge-level energy, with its cost")
+    func repairsUndercountedIntegration() throws {
+        let database = VehicleDatabase.inMemory()
+        let ledger = database.charging
+        // 20 to 90% over five hours, watched only for the first and last stretch.
+        for minute in Array(stride(from: 0, through: 100, by: 5)) + Array(stride(from: 200, through: 300, by: 5)) {
+            ingest(ledger, minutes: minute, soc: 20 + Double(minute) / 300 * 70, state: .charging, power: 10)
+        }
+        ingest(ledger, minutes: 305, soc: 90, state: .complete, power: nil)
+        let stored = try #require(ledger.recentChargingSessions(for: vin).first)
+        // Put the row back as an older build wrote it: integrated energy over the watched part only.
+        try ledger.sql.query(sql: """
+            UPDATE charging_sessions SET energy_delivered_kwh = 38.5, energy_source = 'observed_power_integration',
+                confidence = 'medium', sample_coverage = 0.71, estimated_cost = 14.245, spot_estimated_cost = 9.9
+            WHERE id = ?;
+            """) { stmt in
+            try stmt.bindText(stored.id, at: 1)
+            try stmt.executeUpdate()
+        } process: { _ in }
+        #expect(ledger.legacySummaryVINs() == [vin])
+
+        ledger.repairUndercountedIntegrations(for: vin, usableCapacityKwh: nil)
+
+        let repaired = try #require(ledger.recentChargingSessions(for: vin).first)
+        #expect(repaired.energySource == .socCapacityEstimate)
+        // Split into typed steps: one expression mixing `??` with several literal operations
+        // exceeds the type checker's time limit on Swift 6.2.
+        let expectedEnergy: Double = 0.70 * 79
+        let expectedCost: Double = 14.245 * expectedEnergy / 38.5
+        let actualCost: Double = repaired.estimatedCost ?? 0
+        #expect(abs(repaired.energyDeliveredKwh - expectedEnergy) < 0.01)
+        #expect(abs(actualCost - expectedCost) < 0.01)
+        #expect(repaired.spotEstimatedCost == nil)
+        #expect(ledger.legacySummaryVINs().isEmpty)
+    }
+
     private func ingest(
         _ ledger: ChargingSessionLedger, minutes: Int, soc: Double,
         state: ChargingState, power: Double?, connection: ChargerConnection = .connected

@@ -118,4 +118,29 @@ struct VolvoModelIdentificationTests {
         #expect(profile.support(for: .chargeTarget) == .supported)
         #expect(profile.support(for: .locks) == .supported)
     }
+
+    @Test
+    func testEnergyReadCapabilitiesFollowTheProbeNotTheModelTable() {
+        // The energy-field reads have no static model claim: before Volvo's
+        // energy-capabilities probe answers for the VIN, the honest answer is the
+        // "ask the backend" placeholder, on every model family.
+        let unprobed = VehicleCapabilityProfile(modelName: "EX30")
+        for capability in [VehicleCapability.batteryChargeLevel, .electricRange,
+                           .chargerConnectionStatus, .chargingSystemStatus, .chargingType,
+                           .chargerPowerStatus, .chargingPower, .estimatedChargingTimeToTarget] {
+            #expect(unprobed.support(for: capability) == .backendDependent)
+        }
+        let xc40 = VehicleCapabilityProfile(modelName: "XC40")
+        #expect(xc40.support(for: .batteryChargeLevel) == .backendDependent)
+
+        // A probe records what the car itself said, both ways.
+        var probed = VehicleProbedCapabilities()
+        probed.record(.batteryChargeLevel, as: .supported)
+        probed.record(.chargingType, as: .unavailable)
+        let profile = VehicleCapabilityProfile(modelName: "EX30", probed: probed)
+        #expect(profile.support(for: .batteryChargeLevel) == .supported)
+        #expect(profile.support(for: .chargingType) == .unavailable)
+        // The static table still answers for capabilities the probe did not touch.
+        #expect(profile.support(for: .climateStartStop) == .supported)
+    }
 }

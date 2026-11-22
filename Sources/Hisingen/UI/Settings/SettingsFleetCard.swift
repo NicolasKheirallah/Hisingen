@@ -13,6 +13,23 @@ struct SettingsFleetCard: View {
 
     private var prefs: PreferencesStore { binder.preferences }
 
+    private var detachedVehicles: [DetachedVehicle] {
+        let order = prefs.garageVehicleOrder.map { $0.normalizedVIN }
+        return prefs.detachedVehicles(for: prefs.activeBrand).sorted {
+            let left = order.firstIndex(of: $0.vin.normalizedVIN) ?? Int.max
+            let right = order.firstIndex(of: $1.vin.normalizedVIN) ?? Int.max
+            return left == right ? $0.vin < $1.vin : left < right
+        }
+    }
+
+    /// The saved label was captured before the per-vehicle clear dropped the nickname. Hide it
+    /// again when privacy redaction is on now, not only when it was on at sign-out.
+    private func detachedTitle(_ vehicle: DetachedVehicle) -> String {
+        guard !prefs.privacyRedactionEnabled else { return vehicle.brand.displayName }
+        let title = vehicle.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? vehicle.brand.displayName : title
+    }
+
     private func moveGarageVehicle(_ vin: String, offset: Int, current: [String]) {
         guard let index = current.firstIndex(of: vin) else { return }
         let target = index + offset
@@ -82,6 +99,46 @@ struct SettingsFleetCard: View {
                             .buttonStyle(.pressable)
                             .controlSize(.mini)
                         }
+                    }
+                }
+
+                if !detachedVehicles.isEmpty {
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    Text(L10n.text("Signed Out Vehicles"))
+                        .hisType(.micro, weight: .medium)
+                        .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(L10n.text("These vehicles stay on your account. Bring one back to use it here."))
+                        .hisType(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(detachedVehicles, id: \.vin) { vehicle in
+                        HStack(spacing: 8) {
+                            Image(systemName: vehicle.brand == .polestar ? "bolt.car" : "car")
+                                .hisType(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28)
+                            VStack(alignment: .leading, spacing: 1.5) {
+                                Text(detachedTitle(vehicle))
+                                    .hisType(.label, weight: .semibold)
+                                Text(prefs.displayVIN(vehicle.vin))
+                                    .hisType(.micro, design: .monospaced)
+                                    .foregroundStyle(.secondary)
+                                    .privacySensitive(prefs.privacyRedactionEnabled)
+                            }
+                            Spacer()
+                            Button {
+                                binder.notify(.reconnectVehicle(vehicle.vin))
+                            } label: {
+                                Text(L10n.text("Bring Back"))
+                            }
+                            .buttonStyle(.hisSecondary)
+                            .controlSize(.small)
+                            .accessibilityLabel(
+                                L10n.format("Bring back %@", detachedTitle(vehicle))
+                            )
+                        }
+                        .padding(.vertical, 2)
                     }
                 }
             }

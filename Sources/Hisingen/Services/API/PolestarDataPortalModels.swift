@@ -602,6 +602,102 @@ struct PolestarPreCleaningDTO: Codable, Sendable, Equatable {
     let error: String?
     let metaReceivedAt: String?
     let metaEventId: String?
+    /// JSON keys the payload carried beyond the fields this build decodes, captured raw
+    /// (see the `Decodable` extension below) so a new backend field stays visible instead
+    /// of being dropped at decode. `nil` when the payload held nothing extra.
+    var unknownFields: [VehicleRawPortalField]? = nil
+}
+
+extension PolestarPreCleaningDTO {
+    private enum CodingKeys: String, CodingKey {
+        case vin, timestamp, lastCycleCompleted, measurementDate, startedAt, endingAt
+        case runningStatus, startReason, lastCycleValid
+        case measuredAirQualityIndex, measuredParticulateMatter25, runtimeLeftMinutes
+        case error, metaReceivedAt, metaEventId, unknownFields
+    }
+
+    private struct DynamicCodingKeys: CodingKey {
+        var stringValue: String
+        init?(stringValue: String) { self.stringValue = stringValue }
+        var intValue: Int? { nil }
+        init?(intValue: Int) { nil }
+    }
+
+    /// A JSON value of any shape, decoded only to render an unknown portal key faithfully:
+    /// scalars verbatim, objects and arrays as compact JSON text.
+    private enum RawJSONValue: Decodable {
+        case string(String)
+        case bool(Bool)
+        case number(Double)
+        case object([String: RawJSONValue])
+        case array([RawJSONValue])
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let text = try? c.decode(String.self) { self = .string(text); return }
+            if let flag = try? c.decode(Bool.self) { self = .bool(flag); return }
+            if let value = try? c.decode(Double.self) { self = .number(value); return }
+            if let pairs = try? c.decode([String: RawJSONValue].self) { self = .object(pairs); return }
+            if let items = try? c.decode([RawJSONValue].self) { self = .array(items); return }
+            throw DecodingError.typeMismatch(
+                RawJSONValue.self,
+                .init(codingPath: decoder.codingPath, debugDescription: "Value is null or of an unsupported shape")
+            )
+        }
+
+        var rawText: String {
+            switch self {
+            case .string(let text): return text
+            case .bool(let flag): return flag ? "true" : "false"
+            case .number(let value):
+                return value == value.rounded() && abs(value) < 1e15
+                    ? String(format: "%.0f", value) : String(value)
+            case .object(let pairs):
+                return "{" + pairs.keys.sorted().map {
+                    "\"\($0)\": \(pairs[$0]?.rawText ?? "null")"
+                }.joined(separator: ", ") + "}"
+            case .array(let items):
+                return "[" + items.map(\.rawText).joined(separator: ", ") + "]"
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        vin = try c.decodeIfPresent(String.self, forKey: .vin)
+        timestamp = try c.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .timestamp)
+        lastCycleCompleted = try c.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .lastCycleCompleted)
+        measurementDate = try c.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .measurementDate)
+        startedAt = try c.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .startedAt)
+        endingAt = try c.decodeIfPresent(PolestarDataPortalTimestamp.self, forKey: .endingAt)
+        runningStatus = try c.decodeIfPresent(String.self, forKey: .runningStatus)
+        startReason = try c.decodeIfPresent(String.self, forKey: .startReason)
+        lastCycleValid = try c.decodeIfPresent(Bool.self, forKey: .lastCycleValid)
+        measuredAirQualityIndex = try c.decodeIfPresent(Double.self, forKey: .measuredAirQualityIndex)
+        measuredParticulateMatter25 = try c.decodeIfPresent(Double.self, forKey: .measuredParticulateMatter25)
+        runtimeLeftMinutes = try c.decodeIfPresent(Double.self, forKey: .runtimeLeftMinutes)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        metaReceivedAt = try c.decodeIfPresent(String.self, forKey: .metaReceivedAt)
+        metaEventId = try c.decodeIfPresent(String.self, forKey: .metaEventId)
+        // A DTO re-decoded from an encoded DTO keeps its captured fields; a wire payload
+        // never carries the synthetic key.
+        unknownFields = try c.decodeIfPresent([VehicleRawPortalField].self, forKey: .unknownFields)
+        // Wire keys outside the decoded set stay visible as raw data. A null value carries
+        // no report, so it is skipped rather than shown as an empty field.
+        let dynamic = try decoder.container(keyedBy: DynamicCodingKeys.self)
+        let known: Set<String> = [
+            "vin", "timestamp", "lastCycleCompleted", "measurementDate", "startedAt",
+            "endingAt", "runningStatus", "startReason", "lastCycleValid",
+            "measuredAirQualityIndex", "measuredParticulateMatter25", "runtimeLeftMinutes",
+            "error", "metaReceivedAt", "metaEventId", "unknownFields"
+        ]
+        var captured: [VehicleRawPortalField] = []
+        for key in dynamic.allKeys where !known.contains(key.stringValue) {
+            guard let value = try? dynamic.decode(RawJSONValue.self, forKey: key) else { continue }
+            captured.append(VehicleRawPortalField(key: key.stringValue, value: value.rawText))
+        }
+        if !captured.isEmpty { unknownFields = captured }
+    }
 }
 
 // MARK: - Charging Control DTOs
@@ -630,6 +726,13 @@ struct PolestarTargetSocDTO: Codable, Sendable, Equatable {
     /// Current charge target percentage, from `targetSoc.batteryChargeTargetLevel`.
     var targetSocPercentage: Int? {
         targetSoc?.batteryChargeTargetLevel.flatMap { portalRoundedInt($0, range: 0...100) }
+    }
+
+    /// The car's own mode for that target, from `targetSoc.chargeTargetLevelSettingType`
+    /// (DAILY / LONG_TRIP / CUSTOM). Nil when the portal sent nothing or a token outside
+    /// that vocabulary; never guessed.
+    var chargeTargetLevelSettingMode: ChargeTargetSettingMode? {
+        ChargeTargetSettingMode(wireToken: targetSoc?.chargeTargetLevelSettingType)
     }
 }
 
@@ -1050,7 +1153,8 @@ extension PolestarPreCleaningDTO {
             lastCycleValid: lastCycleValid,
             errorKind: cleaningErrorKind,
             measuredAt: measurementDate?.date,
-            lastCycleCompleted: lastCycleCompleted?.date
+            lastCycleCompleted: lastCycleCompleted?.date,
+            unknownPortalFields: unknownFields
         )
     }
 

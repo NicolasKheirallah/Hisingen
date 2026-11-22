@@ -54,6 +54,27 @@ offered climate setpoints, windows, trunk or charging controls that the public A
   capability check and authorization as a single command, steps run in order, and a routine stops
   at the first failure.
 
+## Automations
+
+**Settings → Automations** can run actions without you present. Three kinds exist, and all of them
+are empty until you add something:
+
+* **Scheduled actions** run one command at a wall-clock time on the days you choose. An action that
+  fires more than fifteen minutes late is skipped rather than replayed, so a Mac that wakes at
+  breakfast does not lock the car six hours late.
+* **Arrival and departure** triggers run a command when the car reaches or leaves a saved charge
+  location. The comparison happens inside Hisingen, using the position the car already reports and
+  the coordinates of the locations you saved — no Location Services permission is requested, and
+  triggers only fire while Hisingen is running. The first snapshot after launch records where the
+  car is; it does not count as an arrival.
+* **Send to every vehicle** sends one command to each car on the connected account, one at a time,
+  and names the ones that did not answer.
+
+Unattended sends share one queue and one per-command cooldown: a command already on its way is not
+sent twice, and a repeat inside the cooldown is refused with the wait spelled out. Only actions that
+need no confirmation can be scheduled or triggered; unlocking, opening windows and anything else a
+person must approve stays a deliberate tap in the Controls tab.
+
 ## When a command's outcome is uncertain
 
 A Polestar command waits up to 15 seconds for the car's reply. Polestar's backend keeps some
@@ -69,6 +90,56 @@ session, choose **Authorize Remote Commands** under **Settings → Accounts → 
 or from the banner that appears if a command needs it. If authorization fails, the alert names
 the step that failed. See which grant each command uses in the
 [Polestar command mappings](api/field-mappings.md#polestar-which-call-carries-each-command).
+
+## Command line
+
+`hisingen cli` sends a command from a terminal. It is not a second command path: it resolves a
+vehicle, then hands the command to the same capability check, the same confirmation step, the same
+provider call, the same history row and the same command receipt this tab, the `hisingen://` links
+and the Shortcuts intents use. A command the app would refuse is refused here, in the app's own
+words.
+
+The command line is a mode of the app binary, so it answers from the app's own code:
+
+```sh
+"/Applications/Hisingen.app/Contents/MacOS/Hisingen" cli vehicles
+```
+
+From a checkout, `swift run Hisingen cli vehicles` works the same way. The app does not need to be
+running: the terminal restores the account session, reads the same local database, and asks the
+provider for a current reading before it sends anything.
+
+```text
+hisingen cli vehicles [--json] [--refresh]
+hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]
+hisingen cli help
+```
+
+`--vin` takes a VIN this Mac knows, a saved nickname, or a model name, and resolves the way a
+Shortcut's vehicle argument does. Without it the selected vehicle is used. `--refresh` asks the
+provider for a current reading instead of using the last stored one. `--confirm` is the
+confirmation step: a command this app asks about before sending — anything other than a routine
+command, such as unlock, honk and flash, engine start, or a software install — is refused without
+it, and device-owner authentication still runs where the app requires it.
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The provider accepted the command. |
+| 1 | The surface itself failed. |
+| 2 | Arguments it could not use: an unknown command or option, a value outside the ranges the app's own controls offer, or a vehicle name that matches nothing. |
+| 3 | Refused: the capability check's answer, or the provider's. The sentence is the one this app's banner would show. |
+| 4 | Not authorized: `--confirm` was missing, or device-owner authentication did not succeed. |
+| 5 | Not sent, and safe to retry: another command was running, the data was still loading, or the session could not be restored. |
+
+Text output puts a success on the standard output and a failure on the error stream, so logging a
+command's output does not record a failure as a success. `--json` prints one object on the standard
+output whatever happened, with `status`, `command`, `vin`, `vehicle`, `outcome` and `message`.
+`vehicles --json` carries, for every vehicle, which one is selected, how old its reading is, and the
+capability answer for each command with the reason for anything blocked.
+
+It deliberately cannot send something this app would refuse, skip the confirmation, bypass the
+history row or the receipt, change what the app has selected, sign in or out, edit settings, or ask
+a car for a value no control in this app can produce.
 
 ## About Polestar remote controls
 

@@ -48,6 +48,8 @@ extension VehicleDatabase {
             "DELETE FROM tyre_pressure_history WHERE vin = ?;",
             "DELETE FROM vehicle_warning_events WHERE vin = ?;",
             "DELETE FROM fuel_entries WHERE vin = ?;",
+            "DELETE FROM maintenance_entries WHERE vin = ?;",
+            "DELETE FROM vehicle_ownership WHERE vin = ?;",
             "DELETE FROM vehicle_metric_log WHERE vin = ?;",
             "DELETE FROM vehicle_images WHERE vin = ?;"
         ]
@@ -84,6 +86,8 @@ extension VehicleDatabase {
             DELETE FROM connectivity_history;
             DELETE FROM cabin_climate_history;
             DELETE FROM fuel_entries;
+            DELETE FROM maintenance_entries;
+            DELETE FROM vehicle_ownership;
             DELETE FROM vehicle_metric_log;
             DELETE FROM vehicle_images;
             """)

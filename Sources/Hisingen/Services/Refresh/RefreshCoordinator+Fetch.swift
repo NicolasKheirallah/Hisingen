@@ -65,7 +65,8 @@ extension RefreshCoordinator {
         let interval = RefreshPolicy.interval(
             isCharging: latest.isCharging,
             isClimateActive: latest.isClimateActive,
-            isVehicleAvailable: latest.identity.availability.isAvailable
+            isVehicleAvailable: latest.identity.availability.isAvailable,
+            availabilityAge: availabilityAge(of: latest)
         )
         if now().timeIntervalSince(latest.freshness.fetchedAt) >= interval { refreshNow() }
     }
@@ -146,6 +147,7 @@ extension RefreshCoordinator {
         rateLimitedUntil = nil
         stateStore.save(authoritative)
         SpotlightIndexer.indexVehicle(authoritative, nickname: preferences.vehicleNickname(for: authoritative.identity.vin))
+        publishWidgetSnapshot?(authoritative)
         let confirmed = confirmations.observe(authoritative, vin: latest?.identity.vin)
         let displayed = commandPresentation(
             authoritative: authoritative,
@@ -186,9 +188,11 @@ extension RefreshCoordinator {
             }
             if !preserved.contains(.chargeTarget) {
                 optimistic.energy.targetPercentage = authoritative.energy.targetPercentage
+                optimistic.energy.targetPercentageReportedAt = authoritative.energy.targetPercentageReportedAt
             }
             if !preserved.contains(.chargingCurrentLimit) {
                 optimistic.energy.currentLimitAmps = authoritative.energy.currentLimitAmps
+                optimistic.energy.currentLimitReportedAt = authoritative.energy.currentLimitReportedAt
             }
             if !preserved.contains(.chargingState) {
                 optimistic.energy.chargingState = authoritative.energy.chargingState

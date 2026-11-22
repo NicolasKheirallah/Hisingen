@@ -33,7 +33,7 @@ struct SettingsNotificationsCard: View {
                         if !plannerAlertsOnly {
                             chargingAlertRows
                         }
-                        if prefs.marketCountry.offersMarketPricing {
+                        if prefs.hasPriceSource {
                             if plannerAlertsOnly {
                                 plannerAlertRows
                             } else {
@@ -190,8 +190,77 @@ struct SettingsNotificationsCard: View {
                 detail: L10n.format("One daily banner after %@ with the cheapest hour", Format.clockTime(hour: 14, minute: 15)),
                 \.notifyPlannerPricesPublished
             )
+
+            // A threshold is only meaningful against a price that moves. Fixed-rate readers see
+            // the row once they switch to automatic pricing.
+            if prefs.electricityRateMode == .automatic {
+                notificationRow(
+                    symbol: "tag",
+                    title: "Price Threshold Alert",
+                    detail: "Alert when the current or next hour's price crosses a level you set",
+                    isOn: binder(\.notifyPriceThreshold, .notifications)
+                )
+                if prefs.notifyPriceThreshold {
+                    priceThresholdRows
+                        .transition(Self.dependentRowTransition)
+                }
+            }
         }
         .hisAnimation(Motion.layout, value: prefs.notifyPlannerWindowStart)
+        .hisAnimation(Motion.layout, value: prefs.notifyPriceThreshold)
+    }
+
+    @ViewBuilder
+    private var priceThresholdRows: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "slider.horizontal.3")
+                .hisType(.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            TextField("", value: binder(\.priceAlertThresholdSekPerKwh, .notifications),
+                      format: .number.precision(.fractionLength(2)))
+                .hisField()
+                .frame(width: 76)
+                .multilineTextAlignment(.trailing)
+                .accessibilityLabel(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 2)
+
+        HStack(spacing: 8) {
+            Image(systemName: "timer")
+                .hisType(.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(L10n.text("Quiet period"))
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Picker("", selection: binder(\.priceAlertQuietMinutes, .notifications)) {
+                ForEach([15, 30, 60, 120, 180, 360, 720], id: \.self) { minutes in
+                    Text(L10n.format("%d min", minutes)).tag(minutes)
+                }
+            }
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Quiet period"))
+            .controlSize(.small)
+            .frame(maxWidth: 100)
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 2)
+
+        Text(prefs.priceAlertThresholdSekPerKwh > 0
+             ? L10n.text("Compared with the price you pay under Electricity settings. One alert per crossing, then quiet for the period above.")
+             : L10n.text("Enter a price level to start alerts."))
+            .hisType(.micro)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .hisCaptionLeading()
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, 28)
     }
 
     private func plannerLeadLabel(_ minutes: Int) -> String {
@@ -279,6 +348,8 @@ struct SettingsNotificationsCard: View {
                 label: { "\($0)%" }
             )
             .transition(Self.dependentRowTransition)
+            pluginReminderAutomationRow
+                .transition(Self.dependentRowTransition)
         }
 
         notificationRow(
@@ -433,7 +504,11 @@ struct SettingsNotificationsCard: View {
         notificationRow(
             symbol: "app.badge.fill",
             title: "Warning Badge",
-            detail: "Show a dock badge while any vehicle reports warnings or an alarm",
+            // A badge on a hidden tile paints nothing, so the row says what it needs instead
+            // of reading as broken. The badge shows once the Dock icon is on.
+            detail: prefs.showDockIcon
+                ? "Show a dock badge while any vehicle reports warnings or an alarm"
+                : "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.",
             \.showWarningBadge
         )
 
@@ -488,6 +563,37 @@ struct SettingsNotificationsCard: View {
     }
 
     // MARK: - Row builders
+
+    /// Opt-in for the Reminders write-back on the plug-in alert. The preference rides
+    /// with the Reminders integration rather than in `PreferencesStore` because the
+    /// persistence layer is being reworked in another session; the key follows the
+    /// same UserDefaults pattern and should move to the notifications preferences
+    /// with the rest.
+    private var pluginReminderAutomationRow: some View {
+        notificationRow(
+            symbol: "reminder",
+            title: "Also Add to Reminders",
+            detail: "Write a Reminder through macOS Reminders each time the plug-in alert fires",
+            isOn: Binding(
+                get: { ReminderWriter.pluginAutomationEnabled(in: UserDefaults.standard) },
+                set: { enabled in
+                    ReminderWriter.setPluginAutomation(enabled, in: UserDefaults.standard)
+                    if enabled {
+                        // The toggle press is the user gesture EventKit needs for its
+                        // access prompt; a refusal snaps the toggle back off.
+                        Task { @MainActor in
+                            guard await ReminderWriter.shared.requestAccessIfNeeded() else {
+                                ReminderWriter.setPluginAutomation(false, in: UserDefaults.standard)
+                                binder.bump()
+                                return
+                            }
+                            binder.bump()
+                        }
+                    }
+                }
+            )
+        )
+    }
 
     private func notificationRow(
         symbol: String,

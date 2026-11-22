@@ -13,7 +13,10 @@ struct SettingsView: View {
     /// with no snapshot yet — because there is no bar to leave by.
     var showsHeaderBar = true
     let onSettingsChanged: (SettingsChange) -> Void
-    let onSignOut: () -> Void
+    let onSignOut: (SignOutSelection) -> Void
+    /// A live fleet read for the sign-out confirmation. The `fleet` value is a snapshot taken
+    /// when the window was built; a car discovered later must still change the copy.
+    var liveFleet: (@MainActor () -> FleetSnapshot)? = nil
     let accountConnection: AccountConnectionModel
     var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
         ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
@@ -59,6 +62,9 @@ struct SettingsView: View {
                         searchText: $settingsSearchText
                     )
                     .frame(width: HisingenTheme.layoutWidth < 600 ? 154 : 238)
+                    // The sidebar is one focus section read top to bottom, in the order the
+                    // sections are listed; the content column is the next one.
+                    .focusSection()
                     Divider()
                     settingsContent
                 }
@@ -68,6 +74,7 @@ struct SettingsView: View {
                     searchText: $settingsSearchText
                 )
                 .padding(.horizontal, HisingenTheme.sectionSpacing)
+                .focusSection()
                 settingsContent
             }
         }
@@ -96,7 +103,7 @@ struct SettingsView: View {
     private var availableDestinations: [SettingsDestination] {
         SettingsDestination.allCases.filter {
             switch $0 {
-            case .plannerSettings, .plannerAlerts: preferences.marketCountry.offersMarketPricing
+            case .plannerSettings, .plannerAlerts: preferences.hasPriceSource
             case .homeCharging, .electricitySupplier, .gridTariff, .houseMeter: homeCharging != nil
             default: true
             }
@@ -180,6 +187,8 @@ struct SettingsView: View {
                 proxy.scrollTo(first, anchor: .top)
             }
         }
+        // The destination cards are the last focus section, in `SettingsDestination` order.
+        .focusSection()
     }
 
     @ViewBuilder
@@ -207,10 +216,13 @@ struct SettingsView: View {
         case .general:
             SettingsDisplayCard(binder: binder)
         case .electricity:
-            if let homeCharging {
-                SettingsElectricityWithSupplier(model: homeCharging, binder: binder, state: state)
-            } else {
-                SettingsElectricityCard(binder: binder, state: state)
+            VStack(alignment: .leading, spacing: HisingenTheme.sectionSpacing) {
+                if let homeCharging {
+                    SettingsElectricityWithSupplier(model: homeCharging, binder: binder, state: state)
+                } else {
+                    SettingsElectricityCard(binder: binder, state: state)
+                }
+                SettingsChargingFeesCard(binder: binder, pairings: homeCharging?.pairings ?? [])
             }
         case .plannerSettings:
             let action: (() -> Void)? = onNavigateToPlan.map { navigate in { navigate(.controlsRoutines) } }
@@ -227,7 +239,7 @@ struct SettingsView: View {
                 }
             }
         case .electricitySupplier:
-            if let homeCharging { SettingsTibberCard(model: homeCharging) }
+            if let homeCharging { SettingsTibberCard(model: homeCharging, preferences: binder.preferences) }
         case .gridTariff:
             if let homeCharging {
                 SettingsGridTariffCard(
@@ -259,13 +271,18 @@ struct SettingsView: View {
         case .vehicleCapabilities:
             SettingsCapabilityMatrixCard(state: state)
         case .automation:
-            if let onNavigateToPlan {
-                NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
-            } else {
-                CalendarPreconditioningSettingsCard(binder: binder)
-                if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
-                    Card { PlannerAutoStartControl(binder: binder) }
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                if let onNavigateToPlan {
+                    NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
+                } else {
+                    CalendarPreconditioningSettingsCard(binder: binder)
+                    if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
+                        Card { PlannerAutoStartControl(binder: binder) }
+                    }
                 }
+                // Scheduled actions, location triggers and the fleet broadcast have no Plan-tab
+                // home; they are configured here whichever surface the reader is in.
+                AutomationSettingsCards(binder: binder, state: state)
             }
         case .notifications, .plannerAlerts:
             VStack(alignment: .leading, spacing: 8) {
@@ -284,6 +301,7 @@ struct SettingsView: View {
         case .localData:
             SettingsDatabaseCard(
                 state: state,
+                fleet: fleet,
                 database: database,
                 imageCache: imageCache,
                 onExportDiagnosticLogs: { onSettingsChanged(.exportDiagnosticLogs) },
@@ -320,6 +338,8 @@ struct SettingsView: View {
         }
         .padding(.horizontal, HisingenTheme.sectionSpacing)
         .padding(.top, 2)
+        // Back and the title are the first focus section; the sidebar comes next.
+        .focusSection()
     }
 
     private var accountCard: some View {
@@ -330,6 +350,8 @@ struct SettingsView: View {
                     title: L10n.text("Account"),
                     color: HisingenTheme.accent
                 )
+                SettingsAccountList(onSettingsChanged: onSettingsChanged)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 AccountCredentialsForm(
                     style: .compact,
                     onSettingsChanged: onSettingsChanged,
@@ -337,7 +359,11 @@ struct SettingsView: View {
                     model: accountConnection
                 )
                 Divider().opacity(HisingenTheme.dividerOpacity)
-                SettingsSignOutButton(binder: binder, onSignOut: onSignOut)
+                SettingsSignOutButton(
+                    binder: binder,
+                    onSignOut: onSignOut,
+                    fleetProvider: liveFleet ?? { fleet }
+                )
             }
         }
     }

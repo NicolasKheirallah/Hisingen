@@ -85,7 +85,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     enum QuickAction {
         case lockVehicle
+        case unlockVehicle
+        case startClimate
         case resumeChargeSchedule
+        case viewDetails
     }
 
     static let unlockedCategoryID = "vehicle-unlocked-actionable"
@@ -93,6 +96,9 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     static let openingsCategoryID = "vehicle-openings-actionable"
     static let vehicleAlertCategoryID = "vehicle-alert-actionable"
     nonisolated static let muteVehicleActionID = "mute-vehicle"
+    nonisolated static let unlockVehicleActionID = "unlock-vehicle"
+    nonisolated static let startClimateActionID = "start-climate"
+    nonisolated static let viewDetailsActionID = "view-details"
 
     /// How intrusive a notification should be. Urgent security banners break through
     /// Focus and quiet hours; routine telemetry chatter stays passive and silent.
@@ -159,6 +165,20 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             title: L10n.text("Mute This Vehicle"),
             options: []
         )
+        // Unlocking a car someone else may be standing next to is a command, so it takes the
+        // same device-owner authentication the lock action does.
+        let unlock = UNNotificationAction(
+            identifier: Self.unlockVehicleActionID,
+            title: L10n.text("Unlock"),
+            options: [.authenticationRequired]
+        )
+        // Pre-conditioning from the banner that says the car is unlocked or a door is open:
+        // the reader is about to get in, and this saves opening the app first.
+        let climate = UNNotificationAction(
+            identifier: Self.startClimateActionID,
+            title: L10n.text("Start Climate"),
+            options: [.authenticationRequired]
+        )
         // Resuming a schedule is a write command too, so it demands the same explicit
         // device unlock the lock action does – consistent capability gates.
         let resume = UNNotificationAction(
@@ -166,27 +186,35 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             title: L10n.text("Resume Schedule"),
             options: [.authenticationRequired]
         )
+        // An explicit way to open the car from the banner. Tapping the banner already does
+        // this, but a banner with buttons reads as a set of choices, and "View Details" is the
+        // one that never sends anything to the vehicle.
+        let view = UNNotificationAction(
+            identifier: Self.viewDetailsActionID,
+            title: L10n.text("View Details"),
+            options: [.foreground]
+        )
         let unlockedCategory = UNNotificationCategory(
             identifier: Self.unlockedCategoryID,
-            actions: [lock, mute],
+            actions: [lock, unlock, climate, view, mute],
             intentIdentifiers: [],
             options: []
         )
         let openingsCategory = UNNotificationCategory(
             identifier: Self.openingsCategoryID,
-            actions: [lock, mute],
+            actions: [lock, unlock, climate, view, mute],
             intentIdentifiers: [],
             options: []
         )
         let vehicleAlertCategory = UNNotificationCategory(
             identifier: Self.vehicleAlertCategoryID,
-            actions: [mute],
+            actions: [view, mute],
             intentIdentifiers: [],
             options: []
         )
         let interruptedCategory = UNNotificationCategory(
             identifier: Self.chargingInterruptedCategoryID,
-            actions: [resume],
+            actions: [resume, view],
             intentIdentifiers: [],
             options: []
         )

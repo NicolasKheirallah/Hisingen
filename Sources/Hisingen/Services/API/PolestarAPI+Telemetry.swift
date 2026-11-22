@@ -78,7 +78,8 @@ extension PolestarAPI {
                 query: query,
                 variables: VINListVariables(vins: [vin]),
                 token: token,
-                operation: "vehicle telematics"
+                operation: "vehicle telematics",
+                scope: .vehicle(vin)
             )
         } catch {
             if Self.isRequestLevelFailure(error) { throw error }

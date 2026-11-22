@@ -9,7 +9,8 @@ struct WhereIsMyCarIntent: AppIntent {
     static let description = IntentDescription("Returns the last reported parking position of the active vehicle.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor

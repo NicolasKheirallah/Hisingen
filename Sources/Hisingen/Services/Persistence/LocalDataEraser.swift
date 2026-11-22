@@ -35,14 +35,19 @@ final class LocalDataEraser {
     /// and SQLite's `PRAGMA` have no per-vehicle form, so they carry no `VehicleScope` and never
     /// touch a per-VIN tier.
     enum Scope: Equatable {
-        /// What a sign-out or an account change drops: the cached snapshot, the mirrors, the
-        /// command receipts, the in-memory image tier and the in-memory per-VIN caches. Durable
-        /// history survives.
+        /// What an account sign-out or an account change drops: the cached snapshot, the
+        /// mirrors, the command receipts, the in-memory image tier and the in-memory per-VIN
+        /// caches. Durable history survives.
         ///
         /// The fleet-wide form is the narrower case of the two: knowing no vehicle, a sign-out
         /// takes only the stores the vehicles reported, so a name or a colour the reader chose
         /// for a vehicle of an untouched brand is not a session casualty.
         case session(VehicleScope)
+        /// One vehicle signed out of an account that stays connected. The vehicle-derived
+        /// stores go, so no stale snapshot, receipt, baseline or planner latch survives; the
+        /// reader-authored nickname, theme, mute and related stores stay for Bring Back, and
+        /// so does the artwork the garage will draw again.
+        case detach(VehicleScope)
         /// Coordinates and charging-location labels only.
         case locations(VehicleScope)
         /// High-volume samples older than the retention window.
@@ -58,14 +63,26 @@ final class LocalDataEraser {
     private let imageCache: CarImageCache
     private let memoryCaches: VehicleMemoryCacheRegistry
     private let beforeSQL: (@Sendable () -> Void)?
+    /// Removes the desktop widget's App Group mirror. Injectable so a test can assert the erase
+    /// reaches it without touching the real container.
+    private let clearWidgetSnapshot: @Sendable () -> Void
+    /// Clears the per-brand account records and the Keychain bundles that hold their secrets.
+    /// `nil` means the real account store. Injectable for the same reason as
+    /// `clearWidgetSnapshot`: a full-fleet erase must clear accounts in the app, but no test
+    /// should block on an interactive Keychain authorization prompt to finish.
+    private let clearAccounts: (() -> Void)?
 
     init(database: VehicleDatabase, preferences: PreferencesStore, imageCache: CarImageCache,
-         memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil) {
+         memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil,
+         clearWidgetSnapshot: @escaping @Sendable () -> Void = { WidgetSnapshotWriter.remove() },
+         clearAccounts: (() -> Void)? = nil) {
         self.database = database
         self.preferences = preferences
         self.imageCache = imageCache
         self.memoryCaches = memoryCaches
         self.beforeSQL = beforeSQL
+        self.clearWidgetSnapshot = clearWidgetSnapshot
+        self.clearAccounts = clearAccounts
     }
 
     /// The complete sequence on the calling actor. The session teardown path uses this: it must
@@ -97,7 +114,7 @@ final class LocalDataEraser {
     /// mirrors must not be dropped before the delete they mirror has committed.
     private nonisolated static func runSQL(_ scope: Scope, database: VehicleDatabase) throws {
         switch scope {
-        case .session(let vehicles):
+        case .session(let vehicles), .detach(let vehicles):
             try database.db.withTransaction {
                 let tables = ["vehicle_snapshots", "charging_baselines", "command_receipts", "provider_backoff"]
                 for table in tables {
@@ -129,6 +146,22 @@ final class LocalDataEraser {
     }
 
     private func applyLocalTiers(_ scope: Scope) {
+        // A full erase is the only destructive action that also takes every account. A
+        // per-vehicle erase and a sign-out leave other accounts alone.
+        if case .everything(.all) = scope {
+            if let clearAccounts { clearAccounts() } else { preferences.accountStore.removeAll() }
+        }
+        // The widget mirrors the active car from an App Group file the database never touches.
+        // A wipe that covers that car, or the whole fleet, has to take it too: otherwise
+        // "erase local data" leaves the VIN, nickname, charge level and next departure readable
+        // in the container. A sign-out already clears it on its own path; this covers the
+        // Settings wipe, which never signs out.
+        switch scope {
+        case .session(let vehicles), .detach(let vehicles), .everything(let vehicles):
+            if vehicles.covers(preferences.vin) { clearWidgetSnapshot() }
+        case .locations, .samples, .compact:
+            break
+        }
         // Both full erases below move the mirror with the row it mirrors: an old snapshot or
         // command receipt reappears after relaunch if the mirror is left behind, and the
         // in-memory tiers have to move with the mirror or the erased snapshot keeps answering
@@ -138,11 +171,15 @@ final class LocalDataEraser {
             clearSessionDefaults(vehicles)
             memoryCaches.drop(vehicles)
             dropImageTier(vehicles)
+        case .detach(let vehicles):
+            clearVehicleDerivedDefaults(vehicles)
+            memoryCaches.drop(vehicles)
         case .everything(let vehicles):
             clearLocalDefaults(vehicles)
             memoryCaches.drop(vehicles)
             dropImageTier(vehicles)
             eraseHomeCharging(vehicles)
+            eraseDiagnosticLogs(vehicles)
         case .locations(let vehicles):
             // Turning the preference off is what keeps the cleared coordinates cleared. The
             // snapshot mirror goes with them: it still carries the coordinates that were just
@@ -164,6 +201,17 @@ final class LocalDataEraser {
         switch vehicles {
         case .vehicle(let vin):
             preferences.clearLocalVehicleDefaults(for: vin)
+        case .all:
+            preferences.clearAllVehicleDerivedDefaults()
+        }
+    }
+
+    /// The vehicle-derived half for a vehicle that stays on its account. The reader-authored
+    /// stores stay: Bring Back should return the name and colour the reader gave the car.
+    private func clearVehicleDerivedDefaults(_ vehicles: VehicleScope) {
+        switch vehicles {
+        case .vehicle(let vin):
+            preferences.clearVehicleDerivedDefaults(for: vin)
         case .all:
             preferences.clearAllVehicleDerivedDefaults()
         }
@@ -201,11 +249,27 @@ final class LocalDataEraser {
         switch vehicles {
         case .all:
             store.eraseAll()
+            // The live-carbon token is account-wide too, so it goes with the other provider
+            // secrets rather than with one vehicle's history.
+            preferences.clearElectricityMapsKey()
         case .vehicle:
             guard let pairing = store.pairing, vehicles.covers(pairing.vin) else { return }
             store.clearPairing()
         }
         NotificationCenter.default.post(name: .homeChargingDataErased, object: nil)
+    }
+
+    /// The redacted request log is the one tier that names a vehicle in no other way, so an
+    /// erased vehicle must not leave its partition behind for the next export to carry. A plain
+    /// sign-out keeps it: the log is diagnostic evidence for why the session ended, it is
+    /// redacted, and the 24-hour window retires it on its own.
+    private func eraseDiagnosticLogs(_ vehicles: VehicleScope) {
+        switch vehicles {
+        case .vehicle(let vin):
+            APIDiagnosticLogStore.shared.eraseVehicleLogsSynchronously(vin: vin)
+        case .all:
+            APIDiagnosticLogStore.shared.eraseAllLogsSynchronously()
+        }
     }
 
     private func dropImageTier(_ vehicles: VehicleScope) {

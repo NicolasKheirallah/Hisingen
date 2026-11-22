@@ -320,6 +320,14 @@ extension ChargingSessionLedger {
     }
 
     /// The newest wallbox session end for a charger, so a sync can ask Home Assistant only for newer history.
+    func earliestWallboxStart(chargerID: String) -> Date? {
+        (try? sql.query(sql: "SELECT MIN(COALESCE(wallbox_started_at, started_at)) FROM charging_sessions WHERE wallbox_charger_id = ?;") { stmt in
+            try stmt.bindText(chargerID, at: 1)
+        } process: { stmt -> Date? in
+            try stmt.stepOrThrow() ? stmt.columnDate(at: 0) : nil
+        }) ?? nil
+    }
+
     func latestWallboxEnd(chargerID: String) -> Date? {
         (try? sql.query(sql: "SELECT MAX(COALESCE(wallbox_ended_at, ended_at)) FROM charging_sessions WHERE wallbox_charger_id = ?;") { stmt in
             try stmt.bindText(chargerID, at: 1)

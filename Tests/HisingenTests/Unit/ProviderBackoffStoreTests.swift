@@ -85,7 +85,7 @@ struct ProviderBackoffStoreTests {
 
         let eraser = LocalDataEraser(
             database: database,
-            preferences: PreferencesStore(defaults: defaults),
+            preferences: PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")),
             imageCache: CarImageCache())
         try eraser.perform(.session(.vehicle(vin)))
 
@@ -108,8 +108,8 @@ struct ProviderBackoffStoreTests {
 
         let eraser = LocalDataEraser(
             database: database,
-            preferences: PreferencesStore(defaults: defaults),
-            imageCache: CarImageCache())
+            preferences: PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")),
+            imageCache: CarImageCache(), clearAccounts: {})
         try eraser.perform(.everything(.all))
 
         #expect(store.blockedUntil(VolvoAPI.endpointBackoffSubject("environment", vin: vin)) == nil)
@@ -124,7 +124,7 @@ struct ProviderBackoffStoreTests {
         let backoffs = ProviderBackoffStore(database: .inMemory())
         let api = VolvoAPI(
             keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)"),
-            preferences: PreferencesStore(defaults: defaults),
+            preferences: PreferencesStore(defaults: defaults, keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")),
             backoffs: backoffs)
 
         let first: Int? = try await api.optional(

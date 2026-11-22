@@ -170,6 +170,21 @@ final class VehicleStateStore {
         }
     }
 
+    /// Forgets one vehicle that is signed out of an account that stays connected. The snapshot,
+    /// command receipts, charging baseline and planner latch are dropped; the reader-authored
+    /// nickname, theme and similar stores survive so Bring Back restores the car as it was.
+    @discardableResult
+    func detach(vin: String, eraseHistory: Bool = false) -> Bool {
+        historyRecorder.resetTransientState(vin: vin)
+        do {
+            try eraser.perform(eraseHistory ? .everything(.vehicle(vin)) : .detach(.vehicle(vin)))
+            return true
+        } catch {
+            logger.error("Could not detach local data for vehicle: \(error, privacy: .public)")
+            return false
+        }
+    }
+
     /// The fleet-wide counterpart, for a sign-out that no longer knows any vehicle. Its own
     /// member because a caller holding one vehicle must not be able to erase the rest by
     /// leaving the VIN out, and its `eraseHistory` choice also picks the breadth of the

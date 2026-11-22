@@ -13,9 +13,11 @@ The direct provider reads from NexBlue's cloud and saves its refresh token in th
 
 **Charge now** and **Pause** require a current charger status. After NexBlue accepts the command, Hisingen waits for the charger to report the result.
 
-Open **Charger details** at the foot of the charger card to see what NexBlue reports about the supply: voltage and current in each phase, the current limit, the cable rating, the circuit fuse, the phase mode, and how the charger reaches the cloud. While charging, a line under the session figure gives the current in each phase next to the limit that applies. The limit row says so when the cable or the circuit fuse is lower than the limit you set. Charging uses the lowest of the three, and the car and load balancing can ask for less, so a low current can have a cause the card cannot see. Phase readings older than ten minutes are left out. Home Assistant and the other direct chargers do not report these values, so the list does not appear for them.
+Open **Charger details** at the foot of the charger card to see what the charger reports about the supply: voltage and current in each phase, the current limit, the cable rating, the circuit fuse, the phase mode, and how the charger reaches the cloud. While charging, a line under the session figure gives the current in each phase next to the limit that applies. The limit row says so when the cable or the circuit fuse is lower than the limit you set. Charging uses the lowest of the three, and the car and load balancing can ask for less, so a low current can have a cause the card cannot see. Phase readings older than ten minutes are left out. NexBlue reports all of it. Zaptec reports the voltage and current of each phase, the cable rating, the phases in use and how it reaches the cloud, and publishes no circuit fuse, so that one row stays off. Easee reports the cable rating, the phase mode and whether it reaches the cloud over Wi-Fi or the mobile network; its per-phase readings are terminal values the documentation does not map to phases, so the voltage and current rows stay off for it. Home Assistant reports none of these values, so the list does not appear for it.
 
 Imported NexBlue sessions record how each one began and ended. Open a session in **Log** to see **Started** (at the charger, remotely, by schedule, by an administrator, on plug-in or after an error) and **Ended** (cable unplugged, charge complete, remotely, by schedule, held by load balancing, and others). A power loss or an emergency stop is marked with a warning. **Remotely** means the command came through the NexBlue cloud and not from the charger. Sessions imported before this release gain their reasons the next time they are imported, and a reason Hisingen has no wording for is left out.
+
+Easee and Zaptec sessions show no **Started** or **Ended** rows: neither vendor's published documentation names a start or an end reason on a session record. Zaptec's constants define session-commit flags, such as a stop by RFID card, but no documented field of the archived-session answer carries them, so nothing is mapped.
 
 Use **Cheapest overnight charge** on the paired vehicle’s charger card to preview a fixed one-time window using your selected Swedish spot price area. Choose a duration from one to eight hours. Hisingen compares the published prices between 18:00 and 07:00 in the charger’s time zone. An owner account, normal scheduling mode, and a free schedule slot are required. An existing active timer blocks a new one. **Save timer** appends the new window and reads it back from the charger. The charger runs the saved window on its own. To cancel it or clear a used slot, open **Schedule** in myNexBlue. The vehicle’s charging schedule and charge limit still apply. [NexBlue scheduling guide](https://nexblue.com/en-nl/apps/hc/mynexblue-app/how-to-set-the-charging-schedule)
 
@@ -26,14 +28,14 @@ In **Settings → Electricity → Home Charging**, **Import earlier sessions** l
 1. Open **Settings → Electricity → Home Charging** and choose **Easee** or **Zaptec** under **Charger connection**.
 2. Enter the email and password of the account you use in the vendor's app, and select **Sign in and find chargers**. Use the owner account: a guest or installer account may be refused control.
 3. Select the charger and vehicle. Choose a saved charge location if you use one, and mark the charger as shared if other cars charge there.
-4. Select **Pair charger**. The paired vehicle's charging card shows status, wall power and delivered energy, **Charge now** and **Pause**. With **Store charging history** on, Hisingen imports finished sessions.
+4. Select **Pair charger**. The paired vehicle's charging card shows status, wall power and delivered energy, **Charge now** and **Pause**. With **Store charging history** on, Hisingen imports finished sessions. The card's **Charger details** disclosure lists the supply values your charger reports, as described under [Connect NexBlue directly](#connect-nexblue-directly).
 
 What Hisingen uses, so you can judge what to expect:
 
 | | Easee | Zaptec |
 |---|---|---|
 | Sign-in | Account and password to `api.easee.com`, one-hour token | Account and password to `api.zaptec.com/oauth/token`, one-hour token, no refresh token |
-| Reads | Observations: operating mode, wall power, session energy, dynamic current, reason for no current | Charger state: operation mode, power (W), session energy, final-stop flag, schedule event |
+| Reads | Observations: operating mode, wall power, session energy, dynamic current, reason for no current, cable rating, phase mode, connection type | Charger state: operation mode, power (W), session energy, final-stop flag, schedule event, phase voltage and current, cable rating, phases in use, network mode |
 | Pause | `pause_charging` | command 506 |
 | Charge now | `resume_charging`, then `start_charging` for a charger that wants authorisation, or `override_schedule` when a schedule holds the start | command 507 |
 | Sessions | The charger's session list, with the vendor's session id | Archived sessions, with energy details when Zaptec has them |
@@ -60,6 +62,11 @@ The automated tests answer from a mock of each cloud, built from the vendors' pu
 6. **A guest or installer account.** Sign in with one and confirm the charger list is empty or the command is refused with a clear message.
 7. **Session lists.** Compare **Import sessions now** with the vendor's app for a recent charge. Easee limits session requests to 10 an hour, so repeated manual imports may be throttled.
 8. **Zaptec session energy details.** Check whether a session has readings fine enough (15 minutes or less) to be priced by interval. Without them the cost is a session-total estimate.
+9. **Zaptec per-phase states.** States 501 to 503 and 507 to 509 are documented as the output voltage and current of each phase. Confirm on your charger that they line up with the phases the installation uses; Go and Pro chargers differ in what they report.
+10. **Zaptec network mode.** State 150 is documented as "Wifi, LTE, PLC, or none". Confirm the exact wording your charger sends. PLC is left out until it has its own wording.
+11. **Easee phase readings.** Easee measures input terminals (IN VOLT T1T2 and its siblings, INT CURRENT T2 to T5), and the documentation does not say which terminal is which phase, so no voltage or current rows appear for Easee. Check a charge against your own wiring if you want them added.
+12. **Easee circuit maximum.** Observations 22 to 24 are the circuit's configured maximum current per phase, a setting rather than the fuse rating, so the Circuit Fuse row stays off for Easee.
+13. **Session reasons.** Neither vendor documents a start or stop reason on a session record. Zaptec's constants define session-commit flags such as StoppedByRFID and Aborted, but the published reference does not show where the archived-session answer carries them, so the Started and Ended rows stay off for both.
 
 ## Connect Tibber
 
@@ -71,11 +78,13 @@ Tibber prices charging sessions with no Home Assistant and no charger involved.
 
 Hisingen asks Tibber's API (`api.tibber.com`) for 15-minute import prices (the subscription's `priceInfoRange`), newest first and page by page, only for the span of the sessions it is pricing. A price is Tibber's all-in `total`: energy, taxes and Tibber's markup, without the grid fee, so the **Network fee** on the paired charger is the only thing added. A session with fine enough readings (Zaptec's energy details) is priced per interval, and one with only a total (Easee, NexBlue) is priced at the time-weighted average over the session. In both cases a missing price slot is shown as missing and never filled. If Tibber cannot be read (a revoked token, a rate limit, no network), the import still runs, the session is priced from your electricity settings, and Settings says why. The token is stored in the macOS Keychain and deleted by **Disconnect Tibber** or by erasing all data.
 
-`priceInfoRange` stops at the slot running now, so a request that reaches past now also reads `priceInfo { today tomorrow }` for the rest of today and for tomorrow (published in the afternoon). Without that the Charging Planner sees no prices ahead and falls back to Elpriser. Each quarter-hour also carries Tibber's own level, which the Charging Planner shows beside "Now" and "Planned average". The home's price area and grid company come from its metering point; the grid company's fee is not published, so it stays the Network fee you type in. Hourly meter readings (`consumption`, about two months back) feed the Car Share of House Load rows in Log, Charging Trends. Live power needs a Tibber Pulse: without one the API answers "no active pulse devices found in home", and Hisingen does not use it.
+`priceInfoRange` stops at the slot running now, so a request that reaches past now also reads `priceInfo { today tomorrow }` for the rest of today and for tomorrow (published in the afternoon). Without that the Charging Planner sees no prices ahead and falls back to Elpriser. Each quarter-hour also carries Tibber's own level, which the Charging Planner shows beside "Now" and "Planned average". The home's price area and grid company come from its metering point; the grid company's fee is not published, so it stays the Network fee you type in. Hourly meter readings (`consumption`, about two months back) feed the Car Share of House Load rows in Log, Charging Trends. When the home has a production metering point (solar, typically), its hourly `production` is read the same way, two months back, and Charging Trends adds a **House Production** row over the hours the share covers. A home that reports no production gets no row.
+
+Live house power comes from a Tibber Pulse (or the older Watty) reader paired to the home's meter. Hisingen asks the home first whether one is paired, and only then opens the API's websocket stream (`wss://api.tibber.com/v1-beta/gql/subscriptions`, the `graphql-transport-ws` protocol Tibber's own .NET SDK speaks). The charging card shows the house load from it exactly as the Perific lines do, plus the production the stream reports while the home is producing, with the same last-known rule: a frame older than three minutes keeps its figure with its age, and the momentary lines are left out. With a Perific meter connected, its house lines stay (they also read phases and today's totals) and only the production line comes from Tibber, because a meter's HAN port sees no production. When the home reports no reader, the line stays absent, Settings → Electricity → Electricity Supplier says **No Pulse paired**, and the API itself would refuse the subscription with "no active pulse devices found in home". The token is sent once, in the stream's handshake, and nothing else goes out.
 
 It works with every charger connection, Home Assistant included: with Tibber connected, its own prices are used first and Home Assistant's `tibber.get_prices` is only the fallback.
 
-Live checks: confirm that the home list shows your home, that a recent session's cost matches the Tibber app within the network fee, and that the first import after connecting prices sessions older than a day (Hisingen reads up to about 40 days of prices; against a real account the cursor paging reached back to the start of the subscription).
+Live checks: confirm that the home list shows your home, that a recent session's cost matches the Tibber app within the network fee, and that the first import after connecting prices sessions older than a day (Hisingen reads up to about 40 days of prices; against a real account the cursor paging reached back to the start of the subscription). With a Pulse paired, confirm the charging card's House line tracks the Tibber app within a few seconds and that Settings says **Reading live**; without one, that Settings says **No Pulse paired**. With a production meter, confirm the **House Production** row against the Tibber app's production total for the same days. The live stream has not been checked against a real Pulse here: the frame shapes follow Tibber's .NET SDK and the schema reference on developer.tibber.com.
 
 ## Connect a Perific house meter
 
@@ -114,12 +123,17 @@ editor says so when it is missing.
 ## Requirements
 
 - Home Assistant reachable from the Mac on the local network, over `http` or `https`.
-- A charger integration in Home Assistant. NexBlue is discovered first; any charger that exposes
-  a switch, a charging-state sensor, a power sensor and a session-energy sensor can be mapped by
-  hand.
+- A charger integration in Home Assistant. NexBlue is matched by its entity names even without
+  the device list; Easee and Zaptec are found through Home Assistant's device registry by their
+  status, power and energy entities. Any charger that exposes a switch, a charging-state sensor,
+  a power sensor and a session-energy sensor can be mapped by hand.
 - A Home Assistant long-lived access token. Create one in your Home Assistant profile under
   **Security**. A token from an administrator also reads the device registry, which finds the
-  charger's serial number; a non-administrator token falls back to matching entity names.
+  serial number and groups Easee and Zaptec entities by device; a non-administrator token falls
+  back to matching NexBlue entity names. Discovery maps a charging switch only when every option
+  of its status sensor is a state Hisingen can read, because that sensor is what confirms a
+  command. A charger whose states are not recognised is still listed for its readings, but its
+  switch is left for you to map by hand.
 - Optional: the Tibber integration, for price-aware windows.
 - Optional: a battery sensor in Home Assistant, for plans that target a percentage.
 
@@ -188,6 +202,22 @@ Open **Settings → Home Charging**:
 `HomeChargingPairing`, `HomeChargerEntityMap` and `HomeAssistantDiscovery` in
 `Sources/Hisingen/Domain/HomeCharging/` hold the pairing, and `HomeAssistantClient` and
 `HomeAssistantSocket` in `Sources/Hisingen/Services/HomeCharging/` do the talking.
+
+### A second charger
+
+An install can hold two chargers: pair the second one from **Settings → Home Charging → Add another
+charger**. Both stay listed with their own vehicle, charge location and last reading, and each has
+its own plan record.
+
+One charger holds the live connection at a time — the one whose row is marked **Live connection**.
+Selecting the other row switches the connection to it, and the charger left behind keeps its last
+reading labelled with the time it was read. The app reads the other charger every few minutes while
+a second one is paired, so both stay visible without two live connections.
+
+The charging card follows the car: it shows the charger paired to that vehicle at its saved charge
+location, and its commands go to that charger (switching the connection first when needed), so two
+chargers are never commanded through each other's reading. Unpairing one leaves the other paired
+and connected.
 
 ### A shared charger
 
@@ -275,6 +305,21 @@ keeps its settings for when Sweden is selected again. Spot prices come from
 [Elpriset just nu.se](https://www.elprisetjustnu.se/), are fetched once a day after 14:15 and
 exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
 each zone refreshes on its own schedule.
+
+**The window has a fixed end.** If you turn on **Auto-Start Charging in the Window**, Hisingen
+sends the charge-now override when the window opens and records that window's end. If the car is
+still charging when the end arrives — because it charged slower than the configured power — the
+planner ends its override there rather than letting it run on to the charge limit in the hours
+after the cheap window. The next plan is a new window, judged against the prices still ahead.
+This is the honest limit of a menu-bar app: Hisingen cannot wake a Mac that is already asleep, so
+the planner only acts while the Mac is awake.
+
+**Keeping the Mac awake** is a separate opt-in toggle under **Settings → Automations**. It holds a
+system sleep assertion from the moment a planned window is known until that window ends, so the
+minute tick can send both the start and the stop. It is off by default, works only together with
+**Auto-Start Charging in the Window**, and does not wake a sleeping Mac. Leaving it on can keep a
+MacBook awake for most of the day, because a window is always somewhere ahead while the car is
+below its target; that is the cost of not being able to schedule a wake.
 
 ## What the NexBlue integration provides
 

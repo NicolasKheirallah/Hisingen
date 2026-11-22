@@ -3,7 +3,17 @@ import LocalAuthentication
 
 @MainActor
 protocol RemoteActionAuthorizing: AnyObject {
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool
+    /// `origin` is who asked. A `.deepLink` command always needs the person's confirmation,
+    /// whatever its risk: a URL another app or page opened says nothing about what the person
+    /// at the Mac wanted.
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool
+}
+
+extension RemoteActionAuthorizing {
+    /// A command the person asked for in the app itself.
+    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
+        await authorize(command, vehicle: vehicle, origin: .userInitiated)
+    }
 }
 
 @MainActor
@@ -37,8 +47,10 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         self.reportAuthenticationFailure = reportAuthenticationFailure ?? Self.showAuthenticationFailure
     }
 
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
-        let requiresConfirmation = command.risk != .routine || preferences.requireBiometricsForRemoteControls
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool {
+        let requiresConfirmation = origin == .deepLink
+            || command.risk != .routine
+            || preferences.requireBiometricsForRemoteControls
         if requiresConfirmation {
             guard confirm(command, vehicle) else { return false }
         }
@@ -57,8 +69,16 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         }
     }
 
+    /// How long the confirmation stays open before it counts as declined. While it is open the
+    /// dispatch lane is held, so an alert nobody sees would otherwise answer every later command
+    /// and automation with "busy".
+    static let confirmationTimeout: TimeInterval = 120
+
     private static func runConfirmationAlert(_ command: RemoteCommand, vehicle: String,
                                              temperatureUnit: TemperatureUnit) -> Bool {
+        // A menu-bar app is not frontmost when a deep link or a Shortcut raises this, and an
+        // alert from a background app can open behind the windows the person is working in.
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = command.risk == .destructive ? .critical : .warning
         alert.messageText = command.title(temperatureUnit: temperatureUnit)
@@ -74,6 +94,12 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         ) + consequence
         alert.addButton(withTitle: L10n.text("Send Command"))
         alert.addButton(withTitle: L10n.text("Cancel"))
+        // The timer is added to the main run loop below, so its block runs on the main thread.
+        let expiry = Timer(timeInterval: confirmationTimeout, repeats: false) { _ in
+            MainActor.assumeIsolated { NSApp.abortModal() }
+        }
+        RunLoop.main.add(expiry, forMode: .common)
+        defer { expiry.invalidate() }
         return alert.runModal() == .alertFirstButtonReturn
     }
 

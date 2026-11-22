@@ -6,9 +6,17 @@ import UserNotifications
 /// authorization (confirmation sheet / device-owner prompt). `.automation` is a
 /// pre-authorized background trigger (e.g. calendar preconditioning) with nobody at the
 /// Mac to answer a prompt – it runs routine commands silently and refuses anything riskier.
+/// `.deepLink` is a `hisingen://` URL opened by another app or a web page. Nothing shows that
+/// the person at the Mac asked for it, so it always gets the confirmation sheet, even for a
+/// routine command.
+/// `.commandLine` is `hisingen cli send` in a terminal. The person typed it, so the risk table
+/// decides what needs confirming exactly as it does for a click in the app; the confirmation
+/// itself is the `--confirm` flag, which the authorizer the terminal installs reads.
 enum RemoteCommandOrigin: Sendable {
     case userInitiated
     case automation
+    case deepLink
+    case commandLine
 }
 
 /// The vehicle and provider a command was approved for. This value stays fixed while
@@ -125,9 +133,24 @@ final class CommandCoordinator {
     /// audit, optimistic patching, user-visible outcome, and confirmation handoff.
     /// The full human presentation still flows through `presentResult`; the return value is
     /// for programmatic callers that await the answer.
+    ///
+    /// `expectedVIN` is the vehicle the caller meant, when it named one (a deep link or Shortcut
+    /// with a VIN). The command is held back if the loaded vehicle is a different one, so a
+    /// selection change between "prepare that vehicle" and "send" cannot redirect it.
     @discardableResult
-    func perform(_ command: RemoteCommand, origin: RemoteCommandOrigin = .userInitiated) async -> RemoteCommandDispatchOutcome {
+    func perform(
+        _ command: RemoteCommand,
+        origin: RemoteCommandOrigin = .userInitiated,
+        expectedVIN: String? = nil
+    ) async -> RemoteCommandDispatchOutcome {
         guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
+        if preferences.isDemoMode {
+            let message = L10n.text("Demo mode: commands are not sent to a vehicle.")
+            context.presentResult(
+                title: L10n.text("Command not sent"), message: message, success: false,
+                target: nil, command: command, remedy: nil, followUp: nil)
+            return .deferred(reason: message)
+        }
         guard !isInProgress && !isAuthorizing else {
             context.presentResult(
                 title: L10n.text("Command not sent"),
@@ -154,6 +177,19 @@ final class CommandCoordinator {
                 followUp: nil)
             return stillLoading ? .deferred(reason: message) : .refused(reason: message)
         }
+        if let expectedVIN = expectedVIN?.normalizedVIN, !expectedVIN.isEmpty,
+           state.identity.vin.normalizedVIN != expectedVIN {
+            let message = L10n.text("The target vehicle could not be loaded.")
+            context.presentResult(
+                title: L10n.text("Command not sent"),
+                message: message,
+                success: false,
+                target: nil,
+                command: command,
+                remedy: nil,
+                followUp: nil)
+            return .deferred(reason: message)
+        }
         let executor = context.currentCommandExecutor()
         let availability = CapabilityGate.availability(
             for: command,
@@ -162,10 +198,11 @@ final class CommandCoordinator {
             polestarConnectionMode: preferences.polestarConnectionMode,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress || isAuthorizing,
-            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
+            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled,
+            volvoGrantedScopes: Set(preferences.volvoGrantedScopes)
         )
         guard availability == .available else {
-            if availability == .unavailableUntilRefresh, origin == .userInitiated {
+            if availability == .unavailableUntilRefresh, origin != .automation {
                 context.requestExpeditedRefresh()
             }
             let message: String = {
@@ -212,10 +249,11 @@ final class CommandCoordinator {
         let approved: Bool
         isAuthorizing = true
         switch origin {
-        case .userInitiated:
+        case .userInitiated, .deepLink, .commandLine:
             approved = await self.authorizer.authorize(
                 adapted,
-                vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle
+                vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle,
+                origin: origin
             )
         case .automation:
             // A user-configured automation pre-authorizes routine commands; there is no
@@ -266,14 +304,16 @@ final class CommandCoordinator {
             logger.info("Remote command \(command.identifier, privacy: .public) sent for \(target.vin, privacy: .private)")
             let result = try await executor.executeRemoteCommand(command, vin: target.vin)
             let receiptID = UUID()
-            database.history.recordCommandAudit(
-                id: receiptID.uuidString,
-                vin: target.vin,
-                command: command.identifier,
-                status: result.outcome.rawValue,
-                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
-                timestamp: startedAt
-            )
+            if mayWriteAudit(for: target) {
+                database.history.recordCommandAudit(
+                    id: receiptID.uuidString,
+                    vin: target.vin,
+                    command: command.identifier,
+                    status: result.outcome.rawValue,
+                    durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
+                    timestamp: startedAt
+                )
+            }
             logger.info("Remote command \(command.identifier, privacy: .public) outcome \(result.outcome.rawValue, privacy: .public)")
             let targetIsCurrent = isCurrentExecutionContext(target)
             let optimisticState = targetIsCurrent
@@ -297,11 +337,11 @@ final class CommandCoordinator {
             let commandTitle = targetIsCurrent
                 ? command.title
                 : L10n.format("%@ (%@)", command.title, target.displayName)
-            // Undo is offered only for a command the reader sent from the panel. An automation's
-            // command was not theirs to take back from a banner.
+            // Undo is offered only for a command a person approved. An automation's command was
+            // not theirs to take back from a banner.
             let isUndoOfLastCommand = lastOfferedUndo?.command == command
                 && lastOfferedUndo?.targetVIN == target.vin
-            let undo = origin == .userInitiated && !isUndoOfLastCommand
+            let undo = origin != .automation && !isUndoOfLastCommand
                 ? command.inverse(previousChargeTarget: previousChargeTarget).map {
                     RemoteCommandFollowUp(kind: .undo, command: $0, targetVIN: target.vin)
                 }
@@ -316,6 +356,10 @@ final class CommandCoordinator {
                 remedy: nil,
                 followUp: undo
             )
+            // A sign-out that landed while the command was in flight already cleared the receipts.
+            // The banner above still tells the reader what was sent; filing a receipt now would
+            // write the signed-out vehicle's command back to disk.
+            guard !accountWasSignedOut(for: target) else { return .sent(result.outcome) }
             var receipt = CommandReceipt(
                 id: receiptID,
                 commandIdentifier: command.identifier,
@@ -338,14 +382,16 @@ final class CommandCoordinator {
             let mapped = error as? LocalizedError
             logger.error("Remote command \(command.identifier, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             let message = mapped?.errorDescription ?? error.localizedDescription
-            database.history.recordCommandAudit(
-                vin: target.vin,
-                command: command.identifier,
-                status: "failed",
-                durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
-                error: message,
-                timestamp: startedAt
-            )
+            if mayWriteAudit(for: target) {
+                database.history.recordCommandAudit(
+                    vin: target.vin,
+                    command: command.identifier,
+                    status: "failed",
+                    durationMs: Int(max(0, now().timeIntervalSince(startedAt)) * 1_000),
+                    error: message,
+                    timestamp: startedAt
+                )
+            }
             context.presentResult(
                 title: L10n.text("Command failed"),
                 message: L10n.format(
@@ -364,6 +410,19 @@ final class CommandCoordinator {
             )
             return .refused(reason: message)
         }
+    }
+
+    /// Whether the account this command ran against has been signed out since. Sign-out sets the
+    /// explicit flag before it clears local data and removes it only on the next sign-in, which
+    /// separates it from a vehicle switch or a brand switch (neither sets it).
+    private func accountWasSignedOut(for target: RemoteCommandTarget) -> Bool {
+        preferences.hasExplicitSignOut(for: target.brand)
+    }
+
+    /// The audit row is durable history, which a sign-out keeps unless the reader chose to erase
+    /// it. A command that finishes after an erasing sign-out must not write a row back.
+    private func mayWriteAudit(for target: RemoteCommandTarget) -> Bool {
+        !(accountWasSignedOut(for: target) && preferences.eraseHistoryOnSignOut)
     }
 
     /// The action a failure offers the reader, when one exists. Only the missing command

@@ -17,6 +17,7 @@ app. This file lists what that covers, where each part came from, and under whic
 | 20 gRPC Swift, SwiftNIO and Swift packages | Linked libraries | Apache 2.0; BoringSSL inside swift-nio-ssl and swift-crypto is ISC and OpenSSL | Polestar gRPC connections |
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
+| Electricity Maps | Grid carbon intensity at runtime, only with the reader's own key | Electricity Maps terms | Optional live carbon in the Charging Planner |
 | Tibber | Home name and 15-minute import prices at runtime | Tibber developer terms | Optional Tibber prices in Home Charging |
 | Perific (formerly Enegic) | Whole-house power and meter readings at runtime, read only | No public interface | Optional house meter in Home Charging |
 | Home Assistant | Charger status and plans at runtime, through the reader's own instance | Apache 2.0 | Optional Home Charging |
@@ -135,27 +136,27 @@ Hisingen's Polestar gRPC calls run on [grpc-swift-2](https://github.com/grpc/grp
 [NIO transport](https://github.com/grpc/grpc-swift-nio-transport), which build on SwiftNIO and
 the Swift packages below. All are pinned in [Package.resolved](Package.resolved) and licensed
 under the Apache License 2.0 (checked against each package's `LICENSE` file on 2026-10-31; the `LICENSE.txt` and
-`NOTICE.txt` files were confirmed unchanged at the versions bumped on 2026-11-01).
+`NOTICE.txt` files were confirmed byte-identical at the versions bumped on 2026-11-01 and again on 2026-11-21).
 
 | Package | Pinned version |
 |---|---|
 | [grpc/grpc-swift-2](https://github.com/grpc/grpc-swift-2) | 2.4.4 |
-| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.10.0 |
-| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.104.0 |
+| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.13.0 |
+| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.105.0 |
 | [apple/swift-nio-extras](https://github.com/apple/swift-nio-extras) | 1.35.2 |
 | [apple/swift-nio-http2](https://github.com/apple/swift-nio-http2) | 1.46.0 |
-| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.37.5 |
+| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.37.6 |
 | [apple/swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services) | 1.28.0 |
 | [apple/swift-certificates](https://github.com/apple/swift-certificates) | 1.21.1 |
 | [apple/swift-crypto](https://github.com/apple/swift-crypto) | 5.0.3 |
 | [apple/swift-asn1](https://github.com/apple/swift-asn1) | 1.7.3 |
 | [apple/swift-http-types](https://github.com/apple/swift-http-types) | 1.8.0 |
 | [apple/swift-http-structured-headers](https://github.com/apple/swift-http-structured-headers) | 1.7.0 |
-| [apple/swift-log](https://github.com/apple/swift-log) | 1.16.2 |
+| [apple/swift-log](https://github.com/apple/swift-log) | 1.17.2 |
 | [apple/swift-algorithms](https://github.com/apple/swift-algorithms) | 1.2.1 |
 | [apple/swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | 1.1.7 |
 | [apple/swift-atomics](https://github.com/apple/swift-atomics) | 1.3.1 |
-| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.7.5 |
+| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.7.6 |
 | [apple/swift-numerics](https://github.com/apple/swift-numerics) | 1.1.1 |
 | [apple/swift-system](https://github.com/apple/swift-system) | 1.8.1 |
 | [swift-server/swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | 2.10.1 |
@@ -2243,7 +2244,15 @@ Called at runtime. No code from them ships in Hisingen.
 * **[Tibber](https://developer.tibber.com/):** optional Home Charging reads the reader's home name
   and 15-minute import prices from `api.tibber.com`, with the reader's own access token. The
   token stays in the macOS Keychain; see [PRIVACY.md](PRIVACY.md). Used under the
-  [Tibber developer terms](https://developer.tibber.com/).
+  [Tibber developer terms](https://developer.tibber.com/). The live-measurement websocket
+  frames follow the shapes of Tibber's own .NET SDK
+  ([tibber/Tibber.SDK.NET](https://github.com/tibber/Tibber.SDK.NET)); Hisingen reimplements
+  them in Swift and ships no code from it.
+* **[Electricity Maps](https://www.electricitymaps.com/):** optional live grid carbon intensity in
+  the Charging Planner, from `api.electricitymap.org`, using the reader's own API token. The token
+  stays in the macOS Keychain and is removed by Erase All Data; see [PRIVACY.md](PRIVACY.md). Only
+  the Swedish price zones are queried, derived from the zone the planner already uses, and the row
+  shows nothing at all when no key is set or the service cannot answer.
 * **Map links:** the location buttons open Apple Maps (`maps.apple.com`) or Google Maps
   (`maps.google.com`, `www.google.com/maps`) with the vehicle's coordinates in the link. Nothing
   is sent to either until the user clicks.
@@ -2253,7 +2262,7 @@ Called at runtime. No code from them ships in Hisingen.
 * **Volvo Cars:** the APIs are published for third-party developers and used under the
   [Volvo Cars Developer Portal terms](https://developer.volvocars.com/terms-and-conditions) and
   any API-specific terms of the account that registers the application. Hosts:
-  `api.volvocars.com` and `volvoid.eu.volvocars.com`.
+  `api.volvocars.com`, `auth.volvocars.com` and `volvoid.eu.volvocars.com`.
 * **Polestar:** credentials for the Developer Portal (the EU Data Act "Data Portal" API) are
   issued under Polestar's terms. The sign-in, GraphQL and gRPC interfaces are not publicly
   documented. Hisingen's support for them comes from public community research and Hisingen's own

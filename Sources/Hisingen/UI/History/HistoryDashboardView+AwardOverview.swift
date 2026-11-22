@@ -159,6 +159,12 @@ struct EnergyTrace: View {
         .frame(height: plotHeight)
         .accessibilityLabel(L10n.text("Battery at the start and end of each charge."))
         .accessibilityValue(accessibilitySummary(charges))
+        .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+            title: L10n.text("Battery at the start and end of each charge."),
+            yLabel: "%",
+            points: charges.flatMap { [($0.start, $0.from), ($0.end, $0.to)] },
+            valueFormat: { String(format: "%.0f", locale: L10n.displayLocale, $0) }
+        ))
     }
 
     /// One charge, drawn from where it started to where it ended, so a charge with duration

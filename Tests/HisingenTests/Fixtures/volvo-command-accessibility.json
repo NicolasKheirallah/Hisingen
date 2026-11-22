@@ -1,0 +1,9 @@
+{
+  "data": {
+    "availabilityStatus": {
+      "value": "UNAVAILABLE",
+      "unavailableReason": "POWER_SAVING_MODE",
+      "timestamp": "2026-08-15T09:00:00Z"
+    }
+  }
+}

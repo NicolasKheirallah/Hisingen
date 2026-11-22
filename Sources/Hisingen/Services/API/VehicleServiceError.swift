@@ -26,6 +26,10 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
     /// probably fine; retrying before the approval cannot succeed.
     case keychainConsentRequired
     case notConfigured
+    /// The provider is configured, but its identity service refuses the application's own
+    /// credentials. Nothing the owner typed is wrong and no cached password is at fault, so this
+    /// must not read as "enter your credentials" – it reads as "these credentials were retired".
+    case appCredentialsRejected(provider: VehicleBrand)
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +40,8 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
                 "%@ requested an additional or changed sign-in step. Open Settings and try again.",
                 provider.displayName
             )
+        case .authenticationRequired(_, .signInSystemChanged):
+            return L10n.text("Volvo moved to a new sign-in system. Sign in again to keep your vehicle data.")
         case .authenticationRequired:
             return L10n.text("Sign in is required.")
         case .network(let error):
@@ -73,11 +79,17 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
             return L10n.text("macOS needs your approval to read the saved sign-in. Approve the Keychain prompt, then refresh.")
         case .notConfigured:
             return L10n.text("Open Settings to sign in.")
+        case .appCredentialsRejected(let provider):
+            return L10n.format(
+                "%@ no longer accepts this application's client ID. Sign in again, or enter credentials for its new sign-in system in Settings.",
+                provider.displayName
+            )
         }
     }
 
     var requiresAuthentication: Bool {
         if case .authenticationRequired = self { return true }
+        if case .appCredentialsRejected = self { return true }
         return false
     }
 
@@ -108,7 +120,9 @@ enum VehicleServiceError: Error, LocalizedError, Sendable {
         switch self {
         case .authenticationRequired(_, .invalidCredentials),
              .authenticationRequired(_, .callbackRejected),
+             .authenticationRequired(_, .signInSystemChanged),
              .notConfigured,
+             .appCredentialsRejected,
              .secureStorage,
              .commandOutcomeUnknown,
              .localDataErasure,

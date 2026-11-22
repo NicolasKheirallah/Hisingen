@@ -64,6 +64,18 @@ extension Notifier {
                    title: L10n.text("Plug-In Reminder"),
                    body: privateBody(detailedBody),
                    subtitle: name, vin: current.identity.vin)
+        // Optional Reminders write-back on the same moment. The writer checks that
+        // Reminders access was already granted and never raises the permission prompt
+        // from this background path; the battery figure follows the private-banner
+        // setting because a reminder syncs off the Mac like any other reminder.
+        if ReminderWriter.pluginAutomationEnabled(in: defaults) {
+            let battery = preferences.privateNotificationDetails ? nil : current.energy.batteryPercentage
+            Task { @MainActor in
+                await ReminderWriter.shared.addPlugInReminderAutomatically(
+                    vehicleName: name, batteryPercent: battery
+                )
+            }
+        }
     }
 
     func chargingBody(_ state: VehicleState) -> String {

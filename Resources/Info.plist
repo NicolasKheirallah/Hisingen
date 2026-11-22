@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.0.1</string>
+	<string>3.0.2</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -38,7 +38,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>34</string>
+	<string>35</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>LSUIElement</key>
@@ -47,6 +47,12 @@
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Hisingen reads events from calendars you select to start vehicle climate before departure.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Hisingen writes reminders you ask for, such as plugging in at a low battery, booking service, or checking tyre pressures.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Hisingen writes reminders you ask for, such as plugging in at a low battery, booking service, or checking tyre pressures.</string>
+	<key>NSSupportsWidgets</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

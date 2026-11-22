@@ -9,21 +9,28 @@ func volvoWarningIsPresent(_ raw: String?) -> Bool {
 }
 
 
+/// Volvo timestamps are ISO 8601 in UTC and sometimes carry fractional seconds
+/// (`2026-11-21T08:43:22.647Z`). `JSONDecoder.volvo` only accepts whole seconds, so a fractional
+/// timestamp used to decode as nil without any error.
+private func volvoDate<Key: CodingKey>(_ container: KeyedDecodingContainer<Key>, _ key: Key) -> Date? {
+    guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: raw) { return date }
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter.date(from: raw)
+}
+
 struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
     let value: Value?
     let updatedAt: Date?
-    /// Decoded but not currently used anywhere. Investigated 2026-08: every field in every real
-    /// captured response this project has (all `Tests/HisingenTests/Fixtures/volvo-*.json`
-    /// fixtures, sanitized from live captures) reports `"OK"`, and no Volvo documentation
-    /// referenced elsewhere in this repo enumerates other values. `unavailableReason` (below) is
-    /// the field this codebase already reads for "why is this unavailable" – that's likely where
-    /// any real signal lives. Wiring `status` into anything beyond this would mean inventing
-    /// semantics for values that have never actually been observed; needs a live capture of a
-    /// genuinely degraded/erroring field (a car with a real reported fault, or a field the active
-    /// API product doesn't cover) before it's safe to act on. See
-    /// `docs/research/api-investigation-backlog.md` #2.
+    /// Volvo sends `OK` for a readable field and `ERROR` for one it cannot produce, with a `code`
+    /// in place of `value` (seen live on energy-state). `init` uses it to decide whether the code
+    /// stands in for `unavailableReason`.
     let status: String?
     let unit: String?
+    /// Why the reading is unavailable. For an error-state field with no explicit reason, this is
+    /// the error `code`.
     let unavailableReason: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -33,18 +40,21 @@ struct VolvoField<Value: Decodable & Sendable>: Decodable, Sendable {
         case status
         case unit
         case unavailableReason
+        case code
     }
 
     init(from decoder: Decoder) throws {
-        if let container = try? decoder.container(keyedBy: CodingKeys.self),
-           container.contains(.value) {
+        // Error-state fields have no `value` key, so the object is read whenever it is an object.
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
             value = try? container.decodeIfPresent(Value.self, forKey: .value)
-            updatedAt = (try? container.decodeIfPresent(Date.self, forKey: .updatedAt))
-                ?? (try? container.decodeIfPresent(Date.self, forKey: .timestamp))
-                ?? nil
-            status = try? container.decodeIfPresent(String.self, forKey: .status)
+            updatedAt = volvoDate(container, .updatedAt) ?? volvoDate(container, .timestamp)
+            let decodedStatus = try? container.decodeIfPresent(String.self, forKey: .status)
+            status = decodedStatus
             unit = try? container.decodeIfPresent(String.self, forKey: .unit)
-            unavailableReason = try? container.decodeIfPresent(String.self, forKey: .unavailableReason)
+            let explicitReason = try? container.decodeIfPresent(String.self, forKey: .unavailableReason)
+            let code = try? container.decodeIfPresent(String.self, forKey: .code)
+            let isErrorState = decodedStatus.map { $0.uppercased() != "OK" } ?? false
+            unavailableReason = explicitReason ?? (isErrorState ? code : nil)
             return
         }
         let single = try decoder.singleValueContainer()
@@ -112,6 +122,28 @@ struct VolvoVehicleDetailsDTO: Decodable, Sendable {
     let gearbox: String?
     let batteryCapacityKWH: Double?
     let images: Images?
+    let specifications: Specifications?
+
+    /// Read field by field: a malformed value drops out alone, instead of throwing out the whole
+    /// details payload and sending the caller down the placeholder path.
+    struct Specifications: Decodable, Sendable {
+        let driveType: String?
+        let enginePowerKw: Double?
+        let grossWeightKg: Int?
+        let numberOfSeats: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case driveType, enginePowerKw, grossWeightKg, numberOfSeats
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            driveType = try? c.decodeIfPresent(String.self, forKey: .driveType)
+            enginePowerKw = try? c.decodeIfPresent(Double.self, forKey: .enginePowerKw)
+            grossWeightKg = try? c.decodeIfPresent(Int.self, forKey: .grossWeightKg)
+            numberOfSeats = try? c.decodeIfPresent(Int.self, forKey: .numberOfSeats)
+        }
+    }
 
     struct Descriptions: Decodable, Sendable {
         let model: String?
@@ -145,7 +177,7 @@ extension VolvoVehicleDetailsDTO {
     // Custom decoding lives in an extension so the memberwise initializer is still synthesized
     // for the placeholder built in `fetchVehicleStateImplementation`.
     private enum CodingKeys: String, CodingKey {
-        case vin, modelYear, descriptions, fuelType, gearbox, batteryCapacityKWH, images
+        case vin, modelYear, descriptions, fuelType, gearbox, batteryCapacityKWH, images, specifications
         case externalColour, externalColours
     }
 
@@ -165,6 +197,8 @@ extension VolvoVehicleDetailsDTO {
         gearbox = try c.decodeIfPresent(String.self, forKey: .gearbox)
         batteryCapacityKWH = try c.decodeIfPresent(Double.self, forKey: .batteryCapacityKWH)
         images = try c.decodeIfPresent(Images.self, forKey: .images)
+        // Optional as a whole, so a malformed block cannot take the rest of the details with it.
+        specifications = try? c.decodeIfPresent(Specifications.self, forKey: .specifications)
         // The Connected Vehicle API v2 vehicle-details payload has been seen both as a flat
         // `externalColour` string and as an `externalColours` array (of `{value}`/`{name}`
         // objects, or bare strings). Collapse either to the single display string the app uses.
@@ -322,6 +356,18 @@ struct VolvoEnergyCapabilitiesDTO: Decodable, Sendable {
 
 struct VolvoCapabilityFlag: Decodable, Sendable {
     let isSupported: Bool?
+}
+
+/// `GET /energy/v2/vehicles/{vin}/voc-subscription`. The Energy family answers without the
+/// `data` envelope the Connected Vehicle endpoints use, so this decodes the root object.
+struct VolvoVOCSubscriptionDTO: Decodable, Sendable {
+    struct Subscription: Decodable, Sendable {
+        let hasPremiumSubscription: Bool?
+    }
+
+    let vocSubscription: Subscription?
+
+    var hasPremiumSubscription: Bool? { vocSubscription?.hasPremiumSubscription }
 }
 
 extension ChargingState {
@@ -593,8 +639,18 @@ struct VolvoStatisticsDTO: Decodable, Sendable {
         energyConsumptionKwhPer100Km(averageEnergyConsumptionAutomatic)
     }
 
+    /// Blended value kept for existing callers. It prefers the automatic trip period.
     var averageSpeedKmH: Double? {
-        let field = averageSpeedAutomatic ?? averageSpeed
+        kilometersPerHour(averageSpeedAutomatic ?? averageSpeed)
+    }
+
+    /// Average speed over the manual trip-meter period, matching `tripMeterManualKm`.
+    var averageSpeedManualKmH: Double? { kilometersPerHour(averageSpeed) }
+
+    /// Average speed over the automatic trip-meter period, matching `tripMeterAutomaticKm`.
+    var averageSpeedAutomaticKmH: Double? { kilometersPerHour(averageSpeedAutomatic) }
+
+    private func kilometersPerHour(_ field: VolvoField<Double>?) -> Double? {
         guard let value = field?.value else { return nil }
         return field?.unit?.lowercased() == "mph" ? value / UnitConversion.kilometersPerMile : value
     }
@@ -656,6 +712,16 @@ struct VolvoLocationDTO: Decodable, Sendable {
     struct Properties: Decodable, Sendable {
         let heading: String?
         let timestamp: Date?
+
+        private enum CodingKeys: String, CodingKey {
+            case heading, timestamp
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            heading = try container.decodeIfPresent(String.self, forKey: .heading)
+            timestamp = volvoDate(container, .timestamp)
+        }
     }
     struct Geometry: Decodable, Sendable {
         let coordinates: [Double]?
@@ -668,7 +734,9 @@ struct VolvoLocationDTO: Decodable, Sendable {
 
     var altitudeMeters: Double? {
         guard let coordinates = geometry?.coordinates, coordinates.count >= 3 else { return nil }
-        return coordinates[2]
+        // Volvo fills the third coordinate with 0.0 when the car has no altitude to report.
+        let altitude = coordinates[2]
+        return altitude == 0 ? nil : altitude
     }
 
     var speedKmH: Double? {
@@ -704,6 +772,9 @@ struct VolvoCommandAccessibilityDTO: Decodable, Sendable {
     }
 
     var reason: String? {
+        // An error-state field puts its code in `unavailableReason` (see VolvoField). That code
+        // describes a failed read, not why the car is unavailable, so it is not shown as a reason.
+        if let status = availabilityStatus?.status, status.uppercased() != "OK" { return nil }
         guard let raw = availabilityStatus?.unavailableReason?.uppercased() else { return nil }
         switch raw {
         case "NO_INTERNET": return L10n.text("Vehicle has no internet connection")
@@ -799,12 +870,18 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
     let refreshToken: String?
     let expiresIn: Int
     let tokenType: String?
+    /// The scope set the identity provider actually granted, space-separated. This is the
+    /// authoritative per-scope answer: Volvo rejects the whole authorization for one
+    /// unapproved scope, and the echo says which scopes survived. Some refresh grants omit
+    /// the field, so it stays optional and an absent echo never erases a recorded set.
+    let scope: String?
 
     private enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
         case tokenType = "token_type"
+        case scope
     }
 }
 
@@ -828,17 +905,23 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
     var text: String? { message?.blankAsNil }
 
     /// Volvo's documented `invokeStatus` values, upper-cased before comparison because the
-    /// API has been observed returning both cases. The Connected Vehicle API v2 command docs
-    /// enumerate exactly: RUNNING, WAITING, COMPLETED, REJECTED, UNKNOWN, TIMEOUT,
-    /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, DELIVERED, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
-    /// NOT_ALLOWED_WRONG_USAGE_MODE. The extra values below (`SUCCESS`, `NOT_ALLOWED`,
-    /// `UNLOCK_TIME_FRAME_PASSED`, `UNABLE_TO_LOCK_DOOR_OPEN`, `FAILED`) are tolerated
-    /// defensively – older captures and sibling APIs have returned them.
+    /// API has been observed returning both cases. The Connected Vehicle API v2 `Invoke` schema
+    /// enumerates all 22: RUNNING, WAITING, COMPLETED, REJECTED, UNKNOWN, TIMEOUT,
+    /// CONNECTION_FAILURE, VEHICLE_IN_SLEEP, CAR_IN_SLEEP_MODE, UNLOCK_TIME_FRAME_PASSED,
+    /// UNABLE_TO_LOCK_DOOR_OPEN, EXPIRED, SENT, NOT_SUPPORTED, DELIVERED, DELIVERY_TIMEOUT,
+    /// SUCCESS, CAR_TIMEOUT, CAR_ERROR, NOT_ALLOWED_PRIVACY_ENABLED,
+    /// NOT_ALLOWED_WRONG_USAGE_MODE, INVOCATION_SPECIFIC_ERROR.
+    ///
+    /// Every one of them now maps to an outcome or a reason. Anything that fell through used to
+    /// reach `dispatchCommand`'s final fallback and be reported to the reader as *accepted*, so
+    /// `NOT_SUPPORTED` or `CAR_IN_SLEEP_MODE` read as a command the car had taken. The extras
+    /// (`ACCEPTED`, `NOT_ALLOWED`, `FAILED`) are tolerated defensively: older captures and
+    /// sibling APIs have returned them.
     var outcome: RemoteCommandOutcome? {
         switch invokeStatus?.uppercased() {
         case "COMPLETED", "SUCCESS": return .completed
         case "DELIVERED": return .delivered
-        case "RUNNING", "WAITING", "ACCEPTED": return .accepted
+        case "RUNNING", "WAITING", "ACCEPTED", "SENT": return .accepted
         default: return nil
         }
     }
@@ -850,12 +933,18 @@ struct VolvoCommandResponseDTO: Decodable, Sendable {
         switch invokeStatus?.uppercased() {
         case "REJECTED", "NOT_ALLOWED", "FAILED":
             return L10n.text("The vehicle rejected the command.")
-        case "TIMEOUT":
+        case "TIMEOUT", "DELIVERY_TIMEOUT", "CAR_TIMEOUT":
             return L10n.text("The vehicle did not respond in time. It may be parked somewhere with no reception.")
         case "CONNECTION_FAILURE":
             return L10n.text("Hisingen could not reach the vehicle. It may be in an area with no connectivity.")
-        case "VEHICLE_IN_SLEEP":
+        case "VEHICLE_IN_SLEEP", "CAR_IN_SLEEP_MODE":
             return L10n.text("The vehicle is in sleep mode and did not receive the command. Try again in a few minutes.")
+        case "NOT_SUPPORTED":
+            return L10n.text("This vehicle does not support this command.")
+        case "EXPIRED":
+            return L10n.text("The command expired before the vehicle acted on it.")
+        case "INVOCATION_SPECIFIC_ERROR":
+            return L10n.text("The vehicle reported a problem with this command.")
         case "CAR_ERROR":
             return L10n.text("The vehicle reported an internal error while handling the command.")
         case "NOT_ALLOWED_PRIVACY_ENABLED":

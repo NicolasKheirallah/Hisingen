@@ -28,9 +28,9 @@ struct SettingsElectricityCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.text("Country"))
                             .hisType(.body, weight: .medium)
-                        Text(preferences.marketCountry.offersMarketPricing
+                        Text(preferences.hasPriceSource
                              ? L10n.text("Market prices, providers and the charging planner are available")
-                             : L10n.text("Market prices are available for Sweden only. Other countries use a typed-in rate."))
+                             : L10n.text("Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used."))
                             .hisType(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -54,7 +54,7 @@ struct SettingsElectricityCard: View {
 
                 SettingsElectricityRateSection(
                     binder: binder,
-                    offersAutomatic: preferences.marketCountry.offersMarketPricing
+                    offersAutomatic: preferences.hasPriceSource
                 )
 
                 Divider().opacity(HisingenTheme.dividerOpacity)

@@ -20,13 +20,23 @@ final class DockWarningBadge {
         refresh()
     }
 
+    /// The label a dock tile should carry, or nil when it should carry none. Pure so the
+    /// gating order stays testable without a running app.
+    nonisolated static func badgeLabel(
+        vehicleCount: Int, alertsEnabled: Bool, badgeEnabled: Bool, dockIconVisible: Bool
+    ) -> String? {
+        guard alertsEnabled, badgeEnabled, dockIconVisible, vehicleCount > 0 else { return nil }
+        return String(vehicleCount)
+    }
+
     /// Repaints from the current count – call after a settings change that could flip the
-    /// gating preferences.
+    /// gating preferences, including the Dock icon itself.
     func refresh() {
-        guard preferences.features.contains(.notifications), preferences.showWarningBadge else {
-            NSApp.dockTile.badgeLabel = nil
-            return
-        }
-        NSApp.dockTile.badgeLabel = vehicleCount > 0 ? "\(vehicleCount)" : nil
+        NSApp.dockTile.badgeLabel = Self.badgeLabel(
+            vehicleCount: vehicleCount,
+            alertsEnabled: preferences.features.contains(.notifications),
+            badgeEnabled: preferences.showWarningBadge,
+            dockIconVisible: preferences.showDockIcon
+        )
     }
 }

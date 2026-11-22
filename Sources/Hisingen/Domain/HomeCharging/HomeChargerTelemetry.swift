@@ -134,7 +134,12 @@ struct HomeChargerEntityMap: Codable, Equatable, Sendable {
     var power: String?
     var sessionEnergy: String?
     var lifetimeEnergy: String?
+    /// The sensor that reports the limit, if the integration has one.
     var currentLimit: String?
+    /// The `number` entity that *sets* the limit. Separate from `currentLimit` because reading and
+    /// writing are different entities in most Home Assistant charger integrations, and a sensor
+    /// cannot be written.
+    var currentLimitNumber: String?
     var chargingSwitch: String?
     var chargingEnabled: String?
     var cableLock: String?
@@ -143,13 +148,15 @@ struct HomeChargerEntityMap: Codable, Equatable, Sendable {
     var vehicleBattery: String?
 
     init(chargingState: String? = nil, power: String? = nil, sessionEnergy: String? = nil,
-         lifetimeEnergy: String? = nil, currentLimit: String? = nil, chargingSwitch: String? = nil,
+         lifetimeEnergy: String? = nil, currentLimit: String? = nil, currentLimitNumber: String? = nil,
+         chargingSwitch: String? = nil,
          chargingEnabled: String? = nil, cableLock: String? = nil, vehicleBattery: String? = nil) {
         self.chargingState = chargingState
         self.power = power
         self.sessionEnergy = sessionEnergy
         self.lifetimeEnergy = lifetimeEnergy
         self.currentLimit = currentLimit
+        self.currentLimitNumber = currentLimitNumber
         self.chargingSwitch = chargingSwitch
         self.chargingEnabled = chargingEnabled
         self.cableLock = cableLock
@@ -157,7 +164,7 @@ struct HomeChargerEntityMap: Codable, Equatable, Sendable {
     }
 
     var allEntityIDs: [String] {
-        [chargingState, power, sessionEnergy, lifetimeEnergy, currentLimit, chargingSwitch,
+        [chargingState, power, sessionEnergy, lifetimeEnergy, currentLimit, currentLimitNumber, chargingSwitch,
          chargingEnabled, cableLock, vehicleBattery].compactMap { $0 }.filter { !$0.isEmpty }
     }
 

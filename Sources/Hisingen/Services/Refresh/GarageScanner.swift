@@ -36,6 +36,10 @@ final class GarageScanner {
     /// than read straight off `preferences`) so a test can drive the brand set without the
     /// system Keychain.
     private let hasResumableSession: (VehicleBrand) -> Bool
+    /// Vehicles the reader signed out of a connected account are not refreshed, do not enter
+    /// the fleet, and must not raise notifications. The account keeps its session, so discovery
+    /// still returns them; this is where they stop.
+    private let isVehicleDetached: (String) -> Bool
     /// Re-establishes a dormant brand's session before its vehicles are scanned (its provider
     /// is not kept warm). Only invoked for a brand other than the currently active one.
     private let restoreDormantSession: (VehicleBrand) async throws -> Void
@@ -62,6 +66,7 @@ final class GarageScanner {
          provider: @escaping (VehicleBrand) -> any VehicleProviding,
          hasResumableSession: @escaping (VehicleBrand) -> Bool,
          restoreDormantSession: @escaping (VehicleBrand) async throws -> Void,
+         isVehicleDetached: @escaping (String) -> Bool = { _ in false },
          diagnosticsStore: GarageScanDiagnosticsStore = .shared,
          initialDelay: TimeInterval = 45,
          loopInterval: TimeInterval = 5 * 60) {
@@ -70,6 +75,7 @@ final class GarageScanner {
         self.provider = provider
         self.hasResumableSession = hasResumableSession
         self.restoreDormantSession = restoreDormantSession
+        self.isVehicleDetached = isVehicleDetached
         self.diagnosticsStore = diagnosticsStore
         self.initialDelay = initialDelay
         self.loopInterval = loopInterval
@@ -175,12 +181,16 @@ final class GarageScanner {
 
         let selectedVIN = preferences.vin(for: brand)
         let providerCars = await provider.cars
+        // Remember every discovered car, including a dormant account's, so a later sign-out can
+        // tell a one-car account from one with a sibling even before this scan runs again.
+        preferences.rememberKnownVINs(providerCars.map(\.vin), for: brand)
         for car in providerCars {
             guard !Task.isCancelled, preferences.activeBrand == originalBrand,
                   !context.commandPipelineIsBusy, !context.refreshPipelineIsBusy else { return .abort }
             // If the user switched vehicles mid-scan, stand down at once: the coordinator
             // owns provider selection from that moment.
             if preferences.vin(for: brand) != selectedVIN { return .abort }
+            if isVehicleDetached(car.vin) { continue }
             if brand == originalBrand && car.vin == selectedVIN { continue }
             let state = try await provider.fetchVehicleState(vin: car.vin, features: .garageScan)
             guard preferences.activeBrand == originalBrand,

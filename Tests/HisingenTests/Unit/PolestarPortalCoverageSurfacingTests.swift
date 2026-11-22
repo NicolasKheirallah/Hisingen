@@ -144,6 +144,16 @@ struct PolestarPortalCoverageSurfacingTests {
         await api.setSessionForTesting(session)
         await api.configure(clientID: "client-id", clientSecret: "client-secret")
         await api.setAccessTokenForTesting("test-token")
+        // The quota counter backs onto process-global defaults when no store is injected, so
+        // every portal test run all day shares one number. Past a few thousand calls the
+        // refresh plan starts rotating endpoints out and this suite fails on whichever
+        // domain the hour puts last. A private always-fresh store keeps the plan at full
+        // breadth and keeps this suite's calls off the shared counter.
+        let quotaBox = QuotaBox()
+        PolestarDataPortalAPI.quotaStateStore = QuotaStateStore(
+            get: { quotaBox.value },
+            set: { count, date in quotaBox.value = (count, date) })
+        defer { PolestarDataPortalAPI.quotaStateStore = nil }
 
         CoverageSurfacingTransport.requestHandler = { request in
             let path = request.url?.path ?? ""
@@ -196,6 +206,150 @@ struct PolestarPortalCoverageSurfacingTests {
 
         let carSource = try await fetchState(payloads: endpointPayloads(targetSocSource: "APP"))
         #expect(carSource.energy.diagnostics?.targetSource == "APP")
+    }
+
+    // MARK: - G9 charge-target mode + the time it was set
+
+    @Test
+    func chargeTargetModeAndSetTimeReachTheSnapshot() async throws {
+        var payloads = endpointPayloads(pendingTarget: nil, pendingAmps: nil)
+        payloads["/charging/target-soc"] = (200, json("""
+        {"vin": "\(vin)",
+         "targetSoc": {"batteryChargeTargetLevel": 80, "chargeTargetLevelSettingType": "DAILY",
+                       "updatedAt": "2024-05-21T13:58:20Z", "source": "RCS"},
+         "metaReceivedAt": "2024-05-21T14:01:35Z"}
+        """))
+        let state = try await fetchState(payloads: payloads)
+        #expect(state.energy.targetPercentage == 80)
+        #expect(state.energy.chargeTargetSettingMode == .daily)
+        // The mode's own `updatedAt` is the time the target was set, and it fills the slot
+        // the shared "Last changed" note reads, which the portal path never filled before.
+        #expect(state.energy.targetPercentageReportedAt == Date(timeIntervalSince1970: 1_716_299_900))
+
+        // A token outside the vocabulary shows nothing new; the value itself still arrives.
+        payloads["/charging/target-soc"] = (200, json("""
+        {"vin": "\(vin)",
+         "targetSoc": {"batteryChargeTargetLevel": 80, "chargeTargetLevelSettingType": "FUTURE_MODE"},
+         "metaReceivedAt": "2024-05-21T14:01:35Z"}
+        """))
+        let unknown = try await fetchState(payloads: payloads)
+        #expect(unknown.energy.targetPercentage == 80)
+        #expect(unknown.energy.chargeTargetSettingMode == nil)
+        #expect(unknown.energy.targetPercentageReportedAt == nil)
+
+        // The short labels the charging card writes beside the target.
+        #expect(ChargeTargetSettingMode.daily.displayName == L10n.text("Daily"))
+        #expect(ChargeTargetSettingMode.longTrip.displayName == L10n.text("Long trip"))
+        #expect(ChargeTargetSettingMode.custom.displayName == L10n.text("Custom"))
+        #expect(ChargeTargetSettingMode(wireToken: "daily") == .daily)
+        #expect(ChargeTargetSettingMode(wireToken: nil) == nil)
+
+        // The shared note: a setting over a month old names its date on every surface that
+        // shows the value; a fresh one, or none reported, says nothing.
+        let now = Date(timeIntervalSince1970: 1_770_000_000)
+        let stale = now.addingTimeInterval(-31 * 86_400)
+        #expect(VehicleChargingCard.staleSettingNote(reportedAt: stale, now: now)
+            == L10n.format("Last changed %@", Format.dateFormatter.string(from: stale)))
+        #expect(VehicleChargingCard.staleSettingNote(reportedAt: now.addingTimeInterval(-29 * 86_400), now: now) == nil)
+        #expect(VehicleChargingCard.staleSettingNote(reportedAt: nil, now: now) == nil)
+
+        // The steppers' note: a queued change and the top of the range keep their place,
+        // and the stale date shows only when they do not.
+        #expect(NowInstrument.limitControlNote(queued: 85, base: 80, upperBound: 100,
+                changedAt: stale, format: { "\($0)%" }, now: now)
+            == L10n.format("%@ queued · applies when the car wakes", "85%"))
+        #expect(NowInstrument.limitControlNote(queued: nil, base: 100, upperBound: 100,
+                changedAt: stale, format: { "\($0)%" }, now: now) == L10n.text("Maximum"))
+        #expect(NowInstrument.limitControlNote(queued: nil, base: 80, upperBound: 100,
+                changedAt: stale, format: { "\($0)%" }, now: now)
+            == L10n.format("Last changed %@", Format.dateFormatter.string(from: stale)))
+        #expect(NowInstrument.limitControlNote(queued: nil, base: 80, upperBound: 100,
+                changedAt: now, format: { "\($0)%" }, now: now) == nil)
+    }
+
+    // MARK: - G10 amp-limit set time + discharge increase
+
+    @Test
+    func ampLimitSetTimeAndDischargeIncreaseReachTheSnapshot() async throws {
+        var payloads = endpointPayloads(pendingTarget: nil, pendingAmps: nil)
+        payloads["/charging/amp-limit"] = (200, json("""
+        {"vin": "\(vin)",
+         "ampLimit": {"ampLimit": 16, "source": "RCS", "updatedAt": "2024-05-21T12:03:20Z"},
+         "metaReceivedAt": "2024-05-21T14:01:35Z"}
+        """))
+        payloads["/telemetry/battery"] = (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_300_100)),
+         "batteryChargeLevelPercentage": 78.5,
+         "chargingStatusV2": "CHARGING_STATUS_V2_CHARGING",
+         "dischargeInfo": {"energyAvailable": 6.5, "energyAvailableIncrease": 1.2, "powerLimit": 8},
+         "metaReceivedAt": "2024-05-21T14:01:40Z"}
+        """))
+        let state = try await fetchState(payloads: payloads)
+        // The synced amp limit's own `updatedAt` fills the slot the shared "Last changed"
+        // note reads, the same way the target's did.
+        #expect(state.energy.currentLimitReportedAt == Date(timeIntervalSince1970: 1_716_293_000))
+        let diagnostics = try #require(state.energy.diagnostics)
+        // Discharge energy and the conditioning increase both reach the diagnostics the
+        // charging card reads; the increase was decoded but never copied before.
+        #expect(diagnostics.energyAvailableKwh == 6.5)
+        #expect(diagnostics.energyAvailableIncreaseKwh == 1.2)
+        #expect(diagnostics.powerLimitKw == 8)
+    }
+
+    // MARK: - G11 main climate word + air-quality cycle markers + raw portal keys
+
+    @Test
+    func mainClimateWordAndAirQualityMarkersSurface() async throws {
+        var payloads = endpointPayloads()
+        payloads["/telemetry/parking-climatization"] = (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_300_100)),
+         "runningStatus": "RUNNING_STATUS_ON",
+         "mainClimateRunningStatus": "MAIN_CLIMATE_RUNNING_STATUS_ON",
+         "ventilation": "VENTILATION_HEATING",
+         "runtimeLeftMinutes": 18,
+         "startReason": "START_REASON_REMOTE",
+         "metaReceivedAt": "2024-05-21T14:41:40Z"}
+        """))
+        payloads["/telemetry/pre-cleaning"] = (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_299_000)),
+         "runningStatus": "RUNNING_STATUS_OFF",
+         "startedAt": \(timestamp(1_716_160_800)),
+         "lastCycleCompleted": \(timestamp(1_716_169_200)),
+         "futureField": "some-value",
+         "futureNested": {"intensity": 2, "active": true},
+         "emptyField": null,
+         "metaReceivedAt": "2024-05-21T14:01:20Z"}
+        """))
+        let state = try await fetchState(payloads: payloads)
+        // The main climate's own running word reaches the climate surface beside the
+        // ventilation mode; the spec vocabulary renders as plain words.
+        #expect(state.climateStatus?.mainClimateRunningStatus == "MAIN_CLIMATE_RUNNING_STATUS_ON")
+        #expect(state.climateStatus?.mainClimateRunningName == L10n.text("On"))
+        // The cycle markers the air-quality card reads: when the running cycle started
+        // and when the previous one finished.
+        let air = try #require(state.airQuality)
+        #expect(air.startedAt?.timeIntervalSince1970 == 1_716_160_800)
+        #expect(air.lastCycleCompleted?.timeIntervalSince1970 == 1_716_169_200)
+        // A portal key this build does not decode stays visible raw; null carries no report.
+        let raw = try #require(air.unknownPortalFields)
+        let keys = raw.map(\.key)
+        #expect(keys.contains("futureField"))
+        #expect(raw.first { $0.key == "futureField" }?.value == "some-value")
+        #expect(keys.contains("futureNested"))
+        #expect(raw.first { $0.key == "futureNested" }?.value == "{\"active\": true, \"intensity\": 2}")
+        #expect(!keys.contains("emptyField"))
+        #expect(!keys.contains("vin") && !keys.contains("timestamp"))
+
+        // The name helper: spec words map, unspecified and absent hide, an unknown token
+        // renders cleaned-up instead of guessed.
+        func mainName(_ token: String?) -> String? {
+            VehicleClimateStatus(activity: .active, timeRemainingMinutes: nil,
+                                 timerTriggered: false, mainClimateRunningStatus: token).mainClimateRunningName
+        }
+        #expect(mainName("MAIN_CLIMATE_RUNNING_STATUS_OFF") == L10n.text("Off"))
+        #expect(mainName("MAIN_CLIMATE_RUNNING_STATUS_UNSPECIFIED") == nil)
+        #expect(mainName(nil) == nil)
+        #expect(mainName("MAIN_CLIMATE_RUNNING_STATUS_FUTURE") == "Future")
     }
 
     // MARK: - G3 climate start reason
@@ -373,7 +527,7 @@ struct PolestarPortalCoverageSurfacingTests {
     }
 }
 
-private final class CoverageSurfacingTransport: URLProtocol, @unchecked Sendable {
+final class CoverageSurfacingTransport: URLProtocol {
     nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (Int, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }

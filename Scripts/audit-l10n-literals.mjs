@@ -22,8 +22,17 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const sourcesDir = path.join(root, "Sources", "Hisingen");
-const enPath = path.join(sourcesDir, "Resources", "en.lproj", "Localizable.strings");
+// Every target that ships user-facing copy is walked: the app, the widget extension and the
+// shared intents module. The widget and intents hold displayName/description strings and
+// LocalizedStringResource titles, and a gate that only looked at Sources/Hisingen could not
+// see a new one, so those literals silently escaped both checks.
+const sourceDirs = [
+    path.join(root, "Sources", "Hisingen"),
+    path.join(root, "Sources", "HisingenWidget"),
+    path.join(root, "Sources", "HisingenIntents"),
+];
+const appDir = sourceDirs[0];
+const enPath = path.join(appDir, "Resources", "en.lproj", "Localizable.strings");
 const baselinePath = path.join(root, "Scripts", "l10n-literals-baseline.json");
 
 function walk(dir, files = []) {
@@ -56,7 +65,8 @@ const patterns = [
 ];
 
 const missing = new Map(); // key -> [file:line]
-for (const file of walk(sourcesDir)) {
+for (const dir of sourceDirs) {
+for (const file of walk(dir)) {
   const text = fs.readFileSync(file, "utf8");
   const relative = path.relative(root, file);
   text.split("\n").forEach((row, index) => {
@@ -72,6 +82,7 @@ for (const file of walk(sourcesDir)) {
       }
     }
   });
+}
 }
 
 const unbaselined = [...missing.keys()].filter((key) => !baseline.has(key));

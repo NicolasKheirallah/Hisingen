@@ -44,14 +44,23 @@ struct UnavailableFeatureCard: View {
         let reportedUnavailable = feature.map {
             state.freshness.unavailableFeatures.contains($0)
         } ?? false
+        // The provider's own status and reason, when it named one. A field that came back as
+        // ERROR with `PROPERTY_NOT_FOUND` is not the same thing as a cached snapshot, and the
+        // generic "did not report" wording hid the one fact a reader could act on.
+        let providerReason = feature.flatMap { state.providerReport?.reason(for: $0) }
         // A caller that supplies a reason is asserting there is one, so the card renders even
         // when the snapshot is live. Without that, a live snapshot with no rows produced no
         // section at all: not a placeholder, not an explanation, nothing.
-        guard state.freshness.isCached || reportedUnavailable || message != nil else { return nil }
-        let capability: CapabilitySummary = reportedUnavailable ? .unsupported : .unavailable
-        let explanation = message ?? (reportedUnavailable
-            ? L10n.text("This vehicle did not report this capability on the last refresh.")
-            : L10n.text("Showing cached data. This section returns when the next refresh succeeds."))
+        guard state.freshness.isCached || reportedUnavailable || message != nil
+                || providerReason != nil else { return nil }
+        let capability: CapabilitySummary = providerReason != nil
+            ? .unavailable
+            : (reportedUnavailable ? .unsupported : .unavailable)
+        let explanation = message
+            ?? providerReason.map { L10n.format("The provider reported %@.", $0) }
+            ?? (reportedUnavailable
+                ? L10n.text("This vehicle did not report this capability on the last refresh.")
+                : L10n.text("Showing cached data. This section returns when the next refresh succeeds."))
         return AnyView(Self(
             symbol: symbol, title: title, color: color, badge: badge,
             message: explanation, state: capability

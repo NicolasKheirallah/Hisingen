@@ -274,7 +274,7 @@ struct PolestarGRPCDiagnosticsTests {
 }
 
 /// 406s the v2 discovery request, serves a valid v1 document, and records each Accept version.
-private final class DiscoveryV2FallbackTransport: URLProtocol, @unchecked Sendable {
+private final class DiscoveryV2FallbackTransport: URLProtocol {
     private static let recorder = DiscoveryAcceptRecorder()
     static func acceptsSeen() -> [String] { recorder.acceptsByVersion() }
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -296,7 +296,7 @@ private final class DiscoveryV2FallbackTransport: URLProtocol, @unchecked Sendab
 }
 
 /// Serves a valid v2 document; any v1 request would mean the fallback fired wrongly.
-private final class DiscoveryV2PrimaryTransport: URLProtocol, @unchecked Sendable {
+private final class DiscoveryV2PrimaryTransport: URLProtocol {
     private static let recorder = DiscoveryAcceptRecorder()
     static func v1Requests() -> Int { recorder.v1Count() }
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -339,7 +339,7 @@ private final class CapabilityFailureCounts: @unchecked Sendable {
     func value(_ token: String) -> Int { lock.lock(); defer { lock.unlock() }; return counts[token, default: 0] }
 }
 
-private final class CapabilityFailureTransport: URLProtocol, @unchecked Sendable {
+private final class CapabilityFailureTransport: URLProtocol {
     static let counts = CapabilityFailureCounts()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -360,7 +360,7 @@ private final class CapabilityFailureTransport: URLProtocol, @unchecked Sendable
 
 /// Counts discovery requests so the single-flight can be asserted. Holds the first response open
 /// briefly so the concurrent callers are genuinely in flight together.
-private final class CountingDiscoveryTransport: URLProtocol, @unchecked Sendable {
+private final class CountingDiscoveryTransport: URLProtocol {
     private static let recorder = DiscoveryRequestCounter()
     static func requestCount() -> Int { recorder.count }
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -387,7 +387,7 @@ private final class DiscoveryRequestCounter: @unchecked Sendable {
 
 /// 406s the v2 document and serves a valid v1 one, with no shared recorder so it cannot interfere
 /// with the other discovery transports when tests run in parallel.
-private final class ClassifiedRejectionDiscoveryTransport: URLProtocol, @unchecked Sendable {
+private final class ClassifiedRejectionDiscoveryTransport: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
@@ -406,7 +406,7 @@ private final class ClassifiedRejectionDiscoveryTransport: URLProtocol, @uncheck
 
 /// What PCCS actually answers when a client is not on a service's allowlist: HTTP 200 with the
 /// refusal in the gRPC trailers, which is why the HTTP status alone cannot classify it.
-private final class AccessDeniedPCCSTransport: URLProtocol, @unchecked Sendable {
+private final class AccessDeniedPCCSTransport: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}

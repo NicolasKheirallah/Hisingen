@@ -75,7 +75,7 @@ extension PreferencesStore {
             || notifyRainWithWindowsOpen || notifyEveningUnlocked || notifyOpeningsLeftOpen
             || notifyServiceDue || notifyStaleTelemetry || notifySlowCharging
             || notifyPlugInReminder || notifyChargerConnection || notifyClimateChanges
-            || notifyUsageModeConvenience || notifyDailySummary
+            || notifyUsageModeConvenience || notifyDailySummary || notifyPriceThreshold
     }
     var openingsAlertDelayMinutes: Int { get { let value = d.integer(forKey: "notify_openings_delay_minutes"); return min(max(value == 0 ? 15 : value, 5), 60) } set { d.set(min(max(newValue, 5), 60), forKey: "notify_openings_delay_minutes") } }
     var plugInReminderThreshold: Int { get { let value = d.integer(forKey: "notify_plugin_threshold"); return min(max(value == 0 ? 40 : value, 10), 80) } set { d.set(min(max(newValue, 10), 80), forKey: "notify_plugin_threshold") } }

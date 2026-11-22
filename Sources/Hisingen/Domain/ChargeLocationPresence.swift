@@ -59,3 +59,50 @@ struct ChargeLocationPresence: Codable, Equatable, Sendable {
         return 2 * earthRadiusMeters * asin(min(1, sqrt(a)))
     }
 }
+
+/// What changed between two observations of the vehicle's saved charge location.
+///
+/// Triggers react to the change, not to the state: being parked at Home all day must not send
+/// anything, and a refresh that still reports Home must not send it again. The rule lives beside
+/// the 150 m match it depends on, so "arrived" and "matched" can never disagree.
+enum ChargeLocationTransition: Equatable, Sendable {
+    /// No saved location either time, or the same one as before.
+    case none
+    /// The car is at a saved location it was not at when last observed.
+    case arrived(ChargeLocationPresence)
+    /// The car is no longer at the saved location it was at when last observed.
+    case departed(from: ChargeLocationPresence)
+    /// The car moved straight from one saved location to another.
+    case moved(from: ChargeLocationPresence, to: ChargeLocationPresence)
+
+    static func between(previous: ChargeLocationPresence?,
+                        current: ChargeLocationPresence?) -> ChargeLocationTransition {
+        switch (previous, current) {
+        case (nil, nil):
+            return .none
+        case (nil, let current?):
+            return .arrived(current)
+        case (let previous?, nil):
+            return .departed(from: previous)
+        case (let previous?, let current?):
+            guard previous.locationID != current.locationID else { return .none }
+            return .moved(from: previous, to: current)
+        }
+    }
+
+    /// The location the car arrived at, whether it came from nowhere or from another saved spot.
+    var arrival: ChargeLocationPresence? {
+        switch self {
+        case .arrived(let presence), .moved(_, let presence): return presence
+        case .none, .departed: return nil
+        }
+    }
+
+    /// The location the car left, whether it went nowhere or to another saved spot.
+    var departure: ChargeLocationPresence? {
+        switch self {
+        case .departed(let presence), .moved(let presence, _): return presence
+        case .none, .arrived: return nil
+        }
+    }
+}

@@ -4,6 +4,18 @@ struct VehicleReadinessCard: View {
     let state: VehicleState
     let lowBatteryThreshold: Int
 
+    @Environment(\.preferencesStore) private var preferences
+    /// One long-lived EventKit store for the card's Add Reminder action, matching the
+    /// calendar settings card's pattern.
+    @State private var reminderWriter = ReminderWriter()
+
+    /// The name the reminder carries: the reader's nickname, or the brand fallback
+    /// the notification copy already uses.
+    private var reminderVehicleName: String {
+        let nickname = preferences.vehicleNickname(for: state.identity.vin)
+        return nickname.isEmpty ? state.model.brand.displayName : nickname
+    }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -16,6 +28,14 @@ struct VehicleReadinessCard: View {
                         if check.status == .unknown {
                             Text(L10n.text("Current condition is not confirmed by a fresh vehicle reading."))
                                 .hisType(.micro).foregroundStyle(.secondary)
+                        }
+                        if check.id == "battery", check.status == .attention {
+                            ReminderActionRow(title: "Add Plug-In Reminder") {
+                                await reminderWriter.addPlugInReminder(
+                                    vehicleName: reminderVehicleName,
+                                    batteryPercent: state.energy.batteryPercentage
+                                )
+                            }
                         }
                     }
                 }

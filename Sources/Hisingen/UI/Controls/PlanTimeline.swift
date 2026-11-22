@@ -1,3 +1,4 @@
+import EventKit
 import SwiftUI
 
 @MainActor
@@ -17,6 +18,14 @@ struct PlanTimeline: View {
     @Environment(\.preferencesStore) private var preferences
     @State private var inspectedEntry: Entry?
     @State private var pendingDelete: Entry?
+    /// Calendar write-back for the inspected schedule: one long-lived EventKit store,
+    /// the destination list, and the outcome line, all scoped to the details sheet.
+    @State private var eventStore = EKEventStore()
+    @State private var calendarSectionExpanded = false
+    @State private var calendarAccessDenied = false
+    @State private var writableCalendars: [EKCalendar] = []
+    @State private var calendarsLoaded = false
+    @State private var addedCalendarOutcome: (calendarTitle: String, outcome: ScheduleCalendarWriter.Outcome)?
 
     struct Entry: Identifiable {
         let id: String
@@ -73,7 +82,10 @@ struct PlanTimeline: View {
         )
     }
 
-    private static func scheduleIdentity(_ schedule: VehicleSchedule) -> String {
+    /// Stable identity of a schedule row. Also the dedupe key the calendar write-back
+    /// writes into the event's note, so the same schedule never lands twice on one
+    /// calendar no matter which surface offered the action.
+    static func scheduleIdentity(_ schedule: VehicleSchedule) -> String {
         let kind = schedule.kind.rawValue
         if let backendID = schedule.backendID, !backendID.isEmpty { return "\(kind)|\(backendID)" }
         let start = schedule.rowIdentity
@@ -184,6 +196,10 @@ struct PlanTimeline: View {
                         onOpenLocation(locationID)
                     }
                 }
+                if entry.next != nil {
+                    PanelRule()
+                    calendarWriteBackSection(entry)
+                }
                 HStack {
                     Spacer()
                     Button(L10n.text("Done")) { inspectedEntry = nil }
@@ -194,6 +210,18 @@ struct PlanTimeline: View {
             .padding(16)
             .frame(width: 340)
             .background(HisingenTheme.canvas)
+            .hisAnimation(Motion.stateChange, value: calendarSectionExpanded)
+            .task(id: calendarSectionExpanded) {
+                await loadWritableCalendarsIfNeeded()
+            }
+            .onChange(of: inspectedEntry?.id) { _, newValue in
+                // Reset only when the sheet closes: the context-menu path opens the
+                // sheet with the calendar section already expanded, and a reset on
+                // every id change would immediately fold it back up.
+                if newValue == nil {
+                    resetCalendarWriteBack()
+                }
+            }
         }
     }
 
@@ -244,7 +272,125 @@ struct PlanTimeline: View {
             if entry.locationID == nil, canDelete(entry.schedule) {
                 Button(L10n.text("Delete climate timer"), role: .destructive) { pendingDelete = entry }
             }
+            if entry.next != nil {
+                Button(L10n.text("Add to Calendar…")) {
+                    inspectedEntry = entry
+                    calendarSectionExpanded = true
+                }
+            }
         }
+    }
+
+    /// The destination picker inside the details sheet. Only writable calendars are
+    /// offered; the state line under it reports what happened on the reader's own Mac.
+    @ViewBuilder
+    private func calendarWriteBackSection(_ entry: Entry) -> some View {
+        Button {
+            calendarSectionExpanded.toggle()
+        } label: {
+            Label(L10n.text("Add to Calendar…"), systemImage: "calendar.badge.plus")
+                .hisType(.subhead)
+        }
+        .buttonStyle(.hisSecondary)
+        if calendarSectionExpanded {
+            if calendarAccessDenied {
+                Label(L10n.text("Calendar access is denied. Allow Hisingen in System Settings → Privacy & Security → Calendars."),
+                      systemImage: "lock.trianglebadge.exclamationmark")
+                    .hisType(.micro).foregroundStyle(HisingenTheme.semanticWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !calendarsLoaded {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.text("Loading writable calendars…"))
+                        .hisType(.micro).foregroundStyle(.secondary)
+                }
+            } else if writableCalendars.isEmpty {
+                Text(L10n.text("No writable calendars are available."))
+                    .hisType(.micro).foregroundStyle(.secondary)
+            } else {
+                Text(L10n.text("Destination"))
+                    .hisType(.caption, weight: .semibold).foregroundStyle(.secondary)
+                ForEach(writableCalendars, id: \.calendarIdentifier) { calendar in
+                    Button {
+                        addToCalendar(entry, calendar: calendar)
+                    } label: {
+                        HStack(spacing: 7) {
+                            Circle().fill(Color(nsColor: calendar.color))
+                                .frame(width: 8, height: 8)
+                            Text(calendar.title).hisType(.caption)
+                            Spacer()
+                            Text(calendar.source.title)
+                                .hisType(.micro).foregroundStyle(.secondary)
+                        }
+                        .frame(minHeight: 28)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel(L10n.format("Add to %@", calendar.title))
+                }
+            }
+            if let result = addedCalendarOutcome {
+                addedCalendarOutcomeLabel(result)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func addedCalendarOutcomeLabel(
+        _ result: (calendarTitle: String, outcome: ScheduleCalendarWriter.Outcome)
+    ) -> some View {
+        switch result.outcome {
+        case .created:
+            Label(L10n.format("Added to %@.", result.calendarTitle), systemImage: "checkmark.circle")
+                .hisType(.micro).foregroundStyle(HisingenTheme.semanticGood)
+                .hisCaptionLeading()
+        case .duplicate:
+            Label(L10n.format("Already on %@.", result.calendarTitle), systemImage: "checkmark.circle")
+                .hisType(.micro).foregroundStyle(.secondary)
+                .hisCaptionLeading()
+        case .noUpcomingStart:
+            Label(L10n.text("The schedule has no upcoming start."), systemImage: "exclamationmark.circle")
+                .hisType(.micro).foregroundStyle(HisingenTheme.semanticWarning)
+                .hisCaptionLeading()
+        case .saveFailed:
+            Label(L10n.text("The event could not be saved."), systemImage: "exclamationmark.circle")
+                .hisType(.micro).foregroundStyle(HisingenTheme.semanticWarning)
+                .hisCaptionLeading()
+        }
+    }
+
+    private func loadWritableCalendarsIfNeeded() async {
+        guard calendarSectionExpanded, !calendarsLoaded else { return }
+        let writer = ScheduleCalendarWriter(session: EventKitCalendarSession(store: eventStore))
+        guard await writer.requestEventAccessIfNeeded() else {
+            calendarAccessDenied = true
+            calendarsLoaded = true
+            return
+        }
+        writableCalendars = writer.writableCalendars()
+        calendarsLoaded = true
+    }
+
+    private func addToCalendar(_ entry: Entry, calendar: EKCalendar) {
+        let writer = ScheduleCalendarWriter(session: EventKitCalendarSession(store: eventStore))
+        let nickname = preferences.vehicleNickname(for: state.identity.vin)
+        let vehicleName = nickname.isEmpty ? state.model.brand.displayName : nickname
+        let outcome = writer.add(
+            schedule: entry.schedule,
+            nextStart: entry.next,
+            vehicleName: vehicleName,
+            dedupeKey: Self.scheduleIdentity(entry.schedule),
+            to: calendar
+        )
+        addedCalendarOutcome = (calendar.title, outcome)
+    }
+
+    private func resetCalendarWriteBack() {
+        calendarSectionExpanded = false
+        calendarAccessDenied = false
+        writableCalendars = []
+        calendarsLoaded = false
+        addedCalendarOutcome = nil
     }
 
     private func row(_ entry: Entry, leads: Bool) -> some View {

@@ -102,6 +102,7 @@ enum HomeSessionPricer {
 
         let slots = tibber.sorted { $0.start < $1.start }
 
+        if session.hasPriceableIntervals, !slots.isEmpty, let note = session.energyProfileNote { assumptions.append(note) }
         if session.hasPriceableIntervals, !slots.isEmpty {
             var cost = 0.0
             var priced = 0.0

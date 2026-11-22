@@ -21,6 +21,10 @@ Polestar and Volvo authentication are also kept separate.
 
 Switching cars doesn't mean mixing their histories or cached information together.
 
+### Volvo sign-in
+
+Volvo has moved to a new sign-in system. After you update, sign in to Volvo once more in Hisingen Settings, because a session from the old system does not work on the new one. On the new system, tick *Remember me* on Volvo's login page, otherwise the session ends with the browser login. A client ID that starts with `vid-` uses the new system. One that starts with `dc-` still uses the original system, which Volvo has said stops working after 31 January 2027.
+
 ## Notifications
 
 Hisingen can let you know about useful vehicle events without requiring the app to stay open in front of you.
@@ -43,6 +47,8 @@ Depending on the vehicle and the features you've enabled, notifications can incl
 * a car left in convenience mode for 30 minutes (opt-in), since convenience mode keeps systems on
   and can drain the 12 V battery
 * a daily summary (opt-in)
+* a weekly or monthly report (opt-in): one banner when the window ends, with distance, energy and
+  cost. The full report, including the maintenance log and depreciation, is on History
 * a climate session whose run time is nearly used up, or whose battery is too low
 * interactive banners: Lock and Mute This Vehicle on vehicle alerts, Resume Schedule
   from an interrupted-charging alert
@@ -52,6 +58,24 @@ permission and quiet hours. Sustained alerts keep their elapsed warning time acr
 signed out and asks you to sign in again even when notifications are off.
 
 Notification behaviour can be configured in Settings.
+
+## Reports
+
+History ends with **Period Report**. Pick a week or a month and step back through past windows to
+see what the car drove, the energy it used, what that cost at your electricity rate, and what you
+spent on maintenance. Copy puts the whole report on the clipboard; Export writes it as a text file.
+
+* **Trip costs** are distance × the consumption the car reported × your rate. A trip with no
+  consumption reading shows no cost rather than a zero. In automatic rate mode the price is the
+  average market price over the window, converted with your markup, charges and VAT; when no market
+  series covers the window the report says it used the fixed rate.
+* **Maintenance** is your own log: date, kind, what was done, odometer and cost. It stays on this
+  Mac and is never read from the car.
+* **Depreciation** is arithmetic on figures you enter under **Ownership figures** — what you paid,
+  when, and the annual decline you assume. Hisingen does not estimate a market value, and the
+  report prints the assumption it applied so the number can be checked.
+* **Recurring reports** (Settings → Automations) post one banner when a week or month ends, once
+  per window, with the same figures the report shows.
 
 ## macOS integration
 
@@ -72,9 +96,15 @@ Depending on your preferences this can include:
 * icon-only status
 
 **Quick Controls** in the menu bar panel include windows, Charge Now / Resume Schedule and
-pre-cleaning, where the car supports them. The menu bar item has VoiceOver actions,
-custom tab icons have descriptive labels in every language, and the price curve reads out the hour
-and price.
+pre-cleaning, where the car supports them. The status item's menu also carries **Timers**,
+**Software Updates** and **Charge Locations**: pause or resume a charging window or cabin timer
+the car reports, install or schedule an update it has already downloaded, save the car's current
+position as a charge location, and switch optimised charging at a saved location. A row that
+cannot run is dimmed with the same reason the Controls tab shows, and every row is reachable with
+the keyboard and through the VoiceOver Actions rotor. Anything that needs a typed value, such as
+a new schedule or a charge target, stays in the Controls tab. The menu bar item has VoiceOver
+actions, custom tab icons have descriptive labels in every language, and the price curve reads out
+the hour and price.
 
 ### Launch at Login
 
@@ -85,6 +115,15 @@ Hisingen can start automatically using the normal macOS Login Items system.
 Keyboard shortcuts are available for common actions such as navigating the app or switching between vehicles.
 
 Global shortcuts can require macOS Accessibility permission.
+
+### VoiceOver and keyboard
+
+Every chart exposes a value summary and the VoiceOver chart rotor, so its points can be read
+without seeing the plot. Controls that step a limit answer the standard increment and decrement
+gestures: the charge and current limit cards move one step up or down, and the heating steppers
+work the same way. Focus sections follow the screen, the tab bar then the tab's cards then the
+footer in the panel, and the header, section list and destination column in Settings. Reduce
+Motion keeps a quiet cross-fade where a transition would otherwise move.
 
 ### System Spotlight
 
@@ -110,6 +149,34 @@ and re-checks after sleep and when the calendar changes. The climate command tar
 vehicle and passes the same capability and feature checks as the manual control; because it is a
 preconfigured automation with nobody at the Mac to answer a prompt, it does not raise the
 device-owner confirmation even when that is required for the manual controls.
+
+### Reminders
+
+The cards that report a service inspection warning, tyre-pressure warnings, or a battery at
+or below the plug-in threshold each offer an Add Reminder action. The reminder is written
+through macOS Reminders (EventKit) to your default list; it stays on your Mac and is never
+sent anywhere. Its due date is a default you can change in Reminders: the plug-in reminder
+is due half an hour out, the service reminder at 09:00 on the day the vehicle says service
+is due, the tyre reminder at 09:00 tomorrow. Tapping again on the same day adds nothing,
+because the note carries a Hisingen key that says the reminder already exists.
+
+The Plug-In Reminder alert can also write the reminder for you. Switch on "Also Add to
+Reminders" under Notifications; Hisingen asks for Reminders access when you enable it, and
+the automated reminder is created only while that access is granted. It never raises the
+Reminders permission prompt on its own. The battery figure in its note follows the Private
+Notification Banners setting.
+
+### Calendar write-back
+
+A schedule on the Plan tab can be placed on a calendar: open its details, or right-click
+the row, and choose Add to Calendar. Hisingen asks for the same full calendar access the
+preconditioning feature uses, offers only calendars you can write to, and creates one
+event on the schedule's next start. A charging window keeps its reported end, also past
+midnight; a schedule without one becomes a 30-minute event. Each event's note carries a
+Hisingen schedule key, so adding the same schedule to the same calendar again does nothing.
+Hisingen never deletes events it created: a schedule can also be removed on the vehicle's
+side with no signal reaching the app, so removing the event is left to you, and the key
+line makes it easy to find.
 
 ### Apple Shortcuts
 
@@ -144,33 +211,36 @@ for local application navigation and automation. Recognized routes:
 | Route | Action | Brand |
 | --- | --- | --- |
 | `hisingen://lock` | Lock vehicle | Volvo, Polestar |
-| `hisingen://unlock` | Unlock vehicle (confirmation first) | Volvo, Polestar |
+| `hisingen://unlock` | Unlock vehicle | Volvo, Polestar |
 | `hisingen://climate/start?temp=21` | Start climate (temp optional, clamped to 16–30 °C) | Volvo, Polestar |
 | `hisingen://climate/stop` | Stop climate | Volvo, Polestar |
 | `hisingen://flash` | Flash lights | Volvo, Polestar |
 | `hisingen://honk-flash` | Honk + flash | Volvo, Polestar |
-| `hisingen://engine/start?minutes=15` | Start engine (`5`, `10` or `15` minutes, confirmation first) | Volvo |
+| `hisingen://engine/start?minutes=15` | Start engine (`5`, `10` or `15` minutes) | Volvo |
 | `hisingen://engine/stop` | Stop engine | Volvo |
 | `hisingen://precleaning/start` | Start cabin pre-cleaning | Polestar |
 | `hisingen://precleaning/stop` | Stop cabin pre-cleaning | Polestar |
-| `hisingen://windows/open` | Open all windows (confirmation first) | Polestar |
+| `hisingen://windows/open` | Open all windows | Polestar |
 | `hisingen://windows/close` | Close all windows | Polestar |
-| `hisingen://tailgate/open` | Open tailgate (confirmation first) | Polestar |
+| `hisingen://tailgate/open` | Open tailgate | Polestar |
 | `hisingen://tailgate/close` | Close tailgate | Polestar |
-| `hisingen://trunk/unlock` | Unlock trunk (confirmation first) | Polestar |
+| `hisingen://trunk/unlock` | Unlock trunk | Polestar |
 | `hisingen://charge-target?percent=80` | Set charge target (clamped to 40–100%) | Polestar |
 | `hisingen://charge-limit?amps=16` | Set charging current (clamped to 6–32 A) | Polestar |
 | `hisingen://charging/override-start` | Charge now, overriding the schedule | Polestar |
 | `hisingen://charging/override-stop` | Resume the charging schedule | Polestar |
 | `hisingen://ota/schedule?delay=120` | Schedule software installation (`120`, `480` or `720` minutes) | Polestar |
-| `hisingen://ota/install` | Install vehicle software now (confirmation first) | Polestar |
+| `hisingen://ota/install` | Install vehicle software now | Polestar |
 | `hisingen://ota/cancel` | Cancel software installation | Polestar |
 
 Links accept an optional `vin=` query to target a vehicle other than the selected one.
 
-Commands follow the same capability gates and confirmations as the in-app controls. A link
-never sends a command the active brand or the vehicle does not offer: it gets a local notice
-instead. Polestar commands also need a Polestar ID or Augmented connection; the Developer Portal
+Every link asks you to confirm before it sends a command. A link comes from outside the app, so
+nothing shows that you asked for it. The commands that are riskier in the app (unlock, trunk,
+tailgate open, windows open, horn, engine start and software install) also ask for your Mac
+password or Touch ID, as the in-app controls do. A link follows the same capability gates as the
+in-app controls and never sends a command the active brand or the vehicle does not offer: it gets
+a local notice instead. Polestar commands also need a Polestar ID or Augmented connection; the Developer Portal
 connection is read-only. Engine runtime and schedule delay must be one of the listed options,
 or the link is refused with a notice. Temperature, charge target and charging current are
 clamped to their ranges instead.
@@ -324,6 +394,12 @@ for credentials.
 * **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
   The export menu on the Log tab also offers a **Full Backup (JSON)**, and Settings can export
   your settings (see [Make it yours](#make-it-yours)).
+* **Vehicle report.** The report menu on the Car tab offers **Copy Vehicle Report**, which
+  puts the whole report on the clipboard, and **Share Vehicle Report…**, which shares it as a
+  PDF through the share sheet. Both follow Screenshot Privacy: with privacy on, the VIN is
+  masked and the registration and parking location are left out, and the shared file's name
+  never carries the VIN either way. **Export Vehicle Report…** saves the same report as
+  plain text.
 * **Handover pack.** **Car → Export Handover Pack…** writes a folder for a sale or trade: a
   summary, charging and trip CSVs without locations, an optional VIN (a checkbox in the save
   panel) and a checklist of the steps that still happen in the manufacturer app or in the car.
@@ -332,8 +408,19 @@ for credentials.
   Recording stays paused for the affected vehicles until the cleanup finishes, so queued writes
   cannot bring erased data back. A failure in local erasure is reported separately from a
   failure to clear credential storage.
-* **Sign out stays signed out.** Signing out clears the email, portal IDs, Volvo custom app, VIN
-  and Keychain items for that brand and the memory cache. An explicit per-brand flag stops
+* **Sign out keeps you on another registered car.** Signing out an account with more than one
+  car signs out only the active car. The car leaves Garage & Fleet, keeps the same local-history
+  rules, and the next car becomes active while the account stays signed in. Settings → Accounts →
+  Garage & Fleet lists the car under Signed Out Vehicles with Bring Back; its nickname and theme
+  survive, while its snapshot, command receipts and charging baseline are cleared. The same
+  confirmation offers Sign Out Entire Account… if you want to remove the whole account. A charger
+  paired to the signed-out car is unpaired, so Home Charging does not report a hidden vehicle.
+  Links, old notifications and Shortcuts naming the car do not bring it back on their own.
+* **Signing out the last car** removes that account's credentials; if another brand is connected,
+  Hisingen resumes its stored car instead of showing the login screen. With no other car
+  registered, it returns to the login screen and closes Settings.
+* **Sign out stays signed out.** Signing out an account clears its email, portal IDs, Volvo
+  custom app, VIN and Keychain items, and the memory cache. An explicit per-brand flag stops
   Hisingen from signing back in on relaunch from built-in developer credentials plus a lingering
   server-side grant. Saving credentials or signing in again lifts it. A cancelled or failed
   sign-in keeps your previous session.
@@ -358,7 +445,8 @@ In practical terms:
 | **Vehicle cache**                | Stored locally                                            |
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
-| **Calendar events**              | Read locally from calendars you select; never sent anywhere |
+| **Calendar events**              | Read locally from calendars you select; events you ask for are written back; never sent anywhere |
+| **Reminders**                    | Written locally through macOS Reminders when you ask Hisingen to; never sent anywhere |
 | **Map integration**              | Uses Apple services where applicable                      |
 | **Update checks**                | Uses Hisingen's signed Sparkle update feed                |
 
