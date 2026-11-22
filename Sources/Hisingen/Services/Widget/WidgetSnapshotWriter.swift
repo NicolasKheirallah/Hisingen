@@ -28,7 +28,9 @@ enum WidgetSnapshotWriter {
                 remove()
                 return
             }
-            publish(state, preferences: PreferencesStore(), now: Date())
+            let preferences = PreferencesStore()
+            publish(state, preferences: preferences, now: Date())
+            publishGarage(activeState: state, preferences: preferences)
         }
     }
 
@@ -45,9 +47,66 @@ enum WidgetSnapshotWriter {
         return write(snapshot, directory: directory) ? snapshot : nil
     }
 
+    /// Builds and writes the garage file the configurable widget reads to list the fleet.
+    /// Runs beside the active-car write on every completed refresh, so a car the reader
+    /// detached, disconnected or signed out drops out on the next refresh; the garage is
+    /// the enumeration, never an independent source of fresh readings.
+    @discardableResult
+    @MainActor static func publishGarage(
+        activeState: VehicleState,
+        preferences: PreferencesStore,
+        now: Date = Date(),
+        directory: URL? = nil,
+        stateStore: VehicleStateStore = VehicleStateStore(database: VehicleDatabase.shared)
+    ) -> VehicleWidgetGarageSnapshot? {
+        let cars = garageCars(
+            activeState: activeState, preferences: preferences, stateStore: stateStore, now: now)
+        guard !cars.isEmpty else { return nil }
+        let garage = VehicleWidgetGarageSnapshot(
+            schemaVersion: VehicleWidgetGarageSnapshot.currentSchemaVersion, cars: cars)
+        // No timeline reload here: the active-car write already asked for one, and the
+        // garage is only ever read through that same reload.
+        return write(garage, directory: directory) ? garage : nil
+    }
+
+    /// Enumerates the garage the widget can render: the active car with its fresh state
+    /// first, then every other known car's persisted reading. A VIN with no stored state
+    /// (known but never refreshed) has nothing to show, so it stays out — the widget
+    /// renders readings, and a placeholder entry per unscanned car would promise data the
+    /// app does not have. Detached vehicles drop out because `knownVINs(for:)` already
+    /// excludes them.
+    @MainActor
+    static func garageCars(
+        activeState: VehicleState,
+        preferences: PreferencesStore,
+        stateStore: VehicleStateStore,
+        now: Date = Date()
+    ) -> [VehicleWidgetSnapshot] {
+        var seen = Set<String>()
+        var vins: [String] = []
+        func push(_ vin: String) {
+            let normalized = vin.normalizedVIN
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { return }
+            vins.append(normalized)
+        }
+        push(activeState.identity.vin)
+        for brand in VehicleBrand.allCases {
+            preferences.knownVINs(for: brand).forEach(push)
+        }
+        return vins.compactMap { vin -> VehicleWidgetSnapshot? in
+            guard let state = vin == activeState.identity.vin.normalizedVIN
+                ? activeState
+                : stateStore.snapshot(for: vin)
+            else { return nil }
+            return snapshot(from: state, preferences: preferences, now: now)
+        }
+    }
+
     static func remove(directory: URL? = nil) {
-        guard let url = fileURL(directory: directory) else { return }
-        try? FileManager.default.removeItem(at: url)
+        for url in [fileURL(directory: directory), garageFileURL(directory: directory)] {
+            guard let url else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Maps one authoritative state onto the widget's display values. The reading is the
@@ -121,15 +180,30 @@ enum WidgetSnapshotWriter {
             logger.error("App Group container unavailable; widget snapshot not written")
             return false
         }
+        guard encodeAndWrite(snapshot, to: url) else { return false }
+        if isActive {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        return true
+    }
+
+    /// The garage twin of the active-car write, without the timeline reload: the reload is
+    /// owned by the active-car write that always runs beside it.
+    static func write(_ garage: VehicleWidgetGarageSnapshot, directory: URL? = nil) -> Bool {
+        guard let url = garageFileURL(directory: directory) else {
+            logger.error("App Group container unavailable; widget garage not written")
+            return false
+        }
+        return encodeAndWrite(garage, to: url)
+    }
+
+    private static func encodeAndWrite(_ value: some Encodable, to url: URL) -> Bool {
         do {
-            let data = try JSONEncoder().encode(snapshot)
+            let data = try JSONEncoder().encode(value)
             try data.write(to: url, options: .atomic)
         } catch {
             logger.error("Widget snapshot write failed: \(String(describing: error), privacy: .public)")
             return false
-        }
-        if isActive {
-            WidgetCenter.shared.reloadAllTimelines()
         }
         return true
     }
@@ -138,5 +212,11 @@ enum WidgetSnapshotWriter {
         let base = directory
             ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
         return base?.appendingPathComponent(VehicleWidgetSnapshot.fileName)
+    }
+
+    private static func garageFileURL(directory: URL?) -> URL? {
+        let base = directory
+            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
+        return base?.appendingPathComponent(VehicleWidgetGarageSnapshot.fileName)
     }
 }

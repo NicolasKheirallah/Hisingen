@@ -4001,6 +4001,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Opent Hisingen met de vergrendelopdracht klaar om te bevestigen.";
 "Start climate" = "Klimaat starten";
 "Opens Hisingen with the climate command ready to confirm." = "Opent Hisingen met de klimaatopdracht klaar om te bevestigen.";
+"Choose which car the widget shows." = "Kies welke auto de widget toont.";
+"Vehicle not on file — showing %@" = "Voertuig niet gevonden — %@ wordt getoond";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Logboekpartitie";

@@ -4012,6 +4012,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Opens Hisingen with the lock command ready to confirm.";
 "Start climate" = "Start climate";
 "Opens Hisingen with the climate command ready to confirm." = "Opens Hisingen with the climate command ready to confirm.";
+"Choose which car the widget shows." = "Choose which car the widget shows.";
+"Vehicle not on file — showing %@" = "Vehicle not on file — showing %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Log partition";

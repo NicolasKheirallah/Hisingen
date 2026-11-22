@@ -3993,6 +3993,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Avaa Hisingenin lukituskomento vahvistettavaksi.";
 "Start climate" = "Käynnistä ilmastointi";
 "Opens Hisingen with the climate command ready to confirm." = "Avaa Hisingenin ilmastointikomento vahvistettavaksi.";
+"Choose which car the widget shows." = "Valitse, minkä auton widget näyttää.";
+"Vehicle not on file — showing %@" = "Ajoneuvoa ei löydy — näytetään %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Lokin osio";

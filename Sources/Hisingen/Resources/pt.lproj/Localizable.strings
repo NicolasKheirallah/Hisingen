@@ -3993,6 +3993,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "Abre o Hisingen com o comando de bloqueio pronto a confirmar.";
 "Start climate" = "Iniciar o clima";
 "Opens Hisingen with the climate command ready to confirm." = "Abre o Hisingen com o comando de clima pronto a confirmar.";
+"Choose which car the widget shows." = "Escolhe que carro o widget mostra.";
+"Vehicle not on file — showing %@" = "Veículo não registado — a mostrar %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "Partição do registo";

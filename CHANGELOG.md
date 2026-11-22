@@ -3,6 +3,21 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- The desktop widget is now configurable per car. Its Edit sheet lists every car the app has
+  readings for, and a widget pinned to one car keeps showing that car even when another is
+  active in the app; the choice is WidgetKit-persisted per widget instance. If the chosen car
+  later leaves the account, the widget falls back to the active car and says so in a line under
+  its status; an unconfigured widget behaves exactly as before, following the active car. The
+  car list comes from a garage snapshot the app writes beside the single-car snapshot after
+  each completed refresh, in the same shared App Group container as before. The per-widget
+  picker uses a `WidgetConfigurationIntent`, which resolves inside the extension process and
+  so ships without the App Intents metadata a SwiftPM build cannot emit — that metadata remains
+  parked for Shortcuts and Siri discovery only.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added
