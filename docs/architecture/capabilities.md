@@ -61,6 +61,26 @@ From `VehicleCapabilityProfile.support(for:)`:
 
 This table is intentionally conservative; a Polestar 3 or 4 owner will typically see more capabilities marked `.supported` than a Polestar 1/5/6 owner not because Hisingen has verified less about those models, but because the table only asserts what's been reasonably confirmed. See [domain/capability-matrix.md](../domain/capability-matrix.md) for the full per-model, per-capability table with confidence labels.
 
+## Evidence in the inspector
+
+Two facts sit beside the capability flags but are not flags: what the account was granted, and
+why a field had no value. Volvo's token response names the granted scopes, and each wrapped
+Volvo field carries a `status` plus `unavailableReason`. Both are attached to the snapshot as a
+`ProviderCapabilityReport` (`VolvoScopeCatalog.report`) and rendered in the Info capabilities
+section: per-domain grant rows, the requested versus granted scope lists, and a row per degraded
+reading with the provider's own status and reason. `UnavailableFeatureCard` uses the same report
+to replace its generic "did not report this capability" line with the provider's reason when one
+exists. This is display evidence only; it never changes `support(for:)` or permits a command.
+
+The same report also carries the connection's domain-support map
+(`ProviderDomainSupportMap`). Developer Portal mode composes `PortalFallbackProvider` around the
+portal adapter: the map says which domains the portal structurally cannot serve (software,
+connectivity, commands), so a portal refresh fills those from the consumer session instead of
+reporting them missing, and a portal whose entitlement probe names a revoked grant, spent quota
+or missing credential is skipped in favour of the Polestar ID session with
+`freshness.servedByFallback` recorded. Developer Portal mode stays read-only regardless of the
+fallback; the command catalog and the provider both refuse writes.
+
 ## Consequence for remote commands
 
 `RemoteCommand.adapted(to:)` uses this same profile to *silently downgrade* a command before sending it. For example, if `hasSelectableClimateTemperature` is false (Polestar 2, `.vehicleManaged`), a `startClimate` command's requested temperature and seat-heating levels are reset to "unspecified" rather than sent and likely rejected. `CommandCoordinator` consults `CapabilityGate` before dispatching anything, so an unsupported command never reaches the network layer.

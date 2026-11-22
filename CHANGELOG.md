@@ -7,6 +7,16 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Volvo access, stated honestly.** The Info tab's capability section gains a provider access
+  inspector: it shows which Volvo scopes the token response granted, which requested scopes were
+  refused or never asked for, and, per feature, the provider's own `status` and
+  `unavailableReason` when a field came back without a value instead of a generic unavailable.
+  Developer Portal (`dataPortal`) mode gains a Polestar ID fallback: a revoked grant, a spent
+  daily quota or a missing credential no longer leaves every card dark, and the inspector names
+  the channel, the domains it can read and any fallback that served the refresh. The entitlement
+  probe and domain-support map live with the provider layer. New strings are translated in all
+  14 locales.
+
 ### Added
 
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging

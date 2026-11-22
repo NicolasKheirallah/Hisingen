@@ -363,7 +363,7 @@ actor PolestarDataPortalAPI {
         return url.absoluteURL
     }
 
-    private func authenticatedGET<T: Decodable & Sendable>(_ path: String, expectedVIN: String? = nil) async throws -> T {
+    func authenticatedGET<T: Decodable & Sendable>(_ path: String, expectedVIN: String? = nil) async throws -> T {
         // Hard-stop before the portal's own limiter does: refused calls still count against
         // the 10k/day meter, and the quota day rolls at UTC midnight.
         guard dailyCallCount < Self.dailyCallLimit else {

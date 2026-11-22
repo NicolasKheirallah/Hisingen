@@ -4065,3 +4065,31 @@
 "This vehicle service reports this value but cannot change it." = "此车辆服务可报告该值，但无法更改。";
 "No active Volvo subscription" = "没有有效的 Volvo 订阅";
 "Remote commands need an active subscription on this car." = "远程指令需要该车辆具有有效订阅。";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "车辆遥测";
+"Energy readings" = "能源读数";
+"Engine" = "发动机";
+"Vehicle health" = "车辆健康";
+"Granted" = "已授予";
+"Partly granted" = "部分授予";
+"Not granted" = "未授予";
+"Not requested" = "未请求";
+"Provider access" = "提供商访问权限";
+"Scopes this connection was granted, and readings the provider answered with a status." = "此连接已获授予的范围，以及提供商以状态回应的读数。";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "尚未记录任何范围授予。请重新登录以记录提供商授予的内容。";
+"Granted scopes" = "已授予范围";
+"Requested scopes" = "已请求范围";
+"Domains this connection can read" = "此连接可读取的领域";
+"Fallback" = "备用连接";
+"Scopes by feature" = "按功能列出的范围";
+"Readings the provider answered with a status" = "提供商以状态回应的读数";
+"These are the provider's own status and reason, not a generic unavailability." = "这些是提供商自己的状态和原因，并非笼统的不可用。";
+"The fallback connection served this refresh." = "本次刷新由备用连接提供。";
+"The provider reported %@." = "提供商报告：%@。";
+"No Developer Portal credentials are configured." = "尚未配置 Developer Portal 凭据。";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "未授予通过 Developer Portal 访问此车辆的权限。请在 Polestar 应用中重新启用数据共享。";
+"The Developer Portal daily call limit has been reached." = "已达到 Developer Portal 每日调用上限。";
+"Developer Portal access could not be verified." = "无法验证 Developer Portal 访问权限。";
+"The Developer Portal refresh failed." = "Developer Portal 刷新失败。";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal 为只读。远程控制需要 Polestar ID 或 Augmented 模式。";

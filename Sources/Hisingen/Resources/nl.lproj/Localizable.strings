@@ -4073,3 +4073,31 @@
 "This vehicle service reports this value but cannot change it." = "Deze voertuigdienst toont deze waarde, maar kan die niet wijzigen.";
 "No active Volvo subscription" = "Geen actief Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Opdrachten op afstand vereisen een actief abonnement voor deze auto.";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Voertuigtelemetrie";
+"Energy readings" = "Energiewaarden";
+"Engine" = "Motor";
+"Vehicle health" = "Voertuigstatus";
+"Granted" = "Toegekend";
+"Partly granted" = "Gedeeltelijk toegekend";
+"Not granted" = "Niet toegekend";
+"Not requested" = "Niet aangevraagd";
+"Provider access" = "Providertoegang";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Scopes die deze verbinding kreeg en waarden die de provider met een status beantwoordde.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "Er is nog geen scopetoekenning vastgelegd. Meld u opnieuw aan om vast te leggen wat de provider heeft toegekend.";
+"Granted scopes" = "Toegekende scopes";
+"Requested scopes" = "Aangevraagde scopes";
+"Domains this connection can read" = "Domeinen die deze verbinding kan lezen";
+"Fallback" = "Terugvalverbinding";
+"Scopes by feature" = "Scopes per functie";
+"Readings the provider answered with a status" = "Waarden die de provider met een status beantwoordde";
+"These are the provider's own status and reason, not a generic unavailability." = "Dit is de status en reden van de provider zelf, geen algemene onbeschikbaarheid.";
+"The fallback connection served this refresh." = "De terugvalverbinding heeft deze verversing geleverd.";
+"The provider reported %@." = "De provider meldde %@.";
+"No Developer Portal credentials are configured." = "Er zijn geen Developer Portal-inloggegevens geconfigureerd.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "Toegang tot dit voertuig via Developer Portal is niet toegekend. Schakel gegevensdeling opnieuw in de Polestar-app in.";
+"The Developer Portal daily call limit has been reached." = "De dagelijkse limiet voor Developer Portal-aanroepen is bereikt.";
+"Developer Portal access could not be verified." = "Toegang tot Developer Portal kon niet worden geverifieerd.";
+"The Developer Portal refresh failed." = "De verversing via Developer Portal is mislukt.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal is alleen-lezen. Afstandsbediening vereist de Polestar ID- of Augmented-modus.";

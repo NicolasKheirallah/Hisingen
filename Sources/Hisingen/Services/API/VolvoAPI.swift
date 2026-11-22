@@ -519,6 +519,13 @@ actor VolvoAPI {
               decoded.expiresIn > 0 else {
             throw VolvoError.decoding(operation: "token response")
         }
+        // A token response is the only place Volvo states what it actually granted. Both the
+        // authorization-code and the refresh grant pass through here, so the inspector's scope
+        // evidence stays current without a second request.
+        let grantedScopes = VolvoScopeCatalog.parseGrantedScopes(decoded.scope)
+        await MainActor.run {
+            preferences.recordVolvoGrantedScopes(grantedScopes, at: Date())
+        }
         return decoded
     }
 

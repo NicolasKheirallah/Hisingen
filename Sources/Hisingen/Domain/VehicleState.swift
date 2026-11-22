@@ -19,6 +19,10 @@ struct VehicleState: Codable, Equatable, Sendable {
     /// the cached copy drops `location`, so a restored snapshot never claims a stale spot.
     var chargeLocationPresence: ChargeLocationPresence? = nil
     var probedCapabilities: VehicleProbedCapabilities? = nil
+    /// What the provider stated about this connection's authorization and any reading it
+    /// answered with a status instead of a value. Optional so snapshots persisted before the
+    /// inspector existed decode unchanged.
+    var providerReport: ProviderCapabilityReport? = nil
 
     var otaCapabilities: VehicleOTACapabilities? = nil
     var powertrain: PowertrainType = .bev
@@ -40,6 +44,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         weather: VehicleWeather? = nil,
         location: VehicleLocation? = nil,
         probedCapabilities: VehicleProbedCapabilities? = nil,
+        providerReport: ProviderCapabilityReport? = nil,
         powertrain: PowertrainType = .bev,
         fuelSystem: FuelSystemSnapshot = .init(),
         otaCapabilities: VehicleOTACapabilities? = nil
@@ -59,6 +64,7 @@ struct VehicleState: Codable, Equatable, Sendable {
         self.weather = weather
         self.location = location
         self.probedCapabilities = probedCapabilities
+        self.providerReport = providerReport
         self.powertrain = powertrain
         self.fuelSystem = fuelSystem
         self.otaCapabilities = otaCapabilities
@@ -98,6 +104,7 @@ struct VehicleState: Codable, Equatable, Sendable {
             airQuality: airQuality,
             weather: weather,
             probedCapabilities: probedCapabilities,
+            providerReport: providerReport,
             powertrain: powertrain,
             fuelSystem: fuelSystem
         )

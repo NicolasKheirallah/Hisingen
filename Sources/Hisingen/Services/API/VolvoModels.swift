@@ -870,12 +870,16 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
     let refreshToken: String?
     let expiresIn: Int
     let tokenType: String?
+    /// The scopes this authorization actually granted, space-separated (RFC 6749 §4.2.2).
+    /// Volvo omits it on some grants; absent stays distinct from an empty grant.
+    let scope: String?
 
     private enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
         case tokenType = "token_type"
+        case scope
     }
 }
 

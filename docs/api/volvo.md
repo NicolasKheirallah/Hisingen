@@ -79,6 +79,16 @@ and the Info capabilities sheet shows each flag's support with "Recent service r
 source. The Connected Vehicle command list supplies the equivalent per-VIN probes for remote
 controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
 
+The token response's `scope` member is the one place Volvo states what an authorization actually
+granted. `VolvoScopeCatalog` records the requested scopes when a sign-in starts and the granted
+list on every token grant, persists both, and turns them into a per-domain grant
+(`granted`/`partly granted`/`not granted`/`not requested`/`unknown`). Wrapped fields keep their
+`status` and `unavailableReason`; every field that did not answer with a value is carried into
+the provider report, so the Info inspector shows Volvo's own reason (`ERROR ·
+PROPERTY_NOT_FOUND`) instead of a generic unavailable. A reported degradation also survives the
+snapshot encoder, so a restored offline copy keeps the explanation. The evidence is diagnostic:
+it never widens a control the capability profile or command catalog refuses.
+
 ## Remote commands
 
 `VolvoAPI.dispatchCommand` implements the public Connected Vehicle v2 command cases below:
@@ -125,4 +135,4 @@ Volvo's response envelope is inconsistent across endpoints/versions in practice:
 
 ## Relevant tests
 
-`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml`; see [operations/ci.md](../operations/ci.md).
+`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoCapabilityInspectorTests.swift` (scope grants and degraded-field reasons, including a full refresh against a sanitized transport), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml`; see [operations/ci.md](../operations/ci.md).

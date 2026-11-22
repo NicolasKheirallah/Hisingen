@@ -4081,3 +4081,31 @@
 "This vehicle service reports this value but cannot change it." = "Den här fordonstjänsten visar det här värdet men kan inte ändra det.";
 "No active Volvo subscription" = "Ingen aktiv Volvo-prenumeration";
 "Remote commands need an active subscription on this car." = "Fjärrkommandon kräver en aktiv prenumeration på den här bilen.";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Fordonstelemetri";
+"Energy readings" = "Energiavlasningar";
+"Engine" = "Motor";
+"Vehicle health" = "Fordonets skick";
+"Granted" = "Beviljad";
+"Partly granted" = "Delvis beviljad";
+"Not granted" = "Ej beviljad";
+"Not requested" = "Ej begärd";
+"Provider access" = "Leverantörsåtkomst";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Behörighetsomfång som den här anslutningen beviljades, och avläsningar som leverantören besvarade med en status.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "Ingen behörighet har registrerats ännu. Logga in igen för att registrera vad leverantören beviljade.";
+"Granted scopes" = "Beviljade behörighetsomfång";
+"Requested scopes" = "Begärda behörighetsomfång";
+"Domains this connection can read" = "Områden som den här anslutningen kan läsa";
+"Fallback" = "Reservanslutning";
+"Scopes by feature" = "Behörigheter per funktion";
+"Readings the provider answered with a status" = "Avläsningar som leverantören besvarade med en status";
+"These are the provider's own status and reason, not a generic unavailability." = "Det är leverantörens egen status och orsak, inte en allmän otillgänglighet.";
+"The fallback connection served this refresh." = "Reservanslutningen levererade den här uppdateringen.";
+"The provider reported %@." = "Leverantören rapporterade %@.";
+"No Developer Portal credentials are configured." = "Inga Developer Portal-uppgifter är konfigurerade.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "Åtkomst till det här fordonet via Developer Portal beviljades inte. Aktivera datadelning igen i Polestar-appen.";
+"The Developer Portal daily call limit has been reached." = "Daggränsen för Developer Portal-anrop har nåtts.";
+"Developer Portal access could not be verified." = "Åtkomsten till Developer Portal kunde inte verifieras.";
+"The Developer Portal refresh failed." = "Uppdateringen från Developer Portal misslyckades.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal är skrivskyddat. Fjärrkontroller kräver Polestar ID- eller Augmented-läge.";

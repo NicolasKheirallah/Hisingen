@@ -4082,3 +4082,31 @@
 "No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
 "Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Vehicle telemetry";
+"Energy readings" = "Energy readings";
+"Engine" = "Engine";
+"Vehicle health" = "Vehicle health";
+"Granted" = "Granted";
+"Partly granted" = "Partly granted";
+"Not granted" = "Not granted";
+"Not requested" = "Not requested";
+"Provider access" = "Provider access";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Scopes this connection was granted, and readings the provider answered with a status.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "No scope grant has been recorded yet. Sign in again to record what the provider granted.";
+"Granted scopes" = "Granted scopes";
+"Requested scopes" = "Requested scopes";
+"Domains this connection can read" = "Domains this connection can read";
+"Fallback" = "Fallback";
+"Scopes by feature" = "Scopes by feature";
+"Readings the provider answered with a status" = "Readings the provider answered with a status";
+"These are the provider's own status and reason, not a generic unavailability." = "These are the provider's own status and reason, not a generic unavailability.";
+"The fallback connection served this refresh." = "The fallback connection served this refresh.";
+"The provider reported %@." = "The provider reported %@.";
+"No Developer Portal credentials are configured." = "No Developer Portal credentials are configured.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app.";
+"The Developer Portal daily call limit has been reached." = "The Developer Portal daily call limit has been reached.";
+"Developer Portal access could not be verified." = "Developer Portal access could not be verified.";
+"The Developer Portal refresh failed." = "The Developer Portal refresh failed.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode.";

@@ -4065,3 +4065,31 @@
 "This vehicle service reports this value but cannot change it." = "Tämä ajoneuvopalvelu näyttää tämän arvon mutta ei voi muuttaa sitä.";
 "No active Volvo subscription" = "Ei aktiivista Volvo-tilausta";
 "Remote commands need an active subscription on this car." = "Etäkomennot edellyttävät aktiivista tilausta tähän autoon.";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Ajoneuvon telemetria";
+"Energy readings" = "Energialukemat";
+"Engine" = "Moottori";
+"Vehicle health" = "Ajoneuvon kunto";
+"Granted" = "Myönnetty";
+"Partly granted" = "Osittain myönnetty";
+"Not granted" = "Ei myönnetty";
+"Not requested" = "Ei pyydetty";
+"Provider access" = "Palveluntarjoajan käyttöoikeus";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Tälle yhteydelle myönnetyt käyttöoikeudet ja lukemat, joihin palveluntarjoaja vastasi tilalla.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "Käyttöoikeuksia ei ole vielä kirjattu. Kirjaudu uudelleen, jotta palveluntarjoajan myöntämät oikeudet tallennetaan.";
+"Granted scopes" = "Myönnetyt käyttöoikeudet";
+"Requested scopes" = "Pyydetyt käyttöoikeudet";
+"Domains this connection can read" = "Alueet, joita tämä yhteys voi lukea";
+"Fallback" = "Varayhteys";
+"Scopes by feature" = "Käyttöoikeudet ominaisuuksittain";
+"Readings the provider answered with a status" = "Lukemat, joihin palveluntarjoaja vastasi tilalla";
+"These are the provider's own status and reason, not a generic unavailability." = "Nämä ovat palveluntarjoajan oma tila ja syy, eivät yleinen käyttökatko.";
+"The fallback connection served this refresh." = "Varayhteys toimitti tämän päivityksen.";
+"The provider reported %@." = "Palveluntarjoaja ilmoitti: %@.";
+"No Developer Portal credentials are configured." = "Developer Portal -tunnuksia ei ole määritetty.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "Developer Portal -pääsyä tähän ajoneuvoon ei myönnetty. Ota tietojen jakaminen uudelleen käyttöön Polestar-sovelluksessa.";
+"The Developer Portal daily call limit has been reached." = "Developer Portal -kutsujen päiväraja on saavutettu.";
+"Developer Portal access could not be verified." = "Developer Portal -pääsyä ei voitu vahvistaa.";
+"The Developer Portal refresh failed." = "Developer Portal -päivitys epäonnistui.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal on vain luku -tila. Etäohjaus vaatii Polestar ID- tai Augmented-tilan.";

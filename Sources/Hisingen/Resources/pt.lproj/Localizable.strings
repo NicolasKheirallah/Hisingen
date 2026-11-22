@@ -4065,3 +4065,31 @@
 "This vehicle service reports this value but cannot change it." = "Este serviço do veículo indica este valor, mas não o pode alterar.";
 "No active Volvo subscription" = "Sem subscrição Volvo ativa";
 "Remote commands need an active subscription on this car." = "Os comandos remotos exigem uma subscrição ativa para este carro.";
+
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Telemetria do veículo";
+"Energy readings" = "Leituras de energia";
+"Engine" = "Motor";
+"Vehicle health" = "Estado do veículo";
+"Granted" = "Concedido";
+"Partly granted" = "Parcialmente concedido";
+"Not granted" = "Não concedido";
+"Not requested" = "Não solicitado";
+"Provider access" = "Acesso do fornecedor";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Âmbitos concedidos a esta ligação e leituras que o fornecedor respondeu com um estado.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "Ainda não foi registada qualquer concessão de âmbitos. Inicie sessão novamente para registar o que o fornecedor concedeu.";
+"Granted scopes" = "Âmbitos concedidos";
+"Requested scopes" = "Âmbitos solicitados";
+"Domains this connection can read" = "Domínios que esta ligação pode ler";
+"Fallback" = "Ligação de recurso";
+"Scopes by feature" = "Âmbitos por funcionalidade";
+"Readings the provider answered with a status" = "Leituras que o fornecedor respondeu com um estado";
+"These are the provider's own status and reason, not a generic unavailability." = "São o estado e o motivo do próprio fornecedor, não uma indisponibilidade genérica.";
+"The fallback connection served this refresh." = "A ligação de recurso serviu esta atualização.";
+"The provider reported %@." = "O fornecedor comunicou %@.";
+"No Developer Portal credentials are configured." = "Não estão configuradas credenciais do Developer Portal.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "O acesso a este veículo através do Developer Portal não foi concedido. Volte a ativar a partilha de dados na app Polestar.";
+"The Developer Portal daily call limit has been reached." = "O limite diário de chamadas do Developer Portal foi atingido.";
+"Developer Portal access could not be verified." = "Não foi possível verificar o acesso ao Developer Portal.";
+"The Developer Portal refresh failed." = "A atualização do Developer Portal falhou.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "O Developer Portal é só de leitura. Os controlos remotos requerem o modo Polestar ID ou Augmented.";
