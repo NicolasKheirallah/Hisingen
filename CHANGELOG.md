@@ -241,6 +241,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **The Charging Planner no longer drops a window on one failed send.** A start or a stop that
+  the command pipeline refused, which includes a request lost to the network, ended the window for
+  good: a failed stop at the window's end left the car charging into the dearer hours with no
+  second try. The planner now repeats a refused start or stop on the next minute ticks, up to five
+  sends, before it gives the window up. Both commands are safe to repeat.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and

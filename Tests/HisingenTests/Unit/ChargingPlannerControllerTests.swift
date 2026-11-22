@@ -339,8 +339,8 @@ struct ChargingPlannerControllerTests {
     }
 
     @Test
-    func aTerminalStopRefusalConsumesTheWindow() async {
-        let harness = autoStartedHarness(stopOutcomes: [.refused(reason: "no")])
+    func aRefusedStopIsRetriedOnTheNextPass() async {
+        let harness = autoStartedHarness(stopOutcomes: [.refused(reason: "network"), .sent(.accepted)])
 
         await harness.controller.evaluate()
         await settle()
@@ -349,11 +349,73 @@ struct ChargingPlannerControllerTests {
         harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
         await harness.controller.evaluate()
         await settle()
+        #expect(await harness.charger.stopCount == 1)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") != nil)
+
         harness.advance(to: plannerDate(2026, 2, 10, 4, 31))
         await harness.controller.evaluate()
         await settle()
+        #expect(await harness.charger.stopCount == 2)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
 
-        #expect(await harness.charger.stopCount == 1)
+    @Test
+    func aStopRefusedEveryTimeIsGivenUpAfterTheLimit() async {
+        let harness = autoStartedHarness(stopOutcomes: [])
+
+        await harness.controller.evaluate()
+        await settle()
+
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        let limit = ChargingPlannerController.maxRefusedSends
+        for minute in 0..<(limit + 2) {
+            harness.advance(to: plannerDate(2026, 2, 10, 4, 30 + minute))
+            await harness.controller.evaluate()
+            await settle()
+        }
+
+        #expect(await harness.charger.stopCount == limit)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
+    func aRefusedAutoStartIsRetriedOnTheNextPass() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            outcomes: [.refused(reason: "network"), .sent(.accepted)]
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+
+        harness.advance(to: plannerDate(2026, 2, 10, 3, 31))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.dispatchCount == 2)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") != nil)
+    }
+
+    @Test
+    func anAutoStartRefusedEveryTimeIsGivenUpAfterTheLimit() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            outcomes: []
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+
+        let limit = ChargingPlannerController.maxRefusedSends
+        for minute in 0..<(limit + 2) {
+            harness.advance(to: plannerDate(2026, 2, 10, 3, 30 + minute))
+            await harness.controller.evaluate()
+            await settle()
+        }
+
+        #expect(await harness.charger.dispatchCount == limit)
         #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
     }
 
