@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Garantia da bateria (restante)";
 "Battery and Power" = "Bateria e potência";
 "Battery and Range" = "Bateria e autonomia";
+"Dock icon" = "Ícone do Dock";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Mostrar o Hisingen no Dock, no seletor de apps e como selo de avisos";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Mostrar um selo no Dock enquanto algum veículo indicar avisos ou alarme";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Mostrar um selo no Dock enquanto algum veículo indicar avisos ou alarme. Ative o ícone do Dock (Aspeto → Barra de menus) para que o selo apareça.";
 "Position relative to car" = "Posição em relação ao carro";
 "First reading" = "Primeira leitura";
 "Above" = "Acima";

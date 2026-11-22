@@ -132,6 +132,10 @@
 "Battery Warranty Remaining" = "Battery Warranty Remaining";
 "Battery and Power" = "Battery and Power";
 "Battery and Range" = "Battery and Range";
+"Dock icon" = "Dock icon";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Show Hisingen in the Dock, the app switcher and the warning badge";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Show a dock badge while any vehicle reports warnings or an alarm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.";
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";

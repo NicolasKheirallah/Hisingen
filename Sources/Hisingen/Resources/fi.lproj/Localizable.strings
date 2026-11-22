@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Akkutakuu (jäljellä)";
 "Battery and Power" = "Akku ja teho";
 "Battery and Range" = "Akku ja toimintamatka";
+"Dock icon" = "Dock-kuvake";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Näytä Hisingen Dockissa, sovellusvaihtajassa ja varoitusmerkkinä";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen. Kytke Dock-kuvake päälle (Ulkoasu → Valikkorivi), jotta merkki näkyy.";
 "Position relative to car" = "Sijainti auton suhteen";
 "First reading" = "Ensimmäinen lukema";
 "Above" = "Yläpuolella";

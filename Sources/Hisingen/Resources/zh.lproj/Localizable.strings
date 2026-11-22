@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "电池保修（剩余里程）";
 "Battery and Power" = "电池与动力";
 "Battery and Range" = "电池与续航";
+"Dock icon" = "Dock 图标";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "在程序坞、应用切换器和警告标记中显示 Hisingen";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "当任一车辆报告警告或警报时显示程序坞标记";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "当任一车辆报告警告或警报时显示程序坞标记。打开 Dock 图标（外观 → 菜单栏）后标记才会显示。";
 "Position relative to car" = "相对于车辆的位置";
 "First reading" = "首项读数";
 "Above" = "上方";
