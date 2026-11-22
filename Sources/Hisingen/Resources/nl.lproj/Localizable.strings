@@ -1719,8 +1719,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kaartindeling";
+"Card view" = "Kaartweergave";
 "How mid-size cards flow on wide panels" = "Hoe middelgrote kaarten op brede panelen stromen";
 "Full Width" = "Volle breedte";
+"Full" = "Volledig";
 "Two Columns" = "Twee kolommen";
 "Every card uses the entire panel width" = "Elke kaart gebruikt de volledige paneelbreedte";
 "Cards flow side by side in two columns" = "Kaarten staan in twee kolommen naast elkaar";
@@ -4006,9 +4008,7 @@
 "Log partition" = "Logboekpartitie";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "De regel verschijnt wanneer het vertrekuur 0 °C of kouder is, regen of sneeuw heeft, of de wind of windstoten 40 km/h bereiken. Een klimatimer die binnen twee uur voor het vertrek start, geldt als dekking, en dan blijft de regel stil.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "Geen actief Volvo-abonnement";
-"Remote commands need an active subscription on this car." = "Opdrachten op afstand vereisen een actief abonnement op deze auto.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "De opdracht verliep voordat de auto hem uitvoerde.";
 "The vehicle reported a problem with this command." = "De auto meldde een probleem met deze opdracht.";
 "This vehicle does not support this command." = "Deze auto ondersteunt deze opdracht niet.";
@@ -4070,3 +4070,6 @@
 "Writable current limit" = "Schrijfbare stroomlimiet";
 "No writable current-limit entity is mapped for this charger." = "Er is geen schrijfbare stroomlimiet gekoppeld aan deze lader.";
 "Hisingen is not connected to a charger yet." = "Hisingen is nog niet met een lader verbonden.";
+"This vehicle service reports this value but cannot change it." = "Deze voertuigdienst toont deze waarde, maar kan die niet wijzigen.";
+"No active Volvo subscription" = "Geen actief Volvo-abonnement";
+"Remote commands need an active subscription on this car." = "Opdrachten op afstand vereisen een actief abonnement voor deze auto.";

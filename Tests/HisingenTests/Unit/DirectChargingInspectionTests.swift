@@ -140,7 +140,7 @@ struct DirectChargingInspectionTests {
         let home = TibberHome(id: "h1", name: "Villa", timeZone: nil, currency: "SEK", priceArea: "SE4",
                               gridCompany: "Vattenfall Eldistribution AB")
         for dark in [false, true] {
-            var pickCard = SettingsTibberCard(model: supplier)
+            let pickCard = SettingsTibberCard(model: supplier)
             pickCard.homes = [home]
             pickCard.selection = "h1"
             try await render(pickCard, width: 560, name: "tibber-pick",

@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Esquema dos cartões";
+"Card view" = "Vista do cartão";
 "How mid-size cards flow on wide panels" = "Como os cartões médios fluem em painéis largos";
 "Full Width" = "Largura total";
+"Full" = "Completa";
 "Two Columns" = "Duas colunas";
 "Every card uses the entire panel width" = "Cada cartão usa toda a largura do painel";
 "Cards flow side by side in two columns" = "Os cartões ficam lado a lado em duas colunas";
@@ -3998,9 +4000,7 @@
 "Log partition" = "Partição do registo";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "A linha aparece quando a hora de partida está a 0 °C ou menos, tem chuva ou neve, ou o vento ou as rajadas atingem 40 km/h. Um temporizador de climatização que começa nas duas horas anteriores à partida conta como cobertura, e a linha fica então silenciosa.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "Sem subscrição Volvo ativa";
-"Remote commands need an active subscription on this car." = "Os comandos remotos exigem uma subscrição ativa neste carro.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "O comando expirou antes de o carro o executar.";
 "The vehicle reported a problem with this command." = "O carro comunicou um problema com este comando.";
 "This vehicle does not support this command." = "Este carro não suporta este comando.";
@@ -4062,3 +4062,6 @@
 "Writable current limit" = "Limite de corrente editável";
 "No writable current-limit entity is mapped for this charger." = "Não há um limite de corrente editável associado a este carregador.";
 "Hisingen is not connected to a charger yet." = "O Hisingen ainda não está ligado a um carregador.";
+"This vehicle service reports this value but cannot change it." = "Este serviço do veículo indica este valor, mas não o pode alterar.";
+"No active Volvo subscription" = "Sem subscrição Volvo ativa";
+"Remote commands need an active subscription on this car." = "Os comandos remotos exigem uma subscrição ativa para este carro.";

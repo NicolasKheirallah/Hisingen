@@ -202,6 +202,64 @@ struct PanelInspectionTests {
         preferences.tabComposition = .default
         #expect(Set(nowRenders).count == 2, "Both appearances must produce different pixels")
 
+        // The same tab without the compact Now fold, so the full forms fit in one frame. This is
+        // the view a reader gets after choosing Full for the cards that offer it.
+        preferences.features = FeatureSelection(
+            enabled: preferences.features.enabled.union([.smartChargingPlanner])
+        )
+        preferences.tabComposition = Self.fullCardComposition()
+        let fullNow = VehicleTabView(
+            layout: TabLayout.resolve(preferences.tabComposition, for: .vehicle),
+            state: reading, cars: [], activeVin: vin, brand: .polestar,
+            remoteCommandInProgress: false, inFlightCommandID: nil,
+            onRemoteCommand: { _ in }, onSelectCar: { _ in }, onDismissCommandReceipt: { _ in },
+            error: nil, history: history, reverseGeocoder: ReverseGeocoder(),
+            imageCache: cache, onRefresh: {}, onOpenPlan: { _ in }, onOpenCar: { _ in },
+            onOpenSession: { _ in }
+        )
+        .frame(width: 620)
+        .background(HisingenTheme.canvas)
+        .environment(\.preferencesStore, preferences)
+        .environment(\.dynamicTypeSize, .large)
+        .environment(\.colorScheme, .light)
+        let light = try #require(NSAppearance(named: .aqua))
+        window.appearance = light
+        let fullHost = NSHostingView(rootView: fullNow)
+        let fullSize = fullHost.fittingSize
+        let fullFrame = NSRect(origin: .zero, size: fullSize)
+        fullHost.frame = fullFrame
+        window.contentView = fullHost
+        window.setContentSize(fullSize)
+        fullHost.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(600))
+        fullHost.layoutSubtreeIfNeeded()
+        let fullBitmap = try #require(fullHost.bitmapImageRepForCachingDisplay(in: fullFrame))
+        light.performAsCurrentDrawingAppearance { fullHost.cacheDisplay(in: fullFrame, to: fullBitmap) }
+        let fullData = try #require(fullBitmap.representation(using: .png, properties: [:]))
+        try fullData.write(to: output.appendingPathComponent("now-full-cards-light.png"))
+
+        // Settings, Tabs & Cards: the per-card Card view picker for the cards that have both forms.
+        let binder = PreferenceBinder(preferences: preferences, notify: { _ in }, bump: {})
+        let tabsAndCards = SettingsTabsAndCardsCard(binder: binder, state: reading)
+            .frame(width: 560, height: 1_400)
+            .background(HisingenTheme.canvas)
+            .environment(\.preferencesStore, preferences)
+            .environment(\.colorScheme, .light)
+            .defaultAppStorage(defaults)
+        let tabsHost = NSHostingView(rootView: tabsAndCards)
+        let tabsSize = tabsHost.fittingSize
+        let tabsFrame = NSRect(origin: .zero, size: tabsSize)
+        tabsHost.frame = tabsFrame
+        window.contentView = tabsHost
+        window.setContentSize(tabsSize)
+        tabsHost.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        tabsHost.layoutSubtreeIfNeeded()
+        let tabsBitmap = try #require(tabsHost.bitmapImageRepForCachingDisplay(in: tabsFrame))
+        light.performAsCurrentDrawingAppearance { tabsHost.cacheDisplay(in: tabsFrame, to: tabsBitmap) }
+        let tabsData = try #require(tabsBitmap.representation(using: .png, properties: [:]))
+        try tabsData.write(to: output.appendingPathComponent("settings-tabs-and-cards-light.png"))
+
         // Settings, Appearance: the Controls on Now tiles with three chosen and one blocked.
         preferences.nowQuickControls = [.climate, .locks, .windows]
         for dark in [false, true] {
@@ -252,5 +310,17 @@ struct PanelInspectionTests {
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             try data.write(to: output.appendingPathComponent("theme-editor-\(dark ? "dark" : "light").png"))
         }
+    }
+
+    /// The shipped Now with every card that has two forms set to Full. The shipped order stays
+    /// in place, so the render also proves a full card lifts out of Vehicle details instead of
+    /// hiding the information it was switched to show.
+    private static func fullCardComposition() -> TabComposition {
+        var composition = TabComposition.default
+        for item in [TabItemID.controlsChargingPlanner, .vehicleHomeCharger,
+                     .vehicleReadiness, .vehicleOpenings, .vehicleLocation] {
+            composition.setViewType(.full, for: item, on: .vehicle)
+        }
+        return composition
     }
 }

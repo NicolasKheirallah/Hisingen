@@ -191,7 +191,7 @@ struct ZaptecProvider: DirectChargerProvider {
         switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "wifi": return .wifi
         case "lte": return .mobile
-        case "none": return .none
+        case "none": return HomeChargerNetwork.none
         default: return nil
         }
     }

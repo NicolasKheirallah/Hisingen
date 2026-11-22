@@ -1719,8 +1719,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kortoppsett";
+"Card view" = "Kortvisning";
 "How mid-size cards flow on wide panels" = "Hvordan mellomstore kort flyter på brede paneler";
 "Full Width" = "Full bredde";
+"Full" = "Fullstendig";
 "Two Columns" = "To kolonner";
 "Every card uses the entire panel width" = "Hvert kort bruker hele panelbredden";
 "Cards flow side by side in two columns" = "Kortene ligger side om side i to kolonner";
@@ -4006,9 +4008,7 @@
 "Log partition" = "Loggpartisjon";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "Linjen vises når avgangstimen er 0 °C eller kaldere, har regn eller snø, eller vinden eller vindkastene når 40 km/h. En klimatimer som starter innen to timer før avgangen regnes som dekkende, og da er linjen stille.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "Ingen aktivt Volvo-abonnement";
-"Remote commands need an active subscription on this car." = "Fjernkommandoer krever et aktivt abonnement på denne bilen.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "Kommandoen utløp før bilen rakk å utføre den.";
 "The vehicle reported a problem with this command." = "Bilen rapporterte et problem med denne kommandoen.";
 "This vehicle does not support this command." = "Denne bilen støtter ikke denne kommandoen.";
@@ -4070,3 +4070,6 @@
 "Writable current limit" = "Skrivbar strømgrense";
 "No writable current-limit entity is mapped for this charger." = "Ingen skrivbar strømgrense er knyttet til denne laderen.";
 "Hisingen is not connected to a charger yet." = "Hisingen er ikke koblet til en lader ennå.";
+"This vehicle service reports this value but cannot change it." = "Denne kjøretøytjenesten viser denne verdien, men kan ikke endre den.";
+"No active Volvo subscription" = "Ingen aktiv Volvo-abonnement";
+"Remote commands need an active subscription on this car." = "Fjernkommandoer krever et aktivt abonnement på denne bilen.";

@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "卡片布局";
+"Card view" = "卡片视图";
 "How mid-size cards flow on wide panels" = "中等尺寸卡片在宽面板上的排布方式";
 "Full Width" = "全宽";
+"Full" = "完整";
 "Two Columns" = "两列";
 "Every card uses the entire panel width" = "每张卡片使用整个面板宽度";
 "Cards flow side by side in two columns" = "卡片并排分为两列";
@@ -3998,9 +4000,7 @@
 "Log partition" = "日志分区";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "当出发时段气温为 0 °C 或更低、有雨雪，或风速或阵风达到 40 km/h 时显示。若在出发前两小时内启动空调定时，则视为已覆盖，此行不再显示。";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "没有有效的 Volvo 订阅";
-"Remote commands need an active subscription on this car." = "远程指令需要此车辆有有效订阅。";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "指令在车辆执行前已过期。";
 "The vehicle reported a problem with this command." = "车辆报告此指令出现问题。";
 "This vehicle does not support this command." = "此车辆不支持此指令。";
@@ -4062,3 +4062,6 @@
 "Writable current limit" = "可写入的电流上限";
 "No writable current-limit entity is mapped for this charger." = "此充电器未映射可写入的电流上限实体。";
 "Hisingen is not connected to a charger yet." = "Hisingen 尚未连接充电器。";
+"This vehicle service reports this value but cannot change it." = "此车辆服务可报告该值，但无法更改。";
+"No active Volvo subscription" = "没有有效的 Volvo 订阅";
+"Remote commands need an active subscription on this car." = "远程指令需要该车辆具有有效订阅。";

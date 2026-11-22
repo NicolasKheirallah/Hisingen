@@ -188,10 +188,19 @@ All notable changes to Hisingen are documented in this file. The project follows
   keeps the line quiet. An information button names the thresholds.
 
 - Volvo premium subscription state is read from the Energy API's `voc-subscription` endpoint and
-  shown as a Controls banner when the car has no active subscription, which is one refusal reason
-  nothing else on screen accounted for.
+  kept on the vehicle snapshot for diagnosis, never raised as a warning. Volvo documents the field
+  as applying only to PHEV Classic vehicles, so it says nothing about a BEV: the `false` this car
+  returned was not a lapse. The request is now skipped for every powertrain except plug-in hybrid,
+  and the read stands itself down after a 404 instead of re-asking on every refresh.
 
 ### Changed
+
+- Cards that have a summary and a full form now carry a **Card view** choice in Settings → Tabs &
+  Cards. On Now the summary still links to the full card, but choosing **Full** draws the planner,
+  home charger, departure check, doors and location cards in place, with the information their
+  full form carries, so the reader no longer has to open another tab to read it. The choice
+  belongs to that tab's placement: the same card can stay compact on Now and complete on a tab of
+  the reader's own. A card on the tab its summary would open keeps the full form only.
 
 - NexBlue sessions are now priced by when their energy flowed. The session list gives only a total,
   so each session used to be priced at the average price over every hour the cable was in, idle
@@ -303,6 +312,11 @@ All notable changes to Hisingen are documented in this file. The project follows
   therefore see no intents. The measurements, the reproduction and the two ways out are in
   `docs/development/app-intents-metadata.md`, and `Scripts/appintents-metadata-status.sh`
   re-checks the state in one step.
+- `make ci` runs green again. The Focus filter's settings summary no longer binds a VIN it never
+  reads, the test target's stale `var`, redundant `try` and deprecated EventKit `.authorized`
+  checks are gone, and `Scripts/appintents-metadata-status.sh` quotes its source list.
+- `THIRD_PARTY_NOTICES.md` now names `auth.volvocars.com`, which Volvo's newer sign-in uses, and
+  credits Tibber's own .NET SDK for the live-measurement frame shapes Hisingen reimplements.
 
 ### Fixed
 
@@ -396,6 +410,38 @@ All notable changes to Hisingen are documented in this file. The project follows
 - Polling a sleeping car backs off to the 30 minute interval once its availability frame is more
   than 30 minutes old. A parked Volvo keeps answering with the frame it last sent, and the app
   spent about 100 requests in 8 hours learning nothing new.
+
+- Notarization was rejected because Sparkle's bundled helpers (`Autoupdate`, `Updater.app`, both
+  XPC services and the framework binary) ship ad-hoc signed, so Apple found no Developer ID
+  signature and no secure timestamp on any of them. A production build now re-signs that nested
+  code inside out before signing the app, and the archive notarizes and staples.
+
+- Climate on a Volvo no longer reads "Unavailable". Volvo reports no climate status, so the Now
+  control fell back to that word forever and always offered Start Climate: a climate started from
+  the app could not be stopped. Activity now comes from the command ledger when the car reports no
+  status, so Start flips to Stop, the fan spins, and the climate polling cadence engages.
+- The charge target and current limit are read-only where the vehicle service has no write for
+  them. Volvo's public API reports both values and cannot change either, so the controls rendered
+  as sliders that were reachable and permanently disabled. They now show the value with one line
+  saying it cannot be changed here.
+
+- The "Showing last-known values" banner no longer pins itself on a domain the provider never
+  serves. Volvo reports software updates, vehicle weather and charging schedules as unavailable on
+  every refresh; those were unioned into the retained set unconditionally, so the banner sat on
+  data from hours earlier and could not clear because nothing could ever refresh it. A retained
+  mark now requires the previous snapshot to hold a value for that domain.
+
+- Location errors now follow Volvo's documented meanings. A 403 is "scopes missing in the Bearer
+  token", so it means `location:read` was not granted and the fix is the approved-permissions
+  switch, not a regional restriction as the app used to claim. A 404 is "No location found for
+  vin", which resolves as soon as the car parks somewhere, so it no longer stands the endpoint
+  down for an hour.
+- A Zaptec charger that reports its network mode as "none" used to hide the connection row,
+  because that value resolved to nothing instead of to the state the charger reported. It now
+  reads **Not connected**, like every other mode.
+- The line the charging card shows when a vehicle service can report a charge target or current
+  limit but has no write for either stayed English in every other language. It is translated in
+  all 14 locales now, and two obsolete Volvo subscription strings are gone from each file.
 
 ## [3.0.1] - 2026-11-19
 

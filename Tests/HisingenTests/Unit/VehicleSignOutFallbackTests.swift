@@ -16,7 +16,7 @@ struct VehicleSignOutFallbackTests {
 
     @Test
     func aSiblingKeepsTheAccountAndBecomesTheActiveVehicle() async throws {
-        let harness = try Harness(active: .polestar,
+        let harness = Harness(active: .polestar,
                                   cars: [.polestar: [Self.polestarOne, Self.polestarTwo],
                                          .volvo: []])
         defer { harness.controller.stop() }
@@ -47,7 +47,7 @@ struct VehicleSignOutFallbackTests {
 
     @Test
     func bringingABackVehicleBackRestoresTheSelection() async throws {
-        let harness = try Harness(active: .polestar,
+        let harness = Harness(active: .polestar,
                                   cars: [.polestar: [Self.polestarOne, Self.polestarTwo],
                                          .volvo: []])
         defer { harness.controller.stop() }
@@ -146,7 +146,7 @@ struct VehicleSignOutFallbackTests {
 
     @Test
     func anotherConnectedBrandUsesItsStoredVehicleInsteadOfTheLoginScreen() async throws {
-        let harness = try Harness(active: .polestar,
+        let harness = Harness(active: .polestar,
                                   cars: [.polestar: [Self.polestarOne],
                                          .volvo: [Self.volvoOne]])
         defer { harness.controller.stop() }

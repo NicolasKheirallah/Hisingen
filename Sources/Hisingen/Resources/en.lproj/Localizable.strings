@@ -1819,8 +1819,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Card Layout";
+"Card view" = "Card view";
 "How mid-size cards flow on wide panels" = "How mid-size cards flow on wide panels";
 "Full Width" = "Full Width";
+"Full" = "Full";
 "Two Columns" = "Two Columns";
 "Every card uses the entire panel width" = "Every card uses the entire panel width";
 "Cards flow side by side in two columns" = "Cards flow side by side in two columns";
@@ -4017,8 +4019,7 @@
 "Log partition" = "Log partition";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet.";
 
-// Volvo command outcomes the API can report beyond the common set, and the premium
-// subscription state that explains a refusal no other signal accounts for.
+// Volvo command outcomes the API can report beyond the common set.
 "This vehicle does not support this command." = "This vehicle does not support this command.";
 "The command expired before the vehicle acted on it." = "The command expired before the vehicle acted on it.";
 "The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
@@ -4080,3 +4081,4 @@
 "Writable current limit" = "Writable current limit";
 "No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
 "Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
+"This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";

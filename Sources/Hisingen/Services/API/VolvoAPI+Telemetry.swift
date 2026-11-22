@@ -88,9 +88,12 @@ extension VolvoAPI {
             enabled: needsCommandCapabilities, key: "commands", vin: vin
         ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands", scope: .vehicle(vin)) }
 
-        // Premium VOC subscription. The answer changes when a customer renews or lapses, not
-        // between polls, and the fetch caches for an hour, so this costs one request per hour.
-        async let subscriptionTask: Bool? = fetchVOCSubscription(vin: vin)
+        // Premium VOC subscription, which Volvo documents as applying only to PHEV Classic. On a
+        // BEV the flag has no meaning, so this skips the request rather than asking a question
+        // that cannot apply to the car.
+        async let subscriptionTask: Bool? = fetchVOCSubscriptionIfRelevant(
+            vin: vin, powertrain: powertrain
+        )
 
         let fuel = try await fuelTask
         let energy = try await energyTask

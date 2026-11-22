@@ -112,7 +112,6 @@ extension VolvoAPI {
         selectedVIN = nil
         vehicleDetailsCache = [:]
         capabilityCache = [:]
-        subscriptionCache = [:]
         optionalTelemetryCache = [:]
         carImageData = [:]
         interiorImageData = [:]

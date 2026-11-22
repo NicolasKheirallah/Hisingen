@@ -30,12 +30,6 @@ struct ControlsBanners: View {
         return false
     }
 
-    /// Only a known lapse raises this. `nil` means the provider exposes no subscription resource
-    /// or the read failed, and an unknown must never look like a warning.
-    private var subscriptionLapsed: Bool {
-        state.identity.hasPremiumSubscription == false
-    }
-
     private var liveFeedback: RemoteCommandFeedback? {
         guard let feedback,
               feedback.targetVIN.map({ $0.caseInsensitiveCompare(state.identity.vin) == .orderedSame }) ?? true,
@@ -68,15 +62,11 @@ struct ControlsBanners: View {
             if vehicleOffline {
                 offlineBanner
             }
-            if subscriptionLapsed {
-                subscriptionBanner
-            }
         }
         // Keyed on each banner's driving identity so an insertion carries the
         // entrance while the removal rides the dismissing transaction.
         .hisAnimation(Motion.entrance, value: liveFeedback?.id)
         .hisAnimation(Motion.entrance, value: vehicleOffline)
-        .hisAnimation(Motion.entrance, value: subscriptionLapsed)
     }
 
     private func feedbackBanner(_ feedback: RemoteCommandFeedback) -> some View {
@@ -139,30 +129,6 @@ struct ControlsBanners: View {
             try? await Task.sleep(for: .seconds(window))
             withAnimation(Motion.resolve(Motion.cardChange)) { dismissedFeedbackID = feedback.id }
         }
-    }
-
-    /// A lapsed premium subscription is why a command can be refused with no fault anywhere else.
-    /// Naming it here saves the reader from working through privacy mode, sleep, and signal first.
-    private var subscriptionBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "creditcard")
-                .hisType(.subhead)
-                .foregroundStyle(HisingenTheme.semanticWarning)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.text("No active Volvo subscription"))
-                    .hisType(.label, weight: .semibold)
-                Text(L10n.text("Remote commands need an active subscription on this car."))
-                    .hisType(.micro)
-                    .foregroundStyle(HisingenTheme.inkMuted)
-            }
-            Spacer()
-        }
-        .padding(10)
-        .padding(.leading, 2)
-        .hisNotice(HisingenTheme.semanticWarning)
-        .transition(.move(edge: .top).combined(with: .opacity))
-        .accessibilityElement(children: .combine)
     }
 
     private var offlineBanner: some View {

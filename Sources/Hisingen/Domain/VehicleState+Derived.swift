@@ -81,8 +81,30 @@ extension VehicleState {
         return percentage >= BatteryLevel.chargingCompletePercentage ? .chargingComplete : .charging
     }
 
+    /// How long a started climate is assumed to still run when the car cannot say.
+    /// Only used for a provider with no climate-status resource, so this window is the sole bound.
+    static let unobservableClimateSessionLimit: TimeInterval = 30 * 60
+
+    /// Volvo publishes no climate-status resource, so `climateStatus` is always nil there and
+    /// every Start/Stop decision read `false`: the app could start a climate it had no way to
+    /// stop, the Now row said "Unavailable", and the climate polling cadence never engaged. The
+    /// command ledger does know a start was accepted, so it stands in when the car says nothing.
     var isClimateActive: Bool {
-        climateStatus?.activity.isActiveSession == true
+        if let active = climateStatus?.activity.isActiveSession { return active }
+        return receiptClimateIsRunning
+    }
+
+    /// True when no climate status is available but the newest climate receipt is a start that was
+    /// not refused and is still inside the session window. A later stop, or an expired window,
+    /// ends it, so the button reverts to Start on its own.
+    var receiptClimateIsRunning: Bool {
+        let climateReceipts = commandState.receipts
+            .filter { $0.commandIdentifier == "start-climate" || $0.commandIdentifier == "stop-climate" }
+            .sorted { $0.issuedAt > $1.issuedAt }
+        guard let latest = climateReceipts.first,
+              latest.commandIdentifier == "start-climate",
+              !latest.status.isTimedOut else { return false }
+        return Date().timeIntervalSince(latest.issuedAt) < Self.unobservableClimateSessionLimit
     }
 
     /// Models that share the 2024 long-range pack revision (82 kWh nominal, 79 kWh usable).

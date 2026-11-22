@@ -2243,7 +2243,10 @@ Called at runtime. No code from them ships in Hisingen.
 * **[Tibber](https://developer.tibber.com/):** optional Home Charging reads the reader's home name
   and 15-minute import prices from `api.tibber.com`, with the reader's own access token. The
   token stays in the macOS Keychain; see [PRIVACY.md](PRIVACY.md). Used under the
-  [Tibber developer terms](https://developer.tibber.com/).
+  [Tibber developer terms](https://developer.tibber.com/). The live-measurement websocket
+  frames follow the shapes of Tibber's own .NET SDK
+  ([tibber/Tibber.SDK.NET](https://github.com/tibber/Tibber.SDK.NET)); Hisingen reimplements
+  them in Swift and ships no code from it.
 * **Map links:** the location buttons open Apple Maps (`maps.apple.com`) or Google Maps
   (`maps.google.com`, `www.google.com/maps`) with the vehicle's coordinates in the link. Nothing
   is sent to either until the user clicks.
@@ -2253,7 +2256,7 @@ Called at runtime. No code from them ships in Hisingen.
 * **Volvo Cars:** the APIs are published for third-party developers and used under the
   [Volvo Cars Developer Portal terms](https://developer.volvocars.com/terms-and-conditions) and
   any API-specific terms of the account that registers the application. Hosts:
-  `api.volvocars.com` and `volvoid.eu.volvocars.com`.
+  `api.volvocars.com`, `auth.volvocars.com` and `volvoid.eu.volvocars.com`.
 * **Polestar:** credentials for the Developer Portal (the EU Data Act "Data Portal" API) are
   issued under Polestar's terms. The sign-in, GraphQL and gRPC interfaces are not publicly
   documented. Hisingen's support for them comes from public community research and Hisingen's own

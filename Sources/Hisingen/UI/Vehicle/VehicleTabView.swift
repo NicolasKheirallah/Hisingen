@@ -78,9 +78,7 @@ struct VehicleTabView: View {
         let rows = Self.cardRows(layout: layout, features: features, twoColumns: twoColumns)
         VStack(spacing: HisingenTheme.sectionSpacing) {
             if usesCompactNow {
-                let overview: Set<TabItemID> = [
-                    .vehicleSwitcher, .vehicleHero, .vehicleReadiness, .vehicleReceipts, .vehicleAttention
-                ]
+                let overview = Self.compactOverviewItems(layout: layout)
                 cardStack(rows.filter { row in row.first.map(overview.contains) == true })
                 let details = rows.compactMap { row -> [TabItemID]? in
                     let items = row.filter { !overview.contains($0) && hasSecondaryContent($0) }
@@ -148,6 +146,19 @@ struct VehicleTabView: View {
         }
     }
 
+    /// The cards Now keeps above the fold. A card the reader switched to its full form joins
+    /// them: choosing Full is a request to read that card in place, so folding it into Vehicle
+    /// details would put the same information one click away instead.
+    static func compactOverviewItems(layout: TabLayout) -> Set<TabItemID> {
+        var items: Set<TabItemID> = [
+            .vehicleSwitcher, .vehicleHero, .vehicleReadiness, .vehicleReceipts, .vehicleAttention
+        ]
+        for item in layout.items where CardViewSupport.hasMultipleViews(item) {
+            if layout.viewType(for: item) == .full { items.insert(TabItemCatalog.canonicalID(item)) }
+        }
+        return items
+    }
+
     static func cardRows(layout: TabLayout, features: FeatureSelection, twoColumns: Bool) -> [[TabItemID]] {
         let nowItems = TabItemCatalog.nowInlineItems
         let orderedItems = layout.includesNewItems
@@ -197,7 +208,9 @@ struct VehicleTabView: View {
                 onDismissCommandReceipt: onDismissCommandReceipt, onVerifyReceipt: onVerifyReceipt,
                 feedback: feedback, onAuthorizeRemoteCommands: onAuthorizeRemoteCommands,
                 onOpenPlan: onOpenPlan, onOpenCar: onOpenCar, onOpenSession: onOpenSession,
-                compact: true, repeatsDisconnectedStatus: !draws(.vehicleHero),
+                viewType: layout.viewType(for: item),
+                showsHomePlan: !draws(.vehicleHomeCharger),
+                repeatsDisconnectedStatus: !draws(.vehicleHero),
                 showsExceptions: item == .vehicleHero ? draws(.vehicleExceptions) : combinesAttention,
                 showsCommandReceipts: draws(.vehicleReceipts),
                 showsWeatherIcon: draws(.vehicleWeather),

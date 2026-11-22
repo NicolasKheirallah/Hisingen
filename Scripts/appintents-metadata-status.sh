@@ -14,7 +14,10 @@ bundle=${1:-releases/Hisingen.app}
 
 if [ -d "$bundle/Contents/Resources/Metadata.appintents" ]; then
     echo "OK   Metadata.appintents is present in $bundle"
-    ls "$bundle/Contents/Resources/Metadata.appintents" | sed 's/^/     /'
+    for entry in "$bundle/Contents/Resources/Metadata.appintents"/*; do
+        [ -e "$entry" ] || continue
+        printf '     %s\n' "${entry##*/}"
+    done
     exit 0
 fi
 
@@ -42,7 +45,7 @@ fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/hisingen-appintents.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-printf '%s\n' $intent_sources > "$tmp/sources.txt"
+printf '%s\n' "$intent_sources" > "$tmp/sources.txt"
 
 toolchain="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
 sdk=$(xcrun --sdk macosx --show-sdk-path)

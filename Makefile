@@ -144,7 +144,8 @@ app: $(if $(SKIP_BUILD),,build)
 	@# The extension signs first with its own entitlements, then the app signs without
 	@# --deep so this signature survives: codesign's --deep would push the app's
 	@# entitlements into every nested bundle ("almost never what you want" per its man
-	@# page), and Sparkle ships a valid signature of its own that is preserved instead.
+	@# page). Sparkle arrives ad-hoc signed, so a production build re-signs its nested
+	@# code with this identity before signing the app around it.
 ifeq ($(IDENTITY),-)
 	codesign --force -s - --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
 	codesign --force -s - --entitlements Resources/Hisingen.entitlements $(APP)
@@ -155,6 +156,18 @@ else
 		else echo "Requested signing identity is unavailable: $(IDENTITY)" >&2; exit 1; fi; \
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
+	@# Sparkle ships its helpers ad-hoc signed. Apple's notary requires a Developer ID
+	@# signature with a secure timestamp on every executable in the bundle, so each one is
+	@# re-signed here, innermost first, then the framework that contains them, then the app.
+	@for nested in \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"; do \
+		codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$$nested" || exit 1; \
+	done
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$(APP)/Contents/Frameworks/Sparkle.framework"
 	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
 	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing."

@@ -368,7 +368,7 @@ private final class FakeReminderSession: ReminderStoreSession {
         self.status = status
         if let defaultList {
             self.defaultList = defaultList
-        } else if status == .fullAccess || status == .authorized {
+        } else if status == .fullAccess {
             let list = EKCalendar(for: .reminder, eventStore: scratch)
             list.title = "Hisingen Test List"
             self.defaultList = list
@@ -414,7 +414,7 @@ private final class FakeCalendarSession: CalendarWritingSession {
         self.status = status
         let calendar = EKCalendar(for: .event, eventStore: scratch)
         calendar.title = "Hisingen Test Calendar"
-        self.calendars = status == .fullAccess || status == .authorized ? [calendar] : []
+        self.calendars = status == .fullAccess ? [calendar] : []
     }
 
     func seedEvent(calendar: EKCalendar, notes: String) {
