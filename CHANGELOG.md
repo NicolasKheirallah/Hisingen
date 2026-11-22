@@ -241,6 +241,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **The planner no longer shows Swedish carbon intensity for another market, or a "kr" sign for
+  another currency.** The live carbon line asked Electricity Maps for `SE-<price zone>` whatever
+  the market, so a Tibber home elsewhere saw Sweden's figure beside its own plan. The line and its
+  setting now appear for Sweden only. The planner's "Saves" figure and its tomorrow's-prices
+  notice used a fixed "kr" and now use the currency symbol saved in Settings, like the other cost
+  rows.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and

@@ -99,7 +99,7 @@ struct ChargingPlannerCard: View {
     /// possible here. The manual grid intensity in Settings remains the emissions estimate's
     /// input and is never substituted for this line.
     private static func gridCarbon(preferences: PreferencesStore, zone: ElspotZone) async -> GridCarbonReading? {
-        guard preferences.hasElectricityMapsKey else { return nil }
+        guard ElectricityMapsClient.covers(preferences.marketCountry), preferences.hasElectricityMapsKey else { return nil }
         let keychain = preferences.keychain
         return await Task.detached(priority: .utility) {
             guard let key = try? keychain.readElectricityMapsKey(), !key.isEmpty else { return nil }
@@ -390,7 +390,7 @@ struct ChargingPlannerCard: View {
             : L10n.format("Charge %@ over %@ to reach %d%%", Format.energyKwh(plan.energyKwh), durationText(plan.hours), target)
 
         let savingsLine = plan.savings > 0.5
-            ? L10n.format("Saves %@", Format.currency(plan.savings, symbol: "kr"))
+            ? L10n.format("Saves %@", Format.currency(plan.savings, symbol: preferences.currencySymbol))
             : L10n.text("Charging now is cheapest")
 
         return PlannerModel(

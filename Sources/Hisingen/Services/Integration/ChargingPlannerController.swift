@@ -310,7 +310,7 @@ final class ChargingPlannerController {
                 "Cheapest hour tomorrow: %@ – %@ at %@ /kWh.",
                 Format.shortTime(date: cheapestHour.start),
                 Format.shortTime(date: cheapestHour.end),
-                Format.currency(cheapestHour.averagePrice, symbol: "kr")
+                Format.currency(cheapestHour.averagePrice, symbol: preferences.currencySymbol)
             )
         } else {
             body = L10n.text("Tomorrow's spot prices have arrived.")
