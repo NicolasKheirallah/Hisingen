@@ -9,6 +9,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- Shortcuts covers the rest of the command surface: **tailgate open/close**, **window
+  open/close**, **install/cancel software update**, **set charging timer**, **set climate timer**
+  and **list saved charge locations**. Timers take `HH:MM` strings and refuse anything else with a
+  message instead of guessing, and every one of these routes through the same command path,
+  capability gates and vehicle resolution as the Controls tab.
+### Added
+
 - Notification banners carry **Unlock**, **Start Climate** and **View Details** next to the
   existing Lock and Mute. Unlock and climate require device authentication like every other
   command button, and they take the same capability gates as the app. Climate uses the saved
