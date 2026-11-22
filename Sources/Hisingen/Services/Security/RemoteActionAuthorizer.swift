@@ -69,8 +69,16 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         }
     }
 
+    /// How long the confirmation stays open before it counts as declined. While it is open the
+    /// dispatch lane is held, so an alert nobody sees would otherwise answer every later command
+    /// and automation with "busy".
+    static let confirmationTimeout: TimeInterval = 120
+
     private static func runConfirmationAlert(_ command: RemoteCommand, vehicle: String,
                                              temperatureUnit: TemperatureUnit) -> Bool {
+        // A menu-bar app is not frontmost when a deep link or a Shortcut raises this, and an
+        // alert from a background app can open behind the windows the person is working in.
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = command.risk == .destructive ? .critical : .warning
         alert.messageText = command.title(temperatureUnit: temperatureUnit)
@@ -86,6 +94,11 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         ) + consequence
         alert.addButton(withTitle: L10n.text("Send Command"))
         alert.addButton(withTitle: L10n.text("Cancel"))
+        let expiry = Timer(timeInterval: confirmationTimeout, repeats: false) { _ in
+            NSApp.abortModal()
+        }
+        RunLoop.main.add(expiry, forMode: .common)
+        defer { expiry.invalidate() }
         return alert.runModal() == .alertFirstButtonReturn
     }
 
