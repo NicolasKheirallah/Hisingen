@@ -9,10 +9,14 @@ import UserNotifications
 /// `.deepLink` is a `hisingen://` URL opened by another app or a web page. Nothing shows that
 /// the person at the Mac asked for it, so it always gets the confirmation sheet, even for a
 /// routine command.
+/// `.commandLine` is `hisingen cli send` in a terminal. The person typed it, so the risk table
+/// decides what needs confirming exactly as it does for a click in the app; the confirmation
+/// itself is the `--confirm` flag, which the authorizer the terminal installs reads.
 enum RemoteCommandOrigin: Sendable {
     case userInitiated
     case automation
     case deepLink
+    case commandLine
 }
 
 /// The vehicle and provider a command was approved for. This value stays fixed while
@@ -245,7 +249,7 @@ final class CommandCoordinator {
         let approved: Bool
         isAuthorizing = true
         switch origin {
-        case .userInitiated, .deepLink:
+        case .userInitiated, .deepLink, .commandLine:
             approved = await self.authorizer.authorize(
                 adapted,
                 vehicle: vehicle.isEmpty ? L10n.text("the selected vehicle") : vehicle,

@@ -1,3 +1,8 @@
+"\"%@\" is a switch and takes no value." = "\"%@\" is a switch and takes no value.";
+"\"%@\" is not a valid value." = "\"%@\" is not a valid value.";
+"\"%@\" is not an option of \"%@\"." = "\"%@\" is not an option of \"%@\".";
+"\"%@\" needs a value." = "\"%@\" needs a value.";
+"\"%@\" takes a different number of values." = "\"%@\" takes a different number of values.";
 "%.1f s request" = "%.1f s request";
 "%@ Capabilities" = "%@ Capabilities";
 "%@ Open" = "%@ Open";
@@ -45,6 +50,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "A software installation can only be scheduled between %d minutes and %d days from now.";
 "A software update is available. The vehicle downloads it automatically." = "A software update is available. The vehicle downloads it automatically.";
 "A software update is ready to install." = "A software update is ready to install.";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "A timer needs --start and --stop times, for example --start 07:30 --stop 17:00.";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "A vehicle service is temporarily unavailable. Retrying automatically.";
 "AQI & particulate matter sensors" = "AQI & particulate matter sensors";
 "About Hisingen" = "About Hisingen";
@@ -134,7 +140,15 @@
 "Battery and Range" = "Battery and Range";
 "Available optimised charging" = "Available optimised charging";
 "Bidirectional charging" = "Bidirectional charging";
+"Blocked:" = "Blocked:";
+"Commands:" = "Commands:";
 "Dock icon" = "Dock icon";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry.";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen asks before it sends %@. Add --confirm to send it anyway.";
+"Hisingen command line" = "Hisingen command line";
+"Name the command to send, for example \"hisingen cli send lock\"." = "Name the command to send, for example \"hisingen cli send lock\".";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "No vehicle is set up in Hisingen. Sign in on this Mac first.";
+"Ready: %@" = "Ready: %@";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Show Hisingen in the Dock, the app switcher and the warning badge";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Show a dock badge while any vehicle reports warnings or an alarm";
 "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.";
@@ -195,6 +209,7 @@
 "Charger power" = "Charger power";
 "Charging" = "Charging";
 "Save token" = "Save token";
+"The charge level must be between %d%% and %d%%." = "The charge level must be between %d%% and %d%%.";
 "This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
 "The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
 "This is already the highest setting." = "This is already the highest setting.";
@@ -204,9 +219,12 @@
 "Choose a vehicle first; muting applies to one car at a time." = "Choose a vehicle first; muting applies to one car at a time.";
 "Next service projection has no date." = "Next service projection has no date.";
 "Finding the address…" = "Finding the address…";
+"Unknown command \"%@\"." = "Unknown command \"%@\".";
+"Unknown option \"%@\"." = "Unknown option \"%@\".";
 "Unrecognised state: %@" = "Unrecognised state: %@";
 "No charging telemetry has been reported for this vehicle yet." = "No charging telemetry has been reported for this vehicle yet.";
 "Try Again" = "Try Again";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "kr per kWh" = "kr per kWh";
 "%@ kr" = "%@ kr";
 "This is the newest page." = "This is the newest page.";

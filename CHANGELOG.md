@@ -7,6 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **A command line for remote commands.** `hisingen cli vehicles` lists every vehicle this Mac
+  knows, which one is selected, how old its reading is and what each command's capability gate
+  answer is, with the gate's own sentence for anything blocked. `hisingen cli send` sends one
+  command to one vehicle through the same gate, confirmation, provider, audit and receipt path as
+  the app, the deep links and the Shortcuts intents; `--confirm` answers the confirmation the app
+  would ask for, `--json` prints one object for scripting, and a refusal exits non-zero with the
+  app's own wording. See [the command line](docs/remote-controls.md#command-line).
+
 - A **Norway grid-tariff preset** for Elvia: day 46.40 and night 31.40 øre per kWh, weekdays
   06–22 as the day window, with VAT, elavgift and Enova included exactly as on the invoice.
   Research into the other three markets says they cannot be expressed by this model at all — Denmark

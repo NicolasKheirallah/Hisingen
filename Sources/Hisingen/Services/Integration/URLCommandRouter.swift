@@ -43,9 +43,10 @@ final class URLCommandRouter: NSObject {
     /// climate slider uses when a vehicle advertises no limits.
     private static let climateTemperatureRange = VehicleControlSettings().temperatureRange
     /// The runtimes and delays the Controls tab pickers offer, so a link can only ask for what
-    /// the in-app surface can ask for.
-    private static let engineRuntimeMinutes = [5, 10, 15]
-    private static let otaScheduleDelayMinutes = [120, 480, 720]
+    /// the in-app surface can ask for. The command line reads the same two lists for the same
+    /// reason: an argument it accepts is one the pickers could have offered.
+    static let engineRuntimeMinutes = [5, 10, 15]
+    static let otaScheduleDelayMinutes = [120, 480, 720]
 
     init(context: any URLCommandRouterContext) {
         self.context = context

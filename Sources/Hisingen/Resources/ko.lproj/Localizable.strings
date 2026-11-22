@@ -1,4 +1,9 @@
 "" = "";
+"\"%@\" is a switch and takes no value." = "\"%@\"은(는) 스위치라서 값을 받지 않습니다.";
+"\"%@\" is not a valid value." = "\"%@\"은(는) 올바른 값이 아닙니다.";
+"\"%@\" is not an option of \"%@\"." = "\"%@\"은(는) \"%@\"의 옵션이 아닙니다.";
+"\"%@\" needs a value." = "\"%@\"에는 값이 필요합니다.";
+"\"%@\" takes a different number of values." = "\"%@\"의 값 개수가 다릅니다.";
 "%.0f °C" = "%.0f °C";
 "%.1f kWh High-Voltage Pack" = "%.1f kWh 고전압 배터리 팩";
 "%.1f kWh Lithium-ion Pack" = "%.1f kWh 리튬이온 팩";
@@ -49,6 +54,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "소프트웨어 설치는 지금부터 %d분 후에서 %d일 후 사이로만 예약할 수 있습니다.";
 "A software update is available. The vehicle downloads it automatically." = "소프트웨어 업데이트가 있습니다. 차량이 자동으로 다운로드합니다.";
 "A software update is ready to install." = "설치할 수 있는 소프트웨어 업데이트가 있습니다.";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "타이머에는 --start와 --stop 시간이 필요합니다. 예: --start 07:30 --stop 17:00.";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "차량 서비스를 일시적으로 사용할 수 없습니다. 자동으로 다시 시도합니다.";
 "AQI & particulate matter sensors" = "AQI 및 미세먼지 센서";
 "About Hisingen" = "Hisingen 정보";
@@ -138,7 +144,15 @@
 "Battery and Range" = "배터리 및 주행 가능 거리";
 "Available optimised charging" = "사용 가능한 최적화 충전";
 "Bidirectional charging" = "양방향 충전";
+"Blocked:" = "차단됨:";
+"Commands:" = "명령:";
 "Dock icon" = "Dock 아이콘";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "종료 코드: 0 전송됨, 2 사용할 수 없는 인수, 3 거부됨, 4 승인되지 않음, 5 전송되지 않았으며 다시 시도해도 안전합니다.";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen은 %@을(를) 보내기 전에 확인합니다. 그래도 보내려면 --confirm을 추가하세요.";
+"Hisingen command line" = "Hisingen 명령줄";
+"Name the command to send, for example \"hisingen cli send lock\"." = "보낼 명령을 지정하세요. 예: \"hisingen cli send lock\".";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "Hisingen에 설정된 차량이 없습니다. 먼저 이 Mac에서 로그인하세요.";
+"Ready: %@" = "준비됨: %@";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Dock, 앱 전환기 및 경고 배지에 Hisingen 표시";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "차량이 경고나 알람을 보고하는 동안 Dock 배지 표시";
 "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "차량이 경고나 알람을 보고하는 동안 Dock 배지 표시. 배지가 나타나려면 Dock 아이콘을 켜십시오(화면 표시 → 메뉴 막대).";
@@ -1021,6 +1035,7 @@
 "Temporarily unavailable" = "일시적으로 사용할 수 없음";
 "Temporarily unavailable: %@" = "일시적으로 사용할 수 없음: %@";
 "Test" = "테스트";
+"The charge level must be between %d%% and %d%%." = "충전 수준은 %d%%에서 %d%% 사이여야 합니다.";
 "The command was delivered to the vehicle." = "명령이 차량에 전달되었습니다.";
 "The last refresh could not read: %@" = "마지막 새로 고침에서 %@ 정보를 읽지 못했습니다.";
 "The last software update failed." = "마지막 소프트웨어 업데이트에 실패했습니다.";
@@ -1095,7 +1110,9 @@
 "Unknown" = "알 수 없음";
 "Unknown (%@)" = "알 수 없음 (%@)";
 "Unknown Volvo model" = "알 수 없는 Volvo 모델";
+"Unknown command \"%@\"." = "알 수 없는 명령 \"%@\"입니다.";
 "Unknown model" = "알 수 없는 모델";
+"Unknown option \"%@\"." = "알 수 없는 옵션 \"%@\"입니다.";
 "Unlock" = "잠금 해제";
 "Unlock Doors" = "도어 잠금 해제";
 "Unlock Trunk" = "트렁크 잠금 해제";
@@ -1112,6 +1129,7 @@
 "Updated" = "업데이트됨";
 "Updated %@" = "업데이트됨: %@";
 "Usable Pack Capacity" = "사용 가능한 배터리 용량";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "사용법: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "Use Default Developer Keys" = "기본 개발자 키 사용";
 "User Setting. Max AC charging current limit configured in vehicle charging settings." = "사용자 설정. 차량 충전 설정에서 구성한 AC 최대 충전 전류 제한입니다.";
 "User Setting. Selected high-voltage battery charge limit target." = "사용자 설정. 선택한 고전압 배터리 충전 제한 목표입니다.";

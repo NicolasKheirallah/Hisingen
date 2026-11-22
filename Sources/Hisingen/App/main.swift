@@ -16,6 +16,14 @@ if CommandLine.arguments.contains("--ci-smoke-test") {
     exit(0)
 }
 
+// The command-line surface is a mode of this binary, answered before AppKit or the app's
+// composition starts: `Hisingen cli vehicles`, `Hisingen cli send lock --confirm`. It shares the
+// app's commands, gate, confirmation and audit code rather than reimplementing them, which is why
+// it lives here and not in a target of its own.
+if let commandLineExitCode = CommandLineEntryPoint.runIfRequested(CommandLine.arguments) {
+    exit(commandLineExitCode)
+}
+
 @MainActor
 private func activateExistingInstanceIfNeeded() -> Bool {
     guard let bundleID = Bundle.main.bundleIdentifier else { return false }

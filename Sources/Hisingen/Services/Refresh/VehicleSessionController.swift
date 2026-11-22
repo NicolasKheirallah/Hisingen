@@ -284,22 +284,13 @@ final class VehicleSessionController {
 
     func resolvedBrand(for vin: String) -> VehicleBrand {
         let upper = vin.normalizedVIN
-        if let snapshot = fleetStore.snapshot(for: upper) {
-            return snapshot.model.brand
-        }
-        if !preferences.vin(for: .volvo).isEmpty && upper == preferences.vin(for: .volvo).uppercased() {
-            return .volvo
-        }
-        if !preferences.vin(for: .polestar).isEmpty && upper == preferences.vin(for: .polestar).uppercased() {
-            return .polestar
-        }
-        if VehicleBrand.isVolvoVIN(upper) {
-            return .volvo
-        }
-        if upper.hasPrefix("YS") || upper.hasPrefix("LP") {
-            return .polestar
-        }
-        return preferences.activeBrand
+        // The brand rule lives in `VehicleBrandResolver` because the command-line surface asks
+        // the same question from a process with no shell; the snapshot this controller already
+        // holds answers the dormant-account case for both of them.
+        return VehicleBrandResolver.brand(
+            for: upper,
+            snapshotBrand: fleetStore.snapshot(for: upper)?.model.brand,
+            preferences: preferences)
     }
 
     @discardableResult

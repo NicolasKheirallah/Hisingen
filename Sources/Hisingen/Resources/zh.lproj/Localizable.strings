@@ -1,4 +1,9 @@
 "" = "";
+"\"%@\" is a switch and takes no value." = "“%@”是开关，不接受值。";
+"\"%@\" is not a valid value." = "“%@”不是有效的值。";
+"\"%@\" is not an option of \"%@\"." = "“%@”不是“%@”的选项。";
+"\"%@\" needs a value." = "“%@”需要一个值。";
+"\"%@\" takes a different number of values." = "“%@”接受的值的数量不同。";
 "%.0f °C" = "%.0f °C";
 "%.1f kWh High-Voltage Pack" = "%.1f kWh 高压电池组";
 "%.1f kWh Lithium-ion Pack" = "%.1f kWh 锂离子电池组";
@@ -49,6 +54,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "软件安装只能安排在从现在起 %d 分钟至 %d 天之间。";
 "A software update is available. The vehicle downloads it automatically." = "有可用的软件更新，车辆会自动下载。";
 "A software update is ready to install." = "软件更新已可安装。";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "定时器需要 --start 和 --stop 时间，例如 --start 07:30 --stop 17:00。";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "车辆服务暂时不可用，正在自动重试。";
 "AQI & particulate matter sensors" = "空气质量与颗粒物传感器";
 "About Hisingen" = "关于 Hisingen";
@@ -138,7 +144,15 @@
 "Battery and Range" = "电池与续航";
 "Available optimised charging" = "可用的优化充电";
 "Bidirectional charging" = "双向充电";
+"Blocked:" = "受阻：";
+"Commands:" = "命令";
 "Dock icon" = "Dock 图标";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "退出码：0 已发送，2 参数不可用，3 已拒绝，4 未获授权，5 未发送且可安全重试。";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen 在发送 %@ 前会询问。加上 --confirm 即可照常发送。";
+"Hisingen command line" = "Hisingen 命令行";
+"Name the command to send, for example \"hisingen cli send lock\"." = "请指明要发送的命令，例如“hisingen cli send lock”。";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "Hisingen 中尚未设置车辆。请先在此 Mac 上登录。";
+"Ready: %@" = "就绪：%@";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "在程序坞、应用切换器和警告标记中显示 Hisingen";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "当任一车辆报告警告或警报时显示程序坞标记";
 "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "当任一车辆报告警告或警报时显示程序坞标记。打开 Dock 图标（外观 → 菜单栏）后标记才会显示。";
@@ -1021,6 +1035,7 @@
 "Temporarily unavailable" = "暂时不可用";
 "Temporarily unavailable: %@" = "暂时不可用：%@";
 "Test" = "测试";
+"The charge level must be between %d%% and %d%%." = "电量水平必须在 %d%% 到 %d%% 之间。";
 "The command was delivered to the vehicle." = "指令已下发到车辆。";
 "The last refresh could not read: %@" = "上次刷新无法读取：%@";
 "The last software update failed." = "上次软件更新失败。";
@@ -1095,7 +1110,9 @@
 "Unknown" = "未知";
 "Unknown (%@)" = "未知（%@）";
 "Unknown Volvo model" = "未知 Volvo 车型";
+"Unknown command \"%@\"." = "未知命令“%@”。";
 "Unknown model" = "未知车型";
+"Unknown option \"%@\"." = "未知选项“%@”。";
 "Unlock" = "解锁";
 "Unlock Doors" = "解锁车门";
 "Unlock Trunk" = "解锁后备箱";
@@ -1112,6 +1129,7 @@
 "Updated" = "已更新";
 "Updated %@" = "已于 %@ 更新";
 "Usable Pack Capacity" = "可用电池包容量";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "用法: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "Use Default Developer Keys" = "使用默认开发者密钥";
 "User Setting. Max AC charging current limit configured in vehicle charging settings." = "用户设置。在车辆充电设置中配置的交流充电电流上限。";
 "User Setting. Selected high-voltage battery charge limit target." = "用户设置。所选的高压电池充电上限目标。";

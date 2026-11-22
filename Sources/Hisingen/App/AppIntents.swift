@@ -84,16 +84,20 @@ enum AutomationHandoff {
     /// vehicle, as before. A named argument resolves to a configured VIN or a nickname or model
     /// match, and returns nil when nothing matches. A typed VIN must have the valid VIN shape and
     /// belong to a configured or known vehicle, so an unknown VIN never reaches the provider.
-    static func resolveVIN(from input: String?, preferences: PreferencesStore) -> String? {
+    ///
+    /// `stateStore` is where the nickname and model matches are read from. The command-line
+    /// surface passes the store it opened, so a VIN it resolves is one it can also read; Shortcuts
+    /// keeps the process-wide store.
+    static func resolveVIN(from input: String?, preferences: PreferencesStore,
+                           stateStore: VehicleStateStore = AutomationHandoff.sharedStateStore) -> String? {
         guard let input = input?.trimmingCharacters(in: .whitespacesAndNewlines), !input.isEmpty else {
             let defaultVIN = preferences.vin
             return defaultVIN.isEmpty ? nil : defaultVIN
         }
         let upper = input.uppercased()
-        let store = AutomationHandoff.sharedStateStore
         let brandVINs = [preferences.vin(for: .polestar), preferences.vin(for: .volvo)].filter { !$0.isEmpty }
         if SettingsValidation.isValidVIN(upper),
-           brandVINs.contains(upper) || store.snapshot(for: upper) != nil {
+           brandVINs.contains(upper) || stateStore.snapshot(for: upper) != nil {
             return upper
         }
         for vin in brandVINs {
@@ -101,7 +105,7 @@ enum AutomationHandoff {
             if nick.localizedCaseInsensitiveContains(input) || vin.localizedCaseInsensitiveContains(input) {
                 return vin
             }
-            if let snap = store.snapshot(for: vin), snap.identity.modelName?.localizedCaseInsensitiveContains(input) == true {
+            if let snap = stateStore.snapshot(for: vin), snap.identity.modelName?.localizedCaseInsensitiveContains(input) == true {
                 return vin
             }
         }
