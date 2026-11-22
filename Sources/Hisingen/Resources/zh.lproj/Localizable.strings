@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "连接 Tibber 或选择瑞典即可使用市场价格和充电计划。没有价格来源时，将使用手动输入的费率。";
 "Commands Reported by the Vehicle" = "车辆报告的指令";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen 已发送“立即充电”，但提供商不会报告计划覆盖是否仍处于活动状态。";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "定时器链接需要开始和结束时间，例如 start=07:30&stop=17:00。";
+"A timer delete link needs the timer id, for example id=123." = "删除定时器的链接需要定时器 id，例如 id=123。";
+"A charge-location link needs a name, for example alias=Home." = "充电位置链接需要一个名称，例如 alias=Home。";
+"A charge-location rename needs the location id and a name." = "重命名充电位置需要位置 id 和名称。";
+"A charge-location amps link needs the location id and amps." = "充电位置电流链接需要位置 id 和电流值。";
+"A charge-location target link needs the location id and soc." = "充电位置目标链接需要位置 id 和电量水平。";
+"A charge-location link needs the location id." = "充电位置链接需要位置 id。";
+"A charge-location delete link needs the location id." = "删除充电位置的链接需要位置 id。";
+"Percentage to charge to, between 40 and 100." = "充电目标百分比，介于 40 和 100 之间。";
+"Charging current in amperes, between 6 and 32." = "充电电流（安培），介于 6 和 32 之间。";
+"How long the engine runs, between 5 and 15 minutes." = "发动机运行时长，介于 5 和 15 分钟之间。";
+"Flashes the headlights so the car is easier to find." = "闪烁前照灯，方便找到车辆。";
+"Sounds the horn and flashes the lights together." = "同时鸣笛并闪烁灯光。";

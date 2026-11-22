@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Connectez Tibber ou choisissez la Suède pour utiliser les prix du marché et le planificateur de recharge. Sans source de prix, un tarif saisi est utilisé.";
 "Commands Reported by the Vehicle" = "Commandes signalées par le véhicule";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen a envoyé Recharger maintenant, mais le fournisseur n'indique pas si le remplacement du planning est toujours actif.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Un lien de minuterie nécessite une heure de début et de fin, par exemple start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Un lien de suppression de minuterie nécessite l'identifiant de la minuterie, par exemple id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Un lien de lieu de recharge nécessite un nom, par exemple alias=Maison.";
+"A charge-location rename needs the location id and a name." = "Renommer un lieu de recharge nécessite son identifiant et un nom.";
+"A charge-location amps link needs the location id and amps." = "Un lien d'ampérage d'un lieu de recharge nécessite son identifiant et les ampères.";
+"A charge-location target link needs the location id and soc." = "Un lien de cible d'un lieu de recharge nécessite son identifiant et le niveau de charge.";
+"A charge-location link needs the location id." = "Un lien de lieu de recharge nécessite son identifiant.";
+"A charge-location delete link needs the location id." = "Un lien de suppression d'un lieu de recharge nécessite son identifiant.";
+"Percentage to charge to, between 40 and 100." = "Pourcentage de charge visé, entre 40 et 100.";
+"Charging current in amperes, between 6 and 32." = "Courant de charge en ampères, entre 6 et 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Durée de fonctionnement du moteur, entre 5 et 15 minutes.";
+"Flashes the headlights so the car is easier to find." = "Fait clignoter les phares pour retrouver la voiture plus facilement.";
+"Sounds the horn and flashes the lights together." = "Klaxonne et fait clignoter les feux en même temps.";

@@ -82,7 +82,7 @@ struct StartEngineIntent: AppIntent {
     static let description = IntentDescription("Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support).")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Runtime (minutes)", default: 15, inclusiveRange: (5, 15))
+    @Parameter(title: "Runtime (minutes)", description: "How long the engine runs, between 5 and 15 minutes.", default: 15, inclusiveRange: (5, 15))
     var minutes: Int
 
     @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")

@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Połącz Tibber lub wybierz Szwecję, aby korzystać z cen rynkowych i planisty ładowania. Bez źródła cen używana jest wpisana stawka.";
 "Commands Reported by the Vehicle" = "Polecenia zgłaszane przez pojazd";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen wysłał polecenie Ładuj teraz, ale dostawca nie informuje, czy nadpisanie harmonogramu jest nadal aktywne.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Link timera wymaga godziny rozpoczęcia i zakończenia, na przykład start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Link usuwania timera wymaga identyfikatora timera, na przykład id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Link miejsca ładowania wymaga nazwy, na przykład alias=Dom.";
+"A charge-location rename needs the location id and a name." = "Zmiana nazwy miejsca ładowania wymaga identyfikatora i nazwy.";
+"A charge-location amps link needs the location id and amps." = "Link amperów miejsca ładowania wymaga identyfikatora i amperów.";
+"A charge-location target link needs the location id and soc." = "Link poziomu naładowania miejsca ładowania wymaga identyfikatora i poziomu.";
+"A charge-location link needs the location id." = "Link miejsca ładowania wymaga identyfikatora miejsca.";
+"A charge-location delete link needs the location id." = "Link usuwania miejsca ładowania wymaga identyfikatora miejsca.";
+"Percentage to charge to, between 40 and 100." = "Procent naładowania, między 40 a 100.";
+"Charging current in amperes, between 6 and 32." = "Prąd ładowania w amperach, między 6 a 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Jak długo pracuje silnik, od 5 do 15 minut.";
+"Flashes the headlights so the car is easier to find." = "Miga światłami, aby łatwiej znaleźć samochód.";
+"Sounds the horn and flashes the lights together." = "Trąbi i jednocześnie miga światłami.";

@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Tibber를 연결하거나 스웨덴을 선택하면 시장 가격과 충전 계획을 사용할 수 있습니다. 가격 소스가 없으면 입력한 요금이 사용됩니다.";
 "Commands Reported by the Vehicle" = "차량이 보고한 명령";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen이 지금 충전을 보냈지만, 공급자가 일정 재정의가 여전히 활성 상태인지 보고하지 않습니다.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "타이머 링크에는 시작 및 종료 시각이 필요합니다. 예: start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "타이머 삭제 링크에는 타이머 id가 필요합니다. 예: id=123.";
+"A charge-location link needs a name, for example alias=Home." = "충전 위치 링크에는 이름이 필요합니다. 예: alias=Home.";
+"A charge-location rename needs the location id and a name." = "충전 위치 이름 변경에는 위치 id와 이름이 필요합니다.";
+"A charge-location amps link needs the location id and amps." = "충전 위치 전류 링크에는 위치 id와 전류 값이 필요합니다.";
+"A charge-location target link needs the location id and soc." = "충전 위치 목표 링크에는 위치 id와 충전 수준이 필요합니다.";
+"A charge-location link needs the location id." = "충전 위치 링크에는 위치 id가 필요합니다.";
+"A charge-location delete link needs the location id." = "충전 위치 삭제 링크에는 위치 id가 필요합니다.";
+"Percentage to charge to, between 40 and 100." = "충전 목표 비율(40~100).";
+"Charging current in amperes, between 6 and 32." = "충전 전류(암페어, 6~32).";
+"How long the engine runs, between 5 and 15 minutes." = "엔진 작동 시간(5~15분).";
+"Flashes the headlights so the car is easier to find." = "차량을 찾기 쉽도록 전조등을 깜박입니다.";
+"Sounds the horn and flashes the lights together." = "경적을 울리며 동시에 전조등을 깜박입니다.";

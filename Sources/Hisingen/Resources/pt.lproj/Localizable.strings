@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Ligue o Tibber ou escolha a Suécia para usar os preços de mercado e o planeador de carregamento. Sem uma fonte de preços, é usada uma tarifa introduzida.";
 "Commands Reported by the Vehicle" = "Comandos comunicados pelo veículo";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "O Hisingen enviou Carregar agora, mas o fornecedor não indica se a substituição do horário continua ativa.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Uma ligação de temporizador precisa de hora de início e fim, por exemplo start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Uma ligação para eliminar um temporizador precisa do identificador, por exemplo id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Uma ligação de local de carregamento precisa de um nome, por exemplo alias=Casa.";
+"A charge-location rename needs the location id and a name." = "Mudar o nome de um local de carregamento precisa do identificador e de um nome.";
+"A charge-location amps link needs the location id and amps." = "Uma ligação de amperagem do local precisa do identificador e dos amperes.";
+"A charge-location target link needs the location id and soc." = "Uma ligação de objetivo do local precisa do identificador e do nível de carga.";
+"A charge-location link needs the location id." = "Uma ligação de local de carregamento precisa do identificador.";
+"A charge-location delete link needs the location id." = "Uma ligação para eliminar um local de carregamento precisa do identificador.";
+"Percentage to charge to, between 40 and 100." = "Percentagem de carga, entre 40 e 100.";
+"Charging current in amperes, between 6 and 32." = "Corrente de carregamento em amperes, entre 6 e 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Durante quanto tempo o motor funciona, entre 5 e 15 minutos.";
+"Flashes the headlights so the car is easier to find." = "Pisca os faróis para encontrar o carro mais facilmente.";
+"Sounds the horn and flashes the lights together." = "Buzina e pisca as luzes ao mesmo tempo.";

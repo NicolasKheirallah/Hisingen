@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Kopla til Tibber eller vel Sverige for å bruke marknadsprisar og ladeplanleggjaren. Utan ei priskjelde vert ein oppgjeven takst nytta.";
 "Commands Reported by the Vehicle" = "Kommandoar køyretøyet rapporterer";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen sende Lad no, men tilbydaren rapporterer ikkje om overstyringa av tidsplanen framleis er aktiv.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Ei timerlenkje treng start- og stopptider, til dømes start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Ei lenkje for å sletta ein timer treng id-en til timeren, til dømes id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Ei lenkje for ein ladeplass treng eit namn, til dømes alias=Heime.";
+"A charge-location rename needs the location id and a name." = "Omdøypering av ein ladeplass krev id-en til plassen og eit namn.";
+"A charge-location amps link needs the location id and amps." = "Ei lenkje for ampere til ladeplassen krev id-en til plassen og ampere.";
+"A charge-location target link needs the location id and soc." = "Ei lenkje for målnivået til ladeplassen krev id-en til plassen og ladenivået.";
+"A charge-location link needs the location id." = "Ei lenkje for ein ladeplass treng id-en til plassen.";
+"A charge-location delete link needs the location id." = "Ei lenkje for å sletta ein ladeplass treng id-en til plassen.";
+"Percentage to charge to, between 40 and 100." = "Prosent å lada til, mellom 40 og 100.";
+"Charging current in amperes, between 6 and 32." = "Ladestraum i ampere, mellom 6 og 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Kor lenge motoren går, mellom 5 og 15 minutt.";
+"Flashes the headlights so the car is easier to find." = "Blinkar med frontlysa, så bilen er lettare å finna.";
+"Sounds the horn and flashes the lights together." = "Tutar og blinkar samstundes.";

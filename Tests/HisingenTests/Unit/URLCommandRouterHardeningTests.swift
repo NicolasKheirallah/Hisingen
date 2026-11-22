@@ -39,6 +39,106 @@ struct URLCommandRouterHardeningTests {
         #expect(context.commands == [.lockReducedGuard, .honkHorn])
     }
 
+    // MARK: - Timer and charge-location routes
+
+    @Test
+    @MainActor
+    func chargeTimerRouteBuildsTheScheduleTheAppWrites() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        URLCommandRouter(context: context)
+            .route(URL(string: "hisingen://charge-timer/set?start=07:30&stop=17:00&weekdays=mon,wed,5")!)
+        guard case .setGlobalChargeTimer(let timer)? = context.commands.first else {
+            Issue.record("expected a charge timer, got \(context.commands)")
+            return
+        }
+        #expect(timer.kind == .globalCharging)
+        #expect(timer.startHour == 7 && timer.startMinute == 30)
+        #expect(timer.endHour == 17 && timer.endMinute == 0)
+        #expect(timer.weekdays == [.monday, .wednesday, .friday])
+        #expect(timer.isActive)
+    }
+
+    @Test
+    @MainActor
+    func aTimerWithoutWeekdaysAppliesEveryDay() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        URLCommandRouter(context: context)
+            .route(URL(string: "hisingen://climate-timer/set?start=06:00&stop=07:00&active=0")!)
+        guard case .setClimateTimer(let timer)? = context.commands.first else {
+            Issue.record("expected a climate timer, got \(context.commands)")
+            return
+        }
+        #expect(timer.kind == .climate)
+        #expect(timer.weekdays.isEmpty)
+        #expect(!timer.isActive)
+    }
+
+    @Test
+    @MainActor
+    func aMalformedTimerIsRefusedLocally() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        let router = URLCommandRouter(context: context)
+        // 24:00 and 07:60 are not times; a timer at the wrong hour is worse than no timer.
+        router.route(URL(string: "hisingen://charge-timer/set?start=24:00&stop=07:00")!)
+        router.route(URL(string: "hisingen://charge-timer/set?start=07:60&stop=17:00")!)
+        router.route(URL(string: "hisingen://charge-timer/set?start=07:00")!)
+        #expect(context.commands.isEmpty)
+        #expect(context.notices.count == 3)
+    }
+
+    @Test
+    @MainActor
+    func climateTimerDeleteRequiresAnID() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        let router = URLCommandRouter(context: context)
+        router.route(URL(string: "hisingen://climate-timer/delete?id=42")!)
+        router.route(URL(string: "hisingen://climate-timer/delete")!)
+        #expect(context.commands == [.deleteClimateTimer(id: "42")])
+        #expect(context.notices.count == 1)
+    }
+
+    @Test
+    @MainActor
+    func chargeLocationRoutesCarryClampedValues() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        let router = URLCommandRouter(context: context)
+        router.route(URL(string: "hisingen://charge-location/add?alias=Home&amps=99&soc=5&optimised=0")!)
+        router.route(URL(string: "hisingen://charge-location/alias?id=7&alias=Work")!)
+        router.route(URL(string: "hisingen://charge-location/amps?id=7&amps=64")!)
+        router.route(URL(string: "hisingen://charge-location/soc?id=7&soc=10")!)
+        router.route(URL(string: "hisingen://charge-location/optimised?id=7&enabled=1")!)
+        router.route(URL(string: "hisingen://charge-location/delete?id=7")!)
+        #expect(context.commands == [
+            .createChargeLocationAtCar(alias: "Home", ampLimit: 32, minimumSoc: 40, optimisedCharging: false),
+            .updateChargeLocationAlias(id: "7", alias: "Work"),
+            .updateChargeLocationAmpLimit(id: "7", amps: 32),
+            .updateChargeLocationMinimumSoc(id: "7", soc: 40),
+            .setChargeLocationOptimisedCharging(id: "7", enabled: true),
+            .deleteChargeLocation(id: "7"),
+        ])
+    }
+
+    @Test
+    @MainActor
+    func chargeLocationLinksWithoutTheirKeyFieldsAreRefused() {
+        let context = HardeningRouterContext(activeBrand: .polestar)
+        let router = URLCommandRouter(context: context)
+        router.route(URL(string: "hisingen://charge-location/add?alias=")!)
+        router.route(URL(string: "hisingen://charge-location/amps?id=7")!)
+        router.route(URL(string: "hisingen://charge-location/delete")!)
+        #expect(context.commands.isEmpty)
+        #expect(context.notices.count == 3)
+    }
+
+    @Test
+    @MainActor
+    func chargingTimerRoutesAreRefusedOnVolvo() {
+        let context = HardeningRouterContext(activeBrand: .volvo)
+        URLCommandRouter(context: context)
+            .route(URL(string: "hisingen://charge-timer/set?start=07:00&stop=17:00")!)
+        #expect(context.commands.isEmpty)
+        #expect(context.notices.count == 1)
+    }
     @Test
     @MainActor
     func unknownHisingenCommandsAreRefusedWithANotice() {

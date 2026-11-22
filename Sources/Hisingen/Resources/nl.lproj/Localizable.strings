@@ -4022,3 +4022,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Verbind Tibber of kies Zweden om marktprijzen en de laadplanner te gebruiken. Zonder prijsbron wordt een ingevoerd tarief gebruikt.";
 "Commands Reported by the Vehicle" = "Door het voertuig gerapporteerde opdrachten";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen heeft Nu laden verzonden, maar de aanbieder meldt niet of de overschrijving van het schema nog actief is.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Een timerlink heeft een start- en eindtijd nodig, bijvoorbeeld start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Een link om een timer te verwijderen heeft de timer-id nodig, bijvoorbeeld id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Een link voor een laadlocatie heeft een naam nodig, bijvoorbeeld alias=Thuis.";
+"A charge-location rename needs the location id and a name." = "Een laadlocatie hernoemen heeft de id en een naam nodig.";
+"A charge-location amps link needs the location id and amps." = "Een link voor het amperage van een laadlocatie heeft de id en het amperage nodig.";
+"A charge-location target link needs the location id and soc." = "Een link voor het laaddoel van een laadlocatie heeft de id en het laadniveau nodig.";
+"A charge-location link needs the location id." = "Een link voor een laadlocatie heeft de id nodig.";
+"A charge-location delete link needs the location id." = "Een link om een laadlocatie te verwijderen heeft de id nodig.";
+"Percentage to charge to, between 40 and 100." = "Percentage om naar te laden, tussen 40 en 100.";
+"Charging current in amperes, between 6 and 32." = "Laadstroom in ampère, tussen 6 en 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Hoe lang de motor draait, tussen 5 en 15 minuten.";
+"Flashes the headlights so the car is easier to find." = "Knippert met de koplampen zodat de auto makkelijker te vinden is.";
+"Sounds the horn and flashes the lights together." = "Claxonneert en knippert tegelijk met de lichten.";

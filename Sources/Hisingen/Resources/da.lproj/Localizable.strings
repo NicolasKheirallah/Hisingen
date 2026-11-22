@@ -4021,3 +4021,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Tilslut Tibber, eller vælg Sverige, for at bruge markedspriser og ladeplanlæggeren. Uden en priskilde bruges en indtastet takst.";
 "Commands Reported by the Vehicle" = "Kommandoer, som køretøjet rapporterer";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen sendte Oplad nu, men udbyderen rapporterer ikke, om tilsidesættelsen af tidsplanen stadig er aktiv.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Et timerlink kræver start- og stopptider, for eksempel start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Et link til at slette en timer kræver timerens id, for eksempel id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Et link til en opladningsplacering kræver et navn, for eksempel alias=Hjem.";
+"A charge-location rename needs the location id and a name." = "Omdøbning af en opladningsplacering kræver placeringens id og et navn.";
+"A charge-location amps link needs the location id and amps." = "Et link til opladningsplaceringens ampere kræver placeringens id og ampere.";
+"A charge-location target link needs the location id and soc." = "Et link til opladningsplaceringens målniveau kræver placeringens id og ladeniveau.";
+"A charge-location link needs the location id." = "Et link til en opladningsplacering kræver placeringens id.";
+"A charge-location delete link needs the location id." = "Et link til at slette en opladningsplacering kræver placeringens id.";
+"Percentage to charge to, between 40 and 100." = "Procent at oplade til, mellem 40 og 100.";
+"Charging current in amperes, between 6 and 32." = "Ladestrøm i ampere, mellem 6 og 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Hvor længe motoren kører, mellem 5 og 15 minutter.";
+"Flashes the headlights so the car is easier to find." = "Blinker med forlygterne, så bilen er lettere at finde.";
+"Sounds the horn and flashes the lights together." = "Tuder og blinker samtidigt.";

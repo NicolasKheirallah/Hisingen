@@ -4024,3 +4024,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Verbinde Tibber oder wähle Schweden, um Marktpreise und den Ladeplaner zu nutzen. Ohne Preisquelle gilt ein eingegebener Tarif.";
 "Commands Reported by the Vehicle" = "Vom Fahrzeug gemeldete Befehle";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen hat „Jetzt laden“ gesendet, aber der Anbieter meldet nicht, ob die Zeitplan-Überschreibung noch aktiv ist.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Ein Timer-Link braucht Start- und Endzeit, zum Beispiel start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Ein Link zum Löschen eines Timers braucht die Timer-ID, zum Beispiel id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Ein Link für einen Ladepunkt braucht einen Namen, zum Beispiel alias=Zuhause.";
+"A charge-location rename needs the location id and a name." = "Zum Umbenennen eines Ladepunkts werden ID und Name benötigt.";
+"A charge-location amps link needs the location id and amps." = "Ein Link für die Ampere eines Ladepunkts braucht ID und Ampere.";
+"A charge-location target link needs the location id and soc." = "Ein Link für das Ladeziel eines Ladepunkts braucht ID und Ladestand.";
+"A charge-location link needs the location id." = "Ein Link für einen Ladepunkt braucht dessen ID.";
+"A charge-location delete link needs the location id." = "Ein Link zum Löschen eines Ladepunkts braucht dessen ID.";
+"Percentage to charge to, between 40 and 100." = "Ladeprozent, zwischen 40 und 100.";
+"Charging current in amperes, between 6 and 32." = "Ladestrom in Ampere, zwischen 6 und 32.";
+"How long the engine runs, between 5 and 15 minutes." = "Laufzeit des Motors, zwischen 5 und 15 Minuten.";
+"Flashes the headlights so the car is easier to find." = "Blinkt mit den Scheinwerfern, damit das Auto leichter zu finden ist.";
+"Sounds the horn and flashes the lights together." = "Hupe und Lichthupe zusammen.";

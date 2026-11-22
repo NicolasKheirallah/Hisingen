@@ -4014,3 +4014,16 @@
 "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Yhdistä Tibber tai valitse Ruotsi käyttääksesi markkinahintoja ja lataussuunnittelijaa. Ilman hintalähdettä käytetään syötettyä hintaa.";
 "Commands Reported by the Vehicle" = "Ajoneuvon ilmoittamat komennot";
 "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen lähetti Lataa nyt -komennon, mutta palveluntarjoaja ei ilmoita, onko aikataulun ohitus yhä käytössä.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "Ajastinlinkki tarvitsee aloitus- ja lopetusajat, esimerkiksi start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "Ajastimen poistolinkki tarvitsee ajastimen tunnisteen, esimerkiksi id=123.";
+"A charge-location link needs a name, for example alias=Home." = "Latauspaikkalinkki tarvitsee nimen, esimerkiksi alias=Koti.";
+"A charge-location rename needs the location id and a name." = "Latauspaikan nimeäminen uudelleen vaatii paikan tunnisteen ja nimen.";
+"A charge-location amps link needs the location id and amps." = "Latauspaikan ampeerilinkki tarvitsee paikan tunnisteen ja ampeerit.";
+"A charge-location target link needs the location id and soc." = "Latauspaikan tavoitetasolinkki tarvitsee paikan tunnisteen ja lataustason.";
+"A charge-location link needs the location id." = "Latauspaikkalinkki tarvitsee paikan tunnisteen.";
+"A charge-location delete link needs the location id." = "Latauspaikan poistolinkki tarvitsee paikan tunnisteen.";
+"Percentage to charge to, between 40 and 100." = "Latausprosentti, välillä 40–100.";
+"Charging current in amperes, between 6 and 32." = "Latausvirta ampeereina, välillä 6–32.";
+"How long the engine runs, between 5 and 15 minutes." = "Kuinka kauan moottori käy, 5–15 minuuttia.";
+"Flashes the headlights so the car is easier to find." = "Vilauttaa ajovaloja, jotta auto on helpompi löytää.";
+"Sounds the horn and flashes the lights together." = "Soittaa torvea ja vilauttaa valoja samanaikaisesti.";

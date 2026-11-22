@@ -7,6 +7,18 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+### Added
+
+- `hisingen://` now reaches the **timers and saved charge locations**, the last commands that had
+  no link: `charge-timer/set`, `climate-timer/set`, `climate-timer/delete`, `charge-location/add`,
+  `charge-location/alias`, `charge-location/amps`, `charge-location/soc`,
+  `charge-location/optimised` and `charge-location/delete`. Times are `HH:MM` and weekdays accept
+  numbers or names; a malformed time is refused locally with a notice rather than nudged to a
+  neighbouring hour, and values are clamped to the ranges the app itself accepts. The charging
+  routes stay Polestar-only, matching the in-app surface.
+- **Every intent now carries copy.** Flash and honk-and-flash gained descriptions, and the charge
+  target, current and engine-runtime parameters gained parameter descriptions, so Shortcuts shows
+  what each field means instead of a bare title.
 - The release build produces **App Intents metadata**, so Shortcuts, Siri and the Focus filter can
   finally see the app's 24 intents and 10 App Shortcut groups. SwiftPM has no setting that asks the
   compiler for the constant values the processor reads, so `make app` replays the module's own
@@ -31,6 +43,9 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- The **Cloud Connectivity** row now shows the reason the provider gives — "car is asleep",
+  "subscription lapsed" — instead of only the status word. That reason is the part a reader can act
+  on, and both providers were already sending it.
 - The charging card now says what happened when **Charge Now** was sent on a provider that cannot
   report the override back, instead of going silent. The note names the action and the gap — it
   never claims the override is still active — and appears only within 12 hours of a sent start or

@@ -14,6 +14,25 @@ struct AttentionRowDedupTests {
         ExceptionsCard.attentionRows(state: state, features: features, dismissedSoftwareEventIdentifier: nil)
     }
 
+    @Test func theProvidersAvailabilityReasonLeadsTheRow() {
+        // "asleep" or "subscription lapsed" is the actionable part; the status word alone gives
+        // the reader nothing to do about it.
+        let state = vehicle(availability: .unavailable(reason: "Car is asleep"))
+        let row = ExceptionsCard.attentionRows(state: state,
+                                              features: FeatureSelection(enabled: [.vehicleAvailability]),
+                                              dismissedSoftwareEventIdentifier: nil).first
+        #expect(row?.key == L10n.text("Cloud Connectivity"))
+        #expect(row?.value == "Car is asleep")
+    }
+
+    @Test func withoutAReasonTheRowFallsBackToTheStatusWord() {
+        let state = vehicle(availability: .unavailable(reason: nil))
+        let row = ExceptionsCard.attentionRows(state: state,
+                                              features: FeatureSelection(enabled: [.vehicleAvailability]),
+                                              dismissedSoftwareEventIdentifier: nil).first
+        #expect(row?.value == VehicleAvailability.unavailable(reason: nil).displayName)
+    }
+
     @Test func serviceWarningReportedTwiceShowsOnce() {
         var state = vehicle(serviceWarning: true)
         state.maintenance.details = VehicleHealthDetails(tyres: [], warnings: [.service])

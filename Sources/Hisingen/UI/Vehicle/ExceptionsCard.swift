@@ -47,7 +47,12 @@ struct ExceptionsCard: View {
             rows.append(KVRow(L10n.text("Vehicle Alarm Triggered"), L10n.text("Active Alarm"), symbol: "speaker.wave.3", critical: true))
         }
         if features.contains(.vehicleAvailability), state.identity.availability != .unknown, state.identity.availability != .available {
-            rows.append(KVRow(L10n.text("Cloud Connectivity"), state.identity.availability.displayName, symbol: "antenna.radiowaves.left.and.right", valueWarning: true))
+            // The provider usually says why it cannot reach the car ("asleep", "subscription
+            // lapsed"). That reason is the actionable part; the status word alone leaves the
+            // reader with no next step, so it wins when present.
+            let reason = state.identity.unavailableReason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = (reason?.isEmpty == false ? reason! : state.identity.availability.displayName)
+            rows.append(KVRow(L10n.text("Cloud Connectivity"), value, symbol: "antenna.radiowaves.left.and.right", valueWarning: true))
         }
         if features.contains(.vehicleHealth) {
             if state.maintenance.service.serviceWarning {
