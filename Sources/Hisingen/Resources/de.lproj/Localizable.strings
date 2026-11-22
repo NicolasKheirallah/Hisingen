@@ -4075,3 +4075,10 @@
 "This vehicle service reports this value but cannot change it." = "Dieser Fahrzeugdienst meldet diesen Wert, kann ihn aber nicht ändern.";
 "No active Volvo subscription" = "Kein aktives Volvo-Abo";
 "Remote commands need an active subscription on this car." = "Fernbefehle erfordern ein aktives Abo für dieses Fahrzeug.";
+
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Das Laden endet mit dem Ladefenster, damit das Auto nicht in den nächsten, teureren Stunden weiterlädt.";
+"Keep the Mac Awake for the Window" = "Den Mac für das Ladefenster wach halten";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Hält eine Sperre gegen den Ruhezustand, bis das geplante Ladefenster endet, damit Hisingen die Start- und Stoppbefehle senden kann. Ein bereits schlafender Mac kann nicht geweckt werden.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Standardmäßig aus. Hält diesen Mac wach, solange ein Ladefenster wartet oder läuft; ein schlafender Mac kann nicht geweckt werden.";
+"Turn on Auto-Start Charging in the Window to use this." = "Aktiviere „Laden im Fenster automatisch starten“, um dies zu nutzen.";

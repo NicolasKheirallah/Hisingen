@@ -34,4 +34,18 @@ extension AppDelegate {
         }
         return await commandCoordinator.perform(.startChargingOverride, origin: .automation)
     }
+
+    /// The planner's unattended stop at the end of the window it started. Same consent and same
+    /// `.automation` origin as the start: ending the override is what makes the cheap window a
+    /// window rather than a permanent charge-now.
+    func stopPlannerCharging(targetVIN: String) async -> RemoteCommandDispatchOutcome {
+        guard preferences.features.contains(.remoteCharging) else {
+            return .refused(reason: RemoteCommandError.disabled.localizedDescription)
+        }
+        guard !targetVIN.isEmpty, let currentVIN = vehicleSession.latest?.identity.vin,
+              currentVIN.caseInsensitiveCompare(targetVIN) == .orderedSame else {
+            return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
+        }
+        return await commandCoordinator.perform(.stopChargingOverride, origin: .automation)
+    }
 }

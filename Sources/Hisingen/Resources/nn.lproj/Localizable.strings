@@ -4065,3 +4065,10 @@
 "This vehicle service reports this value but cannot change it." = "Denne køyretøystenesta viser denne verdien, men kan ikkje endre han.";
 "No active Volvo subscription" = "Ingen aktiv Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Fjernkommandoar krev eit aktivt abonnement på denne bilen.";
+
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Ladinga stoppar når ladeperioden sluttar, slik at bilen ikkje held fram med å lade i dei neste, dyrare timane.";
+"Keep the Mac Awake for the Window" = "Hald Macen vaken gjennom ladeperioden";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Held ei kvileblokkering til den planlagde ladeperioden er over, slik at Hisingen kan sende start- og stoppkommandoane. Ein Mac som alt søv, kan ikkje vekkjast.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Av som standard. Held denne Macen vaken medan ein ladeperiode ventar eller går; ein sovande Mac kan ikkje vekkjast.";
+"Turn on Auto-Start Charging in the Window to use this." = "Slå på «Start lading automatisk i vindauget» for å bruke dette.";

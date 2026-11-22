@@ -60,6 +60,48 @@ struct SettingsPreferenceTests {
     }
 
     @Test
+    func plannerSleepPreventionIsOffByDefaultAndStaysOutOfSettingsArchives() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(preferences.plannerKeepAwakeEnabled == false)
+        #expect(preferences.plannerWindow(for: "YSMTEST") == nil)
+
+        preferences.plannerKeepAwakeEnabled = true
+        preferences.setPlannerWindow(
+            DateInterval(start: Date(timeIntervalSince1970: 1_800_000_000),
+                         end: Date(timeIntervalSince1970: 1_800_003_600)),
+            for: "YSMTEST"
+        )
+        #expect(PreferencesStore(defaults: defaults).plannerKeepAwakeEnabled)
+        #expect(PreferencesStore(defaults: defaults).plannerWindow(for: "YSMTEST") != nil)
+
+        // A settings archive moves presentation and alert preferences, not a consent to keep
+        // this Mac awake or the window another Mac's planner is running.
+        let archive = try preferences.exportSettingsPropertyList()
+        let plist = try PropertyListSerialization.propertyList(from: archive, options: [], format: nil)
+        let values = try #require(plist as? [String: Any])
+        #expect(values["planner_keep_awake_enabled"] == nil)
+        #expect(values["planner_windows_v1"] == nil)
+    }
+
+    @Test
+    func thePlannerWindowRoundTripsPerVehicle() throws {
+        let (preferences, defaults, suite) = try store()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let window = DateInterval(start: start, end: start.addingTimeInterval(3_600))
+
+        preferences.setPlannerWindow(window, for: "YSMTEST")
+        #expect(preferences.plannerWindow(for: "YSMTEST") == window)
+        #expect(PreferencesStore(defaults: defaults).plannerWindow(for: "YSMTEST") == window)
+        #expect(preferences.plannerWindow(for: "OTHER") == nil)
+
+        preferences.setPlannerWindow(nil, for: "YSMTEST")
+        #expect(preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
     func savedFeatureOptOutsSurviveAReadAndRelaunch() throws {
         let (preferences, defaults, suite) = try store()
         defer { defaults.removePersistentDomain(forName: suite) }

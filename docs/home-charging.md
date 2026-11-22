@@ -285,6 +285,21 @@ keeps its settings for when Sweden is selected again. Spot prices come from
 exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
 each zone refreshes on its own schedule.
 
+**The window has a fixed end.** If you turn on **Auto-Start Charging in the Window**, Hisingen
+sends the charge-now override when the window opens and records that window's end. If the car is
+still charging when the end arrives — because it charged slower than the configured power — the
+planner ends its override there rather than letting it run on to the charge limit in the hours
+after the cheap window. The next plan is a new window, judged against the prices still ahead.
+This is the honest limit of a menu-bar app: Hisingen cannot wake a Mac that is already asleep, so
+the planner only acts while the Mac is awake.
+
+**Keeping the Mac awake** is a separate opt-in toggle under **Settings → Automations**. It holds a
+system sleep assertion from the moment a planned window is known until that window ends, so the
+minute tick can send both the start and the stop. It is off by default, works only together with
+**Auto-Start Charging in the Window**, and does not wake a sleeping Mac. Leaving it on can keep a
+MacBook awake for most of the day, because a window is always somewhere ahead while the car is
+below its target; that is the cost of not being able to schedule a wake.
+
 ## What the NexBlue integration provides
 
 Checked against the Home Assistant core source (`homeassistant/components/nexblue`, the `dev`

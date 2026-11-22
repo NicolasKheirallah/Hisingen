@@ -287,4 +287,37 @@ enum ChargingPlannerDecisions {
             && connection == .connected
             && !chargingState.isActivelyCharging
     }
+
+    /// End the planner's own charge-now override at the committed window's end, while the car
+    /// is still drawing power. The window's end is fixed when the start is sent; without this
+    /// a car that charges slower than planned keeps the override into the hours after the
+    /// cheap window and runs to target instead of stopping.
+    ///
+    /// Nothing is sent once the window is old enough that the app cannot say who started the
+    /// charge. A stop that would arrive hours late is more likely to interrupt a manual charge
+    /// than to finish the plan.
+    static let stopWindowGrace: TimeInterval = 60 * 60
+
+    static func shouldStopChargingAtWindowEnd(
+        window: DateInterval?,
+        now: Date,
+        connection: ChargerConnection,
+        chargingState: ChargingState
+    ) -> Bool {
+        guard let window, now >= window.end else { return false }
+        guard now < window.end.addingTimeInterval(stopWindowGrace) else { return false }
+        return connection == .connected && chargingState.isActivelyCharging
+    }
+
+    /// The planner's sleep assertion is worth holding only while a window is still ahead or
+    /// running, and only when both consents that make the planner act are on.
+    static func shouldPreventSleep(
+        window: DateInterval?,
+        now: Date,
+        autoStartEnabled: Bool,
+        keepAwakeEnabled: Bool
+    ) -> Bool {
+        guard autoStartEnabled, keepAwakeEnabled, let window else { return false }
+        return now < window.end
+    }
 }

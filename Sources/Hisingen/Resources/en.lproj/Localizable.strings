@@ -4082,3 +4082,10 @@
 "No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
 "Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours.";
+"Keep the Mac Awake for the Window" = "Keep the Mac Awake for the Window";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac.";
+"Turn on Auto-Start Charging in the Window to use this." = "Turn on Auto-Start Charging in the Window to use this.";

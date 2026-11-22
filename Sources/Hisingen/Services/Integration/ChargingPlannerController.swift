@@ -30,8 +30,10 @@ extension ElectricityPriceService: ChargingPlannerPriceSource {}
 /// that keeps the spot-price cache fresh (this is what performs the once-a-day fetch
 /// after publication even when no panel is open), posts the window-start and
 /// prices-published banners, starts charging inside the planned window when the user has
-/// explicitly consented to auto-start, and backfills market-price costs onto completed
-/// charging sessions.
+/// explicitly consented to auto-start, ends that override at the window's end so the car
+/// does not keep charging into the next, more expensive hours, holds a sleep assertion
+/// while a window waits or runs when the reader asked for it, and backfills market-price
+/// costs onto completed charging sessions.
 ///
 /// All branching logic lives in the pure `ChargingPlannerSupport`/`ChargingPlannerDecisions`
 /// enums; this class owns only scheduling, state lookups, and side effects. The command
@@ -46,6 +48,8 @@ final class ChargingPlannerController {
     private let latestState: () -> VehicleState?
     private let activeVINs: () -> [String]
     private let startCharging: (String) async -> RemoteCommandDispatchOutcome
+    private let stopCharging: (String) async -> RemoteCommandDispatchOutcome
+    private let sleepPrevention: any SleepPreventing
     /// True while Home Assistant runs a charging plan for the vehicle. The two planners must never
     /// drive the same car, so everything that would notify or send a command waits for this to clear.
     private let plannerOwnedByHomeAssistant: (String) -> Bool
@@ -54,10 +58,12 @@ final class ChargingPlannerController {
     private let scheduler: AsyncTimerLoop
     private var evaluationInProgress = false
     private var generation = 0
-    /// Auto-start fires at most once per planned window start, in memory. A relaunch
-    /// mid-window may re-send one start command; the vehicle ignores a start while it is
-    /// already charging, and the coordinator's single-flight guard covers bursts.
+    /// Auto-start fires at most once per planned window start, in memory. The persisted
+    /// committed window carries the same fact across a relaunch; this map is what a terminal
+    /// refusal leaves behind so a window that will not start is not retried every minute.
     private var autoStartedWindowStarts: [String: Date] = [:]
+    /// VIN → the window end whose stop command is in flight, so a minute tick cannot send it twice.
+    private var stopInFlight: [String: Date] = [:]
 
     /// How often the planner re-evaluates. Cheap: the common path is two guards and one
     /// actor hop onto a warm price cache.
@@ -75,6 +81,8 @@ final class ChargingPlannerController {
         plannerOwnedByHomeAssistant: @escaping (String) -> Bool = { _ in false },
         activeVINs: @escaping () -> [String],
         startCharging: @escaping (String) async -> RemoteCommandDispatchOutcome,
+        stopCharging: @escaping (String) async -> RemoteCommandDispatchOutcome,
+        sleepPrevention: any SleepPreventing = SleepPrevention(),
         now: @escaping @Sendable () -> Date = { Date() },
         wait: @escaping AsyncTimerLoop.Wait = AsyncTimerLoop.realWait
     ) {
@@ -85,6 +93,8 @@ final class ChargingPlannerController {
         self.latestState = latestState
         self.activeVINs = activeVINs
         self.startCharging = startCharging
+        self.stopCharging = stopCharging
+        self.sleepPrevention = sleepPrevention
         self.plannerOwnedByHomeAssistant = plannerOwnedByHomeAssistant
         self.now = now
         self.scheduler = AsyncTimerLoop(wait: wait)
@@ -106,6 +116,8 @@ final class ChargingPlannerController {
     func stop() {
         generation &+= 1
         scheduler.cancel()
+        // A disarmed planner does not need the Mac awake for a window it cannot act on.
+        sleepPrevention.release()
     }
 
     /// Re-evaluated whenever feature selection changes.
@@ -130,7 +142,10 @@ final class ChargingPlannerController {
     /// waiting for the tick.
     func evaluate() async {
         guard !evaluationInProgress else { return }
-        guard preferences.smartChargingPlannerAvailable else { return }
+        guard preferences.smartChargingPlannerAvailable else {
+            sleepPrevention.release()
+            return
+        }
         evaluationInProgress = true
         defer { evaluationInProgress = false }
 
@@ -140,20 +155,61 @@ final class ChargingPlannerController {
         // This call performs the once-a-day fetch when the cache is stale, and returns
         // from the persisted series otherwise.
         let prices = await priceSource.prices(for: zone)
-        guard !prices.isEmpty, isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
+        guard !prices.isEmpty, isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else {
+            sleepPrevention.release()
+            return
+        }
         await notifyPricesPublishedIfDue(
             zone: zone,
             prices: prices,
             plannerPowerKw: preferences.electricityChargerPowerKw,
             generation: evaluationGeneration, vin: initialVIN
         )
-        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
+        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else {
+            sleepPrevention.release()
+            return
+        }
         await backfillSpotCosts(zone: zone)
-        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else { return }
+        guard isCurrent(evaluationGeneration, zone: zone, vin: initialVIN) else {
+            sleepPrevention.release()
+            return
+        }
 
-        guard let state = latestState() else { return }
-        // Home Assistant owns this car's charging: no window banner, no auto-start from here.
-        guard !plannerOwnedByHomeAssistant(state.identity.vin) else { return }
+        guard let state = latestState() else {
+            sleepPrevention.release()
+            return
+        }
+        // Home Assistant owns this car's charging: no window banner, no auto-start and no
+        // assertion from this Mac.
+        guard !plannerOwnedByHomeAssistant(state.identity.vin) else {
+            sleepPrevention.release()
+            return
+        }
+        let vin = state.identity.vin
+        let currentDate = now()
+        var committedWindow = preferences.plannerWindow(for: vin)
+
+        // The end of the window the planner started is fixed, so a car that charges slower than
+        // planned is stopped there instead of being carried into the hours after the cheap run.
+        // This runs before the energy check: a lost battery reading must not leave the override on.
+        if let window = committedWindow {
+            if ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+                window: window,
+                now: currentDate,
+                connection: state.energy.connection,
+                chargingState: state.energy.chargingState
+            ) {
+                stopChargingAtWindowEnd(vin: vin, generation: evaluationGeneration, zone: zone)
+                return
+            }
+            if currentDate >= window.end {
+                // The window closed and nothing is still drawing: it needs no stop command.
+                preferences.setPlannerWindow(nil, for: vin)
+                autoStartedWindowStarts[vin] = nil
+                committedWindow = nil
+            }
+        }
+
         let capacity = state.configuredCapacityReference(
             specification: preferences.vehicleSpecificationOverride(for: state.identity.vin)).kwh
         let energyKwh = ChargingPlannerSupport.neededEnergyKwh(
@@ -161,18 +217,31 @@ final class ChargingPlannerController {
             targetPercentage: state.energy.targetPercentage,
             usableCapacityKwh: capacity
         )
-        guard energyKwh > 0.5 else { return }
+        guard energyKwh > 0.5 else {
+            // The target is met: there is no window to guard and no planned charge to stop.
+            preferences.setPlannerWindow(nil, for: vin)
+            autoStartedWindowStarts[vin] = nil
+            sleepPrevention.release()
+            return
+        }
+
         let powerKw = ChargingPlannerSupport.powerKw(
             liveWatts: state.energy.powerWatts,
             isCharging: state.isCharging,
             configuredKw: preferences.electricityChargerPowerKw
         )
         guard let plan = ChargingPlanner.cheapestWindow(
-            prices: prices, now: now(), energyKwh: energyKwh, chargerPowerKw: powerKw
-        ) else { return }
+            prices: prices, now: currentDate, energyKwh: energyKwh, chargerPowerKw: powerKw
+        ) else {
+            sleepPrevention.release()
+            return
+        }
 
-        notifyWindowStartIfDue(plan: plan, state: state)
-        autoStartIfDue(plan: plan, state: state, generation: evaluationGeneration, zone: zone)
+        if committedWindow == nil {
+            notifyWindowStartIfDue(plan: plan, state: state)
+            autoStartIfDue(plan: plan, state: state, generation: evaluationGeneration, zone: zone)
+        }
+        updateSleepPrevention(window: committedWindow ?? DateInterval(start: plan.start, end: plan.end))
     }
 
     // MARK: - Window-start banner
@@ -284,10 +353,59 @@ final class ChargingPlannerController {
             // acknowledged send or a terminal refusal consumes the window. .deferred (command
             // pipeline busy, vehicle context changed mid-flight, shell still loading) must
             // stay retryable – the next 60 s tick re-evaluates while `now < plan.end` holds.
-            if !CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
+            switch outcome {
+            case .sent:
+                // The window's end is now fixed: the stop command is due there even if the
+                // remaining energy pushes the recomputed plan past it.
+                self.preferences.setPlannerWindow(
+                    DateInterval(start: plan.start, end: plan.end), for: vin
+                )
+            case .refused:
+                self.preferences.setPlannerWindow(nil, for: vin)
+            case .deferred:
                 self.autoStartedWindowStarts[vin] = nil
             }
         }
+    }
+
+    // MARK: - Window-end stop
+
+    private func stopChargingAtWindowEnd(vin: String, generation: Int, zone: ElspotZone) {
+        guard stopInFlight[vin] == nil else { return }
+        guard let window = preferences.plannerWindow(for: vin) else { return }
+        stopInFlight[vin] = window.end
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.stopInFlight[vin] = nil }
+            guard self.isCurrent(generation, zone: zone, vin: vin),
+                  !self.plannerOwnedByHomeAssistant(vin) else { return }
+            let outcome = await self.stopCharging(vin)
+            AppLog.logger("elpriser").notice("Planner window-end stop outcome: \(String(describing: outcome), privacy: .public)")
+            // .sent and .refused consume the window: a terminal refusal is not retried, and a
+            // deferred send is tried again on the next tick while the window is still fresh.
+            if CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
+                self.preferences.setPlannerWindow(nil, for: vin)
+                self.autoStartedWindowStarts[vin] = nil
+            }
+        }
+    }
+
+    // MARK: - Sleep prevention
+
+    /// Hold one assertion while a window is ahead or running, and drop it as soon as there is
+    /// nothing left to act on. The system cannot be asked to wake a sleeping Mac, so the
+    /// assertion only covers the case where this Mac is still awake when the window is planned.
+    private func updateSleepPrevention(window: DateInterval?) {
+        guard ChargingPlannerDecisions.shouldPreventSleep(
+            window: window,
+            now: now(),
+            autoStartEnabled: preferences.plannerAutoStartEnabled,
+            keepAwakeEnabled: preferences.plannerKeepAwakeEnabled
+        ) else {
+            sleepPrevention.release()
+            return
+        }
+        sleepPrevention.hold(reason: SleepPrevention.assertionReason)
     }
 
     private func isCurrent(_ generation: Int, zone: ElspotZone, vin: String?) -> Bool {

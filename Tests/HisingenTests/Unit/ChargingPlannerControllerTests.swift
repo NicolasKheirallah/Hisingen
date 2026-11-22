@@ -226,6 +226,273 @@ struct ChargingPlannerControllerTests {
 
         #expect(await harness.charger.dispatchCount == 2)
     }
+
+    // MARK: - Window-end stop
+
+    /// Auto-starts a window at 03:30 and lets the dispatch land. The planner's plan is
+    /// 03:30–04:30 at the harness's 250 kW.
+    private func autoStartedHarness(
+        now: Date = plannerDate(2026, 2, 10, 3, 30),
+        stopOutcomes: [RemoteCommandDispatchOutcome] = [.sent(.accepted)]
+    ) -> PlannerHarness {
+        let harness = PlannerHarness(
+            now: now,
+            vehicleState: vehicle(connection: .connected),
+            outcomes: [.sent(.accepted)],
+            stopOutcomes: stopOutcomes
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        return harness
+    }
+
+    @Test
+    func autoStartRecordsTheWindowItStarted() async {
+        let harness = autoStartedHarness()
+
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.dispatchCount == 1)
+        let recorded = harness.preferences.plannerWindow(for: "YSMTEST")
+        #expect(recorded?.start == plannerDate(2026, 2, 10, 3, 30))
+        #expect(recorded?.end == plannerDate(2026, 2, 10, 4, 30))
+    }
+
+    @Test
+    func theRecordedWindowEndDoesNotSlideWhileTheCarCharges() async {
+        let harness = autoStartedHarness()
+
+        await harness.controller.evaluate()
+        await settle()
+
+        // A slower-than-planned charge recomputes a longer run later on. The window already
+        // started keeps the end it was committed with, so the stop has a fixed instant.
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST")?.end == plannerDate(2026, 2, 10, 4, 30))
+        #expect(await harness.charger.stopCount == 0)
+    }
+
+    @Test
+    func aChargeStillRunningAtTheWindowEndIsStoppedOnce() async {
+        let harness = autoStartedHarness()
+
+        await harness.controller.evaluate()
+        await settle()
+
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.stopCount == 1)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+
+        // The car may report charging for a moment after the command; the consumed window
+        // means no second stop is sent.
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 31))
+        await harness.controller.evaluate()
+        await settle()
+        #expect(await harness.charger.stopCount == 1)
+    }
+
+    @Test
+    func aWindowThatEndedWithTheCarAlreadyStoppedNeedsNoCommand() async {
+        let harness = autoStartedHarness()
+
+        await harness.controller.evaluate()
+        await settle()
+
+        // The car reached its limit at the end of the window: there is nothing drawing power
+        // to stop, and nothing left to plan.
+        harness.setVehicle(vehicle(battery: 80, state: .complete, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.stopCount == 0)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
+    func aDeferredStopIsRetriedOnTheNextPass() async {
+        let harness = autoStartedHarness(stopOutcomes: [.deferred(reason: "busy"), .sent(.accepted)])
+
+        await harness.controller.evaluate()
+        await settle()
+
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+        #expect(await harness.charger.stopCount == 1)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") != nil)
+
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 31))
+        await harness.controller.evaluate()
+        await settle()
+        #expect(await harness.charger.stopCount == 2)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
+    func aTerminalStopRefusalConsumesTheWindow() async {
+        let harness = autoStartedHarness(stopOutcomes: [.refused(reason: "no")])
+
+        await harness.controller.evaluate()
+        await settle()
+
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 31))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.stopCount == 1)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
+    func theWindowEndStopNeedsNoAutoStartConsentOfItsOwn() async {
+        let harness = autoStartedHarness()
+        await harness.controller.evaluate()
+        await settle()
+
+        // Turning auto-start off after the window started does not strand the override: the
+        // planner still ends the window it began.
+        harness.preferences.plannerAutoStartEnabled = false
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.stopCount == 1)
+    }
+
+    @Test
+    func noStopIsSentWithoutAPlannerWindow() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 4, 30),
+            vehicleState: vehicle(state: .charging, connection: .connected)
+        )
+
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(await harness.charger.stopCount == 0)
+    }
+
+    // MARK: - Sleep prevention
+
+    @Test
+    func sleepPreventionIsOffByDefault() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected)
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+
+        #expect(harness.preferences.plannerKeepAwakeEnabled == false)
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.sleeper.holdCount == 0)
+        #expect(harness.sleeper.isHolding == false)
+    }
+
+    @Test
+    func sleepPreventionHoldsTheAssertionWhileAWindowWaits() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected)
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        harness.preferences.plannerKeepAwakeEnabled = true
+
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.sleeper.holdCount == 1)
+        #expect(harness.sleeper.isHolding)
+        #expect(harness.sleeper.lastReason == SleepPrevention.assertionReason)
+    }
+
+    @Test
+    func sleepPreventionNeedsTheAutoStartConsent() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected)
+        )
+        harness.preferences.plannerKeepAwakeEnabled = true
+
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.sleeper.holdCount == 0)
+    }
+
+    @Test
+    func sleepPreventionReleasesWhenTheTargetIsReached() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected)
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        harness.preferences.plannerKeepAwakeEnabled = true
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.sleeper.isHolding)
+
+        harness.setVehicle(vehicle(battery: 80, connection: .connected))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.sleeper.isHolding == false)
+        #expect(harness.sleeper.releaseCount >= 1)
+    }
+
+    @Test
+    func sleepPreventionIsReleasedWhenThePlannerIsDisarmed() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected)
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        harness.preferences.plannerKeepAwakeEnabled = true
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.sleeper.isHolding)
+
+        harness.controller.stop()
+
+        #expect(harness.sleeper.isHolding == false)
+    }
+
+    @Test
+    func homeAssistantOwnershipDropsTheAssertion() async {
+        let owned = OwnershipFlag(false)
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 0),
+            vehicleState: vehicle(connection: .connected),
+            plannerOwned: { _ in owned.value }
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+        harness.preferences.plannerKeepAwakeEnabled = true
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.sleeper.isHolding)
+
+        owned.value = true
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.sleeper.isHolding == false)
+    }
 }
 
 // MARK: - Home Assistant ownership
@@ -311,28 +578,38 @@ private final class PlannerHarness {
     let prices: FakePriceSource
     let timer: FakeTimerWait
     let charger: FakeCharger
+    let sleeper: FakeSleeper
     let controller: ChargingPlannerController
     private let latest: StateBox
+    private let clock: ClockBox
 
     var preferences: PreferencesStore { scoped.store }
+    var now: Date { clock.value }
 
     func changeVIN(_ vin: String) { latest.state.identity.vin = vin }
+
+    func advance(to date: Date) { clock.value = date }
+
+    func setVehicle(_ state: VehicleState) { latest.state = state }
 
     init(
         now: Date = plannerDate(2026, 2, 10, 3, 30),
         series: [ElectricityPricePoint] = plannerHourlySeries(),
         vehicleState: VehicleState = vehicle(connection: .disconnected),
         outcomes: [RemoteCommandDispatchOutcome] = [],
+        stopOutcomes: [RemoteCommandDispatchOutcome] = [],
         plannerOwned: @escaping (String) -> Bool = { _ in false }
     ) {
         let scopedPreferences = ScopedPreferences(label: "ChargingPlannerController")
         let store = scopedPreferences.store
         let priceSource = FakePriceSource(series: series)
-        let charger = FakeCharger(outcomes: outcomes)
+        let charger = FakeCharger(outcomes: outcomes, stopOutcomes: stopOutcomes)
         let latest = StateBox(state: vehicleState)
+        let clock = ClockBox(now: now)
         let database = VehicleDatabase.inMemory()
         let timer = FakeTimerWait()
         let notifier = FakeNotifier()
+        let sleeper = FakeSleeper()
 
         store.marketCountry = .sweden
         store.features = FeatureSelection(enabled: [.smartChargingPlanner, .notifications])
@@ -342,8 +619,10 @@ private final class PlannerHarness {
         self.prices = priceSource
         self.charger = charger
         self.latest = latest
+        self.clock = clock
         self.timer = timer
         self.notifier = notifier
+        self.sleeper = sleeper
         controller = ChargingPlannerController(
             preferences: store,
             notifier: notifier,
@@ -354,7 +633,9 @@ private final class PlannerHarness {
             plannerOwnedByHomeAssistant: plannerOwned,
             activeVINs: { [] },
             startCharging: { _ in await charger.dispatch() },
-            now: { now },
+            stopCharging: { _ in await charger.stop() },
+            sleepPrevention: sleeper,
+            now: { clock.value },
             wait: { seconds in try await timer.wait(seconds) }
         )
     }
@@ -364,6 +645,50 @@ private final class PlannerHarness {
 private final class StateBox {
     var state: VehicleState
     init(state: VehicleState) { self.state = state }
+}
+
+/// A mutable clock the controller reads from its `@Sendable` closure. The lock is what
+/// lets a Sendable closure read a value the main-actor test moves between evaluations.
+private final class ClockBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Date
+
+    init(now: Date) { stored = now }
+
+    var value: Date {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return stored
+        }
+        set {
+            lock.lock()
+            stored = newValue
+            lock.unlock()
+        }
+    }
+}
+
+@MainActor
+private final class FakeSleeper: SleepPreventing {
+    private(set) var isHolding = false
+    private(set) var holdCount = 0
+    private(set) var releaseCount = 0
+    private(set) var lastReason: String?
+
+    func hold(reason: String) -> Bool {
+        lastReason = reason
+        guard !isHolding else { return true }
+        isHolding = true
+        holdCount += 1
+        return true
+    }
+
+    func release() {
+        guard isHolding else { return }
+        isHolding = false
+        releaseCount += 1
+    }
 }
 
 @MainActor
@@ -410,15 +735,23 @@ private actor FakePriceSource: ChargingPlannerPriceSource {
 
 private actor FakeCharger {
     nonisolated let dispatches: AsyncStream<Void>
+    nonisolated let stops: AsyncStream<Void>
     private let dispatchesContinuation: AsyncStream<Void>.Continuation
+    private let stopsContinuation: AsyncStream<Void>.Continuation
     private var outcomes: [RemoteCommandDispatchOutcome]
+    private var stopOutcomes: [RemoteCommandDispatchOutcome]
     private(set) var dispatchCount = 0
+    private(set) var stopCount = 0
 
-    init(outcomes: [RemoteCommandDispatchOutcome]) {
+    init(outcomes: [RemoteCommandDispatchOutcome], stopOutcomes: [RemoteCommandDispatchOutcome]) {
         self.outcomes = outcomes
-        let (stream, continuation) = AsyncStream<Void>.makeStream()
-        dispatches = stream
-        dispatchesContinuation = continuation
+        self.stopOutcomes = stopOutcomes
+        let (dispatchStream, dispatchContinuation) = AsyncStream<Void>.makeStream()
+        dispatches = dispatchStream
+        dispatchesContinuation = dispatchContinuation
+        let (stopStream, stopContinuation) = AsyncStream<Void>.makeStream()
+        stops = stopStream
+        stopsContinuation = stopContinuation
     }
 
     /// Returns the scripted outcome, or a terminal refusal once the script runs out.
@@ -426,6 +759,12 @@ private actor FakeCharger {
         dispatchCount += 1
         dispatchesContinuation.yield(())
         return outcomes.isEmpty ? .refused(reason: "test") : outcomes.removeFirst()
+    }
+
+    func stop() -> RemoteCommandDispatchOutcome {
+        stopCount += 1
+        stopsContinuation.yield(())
+        return stopOutcomes.isEmpty ? .refused(reason: "test") : stopOutcomes.removeFirst()
     }
 }
 

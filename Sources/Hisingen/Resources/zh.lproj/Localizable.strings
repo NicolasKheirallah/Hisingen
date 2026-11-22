@@ -4065,3 +4065,10 @@
 "This vehicle service reports this value but cannot change it." = "此车辆服务可报告该值，但无法更改。";
 "No active Volvo subscription" = "没有有效的 Volvo 订阅";
 "Remote commands need an active subscription on this car." = "远程指令需要该车辆具有有效订阅。";
+
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "充电会在时段结束时停止，以免车辆在接下来更贵的时段继续充电。";
+"Keep the Mac Awake for the Window" = "在时段内保持 Mac 唤醒";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "在计划时段结束前保持睡眠阻止状态，以便 Hisingen 发送开始和停止指令。它无法唤醒已经进入睡眠的 Mac。";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "默认关闭。在时段等待或进行期间保持此 Mac 唤醒；无法唤醒已经进入睡眠的 Mac。";
+"Turn on Auto-Start Charging in the Window to use this." = "请开启“在时段内自动开始充电”以使用此功能。";
