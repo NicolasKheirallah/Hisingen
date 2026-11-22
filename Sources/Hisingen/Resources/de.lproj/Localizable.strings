@@ -4363,3 +4363,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Die Wallbox-Sitzung endete um %@, %@ nach dem Ladeende. Nach der Kulanz blieben %d Minuten zu berechnen.";
 "Rule: %@ after %d minutes of grace." = "Regel: %@ nach %d Minuten Kulanz.";
 "%@ fee" = "%@ Gebühr";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-Arbeitsmappe";
+"GPX Tracks" = "GPX-Tracks";
+"Selected Period" = "Ausgewählter Zeitraum";
+"Full History" = "Gesamter Verlauf";
+"Selected Session Samples (XLSX)" = "Sitzungsproben (XLSX)";
+"Field" = "Feld";
+"Value" = "Wert";
+"Dataset" = "Datensatz";
+"Scope" = "Umfang";
+"Rows" = "Zeilen";
+"Rows with coordinates" = "Zeilen mit Koordinaten";
+"Selected period" = "Ausgewählter Zeitraum";
+"Full history" = "Gesamter Verlauf";
+"Trip %@" = "Fahrt %@";
+"%@ trip tracks" = "Fahrtspuren für %@";
+"The XLSX workbook could not be created." = "Die XLSX-Arbeitsmappe konnte nicht erstellt werden.";
+"The GPX track could not be created." = "Der GPX-Track konnte nicht erstellt werden.";
+"Selected Session Samples" = "Sitzungsproben";
+"Selected session" = "Ausgewählte Sitzung";

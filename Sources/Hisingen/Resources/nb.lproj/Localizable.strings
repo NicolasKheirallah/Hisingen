@@ -4361,3 +4361,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Laderøkten sluttet %@, %@ etter at ladingen var ferdig. Etter fristen gjenstod %d minutter å fakturere.";
 "Rule: %@ after %d minutes of grace." = "Regel: %@ etter %d minutters frist.";
 "%@ fee" = "%@ i gebyr";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-arbeidsbok";
+"GPX Tracks" = "GPX-spor";
+"Selected Period" = "Valgt periode";
+"Full History" = "Hele historikken";
+"Selected Session Samples (XLSX)" = "Prøver fra valgt økt (XLSX)";
+"Field" = "Felt";
+"Value" = "Verdi";
+"Dataset" = "Datasett";
+"Scope" = "Omfang";
+"Rows" = "Rader";
+"Rows with coordinates" = "Rader med koordinater";
+"Selected period" = "Valgt periode";
+"Full history" = "Hele historikken";
+"Trip %@" = "Tur %@";
+"%@ trip tracks" = "Turspor for %@";
+"The XLSX workbook could not be created." = "XLSX-arbeidsboken kunne ikke opprettes.";
+"The GPX track could not be created." = "GPX-sporet kunne ikke opprettes.";
+"Selected Session Samples" = "Prøver fra valgt økt";
+"Selected session" = "Valgt økt";

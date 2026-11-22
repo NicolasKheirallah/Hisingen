@@ -224,6 +224,42 @@ final class HistoryWorkspace {
         }.value
     }
 
+    /// The CSV entry's workbook: the same rows, typed, plus a summary sheet. Built from the CSV
+    /// string so the two files cannot disagree about a value, and so every entry in the export
+    /// menu gains the format without a second row-building path.
+    func exportXLSX(_ kind: ExportKind, scope: ExportScope, vin: String, selectedSessionID: String?,
+                    periodTrips: [TripHistoryEntry], periodSessions: [HistoricalChargingSession],
+                    title: String, vehicle: String) async -> Data? {
+        let csv = await exportCSV(kind, scope: scope, vin: vin, selectedSessionID: selectedSessionID,
+                                  periodTrips: periodTrips, periodSessions: periodSessions)
+        guard !csv.isEmpty else { return nil }
+        let scopeLabel: String
+        switch scope {
+        case .selectedPeriod:
+            scopeLabel = L10n.text("Selected period")
+        case .fullHistory:
+            // The samples export is one session even though it is built by the full-history path.
+            scopeLabel = kind == .sessionSamples ? L10n.text("Selected session") : L10n.text("Full history")
+        }
+        return await Task.detached(priority: .userInitiated) {
+            HistoryWorkbook.workbook(csv: csv, title: title, vehicle: vehicle,
+                                     scope: scopeLabel)?.data()
+        }.value
+    }
+
+    /// GPX 1.1 for the trips in scope. A trip with no recorded position contributes no track.
+    func exportTripsGPX(scope: ExportScope, vin: String, periodTrips: [TripHistoryEntry],
+                        vehicleName: String) async -> Data {
+        let trips: [TripHistoryEntry]
+        switch scope {
+        case .selectedPeriod:
+            trips = periodTrips
+        case .fullHistory:
+            trips = await tripHistory(vin: vin)
+        }
+        return GPXExport.data(trips: trips, vehicleName: vehicleName)
+    }
+
     /// Prices uncosted sessions once spot-price coverage reaches them. Historical day files
     /// are fetched lazily, bounded to the seven most recent uncovered days so a long history
     /// cannot turn one card appearance into an unbounded fetch storm. Returns how many

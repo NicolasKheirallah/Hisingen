@@ -4361,3 +4361,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "De ladersessie eindigde %@, %@ nadat het laden klaar was. Na het respijt bleven %d minuten te factureren.";
 "Rule: %@ after %d minutes of grace." = "Regel: %@ na %d minuten respijt.";
 "%@ fee" = "%@ kosten";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-werkmap";
+"GPX Tracks" = "GPX-tracks";
+"Selected Period" = "Geselecteerde periode";
+"Full History" = "Volledige geschiedenis";
+"Selected Session Samples (XLSX)" = "Sessiemonsters (XLSX)";
+"Field" = "Veld";
+"Value" = "Waarde";
+"Dataset" = "Gegevensset";
+"Scope" = "Bereik";
+"Rows" = "Rijen";
+"Rows with coordinates" = "Rijen met coördinaten";
+"Selected period" = "Geselecteerde periode";
+"Full history" = "Volledige geschiedenis";
+"Trip %@" = "Rit %@";
+"%@ trip tracks" = "Ritsporen voor %@";
+"The XLSX workbook could not be created." = "De XLSX-werkmap kon niet worden gemaakt.";
+"The GPX track could not be created." = "Het GPX-spoor kon niet worden gemaakt.";
+"Selected Session Samples" = "Sessiemonsters";
+"Selected session" = "Geselecteerde sessie";

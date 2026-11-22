@@ -16,7 +16,7 @@ enum FileExport {
         let finish: @MainActor (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
             do {
-                try data.write(to: url, options: .atomic)
+                try ExportFileWriter.write(data, to: url)
                 completion(url, nil)
             } catch {
                 completion(url, error)

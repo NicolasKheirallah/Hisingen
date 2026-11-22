@@ -4353,3 +4353,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "充电桩会话于 %@ 结束，比充电结束晚 %@。宽限时间后剩余 %d 分钟计费。";
 "Rule: %@ after %d minutes of grace." = "规则：%@，含 %d 分钟宽限。";
 "%@ fee" = "%@ 费用";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX 工作簿";
+"GPX Tracks" = "GPX 轨迹";
+"Selected Period" = "所选时段";
+"Full History" = "完整历史";
+"Selected Session Samples (XLSX)" = "所选场次样本 (XLSX)";
+"Field" = "字段";
+"Value" = "值";
+"Dataset" = "数据集";
+"Scope" = "范围";
+"Rows" = "行数";
+"Rows with coordinates" = "含坐标的行数";
+"Selected period" = "所选时段";
+"Full history" = "完整历史";
+"Trip %@" = "行程 %@";
+"%@ trip tracks" = "%@ 的行程轨迹";
+"The XLSX workbook could not be created." = "无法创建 XLSX 工作簿。";
+"The GPX track could not be created." = "无法创建 GPX 轨迹。";
+"Selected Session Samples" = "所选场次样本";
+"Selected session" = "所选场次";

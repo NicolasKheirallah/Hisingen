@@ -4370,3 +4370,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Laddarsessionen avslutades %@, %@ efter att laddningen var klar. Efter karensen återstod %d minuter att debitera.";
 "Rule: %@ after %d minutes of grace." = "Regel: %@ efter %d minuters karens.";
 "%@ fee" = "%@ i avgift";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-arbetsbok";
+"GPX Tracks" = "GPX-spår";
+"Selected Period" = "Vald period";
+"Full History" = "Hela historiken";
+"Selected Session Samples (XLSX)" = "Prov från vald session (XLSX)";
+"Field" = "Fält";
+"Value" = "Värde";
+"Dataset" = "Datamängd";
+"Scope" = "Omfattning";
+"Rows" = "Rader";
+"Rows with coordinates" = "Rader med koordinater";
+"Selected period" = "Vald period";
+"Full history" = "Hela historiken";
+"Trip %@" = "Resa %@";
+"%@ trip tracks" = "Resespår för %@";
+"The XLSX workbook could not be created." = "XLSX-arbetsboken kunde inte skapas.";
+"The GPX track could not be created." = "GPX-spåret kunde inte skapas.";
+"Selected Session Samples" = "Prov från vald session";
+"Selected session" = "Vald session";

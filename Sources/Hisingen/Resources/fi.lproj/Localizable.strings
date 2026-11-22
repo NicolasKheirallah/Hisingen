@@ -4353,3 +4353,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Laturi-istunto päättyi %@, %@ latauksen päättymisen jälkeen. Vapaan ajan jälkeen laskutettavia minuutteja jäi %d.";
 "Rule: %@ after %d minutes of grace." = "Sääntö: %@, kun vapaata aikaa on %d minuuttia.";
 "%@ fee" = "%@ maksu";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-työkirja";
+"GPX Tracks" = "GPX-reitit";
+"Selected Period" = "Valittu jakso";
+"Full History" = "Koko historia";
+"Selected Session Samples (XLSX)" = "Valitun istunnon otokset (XLSX)";
+"Field" = "Kenttä";
+"Value" = "Arvo";
+"Dataset" = "Aineisto";
+"Scope" = "Laajuus";
+"Rows" = "Rivit";
+"Rows with coordinates" = "Rivit, joilla on koordinaatit";
+"Selected period" = "Valittu jakso";
+"Full history" = "Koko historia";
+"Trip %@" = "Matka %@";
+"%@ trip tracks" = "Kohteen %@ reitit";
+"The XLSX workbook could not be created." = "XLSX-työkirjaa ei voitu luoda.";
+"The GPX track could not be created." = "GPX-reittiä ei voitu luoda.";
+"Selected Session Samples" = "Valitun istunnon otokset";
+"Selected session" = "Valittu istunto";

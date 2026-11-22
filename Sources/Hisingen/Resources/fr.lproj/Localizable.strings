@@ -4353,3 +4353,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "La session de la borne s'est terminée à %@, %@ après la fin de la charge. Après la franchise, %d minutes restaient facturables.";
 "Rule: %@ after %d minutes of grace." = "Règle : %@ après %d minutes de franchise.";
 "%@ fee" = "Frais de %@";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "Classeur XLSX";
+"GPX Tracks" = "Traces GPX";
+"Selected Period" = "Période sélectionnée";
+"Full History" = "Historique complet";
+"Selected Session Samples (XLSX)" = "Échantillons de la session sélectionnée (XLSX)";
+"Field" = "Champ";
+"Value" = "Valeur";
+"Dataset" = "Jeu de données";
+"Scope" = "Portée";
+"Rows" = "Lignes";
+"Rows with coordinates" = "Lignes avec coordonnées";
+"Selected period" = "Période sélectionnée";
+"Full history" = "Historique complet";
+"Trip %@" = "Trajet %@";
+"%@ trip tracks" = "Traces de trajet de %@";
+"The XLSX workbook could not be created." = "Le classeur XLSX n'a pas pu être créé.";
+"The GPX track could not be created." = "La trace GPX n'a pas pu être créée.";
+"Selected Session Samples" = "Échantillons de la session sélectionnée";
+"Selected session" = "Session sélectionnée";

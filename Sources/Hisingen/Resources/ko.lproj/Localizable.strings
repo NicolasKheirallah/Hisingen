@@ -4353,3 +4353,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "충전기 세션이 %@에 종료되었으며, 충전 종료 후 %@이 지났습니다. 유예 시간 후 %d분이 청구되었습니다.";
 "Rule: %@ after %d minutes of grace." = "규칙: %@, %d분 유예 후.";
 "%@ fee" = "%@ 요금";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX 통합 문서";
+"GPX Tracks" = "GPX 트랙";
+"Selected Period" = "선택한 기간";
+"Full History" = "전체 기록";
+"Selected Session Samples (XLSX)" = "선택한 세션 샘플(XLSX)";
+"Field" = "필드";
+"Value" = "값";
+"Dataset" = "데이터 집합";
+"Scope" = "범위";
+"Rows" = "행";
+"Rows with coordinates" = "좌표가 있는 행";
+"Selected period" = "선택한 기간";
+"Full history" = "전체 기록";
+"Trip %@" = "주행 %@";
+"%@ trip tracks" = "%@ 주행 트랙";
+"The XLSX workbook could not be created." = "XLSX 통합 문서를 만들 수 없습니다.";
+"The GPX track could not be created." = "GPX 트랙을 만들 수 없습니다.";
+"Selected Session Samples" = "선택한 세션 샘플";
+"Selected session" = "선택한 세션";

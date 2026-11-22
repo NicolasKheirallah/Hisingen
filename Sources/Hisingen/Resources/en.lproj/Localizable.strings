@@ -4371,3 +4371,23 @@
 "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed.";
 "Rule: %@ after %d minutes of grace." = "Rule: %@ after %d minutes of grace.";
 "%@ fee" = "%@ fee";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX Workbook";
+"GPX Tracks" = "GPX Tracks";
+"Selected Period" = "Selected Period";
+"Full History" = "Full History";
+"Selected Session Samples (XLSX)" = "Selected Session Samples (XLSX)";
+"Field" = "Field";
+"Value" = "Value";
+"Dataset" = "Dataset";
+"Scope" = "Scope";
+"Rows" = "Rows";
+"Rows with coordinates" = "Rows with coordinates";
+"Selected period" = "Selected period";
+"Full history" = "Full history";
+"Trip %@" = "Trip %@";
+"%@ trip tracks" = "%@ trip tracks";
+"The XLSX workbook could not be created." = "The XLSX workbook could not be created.";
+"The GPX track could not be created." = "The GPX track could not be created.";
+"Selected Session Samples" = "Selected Session Samples";
+"Selected session" = "Selected session";
