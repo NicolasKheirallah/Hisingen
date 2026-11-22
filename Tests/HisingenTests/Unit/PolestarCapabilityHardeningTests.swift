@@ -32,6 +32,7 @@ struct PolestarGRPCResetHardeningTests {
     @Test func liveStreamCannotConnectAfterReset() async throws {
         let gate = GRPCResetGate()
         GRPCResetProtocol.gate = gate
+        defer { GRPCResetProtocol.gate = nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GRPCResetProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -53,6 +54,7 @@ struct PolestarGRPCResetHardeningTests {
     @Test func delayedMyCarsCannotRepopulateAfterReset() async throws {
         let gate = GRPCResetGate()
         GRPCResetProtocol.gate = gate
+        defer { GRPCResetProtocol.gate = nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GRPCResetProtocol.self]
         let session = URLSession(configuration: configuration)

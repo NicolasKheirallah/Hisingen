@@ -1,4 +1,5 @@
 import Foundation
+import HisingenIntents
 import WidgetKit
 
 /// One widget render pass. Carries the snapshot (nil draws the placeholder) and the date

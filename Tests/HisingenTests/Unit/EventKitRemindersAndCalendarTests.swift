@@ -164,7 +164,8 @@ struct EventKitRemindersAndCalendarTests {
 
     @Test
     func automationStaysOffByDefaultAndNeverPrompts() async {
-        let defaults = freshDefaults()
+        let scoped = ScopedDefaults()
+        let defaults = scoped.defaults
         let session = FakeReminderSession(status: .notDetermined)
         let writer = ReminderWriter(session: session, defaults: defaults)
         let outcome = await writer.addPlugInReminderAutomatically(vehicleName: "Volvo", batteryPercent: 20)
@@ -175,7 +176,8 @@ struct EventKitRemindersAndCalendarTests {
 
     @Test
     func automationRequiresAccessAlreadyGranted() async {
-        let defaults = freshDefaults()
+        let scoped = ScopedDefaults()
+        let defaults = scoped.defaults
         ReminderWriter.setPluginAutomation(true, in: defaults)
         let session = FakeReminderSession(status: .notDetermined)
         let writer = ReminderWriter(session: session, defaults: defaults)
@@ -188,7 +190,8 @@ struct EventKitRemindersAndCalendarTests {
 
     @Test
     func automationWritesOncePerDay() async {
-        let defaults = freshDefaults()
+        let scoped = ScopedDefaults()
+        let defaults = scoped.defaults
         ReminderWriter.setPluginAutomation(true, in: defaults)
         let session = FakeReminderSession(status: .fullAccess)
         let writer = ReminderWriter(session: session, defaults: defaults)
@@ -339,16 +342,19 @@ struct EventKitRemindersAndCalendarTests {
 
     // MARK: - Helpers
 
-    /// A clean UserDefaults suite per test. Suites from earlier runs are swept first;
-    /// a leaked suite would carry the automation flag into the next run.
-    private func freshDefaults() -> UserDefaults {
-        let registryKey = "eventkit-test-suite-names"
-        for stale in UserDefaults.standard.stringArray(forKey: registryKey) ?? [] {
-            UserDefaults.standard.removePersistentDomain(forName: stale)
+    /// A UUID-scoped defaults suite that removes itself when the test ends. The previous
+    /// helper registered suites in the process-global defaults and swept them on the next
+    /// call, which made cleanup depend on another test (or the next run) happening at all.
+    private final class ScopedDefaults {
+        nonisolated(unsafe) let defaults: UserDefaults
+        private let suiteName: String
+
+        init() {
+            suiteName = "eventkit-tests-\(UUID().uuidString)"
+            defaults = UserDefaults(suiteName: suiteName)!
         }
-        let name = "eventkit-tests-\(UUID().uuidString)"
-        UserDefaults.standard.set([name], forKey: registryKey)
-        return UserDefaults(suiteName: name)!
+
+        deinit { defaults.removePersistentDomain(forName: suiteName) }
     }
 }
 

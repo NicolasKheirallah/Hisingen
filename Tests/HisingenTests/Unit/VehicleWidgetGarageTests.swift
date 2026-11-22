@@ -1,4 +1,5 @@
 import Foundation
+import HisingenIntents
 import Testing
 @testable import Hisingen
 @testable import HisingenWidget
@@ -8,11 +9,10 @@ import Testing
 /// itself (Edit sheet, gallery, canvas) cannot be unit-tested — the live check for that
 /// is installing the built bundle and exercising Edit mode on macOS.
 ///
-/// Both binaries define same-named `VehicleWidgetSnapshot` and `VehicleWidgetGarageSnapshot`
-/// types on purpose (no shared module), so this suite imports both and keeps the pairs
-/// straight: the app's writer feeds the resolver only through the wire — values that
-/// `WidgetSnapshotStore` read back out of the files — never by passing an app-side
-/// snapshot into a widget-side call.
+/// The wire types have one definition in `HisingenIntents`, shared by both binaries, so
+/// this suite still feeds the resolver only through the wire: the app's writer publishes,
+/// the widget's `WidgetSnapshotStore` reads the files back, and never an app-side snapshot
+/// passed straight into a widget-side call.
 @Suite("Vehicle widget per-car selection")
 @MainActor
 struct VehicleWidgetGarageTests {
@@ -20,14 +20,20 @@ struct VehicleWidgetGarageTests {
     /// discipline without depending on that file (it belongs to the other test target).
     private final class ScopedDefaults {
         nonisolated(unsafe) let defaults: UserDefaults
+        let keychain: KeychainStore
         private let suiteName: String
 
         init() {
             suiteName = "VehicleWidgetGarageTests.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: suiteName)!
+            keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         }
 
         deinit { defaults.removePersistentDomain(forName: suiteName) }
+
+        @MainActor func preferences() -> PreferencesStore {
+            PreferencesStore(defaults: defaults, keychain: keychain)
+        }
     }
 
     /// One hour ago, fixed per test instance: recent enough that a saved snapshot survives
@@ -71,14 +77,13 @@ struct VehicleWidgetGarageTests {
     }
 
     /// Publishes the two-car fixture and reads it back through the widget's own reader, so
-    /// the resolver tests exercise the extension's wire types. The two binaries carry
-    /// same-named snapshot types, so the widget-side values here can only arrive by
-    /// crossing the files — which is the path the widget itself takes.
+    /// the resolver tests exercise the extension's wire path. The values here arrive only by
+    /// crossing the files, which is the path the widget itself takes.
     private func publishedGarage(
         directory: URL,
         preferences: PreferencesStore,
         stateStore: VehicleStateStore
-    ) throws -> (active: HisingenWidget.VehicleWidgetSnapshot, garage: [HisingenWidget.VehicleWidgetSnapshot]) {
+    ) throws -> (active: VehicleWidgetSnapshot, garage: [VehicleWidgetSnapshot]) {
         let activeState = garageFixture(preferences: preferences, stateStore: stateStore)
         #expect(WidgetSnapshotWriter.publish(
             activeState, preferences: preferences, now: fixedNow, directory: directory) != nil)
@@ -92,15 +97,15 @@ struct VehicleWidgetGarageTests {
     }
 
     /// The resolver tests' entry point: a published two-car garage in a scratch directory,
-    /// already read back as the widget's own types.
+    /// already read back through the widget's reader.
     private func resolverFixture() throws -> (
-        active: HisingenWidget.VehicleWidgetSnapshot, garage: [HisingenWidget.VehicleWidgetSnapshot]
+        active: VehicleWidgetSnapshot, garage: [VehicleWidgetSnapshot]
     ) {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let scoped = ScopedDefaults()
         return try publishedGarage(
-            directory: directory, preferences: PreferencesStore(defaults: scoped.defaults),
+            directory: directory, preferences: scoped.preferences(),
             stateStore: VehicleStateStore(defaults: scoped.defaults, database: .inMemory()))
     }
 
@@ -109,7 +114,7 @@ struct VehicleWidgetGarageTests {
     @Test("the garage lists the active car first, then persisted readings, nothing else")
     func garageEnumeration() throws {
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
 
@@ -123,7 +128,7 @@ struct VehicleWidgetGarageTests {
     @Test("a detached car leaves the garage on the next enumeration")
     func detachedCarDropsOut() throws {
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
         preferences.detachVehicle(vin: "YV1PERSIST2", brand: .polestar, title: "Detached too")
@@ -139,7 +144,7 @@ struct VehicleWidgetGarageTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
 
@@ -169,10 +174,10 @@ struct VehicleWidgetGarageTests {
             now: fixedNow)
         // The car was built by the app's writer, so the container is the app-side type;
         // qualified because the widget target defines a same-named twin.
-        let garage = Hisingen.VehicleWidgetGarageSnapshot(
-            schemaVersion: Hisingen.VehicleWidgetGarageSnapshot.currentSchemaVersion + 1, cars: [car])
+        let garage = VehicleWidgetGarageSnapshot(
+            schemaVersion: VehicleWidgetGarageSnapshot.currentSchemaVersion + 1, cars: [car])
         try JSONEncoder().encode(garage).write(
-            to: directory.appendingPathComponent(Hisingen.VehicleWidgetGarageSnapshot.fileName))
+            to: directory.appendingPathComponent(VehicleWidgetGarageSnapshot.fileName))
 
         #expect(WidgetSnapshotStore.loadGarage(directory: directory) == [])
     }
@@ -237,7 +242,7 @@ struct VehicleWidgetGarageTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
         #expect(WidgetSnapshotWriter.publish(
@@ -263,7 +268,7 @@ struct VehicleWidgetGarageTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
         #expect(WidgetSnapshotWriter.publish(
@@ -286,7 +291,7 @@ struct VehicleWidgetGarageTests {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let scoped = ScopedDefaults()
-        let preferences = PreferencesStore(defaults: scoped.defaults)
+        let preferences = scoped.preferences()
         let stateStore = VehicleStateStore(defaults: scoped.defaults, database: .inMemory())
         let active = garageFixture(preferences: preferences, stateStore: stateStore)
         #expect(WidgetSnapshotWriter.publish(

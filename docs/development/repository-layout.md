@@ -17,7 +17,7 @@
 │   ├── Support/          Format, L10n, PKCE: small stateless helpers
 │   ├── Resources/        Assets.xcassets, .lproj localization bundles
 │   └── UI/               StatusItemController (AppKit) + SwiftUI views
-├── Sources/HisingenIntents/  Shared AppIntent types + command router linked by the app and widget
+├── Sources/HisingenIntents/  Shared AppIntent types, command router and widget snapshot wire format
 ├── Sources/HisingenWidget/  WidgetKit extension target: desktop widget + Control Center controls
 ├── Tests/HisingenTests/
 │   ├── Unit/             18 files, Swift Testing, no network

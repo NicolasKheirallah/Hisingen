@@ -207,6 +207,20 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
+- The widget snapshot's wire format now has **one definition** in
+  `Sources/HisingenIntents/VehicleWidgetSnapshot.swift`, compiled into both the app and the
+  extension. The app's writer and the widget's reader used to carry hand-kept copies of the
+  same structs, so a field could be changed on one side only; the round-trip tests still write
+  with the app and read with the widget, and the files they exchange are the real ones.
+
+- The deterministic test suite no longer reaches into state a developer already owns.
+  `LocalDataEraser` takes an injectable `clearAccounts` hook beside its widget and memory-cache
+  hooks, so an erase test can never block on a Keychain prompt; the default path still clears
+  real accounts and is covered by `LocalDataEraserTests`. Reminder tests own a scoped defaults
+  suite that removes itself, and the portal hardening suite releases the quota store it
+  injects. The few inspection suites that read `PreferencesStore.shared` do so because the
+  views do; that is recorded in the testing strategy instead of being hidden behind a skip.
+
 - Market prices, the automatic rate and the **Charging Planner** now follow the selected
   electricity supplier instead of the country. A connected Tibber home is a price source in every
   market Tibber serves, and the Swedish spot series remains one when Sweden is selected. With
