@@ -121,7 +121,7 @@ struct PolestarHTTP2TrailerTests {
     }
 }
 
-private final class StatusZeroURLProtocol: URLProtocol, @unchecked Sendable {
+private final class StatusZeroURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -203,7 +203,7 @@ struct PolestarTrailerConsumerTests {
     }
 }
 
-private final class PartialTimeoutURLProtocol: URLProtocol, @unchecked Sendable {
+private final class PartialTimeoutURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -211,8 +211,9 @@ private final class PartialTimeoutURLProtocol: URLProtocol, @unchecked Sendable 
                                        headerFields: ["Content-Type": "application/grpc"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data([0, 0, 0, 0, 2, 8, 1, 0, 0, 0, 0, 2, 8]))
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [self] in
-            client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+        nonisolated(unsafe) let loader = self
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            loader.client?.urlProtocol(loader, didFailWithError: URLError(.timedOut))
         }
     }
     override func stopLoading() {}

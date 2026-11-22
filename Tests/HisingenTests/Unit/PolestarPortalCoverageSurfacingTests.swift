@@ -527,7 +527,7 @@ struct PolestarPortalCoverageSurfacingTests {
     }
 }
 
-final class CoverageSurfacingTransport: URLProtocol, @unchecked Sendable {
+final class CoverageSurfacingTransport: URLProtocol {
     nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (Int, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }

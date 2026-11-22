@@ -44,7 +44,7 @@ struct HTTPExchangeBoundaryTests {
     }
 }
 
-private final class BoundaryProtocol: URLProtocol, @unchecked Sendable {
+private final class BoundaryProtocol: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var storedBody = Data()
     static var body: Data {

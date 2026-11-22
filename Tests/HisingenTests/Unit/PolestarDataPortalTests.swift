@@ -1824,7 +1824,7 @@ private final class PortalPathRecorder: @unchecked Sendable {
     }
 }
 
-private final class PortalMockTransport: URLProtocol, @unchecked Sendable {
+private final class PortalMockTransport: URLProtocol {
     nonisolated(unsafe) static var requestHandler: ((URLRequest) -> (Int, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
