@@ -89,6 +89,65 @@ struct LiveVolvoReadOnlyIntegrationTests {
 
     }
 
+
+    /// S31: the opt-in live sweep uses the same endpoint inventory as the fixture tests, so a
+    /// green fixture run and a green live run describe the same surface. Each call goes through
+    /// `VolvoAPI`'s own decode path; a provider refusal (missing scope, unsupported market,
+    /// vehicle does not report the resource) is recorded distinctly from a decode failure,
+    /// which fails the run.
+    @Test(.disabled(if: !liveVolvoCredentialsConfigured, "Live Volvo credentials are not configured"))
+    func testLiveSweepExercisesEveryFixturedEndpoint() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let clientID = try #require(environment["HISINGEN_TEST_VOLVO_CLIENT_ID"])
+        let clientSecret = try #require(environment["HISINGEN_TEST_VOLVO_CLIENT_SECRET"])
+        let vccApiKey = try #require(environment["HISINGEN_TEST_VOLVO_VCC_API_KEY"])
+        let refreshToken = try #require(environment["HISINGEN_TEST_VOLVO_REFRESH_TOKEN"])
+        let preferredVIN = environment["HISINGEN_TEST_VOLVO_VIN"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.live-sweep.\(UUID())")
+        defer { try? keychain.deleteVolvoSessionToken() }
+        let api = VolvoAPI(keychain: keychain)
+        await api.configure(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey)
+        try await api.restoreSession(token: refreshToken, preferredVIN: preferredVIN,
+                                     features: FeatureSelection.default)
+        let resolved = await api.resolvedVIN(preferred: preferredVIN)
+        let vin = try #require(resolved)
+
+        var decoded: [String] = []
+        var refused: [String] = []
+        var failed: [String] = []
+
+        print("\n========================================================")
+        print("📋 VOLVO FIXTURED-ENDPOINT LIVE SWEEP (\(VolvoFixturedEndpoint.allCases.count) endpoints)")
+        for endpoint in VolvoFixturedEndpoint.allCases {
+            do {
+                let projection = try await endpoint.fetch(using: api, vin: vin)
+                decoded.append(endpoint.title)
+                print("  ✅ \(endpoint.title): \(projection)")
+            } catch let error as VolvoError {
+                switch error {
+                case .permissionDenied, .regionRestricted, .temporarilyUnavailable, .unsupported:
+                    refused.append("\(endpoint.title): \(error.errorDescription ?? "provider refused")")
+                    print("  🔒 \(endpoint.title): provider refused")
+                case .client(let status) where [403, 404, 410].contains(status):
+                    refused.append("\(endpoint.title): HTTP \(status)")
+                    print("  🔒 \(endpoint.title): HTTP \(status)")
+                default:
+                    failed.append("\(endpoint.title): \(error)")
+                    print("  ❌ \(endpoint.title): \(error)")
+                }
+            } catch {
+                failed.append("\(endpoint.title): \(error)")
+                print("  ❌ \(endpoint.title): \(error)")
+            }
+        }
+        print("  Decoded: \(decoded.count), refused by provider: \(refused.count), failed: \(failed.count)")
+        print("========================================================\n")
+
+        #expect(failed.isEmpty, "fixtured endpoints failed to decode: \(failed.joined(separator: "; "))")
+        #expect(!decoded.isEmpty, "the live sweep decoded no endpoint; every result was a refusal: \(refused.joined(separator: "; "))")
+    }
+
     /// Comprehensive live probe of all Volvo Developer APIs, OIDC discovery, and Connected Vehicle endpoints.
     @Test(.disabled(if: !volvoProbesEnabled, volvoProbeDisabledReason))
     func testProbeVolvoOAuthAuthorizeURL() async throws {
@@ -246,24 +305,14 @@ struct LiveVolvoReadOnlyIntegrationTests {
         print("  • VCC API Key:             \(vccApiKey.prefix(8))...")
         print("  • Target VIN:              \(vin)")
 
-        let endpoints: [(name: String, path: String, method: String)] = [
-            ("Vehicles Discovery", "/connected-vehicle/v2/vehicles", "GET"),
-            ("Vehicle Specification", "/connected-vehicle/v2/vehicles/\(vin)", "GET"),
-            ("Doors & Central Lock", "/connected-vehicle/v2/vehicles/\(vin)/doors", "GET"),
-            ("Windows Status", "/connected-vehicle/v2/vehicles/\(vin)/windows", "GET"),
-            ("Odometer & Distance", "/connected-vehicle/v2/vehicles/\(vin)/odometer", "GET"),
-            ("Tyres & iTPMS", "/connected-vehicle/v2/vehicles/\(vin)/tyres", "GET"),
-            ("Battery Charge Level", "/energy/v1/vehicles/\(vin)/battery-charge-level", "GET"),
-            ("Recharge & Plug Status", "/energy/v1/vehicles/\(vin)/recharge-status", "GET"),
-            ("Climatization Status", "/connected-vehicle/v2/vehicles/\(vin)/climatization-status", "GET"),
-            ("Fuel & Engine Status", "/connected-vehicle/v2/vehicles/\(vin)/fuel-amount", "GET"),
-            ("Engine Health Status", "/connected-vehicle/v2/vehicles/\(vin)/engine-status", "GET"),
-            ("Vehicle Warnings & Fluids", "/connected-vehicle/v2/vehicles/\(vin)/warnings", "GET"),
-            ("Diagnostics & Service", "/connected-vehicle/v2/vehicles/\(vin)/diagnostics", "GET"),
-            ("Parking GPS Location", "/location/v1/vehicles/\(vin)/location", "GET"),
-            ("Trip Statistics", "/connected-vehicle/v2/vehicles/\(vin)/statistics", "GET"),
-            ("Extended Vehicle Telematics", "/extended-vehicle/v1/vehicles/\(vin)/resources", "GET")
-        ]
+        // The sweep and the saved fixtures are one inventory (`VolvoFixturedEndpoint`), so it
+        // lists only resources the adapter actually calls: the seven endpoints added for S31
+        // (engine diagnostics, brakes, warnings, engine-status, command-accessibility,
+        // commands, voc-subscription) and the read set around them. The retired energy/v1,
+        // climatization-status, fuel-amount and extended-vehicle probes are gone: nothing in
+        // the app calls them, so a green result said nothing about the shipping code.
+        let endpoints: [(name: String, path: String, method: String)] =
+            VolvoFixturedEndpoint.allCases.map { ($0.title, $0.path(vin: vin), "GET") }
 
         var endpointStatuses: [(endpoint: String, status: Int)] = []
         for ep in endpoints {
