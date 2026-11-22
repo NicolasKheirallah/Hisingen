@@ -66,6 +66,15 @@ All notable changes to Hisingen are documented in this file. The project follows
   inside a per-command cooldown is refused with the wait in the message. Only actions that need no
   confirmation can be scheduled or triggered; everything else stays a deliberate tap.
 ### Added
+- **Volvo endpoint evidence.** Seven sanitized fixtures now prove the decoding of every Volvo
+  GET resource the adapter calls: engine diagnostics, brakes, warnings, engine-status, command
+  accessibility, the advertised command list, and the VOC subscription. An opt-in live sweep
+  walks the same inventory through `VolvoAPI`'s own decode path instead of a hand-maintained
+  endpoint list that had kept four endpoints the app no longer calls and missed all seven of
+  these. A test pins the fixture set and records the called endpoints that deliberately have no
+  file fixture: the command POST (state-changing, covered by inline response tests), token
+  revocation (no body), image CDN bytes, and the external OIDC documents.
+
 - **Volvo access, stated honestly.** The Info tab's capability section gains a provider access
   inspector: it shows which Volvo scopes the token response granted, which requested scopes were
   refused or never asked for, and, per feature, the provider's own `status` and
