@@ -18,6 +18,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   Auto-Start Charging in the Window is on, and the UI says plainly that Hisingen cannot wake a Mac
   that is already asleep — scheduling a wake needs root and a privileged helper, which this app
   does not ship.
+- **Shared intents target.** The widget extension and the app now link `HisingenIntents`, a small
+  target holding the widget-facing App Intent types and the command router the app registers at
+  launch. An extension cannot link the app executable, so the intent types could not live in the
+  app; each intent runs with `openAppWhenRun` in the app, through the same capability gates,
+  confirmation and audit path as the panel. The extension's own `Metadata.appintents` is built by
+  folding that module in as a static dependency and installed in `HisingenWidget.appex`, so
+  interactive widget buttons and real Control Center actions have something to resolve. No button
+  uses the intents yet — this is the platform for that change.
 
 ### Added
 

@@ -657,6 +657,7 @@
 "Open Hisingen Settings to reconnect your %@ account." = "Avaa Hisingenin asetukset yhdistääksesi %@-tilisi uudelleen.";
 "Open Hisingen Settings to reconnect your Polestar account." = "Avaa Hisingenin asetukset yhdistääksesi Polestar-tilisi uudelleen.";
 "Open Hisingen for details." = "Lisätietoja saat avaamalla Hisingenin.";
+"Open Hisingen to send this command." = "Avaa Hisingen lähettääksesi tämän komennon.";
 "Open Release Page" = "Avaa julkaisusivu";
 "Open Settings" = "Avaa asetukset";
 "Open Settings & Sign In" = "Avaa asetukset ja kirjaudu sisään";

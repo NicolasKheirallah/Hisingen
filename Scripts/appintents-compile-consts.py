@@ -35,6 +35,8 @@ def main() -> int:
     parser.add_argument("--object-output", required=True)
     parser.add_argument("--source-list", required=True)
     parser.add_argument("--root", required=True)
+    parser.add_argument("--source-directory", default="Sources/Hisingen",
+                        help="module source directory, relative to the repository root")
     args = parser.parse_args()
 
     import shlex
@@ -54,15 +56,20 @@ def main() -> int:
         if arg in DROP_FLAG:
             index += 1
             continue
+        # Small targets spell their sources out on the command line. The replay supplies its own
+        # -filelist, so leaving them in would compile every file twice.
+        if arg.endswith(".swift") and not arg.startswith("-"):
+            index += 1
+            continue
         # Optimization level is irrelevant to compile-time constants, and -Onone roughly halves
         # the compile. The real build keeps its own -O objects; this run only reads metadata.
         flags.append("-Onone" if arg == "-O" else arg)
         index += 1
 
     root = pathlib.Path(args.root)
-    sources = sorted(str(p) for p in (root / "Sources/Hisingen").rglob("*.swift"))
+    sources = sorted(str(p) for p in (root / args.source_directory).rglob("*.swift"))
     if not sources:
-        print("no Hisingen sources found", file=sys.stderr)
+        print(f"no sources found under {args.source_directory}", file=sys.stderr)
         return 1
 
     protocols = pathlib.Path(args.protocols)
