@@ -7,6 +7,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Interactive widget buttons.** The vehicle status widget now carries lock, unlock, start
+  climate and refresh in a square action row under the data, when a snapshot names a car. Each
+  button is an App Intent that opens Hisingen and runs in the app process, so it takes the same
+  vehicle resolution, capability gate, confirmation and audit path as the Controls tab instead
+  of a side channel. A refused command returns the gate's sentence, which the intent presents
+  as a dialog while the app files its normal result banner.
 - **Shared intents target.** The widget extension and the app now link `HisingenIntents`, a small
   target holding the widget-facing App Intent types and the command router the app registers at
   launch. An extension cannot link the app executable, so the intent types could not live in the

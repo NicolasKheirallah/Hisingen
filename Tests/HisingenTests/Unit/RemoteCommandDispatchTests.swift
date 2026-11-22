@@ -1,4 +1,5 @@
 import Foundation
+import HisingenIntents
 import Testing
 @testable import Hisingen
 
@@ -135,6 +136,84 @@ struct RemoteCommandDispatchTests {
         let dialog = await AutomationHandoff.send(.lock, vehicle: nil, preferences: preferences)
         #expect(context.provider.executedCommands == [])
         #expect(dialog == CommandAvailability.requiresAccountApproval.shortReason)
+    }
+
+    // MARK: - Widget intents
+
+    /// The widget buttons use the same adapter the app registers at launch, so a lock from the
+    /// widget resolves the vehicle, runs the shared gate and reaches the provider exactly as a
+    /// Controls-tab lock does.
+    @Test
+    @MainActor
+    func widgetIntentHandlerRoutesLockThroughTheSharedGate() async throws {
+        AutomationHandoff.resetForTesting()
+        defer { AutomationHandoff.resetForTesting() }
+        let scoped = ScopedPreferences(label: "widget-intent-lock")
+        let preferences = scoped.store
+        preferences.vin = vin
+        preferences.setVin(vin, for: .volvo)
+
+        let context = DispatchMock(enabledFeatures: [.remoteLocks], vin: vin)
+        AutomationHandoff.install(context)
+
+        let message = try await WidgetIntentCommandHandler(preferences: preferences)
+            .perform(.lock, vin: nil)
+
+        #expect(context.provider.executedCommands == [.lock])
+        #expect(message == L10n.text("Command accepted; waiting for the vehicle to report the result."))
+    }
+
+    /// A refused widget command returns the gate's own sentence; the shared intent wraps that
+    /// in its dialog, so the reader sees why the tap did nothing.
+    @Test
+    @MainActor
+    func widgetIntentHandlerReturnsTheGateRefusalReason() async throws {
+        AutomationHandoff.resetForTesting()
+        defer { AutomationHandoff.resetForTesting() }
+        let scoped = ScopedPreferences(label: "widget-intent-refusal")
+        let preferences = scoped.store
+        preferences.vin = vin
+        preferences.setVin(vin, for: .volvo)
+
+        let context = DispatchMock(
+            enabledFeatures: [.remoteLocks], vin: vin, brand: .volvo,
+            restrictedScopesEnabled: false)
+        AutomationHandoff.install(context)
+
+        let message = try await WidgetIntentCommandHandler(preferences: preferences)
+            .perform(.lock, vin: nil)
+
+        #expect(context.provider.executedCommands.isEmpty)
+        #expect(message == CommandAvailability.requiresAccountApproval.shortReason)
+    }
+
+    /// Refresh is not a remote command: the widget uses the same launch-installed refresh action
+    /// as the panel and the Shortcuts intent.
+    @Test
+    @MainActor
+    func widgetIntentHandlerUsesTheInstalledRefreshAction() async throws {
+        AutomationHandoff.resetForTesting()
+        defer { AutomationHandoff.resetForTesting() }
+        var refreshes = 0
+        AutomationHandoff.installRefreshAction { refreshes += 1 }
+
+        let message = try await WidgetIntentCommandHandler(preferences: ScopedPreferences(label: "widget-intent-refresh").store)
+            .perform(.refresh, vin: nil)
+
+        #expect(refreshes == 1)
+        #expect(message == L10n.text("Refresh requested – Hisingen is fetching the latest vehicle data."))
+    }
+
+    @Test
+    @MainActor
+    func widgetIntentHandlerReportsTheLaunchWindowForRefresh() async throws {
+        AutomationHandoff.resetForTesting()
+        defer { AutomationHandoff.resetForTesting() }
+
+        let message = try await WidgetIntentCommandHandler(preferences: ScopedPreferences(label: "widget-intent-refresh-missing").store)
+            .perform(.refresh, vin: nil)
+
+        #expect(message == L10n.text("Hisingen is still launching. Try again in a moment."))
     }
 
     // MARK: - Optimistic state patch

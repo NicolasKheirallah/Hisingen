@@ -80,7 +80,7 @@ let package = Package(
         ),
         .testTarget(
             name: "HisingenTests",
-            dependencies: ["Hisingen",
+            dependencies: ["Hisingen", "HisingenIntents",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
@@ -105,7 +105,7 @@ let package = Package(
             // Round-trip tests need both sides: the app's snapshot writer and the widget's
             // snapshot reader live in separate targets with no shared module between them,
             // so this suite imports both and pins the JSON they exchange.
-            dependencies: ["HisingenWidget", "Hisingen"],
+            dependencies: ["HisingenWidget", "Hisingen", "HisingenIntents"],
             path: "Tests/HisingenWidgetTests",
             swiftSettings: testSwiftSettings,
             linkerSettings: testLinkerSettings
