@@ -136,27 +136,27 @@ Hisingen's Polestar gRPC calls run on [grpc-swift-2](https://github.com/grpc/grp
 [NIO transport](https://github.com/grpc/grpc-swift-nio-transport), which build on SwiftNIO and
 the Swift packages below. All are pinned in [Package.resolved](Package.resolved) and licensed
 under the Apache License 2.0 (checked against each package's `LICENSE` file on 2026-10-31; the `LICENSE.txt` and
-`NOTICE.txt` files were confirmed unchanged at the versions bumped on 2026-11-01).
+`NOTICE.txt` files were confirmed byte-identical at the versions bumped on 2026-11-01 and again on 2026-11-21).
 
 | Package | Pinned version |
 |---|---|
 | [grpc/grpc-swift-2](https://github.com/grpc/grpc-swift-2) | 2.4.4 |
-| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.10.0 |
-| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.104.0 |
+| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.13.0 |
+| [apple/swift-nio](https://github.com/apple/swift-nio) | 2.105.0 |
 | [apple/swift-nio-extras](https://github.com/apple/swift-nio-extras) | 1.35.2 |
 | [apple/swift-nio-http2](https://github.com/apple/swift-nio-http2) | 1.46.0 |
-| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.37.5 |
+| [apple/swift-nio-ssl](https://github.com/apple/swift-nio-ssl) | 2.37.6 |
 | [apple/swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services) | 1.28.0 |
 | [apple/swift-certificates](https://github.com/apple/swift-certificates) | 1.21.1 |
 | [apple/swift-crypto](https://github.com/apple/swift-crypto) | 5.0.3 |
 | [apple/swift-asn1](https://github.com/apple/swift-asn1) | 1.7.3 |
 | [apple/swift-http-types](https://github.com/apple/swift-http-types) | 1.8.0 |
 | [apple/swift-http-structured-headers](https://github.com/apple/swift-http-structured-headers) | 1.7.0 |
-| [apple/swift-log](https://github.com/apple/swift-log) | 1.16.2 |
+| [apple/swift-log](https://github.com/apple/swift-log) | 1.17.2 |
 | [apple/swift-algorithms](https://github.com/apple/swift-algorithms) | 1.2.1 |
 | [apple/swift-async-algorithms](https://github.com/apple/swift-async-algorithms) | 1.1.7 |
 | [apple/swift-atomics](https://github.com/apple/swift-atomics) | 1.3.1 |
-| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.7.5 |
+| [apple/swift-collections](https://github.com/apple/swift-collections) | 1.7.6 |
 | [apple/swift-numerics](https://github.com/apple/swift-numerics) | 1.1.1 |
 | [apple/swift-system](https://github.com/apple/swift-system) | 1.8.1 |
 | [swift-server/swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle) | 2.10.1 |
