@@ -1458,7 +1458,7 @@
 "Fuel Fill-Ups" = "Pleins de carburant";
 "Full OTA Updates" = "Mises à jour OTA complètes";
 "Gallons Imperial (UK gal)" = "Gallons impériaux (UK gal)";
-"Gallons US (gal)" = "Gallons US (gal)";
+"Gallons US (gal)" = "Gallons américains (gal)";
 "Garage" = "Garage";
 "General reference only. Warranty coverage varies by vehicle, market and in-service date; verify your vehicle documents." = "Simple référence générale. La couverture de garantie varie selon le véhicule, le marché et la date de mise en service ; vérifiez les documents de votre véhicule.";
 "Grand (Wide & Tall)" = "Grand (large et haut)";
@@ -2745,7 +2745,7 @@
 "Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt, because nobody is present to answer it when they fire." = "Comme vous exigez l'authentification du propriétaire de l'appareil pour les commandes à distance, les démarrages de climatisation planifiés dans le calendrier s'exécutent sans cette invite, car personne n'est là pour y répondre au moment du déclenchement.";
 "Belongs to %@" = "Appartient à %@";
 "Bidirectional Charging" = "Recharge bidirectionnelle";
-"Business" = "Business";
+"Business" = "Professionnel";
 "Cabin %@" = "Habitacle %@";
 "Cabin %@ → target %@" = "Habitacle %@ → objectif %@";
 "Cabin Thermal Overview" = "Vue d'ensemble thermique de l'habitacle";

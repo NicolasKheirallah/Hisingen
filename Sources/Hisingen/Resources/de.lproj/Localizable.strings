@@ -2836,7 +2836,7 @@
 "Hide Tab" = "Tab ausblenden";
 "Hide from this tab" = "Auf diesem Tab ausblenden";
 "High-voltage battery warming ahead of DC fast charging." = "Erwärmung der Hochvoltbatterie vor dem DC-Schnellladen.";
-"Hisingen Updates" = "Hisingen Updates";
+"Hisingen Updates" = "Hisingen-Updates";
 "Hisingen is not requesting this reading because “%@” is switched off in Settings → Features." = "Hisingen fragt diese Messung nicht ab, weil „%@“ unter Einstellungen → Funktionen ausgeschaltet ist.";
 "Hisingen will send a start-charging command without another prompt when the planned cheap-price window opens, but only while the vehicle is plugged in and below its charge limit." = "Hisingen sendet beim Öffnen des geplanten Günstigpreisfensters ohne weitere Nachfrage einen Befehl zum Starten des Ladevorgangs. Das geschieht nur, solange das Fahrzeug angesteckt ist und unter seinem Ladelimit liegt.";
 "History" = "Verlauf";

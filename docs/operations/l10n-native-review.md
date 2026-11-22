@@ -3880,3 +3880,55 @@ by this pass and still wait for the owner.
   Some readings are from an earlier report, Telemetry is flowing now..., The vehicle reported these
   values at the time shown..., Volvo connected but not saved, Volvo no longer accepts this application's
   client ID... . They need keys with Swedish before any locale can carry them.
+
+---
+
+## Backlog pass 2026-11-22 (chore/l10n-backlog)
+
+Eleven values translated across nine locales; the remaining backlog is labels the target
+languages genuinely spell as English does (Online, Normal, Garage, App, Cloud, Timer, Start,
+Status, Signal, Trend, Segment, Session, Pause, Test, Stop, Infotainment, Software,
+Destination, Ventilation, Neutral, Optimal, Service, Live, Week, Route, Wind, Meter, Model,
+Privacy, Dashboard, Details, Later, Open, Compact, Updates, Date, Mode, Nature, Source,
+Distance, Altitude, Architecture, Attention, Excellent, Notifications, Combustion, and the
+volume/kilopascal/mile/gallon unit names), so they stay counted per the ratchet convention.
+
+### sv (owner's language) — one value to read
+
+| English source | Shipped value |
+| --- | --- |
+| Circuit Blue | Racerbanblå |
+
+Compound on the file's own pattern (banprofil → Racerbanblå), matching da/nb Racerbaneblå
+and de Rennbahnblau. If the owner prefers the English color name, revert this one value;
+nothing else in sv changed.
+
+### The other ten (flag any that read wrong)
+
+| Locale | English source | Shipped value |
+| --- | --- | --- |
+| da | Side | Fra siden |
+| da | Top | Fra oven |
+| da | Transmission | Gearkasse |
+| nb | Side | Fra siden |
+| nn | Side | Frå sida |
+| nl | Nordic Night | Noordse nacht |
+| de | Hisingen Updates | Hisingen-Updates |
+| fr | Business | Professionnel |
+| fr | Gallons US (gal) | Gallons américains (gal) |
+| it | Business | Lavoro |
+
+View angles follow each file's Front/Rear family (da Foran/Bag, nb/nn Foran/Bak); da
+Gearkasse matches nb/nn Girkasse; de carries the Durchkopplung hyphen its own file uses
+(Cloud-Verbindung, Update-Status); fr Professionnel pairs with its existing Privé, it
+Lavoro with Privato.
+
+### Found while reading, not touched
+
+- da "Showing the last saved snapshot..." opens with Swedish: "Visar senast sparade
+  øjebliksbillede" (rest of the sentence is Danish). Danish reads "Viser senest gemte
+  øjebliksbillede". Pre-existing; fix the value in place.
+- Scripts/check-localization.py ALLOWED_VALUES has an adjacent-literal concatenation:
+  `"Tariff"    "Services"` joins into one entry "TariffServices", so Tariff (sv/nb/nn) and
+  Services (fr) count as untranslated although the comment says Tariff is intentionally
+  shared. Code file, not touched by a translation pass.
