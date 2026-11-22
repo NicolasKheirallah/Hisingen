@@ -106,6 +106,32 @@ struct RefreshCoordinatorStreamTests {
         clock.releaseAll()
     }
 
+    /// The charging stream says nothing about climate, so a running climate session must keep the
+    /// two-minute poll even while the stream is healthy. Without it the card froze on the car's
+    /// first STARTING frame while the car's own app counted down.
+    @Test
+    func runningClimateKeepsRoutinePollingWhileStreamIsHealthy() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let provider = StreamingMockProvider(script: [.healthy(frames: 2)], recorder: StreamRecorder())
+        await provider.setClimate(.starting)
+        let events = DiagnosticsRecorder()
+        let clock = ManualTickClock()
+        let coordinator = makeCoordinator(
+            provider: provider, defaults: defaults, scheduler: makeManualScheduler(clock)
+        )
+        coordinator.onEvent = { events.record($0) }
+        coordinator.start(preferredVIN: StreamingMockProvider.vinA)
+
+        let connected = await waitUntil(events) { $0.liveStreamConnected && $0.nextRefresh != nil }
+        let snapshot = try #require(connected, "Expected the charging stream to connect")
+        let lead = snapshot.nextRefresh.map { $0.timeIntervalSinceNow } ?? 0
+        #expect(events.states.last?.isClimateActive == true)
+        #expect(lead > 0 && lead < 300, "Expected the two-minute climate poll, got \(lead) s")
+        coordinator.stop()
+        clock.releaseAll()
+    }
+
     @Test
     func identicalLiveFramesPublishStateOnlyOnce() async throws {
         let (defaults, suite) = try makeDefaults()

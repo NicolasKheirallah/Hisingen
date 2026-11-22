@@ -3,6 +3,16 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
+  next refresh was the 30-minute drift check, and the stream carries battery and charging
+  readings only. A climate started on a charging car therefore kept its first "Starting" frame,
+  with no countdown, until that check ran. A running climate session now keeps the two-minute
+  refresh while the stream is open.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added
