@@ -140,6 +140,17 @@ All notable changes to Hisingen are documented in this file. The project follows
   command receipts, and clears the vehicle-history database only when **Erase local history on
   sign out** is enabled (off by default).
 
+### Changed
+
+- Volvo's approved permissions are now tracked per scope instead of all-or-nothing. When Volvo
+  rejects a sign-in over one unapproved scope, Hisingen first retries without `location:read` —
+  the permission developer applications most often lack — so a car without location approval
+  keeps remote locks, engine start, and honk/flash instead of losing every remote control. The
+  token response echoes the scope set Volvo actually granted, and each control now asks about
+  its own scope: a missing location approval no longer dims the lock cards or stands the
+  vehicle-location read down for an hour. The Approved Volvo permissions row in Settings shows
+  which of the five permissions the current session carries.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

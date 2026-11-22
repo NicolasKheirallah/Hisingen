@@ -4093,3 +4093,10 @@
 "Developer Portal access could not be verified." = "Nie udało się zweryfikować dostępu do Developer Portal.";
 "The Developer Portal refresh failed." = "Odświeżanie przez Developer Portal nie powiodło się.";
 "Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal jest tylko do odczytu. Zdalne sterowanie wymaga trybu Polestar ID lub Augmented.";
+
+
+"Volvo connected – location unavailable" = "Volvo połączone – lokalizacja niedostępna";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Twoja aplikacja deweloperska Volvo nie ma zatwierdzenia do lokalizacji pojazdu. Blokowanie, uruchamianie silnika oraz klakson i migacze połączyły się normalnie; poproś o lokalizację na developer.volvocars.com, aby widzieć samochód na mapie.";
+"Granted on the current session: %@" = "Przyznano w bieżącej sesji: %@";
+"None of the approved permissions are granted on the current session." = "Żadne z zatwierdzonych uprawnień nie zostało przyznane w bieżącej sesji.";
+"Engine start" = "Uruchamianie silnika";

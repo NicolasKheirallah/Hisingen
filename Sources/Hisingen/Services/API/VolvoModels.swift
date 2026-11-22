@@ -870,8 +870,10 @@ struct VolvoTokenResponseDTO: Decodable, Sendable {
     let refreshToken: String?
     let expiresIn: Int
     let tokenType: String?
-    /// The scopes this authorization actually granted, space-separated (RFC 6749 §4.2.2).
-    /// Volvo omits it on some grants; absent stays distinct from an empty grant.
+    /// The scope set the identity provider actually granted, space-separated. This is the
+    /// authoritative per-scope answer: Volvo rejects the whole authorization for one
+    /// unapproved scope, and the echo says which scopes survived. Some refresh grants omit
+    /// the field, so it stays optional and an absent echo never erases a recorded set.
     let scope: String?
 
     private enum CodingKeys: String, CodingKey {

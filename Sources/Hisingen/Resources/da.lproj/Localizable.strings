@@ -4100,3 +4100,10 @@
 "Developer Portal access could not be verified." = "Adgangen til Developer Portal kunne ikke bekræftes.";
 "The Developer Portal refresh failed." = "Opdateringen fra Developer Portal mislykkedes.";
 "Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal er skrivebeskyttet. Fjernbetjening kræver Polestar ID eller Augmented-tilstand.";
+
+
+"Volvo connected – location unavailable" = "Volvo tilsluttet – position utilgængelig";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Din Volvo-udviklerapplikation er ikke godkendt til køretøjets position. Låsning, motorstart og tud/blink blev tilsluttet som normalt; anmod om position på developer.volvocars.com for at se bilen på kortet.";
+"Granted on the current session: %@" = "Godkendt på den aktuelle session: %@";
+"None of the approved permissions are granted on the current session." = "Ingen af de godkendte tilladelser er godkendt på den aktuelle session.";
+"Engine start" = "Motorstart";

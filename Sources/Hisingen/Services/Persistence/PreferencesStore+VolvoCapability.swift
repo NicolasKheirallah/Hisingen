@@ -9,7 +9,6 @@ import Foundation
 extension PreferencesStore {
     private enum VolvoScopeKeys {
         static let requested = "volvo_requested_scopes_v1"
-        static let granted = "volvo_granted_scopes"
         static let tier = "volvo_grant_tier_v1"
         static let recordedAt = "volvo_scope_grant_recorded_at_v1"
     }
@@ -17,14 +16,6 @@ extension PreferencesStore {
     /// The widest scope set the last sign-in asked for, in the order it was sent.
     var volvoRequestedScopes: [String] {
         d.stringArray(forKey: VolvoScopeKeys.requested) ?? []
-    }
-
-    /// The scopes the token response said it granted. Empty means no grant has been recorded
-    /// (or the session predates the recording), which consumers treat as unknown rather than
-    /// as "granted nothing".
-    var volvoGrantedScopes: [String] {
-        get { d.stringArray(forKey: VolvoScopeKeys.granted) ?? [] }
-        set { d.set(newValue, forKey: VolvoScopeKeys.granted) }
     }
 
     /// The requested tier's raw value: 0 full, 1 standard, 2 core.

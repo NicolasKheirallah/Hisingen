@@ -55,6 +55,64 @@ actor VolvoAPI {
         case core       // coreReadScopes only – telemetry, no remote controls at all
     }
 
+    /// The restricted scope list for one sign-in request. `dropsLocation` removes
+    /// `location:read` for the cascade's middle step: it is the scope developer applications
+    /// most often lack approval for, and Volvo rejects the whole authorization over that one
+    /// missing scope, so retrying without it keeps lock/unlock, engine and honk/flash alive.
+    /// Pure so tests can pin the cascade's scope lists without a network round trip.
+    static func restrictedScopeList(wanted: Bool, dropsLocation: Bool) -> [String] {
+        guard wanted else { return [] }
+        guard dropsLocation else { return restrictedScopes }
+        return restrictedScopes.filter { $0 != "location:read" }
+    }
+
+    /// Parses a token response's `scope` echo (space-separated) into the granted set. Pure.
+    static func parseGrantedScopes(_ raw: String?) -> Set<String> {
+        guard let raw else { return [] }
+        return Set(raw.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init))
+    }
+
+    /// Whether `scope` is in the recorded grant set. Nil when the set is empty — a session
+    /// from before grants were recorded — so callers fall back to the whole opt-in flag
+    /// instead of reading absence as refusal. Pure; the actor wraps it below.
+    static func hasGranted(_ scope: String, in granted: Set<String>) -> Bool? {
+        guard !granted.isEmpty else { return nil }
+        return granted.contains(scope)
+    }
+
+    /// Whether the session's recorded grant set answers `scope`. Nil with nothing recorded.
+    func hasGranted(_ scope: String) async -> Bool? {
+        let granted = await MainActor.run { preferences.volvoGrantedScopes }
+        return Self.hasGranted(scope, in: Set(granted))
+    }
+
+    /// The restricted scope a remote command's dispatch needs on the token; nil for commands
+    /// outside the restricted tier (cabin climate rides on `conve:climatization_start_stop`,
+    /// which no application approval gates). One mapping, so every gate answers identically.
+    static func requiredScope(for command: RemoteCommand) -> String? {
+        switch command {
+        case .lock, .lockReducedGuard: "conve:lock"
+        case .unlock: "conve:unlock"
+        case .honkAndFlash, .flashLights, .honkHorn: "conve:honk_flash"
+        case .startEngine, .stopEngine: "conve:engine_start_stop"
+        default: nil
+        }
+    }
+
+    /// Persists the scope set this token actually carries. Both the authorization-code
+    /// exchange and every refresh flow through `requestToken`, so this is the one place the
+    /// recorded set tracks the live session. A response without a `scope` echo leaves the
+    /// previous record untouched rather than wiping it with unknowns.
+    private func recordGrantedScopes(_ raw: String?) async {
+        let granted = Self.parseGrantedScopes(raw)
+        guard !granted.isEmpty else { return }
+        // The array is the per-scope gate's answer; the timestamp is the inspector's evidence
+        // of when the echo was last observed. One write keeps them from disagreeing.
+        await MainActor.run {
+            preferences.recordVolvoGrantedScopes(granted.sorted(), at: Date())
+        }
+    }
+
 
     var clientID: String?
     var clientSecret: String?
@@ -474,6 +532,8 @@ actor VolvoAPI {
     func discardDeadRefreshToken() async {
         tokens.reset()
         try? keychain.deleteVolvoSessionToken()
+        // The grant died with the session, so its recorded scopes stop answering gates.
+        await MainActor.run { preferences.volvoGrantedScopes = [] }
         await MainActor.run { preferences.invalidateSessionCache() }
     }
 
@@ -519,13 +579,7 @@ actor VolvoAPI {
               decoded.expiresIn > 0 else {
             throw VolvoError.decoding(operation: "token response")
         }
-        // A token response is the only place Volvo states what it actually granted. Both the
-        // authorization-code and the refresh grant pass through here, so the inspector's scope
-        // evidence stays current without a second request.
-        let grantedScopes = VolvoScopeCatalog.parseGrantedScopes(decoded.scope)
-        await MainActor.run {
-            preferences.recordVolvoGrantedScopes(grantedScopes, at: Date())
-        }
+        await recordGrantedScopes(decoded.scope)
         return decoded
     }
 

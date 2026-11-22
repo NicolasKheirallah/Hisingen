@@ -4093,3 +4093,10 @@
 "Developer Portal access could not be verified." = "无法验证 Developer Portal 访问权限。";
 "The Developer Portal refresh failed." = "Developer Portal 刷新失败。";
 "Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal 为只读。远程控制需要 Polestar ID 或 Augmented 模式。";
+
+
+"Volvo connected – location unavailable" = "Volvo 已连接：位置不可用";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "您的 Volvo 开发者应用未获准获取车辆位置。上锁、解锁、启动发动机以及鸣笛与闪灯均已正常连接；请在 developer.volvocars.com 申请位置权限，以便在地图上查看车辆。";
+"Granted on the current session: %@" = "当前会话已获准的权限：%@";
+"None of the approved permissions are granted on the current session." = "当前会话未获准任何已审批的权限。";
+"Engine start" = "启动发动机";

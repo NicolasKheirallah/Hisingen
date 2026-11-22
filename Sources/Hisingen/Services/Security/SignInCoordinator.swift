@@ -193,31 +193,53 @@ final class SignInCoordinator {
             let hadSuppression = self.preferences.hasExplicitSignOut(for: .volvo)
             await volvoAPI.configure(clientID: trimmedClientID, clientSecret: effectiveSecret, vccApiKey: effectiveApiKey)
             // Volvo rejects the *whole* authorization with `invalid_scope` if any single
-            // requested scope is not approved for the application. Cascade widest → narrowest:
-            // full (with remote controls) → standard (telemetry + remote climate) → core
-            // (telemetry only), so a stale approval on one scope never blocks sign-in outright.
-            for tier in VolvoAPI.ScopeTier.allCases {
+            // requested scope is not approved for the application. Cascade widest →
+            // narrowest: full (with remote controls) → full without `location:read` (the
+            // scope applications most often lack approval for) → standard (telemetry +
+            // remote climate) → core (telemetry only), so one unapproved scope never blocks
+            // sign-in outright. Each step is one browser round trip; the drop-location
+            // retry is the only extra prompt a partial grant can cost.
+            let cascade: [(tier: VolvoAPI.ScopeTier, dropsLocation: Bool)] = [
+                (.full, false), (.full, true), (.standard, false), (.core, false)
+            ]
+            for step in cascade {
                 do {
                     try await self.runVolvoInteractiveSignIn(
                         clientID: trimmedClientID, clientSecret: effectiveSecret,
-                        vccApiKey: effectiveApiKey, nickname: trimmedNickname, tier: tier,
+                        vccApiKey: effectiveApiKey, nickname: trimmedNickname,
+                        tier: step.tier, dropsLocation: step.dropsLocation,
                         previousClientID: prevClientID
                     )
-                    if tier != .full {
-                        // Any narrowed tier means the approved scopes were not granted. Only
-                        // `.core` used to clear this, so a `.standard` sign-in left the flag on:
-                        // the notice correctly said lock/unlock/engine/locate were unavailable,
-                        // while the gate kept those buttons enabled and every send ended in 403.
-                        preferences.volvoRestrictedScopesEnabled = false
+                    switch step {
+                    case (.full, false):
+                        break // runVolvoInteractiveSignIn already presented the success toast.
+                    case (.full, true):
                         context?.presentSignInNotice(
-                            title: tier == .standard
-                                ? L10n.text("Volvo connected – data & climate")
-                                : L10n.text("Volvo connected – data only"),
-                            body: tier == .standard
-                                ? L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location. Reconnected with vehicle data and remote climate; request those permissions on developer.volvocars.com to enable the rest.")
-                                : L10n.text("Your Volvo developer application is only approved for vehicle data. Reconnected in read-only mode; request command scopes on developer.volvocars.com to enable remote climate and controls."),
+                            title: L10n.text("Volvo connected – location unavailable"),
+                            body: L10n.text("Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map."),
                             subtitle: L10n.text("Volvo")
                         )
+                    case (.standard, false):
+                        // A standard grant carries no restricted scope at all; the recorded
+                        // echo is authoritative when present, and the flag is the fallback for
+                        // sessions that predate it.
+                        preferences.volvoRestrictedScopesEnabled = false
+                        context?.presentSignInNotice(
+                            title: L10n.text("Volvo connected – data & climate"),
+                            body: L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location. Reconnected with vehicle data and remote climate; request those permissions on developer.volvocars.com to enable the rest."),
+                            subtitle: L10n.text("Volvo")
+                        )
+                    case (.core, false):
+                        preferences.volvoRestrictedScopesEnabled = false
+                        context?.presentSignInNotice(
+                            title: L10n.text("Volvo connected – data only"),
+                            body: L10n.text("Your Volvo developer application is only approved for vehicle data. Reconnected in read-only mode; request command scopes on developer.volvocars.com to enable remote climate and controls."),
+                            subtitle: L10n.text("Volvo")
+                        )
+                    default:
+                        // (.standard/.core, dropsLocation) is never requested: dropping
+                        // location only means something on the full tier.
+                        break
                     }
                     return
                 } catch is CancellationError {
@@ -227,8 +249,11 @@ final class SignInCoordinator {
                     preferences.setVin(prevVIN, for: .volvo)
                     if hadSuppression { preferences.setExplicitSignOut(for: .volvo) }
                     return
-                } catch let error as VolvoError where Self.isInvalidScope(error) && tier != .core {
-                    logger.warning("Volvo rejected scope tier \(tier.rawValue, privacy: .public); retrying narrower")
+                } catch let error as VolvoError where Self.isInvalidScope(error) && step.tier != .core {
+                    logger.warning("""
+                        Volvo rejected the scope request (tier \(step.tier.rawValue, privacy: .public), \
+                        location dropped: \(step.dropsLocation, privacy: .public)); retrying narrower
+                        """)
                     continue
                 } catch {
                     // Abandoned handshake must not leave mutated identity prefs.
@@ -249,11 +274,13 @@ final class SignInCoordinator {
     }
 
     /// One full browser OAuth round trip: authorize → callback → token exchange → discovery,
-    /// then persist the credentials and adopt the brand. `tier` narrows the requested scope set.
+    /// then persist the credentials and adopt the brand. `tier` narrows the requested scope
+    /// set; `dropsLocation` drops `location:read` from the full tier for the cascade's
+    /// dedicated location retry.
     private func runVolvoInteractiveSignIn(clientID: String, clientSecret: String, vccApiKey: String,
                                            nickname: String, tier: VolvoAPI.ScopeTier,
-                                           previousClientID: String) async throws {
-        let authorizeURL = try await volvoAPI.beginSignIn(tier: tier)
+                                           dropsLocation: Bool, previousClientID: String) async throws {
+        let authorizeURL = try await volvoAPI.beginSignIn(tier: tier, dropsLocation: dropsLocation)
         let callbackURL = try await volvoPresenter.signIn(
             authorizeURL: authorizeURL, callbackScheme: "hisingen"
         )
@@ -281,9 +308,10 @@ final class SignInCoordinator {
         await assignVolvoNickname(nickname)
         context?.activateBrandAfterSignIn(.volvo)
         context?.dismissSettingsAfterSignIn()
-        // A reduced tier gets its own explanatory notice from the caller; don't also fire the
-        // generic success toast.
-        if tier == .full {
+        // A reduced grant gets its own explanatory notice from the caller; don't also fire
+        // the generic success toast. The drop-location step keeps the `.full` tier but its
+        // grant is still reduced, so it counts here too.
+        if tier == .full, !dropsLocation {
             if credentialsPersisted {
                 resultPresenter.present(
                     title: L10n.text("Volvo sign-in successful"),

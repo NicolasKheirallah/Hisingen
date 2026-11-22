@@ -38,12 +38,11 @@ enum VolvoScopeCatalog {
 
     /// A token response lists granted scopes space-separated. Blank and absent both mean the
     /// provider did not state a grant, which stays distinguishable from "granted nothing".
+    /// The parser itself lives on `VolvoAPI` because the command gates need the same answer;
+    /// this projection only preserves the inspector's "not stated" distinction.
     static func parseGrantedScopes(_ raw: String?) -> [String]? {
-        guard let raw else { return nil }
-        let scopes = raw.split(whereSeparator: { $0 == " " || $0 == "," })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return scopes.isEmpty ? nil : Array(Set(scopes)).sorted()
+        let scopes = VolvoAPI.parseGrantedScopes(raw)
+        return scopes.isEmpty ? nil : scopes.sorted()
     }
 
     static func grants(
