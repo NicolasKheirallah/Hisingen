@@ -224,6 +224,18 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Consumption vs Temperature"))
                 .accessibilityValue(chartAccessibilityValue(points: points.map { unit.plotValue(kwhPer100Km: $0.consumption) }))
+                .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+                    title: L10n.text("Consumption vs Temperature"),
+                    xLabel: tempUnit.suffix,
+                    yLabel: unit.title,
+                    series: [.init(
+                        name: L10n.text("Consumption"),
+                        points: points.map {
+                            (tempUnit.convert(celsius: $0.temperature),
+                             unit.plotValue(kwhPer100Km: $0.consumption))
+                        }
+                    )]
+                ))
             }
         }
         let months = HistoryInsights.monthlyNormalisedConsumption(from: trips)
@@ -254,6 +266,16 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight * 0.7)
                 .accessibilityLabel(normalisedName)
                 .accessibilityValue(chartAccessibilityValue(points: months.map { unit.plotValue(kwhPer100Km: $0.normalised) }))
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: normalisedName,
+                    yLabel: unit.title,
+                    series: [
+                        .init(name: L10n.text("Average consumption"),
+                              points: months.map { ($0.month, unit.plotValue(kwhPer100Km: $0.raw)) }),
+                        .init(name: normalisedName,
+                              points: months.map { ($0.month, unit.plotValue(kwhPer100Km: $0.normalised)) })
+                    ]
+                ))
                 HStack(spacing: 10) {
                     HistoryChartLegendItem(color: HisingenTheme.inkMuted, label: L10n.text("Average consumption"), dashed: true)
                     HistoryChartLegendItem(color: HisingenTheme.chartInfo, label: normalisedName)
@@ -320,6 +342,15 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight * 0.6)
                 .accessibilityLabel(L10n.text("Energy by Time of Day"))
                 .accessibilityValue(chartAccessibilityValue(points: buckets.map { byTimeOfDay[$0] ?? 0 }))
+                .accessibilityChartDescriptor(CategoricalSeriesAXDescriptor(
+                    title: L10n.text("Energy by Time of Day"),
+                    categoryLabel: L10n.text("Hour"),
+                    valueLabel: "kWh",
+                    categories: buckets.map { L10n.text($0.rawValue) },
+                    series: [.init(name: L10n.text("Energy"),
+                                   values: buckets.map { byTimeOfDay[$0] ?? 0 })],
+                    valueFormat: { String(format: "%.1f kWh", locale: L10n.displayLocale, $0) }
+                ))
             }
         }
     }

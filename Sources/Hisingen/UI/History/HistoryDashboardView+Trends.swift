@@ -475,6 +475,14 @@ extension HistoryDashboardView {
                     .frame(height: chartHeight * 0.7)
                     .accessibilityLabel(L10n.text("Cabin particulate matter trend chart"))
                     .accessibilityValue(chartAccessibilityValue(points: pm10Points.map { $0.pm10 }))
+                    .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                        title: L10n.text("Cabin particulate matter trend chart"),
+                        yLabel: "µg/m³",
+                        series: [
+                            .init(name: "PM2.5", points: pm25Points.map { ($0.record.timestamp, $0.pm25) }),
+                            .init(name: "PM10", points: pm10Points.map { ($0.record.timestamp, $0.pm10) })
+                        ]
+                    ))
                     .hisAnimation(Motion.progress, value: periodDataKey)
                     if !pm10Points.isEmpty {
                         HStack(spacing: 10) {

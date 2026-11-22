@@ -96,6 +96,15 @@ Keyboard shortcuts are available for common actions such as navigating the app o
 
 Global shortcuts can require macOS Accessibility permission.
 
+### VoiceOver and keyboard
+
+Every chart exposes a value summary and the VoiceOver chart rotor, so its points can be read
+without seeing the plot. Controls that step a limit answer the standard increment and decrement
+gestures: the charge and current limit cards move one step up or down, and the heating steppers
+work the same way. Focus sections follow the screen, the tab bar then the tab's cards then the
+footer in the panel, and the header, section list and destination column in Settings. Reduce
+Motion keeps a quiet cross-fade where a transition would otherwise move.
+
 ### System Spotlight
 
 Search your car's nickname and see battery, range and charging state right in Spotlight

@@ -318,6 +318,10 @@ struct HisingenContentView: View {
                                 }
                                 }
                                 .padding(HisingenTheme.sectionSpacing)
+                                // The tab's cards form their own focus section, between the
+                                // bar above and the footer below, so Tab never jumps from the
+                                // tab strip into the footer while cards are still unvisited.
+                                .focusSection()
                                 .animation(reduceMotion ? nil : Motion.interaction, value: tab)
                                 .hisAnimation(Motion.cardChange, value: activeVin)
                                 .hisAnimation(Motion.stateChange, value: noticeIdentity)
@@ -911,6 +915,9 @@ struct HisingenContentView: View {
         .padding(.horizontal, HisingenTheme.sectionSpacing + HisingenTheme.cardPadding)
         .padding(.top, 4)
         .background(alignment: .bottom) { PanelRule() }
+        // One focus section for the bar: Tab moves through the tabs and the Settings gear in
+        // their visual order, and leaving the last one steps into the tab content below.
+        .focusSection()
     }
 
     private func tabButtons(_ tabs: [TabRef], selected: TabRef, iconsOnly: Bool, spacing: CGFloat) -> some View {
@@ -1263,6 +1270,8 @@ struct HisingenContentView: View {
         .padding(.vertical, 5)
         .overlay(alignment: .top) { PanelRule() }
         .hisAnimation(Motion.stateChange, value: updateVersion)
+        // The footer is the last focus section: it is the last row of the panel.
+        .focusSection()
     }
 }
 

@@ -726,6 +726,23 @@ struct NowInstrument: View {
                            rangeText: L10n.format("From %1$@ to %2$@", format(range.lowerBound), format(range.upperBound)),
                            command: command)
             },
+            // One VoiceOver adjustment gesture: increment matches the card's press (a step up,
+            // or the restart value at the ceiling); decrement is the same step downwards, which
+            // the pointer never needed because the card only climbs.
+            adjustment: { direction in
+                guard let base else { return nil }
+                let limitDirection: LimitStepping.Direction?
+                switch direction {
+                case .increment: limitDirection = .up
+                case .decrement: limitDirection = .down
+                @unknown default: limitDirection = nil
+                }
+                guard let limitDirection else { return nil }
+                return LimitStepping.adjusted(base, within: range,
+                                              step: preferences.nowLimitStep,
+                                              direction: limitDirection)
+                    .map(command)
+            },
             action: action,
             command: command(press?.value ?? base ?? range.upperBound)
         )
@@ -745,6 +762,7 @@ struct NowInstrument: View {
         note: String? = nil,
         entry: LimitEntry? = nil,
         valueIsWarning: Bool = false,
+        adjustment: ((AccessibilityAdjustmentDirection) -> RemoteCommand?)? = nil,
         action: String?,
         command: RemoteCommand
     ) -> some View {
@@ -783,6 +801,11 @@ struct NowInstrument: View {
             .accessibilityLabel(sending ? visibleAction : commandTitle)
             .accessibilityValue(spoken)
             .accessibilityHint(availability.shortReason ?? "")
+            .accessibilityAdjustableActionIf(adjustment != nil) { direction in
+                guard let next = adjustment?(direction),
+                      commandGate.availability(next).isAvailable else { return }
+                commandGate.send(next)
+            }
             .overlay(alignment: .bottomTrailing) {
                 if let entry {
                     LimitEntryButton(

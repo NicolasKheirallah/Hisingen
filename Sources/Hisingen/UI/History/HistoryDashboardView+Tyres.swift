@@ -53,6 +53,15 @@ extension HistoryDashboardView {
                 .frame(height: chartHeight)
                 .accessibilityLabel(L10n.text("Tyre pressure trend chart"))
                 .accessibilityValue(chartAccessibilityValue(points: chronological.map { unit.convert(kilopascals: $0.kilopascals) }))
+                .accessibilityChartDescriptor(TimeSeriesAXDescriptor(
+                    title: L10n.text("Tyre pressure trend chart"),
+                    yLabel: unit.suffix,
+                    series: positions.map { position in
+                        .init(name: position.displayName,
+                              points: chronological.filter { $0.position == position }
+                                  .map { ($0.timestamp, unit.convert(kilopascals: $0.kilopascals)) })
+                    }
+                ))
                 .hisAnimation(Motion.progress, value: periodDataKey)
                 HStack(spacing: 10) {
                     ForEach(positions, id: \.self) { position in
