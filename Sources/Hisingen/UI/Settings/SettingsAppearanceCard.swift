@@ -357,6 +357,21 @@ struct SettingsAppearanceCard: View {
             .accessibilityLabel(L10n.text("Menu bar display"))
         }
 
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text("Dock icon"))
+                    .hisType(.body, weight: .medium)
+                Text(L10n.text("Show Hisingen in the Dock, the app switcher and the warning badge"))
+                    .hisType(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: binder.toggle(\.showDockIcon, .dockIcon))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+
         let previewSample = VehicleState(
             energy: EnergyAndChargingSnapshot(
                 batteryPercentage: 82,

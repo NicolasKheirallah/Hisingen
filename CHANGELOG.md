@@ -3,6 +3,16 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Dock Icon** (Appearance → Menu Bar) shows Hisingen in the Dock and the app switcher. The
+  warning badge needed this switch: it sat in Notifications while the Dock tile it paints was
+  permanently hidden by the bundle, so a reader could turn on a badge that never appeared. The
+  badge row now names what it needs, the tile stays blank while the Dock icon is off, and the
+  count returns the moment the icon is back.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

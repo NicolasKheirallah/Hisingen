@@ -16,6 +16,7 @@ enum SettingsChange {
     case timeFormat
     case panelLayout
     case launchAtLogin
+    case dockIcon
     case updater
     case checkForUpdates
     case automation

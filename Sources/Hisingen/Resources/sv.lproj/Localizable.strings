@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterigaranti (återstående)";
 "Battery and Power" = "Batteri och effekt";
 "Battery and Range" = "Batteri och räckvidd";
+"Dock icon" = "Dockikon";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Visa Hisingen i Docken, programväxlaren och som varningsmärke";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Visa ett Dock-märke medan någon bil rapporterar varningar eller larm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Visa ett Dock-märke medan någon bil rapporterar varningar eller larm. Slå på Dock-ikonen (Utseende → Menyrad) för att märket ska visas.";
 "Position relative to car" = "Placering i förhållande till bilen";
 "First reading" = "Första värdet";
 "Above" = "Ovanför";

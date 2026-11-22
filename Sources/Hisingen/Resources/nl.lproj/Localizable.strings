@@ -136,6 +136,10 @@
 "Battery Warranty Remaining" = "Batterijgarantie (resterend)";
 "Battery and Power" = "Batterij en vermogen";
 "Battery and Range" = "Batterij en actieradius";
+"Dock icon" = "Dock-pictogram";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Hisingen tonen in het Dock, de app-wisselaar en als waarschuwingsbadge";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Toon een Dock-badge zolang een voertuig waarschuwingen of alarm meldt";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Toon een Dock-badge zolang een voertuig waarschuwingen of alarm meldt. Schakel het Dock-pictogram in (Weergave → Menubalk) om de badge te tonen.";
 "Position relative to car" = "Positie ten opzichte van de auto";
 "First reading" = "Eerste waarde";
 "Above" = "Boven";
