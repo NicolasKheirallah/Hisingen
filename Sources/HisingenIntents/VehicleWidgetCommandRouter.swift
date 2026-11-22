@@ -21,7 +21,12 @@ public protocol VehicleWidgetCommandHandling: AnyObject, Sendable {
 @MainActor
 public enum VehicleWidgetCommandRouter {
     private static var registered: (any VehicleWidgetCommandHandling)?
-    private static var waiters: [UUID: CheckedContinuation<any VehicleWidgetCommandHandling, Never>] = [:]
+    private static var waiters: [UUID: CheckedContinuation<(any VehicleWidgetCommandHandling)?, Never>] = [:]
+
+    /// How long an intent performed mid-launch waits for the install before it reports that the
+    /// app is not ready. A launch that never reaches the install must not leave a button or a
+    /// Shortcut hanging.
+    static var installTimeout: Duration = .seconds(30)
 
     /// Installed once the app's composition is complete, beside the Shortcuts handoff.
     public static func install(_ handler: any VehicleWidgetCommandHandling) {
@@ -49,7 +54,13 @@ public enum VehicleWidgetCommandRouter {
         // arrives; an intent performed mid-launch waits exactly as the Shortcuts handoff does.
         if Bundle.main.bundleURL.pathExtension == "appex" { return nil }
         return await withCheckedContinuation { continuation in
-            waiters[UUID()] = continuation
+            let id = UUID()
+            waiters[id] = continuation
+            let timeout = installTimeout
+            Task { @MainActor in
+                try? await Task.sleep(for: timeout)
+                waiters.removeValue(forKey: id)?.resume(returning: nil)
+            }
         }
     }
 
@@ -57,7 +68,9 @@ public enum VehicleWidgetCommandRouter {
     /// Test isolation for the process-wide registry.
     public static func resetForTesting() {
         registered = nil
+        for continuation in waiters.values { continuation.resume(returning: nil) }
         waiters = [:]
+        installTimeout = .seconds(30)
     }
     #endif
 }

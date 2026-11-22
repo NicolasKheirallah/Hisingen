@@ -105,4 +105,34 @@ struct WidgetIntentRoutingTests {
         #expect(recorder.commands == [.lock])
         #expect(recorder.vins == [nil])
     }
+    /// An intent performed while the app is still launching waits for the install, and gives up
+    /// instead of hanging when the install never arrives.
+    @Test
+    @MainActor
+    func anIntentGivesUpWhenTheAppNeverInstallsItsHandler() async throws {
+        VehicleWidgetCommandRouter.resetForTesting()
+        defer { VehicleWidgetCommandRouter.resetForTesting() }
+        VehicleWidgetCommandRouter.installTimeout = .milliseconds(50)
+
+        let message = try await VehicleWidgetCommandRouter.send(.lock, vin: nil)
+
+        #expect(message == nil)
+    }
+
+    @Test
+    @MainActor
+    func anIntentWaitingForTheInstallRunsOnceItArrives() async throws {
+        VehicleWidgetCommandRouter.resetForTesting()
+        defer { VehicleWidgetCommandRouter.resetForTesting() }
+        VehicleWidgetCommandRouter.installTimeout = .seconds(5)
+        let recorder = Recorder()
+
+        async let pending = VehicleWidgetCommandRouter.send(.unlock, vin: "YSMWAIT")
+        await Task.yield()
+        VehicleWidgetCommandRouter.install(recorder)
+
+        let message = try await pending
+        #expect(message == "sent")
+        #expect(recorder.commands == [.unlock])
+    }
 }
