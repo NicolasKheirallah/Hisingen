@@ -3395,7 +3395,6 @@
 "No charging switch is mapped for this charger." = "Dla tej ładowarki nie ma przypisanego przełącznika ładowania.";
 "No charging window found before the deadline." = "Nie znaleziono okna ładowania przed terminem.";
 "No new reading arrived from the charger." = "Z ładowarki nie przyszedł nowy odczyt.";
-"No NexBlue charger was found. Map the entities by hand below." = "Nie znaleziono ładowarki NexBlue. Powiąż encje ręcznie poniżej.";
 "No plan" = "Brak planu";
 "Not checked yet" = "Jeszcze nie sprawdzono";
 "Not imported yet" = "Jeszcze nie zaimportowano";
@@ -4216,3 +4215,22 @@
 "Log a public charge from a receipt, or add a missing session." = "Zapisz publiczne ładowanie z paragonu lub dodaj brakującą sesję.";
 "Stored cost: %@" = "Zapisany koszt: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Wprowadzone z paragonu: energia i cena to Twoje dane, a nie pomiar.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Prognoza słoneczna";
+"Solar forecast chart" = "Wykres prognozy słonecznej";
+"Peak %@ at %@" = "Szczyt %@ o %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Promieniowanie Open-Meteo w miejscu samochodu; to nie jest produkcja paneli.";
+"Grid carbon now" = "CO₂ sieci teraz";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "CO₂ sieci na żywo";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Pokazuje bieżącą intensywność emisji sieci obok planu ładowania. Bez klucza linia na żywo się nie pojawia.";
+"Electricity Maps API key" = "Klucz API Electricity Maps";
+"Key saved" = "Klucz zapisany";
+"Remove" = "Usuń";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Linia na żywo pojawia się tylko wtedy, gdy Electricity Maps odpowie. Wprowadzona powyżej intensywność nadal służy do szacowania emisji.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Utwórz darmowy token na electricitymaps.com. Jest przechowywany w pęku kluczy macOS i nigdy nie jest eksportowany.";
+"Source: %@" = "Źródło: %@";
+"No charger was found. Map the entities by hand below." = "Nie znaleziono ładowarki. Powiąż encje ręcznie poniżej.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Ładowarki Easee i Zaptec są znajdowane na liście urządzeń, więc wymagają tokenu administratora.";

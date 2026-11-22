@@ -3395,7 +3395,6 @@
 "No charging switch is mapped for this charger." = "Aucun interrupteur de charge n'est associé à ce chargeur.";
 "No charging window found before the deadline." = "Aucune fenêtre de recharge trouvée avant l'échéance.";
 "No new reading arrived from the charger." = "Aucune nouvelle mesure n'est arrivée du chargeur.";
-"No NexBlue charger was found. Map the entities by hand below." = "Aucun chargeur NexBlue n'a été trouvé. Associez les entités ci-dessous à la main.";
 "No plan" = "Aucun programme";
 "Not checked yet" = "Pas encore vérifié";
 "Not imported yet" = "Pas encore importé";
@@ -4216,3 +4215,22 @@
 "Log a public charge from a receipt, or add a missing session." = "Enregistrez une recharge publique depuis un reçu, ou ajoutez une session manquante.";
 "Stored cost: %@" = "Coût enregistré : %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Saisie depuis un reçu : l'énergie et le prix sont vos chiffres, pas une mesure.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Prévision solaire";
+"Solar forecast chart" = "Graphique de prévision solaire";
+"Peak %@ at %@" = "Pic %@ à %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Rayonnement Open-Meteo à l'emplacement de la voiture ; ce n'est pas la production des panneaux.";
+"Grid carbon now" = "CO₂ du réseau maintenant";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "CO₂ du réseau en direct";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Affiche l'intensité carbone du réseau maintenant à côté du plan de recharge. Sans clé, aucune ligne en direct n'apparaît.";
+"Electricity Maps API key" = "Clé API Electricity Maps";
+"Key saved" = "Clé enregistrée";
+"Remove" = "Supprimer";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "La ligne en direct n'apparaît que lorsque Electricity Maps répond. L'intensité saisie ci-dessus reste utilisée pour l'estimation des émissions.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Créez un jeton gratuit sur electricitymaps.com. Il est stocké dans le trousseau macOS et jamais exporté.";
+"Source: %@" = "Source : %@";
+"No charger was found. Map the entities by hand below." = "Aucun chargeur n'a été trouvé. Associez les entités manuellement ci-dessous.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Les chargeurs Easee et Zaptec sont trouvés via la liste des appareils et nécessitent donc un jeton administrateur.";

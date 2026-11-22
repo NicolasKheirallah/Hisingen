@@ -3395,7 +3395,6 @@
 "No charging switch is mapped for this charger." = "이 충전기에 매핑된 충전 스위치가 없습니다.";
 "No charging window found before the deadline." = "마감 전에 충전 시간대를 찾지 못했습니다.";
 "No new reading arrived from the charger." = "충전기에서 새로운 읽음이 도착하지 않았습니다.";
-"No NexBlue charger was found. Map the entities by hand below." = "NexBlue 충전기를 찾을 수 없습니다. 아래에서 엔터티를 수동으로 연결하세요.";
 "No plan" = "계획 없음";
 "Not checked yet" = "아직 확인되지 않음";
 "Not imported yet" = "아직 가져오지 않음";
@@ -4216,3 +4215,22 @@
 "Log a public charge from a receipt, or add a missing session." = "영수증에서 공용 충전을 기록하거나 누락된 세션을 추가하세요.";
 "Stored cost: %@" = "저장된 비용: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "영수증에서 입력: 에너지와 가격은 측정값이 아니라 직접 입력한 값입니다.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "태양광 예보";
+"Solar forecast chart" = "태양광 예보 차트";
+"Peak %@ at %@" = "최고 %@, %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "차량 위치의 Open-Meteo 복사량이며, 패널 발전량이 아닙니다.";
+"Grid carbon now" = "현재 전력망 CO₂";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "실시간 전력망 CO₂";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "충전 계획 옆에 현재 전력망 탄소 집약도를 표시합니다. 키가 없으면 실시간 줄이 나타나지 않습니다.";
+"Electricity Maps API key" = "Electricity Maps API 키";
+"Key saved" = "키 저장됨";
+"Remove" = "삭제";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "실시간 줄은 Electricity Maps가 응답할 때만 표시됩니다. 위에 입력한 값은 배출량 추정에 계속 사용됩니다.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "electricitymaps.com에서 무료 토큰을 만드세요. macOS 키체인에 저장되며 내보내지지 않습니다.";
+"Source: %@" = "출처: %@";
+"No charger was found. Map the entities by hand below." = "충전기를 찾을 수 없습니다. 아래에서 엔터티를 수동으로 연결하세요.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee 및 Zaptec 충전기는 기기 목록에서 찾으므로 관리자 토큰이 필요합니다.";

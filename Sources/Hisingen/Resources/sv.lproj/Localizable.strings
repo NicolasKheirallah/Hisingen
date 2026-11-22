@@ -3429,7 +3429,6 @@
 "No charging switch is mapped for this charger." = "Ingen laddningsbrytare är mappad för den här laddaren.";
 "No charging window found before the deadline." = "Ingen laddningsruta hittades före tidsfristen.";
 "No new reading arrived from the charger." = "Ingen ny avläsning kom från laddaren.";
-"No NexBlue charger was found. Map the entities by hand below." = "Ingen NexBlue-laddare hittades. Mappa entiteterna manuellt nedan.";
 "No plan" = "Ingen plan";
 "Not checked yet" = "Inte kontrollerad än";
 "Not imported yet" = "Inte importerad än";
@@ -4232,3 +4231,22 @@
 "Log a public charge from a receipt, or add a missing session." = "Logga en offentlig laddning från ett kvitto eller lägg till en saknad session.";
 "Stored cost: %@" = "Sparat pris: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Inmatad från ett kvitto: energin och priset är dina uppgifter, inte en mätning.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Solprognos";
+"Solar forecast chart" = "Solprognosdiagram";
+"Peak %@ at %@" = "Toppvärde %@ kl. %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-strålning vid bilens plats; det är inte panelernas effekt.";
+"Grid carbon now" = "Nätets CO₂ nu";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Live för nätets CO₂";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Visar nätets koldioxidintensitet just nu bredvid laddplanen. Utan nyckel visas ingen live-rad.";
+"Electricity Maps API key" = "API-nyckel för Electricity Maps";
+"Key saved" = "Nyckeln är sparad";
+"Remove" = "Ta bort";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Live-raden visas bara när Electricity Maps svarar. Det angivna värdet ovan används fortfarande för utsläppsberäkningen.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Skapa en gratis token på electricitymaps.com. Den sparas i macOS Keychain och exporteras aldrig.";
+"Source: %@" = "Källa: %@";
+"No charger was found. Map the entities by hand below." = "Ingen laddare hittades. Koppla entiteterna manuellt nedan.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee- och Zaptec-laddare hittas via enhetslistan och kräver därför en administratörstoken.";

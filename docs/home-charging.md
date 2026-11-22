@@ -123,12 +123,17 @@ editor says so when it is missing.
 ## Requirements
 
 - Home Assistant reachable from the Mac on the local network, over `http` or `https`.
-- A charger integration in Home Assistant. NexBlue is discovered first; any charger that exposes
-  a switch, a charging-state sensor, a power sensor and a session-energy sensor can be mapped by
-  hand.
+- A charger integration in Home Assistant. NexBlue is matched by its entity names even without
+  the device list; Easee and Zaptec are found through Home Assistant's device registry by their
+  status, power and energy entities. Any charger that exposes a switch, a charging-state sensor,
+  a power sensor and a session-energy sensor can be mapped by hand.
 - A Home Assistant long-lived access token. Create one in your Home Assistant profile under
   **Security**. A token from an administrator also reads the device registry, which finds the
-  charger's serial number; a non-administrator token falls back to matching entity names.
+  serial number and groups Easee and Zaptec entities by device; a non-administrator token falls
+  back to matching NexBlue entity names. Discovery maps a charging switch only when every option
+  of its status sensor is a state Hisingen can read, because that sensor is what confirms a
+  command. A charger whose states are not recognised is still listed for its readings, but its
+  switch is left for you to map by hand.
 - Optional: the Tibber integration, for price-aware windows.
 - Optional: a battery sensor in Home Assistant, for plans that target a percentage.
 
