@@ -137,11 +137,12 @@ struct HomeAssistantClientTests {
 struct HomeAssistantSocketTests {
     private let base = URL(string: "http://homeassistant.local:8123")!
 
-    /// Polls for up to two seconds. Returns whether the condition held, so a test that depends on
+    /// Polls for up to ten seconds, returning as soon as the condition holds, so a loaded CI runner
+    /// has room and a passing test pays nothing. Returns whether it held, so a test that depends on
     /// it can fail at the cause instead of timing out later.
     @discardableResult
     private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async -> Bool {
-        for _ in 0..<200 {
+        for _ in 0..<1000 {
             if condition() { return true }
             try? await Task.sleep(for: .milliseconds(10))
         }

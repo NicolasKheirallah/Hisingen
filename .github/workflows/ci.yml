@@ -14,11 +14,30 @@ permissions:
 env:
   CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
 
+# A new push supersedes an open pull request's run. Main pushes and merge groups each get a
+# full run, so a quick second merge never leaves the first commit unvalidated.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Documentation-only changes cannot alter the app, so they skip the macOS jobs. The gate
+  # below accepts that skip only when this job says it was safe.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.detect.outputs.native }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decide whether the macOS jobs are needed
+        id: detect
+        run: python3 Scripts/ci-changes.py
+
   portable-checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -42,33 +61,20 @@ jobs:
           go-version: '1.26.7'
           cache: false
       - name: Install pinned linters
+        uses: ./.github/actions/install-lint-tools
+      - name: Audit workflows for security issues
+        # Offline, so the audit needs no token and a network blip cannot fail it.
         run: |
-          set -euo pipefail
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
-            -o "$RUNNER_TEMP/shellcheck.tar.xz" \
-            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
-          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
-          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+          python3 -m pip install --quiet zizmor==1.32.0
+          zizmor --offline --config .github/zizmor.yml .github
       - name: Run portable validation
         run: sh Scripts/ci-checks.sh portable
 
-  compatibility-checks:
-    name: ${{ matrix.check }}
-    needs: portable-checks
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    strategy:
-      matrix:
-        check: [lint-workflows-and-scripts, check-localization, check-docs, check-vin-scoping, check-contrast, check-source-invariants]
-    steps:
-      - name: Preserve required contexts during protection migration
-        run: echo "Shared portable validation succeeded"
-
+  # Tests run on both architectures. They compile the app and test targets once; the release
+  # builds that ship are made by the package jobs, in parallel with these.
   build-and-test:
-    needs: portable-checks
+    needs: [portable-checks, changes]
+    if: needs.changes.outputs.native == 'true'
     name: build-and-test (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -76,15 +82,12 @@ jobs:
         include:
           - os: macos-15
             arch: arm64
-            package: true
           - os: macos-26-intel
             arch: x86_64
-            package: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       HISINGEN_BUILD_CONFIGURATION: fixture
-      HISINGEN_CI_PACKAGE: ${{ matrix.package }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
@@ -99,33 +102,12 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.15'
-      - name: Select pinned Xcode
-        run: sh Scripts/select-xcode.sh
-      - name: Configure diagnostic output
-        run: echo "HISINGEN_CI_OUTPUT_DIR=$RUNNER_TEMP/ci-output" >> "$GITHUB_ENV"
-      - name: Verify runtime architecture and toolchain
-        env:
-          EXPECTED_ARCH: ${{ matrix.arch }}
-        run: |
-          set -euo pipefail
-          test "$(uname -m)" = "$EXPECTED_ARCH"
-          xcodebuild -version
-          swift --version
-      - name: Cache dependency repositories and binary artifacts
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Set up the macOS build environment
+        uses: ./.github/actions/setup-macos
         with:
-          path: |
-            ~/Library/Caches/org.swift.swiftpm
-            ~/.cache/org.swift.swiftpm
-            .build/repositories
-            .build/artifacts
-            .build-arm64/repositories
-            .build-arm64/artifacts
-            .build-x86_64/repositories
-            .build-x86_64/artifacts
-          key: dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
-      - name: Validate native runtime and universal package
-        run: sh Scripts/ci-checks.sh macos
+          expected-arch: ${{ matrix.arch }}
+      - name: Build, test and validate the native runtime
+        run: sh Scripts/ci-checks.sh macos-test
       - name: Write execution summary
         if: always()
         run: python3 Scripts/ci-summary.py summary "$HISINGEN_CI_OUTPUT_DIR"
@@ -138,10 +120,99 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Each architecture builds natively on its own runner. The package job merges them.
+  package-arch:
+    needs: [portable-checks, changes]
+    if: needs.changes.outputs.native == 'true'
+    name: package-arch (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-26-intel
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      HISINGEN_BUILD_CONFIGURATION: fixture
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.15'
+      - name: Set up the macOS build environment
+        uses: ./.github/actions/setup-macos
+        with:
+          expected-arch: ${{ matrix.arch }}
+      - name: Build the ${{ matrix.arch }} release binary
+        run: sh Scripts/ci-checks.sh build-arch ${{ matrix.arch }}
+      - name: Preserve the ${{ matrix.arch }} build for packaging
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: arch-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ env.HISINGEN_CI_OUTPUT_DIR }}/arch-${{ matrix.arch }}.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  package:
+    needs: [package-arch, changes]
+    if: needs.changes.outputs.native == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      HISINGEN_BUILD_CONFIGURATION: fixture
+      HISINGEN_ARCH_DIR: arch-builds
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.23.2'
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.15'
+      - name: Set up the macOS build environment
+        uses: ./.github/actions/setup-macos
+        with:
+          expected-arch: arm64
+      - name: Restore both architecture builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: arch-*-${{ github.run_attempt }}
+          merge-multiple: true
+          path: arch-builds
+      - name: Merge, bundle, package and validate the universal app
+        run: sh Scripts/ci-checks.sh package
+      - name: Write execution summary
+        if: always()
+        run: python3 Scripts/ci-summary.py summary "$HISINGEN_CI_OUTPUT_DIR"
+      - name: Preserve the packaged app and diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-package-${{ github.run_attempt }}
+          path: ${{ env.HISINGEN_CI_OUTPUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 7
+
   ci-required:
     name: ci-required
     if: always()
-    needs: [portable-checks, build-and-test]
+    needs: [portable-checks, changes, build-and-test, package-arch, package]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

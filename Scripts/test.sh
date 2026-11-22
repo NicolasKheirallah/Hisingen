@@ -55,25 +55,24 @@ else
 fi
 report_dir=$(CDPATH='' cd -- "$report_dir" && pwd)
 
-# Discover with the same build and selection flags as execution; a typo cannot become a green run.
-python3 "$root_dir/Scripts/check-test-selection.py" discover --output "$report_dir" -- swift test "$@"
+stage_start=$(date +%s)
+stage() { printf '\n== %s (%ss into the test phase)\n' "$1" "$(( $(date +%s) - stage_start ))"; }
+
+stage build
+# Compile the app and test targets exactly once, with the caller's build flags (coverage and
+# warnings-as-errors included). Discovery and execution then reuse that build with --skip-build.
+# `swift test list` ignores --enable-code-coverage, so letting it do the building left
+# uninstrumented products and made the run compile the whole package a second time.
+python3 "$root_dir/Scripts/check-test-selection.py" build --output "$report_dir" -- swift test "$@"
+stage discover
+# Discover with the same selection flags as execution; a typo cannot become a green run.
+python3 "$root_dir/Scripts/check-test-selection.py" discover --output "$report_dir" -- swift test --skip-build "$@"
 python3 "$root_dir/Scripts/check-test-selection.py" selection \
     --output "$report_dir" "$report_dir/discovered-tests.txt" -- "$@"
 case "$swift_test_help" in
     *--xunit-output*) result_flag=--xunit ;;
     *) echo "The selected Swift test runner must support --xunit-output" >&2; exit 1 ;;
 esac
-# The discovery run above already built everything, so `--skip-build` only saves seconds. With
-# coverage it also breaks the run: SwiftPM clears its profile directory and recreates it only in
-# the build step, so a fresh checkout would pass every test and then fail to merge coverage.
-skip_build=--skip-build
-for argument in "$@"; do
-    if [ "$argument" = --enable-code-coverage ]; then skip_build=; fi
-done
-if [ -n "$skip_build" ]; then
-    python3 "$root_dir/Scripts/check-test-selection.py" run --output "$report_dir" "$result_flag" \
-        -- swift test "$@" "$skip_build"
-else
-    python3 "$root_dir/Scripts/check-test-selection.py" run --output "$report_dir" "$result_flag" \
-        -- swift test "$@"
-fi
+stage run
+python3 "$root_dir/Scripts/check-test-selection.py" run --output "$report_dir" "$result_flag" \
+    -- swift test --skip-build "$@"

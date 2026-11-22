@@ -40,7 +40,7 @@ NOTARYTOOL_PROFILE ?= hisingen-notary
 export NOTARIZE
 export NOTARYTOOL_PROFILE
 
-.PHONY: all dist ci doctor build universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets
+.PHONY: all dist ci doctor build build-arch lipo-universal package-universal universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets
 
 ## Default target: build both .app bundle and .dmg installer
 all: dmg
@@ -67,17 +67,35 @@ setup-cert:
 build: doctor inject-secrets
 	swift build -c release $(SWIFT_FLAGS)
 
-## Build a universal binary for distribution. Separate scratch directories
-## avoid SwiftPM reusing artifacts from the other target architecture.
-universal: doctor inject-secrets
-	swift build -c release --arch arm64 --scratch-path .build-arm64 $(SWIFT_FLAGS)
-	swift build -c release --arch x86_64 --scratch-path .build-x86_64 $(SWIFT_FLAGS)
+## Build one architecture into its own scratch directory, so SwiftPM never reuses artifacts
+## from the other one. CI runs each architecture on its own runner and merges them afterwards.
+build-arch: doctor inject-secrets
+	@case "$(ARCH)" in arm64|x86_64) ;; *) echo "Set ARCH=arm64 or ARCH=x86_64" >&2; exit 2 ;; esac
+	swift build -c release --arch $(ARCH) --scratch-path .build-$(ARCH) $(SWIFT_FLAGS)
+	@bin="$$(swift build -c release --arch $(ARCH) --scratch-path .build-$(ARCH) --show-bin-path)"; \
+	case "$$bin" in \
+		*/.build-$(ARCH)/$(ARCH)-apple-macosx/release) ;; \
+		*) echo "Unexpected SwiftPM output layout: $$bin" >&2; exit 1 ;; \
+	esac; \
+	test -x "$$bin/Hisingen" || { echo "Missing $$bin/Hisingen" >&2; exit 1; }
+
+## Merge two per-architecture builds into the single binary the app bundle packages.
+lipo-universal:
+	@for arch in arm64 x86_64; do \
+		test -x ".build-$$arch/$$arch-apple-macosx/release/Hisingen" || { echo "Missing the $$arch build; run make build-arch ARCH=$$arch" >&2; exit 1; }; \
+	done
 	mkdir -p .build/release
 	lipo -create \
-		"$$(swift build -c release --arch arm64 --scratch-path .build-arm64 --show-bin-path)/Hisingen" \
-		"$$(swift build -c release --arch x86_64 --scratch-path .build-x86_64 --show-bin-path)/Hisingen" \
+		.build-arm64/arm64-apple-macosx/release/Hisingen \
+		.build-x86_64/x86_64-apple-macosx/release/Hisingen \
 		-output $(BINARY)
 	lipo $(BINARY) -verify_arch arm64 x86_64
+
+## Build a universal binary for distribution.
+universal: doctor inject-secrets
+	$(MAKE) build-arch ARCH=arm64
+	$(MAKE) build-arch ARCH=x86_64
+	$(MAKE) lipo-universal
 
 ## Assemble a proper .app bundle (needed for launch-at-login) and sign it
 app: $(if $(SKIP_BUILD),,build)
@@ -126,6 +144,10 @@ endif
 	@echo "Done → open $(APP)  (or move it to /Applications)"
 
 app-universal: universal
+	$(MAKE) app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"
+
+## Bundle per-architecture builds produced elsewhere (CI builds each on a native runner).
+package-universal: lipo-universal
 	$(MAKE) app SKIP_BUILD=1 IDENTITY="$(IDENTITY)"
 
 ## Notarize and staple an already-built app bundle and disk image

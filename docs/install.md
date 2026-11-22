@@ -27,18 +27,29 @@ Hisingen checks for signed updates daily by default. To check now, choose **Hisi
 ### Code signing
 
 The release workflow signs Hisingen.app and Hisingen.dmg with Developer ID, notarizes both and
-staples Apple's tickets. Each release includes SHA-256 checksums and GitHub build attestations.
+staples Apple's tickets. Each release includes a SHA-256 checksum file and GitHub build attestations.
 [Release process](operations/releases.md)
 
 ### Verify the download checksum
 
-Every release publishes a `SHA256SUMS` file covering all artifacts. To verify:
+A release has three files: `Hisingen.dmg`, `Hisingen.app.zip` (the archive the in-app updater
+downloads) and `SHA256SUMS`, which covers both. Run this in the folder containing the files
+you downloaded, with the name of the one you want to check:
 
 ```bash
-shasum -a 256 -c SHA256SUMS
+grep Hisingen.dmg SHA256SUMS | shasum -a 256 -c -
 ```
 
-Run this in the folder containing the downloaded files. It should report `OK` for each one.
+It should report `Hisingen.dmg: OK`.
+
+### Verify where it was built
+
+Each release file carries a GitHub build attestation that ties it to this repository's release
+workflow. With the [GitHub CLI](https://cli.github.com/) installed:
+
+```bash
+gh attestation verify Hisingen.dmg --owner NicolasKheirallah
+```
 
 ### Verify the signature
 
@@ -46,6 +57,13 @@ macOS checks the signature and notarization at first launch. To verify the insta
 
 ```bash
 spctl -a -t exec -vv /Applications/Hisingen.app
+```
+
+To check a downloaded disk image before you open it:
+
+```bash
+xcrun stapler validate Hisingen.dmg
+spctl -a -t open --context context:primary-signature -vv Hisingen.dmg
 ```
 
 The expected result is `accepted` with `source=Notarized Developer ID`. If verification fails or

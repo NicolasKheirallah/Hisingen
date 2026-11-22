@@ -30,10 +30,12 @@ cp "$ARCHIVE" "$STAGING/Hisingen.app.zip"
 sh Scripts/extract-release-notes.sh "$VERSION" CHANGELOG.md "$STAGING/Hisingen.app.md"
 
 DOWNLOAD_PREFIX="https://github.com/NicolasKheirallah/Hisingen/releases/download/$RELEASE_TAG/"
+# Release notes are served from Pages beside the feed; the release carries only what a person downloads.
+NOTES_PREFIX="https://nicolaskheirallah.github.io/Hisingen/updates/"
 "$GENERATE_APPCAST" \
     --ed-key-file "$PRIVATE_KEY_FILE" \
     --download-url-prefix "$DOWNLOAD_PREFIX" \
-    --release-notes-url-prefix "$DOWNLOAD_PREFIX" \
+    --release-notes-url-prefix "$NOTES_PREFIX" \
     --full-release-notes-url "https://github.com/NicolasKheirallah/Hisingen/blob/main/CHANGELOG.md" \
     --maximum-deltas 0 \
     "$STAGING"

@@ -3,6 +3,27 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- A release now attaches only what a person downloads: `Hisingen.dmg`, `Hisingen.app.zip` and
+  `SHA256SUMS`, which covers both. The duplicate `Hisingen.zip`, `release-manifest.json`, `appcast.xml`
+  and `Hisingen.app.md` are no longer release assets. Sparkle's feed and its signed release notes are
+  served from the Pages site, and the manifest stays in the release run's artifact. Publishing deletes
+  any other asset from the draft and stops if one remains. The release body opens with the commands to
+  check a download: checksum, build attestation, signature and notarization ticket. Installed copies
+  keep updating, because feeds already published still point at the notes attached to their release.
+
+- CI is faster and its gate is the real one. The release binaries now build in parallel, each on its
+  own native runner, instead of one after the other behind the tests, and a documentation-only change
+  skips the macOS jobs. `main` requires only `ci-required`, which covers both architectures; the
+  placeholder jobs it used to require are gone. Release reuses CI's green result for the tagged commit
+  instead of repeating the test suites. The ShellCheck download retries on any failure and is cached,
+  Dependabot waits a week before proposing a release, CodeQL runs on pull requests only when source
+  or package files change, workflows are audited with zizmor, and line coverage has a floor that can
+  only rise. `check-third-party-notices.py --fix` updates pinned versions after a dependency bump.
+
 ## [3.0.1] - 2026-11-19
 
 ### Added
