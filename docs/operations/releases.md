@@ -36,8 +36,9 @@ again on its own ref.
 
 1. **Validate:** require workflow ref, tag, checkout, plist version, changelog,
    increasing build number and main ancestry to agree. Run portable checks.
-2. **Test:** run credential-free deterministic tests and package validation before
-   production signing credentials become available.
+2. **Test:** reuse CI's result when every required check passed for the tagged commit;
+   otherwise run the credential-free deterministic tests and package validation here,
+   before production signing credentials become available.
 3. **Build:** import a Developer ID certificate, build/sign a universal app and
    upload `signed-app.zip` plus its digest/identity checkpoint.
 4. **Notarize:** restore that checkpoint, submit/resume Apple's app request,
@@ -52,8 +53,13 @@ again on its own ref.
 7. **Distribute:** call the reusable Pages workflow and update Homebrew under
    monotonic version guards. A release run remains incomplete if either fails.
 
-The publication input includes the DMG, both ZIP names, SHA256SUMS, signed feed,
-signed notes and an identity/digest manifest. Pages consumes the same-run verified
+The publication input includes the DMG, `Hisingen.app.zip`, SHA256SUMS, signed feed,
+signed notes and an identity/digest manifest. Only the first three are release assets:
+the DMG, the app archive and the checksums that cover both. The feed and notes are
+served from Pages beside the feed, and the manifest stays in the run artifact. Publication
+removes any other asset from the draft and refuses to publish if one remains. The release
+body opens with a "Verify your download" section (checksum, attestation, signature and
+notarization commands). Pages consumes the same-run verified
 site artifact; it no longer needs the release bot to commit an appcast onto main.
 The Pages deployment verifies served callback/feed bytes and referenced release
 assets over HTTPS. Homebrew hashes the published DMG and refuses a cask downgrade.
@@ -80,6 +86,8 @@ artifact identity changes. Verify provenance independently with:
 ```sh
 gh attestation verify Hisingen.dmg --owner NicolasKheirallah
 ```
+
+The attestation covers `Hisingen.dmg`, `Hisingen.app.zip` and `SHA256SUMS`.
 
 ## Repository policy and rollout
 

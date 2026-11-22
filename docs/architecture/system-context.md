@@ -51,7 +51,7 @@ C4Context
 | Volvo Connected Vehicle / Energy / Location API | `api.volvocars.com` | All Volvo telemetry and remote commands | No: required for Volvo |
 | Apple CoreLocation (`CLGeocoder`) | Apple-operated | Reverse-geocode vehicle coordinates into a street address | **Yes**: only when "Vehicle Location" is enabled |
 | Open-Meteo | `api.open-meteo.com` | Weather at the vehicle's parked location | **Yes**: only when "Vehicle Weather" is enabled |
-| GitHub Pages + Releases | `nicolaskheirallah.github.io/Hisingen/updates/appcast.xml` and GitHub release assets | Signed Sparkle update metadata and archive | **Yes**: only when "Update Checks" is enabled |
+| GitHub Pages + Releases | `nicolaskheirallah.github.io/Hisingen/updates/appcast.xml` and GitHub release assets | Signed Sparkle feed and release notes (Pages) and the update archive (release asset) | **Yes**: only when "Update Checks" is enabled |
 | GitHub Pages | `nicolaskheirallah.github.io/Hisingen/oauth-callback.html` | Static bridge page: Volvo requires an `http(s)` redirect URI, so this page forwards the OAuth callback query string to Hisingen's `hisingen://` URL scheme. It never sees or stores anything; see [api/authentication.md](../api/authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-bridge). | No: required for Volvo sign-in |
 | macOS Keychain | Local | Credential/token storage | No |
 | Notification Center | Local | Charging/warning/security notifications | **Yes**: gated by the Notifications feature and OS permission |

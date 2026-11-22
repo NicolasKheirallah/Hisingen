@@ -55,7 +55,8 @@ try {
     const support = requireFile('Scripts/release-support.py');
     const releasePipeline = [workflow, notarize, support, requireFile('Scripts/publish-appcast.sh'), requireFile('Scripts/stapler-staple.sh')].join('\n');
     for (const value of ['SPARKLE_PUBLIC_ED_KEY', 'SPARKLE_PRIVATE_ED_KEY', 'SPARKLE_TOOLS_SHA256', 'generate_appcast', '--ed-key-file', 'verify-sparkle-keypair.mjs', 'verify-updater.mjs appcast', 'publish-appcast.sh', 'request("submit"', 'Scripts/stapler-staple.sh', 'xcrun stapler staple', 'Hisingen.app.md']) requireText(releasePipeline, value, 'release security control');
-    requireText(workflow, 'needs: [validate, test]', 'validation before signing');
+    requireText(workflow, 'needs: [validate, ci-proof, test]', 'validation before signing');
+    requireText(workflow, "needs.test.result == 'success' || needs.test.result == 'skipped'", 'a skipped test job only when CI already proved the commit');
     requireText(workflow, 'ref: ${{ needs.validate.outputs.sha }}', 'validated source checkout');
     requireText(notarize, 'Hisingen.app/Contents/Info.plist "$TAG"', 'verification against final embedded key and release tag');
     if (!/- name: Notarize once, package and verify signed updater[\s\S]*?env:[\s\S]*?SPARKLE_PUBLIC_ED_KEY:[\s\S]*?SPARKLE_PRIVATE_ED_KEY:/.test(workflow)) {

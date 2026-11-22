@@ -22,6 +22,39 @@ def load_module(name, filename):
 
 localization = load_module("localization", "check-localization.py")
 sync = load_module("sync", "check-sync.py")
+notices = load_module("notices", "check-third-party-notices.py")
+
+
+class ThirdPartyNoticeFixTests(unittest.TestCase):
+    PINS = [
+        {"location": "https://github.com/grpc/grpc-swift-nio-transport.git", "state": {"version": "2.12.0"}},
+        {"location": "https://github.com/sparkle-project/Sparkle.git", "state": {"version": "2.10.2"}},
+        {"location": "https://github.com/apple/swift-log.git", "state": {"version": "1.17.0"}},
+    ]
+    TEXT = """| Package | Pinned version |
+|---|---|
+| [grpc/grpc-swift-nio-transport](https://github.com/grpc/grpc-swift-nio-transport) | 2.10.0 |
+| [apple/swift-log](https://github.com/apple/swift-log) | 1.17.0 |
+
+[Sparkle's LICENSE at 2.10.1](https://github.com/sparkle-project/Sparkle/blob/2.10.1/LICENSE).
+"""
+
+    def test_version_cells_and_license_links_follow_package_resolved(self):
+        fixed, changes = notices.fix_versions(self.TEXT, self.PINS)
+        self.assertIn("(https://github.com/grpc/grpc-swift-nio-transport) | 2.12.0 |", fixed)
+        self.assertIn("Sparkle/blob/2.10.2/LICENSE", fixed)
+        self.assertIn("swift-log) | 1.17.0 |", fixed)
+        self.assertEqual(sorted(changes), ["grpc/grpc-swift-nio-transport: 2.10.0 -> 2.12.0", "sparkle-project/Sparkle: 2.10.1 -> 2.10.2"])
+
+    def test_a_package_the_notices_never_name_is_left_for_a_human(self):
+        pins = [{"location": "https://github.com/example/new-package.git", "state": {"version": "1.0.0"}}]
+        fixed, changes = notices.fix_versions(self.TEXT, pins)
+        self.assertEqual((fixed, changes), (self.TEXT, []))
+
+    def test_fixing_twice_changes_nothing(self):
+        once, _ = notices.fix_versions(self.TEXT, self.PINS)
+        twice, changes = notices.fix_versions(once, self.PINS)
+        self.assertEqual((twice, changes), (once, []))
 
 
 class LocalizationSafetyTests(unittest.TestCase):

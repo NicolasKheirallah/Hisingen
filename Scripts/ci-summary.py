@@ -19,6 +19,8 @@ import xml.etree.ElementTree as ET
 
 SPARKLE = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
 RELEASE_PREFIX = "https://github.com/NicolasKheirallah/Hisingen/releases/download/"
+UPDATES_PREFIX = "https://nicolaskheirallah.github.io/Hisingen/updates/"
+COVERAGE_FLOOR = pathlib.Path(__file__).resolve().parent.parent / ".github/coverage-floor.json"
 
 
 def normalize_queue_extension(text):
@@ -61,6 +63,8 @@ def lint_workflows(root):
             normalized, used = normalize_queue_extension(source.read_text())
             queue_used = queue_used or used
             (workflows / source.name).write_text(normalized)
+        if (root / ".github/actions").is_dir():
+            shutil.copytree(root / ".github/actions", project / ".github/actions")
         for name in ("actionlint.yaml", "actionlint.yml"):
             source = root / ".github" / name
             if source.is_file():
@@ -75,10 +79,23 @@ def lint_workflows(root):
         print("workflow-lint-passed")
 
 
+ALWAYS_REQUIRED = ("portable-checks", "changes")
+NATIVE_REQUIRED = ("build-and-test", "package-arch", "package")
+
+
 def require_ci_success(results):
-    if set(results) != {"portable-checks", "build-and-test"}:
+    """Every job must succeed. The macOS jobs may be skipped, and only when the change
+    detector said the diff cannot affect the built app."""
+    if set(results) != set(ALWAYS_REQUIRED + NATIVE_REQUIRED):
         raise ValueError("The required CI result set changed or is incomplete")
-    unsuccessful = {name: item.get("result") for name, item in results.items() if item.get("result") != "success"}
+    unsuccessful = {name: results[name].get("result") for name in ALWAYS_REQUIRED if results[name].get("result") != "success"}
+    if unsuccessful:
+        raise ValueError(f"Required jobs did not succeed: {unsuccessful}")
+    native = results["changes"].get("outputs", {}).get("native")
+    if native not in ("true", "false"):
+        raise ValueError("The change detector did not report whether the macOS lanes were needed")
+    allowed = ("success",) if native == "true" else ("success", "skipped")
+    unsuccessful = {name: results[name].get("result") for name in NATIVE_REQUIRED if results[name].get("result") not in allowed}
     if unsuccessful:
         raise ValueError(f"Required jobs did not succeed: {unsuccessful}")
 
@@ -110,8 +127,10 @@ def appcast_version(data, expected_version=None):
         raise ValueError("Appcast archive is not the expected HTTPS release asset")
     if not enclosure.get("length", "").isdecimal() or int(enclosure.get("length")) <= 0:
         raise ValueError("Appcast archive length is invalid")
-    if notes is None or notes.text != prefix + "Hisingen.app.md":
-        raise ValueError("Appcast notes are not the expected HTTPS release asset")
+    # New releases serve notes from Pages beside the feed; older feeds, including the
+    # checked-in seed, still point at the notes file attached to that release.
+    if notes is None or notes.text not in (UPDATES_PREFIX + "Hisingen.app.md", prefix + "Hisingen.app.md"):
+        raise ValueError("Appcast notes are not at the expected HTTPS location")
     for element in (enclosure, notes):
         try:
             signature = base64.b64decode(element.get(f"{SPARKLE}edSignature", ""), validate=True)
@@ -129,7 +148,11 @@ def validate_site(directory, expected_version=None):
         if required not in callback:
             raise ValueError("OAuth callback no longer forwards the authorization result")
     feed = (directory / "updates/appcast.xml").read_bytes()
-    return appcast_version(feed, expected_version)
+    version, assets = appcast_version(feed, expected_version)
+    for url, _ in assets:
+        if url.startswith(UPDATES_PREFIX) and not (directory / "updates" / url[len(UPDATES_PREFIX):]).is_file():
+            raise ValueError(f"Site is missing the release notes the feed links to: {url}")
+    return version, assets
 
 
 def request_bytes(url):
@@ -149,12 +172,16 @@ def verify_deployed(base_url, directory, expected_version=None):
     last_error = None
     for attempt in range(8):
         try:
-            for relative in ("oauth-callback.html", "updates/appcast.xml"):
+            pages_assets = [url for url, _ in assets if url.startswith(UPDATES_PREFIX)]
+            relatives = ["oauth-callback.html", "updates/appcast.xml"] + ["updates/" + url[len(UPDATES_PREFIX):] for url in pages_assets]
+            for relative in relatives:
                 actual = request_bytes(base_url.rstrip("/") + "/" + relative)
                 expected = (pathlib.Path(directory) / relative).read_bytes()
                 if hashlib.sha256(actual).digest() != hashlib.sha256(expected).digest():
                     raise ValueError(f"Deployed {relative} differs from the deployment artifact")
             for url, length in assets:
+                if url in pages_assets:
+                    continue
                 request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Hisingen-CI"})
                 with urllib.request.urlopen(request, timeout=20) as response:
                     if response.status != 200:
@@ -214,6 +241,21 @@ def record_coverage(source, directory):
     report = {"files": len(files), "lines": count, "covered_lines": covered, "percent": round(100 * covered / count, 2)}
     (output / "coverage-summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"Application line coverage: {covered}/{count} ({report['percent']}%)")
+    enforce_coverage_floor(report["percent"])
+
+
+def enforce_coverage_floor(percent, floor_path=None):
+    """Fail when line coverage drops below the committed floor, and say when to raise it.
+
+    The floor only moves up: raise it in the same change that adds the tests."""
+    path = pathlib.Path(floor_path or COVERAGE_FLOOR)
+    if not path.is_file():
+        return
+    floor = float(json.loads(path.read_text())["percent"])
+    if percent < floor:
+        raise ValueError(f"Application line coverage {percent}% is below the committed floor of {floor}% ({path.name})")
+    if percent >= floor + 2:
+        print(f"Coverage is {round(percent - floor, 2)} points above the floor; raise {path.name} to {int(percent)}.")
 
 
 def summary(directory):

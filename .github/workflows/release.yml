@@ -45,6 +45,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -64,21 +65,38 @@ jobs:
           python3 Scripts/release-support.py monotonic "$TAG"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-      - name: Install workflow linter
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
-            -o "$RUNNER_TEMP/shellcheck.tar.xz" \
-            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
-          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
-          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+      - name: Install pinned linters
+        uses: ./.github/actions/install-lint-tools
       - name: Validate all portable source checks
         run: sh Scripts/ci-checks.sh portable
 
-  test:
+  # The tagged commit is a main commit that CI already tested. When CI's own results for
+  # that exact commit are all green, rerunning the same suites here would only repeat them.
+  ci-proof:
     needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      proven: ${{ steps.proof.outputs.proven }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.sha }}
+      - name: Look for a complete green CI run on this commit
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.validate.outputs.sha }}
+        run: echo "proven=$(python3 Scripts/release-support.py ci-proof "$SHA")" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: [validate, ci-proof]
+    if: needs.ci-proof.outputs.proven != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +123,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -113,14 +132,15 @@ jobs:
       - name: Select pinned Xcode
         run: sh Scripts/select-xcode.sh
       - name: Restore dependency data
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.cache/org.swift.swiftpm
             ~/Library/Caches/org.swift.swiftpm
+            ~/.cache/org.swift.swiftpm
             .build/repositories
             .build/artifacts
-          key: release-deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Package.resolved') }}
+          # Restore-only: a publishing workflow never writes a cache that CI later trusts.
+          key: dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}
       - name: Run credential-free deterministic and packaging checks
         env:
           HISINGEN_CI_OUTPUT_DIR: ci-results
@@ -135,7 +155,9 @@ jobs:
           if-no-files-found: warn
 
   build:
-    needs: [validate, test]
+    needs: [validate, ci-proof, test]
+    # `test` is skipped when CI already proved this commit. Anything else but success stops here.
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.ci-proof.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: macos-15
     timeout-minutes: 75
     environment: production-release
@@ -149,6 +171,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -224,6 +247,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -261,7 +285,6 @@ jobs:
           name: release-ready-${{ env.TAG }}
           path: |
             Hisingen.dmg
-            Hisingen.zip
             Hisingen.app.zip
             SHA256SUMS
             release-manifest.json
@@ -305,6 +328,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -319,9 +343,8 @@ jobs:
         with:
           subject-path: |
             Hisingen.dmg
-            Hisingen.zip
             Hisingen.app.zip
-            release-manifest.json
+            SHA256SUMS
       - name: Draft, upload, download-verify and publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -353,6 +376,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
+          package-manager-cache: false
           node-version: '22.23.2'
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0

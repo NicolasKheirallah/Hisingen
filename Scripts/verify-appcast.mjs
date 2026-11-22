@@ -54,7 +54,7 @@ export function verifyAppcast({ feed, archive, notes, plist, expectedTag }) {
   if (item.minimum !== plist.LSMinimumSystemVersion) throw new Error('Minimum macOS version does not match bundle');
   if (expectedTag && expectedTag !== `v${item.version}`) throw new Error('Appcast version does not match release tag');
   const prefix = `https://github.com/NicolasKheirallah/Hisingen/releases/download/v${item.version}/`;
-  if (item.enclosure.url !== `${prefix}Hisingen.app.zip` || item.notesURL !== `${prefix}Hisingen.app.md`) throw new Error('Unexpected release asset URL');
+  if (item.enclosure.url !== `${prefix}Hisingen.app.zip` || item.notesURL !== 'https://nicolaskheirallah.github.io/Hisingen/updates/Hisingen.app.md') throw new Error('Unexpected release asset URL');
   for (const [name, bytes, attrs] of [['Archive', archive, item.enclosure], ['Release notes', notes, item.notes]]) {
     const length = attrs.length ?? attrs[`{${sparkleNS}}length`];
     if (!/^\d+$/.test(length || '') || Number(length) !== bytes.length) throw new Error(`${name} length mismatch`);
@@ -81,7 +81,7 @@ export function appcastSelfTest() {
   const notes = Buffer.from('Release notes.\n');
   const signature = bytes => sign(null, bytes, privateKey).toString('base64');
   const plist = { SURequireSignedFeed: true, SUVerifyUpdateBeforeExtraction: true, SUPublicEDKey: rawKey, CFBundleShortVersionString: '1.2.3', CFBundleVersion: '42', LSMinimumSystemVersion: '15.0' };
-  const xml = `<rss xmlns:sparkle="${sparkleNS}"><channel><item><sparkle:version>42</sparkle:version><sparkle:shortVersionString>1.2.3</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><sparkle:releaseNotesLink sparkle:edSignature="${signature(notes)}" sparkle:length="${notes.length}">https://github.com/NicolasKheirallah/Hisingen/releases/download/v1.2.3/Hisingen.app.md</sparkle:releaseNotesLink><enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v1.2.3/Hisingen.app.zip" length="${archive.length}" sparkle:edSignature="${signature(archive)}" /></item></channel></rss>`;
+  const xml = `<rss xmlns:sparkle="${sparkleNS}"><channel><item><sparkle:version>42</sparkle:version><sparkle:shortVersionString>1.2.3</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><sparkle:releaseNotesLink sparkle:edSignature="${signature(notes)}" sparkle:length="${notes.length}">https://nicolaskheirallah.github.io/Hisingen/updates/Hisingen.app.md</sparkle:releaseNotesLink><enclosure url="https://github.com/NicolasKheirallah/Hisingen/releases/download/v1.2.3/Hisingen.app.zip" length="${archive.length}" sparkle:edSignature="${signature(archive)}" /></item></channel></rss>`;
   const signedFeed = xmlText => {
     const content = Buffer.from(xmlText);
     return Buffer.concat([content, Buffer.from(`<!-- sparkle-signatures:\nedSignature: ${signature(content)}\nlength: ${content.length}\n-->\n`)]);

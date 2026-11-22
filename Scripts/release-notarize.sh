@@ -30,19 +30,16 @@ if [ ! -f Hisingen.dmg ]; then
 fi
 codesign --verify --verbose=2 Hisingen.dmg
 NOTARIZE=require NOTARY_STATE_DIR=notary-state sh Scripts/notarize.sh Hisingen.dmg
-ditto -c -k --keepParent Hisingen.app Hisingen.zip
-cp Hisingen.zip Hisingen.app.zip
+ditto -c -k --keepParent Hisingen.app Hisingen.app.zip
 archive_check_dir=$(mktemp -d "$RUNNER_TEMP/hisingen-archives.XXXXXX")
-for archive in Hisingen.zip Hisingen.app.zip; do
-    destination="$archive_check_dir/$archive"
-    mkdir -p "$destination"
-    ditto -x -k "$archive" "$destination"
-    codesign --verify --deep --strict --verbose=2 "$destination/Hisingen.app"
-    lipo "$destination/Hisingen.app/Contents/MacOS/Hisingen" -verify_arch arm64 x86_64
-    spctl --assess --type execute --verbose=2 "$destination/Hisingen.app"
-done
+destination="$archive_check_dir/Hisingen.app.zip"
+mkdir -p "$destination"
+ditto -x -k Hisingen.app.zip "$destination"
+codesign --verify --deep --strict --verbose=2 "$destination/Hisingen.app"
+lipo "$destination/Hisingen.app/Contents/MacOS/Hisingen" -verify_arch arm64 x86_64
+spctl --assess --type execute --verbose=2 "$destination/Hisingen.app"
 APP_PATH=Hisingen.app DMG_PATH=Hisingen.dmg REQUIRE_UNIVERSAL=true sh Scripts/validate-release.sh --artifacts Hisingen.app Hisingen.dmg
-shasum -a 256 Hisingen.dmg Hisingen.zip Hisingen.app.zip > SHA256SUMS
+shasum -a 256 Hisingen.dmg Hisingen.app.zip > SHA256SUMS
 archive="$RUNNER_TEMP/Sparkle-2.10.1.tar.xz"
 curl --fail --silent --show-error --location --retry 3 --connect-timeout 20 --max-time 180 -o "$archive" https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-2.10.1.tar.xz
 printf '%s  %s\n' "$SPARKLE_TOOLS_SHA256" "$archive" | shasum -a 256 -c -
@@ -57,6 +54,8 @@ printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > "$private_key"
 node Scripts/verify-sparkle-keypair.mjs "$private_key"
 sh Scripts/publish-appcast.sh "$tools_dir" "${TAG#v}" "$TAG" Hisingen.app.zip updates "$private_key"
 node Scripts/verify-updater.mjs appcast updates/appcast.xml Hisingen.app.zip updates/Hisingen.app.md Hisingen.app/Contents/Info.plist "$TAG"
+# The feed and its signed notes are served from Pages, not attached to the release.
 mkdir -p site/updates
 cp updates/appcast.xml site/updates/appcast.xml
-python3 Scripts/release-support.py manifest release-manifest.json "$TAG" Hisingen.dmg Hisingen.zip Hisingen.app.zip SHA256SUMS updates/appcast.xml updates/Hisingen.app.md
+cp updates/Hisingen.app.md site/updates/Hisingen.app.md
+python3 Scripts/release-support.py manifest release-manifest.json "$TAG" Hisingen.dmg Hisingen.app.zip SHA256SUMS updates/appcast.xml updates/Hisingen.app.md

@@ -77,7 +77,8 @@ One-time maintainer setup:
 
 For every version tag CI tests, builds, signs/notarizes/staples, packages the app zip and DMG,
 generates a signed appcast and signed Markdown notes, verifies a complete draft release, and
-publishes immutable assets. It passes the verified feed artifact to the reusable Pages workflow
+publishes immutable assets (the DMG, `Hisingen.app.zip` and `SHA256SUMS`; the feed and notes are
+served from Pages). It passes the verified feed artifact to the reusable Pages workflow
 and waits for the deployed bytes to match. Checkpoints preserve artifact identity for retries;
 release preparation uses a pull request rather than directly updating main.
 
