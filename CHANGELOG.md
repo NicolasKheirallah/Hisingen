@@ -3,6 +3,14 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Reading Freshness names the transport that answered each reading — Portal, gRPC, Live or
+  Weather — whenever it is not the usual Polestar app transport, and stays silent when it is.
+  In Developer Portal mode this explains a stale domain sitting next to a fresh one.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

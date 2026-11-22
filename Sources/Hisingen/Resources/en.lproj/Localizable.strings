@@ -231,6 +231,8 @@
 "Unlocks the vehicle." = "Unlocks the vehicle.";
 "Locks the vehicle." = "Locks the vehicle.";
 "Lock State Not Reported" = "Lock State Not Reported";
+"Portal" = "Portal";
+"Weather" = "Weather";
 "Window State Not Reported" = "Window State Not Reported";
 "Windows Closed" = "Windows Closed";
 "Windows Open" = "Windows Open";
