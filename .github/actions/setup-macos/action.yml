@@ -1,0 +1,39 @@
+name: Set up the macOS build environment
+description: Select the pinned Xcode, confirm the runner architecture, route diagnostics and restore the dependency caches. Call it after checkout, setup-node and setup-python.
+
+inputs:
+  expected-arch:
+    description: Runner architecture the job must run on, arm64 or x86_64.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Select pinned Xcode
+      shell: bash
+      run: sh Scripts/select-xcode.sh
+    - name: Configure diagnostic output
+      shell: bash
+      run: echo "HISINGEN_CI_OUTPUT_DIR=$RUNNER_TEMP/ci-output" >> "$GITHUB_ENV"
+    - name: Verify runtime architecture and toolchain
+      shell: bash
+      env:
+        EXPECTED_ARCH: ${{ inputs.expected-arch }}
+      run: |
+        set -euo pipefail
+        test "$(uname -m)" = "$EXPECTED_ARCH"
+        xcodebuild -version
+        swift --version
+    - name: Cache dependency repositories and binary artifacts
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/Library/Caches/org.swift.swiftpm
+          ~/.cache/org.swift.swiftpm
+          .build/repositories
+          .build/artifacts
+          .build-arm64/repositories
+          .build-arm64/artifacts
+          .build-x86_64/repositories
+          .build-x86_64/artifacts
+        key: dependencies-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/ci-toolchain.json', 'Package.resolved', 'Package.swift') }}

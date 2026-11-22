@@ -21,6 +21,11 @@ VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z
 # checksums that cover both. The feed, notes and manifest are pipeline inputs, not downloads.
 PUBLIC_ASSETS = ("Hisingen.dmg", "Hisingen.app.zip", "SHA256SUMS")
 
+# Check runs that must all have succeeded, from GitHub Actions, on the commit being released
+# before Release may skip its own test job.
+GITHUB_ACTIONS_APP_ID = 15368
+CI_PROOF_CHECKS = ("ci-required", "build-and-test (macos-15)", "build-and-test (macos-26-intel)", "package")
+
 
 def run(*args, check=True, input=None):
     result = subprocess.run(args, text=True, input=input, capture_output=True, timeout=180)
@@ -231,6 +236,24 @@ def monotonic(tag):
         raise ValueError("A newer version is already published; refusing distribution rollback")
 
 
+def ci_proof(sha):
+    """True when the newest GitHub Actions run of every required check on `sha` succeeded."""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("ci-proof needs a full commit SHA")
+    listing = run("gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100", "--jq", ".check_runs[] | {name, conclusion, completed_at, app: .app.id}").stdout
+    return ci_proof_from(json.loads(line) for line in listing.splitlines() if line.strip())
+
+
+def ci_proof_from(check_runs):
+    newest = {}
+    for check in check_runs:
+        if check.get("app") != GITHUB_ACTIONS_APP_ID or check.get("name") not in CI_PROOF_CHECKS:
+            continue
+        if check.get("name") not in newest or (check.get("completed_at") or "") > (newest[check["name"]].get("completed_at") or ""):
+            newest[check["name"]] = check
+    return all(newest.get(name, {}).get("conclusion") == "success" for name in CI_PROOF_CHECKS)
+
+
 def release_notes_header():
     return """## Verify your download
 
@@ -368,7 +391,7 @@ def notarize(artifact):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("validate", "prepare", "auto", "manifest", "verify-manifest", "monotonic", "publish", "notarize"))
+    parser.add_argument("command", choices=("validate", "prepare", "auto", "manifest", "verify-manifest", "monotonic", "publish", "notarize", "ci-proof"))
     parser.add_argument("values", nargs="*")
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -388,6 +411,14 @@ def main():
         publish(*args.values)
     elif args.command == "notarize":
         notarize(*args.values)
+    elif args.command == "ci-proof":
+        # Anything short of a clear green result means "run the tests", never "block the release".
+        try:
+            proven = ci_proof(*args.values)
+        except (RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            print(f"No CI proof available: {error}", file=sys.stderr)
+            proven = False
+        print("true" if proven else "false")
 
 
 if __name__ == "__main__":

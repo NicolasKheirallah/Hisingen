@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 SPARKLE = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
 RELEASE_PREFIX = "https://github.com/NicolasKheirallah/Hisingen/releases/download/"
 UPDATES_PREFIX = "https://nicolaskheirallah.github.io/Hisingen/updates/"
+COVERAGE_FLOOR = pathlib.Path(__file__).resolve().parent.parent / ".github/coverage-floor.json"
 
 
 def normalize_queue_extension(text):
@@ -62,6 +63,8 @@ def lint_workflows(root):
             normalized, used = normalize_queue_extension(source.read_text())
             queue_used = queue_used or used
             (workflows / source.name).write_text(normalized)
+        if (root / ".github/actions").is_dir():
+            shutil.copytree(root / ".github/actions", project / ".github/actions")
         for name in ("actionlint.yaml", "actionlint.yml"):
             source = root / ".github" / name
             if source.is_file():
@@ -76,10 +79,23 @@ def lint_workflows(root):
         print("workflow-lint-passed")
 
 
+ALWAYS_REQUIRED = ("portable-checks", "changes")
+NATIVE_REQUIRED = ("build-and-test", "package-arch", "package")
+
+
 def require_ci_success(results):
-    if set(results) != {"portable-checks", "build-and-test"}:
+    """Every job must succeed. The macOS jobs may be skipped, and only when the change
+    detector said the diff cannot affect the built app."""
+    if set(results) != set(ALWAYS_REQUIRED + NATIVE_REQUIRED):
         raise ValueError("The required CI result set changed or is incomplete")
-    unsuccessful = {name: item.get("result") for name, item in results.items() if item.get("result") != "success"}
+    unsuccessful = {name: results[name].get("result") for name in ALWAYS_REQUIRED if results[name].get("result") != "success"}
+    if unsuccessful:
+        raise ValueError(f"Required jobs did not succeed: {unsuccessful}")
+    native = results["changes"].get("outputs", {}).get("native")
+    if native not in ("true", "false"):
+        raise ValueError("The change detector did not report whether the macOS lanes were needed")
+    allowed = ("success",) if native == "true" else ("success", "skipped")
+    unsuccessful = {name: results[name].get("result") for name in NATIVE_REQUIRED if results[name].get("result") not in allowed}
     if unsuccessful:
         raise ValueError(f"Required jobs did not succeed: {unsuccessful}")
 
@@ -225,6 +241,21 @@ def record_coverage(source, directory):
     report = {"files": len(files), "lines": count, "covered_lines": covered, "percent": round(100 * covered / count, 2)}
     (output / "coverage-summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"Application line coverage: {covered}/{count} ({report['percent']}%)")
+    enforce_coverage_floor(report["percent"])
+
+
+def enforce_coverage_floor(percent, floor_path=None):
+    """Fail when line coverage drops below the committed floor, and say when to raise it.
+
+    The floor only moves up: raise it in the same change that adds the tests."""
+    path = pathlib.Path(floor_path or COVERAGE_FLOOR)
+    if not path.is_file():
+        return
+    floor = float(json.loads(path.read_text())["percent"])
+    if percent < floor:
+        raise ValueError(f"Application line coverage {percent}% is below the committed floor of {floor}% ({path.name})")
+    if percent >= floor + 2:
+        print(f"Coverage is {round(percent - floor, 2)} points above the floor; raise {path.name} to {int(percent)}.")
 
 
 def summary(directory):

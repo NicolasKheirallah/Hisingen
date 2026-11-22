@@ -147,6 +147,37 @@ class IdentityTests(unittest.TestCase):
                 release.verify_manifest("checkpoint.json", "v1.1.0")
 
 
+class CiProofTests(unittest.TestCase):
+    def runs(self, **overrides):
+        names = {name: "success" for name in release.CI_PROOF_CHECKS}
+        names.update(overrides)
+        return [{"name": name, "conclusion": result, "completed_at": "2026-11-22T10:00:00Z", "app": release.GITHUB_ACTIONS_APP_ID} for name, result in names.items()]
+
+    def test_every_required_check_green_is_proof(self):
+        self.assertTrue(release.ci_proof_from(self.runs()))
+
+    def test_a_missing_failed_or_skipped_check_is_not_proof(self):
+        for name in release.CI_PROOF_CHECKS:
+            for result in ("failure", "cancelled", "skipped", None):
+                with self.subTest(name=name, result=result):
+                    self.assertFalse(release.ci_proof_from(self.runs(**{name: result})))
+            self.assertFalse(release.ci_proof_from([run for run in self.runs() if run["name"] != name]))
+
+    def test_checks_from_other_apps_do_not_count(self):
+        self.assertFalse(release.ci_proof_from([{**run, "app": 1} for run in self.runs()]))
+
+    def test_the_newest_attempt_decides(self):
+        failed_then_fixed = self.runs() + [{"name": "package", "conclusion": "failure", "completed_at": "2026-11-22T09:00:00Z", "app": release.GITHUB_ACTIONS_APP_ID}]
+        self.assertTrue(release.ci_proof_from(failed_then_fixed))
+        fixed_then_broken = self.runs() + [{"name": "package", "conclusion": "failure", "completed_at": "2026-11-22T11:00:00Z", "app": release.GITHUB_ACTIONS_APP_ID}]
+        self.assertFalse(release.ci_proof_from(fixed_then_broken))
+
+    def test_only_a_full_commit_sha_is_accepted(self):
+        for value in ("", "main", "abc123", "g" * 40, "a" * 41):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                release.ci_proof(value)
+
+
 class PublicationTests(unittest.TestCase):
     def test_release_publishes_only_installer_archive_and_checksums(self):
         self.assertEqual(release.PUBLIC_ASSETS, ("Hisingen.dmg", "Hisingen.app.zip", "SHA256SUMS"))

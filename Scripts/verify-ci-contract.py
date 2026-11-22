@@ -53,17 +53,69 @@ class QueueCompatibilityTests(unittest.TestCase):
                 ci.normalize_queue_extension(invalid)
 
 
+def gate_results(native="true", **overrides):
+    results = {name: {"result": "success"} for name in ("portable-checks", "build-and-test", "package-arch", "package")}
+    results["changes"] = {"result": "success", "outputs": {"native": native}}
+    for name, result in overrides.items():
+        results[name.replace("_", "-")] = {**results.get(name.replace("_", "-"), {}), "result": result}
+    return results
+
+
 class ResultGateTests(unittest.TestCase):
     def test_only_complete_success_is_accepted(self):
-        ci.require_ci_success({"portable-checks": {"result": "success"}, "build-and-test": {"result": "success"}})
-        for result in ("failure", "cancelled", "skipped", None):
-            with self.subTest(result=result), self.assertRaises(ValueError):
-                ci.require_ci_success({"portable-checks": {"result": "success"}, "build-and-test": {"result": result}})
+        ci.require_ci_success(gate_results())
+        for name in ("portable_checks", "changes", "build_and_test", "package_arch", "package"):
+            for result in ("failure", "cancelled", "skipped", None):
+                with self.subTest(job=name, result=result), self.assertRaises(ValueError):
+                    ci.require_ci_success(gate_results(**{name: result}))
+
+    def test_docs_only_changes_may_skip_the_macos_jobs_and_nothing_else(self):
+        skipped = {name: "skipped" for name in ("build_and_test", "package_arch", "package")}
+        ci.require_ci_success(gate_results("false", **skipped))
+        for name in skipped:
+            for result in ("failure", "cancelled"):
+                with self.subTest(job=name, result=result), self.assertRaises(ValueError):
+                    ci.require_ci_success(gate_results("false", **{name: result}))
+        with self.assertRaises(ValueError):
+            ci.require_ci_success(gate_results("false", portable_checks="skipped", **skipped))
+
+    def test_a_skipped_macos_job_fails_when_the_change_was_native(self):
+        with self.assertRaises(ValueError):
+            ci.require_ci_success(gate_results("true", package="skipped"))
+
+    def test_missing_detector_output_fails_closed(self):
+        results = gate_results()
+        results["changes"] = {"result": "success"}
+        with self.assertRaises(ValueError):
+            ci.require_ci_success(results)
 
     def test_missing_and_unexpected_jobs_fail_closed(self):
-        for data in ({}, {"portable-checks": {"result": "success"}}, {"unexpected": {"result": "success"}}):
+        for data in ({}, {"portable-checks": {"result": "success"}}, {"unexpected": {"result": "success"}}, {**gate_results(), "extra": {"result": "success"}}):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 ci.require_ci_success(data)
+
+
+class ChangeDetectionTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("ci_changes", ROOT / "Scripts/ci-changes.py")
+        self.changes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.changes)
+
+    def test_documentation_only_changes_skip_the_native_lanes(self):
+        for paths in (["README.md"], ["CHANGELOG.md", "docs/install.md"], ["site/updates/appcast.xml"], ["home-assistant/custom_components/x.py"], [".github/pull_request_template.md"]):
+            with self.subTest(paths=paths):
+                self.assertFalse(self.changes.needs_native(paths))
+
+    def test_anything_that_can_reach_the_app_runs_them(self):
+        for path in ("Sources/Hisingen/App.swift", "Tests/HisingenTests/A.swift", "Package.resolved", "Resources/Info.plist", "Scripts/ci-checks.sh", "Makefile", ".github/workflows/ci.yml", "Sources/Hisingen/Resources/notes.md", "docs/../Sources/x.swift"):
+            with self.subTest(path=path):
+                self.assertTrue(self.changes.needs_native(["docs/install.md", path]))
+
+    def test_an_empty_or_unknown_diff_is_treated_as_native(self):
+        self.assertTrue(self.changes.needs_native([]))
+        self.assertIsNone(self.changes.changed_paths(""))
+        self.assertIsNone(self.changes.changed_paths("0" * 40))
+        self.assertIsNone(self.changes.changed_paths("not-a-commit-0123456789abcdef"))
 
 
 class SoakBudgetTests(unittest.TestCase):
@@ -142,6 +194,20 @@ class ReportTests(unittest.TestCase):
             source.write_text('{"data": []}')
             with self.assertRaises(ValueError):
                 ci.record_coverage(source, root)
+
+    def test_coverage_below_the_floor_fails_and_meeting_it_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            floor = pathlib.Path(directory) / "floor.json"
+            floor.write_text('{"percent": 50}')
+            ci.enforce_coverage_floor(50.0, floor)
+            ci.enforce_coverage_floor(80.0, floor)
+            with self.assertRaisesRegex(ValueError, "below the committed floor"):
+                ci.enforce_coverage_floor(49.99, floor)
+            ci.enforce_coverage_floor(10.0, pathlib.Path(directory) / "missing.json")
+
+    def test_committed_floor_is_a_valid_percentage_the_suite_can_meet(self):
+        floor = json.loads((ROOT / ".github/coverage-floor.json").read_text())["percent"]
+        self.assertTrue(0 < float(floor) < 100)
 
     def test_summary_contains_counts_and_actual_toolchain(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -249,11 +315,27 @@ class WorkflowWiringTests(unittest.TestCase):
         for version in (settings["node"], settings["python"], settings["go"]):
             self.assertIn(version, workflow)
         self.assertIn("sh Scripts/ci-checks.sh portable", workflow)
-        self.assertIn("sh Scripts/ci-checks.sh macos", workflow)
-        self.assertIn("if: always()\n    needs: [portable-checks, build-and-test]", workflow)
+        for phase in ("macos-test", "build-arch ${{ matrix.arch }}", "ci-checks.sh package"):
+            self.assertIn(phase, workflow)
+        self.assertIn("if: always()\n    needs: [portable-checks, changes, build-and-test, package-arch, package]", workflow)
         self.assertNotIn("secrets.", workflow)
         self.assertIn("macos-15", workflow)
         self.assertIn("macos-26-intel", workflow)
+
+    def test_gate_jobs_match_the_workflow_and_macos_jobs_honour_the_detector(self):
+        import re
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        needs = re.search(r"ci-required:[\s\S]*?needs: \[([^\]]+)\]", workflow).group(1).split(", ")
+        self.assertEqual(set(needs), set(ci.ALWAYS_REQUIRED + ci.NATIVE_REQUIRED))
+        for job in ci.NATIVE_REQUIRED:
+            body = re.search(rf"\n  {job}:\n([\s\S]*?)(?=\n  [a-z-]+:\n)", workflow).group(1)
+            self.assertIn("needs.changes.outputs.native == 'true'", body, job)
+
+    def test_only_one_job_per_architecture_builds_the_release_binary_and_nothing_is_cached_by_release(self):
+        ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        self.assertEqual(ci_workflow.count("ci-checks.sh build-arch"), 1)
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertNotIn("uses: actions/cache@", release)
 
     def test_live_phases_do_not_run_in_parallel_and_validate_duration(self):
         workflow = (ROOT / ".github/workflows/live-integration.yml").read_text()

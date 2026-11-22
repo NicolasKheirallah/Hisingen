@@ -1,0 +1,29 @@
+name: Install pinned lint tools
+description: Install actionlint and ShellCheck at the versions in .github/ci-toolchain.json. Call it after actions/setup-go.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the ShellCheck archive
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/shellcheck.tar.xz
+        key: shellcheck-0.11.0-linux-x86_64-8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+    - name: Install pinned linters
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest=8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        archive="$RUNNER_TEMP/shellcheck.tar.xz"
+        go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        # A cached archive is still checked against the digest. curl only retries transient
+        # failures by default, so a rate limit or 5xx response needs --retry-all-errors.
+        if ! echo "$digest  $archive" | sha256sum -c - >/dev/null 2>&1; then
+          curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 5 --max-time 120 \
+            -o "$archive" \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "$digest  $archive" | sha256sum -c -
+        fi
+        tar -xJf "$archive" -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"

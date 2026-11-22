@@ -36,8 +36,9 @@ again on its own ref.
 
 1. **Validate:** require workflow ref, tag, checkout, plist version, changelog,
    increasing build number and main ancestry to agree. Run portable checks.
-2. **Test:** run credential-free deterministic tests and package validation before
-   production signing credentials become available.
+2. **Test:** reuse CI's result when every required check passed for the tagged commit;
+   otherwise run the credential-free deterministic tests and package validation here,
+   before production signing credentials become available.
 3. **Build:** import a Developer ID certificate, build/sign a universal app and
    upload `signed-app.zip` plus its digest/identity checkpoint.
 4. **Notarize:** restore that checkpoint, submit/resume Apple's app request,
