@@ -19,12 +19,11 @@ struct SolarForecastClient: Sendable {
               (-90...90).contains(latitude), (-180...180).contains(longitude),
               let url = Self.url(latitude: latitude, longitude: longitude)
         else { return nil }
-        let key = url.absoluteString
-        if let cached = await cache.entry(for: key, now: Date()) { return cached.forecast }
-        let json = await http.json(url, operation: "Open-Meteo solar forecast")
-        let result = json.flatMap(Self.forecast(from:))
-        await cache.store(result, for: key, now: Date())
-        return result
+        let http = self.http
+        return await cache.forecast(for: url.absoluteString, now: Date()) {
+            let json = await http.json(url, operation: "Open-Meteo solar forecast")
+            return json.flatMap(Self.forecast(from:))
+        }
     }
 
     /// The request's coordinates are rounded to two decimals, about a kilometre.
@@ -91,19 +90,44 @@ actor SolarForecastCache {
     static let failureLifetime: TimeInterval = 5 * 60
 
     private var entries: [String: Entry] = [:]
+    private var inFlight: [String: Task<SolarForecast?, Never>] = [:]
+
+    var entryCount: Int { entries.count }
+
+    private static func isFresh(_ entry: Entry, at now: Date) -> Bool {
+        let lifetime = entry.forecast == nil ? failureLifetime : successLifetime
+        let age = now.timeIntervalSince(entry.storedAt)
+        return age >= 0 && age < lifetime
+    }
 
     func entry(for key: String, now: Date) -> Entry? {
         guard let entry = entries[key] else { return nil }
-        let lifetime = entry.forecast == nil ? Self.failureLifetime : Self.successLifetime
-        let age = now.timeIntervalSince(entry.storedAt)
-        guard age >= 0, age < lifetime else {
+        guard Self.isFresh(entry, at: now) else {
             entries[key] = nil
             return nil
         }
         return entry
     }
 
+    /// Drops every entry past its lifetime, so a car that moves between places does not leave a
+    /// trail of old locations in memory.
     func store(_ forecast: SolarForecast?, for key: String, now: Date) {
+        entries = entries.filter { Self.isFresh($0.value, at: now) }
         entries[key] = Entry(forecast: forecast, storedAt: now)
+    }
+
+    /// The cached answer for `key`, or the answer of one fetch that every concurrent caller of
+    /// the same key shares. A planner card and a menu that both ask while the first request is
+    /// still out send one request, not two.
+    func forecast(for key: String, now: Date,
+                  fetch: @escaping @Sendable () async -> SolarForecast?) async -> SolarForecast? {
+        if let cached = entry(for: key, now: now) { return cached.forecast }
+        if let running = inFlight[key] { return await running.value }
+        let task = Task { await fetch() }
+        inFlight[key] = task
+        let result = await task.value
+        inFlight[key] = nil
+        store(result, for: key, now: now)
+        return result
     }
 }

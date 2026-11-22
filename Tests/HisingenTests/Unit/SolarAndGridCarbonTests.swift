@@ -100,6 +100,36 @@ struct SolarAndGridCarbonTests {
     }
 
     @Test
+    func concurrentCallersForOneLocationShareASingleFetch() async {
+        let cache = SolarForecastCache()
+        let counter = FetchCounter()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let forecast = SolarForecast(points: [SolarForecastPoint(time: start, wattsPerSquareMeter: 90)])
+
+        async let first = cache.forecast(for: "gothenburg", now: start) {
+            await counter.fetchOnce(returning: forecast)
+        }
+        async let second = cache.forecast(for: "gothenburg", now: start) {
+            await counter.fetchOnce(returning: forecast)
+        }
+        let answers = await [first, second]
+
+        #expect(answers == [forecast, forecast])
+        #expect(await counter.count == 1)
+    }
+
+    @Test
+    func expiredEntriesAreDroppedWhenAnotherLocationIsStored() async {
+        let cache = SolarForecastCache()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+        await cache.store(nil, for: "old-place", now: start)
+        await cache.store(nil, for: "new-place", now: start.addingTimeInterval(10 * 60))
+
+        #expect(await cache.entryCount == 1)
+    }
+
+    @Test
     func aFailedSolarAnswerIsRememberedBrieflyAndNotAsAForecast() async {
         let cache = SolarForecastCache()
         let start = Date(timeIntervalSince1970: 1_800_000_000)
@@ -178,5 +208,17 @@ struct SolarAndGridCarbonTests {
 
         scoped.store.clearElectricityMapsKey()
         #expect(!scoped.store.hasElectricityMapsKey)
+    }
+}
+
+/// Counts the fetches a test's closure makes, and answers after a short pause so a second caller
+/// has time to arrive while the first is still out.
+private actor FetchCounter {
+    private(set) var count = 0
+
+    func fetchOnce(returning forecast: SolarForecast) async -> SolarForecast {
+        count += 1
+        try? await Task.sleep(for: .milliseconds(50))
+        return forecast
     }
 }
