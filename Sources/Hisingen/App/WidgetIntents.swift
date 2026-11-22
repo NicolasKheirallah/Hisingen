@@ -34,6 +34,12 @@ final class WidgetIntentCommandHandler: VehicleWidgetCommandHandling {
                     steeringWheel: preferences.remoteSteeringWheelHeating),
                 vehicle: vin,
                 preferences: preferences)
+        case .honkAndFlash:
+            return await AutomationHandoff.send(.honkAndFlash, vehicle: vin, preferences: preferences)
+        case .startChargingOverride:
+            return await AutomationHandoff.send(.startChargingOverride, vehicle: vin, preferences: preferences)
+        case .startPreCleaning:
+            return await AutomationHandoff.send(.startPreCleaning, vehicle: vin, preferences: preferences)
         case .refresh:
             // Refresh is not a remote command: it asks the same launch-installed action the
             // Shortcuts intent and the panel use, so there is no second refresh path.

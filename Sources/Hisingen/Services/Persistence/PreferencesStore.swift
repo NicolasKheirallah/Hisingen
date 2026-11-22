@@ -16,6 +16,10 @@ final class PreferencesStore {
     let d: UserDefaults
     let keychain: KeychainStore
     let logger = AppLog.logger("preferences")
+    /// The per-brand account records built on this store's Keychain handle. Lazy so a store
+    /// that only reads a preference does not migrate accounts, and so tests that inject a
+    /// scoped Keychain get an isolated account store.
+    lazy var accountStore = AccountStore(preferences: self, keychain: keychain, defaults: d)
 
     init(defaults: UserDefaults = .standard, keychain: KeychainStore = .app) {
         d = defaults

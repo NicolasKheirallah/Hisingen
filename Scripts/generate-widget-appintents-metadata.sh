@@ -67,6 +67,9 @@ expected = {
     "WidgetLockVehicleIntent",
     "WidgetUnlockVehicleIntent",
     "WidgetStartClimateIntent",
+    "WidgetHonkVehicleIntent",
+    "WidgetChargeNowIntent",
+    "WidgetStartPreCleaningIntent",
     "WidgetRefreshVehicleIntent",
 }
 missing = sorted(expected - actions.keys())

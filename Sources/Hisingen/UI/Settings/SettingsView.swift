@@ -346,6 +346,8 @@ struct SettingsView: View {
                     title: L10n.text("Account"),
                     color: HisingenTheme.accent
                 )
+                SettingsAccountList(onSettingsChanged: onSettingsChanged)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 AccountCredentialsForm(
                     style: .compact,
                     onSettingsChanged: onSettingsChanged,

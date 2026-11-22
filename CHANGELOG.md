@@ -18,6 +18,21 @@ All notable changes to Hisingen are documented in this file. The project follows
   Auto-Start Charging in the Window is on, and the UI says plainly that Hisingen cannot wake a Mac
   that is already asleep — scheduling a wake needs root and a privileged helper, which this app
   does not ship.
+- **Multiple accounts per brand.** Accounts now have their own record and exported Keychain
+  credential bundle, so two Polestar accounts can be added and switched without re-entering the
+  other's session. The active account keeps the existing fixed Keychain slots, which means every
+  provider and sign-out path continues to read one account at a time; switching swaps the
+  bundles. Existing single-account installs migrate to their first account without a Keychain
+  prompt and without touching the stored session.
+- **Demo mode.** A local sample Polestar renders every tab with no provider session, no garage
+  scan, no price or charger traffic, and no remote commands sent. Settings → Accounts carries
+  the switch and says a relaunch applies it.
+- **Real Control Center actions.** Unlock, Honk and Flash, Charge Now and Start Cabin
+  Pre-Cleaning are now controls that dispatch through Hisingen's shared intents. Each one opens
+  the app and runs in its process, so the command takes the same capability gate, confirmation
+  and audit path as the Controls tab, and a refusal is shown instead of disappearing. Lock and
+  Start Climate keep their existing `hisingen://` URL launchers, so those routes and their tests
+  still work. All six controls are macOS 26 or later.
 - **Interactive widget buttons.** The vehicle status widget now carries lock, unlock, start
   climate and refresh in a square action row under the data, when a snapshot names a car. Each
   button is an App Intent that opens Hisingen and runs in the app process, so it takes the same

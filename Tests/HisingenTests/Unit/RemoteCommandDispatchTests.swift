@@ -187,6 +187,36 @@ struct RemoteCommandDispatchTests {
         #expect(message == CommandAvailability.requiresAccountApproval.shortReason)
     }
 
+    /// The four real Control Center actions map to the Remote Command each control names, and
+    /// each one reaches the provider through the same gate as its Controls-tab counterpart.
+    @Test
+    @MainActor
+    func widgetIntentHandlerMapsTheControlCenterActions() async throws {
+        AutomationHandoff.resetForTesting()
+        defer { AutomationHandoff.resetForTesting() }
+        let cases: [(VehicleWidgetCommand, Set<AppFeature>, RemoteCommand)] = [
+            (.unlock, [.remoteLocks], .unlock),
+            (.honkAndFlash, [.remoteHonkFlash], .honkAndFlash),
+            (.startChargingOverride, [.remoteCharging], .startChargingOverride),
+            (.startPreCleaning, [.remotePreCleaning], .startPreCleaning),
+        ]
+        for (command, features, expected) in cases {
+            AutomationHandoff.resetForTesting()
+            let scoped = ScopedPreferences(label: "widget-control-\(command.rawValue)")
+            let preferences = scoped.store
+            preferences.vin = vin
+            preferences.setVin(vin, for: .polestar)
+            let context = DispatchMock(enabledFeatures: features, vin: vin)
+            AutomationHandoff.install(context)
+
+            _ = try await WidgetIntentCommandHandler(preferences: preferences)
+                .perform(command, vin: nil)
+
+            #expect(context.provider.executedCommands == [expected],
+                    "\(command.rawValue) should dispatch \(expected.identifier)")
+        }
+    }
+
     /// Refresh is not a remote command: the widget uses the same launch-installed refresh action
     /// as the panel and the Shortcuts intent.
     @Test

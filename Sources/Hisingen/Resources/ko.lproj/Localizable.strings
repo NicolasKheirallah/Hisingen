@@ -1875,6 +1875,13 @@
 "Target temperature" = "목표 온도";
 "Vehicle is offline" = "차량이 오프라인입니다";
 "Accounts" = "계정";
+"Add Account" = "계정 추가";
+"Switch" = "전환";
+"Demo mode" = "데모 모드";
+"Relaunch Hisingen to apply." = "적용하려면 Hisingen을 다시 실행하세요.";
+"The account could not be added." = "계정을 추가하지 못했습니다.";
+"The account could not be switched." = "계정으로 전환하지 못했습니다.";
+"Demo mode: commands are not sent to a vehicle." = "데모 모드: 명령은 차량으로 전송되지 않습니다.";
 "Privacy & Data" = "개인정보 및 데이터";
 "Updates" = "업데이트";
 "About" = "정보";

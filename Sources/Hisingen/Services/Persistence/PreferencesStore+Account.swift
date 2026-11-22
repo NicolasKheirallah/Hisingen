@@ -98,6 +98,13 @@ extension PreferencesStore {
             }
         }
     }
+    /// Local sample data for screenshots and a network-free look at the UI. It never changes
+    /// accounts and never writes provider credentials; the session controller serves the seeded
+    /// snapshot while this is on.
+    var isDemoMode: Bool {
+        get { d.bool(forKey: "demo_mode_v1") }
+        set { d.set(newValue, forKey: "demo_mode_v1") }
+    }
     var activeBrand: VehicleBrand {
         get { VehicleBrand(rawValue: d.string(forKey: "active_vehicle_brand") ?? "") ?? .polestar }
         set { d.set(newValue.rawValue, forKey: "active_vehicle_brand"); syncAppThemeStorageKey() }

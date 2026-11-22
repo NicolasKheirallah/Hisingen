@@ -1966,6 +1966,13 @@
 
 // Settings navigation, validation, and data-management feedback
 "Accounts" = "Accounts";
+"Add Account" = "Add Account";
+"Switch" = "Switch";
+"Demo mode" = "Demo mode";
+"Relaunch Hisingen to apply." = "Relaunch Hisingen to apply.";
+"The account could not be added." = "The account could not be added.";
+"The account could not be switched." = "The account could not be switched.";
+"Demo mode: commands are not sent to a vehicle." = "Demo mode: commands are not sent to a vehicle.";
 "Privacy & Data" = "Privacy & Data";
 "Updates" = "Updates";
 "About" = "About";

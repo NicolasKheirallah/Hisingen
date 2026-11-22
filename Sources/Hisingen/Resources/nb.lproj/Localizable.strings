@@ -1883,6 +1883,13 @@
 "Target temperature" = "Måltemperatur";
 "Vehicle is offline" = "Kjøretøyet er frakoblet";
 "Accounts" = "Kontoer";
+"Add Account" = "Legg til konto";
+"Switch" = "Bytt";
+"Demo mode" = "Demomodus";
+"Relaunch Hisingen to apply." = "Start Hisingen på nytt for å bruke.";
+"The account could not be added." = "Kontoen kunne ikke legges til.";
+"The account could not be switched." = "Kunne ikke bytte til kontoen.";
+"Demo mode: commands are not sent to a vehicle." = "Demomodus: kommandoer sendes ikke til et kjøretøy.";
 "Privacy & Data" = "Personvern og data";
 "Updates" = "Oppdateringer";
 "About" = "Om";

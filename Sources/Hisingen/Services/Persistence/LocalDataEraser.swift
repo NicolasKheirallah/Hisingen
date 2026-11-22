@@ -139,6 +139,11 @@ final class LocalDataEraser {
     }
 
     private func applyLocalTiers(_ scope: Scope) {
+        // A full erase is the only destructive action that also takes every account. A
+        // per-vehicle erase and a sign-out leave other accounts alone.
+        if case .everything(.all) = scope {
+            preferences.accountStore.removeAll()
+        }
         // The widget mirrors the active car from an App Group file the database never touches.
         // A wipe that covers that car, or the whole fleet, has to take it too: otherwise
         // "erase local data" leaves the VIN, nickname, charge level and next departure readable

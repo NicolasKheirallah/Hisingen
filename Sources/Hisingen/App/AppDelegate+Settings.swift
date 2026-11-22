@@ -86,7 +86,15 @@ extension AppDelegate {
     func settingsChanged(_ change: SettingsChange) {
         switch change {
         case .credentials:
+            preferences.accountStore.commitActiveAccount()
             vehicleSession.credentialsDidChange(for: .polestar)
+        case .accountAdded:
+            // The new account is empty until the sign-in form below completes; do not resume a
+            // provider session for it, or the app would try to authenticate with no credentials.
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
+        case .accountSwitched:
+            vehicleSession.accountDidSwitch(to: preferences.activeBrand)
+            Task { @MainActor [weak self] in self?.refreshSettingsSurface() }
         case .volvoSignIn(let clientID, let clientSecret, let vccApiKey, let nickname):
             signInCoordinator.beginVolvoSignIn(clientID: clientID, clientSecret: clientSecret, vccApiKey: vccApiKey, nickname: nickname)
         case .polestarCommandAuthorization:

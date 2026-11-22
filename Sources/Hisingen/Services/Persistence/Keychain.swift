@@ -223,6 +223,24 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
     }
 
+    /// Stores one account's exported credential bundle. The active account continues to use the
+    /// fixed slots above, so every API and Keychain reader keeps its existing path; switching
+    /// accounts swaps which bundle occupies those slots. The payload is opaque JSON, base64
+    /// wrapped so it uses the same string Keychain path as every other secret.
+    func saveAccountCredentialBundle(_ data: Data, accountID: String) throws {
+        try save(data.base64EncodedString(), account: "account-credentials-\(accountID)")
+    }
+
+    func readAccountCredentialBundle(accountID: String) throws -> Data? {
+        guard let encoded = try read(account: "account-credentials-\(accountID)"),
+              let data = Data(base64Encoded: encoded) else { return nil }
+        return data
+    }
+
+    func deleteAccountCredentialBundle(accountID: String) throws {
+        try delete(account: "account-credentials-\(accountID)")
+    }
+
     func saveVolvoSessionToken(_ token: String) throws {
         try mutateVolvoBundle { $0.sessionToken = token }
     }

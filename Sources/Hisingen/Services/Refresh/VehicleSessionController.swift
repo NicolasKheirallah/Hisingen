@@ -122,6 +122,10 @@ final class VehicleSessionController {
     /// Seeds the display from persisted state (no network) and renders once, so the status
     /// item shows the last known vehicle immediately at launch.
     func primeDisplayState() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
         let brand = preferences.activeBrand
         signInRequired = initiallyRequiresSignIn(for: brand)
         let savedVIN = preferences.vin(for: brand)
@@ -138,12 +142,36 @@ final class VehicleSessionController {
 
     /// Kicks off stored-session restoration.
     func resume() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
         resumeStoredSession()
+    }
+
+    /// Serves the local sample vehicle and never starts the provider. The shell reads `latest`
+    /// exactly as it does a real snapshot, so every tab renders populated data with no network.
+    func enterDemoMode() {
+        refreshCoordinator.stop()
+        let state = DemoMode.state()
+        latest = state
+        sessionValid = true
+        signInRequired = false
+        lastError = nil
+        setFleet([DemoMode.carSummary], activeVIN: DemoMode.vin)
+        context?.didReceiveVehicleState(state)
+        context?.sessionStateDidChange()
     }
 
     // MARK: - Passthroughs
 
-    func refreshNow() { refreshCoordinator.refreshNow() }
+    func refreshNow() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
+        refreshCoordinator.refreshNow()
+    }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
         optimisticState: VehicleState?
@@ -153,8 +181,15 @@ final class VehicleSessionController {
     func dismissCommandReceipt(id: UUID) {
         refreshCoordinator.dismissCommandReceipt(id: id)
     }
-    func refreshIfStale() { refreshCoordinator.refreshIfStale() }
-    func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
+    func refreshIfStale() {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        refreshCoordinator.refreshIfStale()
+    }
+
+    func reloadVehicleMetadata() {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        refreshCoordinator.reloadVehicleMetadata()
+    }
 
     /// Signs out of the active vehicle, then keeps the reader on another registered vehicle
     /// when one can carry the session. See `signOutPlan()` for the decision.
@@ -271,6 +306,11 @@ final class VehicleSessionController {
     func selectVehicle(vin: String) -> Bool {
         let trimmedVIN = vin.normalizedVIN
         guard !trimmedVIN.isEmpty else { return false }
+        if preferences.isDemoMode {
+            guard trimmedVIN == DemoMode.vin else { return false }
+            enterDemoMode()
+            return true
+        }
         // A signed-out vehicle has no active session in Hisingen. Deep links, Shortcuts and old
         // notifications must not silently re-add it; Bring Back in Settings is the explicit
         // path, and it goes through `reconnectVehicle`.
@@ -293,6 +333,7 @@ final class VehicleSessionController {
     func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
         let target = vin.normalizedVIN
         guard !target.isEmpty else { return sessionValid && latest != nil }
+        if preferences.isDemoMode { return target == DemoMode.vin && latest != nil }
         if sessionValid, latest?.identity.vin.uppercased() == target,
            !refreshCoordinator.isBusy { return true }
         guard selectVehicle(vin: target) else { return false }
@@ -302,13 +343,24 @@ final class VehicleSessionController {
     }
 
     /// Settings "switch to <brand>": adopt the brand and resume its stored session.
+    /// Settings selected another account for the active brand. The account store has already
+    /// moved the credentials and preferences; this rebuilds the provider against the new
+    /// session and resumes it.
+    func accountDidSwitch(to brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        switchActiveBrand(to: brand, force: true)
+        resumeStoredSession()
+    }
+
     func switchToBrandAndResume(_ brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
         switchActiveBrand(to: brand)
         resumeStoredSession()
     }
 
     /// After an interactive sign-in: force past the idempotence guard, then resume.
     func adoptBrandAfterSignIn(_ brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
         // A successful sign-in registers the account from scratch; cars signed out of the
         // previous session on this brand come back with it.
         preferences.clearDetachedVehicles(for: brand)
@@ -323,6 +375,7 @@ final class VehicleSessionController {
     /// mode flip changes the backing adapter, but must not destroy the coordinator (and its
     /// remembered `accountEmail`) on ordinary same-brand credential updates.
     func credentialsDidChange(for brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
         // Saving credentials is an explicit re-registration of the account, so vehicles signed
         // out of its previous session are visible again.
         preferences.clearDetachedVehicles(for: brand)

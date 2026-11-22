@@ -11,16 +11,18 @@ bundle is, into `Hisingen.app/Contents/PlugIns/HisingenWidget.appex`.
   flat canvas, typeface and figure-over-label grammar as the panel. The 2pt charge line is
   ink at rest and amber while the car charges. When a snapshot names a car, a square button row
   beneath the data runs lock, unlock, start climate and refresh through the app.
-- **Control Center controls**, macOS 26 or later: one Lock button and one Start Climate
-  button, each a separate control (WidgetKit's template builder takes one template per
-  control). Both are deep links, not commands.
+- **Control Center controls**, macOS 26 or later, one per command (WidgetKit's template builder
+  takes one template per control): Lock and Start Climate remain URL launchers, while Unlock,
+  Honk and Flash, Charge Now and Start Cabin Pre-Cleaning are real App Intents.
 
 The widget's data area opens the app on the existing `hisingen://` routes: `select-car?vin=…`
 when a snapshot names a car, `status` when nothing is on file. Its four action buttons use App
 Intents with `openAppWhenRun`, so the app comes forward and sends the command through its own
-dispatch path; nothing in the extension talks to a vehicle backend. The Control Center buttons
-still open `lock?vin=…` and `climate/start?vin=…`, which the app treats as any other deep link
-and asks for confirmation before sending.
+dispatch path; nothing in the extension talks to a vehicle backend. The Lock and Start Climate
+Control Center controls still open `lock?vin=…` and `climate/start?vin=…`, which the app treats
+as any other deep link and asks for confirmation before sending. The four real control intents
+also open the app: that is what puts the command through the same gate and audit path as the
+Controls tab, and a refused command comes back as the intent's dialog.
 
 ## Shared intent foundation
 
@@ -37,9 +39,11 @@ failing on an empty registry.
 dependency (see [app-intents-metadata.md](app-intents-metadata.md)), so the intent types are
 discoverable from the extension.
 
-The vehicle status widget's action row is the first user of that seam. Lock, unlock, start
-climate and refresh are `Button(intent:)` controls; refresh asks the same launch-installed
-refresh action as the panel and the Shortcuts intent. A refused command returns the gate's
+The vehicle status widget's action row and the four real Control Center controls are the users
+of that seam. The widget's lock, unlock, start climate and refresh buttons are
+`Button(intent:)` controls; Control Center adds unlock, honk-and-flash, charge-now and
+pre-cleaning. Refresh asks the same launch-installed refresh action as the panel and the
+Shortcuts intent. A refused command returns the gate's
 sentence, which the intent presents as a dialog, and the app also files its normal result
 banner and notification. The row draws only when a snapshot names a car, so the placeholder
 offers no dead command; `widgetURL` still opens the named car for the data area.
@@ -111,7 +115,11 @@ binary beside the app's.
   the app's database, which the App Group container does not carry.
 - **One car.** The snapshot is the active car's; there is no per-car widget yet.
 - **Control Center is macOS 26+.** The controls are gated with `#available(macOS 26.0, *)`
-  and do not exist on earlier systems.
+  and do not exist on earlier systems. The four real controls open the app to run the command;
+  they do not send from the extension.
+- **Lock and climate keep their URL launchers.** Those two controls still open `hisingen://`
+  routes rather than running an intent, so the existing deep-link behavior and its tests stay
+  in place.
 
 ## Live checks still owed
 
@@ -120,16 +128,16 @@ Honesty ledger for what was verified against what was assumed:
 1. **Widget gallery listing.** The bundle assembles, the plist lints, the app declares
    `NSSupportsWidgets`, and the binary carries a real `_main` entry point. Live check:
    install a signed build and confirm the widget appears in the gallery and renders.
-2. **Control Center listing.** `StaticControlConfiguration` with the system
-   `OpenURLIntent` compiles and links against the macOS 26.5 SDK, and needs no custom
-   App Intents metadata. Live check: install a signed build on macOS 26 and confirm both
-   controls appear in Control Center's customization list and open the app.
-3. **Widget intent metadata and buttons.** `make app` produces
-   `HisingenWidget.appex/Contents/Resources/Metadata.appintents` with the four shared
+2. **Control Center listing.** The six `StaticControlConfiguration` controls compile and link
+   against the macOS 26.5 SDK. Lock and climate use the system `OpenURLIntent`; unlock, honk,
+   charge-now and pre-cleaning use the shared intents. Live check: install a signed build on
+   macOS 26 and confirm all six appear in Control Center's customization list.
+3. **Widget and control intent metadata and buttons.** `make app` produces
+   `HisingenWidget.appex/Contents/Resources/Metadata.appintents` with the seven shared
    intents, qualified as `HisingenIntents.*`; `Scripts/validate-release.sh --artifacts`
    checks it and `WidgetIntentRoutingTests` pins the router seam. Live check: install a signed
-   build, tap each button, confirm the app comes forward and sends the command, and confirm a
-   refused command shows the gate's reason.
+   build, tap each widget button and real control, confirm the app comes forward and sends the
+   command, and confirm a refused command shows the gate's reason.
 4. **App Group container access.** Both processes declare the group in entitlements;
    macOS also honours the container for unsandboxed processes. Live check: run the signed
    pair and confirm the widget renders the app's snapshot bytes.
