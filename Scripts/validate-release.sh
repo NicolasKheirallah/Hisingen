@@ -33,6 +33,27 @@ test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifie
 plutil -lint "$appex/Contents/Info.plist" >/dev/null
 codesign --verify --strict --verbose=2 "$appex"
 
+# App Intents metadata is what makes the intents discoverable, and nothing else in the build
+# notices when it is absent: the app runs, and Shortcuts simply lists nothing. A release either
+# carries a populated bundle or says explicitly that it was built without one.
+if [ "${REQUIRE_APPINTENTS:-true}" = true ]; then
+    metadata="$APP_PATH/Contents/Resources/Metadata.appintents"
+    test -d "$metadata" || { echo "Missing App Intents metadata: $metadata" >&2; exit 1; }
+    test -s "$metadata/version.json" || { echo 'App Intents metadata has no version.json' >&2; exit 1; }
+    test -s "$metadata/extract.actionsdata" || { echo 'App Intents metadata has no actions data' >&2; exit 1; }
+    python3 -c '
+import json, sys
+document = json.load(open(sys.argv[1], encoding="utf-8"))
+intents = document.get("actions") or {}
+shortcuts = document.get("autoShortcuts") or []
+if not intents:
+    raise SystemExit("App Intents metadata lists no intents")
+if not shortcuts:
+    raise SystemExit("App Intents metadata lists no App Shortcuts")
+print(f"App Intents metadata: {len(intents)} intents, {len(shortcuts)} shortcut groups")
+' "$metadata/extract.actionsdata"
+fi
+
 plutil -lint "$APP_PATH/Contents/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP_PATH/Contents/Info.plist")" = true
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

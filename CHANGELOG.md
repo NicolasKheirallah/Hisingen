@@ -7,6 +7,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- The release build produces **App Intents metadata**, so Shortcuts, Siri and the Focus filter can
+  finally see the app's 24 intents and 10 App Shortcut groups. SwiftPM has no setting that asks the
+  compiler for the constant values the processor reads, so `make app` replays the module's own
+  compile command with `-emit-const-values-path` into a throwaway directory, runs the processor, and
+  installs `Metadata.appintents` in the bundle. `SKIP_APPINTENTS=1 make app` skips it, and
+  `Scripts/validate-release.sh --artifacts` refuses a release whose metadata is missing or empty.
 - The desktop widget has a **large** size. It is the medium layout with room to breathe — the
   same battery, range, charging and departure values the app last read, not a second model.
 - Hisingen's main menu now carries **Services**, **Window** and **Help**. Text selected in a

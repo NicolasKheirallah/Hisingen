@@ -112,6 +112,14 @@ app: $(if $(SKIP_BUILD),,build)
 	mkdir -p $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)/
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/
+	@# App Intents metadata. SwiftPM cannot ask the compiler for the constant values the processor
+	@# reads, so a build step produces them; without this bundle Shortcuts, Siri, the Focus filter
+	@# and interactive widget buttons cannot discover any intent. SKIP_APPINTENTS=1 leaves it out.
+	@if [ -n "$(SKIP_APPINTENTS)" ]; then \
+		echo "note: App Intents metadata skipped; Shortcuts will not list this build's intents" >&2; \
+	else \
+		sh Scripts/generate-appintents-metadata.sh --output "$(APP)/Contents/Resources/Metadata.appintents"; \
+	fi
 	@if [ -n "$(SPARKLE_FRAMEWORK)" ] && [ -d "$(SPARKLE_FRAMEWORK)" ]; then \
 		cp -R "$(SPARKLE_FRAMEWORK)" "$(APP)/Contents/Frameworks/"; \
 	else \

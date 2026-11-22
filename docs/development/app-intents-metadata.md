@@ -1,64 +1,51 @@
 # App Intents metadata
 
-Hisingen ships 23 App Intents and 10 `AppShortcut` phrases. None of them is discoverable by
-Shortcuts, Siri or the Focus filter in a release build, because the app bundle has no
-`Metadata.appintents`. This page records what was measured on 2026-11-21, why the blocker is the
-build system rather than the code, and what would unblock it.
+Hisingen ships 24 App Intents, 10 `AppShortcut` groups and a Focus filter. The build produces
+`Metadata.appintents`, so Shortcuts, Siri and the Focus filter can discover all of them.
 
-Check the current state in one step:
+Check a built bundle in one step:
 
 ```sh
-sh Scripts/appintents-metadata-status.sh
+sh Scripts/appintents-metadata-status.sh releases/Hisingen.app
 ```
 
-The script reports whether a built bundle carries the metadata and, when it does not, runs the
-extractor itself so its own verdict appears instead of a guess.
+## Why a build step exists
 
-## What the extractor needs
+`appintentsmetadataprocessor` reads two inputs: the intent sources, and constant values the Swift
+compiler extracts from the types that conform to `AppIntent` and friends. Without those values the
+processor reports `No swift const values found` and writes nothing.
 
-`appintentsmetadataprocessor` compiles the metadata bundle from two inputs: the intent sources,
-and `.swiftconstvalues` files the Swift compiler produces alongside object files. Run it against
-this checkout and it says so directly:
+Xcode asks for them through the `SWIFT_ENABLE_EMIT_CONST_VALUES` build setting, which becomes a
+`-emit-const-values-path` on each frontend compile. SwiftPM has no equivalent setting, so
+`Scripts/generate-appintents-metadata.sh` provides one:
 
-```text
-warning: No swift const values found. If SWIFT_ENABLE_EMIT_CONST_VALUES = NO, AppIntents metadata cannot be extracted.
-Extracted no relevant App Intents symbols, skipping writing output
-```
+1. Read the module's own compile command from SwiftPM's verbose output (`swift build -c release -v`).
+   The command is cached per dependency graph, so a clean checkout pays for it once.
+2. Replay it in the same batch shape SwiftPM uses — `-filelist` plus `-output-filelist`, one object
+   per source — with `-const-gather-protocols-file` and `-emit-const-values-path` added, writing the
+   objects into a throwaway directory. `-O` becomes `-Onone`: optimisation is irrelevant to
+   compile-time constants and roughly halves the run.
+3. Run `appintentsmetadataprocessor` over those values and write `Metadata.appintents`.
 
-`SWIFT_ENABLE_EMIT_CONST_VALUES` is an Xcode build setting. Xcode turns it into a per-file
-`-emit-const-values-path` on every frontend compile, and the extractor reads the resulting list.
-SwiftPM has no equivalent setting, and the flag alone is not enough, as the next section shows.
+`make app` runs this step and installs the bundle at `Contents/Resources/Metadata.appintents`.
+`SKIP_APPINTENTS=1 make app` leaves it out for a quick bundle-only iteration; the app still runs,
+and Shortcuts then lists nothing.
 
-## What was tried
+`Scripts/validate-release.sh --artifacts` fails a release that carries no populated metadata, so a
+missing bundle cannot ship silently. `REQUIRE_APPINTENTS=false` opts out for a deliberate build.
 
-Each step was run on this machine (Xcode 26.6, Swift 6.2, macOS 26.5 SDK).
+## Facts worth keeping
 
-| Attempt | Result |
-| --- | --- |
-| `swift build -c release` with `-Xswiftc -Xfrontend -emit-const-values-path -Xswiftc -Xfrontend <file>` | The build succeeds and writes `[]`. SwiftPM drives every compile through `-output-file-map`, so the driver plans one frontend job with `-filelist` and `-supplementary-output-file-map`; the const-values path from a build setting is not attached to the per-file supplementary outputs, and the one file the driver does write ends up empty. |
-| `-Xswiftc -num-threads -Xswiftc 1` to defeat a last-writer-wins race | Same `[]`. The threading was not the cause. |
-| `swiftc -c -wmo` on a single file with `-Xfrontend -const-gather-protocols-file` and `-Xfrontend -emit-const-values-path` | **Works**: the JSON lists the type, its conformance and its static members, including `@Parameter` titles. So the compiler can extract these values. The obstacle is only that SwiftPM cannot ask for it per file. |
-| The same extraction over the whole module in one command, replaying SwiftPM's own recorded compile command with `-emit-module` and `-output-file-map` removed | Compiles, but writes no const values: the driver still constructs a supplementary-output-file-map for the `-filelist` job, and the standalone path is ignored. |
-| Enabling the compiler's `ExtractConstantsFromMembers` feature directly | Rejected: `experimental feature 'ExtractConstantsFromMembers' cannot be enabled in production compiler`. A release toolchain does not allow it. |
+- The protocol list must use **unqualified** names (`AppIntent`, not `AppIntents.AppIntent`), and it
+  is JSON (`["AppIntent","AppShortcutsProvider"]`). A newline list is rejected as malformed.
+- Constant extraction happens for `-c` compiles. `-emit-ir` produces none.
+- The extractor matches source paths exactly; it wants the same relative paths the compiler was
+  given, not absolute ones.
+- `-O` versus `-Onone` does not change the extracted values, only the time it takes.
 
-The protocol list also has to use unqualified names (`AppIntent`, not `AppIntents.AppIntent`).
+## What this unblocks
 
-## What would unblock it, cheapest first
-
-1. **A real Xcode target or build phase for the app.** Xcode sets `SWIFT_ENABLE_EMIT_CONST_VALUES`
-   and runs the extractor itself; this is the supported path, and the app's intents are already
-   ordinary Swift. The cost is moving the app from a hand-assembled SwiftPM bundle to an Xcode
-   project or adding a small Xcode project that builds the same sources for release.
-2. **A SwiftPM feature that emits per-file const values.** Watch `swift-package-manager` for a
-   setting equivalent to `SWIFT_ENABLE_EMIT_CONST_VALUES`; when it lands, add the flag to
-   `swift build` here, copy `Metadata.appintents` into `Contents/Resources`, and run the script
-   above to confirm.
-3. **A custom build step that replays every frontend command.** Possible in principle: read the
-   plan from `swift build -v`, split it per primary file, and rerun each with its own const-values
-   path. Rejected for now: it doubles build time, it breaks whenever SwiftPM changes its command
-   shape, and a release path that silently produces no metadata is worse than one that says it
-   cannot.
-
-Until one of those lands, the widget's interactive buttons stay unshipped (they need the same
-metadata), the Focus filter stays dormant, and the app's intents are reachable only through the
-`hisingen://` URL scheme, which needs no metadata.
+- **Interactive widget buttons** and **real Control Center actions** still need the widget target's
+  own `Metadata.appintents`, built the same way from that module.
+- The Focus filter and the `AppShortcut` phrases are discoverable now that the app bundle carries
+  metadata.
