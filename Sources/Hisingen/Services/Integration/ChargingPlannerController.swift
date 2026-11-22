@@ -67,8 +67,8 @@ final class ChargingPlannerController {
     /// Refused sends of the start and of the stop, per VIN. `.refused` also covers a provider
     /// request that failed on the network, and both commands are safe to repeat, so one
     /// refusal does not end the window.
-    private var refusedStarts: [String: Int] = [:]
-    private var refusedStops: [String: Int] = [:]
+    private(set) var refusedStarts: [String: Int] = [:]
+    private(set) var refusedStops: [String: Int] = [:]
     /// VIN → when a start that was refused `maxRefusedSends` times may be tried again. The plan
     /// is recomputed every tick, so the guard on the window start alone would not hold it back.
     private var gaveUpStartsUntil: [String: Date] = [:]
