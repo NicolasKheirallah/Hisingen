@@ -4072,3 +4072,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Mantiene un'asserzione di sonno fino alla fine della finestra di ricarica prevista, così Hisingen può inviare i comandi di avvio e arresto. Non può risvegliare un Mac già addormentato.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Disattivato per impostazione predefinita. Mantiene questo Mac sveglio mentre una finestra di ricarica attende o è in corso; non può risvegliare un Mac addormentato.";
 "Turn on Auto-Start Charging in the Window to use this." = "Attiva «Avvio automatico della ricarica nella finestra» per usare questa opzione.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Pubblico";
+"Add Session" = "Aggiungi sessione";
+"Log Charging Session" = "Registra sessione di ricarica";
+"Edit Charging Session" = "Modifica sessione di ricarica";
+"Charging place" = "Luogo di ricarica";
+"Energy (kWh)" = "Energia (kWh)";
+"Total price" = "Prezzo totale";
+"Enter the energy in kWh, greater than zero." = "Inserisci l'energia in kWh, maggiore di zero.";
+"Enter the total price as a number." = "Inserisci il prezzo totale come numero.";
+"Enter the price per kWh as a number." = "Inserisci il prezzo per kWh come numero.";
+"Enter a total price or a price per kWh." = "Inserisci un prezzo totale o un prezzo per kWh.";
+"The session must end after it starts." = "La sessione deve terminare dopo l'inizio.";
+"Entered by hand" = "Inserita a mano";
+"Stored with the session and included in the home and public charging totals." = "Salvata con la sessione e inclusa nei totali di ricarica domestica e pubblica.";
+"Public Charging" = "Ricarica pubblica";
+"Includes every session recorded automatically until its place is changed." = "Considera domestica ogni sessione registrata automaticamente finché non ne cambi il luogo di ricarica.";
+"Log a public charge from a receipt, or add a missing session." = "Registra una ricarica pubblica da uno scontrino o aggiungi una sessione mancante.";
+"Stored cost: %@" = "Costo salvato: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Inserito da uno scontrino: energia e prezzo sono i tuoi dati, non una misura.";

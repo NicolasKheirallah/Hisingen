@@ -21,6 +21,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Public charging sessions and a home-versus-public cost split.** The Charging Sessions card
+  gains **Add Session**, which logs a charge by hand with its place (home or public), location,
+  start and end time, energy, and a price as a total, a per-kWh figure, or both. A stored session
+  can be edited from its context menu or the pencil in its detail card, so a public charge the car
+  recorded without a price can be corrected. **Charging Trends** now shows **Home Charging** and
+  **Public Charging** cost as separate lines that add up to the existing total. The place is a new
+  column with an additive migration: existing rows read as home and every stored total is
+  unchanged. Everything is local; no provider call is added.
+
+### Added
+
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging
   current set from the charger card: map the integration's writable `number` entity under
   Settings → Home Charging → Entities → Writable current limit, and the card shows a stepper with

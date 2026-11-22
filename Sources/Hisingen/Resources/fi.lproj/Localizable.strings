@@ -4072,3 +4072,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Pitää unen estoa yllä, kunnes suunniteltu latausikkuna päättyy, jotta Hisingen voi lähettää aloitus- ja pysäytyskomennot. Jo nukkuvaa Macia ei voi herättää.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Oletuksena pois. Pitää tämän Macin hereillä, kun latausikkuna odottaa tai on käynnissä; nukkuvaa Macia ei voi herättää.";
 "Turn on Auto-Start Charging in the Window to use this." = "Ota käyttöön ”Käynnistä lataus automaattisesti ikkunassa”, jotta voit käyttää tätä.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Julkinen";
+"Add Session" = "Lisää istunto";
+"Log Charging Session" = "Kirjaa latausistunto";
+"Edit Charging Session" = "Muokkaa latausistuntoa";
+"Charging place" = "Latauspaikka";
+"Energy (kWh)" = "Energia (kWh)";
+"Total price" = "Kokonaishinta";
+"Enter the energy in kWh, greater than zero." = "Syötä energia kWh:ina, nollaa suurempi.";
+"Enter the total price as a number." = "Syötä kokonaishinta numerona.";
+"Enter the price per kWh as a number." = "Syötä hinta per kWh numerona.";
+"Enter a total price or a price per kWh." = "Syötä kokonaishinta tai hinta per kWh.";
+"The session must end after it starts." = "Istunnon on päätyttävä aloituksensa jälkeen.";
+"Entered by hand" = "Syötetty käsin";
+"Stored with the session and included in the home and public charging totals." = "Tallennetaan istunnon kanssa ja lasketaan koti- ja julkisen latauksen summiin.";
+"Public Charging" = "Julkinen lataus";
+"Includes every session recorded automatically until its place is changed." = "Laskee jokaisen automaattisesti tallennetun istunnon kotilataukseksi, kunnes sen latauspaikka muutetaan.";
+"Log a public charge from a receipt, or add a missing session." = "Kirjaa julkinen lataus kuitista tai lisää puuttuva istunto.";
+"Stored cost: %@" = "Tallennettu hinta: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Syötetty kuitista: energia ja hinta ovat omia lukujasi, eivät mittaus.";

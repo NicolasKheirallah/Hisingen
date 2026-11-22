@@ -4088,3 +4088,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Håller en sömnspärr tills det planerade laddfönstret slutar, så att Hisingen kan skicka start- och stoppkommandona. En Mac som redan sover kan inte väckas.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Av som standard. Håller den här Macen vaken medan ett laddfönster väntar eller pågår; en sovande Mac kan inte väckas.";
 "Turn on Auto-Start Charging in the Window to use this." = "Slå på ”Starta laddning automatiskt i fönstret” för att använda detta.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Offentlig";
+"Add Session" = "Lägg till session";
+"Log Charging Session" = "Logga laddsession";
+"Edit Charging Session" = "Redigera laddsession";
+"Charging place" = "Laddplats";
+"Energy (kWh)" = "Energi (kWh)";
+"Total price" = "Totalpris";
+"Enter the energy in kWh, greater than zero." = "Ange energin i kWh, större än noll.";
+"Enter the total price as a number." = "Ange totalpriset som ett tal.";
+"Enter the price per kWh as a number." = "Ange priset per kWh som ett tal.";
+"Enter a total price or a price per kWh." = "Ange ett totalpris eller ett pris per kWh.";
+"The session must end after it starts." = "Sessionen måste sluta efter att den börjat.";
+"Entered by hand" = "Inmatad för hand";
+"Stored with the session and included in the home and public charging totals." = "Sparas med sessionen och räknas in i summorna för hemmaladdning och offentlig laddning.";
+"Public Charging" = "Offentlig laddning";
+"Includes every session recorded automatically until its place is changed." = "Räknar varje automatiskt registrerad session som hemma tills dess laddplats ändras.";
+"Log a public charge from a receipt, or add a missing session." = "Logga en offentlig laddning från ett kvitto eller lägg till en saknad session.";
+"Stored cost: %@" = "Sparat pris: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Inmatad från ett kvitto: energin och priset är dina uppgifter, inte en mätning.";

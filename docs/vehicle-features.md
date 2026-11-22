@@ -161,6 +161,14 @@ Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage 
 the business/private distance split per month with CSV export. Tags are stored locally per
 vehicle.
 
+Public charging can be logged by hand from the **Charging Sessions** card: **Add Session**
+records the charging place (home or public), a location, the start and end time, the energy, and
+the price as a total, a price per kWh, or both. A stored session can be edited from its context
+menu or the pencil in its detail card, so a public charge the car recorded without a price can be
+corrected. The **Charging Trends** card separates **Home Charging** and **Public Charging** cost;
+the two lines add up to the total. Sessions recorded automatically count as home until their
+place is changed. Everything is stored locally and no provider is asked for a price.
+
 A few more things that follow from the same history:
 
 * scheduled charging says whether it will finish, including "cannot complete" and "smart

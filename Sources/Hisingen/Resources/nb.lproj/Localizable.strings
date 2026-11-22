@@ -4080,3 +4080,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Holder en hvileblokkering til det planlagte ladevinduet er over, slik at Hisingen kan sende start- og stoppkommandoene. En Mac som allerede sover, kan ikke vekkes.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Av som standard. Holder denne Macen våken mens et ladevindu venter eller pågår; en sovende Mac kan ikke vekkes.";
 "Turn on Auto-Start Charging in the Window to use this." = "Slå på «Start lading automatisk i vinduet» for å bruke dette.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Offentlig";
+"Add Session" = "Legg til økt";
+"Log Charging Session" = "Registrer ladeøkt";
+"Edit Charging Session" = "Rediger ladeøkt";
+"Charging place" = "Ladested";
+"Energy (kWh)" = "Energi (kWh)";
+"Total price" = "Totalpris";
+"Enter the energy in kWh, greater than zero." = "Angi energien i kWh, større enn null.";
+"Enter the total price as a number." = "Angi totalprisen som et tall.";
+"Enter the price per kWh as a number." = "Angi prisen per kWh som et tall.";
+"Enter a total price or a price per kWh." = "Angi en totalpris eller en pris per kWh.";
+"The session must end after it starts." = "Økten må slutte etter at den har begynt.";
+"Entered by hand" = "Skrevet inn for hånd";
+"Stored with the session and included in the home and public charging totals." = "Lagres med økten og inngår i summen for hjemmelading og offentlig lading.";
+"Public Charging" = "Offentlig lading";
+"Includes every session recorded automatically until its place is changed." = "Teller hver automatisk registrerte økt som hjemme til ladestedet endres.";
+"Log a public charge from a receipt, or add a missing session." = "Registrer en offentlig lading fra en kvittering, eller legg til en manglende økt.";
+"Stored cost: %@" = "Lagret pris: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Skrevet inn fra en kvittering: energien og prisen er dine tall, ikke en måling.";

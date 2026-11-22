@@ -4072,3 +4072,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "계획된 시간대가 끝날 때까지 잠자기 방지를 유지하여 Hisingen이 시작 및 중지 명령을 보낼 수 있게 합니다. 이미 잠든 Mac은 깨울 수 없습니다.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "기본적으로 꺼져 있습니다. 충전 시간대를 기다리거나 진행하는 동안 이 Mac을 깨어 있게 유지하며, 잠든 Mac은 깨울 수 없습니다.";
 "Turn on Auto-Start Charging in the Window to use this." = "이 기능을 사용하려면 ‘지정 시간대에 자동 충전 시작’을 켜세요.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "공용";
+"Add Session" = "세션 추가";
+"Log Charging Session" = "충전 세션 기록";
+"Edit Charging Session" = "충전 세션 편집";
+"Charging place" = "충전 장소";
+"Energy (kWh)" = "에너지(kWh)";
+"Total price" = "총 가격";
+"Enter the energy in kWh, greater than zero." = "에너지를 kWh 단위로 입력하세요. 0보다 커야 합니다.";
+"Enter the total price as a number." = "총 가격을 숫자로 입력하세요.";
+"Enter the price per kWh as a number." = "kWh당 가격을 숫자로 입력하세요.";
+"Enter a total price or a price per kWh." = "총 가격 또는 kWh당 가격을 입력하세요.";
+"The session must end after it starts." = "세션은 시작 후에 끝나야 합니다.";
+"Entered by hand" = "직접 입력";
+"Stored with the session and included in the home and public charging totals." = "세션과 함께 저장되며 가정 및 공용 충전 합계에 포함됩니다.";
+"Public Charging" = "공용 충전";
+"Includes every session recorded automatically until its place is changed." = "장소를 변경할 때까지 자동으로 기록된 모든 세션을 가정 충전으로 계산합니다.";
+"Log a public charge from a receipt, or add a missing session." = "영수증에서 공용 충전을 기록하거나 누락된 세션을 추가하세요.";
+"Stored cost: %@" = "저장된 비용: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "영수증에서 입력: 에너지와 가격은 측정값이 아니라 직접 입력한 값입니다.";

@@ -4072,3 +4072,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "在计划时段结束前保持睡眠阻止状态，以便 Hisingen 发送开始和停止指令。它无法唤醒已经进入睡眠的 Mac。";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "默认关闭。在时段等待或进行期间保持此 Mac 唤醒；无法唤醒已经进入睡眠的 Mac。";
 "Turn on Auto-Start Charging in the Window to use this." = "请开启“在时段内自动开始充电”以使用此功能。";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "公共";
+"Add Session" = "添加会话";
+"Log Charging Session" = "记录充电会话";
+"Edit Charging Session" = "编辑充电会话";
+"Charging place" = "充电地点";
+"Energy (kWh)" = "电量（kWh）";
+"Total price" = "总价";
+"Enter the energy in kWh, greater than zero." = "请输入大于零的电量（kWh）。";
+"Enter the total price as a number." = "请以数字输入总价。";
+"Enter the price per kWh as a number." = "请以数字输入每 kWh 价格。";
+"Enter a total price or a price per kWh." = "请输入总价或每 kWh 价格。";
+"The session must end after it starts." = "会话的结束时间必须晚于开始时间。";
+"Entered by hand" = "手动输入";
+"Stored with the session and included in the home and public charging totals." = "随会话保存，并计入家用和公共充电总额。";
+"Public Charging" = "公共充电";
+"Includes every session recorded automatically until its place is changed." = "在更改充电地点前，所有自动记录的会话均按家用充电计算。";
+"Log a public charge from a receipt, or add a missing session." = "按收据记录公共充电，或添加缺失的会话。";
+"Stored cost: %@" = "已保存费用：%@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "按收据输入：电量和价格是手动填写的数据，并非实测值。";

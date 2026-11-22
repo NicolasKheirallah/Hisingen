@@ -4079,3 +4079,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Holder en søvnspærring, indtil det planlagte ladevindue slutter, så Hisingen kan sende start- og stopkommandoerne. En Mac, der allerede sover, kan ikke vækkes.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Slået fra som standard. Holder denne Mac vågen, mens et ladevindue venter eller kører; en sovende Mac kan ikke vækkes.";
 "Turn on Auto-Start Charging in the Window to use this." = "Slå „Start ladning automatisk i vinduet“ til for at bruge dette.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Offentlig";
+"Add Session" = "Tilføj session";
+"Log Charging Session" = "Registrér opladningssession";
+"Edit Charging Session" = "Rediger opladningssession";
+"Charging place" = "Opladningssted";
+"Energy (kWh)" = "Energi (kWh)";
+"Total price" = "Samlet pris";
+"Enter the energy in kWh, greater than zero." = "Indtast energien i kWh, større end nul.";
+"Enter the total price as a number." = "Indtast den samlede pris som et tal.";
+"Enter the price per kWh as a number." = "Indtast prisen per kWh som et tal.";
+"Enter a total price or a price per kWh." = "Indtast en samlet pris eller en pris per kWh.";
+"The session must end after it starts." = "Sessionen skal slutte efter, at den er begyndt.";
+"Entered by hand" = "Indtastet i hånden";
+"Stored with the session and included in the home and public charging totals." = "Gemmes med sessionen og indgår i summen for hjemmeopladning og offentlig opladning.";
+"Public Charging" = "Offentlig opladning";
+"Includes every session recorded automatically until its place is changed." = "Tæller hver automatisk registreret session som hjemme, indtil dens opladningssted ændres.";
+"Log a public charge from a receipt, or add a missing session." = "Registrér en offentlig opladning fra en kvittering, eller tilføj en manglende session.";
+"Stored cost: %@" = "Gemt pris: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Indtastet fra en kvittering: energien og prisen er dine tal, ikke en måling.";

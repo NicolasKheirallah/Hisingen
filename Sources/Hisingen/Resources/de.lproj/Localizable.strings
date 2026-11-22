@@ -4082,3 +4082,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Hält eine Sperre gegen den Ruhezustand, bis das geplante Ladefenster endet, damit Hisingen die Start- und Stoppbefehle senden kann. Ein bereits schlafender Mac kann nicht geweckt werden.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Standardmäßig aus. Hält diesen Mac wach, solange ein Ladefenster wartet oder läuft; ein schlafender Mac kann nicht geweckt werden.";
 "Turn on Auto-Start Charging in the Window to use this." = "Aktiviere „Laden im Fenster automatisch starten“, um dies zu nutzen.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Öffentlich";
+"Add Session" = "Sitzung hinzufügen";
+"Log Charging Session" = "Ladesitzung erfassen";
+"Edit Charging Session" = "Ladesitzung bearbeiten";
+"Charging place" = "Ladeort";
+"Energy (kWh)" = "Energie (kWh)";
+"Total price" = "Gesamtpreis";
+"Enter the energy in kWh, greater than zero." = "Gib die Energie in kWh ein, größer als null.";
+"Enter the total price as a number." = "Gib den Gesamtpreis als Zahl ein.";
+"Enter the price per kWh as a number." = "Gib den Preis pro kWh als Zahl ein.";
+"Enter a total price or a price per kWh." = "Gib einen Gesamtpreis oder einen Preis pro kWh ein.";
+"The session must end after it starts." = "Die Sitzung muss nach ihrem Beginn enden.";
+"Entered by hand" = "Von Hand eingegeben";
+"Stored with the session and included in the home and public charging totals." = "Wird mit der Sitzung gespeichert und in die Summen für Laden zu Hause und öffentliches Laden eingerechnet.";
+"Public Charging" = "Öffentliches Laden";
+"Includes every session recorded automatically until its place is changed." = "Zählt jede automatisch aufgezeichnete Sitzung als Zuhause, bis ihr Ladeort geändert wird.";
+"Log a public charge from a receipt, or add a missing session." = "Erfasse eine öffentliche Ladung aus einem Beleg oder füge eine fehlende Sitzung hinzu.";
+"Stored cost: %@" = "Gespeicherte Kosten: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Aus einem Beleg erfasst: Energie und Preis sind deine Angaben, keine Messung.";

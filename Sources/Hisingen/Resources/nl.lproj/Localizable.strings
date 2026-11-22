@@ -4080,3 +4080,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Houdt een slaapblokkering aan tot het geplande laadvenster eindigt, zodat Hisingen de start- en stopopdrachten kan sturen. Een Mac die al slaapt, kan niet worden gewekt.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Standaard uit. Houdt deze Mac wakker terwijl een laadvenster wacht of loopt; een slapende Mac kan niet worden gewekt.";
 "Turn on Auto-Start Charging in the Window to use this." = "Schakel ‘Automatisch laden starten binnen het venster’ in om dit te gebruiken.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Openbaar";
+"Add Session" = "Sessie toevoegen";
+"Log Charging Session" = "Laadsessie vastleggen";
+"Edit Charging Session" = "Laadsessie bewerken";
+"Charging place" = "Laadlocatie";
+"Energy (kWh)" = "Energie (kWh)";
+"Total price" = "Totaalprijs";
+"Enter the energy in kWh, greater than zero." = "Voer de energie in kWh in, groter dan nul.";
+"Enter the total price as a number." = "Voer de totaalprijs als getal in.";
+"Enter the price per kWh as a number." = "Voer de prijs per kWh als getal in.";
+"Enter a total price or a price per kWh." = "Voer een totaalprijs of een prijs per kWh in.";
+"The session must end after it starts." = "De sessie moet na het begin eindigen.";
+"Entered by hand" = "Handmatig ingevoerd";
+"Stored with the session and included in the home and public charging totals." = "Wordt met de sessie opgeslagen en meetelt in de totalen voor thuisladen en openbaar laden.";
+"Public Charging" = "Openbaar laden";
+"Includes every session recorded automatically until its place is changed." = "Telt elke automatisch vastgelegde sessie als thuis tot de laadlocatie wordt gewijzigd.";
+"Log a public charge from a receipt, or add a missing session." = "Leg een openbare laadsessie vast vanaf een bon, of voeg een ontbrekende sessie toe.";
+"Stored cost: %@" = "Opgeslagen kosten: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Ingevoerd vanaf een bon: de energie en prijs zijn jouw cijfers, geen meting.";

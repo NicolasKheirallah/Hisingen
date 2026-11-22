@@ -4072,3 +4072,24 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Mantiene una aserción de sueño hasta que termina la ventana de carga prevista, para que Hisingen pueda enviar los comandos de inicio y parada. No puede despertar un Mac que ya esté dormido.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Desactivado de forma predeterminada. Mantiene este Mac despierto mientras una ventana de carga espera o está en curso; no puede despertar un Mac dormido.";
 "Turn on Auto-Start Charging in the Window to use this." = "Activa «Inicio automático de la carga en la ventana» para usar esta opción.";
+
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Público";
+"Add Session" = "Añadir sesión";
+"Log Charging Session" = "Registrar sesión de carga";
+"Edit Charging Session" = "Editar sesión de carga";
+"Charging place" = "Lugar de carga";
+"Energy (kWh)" = "Energía (kWh)";
+"Total price" = "Precio total";
+"Enter the energy in kWh, greater than zero." = "Introduce la energía en kWh, mayor que cero.";
+"Enter the total price as a number." = "Introduce el precio total como un número.";
+"Enter the price per kWh as a number." = "Introduce el precio por kWh como un número.";
+"Enter a total price or a price per kWh." = "Introduce un precio total o un precio por kWh.";
+"The session must end after it starts." = "La sesión debe terminar después de empezar.";
+"Entered by hand" = "Introducida a mano";
+"Stored with the session and included in the home and public charging totals." = "Se guarda con la sesión y se incluye en los totales de carga doméstica y pública.";
+"Public Charging" = "Carga pública";
+"Includes every session recorded automatically until its place is changed." = "Cuenta cada sesión registrada automáticamente como doméstica hasta que se cambie su lugar de carga.";
+"Log a public charge from a receipt, or add a missing session." = "Registra una carga pública desde un recibo o añade una sesión que falte.";
+"Stored cost: %@" = "Coste guardado: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Introducido desde un recibo: la energía y el precio son tus datos, no una medición.";

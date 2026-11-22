@@ -75,6 +75,7 @@ extension VehicleDatabase {
         let wallboxCost: Double?
         let wallboxCostMethod: String?
         let wallboxPriceSource: String?
+        let place: String
     }
 
     private func backupChargingSessions(includeCoordinates: Bool) throws -> [BackupSession] {
@@ -86,7 +87,8 @@ extension VehicleDatabase {
                night_tariff_price_per_kwh, night_tariff_start_hour,
                night_tariff_end_hour, estimated_cost, currency_symbol, target_soc,
                summary_version, wallbox_charger_id, wallbox_energy_kwh, wallbox_energy_source,
-               wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source
+               wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source,
+               charging_place
         FROM charging_sessions ORDER BY started_at DESC;
         """
         let df = Format.iso8601
@@ -126,7 +128,8 @@ extension VehicleDatabase {
                     wallboxMeasuredAt: stmt.columnDate(at: 27).map { df.string(from: $0) },
                     wallboxCost: stmt.columnDouble(at: 28),
                     wallboxCostMethod: stmt.columnText(at: 29),
-                    wallboxPriceSource: stmt.columnText(at: 30)
+                    wallboxPriceSource: stmt.columnText(at: 30),
+                    place: stmt.columnText(at: 31) ?? "home"
                 ))
             }
             return out
