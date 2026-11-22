@@ -23,6 +23,11 @@ struct ElectricityMapsClient: Sendable {
 
     static func zoneID(for zone: ElspotZone) -> String { "SE-\(zone.rawValue)" }
 
+    /// The zone names above exist for Sweden only. In any other market the saved price zone is a
+    /// leftover default, and asking for it would put Swedish carbon intensity beside a plan for
+    /// another country.
+    static func covers(_ market: MarketCountry) -> Bool { market == .sweden }
+
     static func url(zone: ElspotZone) -> URL? {
         var components = URLComponents()
         components.scheme = "https"

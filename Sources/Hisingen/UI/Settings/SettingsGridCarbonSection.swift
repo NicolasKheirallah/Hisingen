@@ -54,68 +54,70 @@ struct SettingsGridCarbonSection: View {
             InlineValidationLabel(message: L10n.text("Enter an intensity between 1 and 1,200 g CO₂/kWh."))
         }
 
-        Divider().opacity(HisingenTheme.dividerOpacity)
+        if ElectricityMapsClient.covers(preferences.marketCountry) || hasLiveCarbonKey {
+            Divider().opacity(HisingenTheme.dividerOpacity)
 
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.text("Live grid carbon"))
-                        .hisType(.body, weight: .medium)
-                    Text(L10n.text("Shows the carbon intensity now beside the charging plan. Without a key, no live line appears."))
-                        .hisType(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                if hasLiveCarbonKey {
-                    Button(L10n.text("Remove")) {
-                        preferences.clearElectricityMapsKey()
-                        hasLiveCarbonKey = false
-                        keyDraft = ""
-                        keyError = nil
-                        binder.bump()
-                    }
-                    .buttonStyle(.hisSecondary)
-                    .controlSize(.small)
-                }
-            }
-            if hasLiveCarbonKey {
-                Label(L10n.text("Key saved"), systemImage: "checkmark.seal")
-                    .hisType(.label, weight: .medium)
-                    .foregroundStyle(HisingenTheme.semanticGood)
-                Text(L10n.text("The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    SecureField("", text: $keyDraft)
-                        .hisField()
-                        .accessibilityLabel(L10n.text("Electricity Maps API key"))
-                    Button(L10n.text("Save")) {
-                        let key = keyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !key.isEmpty else { return }
-                        do {
-                            try preferences.saveElectricityMapsKey(key)
-                            hasLiveCarbonKey = true
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.text("Live grid carbon"))
+                            .hisType(.body, weight: .medium)
+                        Text(L10n.text("Shows the carbon intensity now beside the charging plan. Without a key, no live line appears."))
+                            .hisType(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    if hasLiveCarbonKey {
+                        Button(L10n.text("Remove")) {
+                            preferences.clearElectricityMapsKey()
+                            hasLiveCarbonKey = false
                             keyDraft = ""
                             keyError = nil
                             binder.bump()
-                        } catch {
-                            keyError = error.localizedDescription
                         }
+                        .buttonStyle(.hisSecondary)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.hisSecondary)
-                    .controlSize(.small)
-                    .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Text(L10n.text("Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported."))
-                    .hisType(.micro)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let keyError {
-                InlineValidationLabel(message: keyError)
+                if hasLiveCarbonKey {
+                    Label(L10n.text("Key saved"), systemImage: "checkmark.seal")
+                        .hisType(.label, weight: .medium)
+                        .foregroundStyle(HisingenTheme.semanticGood)
+                    Text(L10n.text("The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate."))
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    HStack(spacing: 8) {
+                        SecureField("", text: $keyDraft)
+                            .hisField()
+                            .accessibilityLabel(L10n.text("Electricity Maps API key"))
+                        Button(L10n.text("Save")) {
+                            let key = keyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !key.isEmpty else { return }
+                            do {
+                                try preferences.saveElectricityMapsKey(key)
+                                hasLiveCarbonKey = true
+                                keyDraft = ""
+                                keyError = nil
+                                binder.bump()
+                            } catch {
+                                keyError = error.localizedDescription
+                            }
+                        }
+                        .buttonStyle(.hisSecondary)
+                        .controlSize(.small)
+                        .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    Text(L10n.text("Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported."))
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let keyError {
+                    InlineValidationLabel(message: keyError)
+                }
             }
         }
     }

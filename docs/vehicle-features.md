@@ -195,7 +195,8 @@ peak time. The request carries the position rounded to two decimals, and the ans
 minutes. It is radiation,
 not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
 kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
-provider named beneath it. Without a token, or whenever the provider fails, the line stays absent
+provider named beneath it. The line and its setting exist for Swedish price zones only, because
+the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
 rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
 the History emissions estimate.
 

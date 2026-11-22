@@ -115,6 +115,12 @@ struct SolarAndGridCarbonTests {
 
     // MARK: - Grid carbon
 
+    @Test
+    func liveCarbonCoversOnlyTheSwedishMarket() {
+        #expect(ElectricityMapsClient.covers(.sweden))
+        #expect(!ElectricityMapsClient.covers(.other))
+    }
+
     private let carbonJSON = """
     {
       "zone": "SE-SE3",
