@@ -27,11 +27,9 @@ struct SolarForecastClient: Sendable {
         return result
     }
 
-    /// The request's coordinates are rounded to two decimals, about a kilometre. A radiation
-    /// forecast does not get better with more digits, and the car's exact position stays out of
-    /// the request.
+    /// The request's coordinates are rounded to two decimals, about a kilometre.
     static func roundedCoordinate(_ value: Double) -> String {
-        String(format: "%.2f", (value * 100).rounded() / 100)
+        OpenMeteoCoordinate.rounded(value)
     }
 
     static func url(latitude: Double, longitude: Double) -> URL? {

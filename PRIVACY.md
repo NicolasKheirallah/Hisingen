@@ -239,7 +239,7 @@ When suitable coordinates are available, Hisingen may send:
 - latitude; and
 - longitude
 
-to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location.
+to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
 
 The Open-Meteo request does not need to contain:
 
@@ -252,7 +252,7 @@ The Open-Meteo request does not need to contain:
 
 If you do not want vehicle coordinates sent to Open-Meteo, leave Vehicle Weather disabled.
 
-The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends the vehicle's latitude and longitude, rounded to two decimals (about a kilometre), to Open-Meteo to read the next day's hourly solar radiation, and keeps the answer for 30 minutes. With Vehicle Weather disabled, the forecast is not requested.
+The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends the same rounded latitude and longitude to Open-Meteo to read the next day's hourly solar radiation, and keeps the answer for 30 minutes. With Vehicle Weather disabled, the forecast is not requested.
 
 Weather information returned to Hisingen may itself be stored as part of locally cached or historical vehicle information.
 

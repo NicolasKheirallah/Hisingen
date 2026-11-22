@@ -60,8 +60,8 @@ struct OpenMeteoWeatherClient: Sendable {
         components.host = "api.open-meteo.com"
         components.path = "/v1/forecast"
         components.queryItems = [
-            URLQueryItem(name: "latitude", value: String(latitude)),
-            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "latitude", value: OpenMeteoCoordinate.rounded(latitude)),
+            URLQueryItem(name: "longitude", value: OpenMeteoCoordinate.rounded(longitude)),
             URLQueryItem(name: "current", value: currentFields),
             URLQueryItem(name: "hourly", value: hourlyFields),
             URLQueryItem(name: "forecast_days", value: "2"),
@@ -129,8 +129,8 @@ struct OpenMeteoWeatherClient: Sendable {
         components.host = "api.open-meteo.com"
         components.path = "/v1/forecast"
         components.queryItems = [
-            URLQueryItem(name: "latitude", value: String(latitude)),
-            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "latitude", value: OpenMeteoCoordinate.rounded(latitude)),
+            URLQueryItem(name: "longitude", value: OpenMeteoCoordinate.rounded(longitude)),
             URLQueryItem(name: "current", value: currentFields)
         ]
         return components.url
@@ -154,5 +154,14 @@ struct OpenMeteoWeatherClient: Sendable {
         case 95, 96, 99: return "Thunderstorm"
         default: return "Partly Cloudy"
         }
+    }
+}
+
+/// The one place an Open-Meteo request gets its coordinates. Weather and radiation are modelled on
+/// a grid several kilometres wide, so two decimals (about a kilometre) lose nothing, and the car's
+/// exact position stays out of the request.
+enum OpenMeteoCoordinate {
+    static func rounded(_ value: Double) -> String {
+        String(format: "%.2f", (value * 100).rounded() / 100)
     }
 }

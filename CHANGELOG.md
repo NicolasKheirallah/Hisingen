@@ -324,6 +324,11 @@ All notable changes to Hisingen are documented in this file. The project follows
   every minute inside that window, and a failed send, including one lost to the network, is
   repeated up to three times before the occurrence is given up.
 
+- **Weather requests now send the car's position rounded to two decimals.** The current-conditions
+  and hourly-forecast requests to Open-Meteo carried the coordinates at full precision. Weather is
+  modelled on a grid several kilometres wide, so the request now carries two decimals (about a
+  kilometre) and the exact position stays out of it, as it does for the solar forecast.
+
 - **The solar forecast no longer sends the car's exact position, and follows Vehicle Weather.**
   The Charging Planner asked Open-Meteo for radiation with the coordinates at full precision, on
   every vehicle refresh, with no setting behind it. The request now carries the position rounded to
