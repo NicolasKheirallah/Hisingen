@@ -362,8 +362,9 @@ All notable changes to Hisingen are documented in this file. The project follows
 - **The solar forecast no longer sends the car's exact position, and follows Vehicle Weather.**
   The Charging Planner asked Open-Meteo for radiation with the coordinates at full precision, on
   every vehicle refresh, with no setting behind it. The request now carries the position rounded to
-  two decimals (about a kilometre), the answer is kept for 30 minutes, and nothing is requested
-  while Vehicle Weather is off. `PRIVACY.md` describes the solar request and the optional
+  two decimals (about a kilometre), the answer is kept for 30 minutes, two cards asking at once
+  share one request, expired locations are dropped from memory, and nothing is requested while
+  Vehicle Weather is off. `PRIVACY.md` describes the solar request and the optional
   Electricity Maps carbon reading, which sends only a token and a price-zone code.
 
 - **The planner no longer shows Swedish carbon intensity for another market, or a "kr" sign for
