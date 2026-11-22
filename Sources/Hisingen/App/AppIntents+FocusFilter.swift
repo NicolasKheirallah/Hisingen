@@ -9,15 +9,12 @@ enum FocusNotificationPolicy: String, AppEnum {
     /// The per-vehicle mute Hisingen's notification settings already use.
     case muted
 
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        TypeDisplayRepresentation(name: LocalizedStringResource(stringLiteral: L10n.text("Notifications")))
-    }
-    static var caseDisplayRepresentations: [FocusNotificationPolicy: DisplayRepresentation] {
-        [
-            .all: DisplayRepresentation(title: LocalizedStringResource(stringLiteral: L10n.text("All notifications"))),
-            .muted: DisplayRepresentation(title: LocalizedStringResource(stringLiteral: L10n.text("Muted")))
-        ]
-    }
+    static let typeDisplayRepresentation: TypeDisplayRepresentation =
+        TypeDisplayRepresentation(name: "Notifications")
+    static let caseDisplayRepresentations: [FocusNotificationPolicy: DisplayRepresentation] = [
+        .all: DisplayRepresentation(title: "All notifications"),
+        .muted: DisplayRepresentation(title: "Muted")
+    ]
 }
 
 /// The concrete settings one applied filter leaves behind, resolved from the parameters
@@ -91,17 +88,15 @@ enum FocusFilterMapping {
 /// item; this intent compiles and its mapping is unit-tested here, but it cannot be
 /// picked up by the system until that metadata ships.
 struct SetHisingenFocusFilterIntent: SetFocusFilterIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Hisingen Focus Filter")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on.")))
-    }
+    static let title: LocalizedStringResource = "Hisingen Focus Filter"
+    static let description = IntentDescription("Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Notifications")), default: .all)
+    @Parameter(title: "Notifications", default: .all)
     var notifications: FocusNotificationPolicy
 
     /// What Focus settings shows for the configured filter. Built from the stored
@@ -112,7 +107,7 @@ struct SetHisingenFocusFilterIntent: SetFocusFilterIntent {
             ? L10n.text("Muted")
             : L10n.text("All notifications")
         return DisplayRepresentation(
-            title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle and notifications")),
+            title: "Vehicle and notifications",
             subtitle: LocalizedStringResource(stringLiteral: policy)
         )
     }

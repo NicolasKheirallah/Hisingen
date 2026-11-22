@@ -517,6 +517,16 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **The App Intents metadata builds again, so Shortcuts, Siri, the Focus filter and the widget's
+  buttons can find the intents.** The localization pass had turned every intent title, description,
+  parameter title and shortcut title into a runtime call, `LocalizedStringResource(stringLiteral:
+  L10n.text(...))`, and swapped stored constants for computed properties. The metadata processor
+  reads only stored literal constants, so `make app` stopped at its first step with about a hundred
+  "must be initialized with a call to its initializer or a string literal" errors. Those 112 strings
+  are literals again, and they still localize because every key is in the string tables. The widget
+  step also failed, because the constant extractor was not told to look at `EntityQuery` and
+  `EntityStringQuery`, so the car picker's query was never recorded.
+
 - The command confirmation alert's expiry timer no longer breaks the strict-concurrency build. It
   called `NSApp.abortModal()` from a non-isolated closure; the timer runs on the main run loop, so
   the call now asserts main-actor isolation.

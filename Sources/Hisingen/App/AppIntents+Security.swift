@@ -2,14 +2,12 @@ import AppIntents
 import Foundation
 
 struct LockVehicleIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Lock Vehicle")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Locks the vehicle doors.")))
-    }
+    static let title: LocalizedStringResource = "Lock Vehicle"
+    static let description = IntentDescription("Locks the vehicle doors.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -20,14 +18,12 @@ struct LockVehicleIntent: AppIntent {
 }
 
 struct UnlockVehicleIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Unlock Vehicle")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Unlocks the vehicle doors.")))
-    }
+    static let title: LocalizedStringResource = "Unlock Vehicle"
+    static let description = IntentDescription("Unlocks the vehicle doors.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -38,12 +34,12 @@ struct UnlockVehicleIntent: AppIntent {
 }
 
 struct FlashLightsIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Flash Vehicle Lights")) }
+    static let title: LocalizedStringResource = "Flash Vehicle Lights"
     static let description = IntentDescription("Flashes the headlights so the car is easier to find.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor func perform() async throws -> some ProvidesDialog {
@@ -53,12 +49,12 @@ struct FlashLightsIntent: AppIntent {
 }
 
 struct HonkAndFlashIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Honk and Flash Vehicle")) }
+    static let title: LocalizedStringResource = "Honk and Flash Vehicle"
     static let description = IntentDescription("Sounds the horn and flashes the lights together.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor func perform() async throws -> some ProvidesDialog {

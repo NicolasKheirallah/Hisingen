@@ -2,14 +2,12 @@ import AppIntents
 import Foundation
 
 struct GetChargingStatusIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Charging Status")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns charging state, power, target, and time remaining.")))
-    }
+    static let title: LocalizedStringResource = "Get Charging Status"
+    static let description = IntentDescription("Returns charging state, power, target, and time remaining.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -32,19 +30,17 @@ struct GetChargingStatusIntent: AppIntent {
 /// The parameter is validated by the same capability/bounds logic as the in-app slider,
 /// so an out-of-range request surfaces the vehicle's own limits instead of failing blindly.
 struct SetChargeTargetIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Set Charge Target")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Sets the vehicle's target charge level percentage.")))
-    }
+    static let title: LocalizedStringResource = "Set Charge Target"
+    static let description = IntentDescription("Sets the vehicle's target charge level percentage.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Charge Target (%)")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Percentage to charge to, between 40 and 100.")),
+    @Parameter(title: "Charge Target (%)",
+               description: "Percentage to charge to, between 40 and 100.",
                default: 80, inclusiveRange: (40, 100))
     var percent: Int
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -58,14 +54,12 @@ struct SetChargeTargetIntent: AppIntent {
 /// an active schedule, and "stop" hands control back to the schedule. Without a schedule
 /// active there is nothing to override, and the provider answer says so.
 struct StartChargingOverrideIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Charge Now")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Overrides the active charging schedule so the vehicle charges immediately.")))
-    }
+    static let title: LocalizedStringResource = "Charge Now"
+    static let description = IntentDescription("Overrides the active charging schedule so the vehicle charges immediately.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -76,14 +70,12 @@ struct StartChargingOverrideIntent: AppIntent {
 }
 
 struct StopChargingOverrideIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Resume Charging Schedule")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Ends a charging override so the vehicle returns to its charging schedule.")))
-    }
+    static let title: LocalizedStringResource = "Resume Charging Schedule"
+    static let description = IntentDescription("Ends a charging override so the vehicle returns to its charging schedule.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -96,19 +88,17 @@ struct StopChargingOverrideIntent: AppIntent {
 /// The range matches `VehicleChargeBounds.fallbackAmperageRange`; a vehicle with narrower
 /// capabilities validates the request at dispatch and answers with its own limits.
 struct SetAmpLimitIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Set Charging Current")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Sets the vehicle's charging current limit in amperes.")))
-    }
+    static let title: LocalizedStringResource = "Set Charging Current"
+    static let description = IntentDescription("Sets the vehicle's charging current limit in amperes.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Current (A)")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Charging current in amperes, between 6 and 32.")),
+    @Parameter(title: "Current (A)",
+               description: "Charging current in amperes, between 6 and 32.",
                default: 16, inclusiveRange: (6, 32))
     var amps: Int
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
