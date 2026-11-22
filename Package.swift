@@ -89,6 +89,10 @@ let package = Package(
                 // target, so the fixture suites import it the same way HisingenWidgetTests
                 // already imports both binaries. No new external products.
                 "HisingenWidget",
+                // `SparkleFeedTests` drives Sparkle's real updater against a loopback fixture
+                // appcast. The app links Sparkle already; the suite needs the same module to
+                // build a throwaway updater and read the parsed `SUAppcastItem`.
+                .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),

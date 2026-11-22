@@ -17,6 +17,7 @@ app. This file lists what that covers, where each part came from, and under whic
 | 20 gRPC Swift, SwiftNIO and Swift packages | Linked libraries | Apache 2.0; BoringSSL inside swift-nio-ssl and swift-crypto is ISC and OpenSSL | Polestar gRPC connections |
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
+| Electricity Maps | Grid carbon intensity at runtime, only with the reader's own key | Electricity Maps terms | Optional live carbon in the Charging Planner |
 | Tibber | Home name and 15-minute import prices at runtime | Tibber developer terms | Optional Tibber prices in Home Charging |
 | Perific (formerly Enegic) | Whole-house power and meter readings at runtime, read only | No public interface | Optional house meter in Home Charging |
 | Home Assistant | Charger status and plans at runtime, through the reader's own instance | Apache 2.0 | Optional Home Charging |
@@ -2247,6 +2248,11 @@ Called at runtime. No code from them ships in Hisingen.
   frames follow the shapes of Tibber's own .NET SDK
   ([tibber/Tibber.SDK.NET](https://github.com/tibber/Tibber.SDK.NET)); Hisingen reimplements
   them in Swift and ships no code from it.
+* **[Electricity Maps](https://www.electricitymaps.com/):** optional live grid carbon intensity in
+  the Charging Planner, from `api.electricitymap.org`, using the reader's own API token. The token
+  stays in the macOS Keychain and is removed by Erase All Data; see [PRIVACY.md](PRIVACY.md). Only
+  the Swedish price zones are queried, derived from the zone the planner already uses, and the row
+  shows nothing at all when no key is set or the service cannot answer.
 * **Map links:** the location buttons open Apple Maps (`maps.apple.com`) or Google Maps
   (`maps.google.com`, `www.google.com/maps`) with the vehicle's coordinates in the link. Nothing
   is sent to either until the user clicks.

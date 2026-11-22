@@ -4306,3 +4306,4 @@
 "Volvo connected, but not saved" = "Volvo 已连接，但未保存";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo 不再接受本应用的客户端 ID。请使用你的 Volvo ID 登录，或在设置中输入新登录系统的凭据。";
 "Watts per square metre" = "瓦特每平方米";
+"A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "较新版本的 Hisingen 写入了此历史数据库（数据库架构 %d；此版本最高读取 %d）。你的数据未被改动。请更新 Hisingen 以读取。";

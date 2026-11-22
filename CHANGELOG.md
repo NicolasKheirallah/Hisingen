@@ -241,6 +241,22 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A history database written by a newer Hisingen is refused instead of read with the wrong
+  schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes
+  the handle before any ledger reads it, so the app cannot show half-decoded rows or migrate a
+  file it does not understand. Settings → SQLite Storage & Data says the data is untouched and
+  that updating Hisingen will read it. A damaged store (one that fails `PRAGMA quick_check`, or
+  is not a SQLite file at all) is moved aside with its `-wal`/`-shm` siblings and the app starts
+  clean, keeping the bytes recoverable rather than disabling persistence or recreating an empty
+  store over them.
+
+- The test suite now pins the SQLite schema end to end. `VehicleDatabaseSchemaParityTests`
+  compares a fresh install with a checked-in schema fixture and with a store built from the
+  pre-`user_version` fixture schema, and checks every table and column the persistence layer
+  writes against that upgraded store; `VehicleDatabaseOpenGuardTests` covers the downgrade
+  refusal and both quarantine paths; `SparkleFeedTests` drives Sparkle's real updater against
+  fixture appcasts served over loopback, for a newer version and a malformed feed.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and
