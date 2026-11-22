@@ -41,3 +41,19 @@ struct VehicleWidgetSnapshot: Codable, Equatable, Sendable {
     /// follow the same choice. Nil means the app follows the system language.
     var languageCode: String?
 }
+
+/// The garage-level container beside the active-car snapshot: one display entry per car
+/// the app can render, so a configurable widget instance can pin itself to a specific
+/// car. Written by `WidgetSnapshotWriter` on every completed refresh; the active-car
+/// file stays the single-car contract the original widget reads, so an extension from
+/// before the per-car work keeps rendering unchanged.
+struct VehicleWidgetGarageSnapshot: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+    static let fileName = "vehicle-widget-garage.json"
+
+    var schemaVersion: Int
+    /// The active car first, then every other car with a stored reading. Entries reuse
+    /// the per-car snapshot shape, so each one carries its own vin, display strings,
+    /// timestamps and language code.
+    var cars: [VehicleWidgetSnapshot]
+}

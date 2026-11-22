@@ -4015,6 +4015,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "打开 Hisingen 并等待确认锁车指令。";
 "Start climate" = "启动空调";
 "Opens Hisingen with the climate command ready to confirm." = "打开 Hisingen 并等待确认空调指令。";
+"Choose which car the widget shows." = "选择小组件显示的车辆。";
+"Vehicle not on file — showing %@" = "车辆不在记录中——正在显示 %@";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "日志分区";

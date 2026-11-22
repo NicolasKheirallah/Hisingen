@@ -4015,6 +4015,8 @@
 "Opens Hisingen with the lock command ready to confirm." = "확인할 잠금 명령과 함께 Hisingen을 엽니다.";
 "Start climate" = "공조 시작";
 "Opens Hisingen with the climate command ready to confirm." = "확인할 공조 명령과 함께 Hisingen을 엽니다.";
+"Choose which car the widget shows." = "위젯에 표시할 차량을 선택합니다.";
+"Vehicle not on file — showing %@" = "차량 정보 없음 — %@ 표시 중";
 
 // The diagnostic inspector: which partition of the API log an exchange belongs to.
 "Log partition" = "기록 구획";

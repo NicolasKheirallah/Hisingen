@@ -73,6 +73,11 @@ let package = Package(
         .testTarget(
             name: "HisingenTests",
             dependencies: ["Hisingen",
+                // The per-car widget's selection resolver and garage reader live in the
+                // widget target, so the fixture suites here import it the same way
+                // HisingenWidgetTests already imports both binaries. No new external
+                // products; the widget target itself stays dependency-free.
+                "HisingenWidget",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP2", package: "swift-nio-http2"),
@@ -85,9 +90,11 @@ let package = Package(
         .executableTarget(
             name: "HisingenWidget",
             // WidgetKit extension. The .appex bundle is hand-assembled by the Makefile the
-            // same way the app is; SwiftPM only produces the binary here. Display-only by
-            // design: interactive widget buttons need App Intents metadata emission, which
-            // a SwiftPM build cannot produce yet, so taps deep-link on hisingen://.
+            // same way the app is; SwiftPM only produces the binary here. The widget stays
+            // display-only and deep-links on hisingen://; its Edit-sheet car picker uses a
+            // WidgetConfigurationIntent, which resolves inside this extension process and
+            // so needs no App Intents metadata emission (a SwiftPM gap that still blocks
+            // Shortcuts/Siri discovery).
             path: "Sources/HisingenWidget"
         ),
         .testTarget(

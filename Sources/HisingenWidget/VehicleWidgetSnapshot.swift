@@ -70,6 +70,20 @@ struct VehicleWidgetSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// The widget-side twin of the app's garage container (see
+/// `Sources/Hisingen/Services/Widget/VehicleWidgetSnapshot.swift`): one entry per car a
+/// configurable widget instance can pin itself to. Written only alongside the active-car
+/// snapshot, so an older app that never writes it simply leaves the widget with the
+/// active-car file and no list.
+struct VehicleWidgetGarageSnapshot: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+    static let fileName = "vehicle-widget-garage.json"
+
+    var schemaVersion: Int
+    /// The active car first, then every other car with a stored reading.
+    var cars: [VehicleWidgetSnapshot]
+}
+
 /// Reads the snapshot out of the App Group container. Every miss (no container, no
 /// file, undecodable bytes, an unknown schema) is the same honest answer: no snapshot,
 /// and the widget draws its placeholder.
@@ -89,5 +103,24 @@ enum WidgetSnapshotStore {
               snapshot.schemaVersion == VehicleWidgetSnapshot.currentSchemaVersion
         else { return nil }
         return snapshot
+    }
+
+    /// The garage the widget's Edit sheet lists. An empty array covers every miss the same
+    /// way `load` answers nil: an older app, a future schema, or corrupt bytes all mean
+    /// "no list", and the picker then offers nothing while the active-car file keeps the
+    /// widget rendering.
+    static func loadGarage(directory: URL? = nil) -> [VehicleWidgetSnapshot] {
+        guard let url = garageURL(directory: directory),
+              let data = try? Data(contentsOf: url),
+              let garage = try? JSONDecoder().decode(VehicleWidgetGarageSnapshot.self, from: data),
+              garage.schemaVersion == VehicleWidgetGarageSnapshot.currentSchemaVersion
+        else { return [] }
+        return garage.cars
+    }
+
+    static func garageURL(directory: URL? = nil) -> URL? {
+        let base = directory
+            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
+        return base?.appendingPathComponent(VehicleWidgetGarageSnapshot.fileName)
     }
 }
