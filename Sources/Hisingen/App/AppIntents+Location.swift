@@ -5,11 +5,14 @@ import Foundation
 /// Uses only the locally cached snapshot; it never wakes the car or hits the location API,
 /// so running it repeatedly costs nothing and reveals nothing fresher than Hisingen holds.
 struct WhereIsMyCarIntent: AppIntent {
-    static let title: LocalizedStringResource = "Where Is My Car"
-    static let description = IntentDescription("Returns the last reported parking position of the active vehicle.")
+    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Where Is My Car")) }
+    static var description: IntentDescription {
+        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns the last reported parking position of the active vehicle.")))
+    }
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
+               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
     var vehicle: String?
 
     @MainActor

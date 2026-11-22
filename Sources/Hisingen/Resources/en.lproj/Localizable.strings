@@ -4023,3 +4023,47 @@
 "The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
 
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+
+// App Intents titles, descriptions, parameters and Focus filter choices.
+"Hisingen Focus Filter" = "Hisingen Focus Filter";
+"Vehicle Battery" = "Vehicle Battery";
+"Charging Status" = "Charging Status";
+"Recent Trips" = "Recent Trips";
+"Returns charging state, power, target, and time remaining." = "Returns charging state, power, target, and time remaining.";
+"Sets the vehicle's target charge level percentage." = "Sets the vehicle's target charge level percentage.";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Overrides the active charging schedule so the vehicle charges immediately.";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Ends a charging override so the vehicle returns to its charging schedule.";
+"Sets the vehicle's charging current limit in amperes." = "Sets the vehicle's charging current limit in amperes.";
+"Starts cabin climate preconditioning." = "Starts cabin climate preconditioning.";
+"Stops cabin climate preconditioning." = "Stops cabin climate preconditioning.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starts the cabin pre-cleaning cycle that purifies the interior air before departure.";
+"Stops a running cabin pre-cleaning cycle." = "Stops a running cabin pre-cleaning cycle.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support).";
+"Stops a remotely started combustion engine." = "Stops a remotely started combustion engine.";
+"Returns the last reported parking position of the active vehicle." = "Returns the last reported parking position of the active vehicle.";
+"Locks the vehicle doors." = "Locks the vehicle doors.";
+"Unlocks the vehicle doors." = "Unlocks the vehicle doors.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returns the battery level, range, and charging status of a vehicle.";
+"Returns the status of all vehicles in your garage." = "Returns the status of all vehicles in your garage.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returns lock, opening, and attention status from the latest Hisingen snapshot.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returns locally derived trip distance and driving time for the last seven days.";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Asks Hisingen to fetch fresh vehicle data from the provider now.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.";
+"Returns the current tire pressures and statuses for all wheels." = "Returns the current tire pressures and statuses for all wheels.";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on.";
+"Vehicle nickname or VIN (optional)" = "Vehicle nickname or VIN (optional)";
+"Charge Target (%)" = "Charge Target (%)";
+"Runtime (minutes)" = "Runtime (minutes)";
+"All notifications" = "All notifications";
+"Muted" = "Muted";
+
+// Data freshness and sign-in strings.
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading.";
+"Oldest reading %@" = "Oldest reading %@";
+"Sign in again to keep this up to date" = "Sign in again to keep this up to date";
+"Sign in again: Hisingen cannot refresh" = "Sign in again: Hisingen cannot refresh";
+"Some readings are from an earlier report" = "Some readings are from an earlier report";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current.";
+"Volvo connected, but not saved" = "Volvo connected, but not saved";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings.";

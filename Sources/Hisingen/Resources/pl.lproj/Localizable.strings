@@ -4004,3 +4004,47 @@
 "This vehicle does not support this command." = "Ten samochód nie obsługuje tego polecenia.";
 
 "This vehicle service reports this value but cannot change it." = "Ta usługa pojazdu zgłasza tę wartość, ale nie może jej zmienić.";
+
+// App Intents titles, descriptions, parameters and Focus filter choices.
+"Hisingen Focus Filter" = "Filtr Focus Hisingen";
+"Vehicle Battery" = "Bateria pojazdu";
+"Charging Status" = "Stan ładowania";
+"Recent Trips" = "Ostatnie przejazdy";
+"Returns charging state, power, target, and time remaining." = "Zwraca stan ładowania, moc, cel i pozostały czas.";
+"Sets the vehicle's target charge level percentage." = "Ustawia docelowy poziom naładowania pojazdu w procentach.";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Zastępuje aktywny harmonogram ładowania, aby pojazd zaczął ładować się natychmiast.";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Kończy zastąpienie harmonogramu ładowania, aby pojazd wrócił do swojego harmonogramu ładowania.";
+"Sets the vehicle's charging current limit in amperes." = "Ustawia limit prądu ładowania pojazdu w amperach.";
+"Starts cabin climate preconditioning." = "Uruchamia wstępną klimatyzację kabiny.";
+"Stops cabin climate preconditioning." = "Zatrzymuje wstępną klimatyzację kabiny.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Uruchamia cykl wstępnego oczyszczania kabiny, który oczyszcza powietrze przed wyjazdem.";
+"Stops a running cabin pre-cleaning cycle." = "Zatrzymuje trwający cykl wstępnego oczyszczania kabiny.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Uruchamia silnik spalinowy, aby przygotować klimatyzację kabiny (pojazdy Volvo obsługujące uruchamianie silnika).";
+"Stops a remotely started combustion engine." = "Zatrzymuje zdalnie uruchomiony silnik spalinowy.";
+"Returns the last reported parking position of the active vehicle." = "Zwraca ostatnią zgłoszoną pozycję parkingową aktywnego pojazdu.";
+"Locks the vehicle doors." = "Blokuje drzwi pojazdu.";
+"Unlocks the vehicle doors." = "Odblokowuje drzwi pojazdu.";
+"Returns the battery level, range, and charging status of a vehicle." = "Zwraca poziom baterii, zasięg i stan ładowania pojazdu.";
+"Returns the status of all vehicles in your garage." = "Zwraca stan wszystkich pojazdów w Twoim garażu.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Zwraca stan zamknięcia, otwarcia i uwagi z ostatniej migawki Hisingena.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Zwraca lokalnie wyliczony dystans przejazdów i czas jazdy z ostatnich siedmiu dni.";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Prosi Hisingen o pobranie teraz świeżych danych pojazdu od dostawcy.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Zwraca podział elektrycznego zużycia energii pojazdu na jazdę, klimatyzację i kondycjonowanie baterii.";
+"Returns the current tire pressures and statuses for all wheels." = "Zwraca aktualne ciśnienia i stan wszystkich kół.";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Ustawia aktywny pojazd i decyduje, czy powiadomienia pojazdu są wyciszane po włączeniu trybu Focus.";
+"Vehicle nickname or VIN (optional)" = "Pseudonim pojazdu lub numer VIN (opcjonalnie)";
+"Charge Target (%)" = "Cel ładowania (%)";
+"Runtime (minutes)" = "Czas pracy (minuty)";
+"All notifications" = "Wszystkie powiadomienia";
+"Muted" = "Wyciszone";
+
+// Data freshness and sign-in strings.
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen nie może odświeżyć danych, dopóki konto nie zostanie ponownie połączone, więc wszystko poniżej to ostatni udany odczyt.";
+"Oldest reading %@" = "Najstarszy odczyt %@";
+"Sign in again to keep this up to date" = "Zaloguj się ponownie, aby utrzymać aktualność tych danych";
+"Sign in again: Hisingen cannot refresh" = "Zaloguj się ponownie: Hisingen nie może odświeżyć";
+"Some readings are from an earlier report" = "Niektóre odczyty pochodzą z wcześniejszego raportu";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetria działa teraz, ale macOS nie mógł zapisać danych logowania. Sprawdź wolne miejsce na dysku, a następnie zaloguj się ponownie, aby sesja przetrwała ponowne uruchomienie.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Pojazd zgłosił te wartości w pokazanym momencie, a nie przy tym odświeżeniu. Hisingen oznacza je, zamiast przedstawiać je jako aktualne.";
+"Volvo connected, but not saved" = "Volvo połączone, ale nie zapisane";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo nie akceptuje już identyfikatora klienta tej aplikacji. Zaloguj się swoim Volvo ID lub wprowadź dane logowania nowego systemu w Ustawieniach.";

@@ -4004,3 +4004,47 @@
 "This vehicle does not support this command." = "此车辆不支持此指令。";
 
 "This vehicle service reports this value but cannot change it." = "此车辆服务可报告该值，但无法更改。";
+
+// App Intents titles, descriptions, parameters and Focus filter choices.
+"Hisingen Focus Filter" = "Hisingen 专注模式过滤器";
+"Vehicle Battery" = "车辆电池";
+"Charging Status" = "充电状态";
+"Recent Trips" = "近期行程";
+"Returns charging state, power, target, and time remaining." = "返回充电状态、充电功率、目标和剩余时间。";
+"Sets the vehicle's target charge level percentage." = "设置车辆的目标充电电量百分比。";
+"Overrides the active charging schedule so the vehicle charges immediately." = "覆盖当前充电计划，让车辆立即开始充电。";
+"Ends a charging override so the vehicle returns to its charging schedule." = "结束充电覆盖，让车辆恢复按充电计划充电。";
+"Sets the vehicle's charging current limit in amperes." = "设置车辆的充电电流限制（安培）。";
+"Starts cabin climate preconditioning." = "启动车厢空调预调节。";
+"Stops cabin climate preconditioning." = "停止车厢空调预调节。";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "启动车厢预净化循环，在出发前净化车内空气。";
+"Stops a running cabin pre-cleaning cycle." = "停止正在运行的车厢预净化循环。";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "启动内燃机以预调节车厢（支持发动机远程启动的 Volvo 车辆）。";
+"Stops a remotely started combustion engine." = "停止远程启动的内燃机。";
+"Returns the last reported parking position of the active vehicle." = "返回当前车辆最近上报的停车位置。";
+"Locks the vehicle doors." = "锁定车门。";
+"Unlocks the vehicle doors." = "解锁车门。";
+"Returns the battery level, range, and charging status of a vehicle." = "返回车辆的电量、续航和充电状态。";
+"Returns the status of all vehicles in your garage." = "返回车库中所有车辆的状态。";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "从最新的 Hisingen 快照返回锁定、开闭和需注意状态。";
+"Returns locally derived trip distance and driving time for the last seven days." = "返回最近七天本地推算的行程距离和行驶时间。";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "让 Hisingen 立即从服务商获取最新车辆数据。";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "返回车辆电耗在行驶、空调和电池温控之间的明细。";
+"Returns the current tire pressures and statuses for all wheels." = "返回所有车轮的当前胎压和状态。";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "在专注模式开启时设置当前车辆，以及是否静音该车辆的通知。";
+"Vehicle nickname or VIN (optional)" = "车辆昵称或 VIN（可选）";
+"Charge Target (%)" = "目标电量（%）";
+"Runtime (minutes)" = "运行时长（分钟）";
+"All notifications" = "所有通知";
+"Muted" = "已静音";
+
+// Data freshness and sign-in strings.
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "账户重新连接前 Hisingen 无法刷新，以下内容均为最近一次成功读取的数据。";
+"Oldest reading %@" = "最早的读取数据 %@";
+"Sign in again to keep this up to date" = "重新登录以保持最新状态";
+"Sign in again: Hisingen cannot refresh" = "重新登录：Hisingen 无法刷新";
+"Some readings are from an earlier report" = "部分读取数据来自较早的报告";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "遥测数据现已正常传输，但 macOS 无法存储凭据。请检查可用磁盘空间，然后重新登录，让会话在重启后仍然保留。";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "车辆是在所示时间上报这些数值的，而非本次刷新时。Hisingen 会为此加注说明，而不将其显示为当前值。";
+"Volvo connected, but not saved" = "Volvo 已连接，但未保存";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo 不再接受本应用的客户端 ID。请使用你的 Volvo ID 登录，或在设置中输入新登录系统的凭据。";

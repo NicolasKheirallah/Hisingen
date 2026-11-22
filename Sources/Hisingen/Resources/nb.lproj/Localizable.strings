@@ -4012,3 +4012,47 @@
 "This vehicle does not support this command." = "Denne bilen støtter ikke denne kommandoen.";
 
 "This vehicle service reports this value but cannot change it." = "Denne kjøretøytjenesten viser denne verdien, men kan ikke endre den.";
+
+// App Intents titles, descriptions, parameters and Focus filter choices.
+"Hisingen Focus Filter" = "Hisingen-fokusfilter";
+"Vehicle Battery" = "Kjøretøybatteri";
+"Charging Status" = "Ladestatus";
+"Recent Trips" = "Siste turer";
+"Returns charging state, power, target, and time remaining." = "Returnerer ladestatus, effekt, mål og gjenstående tid.";
+"Sets the vehicle's target charge level percentage." = "Setter kjøretøyets måleladenivå i prosent.";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Overstyrer den aktive ladeplanen, slik at kjøretøyet lader med én gang.";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Avslutter en ladeoverstyring, slik at kjøretøyet går tilbake til ladeplanen sin.";
+"Sets the vehicle's charging current limit in amperes." = "Setter kjøretøyets ladestrømgrense i ampere.";
+"Starts cabin climate preconditioning." = "Starter forkonditionering av kupéklimaet.";
+"Stops cabin climate preconditioning." = "Stopper forkonditionering av kupéklimaet.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starter forrensningsyklusen som renser luften i kupéen før avgang.";
+"Stops a running cabin pre-cleaning cycle." = "Stopper en pågående forrensningsyklus i kupéen.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starter forbrenningsmotoren for å forkonditionere kupéen (Volvo-kjøretøy med støtte for motorstart).";
+"Stops a remotely started combustion engine." = "Stopper en fjernstartet forbrenningsmotor.";
+"Returns the last reported parking position of the active vehicle." = "Returnerer den sist rapporterte parkeringsposisjonen til det aktive kjøretøyet.";
+"Locks the vehicle doors." = "Låser kjøretøyets dører.";
+"Unlocks the vehicle doors." = "Låser opp kjøretøyets dører.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returnerer batterinivå, rekkevidde og ladestatus for et kjøretøy.";
+"Returns the status of all vehicles in your garage." = "Returnerer statusen til alle kjøretøy i garasjen din.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returnerer låse-, åpnings- og oppmerksomhetsstatus fra siste Hisingen-øyeblikksbilde.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returnerer lokalt utledet turdistanse og kjøretid for de siste sju dagene.";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Ber Hisingen hente ferske kjøretøydata fra leverandøren nå.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returnerer fordelingen av kjøretøyets elektriske energiforbruk på kjøring, klima og batterikonditionering.";
+"Returns the current tire pressures and statuses for all wheels." = "Returnerer gjeldende dekktrykk og status for alle hjul.";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Setter aktivt kjøretøy og om kjøretøyets varsler skal dempes når et fokus slås på.";
+"Vehicle nickname or VIN (optional)" = "Kjøretøyets kallenavn eller VIN (valgfritt)";
+"Charge Target (%)" = "Lademål (%)";
+"Runtime (minutes)" = "Kjøretid (minutter)";
+"All notifications" = "Alle varsler";
+"Muted" = "Dempet";
+
+// Data freshness and sign-in strings.
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen kan ikke oppdatere før kontoen er koblet til igjen, så alt nedenfor er den siste vellykkede avlesningen.";
+"Oldest reading %@" = "Eldste avlesning %@";
+"Sign in again to keep this up to date" = "Logg inn på nytt for å holde dette oppdatert";
+"Sign in again: Hisingen cannot refresh" = "Logg inn på nytt: Hisingen kan ikke oppdatere";
+"Some readings are from an earlier report" = "Noen avlesninger stammer fra en tidligere rapport";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetrien flyter nå, men macOS klarte ikke å lagre påloggingsinformasjonen. Sjekk ledig diskplass og logg inn på nytt, slik at økten overlever en omstart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Kjøretøyet rapporterte disse verdiene på det viste tidspunktet, ikke ved denne oppdateringen. Hisingen merker dem i stedet for å vise dem som gjeldende.";
+"Volvo connected, but not saved" = "Volvo tilkoblet, men ikke lagret";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo godtar ikke lenger denne appens klient-ID. Logg inn med Volvo-ID-en din, eller oppgi påloggingsinformasjon for det nye innloggingssystemet i Innstillinger.";
