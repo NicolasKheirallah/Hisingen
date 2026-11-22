@@ -164,7 +164,8 @@ struct ChargingPlannerControllerTests {
     func autoStartDispatchesOncePerWindowWhenPluggedIn() async {
         let harness = PlannerHarness(
             now: plannerDate(2026, 2, 10, 3, 30),
-            vehicleState: vehicle(connection: .connected)
+            vehicleState: vehicle(connection: .connected),
+            outcomes: [.sent(.accepted)]
         )
         harness.preferences.plannerAutoStartEnabled = true
         var dispatches = harness.charger.dispatches.makeAsyncIterator()
