@@ -380,6 +380,54 @@ struct ChargingPlannerControllerTests {
     }
 
     @Test
+    func theRefusedStopCountStartsOverOnceTheWindowIsConsumed() async {
+        let harness = autoStartedHarness(stopOutcomes: [])
+
+        await harness.controller.evaluate()
+        await settle()
+
+        harness.setVehicle(vehicle(state: .charging, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 30))
+        await harness.controller.evaluate()
+        await settle()
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 31))
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.controller.refusedStops["YSMTEST"] == 2)
+
+        // The car stopped on its own, so the window is consumed without another stop. The two
+        // refusals must not count against the next window.
+        harness.setVehicle(vehicle(battery: 80, state: .complete, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 4, 32))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.controller.refusedStops["YSMTEST"] == nil)
+        #expect(harness.preferences.plannerWindow(for: "YSMTEST") == nil)
+    }
+
+    @Test
+    func theRefusedStartCountStartsOverOnceTheTargetIsMet() async {
+        let harness = PlannerHarness(
+            now: plannerDate(2026, 2, 10, 3, 30),
+            vehicleState: vehicle(connection: .connected),
+            outcomes: []
+        )
+        harness.preferences.plannerAutoStartEnabled = true
+
+        await harness.controller.evaluate()
+        await settle()
+        #expect(harness.controller.refusedStarts["YSMTEST"] == 1)
+
+        harness.setVehicle(vehicle(battery: 80, state: .complete, connection: .connected))
+        harness.advance(to: plannerDate(2026, 2, 10, 3, 31))
+        await harness.controller.evaluate()
+        await settle()
+
+        #expect(harness.controller.refusedStarts["YSMTEST"] == nil)
+    }
+
+    @Test
     func aRefusedAutoStartIsRetriedOnTheNextPass() async {
         let harness = PlannerHarness(
             now: plannerDate(2026, 2, 10, 3, 30),
