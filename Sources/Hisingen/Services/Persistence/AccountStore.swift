@@ -62,6 +62,7 @@ final class AccountStore {
         self.keychain = keychain
         self.defaults = defaults
         loadOrMigrate()
+        repairInterruptedSwitches()
     }
 
     // MARK: - Reads
@@ -131,6 +132,7 @@ final class AccountStore {
             // The account already owns this brand's slots; only the active brand moves.
             preferences.activeBrand = target.brand
             apply(target)
+            try restoreIfSlotsAreEmpty(for: target)
             preferences.invalidateSessionCache()
             save()
             return
@@ -141,7 +143,8 @@ final class AccountStore {
         if let current = activeAccount(for: target.brand) {
             try captureCredentials(into: current.id, brand: target.brand)
         }
-        try clearCredentials(for: target.brand)
+        // `restoreCredentials` clears the brand's slots itself, right before it writes the
+        // target's bundle. Clearing earlier would leave a longer stretch with empty slots.
         defaults.set(target.id, forKey: activeKey(for: target.brand))
         preferences.activeBrand = target.brand
         apply(target)
@@ -269,6 +272,34 @@ final class AccountStore {
             return !preferences.vin(for: .volvo).isEmpty
                 || !storedClientID.isEmpty
                 || preferences.hasResumableSession(for: .volvo)
+        }
+    }
+
+    // MARK: - Interrupted switches
+
+    /// A switch moves secrets in several Keychain writes. If the app quits or a write fails after
+    /// the old slots are cleared, the target account is active with empty slots, and its bundle
+    /// still holds the credentials. Called at launch and when switching to the account that is
+    /// already active.
+    ///
+    /// Nothing is restored for an account the reader signed out of, or when no bundle exists. An
+    /// account that has a resumable session already is left alone, so the common launch reads no
+    /// secret at all.
+    private func restoreIfSlotsAreEmpty(for account: StoredAccount) throws {
+        guard !preferences.hasResumableSession(for: account.brand),
+              !preferences.hasExplicitSignOut(for: account.brand) else { return }
+        try restoreCredentials(for: account)
+        preferences.invalidateSessionCache()
+    }
+
+    private func repairInterruptedSwitches() {
+        for brand in VehicleBrand.allCases {
+            guard let active = activeAccount(for: brand) else { continue }
+            do {
+                try restoreIfSlotsAreEmpty(for: active)
+            } catch {
+                logger.error("Restoring an interrupted account switch failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
