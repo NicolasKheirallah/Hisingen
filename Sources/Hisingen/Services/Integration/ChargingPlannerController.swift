@@ -218,6 +218,7 @@ final class ChargingPlannerController {
                 // The window closed and nothing is still drawing: it needs no stop command.
                 preferences.setPlannerWindow(nil, for: vin)
                 autoStartedWindowStarts[vin] = nil
+                refusedStops[vin] = nil
                 committedWindow = nil
             }
         }
@@ -234,6 +235,7 @@ final class ChargingPlannerController {
             preferences.setPlannerWindow(nil, for: vin)
             autoStartedWindowStarts[vin] = nil
             refusedStarts[vin] = nil
+            refusedStops[vin] = nil
             gaveUpStartsUntil[vin] = nil
             sleepPrevention.release()
             return

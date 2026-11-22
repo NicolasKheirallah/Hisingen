@@ -344,7 +344,8 @@ All notable changes to Hisingen are documented in this file. The project follows
   the command pipeline refused, which includes a request lost to the network, ended the window for
   good: a failed stop at the window's end left the car charging into the dearer hours with no
   second try. The planner now repeats a refused start or stop on the next minute ticks, up to five
-  sends, before it gives the window up. Both commands are safe to repeat.
+  sends, before it gives the window up, and the count starts over with each window. Both commands
+  are safe to repeat.
 
 - **A scheduled action that could not be sent is now tried again.** A Mac that woke just after the
   scheduled minute, before the car's data had loaded, lost the occurrence: the timer was set for
