@@ -52,6 +52,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   and the fallback Pages path could have served it after a rollback or a new checkout. The
   live feed itself already deploys from the release artifact and needs no merge.
 
+- The App Intents surface resolves through `L10n` like every other part of the app: the
+  intent titles and descriptions, the parameter titles, the Focus filter's display strings
+  and the Shortcuts short titles read the selected interface language instead of English
+  (MAINT-02). The eleven known-unkeyed literals — the Focus filter's two AppIntents strings
+  plus nine sign-in and data-freshness strings — gained keys and translations in all 14
+  locales and left the usage baseline, so the commit-time localization gates now run at zero
+  known-unkeyed. `AppShortcuts.strings` stays parked on the `Metadata.appintents` blocker.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

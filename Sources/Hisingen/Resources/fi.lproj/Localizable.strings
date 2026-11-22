@@ -4029,8 +4029,52 @@
 
 "This vehicle service reports this value but cannot change it." = "Tämä ajoneuvopalvelu näyttää tämän arvon mutta ei voi muuttaa sitä.";
 
-"Volvo connected – location unavailable" = "Volvo yhdistetty: sijainti ei ole käytettävissä";
-"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo-kehittäjäsovellusta ei ole hyväksytty ajoneuvon sijaintiin. Lukitus, moottorin käynnistys ja tööttäys/vilkutus yhdistettiin tavalliseen tapaan; pyydä sijainti osoitteessa developer.volvocars.com, jotta näet auton kartalla.";
-"Granted on the current session: %@" = "Myönnetty nykyisessä istunnossa: %@";
-"None of the approved permissions are granted on the current session." = "Mikään hyväksytyistä oikeuksista ei ole myönnetty nykyisessä istunnossa.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Kaikki ilmoitukset";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Pyytää Hisingeniä hakemaan tuoreet ajoneuvotiedot palveluntarjoajalta nyt.";
+"Charge Target (%)" = "Latauksen tavoite (%)";
+"Charging Status" = "Latauksen tila";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Lopettaa latauksen ohituksen, jolloin ajoneuvo palaa latausaikatauluunsa.";
 "Engine start" = "Moottorin käynnistys";
+"Granted on the current session: %@" = "Myönnetty nykyisessä istunnossa: %@";
+"Hisingen Focus Filter" = "Hisingen Focus -suodatin";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen ei voi päivittää, ennen kuin tili on yhdistetty uudelleen, joten kaikki alla oleva on viimeisin onnistunut lukema.";
+"Locks the vehicle doors." = "Lukitsee ajoneuvon ovet.";
+"Muted" = "Mykistetty";
+"None of the approved permissions are granted on the current session." = "Mikään hyväksytyistä oikeuksista ei ole myönnetty nykyisessä istunnossa.";
+"Oldest reading %@" = "Vanhin lukema %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Ohittaa voimassa olevan latausaikataulun, jolloin ajoneuvo lataa heti.";
+"Recent Trips" = "Viimeisimmät matkat";
+"Returns charging state, power, target, and time remaining." = "Palauttaa latauksen tilan, tehon, tavoitteen ja jäljellä olevan ajan.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Palauttaa paikallisesti lasketun matkan pituuden ja ajoajan viimeiseltä seitsemältä päivältä.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Palauttaa lukituksen, ovien tilan ja huomiotiedot Hisingenin viimeisimmästä tilannekuvasta.";
+"Returns the battery level, range, and charging status of a vehicle." = "Palauttaa ajoneuvon akkutason, toimintamatkan och lataustilan.";
+"Returns the current tire pressures and statuses for all wheels." = "Palauttaa kaikkien renkaiden ajankohtaiset paineet ja tilat.";
+"Returns the last reported parking position of the active vehicle." = "Palauttaa aktiivisen ajoneuvon viimeksi ilmoitetun pysäköintisijainnin.";
+"Returns the status of all vehicles in your garage." = "Palauttaa kaikkien autotallin ajoneuvien tilan.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Palauttaa ajoneuvon sähköenergian kulutuksen jaon ajolle, ilmastoinnille ja akun esikäsittelylle.";
+"Runtime (minutes)" = "Käyntiaika (minuuttia)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Asettaa aktiivisen ajoneuvon ja sen, mykistetäänkö ajoneuvon ilmoitukset, kun Focus-tila aktivoituu.";
+"Sets the vehicle's charging current limit in amperes." = "Asettaa ajoneuvon latausvirran ylärajan ampeereina.";
+"Sets the vehicle's target charge level percentage." = "Asettaa ajoneuvon lataustavoitteen prosentteina.";
+"Sign in again to keep this up to date" = "Kirjaudu uudelleen sisään pitääksesi tämän ajan tasalla";
+"Sign in again: Hisingen cannot refresh" = "Kirjaudu uudelleen sisään: Hisingen ei voi päivittää";
+"Some readings are from an earlier report" = "Osa lukemista on peräisin aiemmasta raportista";
+"Starts cabin climate preconditioning." = "Käynnistää matkustamon ilmastoinnin esilämmityksen.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Käynnistää matkustamon esipuhdistusjakson, joka puhdistaa sisäilman ennen lähtöä.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Käynnistää polttomoottorin matkustamon esilämmittämiseksi (Volvo-ajoneuvot, jotka tukevat moottorin käynnistystä).";
+"Stops a remotely started combustion engine." = "Pysäyttää etänä käynnistetyn polttomoottorin.";
+"Stops a running cabin pre-cleaning cycle." = "Pysäyttää käynnissä olevan matkustamon esipuhdistusjakson.";
+"Stops cabin climate preconditioning." = "Pysäyttää matkustamon ilmastoinnin esilämmityksen.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetria toimii nyt, mutta macOS ei voinut tallentaa tunnistetietoja. Tarkista vapaa levytila ja kirjaudu sitten uudelleen sisään, jotta istunto säilyy uudelleenkäynnistyksessä.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Ajoneuvo raportoi nämä arvot näytettynä ajankohtana, ei tämän päivityksen yhteydessä. Hisingen merkitsee ne sen sijaan, että esittäisi ne ajantasaisina.";
+"Unlocks the vehicle doors." = "Avaa ajoneuvon ovien lukot.";
+"Vehicle Battery" = "Ajoneuvon akku";
+"Vehicle nickname or VIN (optional)" = "Ajoneuvon lempinimi tai VIN (valinnainen)";
+"Volvo connected – location unavailable" = "Volvo yhdistetty: sijainti ei ole käytettävissä";
+"Volvo connected, but not saved" = "Volvo yhdistetty, mutta ei tallennettu";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo ei enää hyväksy tämän sovelluksen client-ID:tä. Kirjaudu sisään Volvo-ID:lläsi tai anna uuden kirjautumisjärjestelmän tunnistetiedot asetuksissa.";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo-kehittäjäsovellusta ei ole hyväksytty ajoneuvon sijaintiin. Lukitus, moottorin käynnistys ja tööttäys/vilkutus yhdistettiin tavalliseen tapaan; pyydä sijainti osoitteessa developer.volvocars.com, jotta näet auton kartalla.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.

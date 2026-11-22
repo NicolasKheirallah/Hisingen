@@ -4037,8 +4037,52 @@
 
 "This vehicle service reports this value but cannot change it." = "Denne kjøretøytjenesten viser denne verdien, men kan ikke endre den.";
 
-"Volvo connected – location unavailable" = "Volvo tilkoblet: posisjon utilgjengelig";
-"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo-utviklerappen din er ikke godkjent for kjøretøyets posisjon. Låsing, motorstart og tut og blink ble tilkoblet som normalt; be om posisjon på developer.volvocars.com for å se bilen på kartet.";
-"Granted on the current session: %@" = "Innvilget i denne økten: %@";
-"None of the approved permissions are granted on the current session." = "Ingen av de godkjente tilgangene er innvilget i denne økten.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Alle varsler";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Ber Hisingen hente ferske kjøretøydata fra leverandøren nå.";
+"Charge Target (%)" = "Lademål (%)";
+"Charging Status" = "Ladestatus";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Avslutter en ladeoverstyring, slik at kjøretøyet går tilbake til ladeplanen sin.";
 "Engine start" = "Motorstart";
+"Granted on the current session: %@" = "Innvilget i denne økten: %@";
+"Hisingen Focus Filter" = "Hisingen-fokusfilter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen kan ikke oppdatere før kontoen er koblet til igjen, så alt nedenfor er den siste vellykkede avlesningen.";
+"Locks the vehicle doors." = "Låser kjøretøyets dører.";
+"Muted" = "Dempet";
+"None of the approved permissions are granted on the current session." = "Ingen av de godkjente tilgangene er innvilget i denne økten.";
+"Oldest reading %@" = "Eldste avlesning %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Overstyrer den aktive ladeplanen, slik at kjøretøyet lader med én gang.";
+"Recent Trips" = "Siste turer";
+"Returns charging state, power, target, and time remaining." = "Returnerer ladestatus, effekt, mål og gjenstående tid.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returnerer lokalt utledet turdistanse og kjøretid for de siste sju dagene.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returnerer låse-, åpnings- og oppmerksomhetsstatus fra siste Hisingen-øyeblikksbilde.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returnerer batterinivå, rekkevidde og ladestatus for et kjøretøy.";
+"Returns the current tire pressures and statuses for all wheels." = "Returnerer gjeldende dekktrykk og status for alle hjul.";
+"Returns the last reported parking position of the active vehicle." = "Returnerer den sist rapporterte parkeringsposisjonen til det aktive kjøretøyet.";
+"Returns the status of all vehicles in your garage." = "Returnerer statusen til alle kjøretøy i garasjen din.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returnerer fordelingen av kjøretøyets elektriske energiforbruk på kjøring, klima og batterikonditionering.";
+"Runtime (minutes)" = "Kjøretid (minutter)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Setter aktivt kjøretøy og om kjøretøyets varsler skal dempes når et fokus slås på.";
+"Sets the vehicle's charging current limit in amperes." = "Setter kjøretøyets ladestrømgrense i ampere.";
+"Sets the vehicle's target charge level percentage." = "Setter kjøretøyets måleladenivå i prosent.";
+"Sign in again to keep this up to date" = "Logg inn på nytt for å holde dette oppdatert";
+"Sign in again: Hisingen cannot refresh" = "Logg inn på nytt: Hisingen kan ikke oppdatere";
+"Some readings are from an earlier report" = "Noen avlesninger stammer fra en tidligere rapport";
+"Starts cabin climate preconditioning." = "Starter forkonditionering av kupéklimaet.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starter forrensningsyklusen som renser luften i kupéen før avgang.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starter forbrenningsmotoren for å forkonditionere kupéen (Volvo-kjøretøy med støtte for motorstart).";
+"Stops a remotely started combustion engine." = "Stopper en fjernstartet forbrenningsmotor.";
+"Stops a running cabin pre-cleaning cycle." = "Stopper en pågående forrensningsyklus i kupéen.";
+"Stops cabin climate preconditioning." = "Stopper forkonditionering av kupéklimaet.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetrien flyter nå, men macOS klarte ikke å lagre påloggingsinformasjonen. Sjekk ledig diskplass og logg inn på nytt, slik at økten overlever en omstart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Kjøretøyet rapporterte disse verdiene på det viste tidspunktet, ikke ved denne oppdateringen. Hisingen merker dem i stedet for å vise dem som gjeldende.";
+"Unlocks the vehicle doors." = "Låser opp kjøretøyets dører.";
+"Vehicle Battery" = "Kjøretøybatteri";
+"Vehicle nickname or VIN (optional)" = "Kjøretøyets kallenavn eller VIN (valgfritt)";
+"Volvo connected – location unavailable" = "Volvo tilkoblet: posisjon utilgjengelig";
+"Volvo connected, but not saved" = "Volvo tilkoblet, men ikke lagret";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo godtar ikke lenger denne appens klient-ID. Logg inn med Volvo-ID-en din, eller oppgi påloggingsinformasjon for det nye innloggingssystemet i Innstillinger.";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo-utviklerappen din er ikke godkjent for kjøretøyets posisjon. Låsing, motorstart og tut og blink ble tilkoblet som normalt; be om posisjon på developer.volvocars.com for å se bilen på kartet.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.

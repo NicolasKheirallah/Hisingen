@@ -4029,8 +4029,52 @@
 
 "This vehicle service reports this value but cannot change it." = "이 차량 서비스는 이 값을 표시하지만 변경할 수는 없습니다.";
 
-"Volvo connected – location unavailable" = "Volvo 연결됨: 위치 사용 불가";
-"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo 개발자 애플리케이션이 차량 위치 권한에 대해 승인되지 않았습니다. 잠금, 엔진 시동, 경적 및 조명 깜빡임은 정상적으로 연결되었습니다. 지도에서 차량을 보려면 developer.volvocars.com에서 위치 권한을 요청하세요.";
-"Granted on the current session: %@" = "현재 세션에 허용됨: %@";
-"None of the approved permissions are granted on the current session." = "현재 세션에서 승인된 권한이 하나도 허용되지 않았습니다.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "모든 알림";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Hisingen에게 지금 공급자로부터 최신 차량 데이터를 가져오도록 요청합니다.";
+"Charge Target (%)" = "충전 목표(%)";
+"Charging Status" = "충전 상태";
+"Ends a charging override so the vehicle returns to its charging schedule." = "충전 재정의를 종료하여 차량이 충전 일정으로 돌아가도록 합니다.";
 "Engine start" = "엔진 시동";
+"Granted on the current session: %@" = "현재 세션에 허용됨: %@";
+"Hisingen Focus Filter" = "Hisingen 집중 모드 필터";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "계정이 다시 연결될 때까지 Hisingen은 새로 고칠 수 없으므로 아래 내용은 마지막으로 성공한 측정 값입니다.";
+"Locks the vehicle doors." = "차량 문을 잠급니다.";
+"Muted" = "무음";
+"None of the approved permissions are granted on the current session." = "현재 세션에서 승인된 권한이 하나도 허용되지 않았습니다.";
+"Oldest reading %@" = "가장 오래된 측정 값 %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "활성 충전 일정을 재정의하여 차량이 즉시 충전되도록 합니다.";
+"Recent Trips" = "최근 주행";
+"Returns charging state, power, target, and time remaining." = "충전 상태, 충전 전력, 목표 및 남은 시간을 반환합니다.";
+"Returns locally derived trip distance and driving time for the last seven days." = "최근 7일 동안 로컬에서 추정한 주행 거리와 운전 시간을 반환합니다.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "최신 Hisingen 스냅샷의 잠금, 개폐 및 주의 상태를 반환합니다.";
+"Returns the battery level, range, and charging status of a vehicle." = "차량의 배터리 수준, 주행거리 및 충전 상태를 반환합니다.";
+"Returns the current tire pressures and statuses for all wheels." = "모든 바퀴의 현재 타이어 공기압과 상태를 반환합니다.";
+"Returns the last reported parking position of the active vehicle." = "활성 차량의 마지막 보고된 주차 위치를 반환합니다.";
+"Returns the status of all vehicles in your garage." = "차고에 있는 모든 차량의 상태를 반환합니다.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "주행, 공조, 배터리 컨디셔닝별 차량 전기 에너지 소비 내역을 반환합니다.";
+"Runtime (minutes)" = "작동 시간(분)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "집중 모드가 켜질 때 활성 차량과 해당 차량의 알림 무음 여부를 설정합니다.";
+"Sets the vehicle's charging current limit in amperes." = "차량의 충전 전류 한도를 암페어 단위로 설정합니다.";
+"Sets the vehicle's target charge level percentage." = "차량의 목표 충전 수준을 백분율로 설정합니다.";
+"Sign in again to keep this up to date" = "최신 상태를 유지하려면 다시 로그인하세요";
+"Sign in again: Hisingen cannot refresh" = "다시 로그인: Hisingen은 새로 고칠 수 없음";
+"Some readings are from an earlier report" = "일부 측정 값은 이전 보고에서 가져온 것입니다";
+"Starts cabin climate preconditioning." = "실내 공조 사전 조절을 시작합니다.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "출발 전 실내 공기를 정화하는 사전 청소 사이클을 시작합니다.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "실내를 사전 조절하기 위해 내연기관을 시동합니다(엔진 시동을 지원하는 Volvo 차량).";
+"Stops a remotely started combustion engine." = "원격으로 시동한 내연기관을 중지합니다.";
+"Stops a running cabin pre-cleaning cycle." = "실행 중인 실내 사전 청소 사이클을 중지합니다.";
+"Stops cabin climate preconditioning." = "실내 공조 사전 조절을 중지합니다.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "이제 텔레메트리가 작동하지만 macOS가 자격 증명을 저장하지 못했습니다. 여유 디스크 공간을 확인한 후 다시 로그인하여 세션이 재시동 후에도 유지되도록 하세요.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "차량은 이 값을 표시된 시점에 보고했으며, 이번 새로 고침 때가 아닙니다. Hisingen은 이를 현재 값으로 표시하는 대신 라벨을 붙입니다.";
+"Unlocks the vehicle doors." = "차량 문 잠금을 해제합니다.";
+"Vehicle Battery" = "차량 배터리";
+"Vehicle nickname or VIN (optional)" = "차량 별명 또는 VIN(선택 사항)";
+"Volvo connected – location unavailable" = "Volvo 연결됨: 위치 사용 불가";
+"Volvo connected, but not saved" = "Volvo 연결됨, 하지만 저장되지 않음";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo에서 이 앱의 클라이언트 ID를 더 이상 허용하지 않습니다. Volvo ID로 로그인하거나 설정에서 새 로그인 시스템의 자격 증명을 입력하세요.";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Volvo 개발자 애플리케이션이 차량 위치 권한에 대해 승인되지 않았습니다. 잠금, 엔진 시동, 경적 및 조명 깜빡임은 정상적으로 연결되었습니다. 지도에서 차량을 보려면 developer.volvocars.com에서 위치 권한을 요청하세요.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.

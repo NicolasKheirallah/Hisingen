@@ -4039,8 +4039,52 @@
 
 "This vehicle service reports this value but cannot change it." = "Dieser Fahrzeugdienst meldet diesen Wert, kann ihn aber nicht ändern.";
 
-"Volvo connected – location unavailable" = "Volvo verbunden – Standort nicht verfügbar";
-"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Deine Volvo-Developer-Anwendung ist nicht für den Fahrzeugstandort freigegeben. Verriegeln, Motorstart und Hupen/Blinken wurden wie gewohnt verbunden; fordere den Standort auf developer.volvocars.com an, um das Auto auf der Karte zu sehen.";
-"Granted on the current session: %@" = "Für die aktuelle Sitzung freigegeben: %@";
-"None of the approved permissions are granted on the current session." = "Für die aktuelle Sitzung ist keine der freigegebenen Berechtigungen erteilt.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "Alle Mitteilungen";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Bittet Hisingen, jetzt aktuelle Fahrzeugdaten vom Anbieter abzurufen.";
+"Charge Target (%)" = "Ladeziel (%)";
+"Charging Status" = "Ladestatus";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Beendet die Übersteuerung des Ladeplans, sodass das Fahrzeug zu seinem Ladeplan zurückkehrt.";
 "Engine start" = "Motorstart";
+"Granted on the current session: %@" = "Für die aktuelle Sitzung freigegeben: %@";
+"Hisingen Focus Filter" = "Hisingen-Fokusfilter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen kann nicht aktualisieren, bis das Konto wieder verbunden ist; alles Folgende ist die letzte erfolgreiche Messung.";
+"Locks the vehicle doors." = "Verriegelt die Fahrzeugtüren.";
+"Muted" = "Stumm";
+"None of the approved permissions are granted on the current session." = "Für die aktuelle Sitzung ist keine der freigegebenen Berechtigungen erteilt.";
+"Oldest reading %@" = "Älteste Messung %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Setzt den aktiven Ladeplan außer Kraft, damit das Fahrzeug sofort lädt.";
+"Recent Trips" = "Letzte Fahrten";
+"Returns charging state, power, target, and time remaining." = "Gibt Ladestatus, Leistung, Ziel und verbleibende Zeit zurück.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Gibt lokal berechnete Fahrstrecke und Fahrzeit der letzten sieben Tage zurück.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Gibt Verriegelungs-, Öffnungs- und Aufmerksamkeitsstatus aus dem letzten Hisingen-Snapshot zurück.";
+"Returns the battery level, range, and charging status of a vehicle." = "Gibt Akkustand, Reichweite und Ladestatus eines Fahrzeugs zurück.";
+"Returns the current tire pressures and statuses for all wheels." = "Gibt den aktuellen Reifendruck und den Status aller Räder zurück.";
+"Returns the last reported parking position of the active vehicle." = "Gibt die zuletzt gemeldete Parkposition des aktiven Fahrzeugs zurück.";
+"Returns the status of all vehicles in your garage." = "Gibt den Status aller Fahrzeuge in deiner Garage zurück.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Gibt die Aufteilung des elektrischen Energieverbrauchs des Fahrzeugs auf Antrieb, Klima und Batteriekonditionierung zurück.";
+"Runtime (minutes)" = "Laufzeit (Minuten)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Legt das aktive Fahrzeug fest und ob dessen Mitteilungen stummgeschaltet werden, wenn ein Fokus aktiviert wird.";
+"Sets the vehicle's charging current limit in amperes." = "Legt den Ladestrom-Grenzwert des Fahrzeugs in Ampere fest.";
+"Sets the vehicle's target charge level percentage." = "Legt den Ziel-Ladestand des Fahrzeugs in Prozent fest.";
+"Sign in again to keep this up to date" = "Melde dich erneut an, um dies aktuell zu halten";
+"Sign in again: Hisingen cannot refresh" = "Erneut anmelden: Hisingen kann nicht aktualisieren";
+"Some readings are from an earlier report" = "Einige Messungen stammen aus einem früheren Bericht";
+"Starts cabin climate preconditioning." = "Startet die Vorklimatisierung des Innenraums.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Startet den Innenraum-Vorreinigungszyklus, der die Luft vor der Abfahrt reinigt.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Startet den Verbrennungsmotor, um den Innenraum vorzuklimatisieren (Volvo-Fahrzeuge mit Unterstützung für Motorstart).";
+"Stops a remotely started combustion engine." = "Stoppt einen ferngestarteten Verbrennungsmotor.";
+"Stops a running cabin pre-cleaning cycle." = "Beendet einen laufenden Innenraum-Vorreinigungszyklus.";
+"Stops cabin climate preconditioning." = "Beendet die Vorklimatisierung des Innenraums.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Die Telemetrie läuft jetzt, aber macOS konnte die Anmeldedaten nicht speichern. Prüfe den freien Speicherplatz und melde dich erneut an, damit die Sitzung einen Neustart übersteht.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "Das Fahrzeug hat diese Werte zum angezeigten Zeitpunkt gemeldet, nicht bei dieser Aktualisierung. Hisingen kennzeichnet sie, statt sie als aktuell darzustellen.";
+"Unlocks the vehicle doors." = "Entriegelt die Fahrzeugtüren.";
+"Vehicle Battery" = "Fahrzeugbatterie";
+"Vehicle nickname or VIN (optional)" = "Fahrzeug-Spitzname oder VIN (optional)";
+"Volvo connected – location unavailable" = "Volvo verbunden – Standort nicht verfügbar";
+"Volvo connected, but not saved" = "Volvo verbunden, aber nicht gespeichert";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo akzeptiert die Client-ID dieser App nicht mehr. Melde dich mit deiner Volvo-ID an, oder gib Anmeldedaten für das neue Anmeldesystem in den Einstellungen ein.";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Deine Volvo-Developer-Anwendung ist nicht für den Fahrzeugstandort freigegeben. Verriegeln, Motorstart und Hupen/Blinken wurden wie gewohnt verbunden; fordere den Standort auf developer.volvocars.com an, um das Auto auf der Karte zu sehen.";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
