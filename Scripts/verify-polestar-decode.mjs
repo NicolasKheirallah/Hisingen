@@ -127,7 +127,10 @@ require_(infoDiag.includes("unknownWireFields"), "info-tab raw field rows missin
 require_(infoDiag.includes("Installs In"), "info-tab countdown row missing");
 
 const infoCaps = read("Sources/Hisingen/UI/Info/InfoTabView+Capabilities.swift");
-require_(infoCaps.includes("Sunroof Remote Control"), "capabilities sunroof row missing");
+// M5: the row reports the roof the car describes and must not promise a remote control the app
+// does not implement, so the guardrail checks for the honest label and value instead.
+require_(infoCaps.includes('L10n.text("Sunroof")'), "capabilities sunroof row missing");
+require_(!infoCaps.includes("Sunroof Remote Control"), "capabilities sunroof row must not promise a control");
 require_(infoCaps.includes("Backend Registration Plate"), "capabilities plate row missing");
 require_(infoCaps.includes("Account Linked To Vehicle"), "capabilities linked row missing");
 require_(infoCaps.includes("Account Owns Vehicle"), "capabilities owner row missing");
