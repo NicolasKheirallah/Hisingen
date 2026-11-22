@@ -129,6 +129,7 @@ extension VolvoAPI {
         vehicleDetailsCache = [:]
         capabilityCache = [:]
         optionalTelemetryCache = [:]
+        commandListCache = [:]
         carImageData = [:]
         interiorImageData = [:]
         // The recorded grant set belongs to the session that earned it; a reset without a

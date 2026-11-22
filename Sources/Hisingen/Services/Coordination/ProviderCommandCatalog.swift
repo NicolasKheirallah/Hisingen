@@ -38,13 +38,10 @@ struct ProviderCommandCatalog: Sendable {
     }
 
     private func implementsVolvo(_ command: RemoteCommand) -> Bool {
-        switch command {
-        case .lock, .lockReducedGuard, .unlock, .startClimate, .stopClimate,
-             .honkAndFlash, .flashLights, .honkHorn, .startEngine, .stopEngine:
-            return true
-        default:
-            return false
-        }
+        // One table answers both questions: `VolvoCommandCatalog` already decides which commands
+        // post to an endpoint and which advertised names mean the car offers it. A second list
+        // here is what let the capability probe and dispatch disagree before they were merged.
+        VolvoCommandCatalog.kind(for: command) != nil
     }
 }
 

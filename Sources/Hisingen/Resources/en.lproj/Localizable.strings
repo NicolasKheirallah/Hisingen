@@ -210,6 +210,7 @@
 "Charging" = "Charging";
 "Save token" = "Save token";
 "The charge level must be between %d%% and %d%%." = "The charge level must be between %d%% and %d%%.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "The vehicle's command list could not be refreshed. Capability answers may be out of date.";
 "This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
 "The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
 "This is already the highest setting." = "This is already the highest setting.";

@@ -5,17 +5,41 @@ import Testing
 /// The catalog is the agreement between what the UI promises (a capability the car advertises)
 /// and what dispatch posts (one endpoint). Drift between them used to be silent.
 struct VolvoCommandCatalogTests {
+    /// The commands Volvo's public v2 surface can run, with the arguments the app sends.
+    private static let supportedCommands: [RemoteCommand] = [
+        .lock, .unlock, .lockReducedGuard, .startClimate(temperatureCelsius: 21,
+            frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off,
+            rearRightSeat: .off, steeringWheel: .off),
+        .stopClimate, .startEngine(runtimeMinutes: 15), .stopEngine,
+        .honkAndFlash, .flashLights, .honkHorn,
+    ]
+
     @Test
     func everyVolvoCommandResolvesToAnEndpoint() {
-        let supported: [RemoteCommand] = [
-            .lock, .unlock, .lockReducedGuard, .startClimate(temperatureCelsius: 21,
-                frontLeftSeat: .off, frontRightSeat: .off, rearLeftSeat: .off,
-                rearRightSeat: .off, steeringWheel: .off),
-            .stopClimate, .startEngine(runtimeMinutes: 15), .stopEngine,
-            .honkAndFlash, .flashLights, .honkHorn,
-        ]
-        for command in supported {
+        for command in Self.supportedCommands {
             #expect(VolvoCommandCatalog.endpoint(for: command) != nil, "\(command)")
+        }
+    }
+
+    @Test
+    func theProbeAndDispatchReadOneCatalog() {
+        // The name the car's list has to report for a control is the endpoint dispatch posts to,
+        // so a list the probe accepts is a command the app can actually send.
+        for kind in VolvoCommandCatalog.Kind.allCases {
+            let entry = VolvoCommandCatalog.entry(for: kind)
+            #expect(entry.advertisedNames.contains(entry.endpoint), "\(kind)")
+            #expect(VolvoCommandCatalog.isAdvertised(kind, in: [entry.endpoint]), "\(kind)")
+        }
+        // And the provider catalog that dispatch and the availability gate ask is the same table,
+        // not a second hand-written list that could drift from it.
+        for command in Self.supportedCommands {
+            guard let kind = VolvoCommandCatalog.kind(for: command),
+                  let endpoint = VolvoCommandCatalog.endpoint(for: command) else {
+                Issue.record("\(command) has no catalog entry")
+                continue
+            }
+            #expect(VolvoCommandCatalog.isAdvertised(kind, in: [endpoint]), "\(command)")
+            #expect(ProviderCommandCatalog(brand: .volvo).implements(command), "\(command)")
         }
     }
 

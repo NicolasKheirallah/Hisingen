@@ -459,6 +459,11 @@ struct VehicleProbedCapabilities: Codable, Equatable, Sendable {
     /// that reports a list; the app still refuses anything outside its catalog, so this is a
     /// read-only diagnostic: it says what the car offers that Hisingen cannot send yet.
     var reportedCommandNames: [String]? = nil
+    /// Whether the list behind the command probes is the last known one: a refresh was due and
+    /// failed. The support answers built from it are the best available, and the capability
+    /// matrix says so instead of the app silently re-deciding from the model table. Nil when no
+    /// list has ever been read, which is a different fact from "the list is out of date".
+    var commandListIsStale: Bool? = nil
 
     static let stalenessInterval: TimeInterval = 6 * 3_600
 

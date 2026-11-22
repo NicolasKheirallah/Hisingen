@@ -1062,6 +1062,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "Ajoneuvopalvelu hylkäsi pyynnön. Avaa Asetukset, jos tämä jatkuu.";
 "The vehicle service returned an unexpected response." = "Ajoneuvopalvelu palautti odottamattoman vastauksen.";
 "The vehicle service took too long to respond. Retrying automatically." = "Ajoneuvopalvelun vastaus kesti liian kauan. Yritetään automaattisesti uudelleen.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "Ajoneuvon komentoluetteloa ei voitu päivittää. Ominaisuusvastaukset voivat olla vanhentuneita.";
 "The vehicle's privacy setting prevented this command." = "Ajoneuvon yksityisyysasetus esti tämän komennon.";
 "There is no software update waiting to be installed on this vehicle." = "Tälle ajoneuvolle ei ole odottavaa ohjelmistopäivitystä asennettavaksi.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Nämä kytkimet eivät hälytä, ennen kuin Hisingenille on sallittu ilmoitukset.";

@@ -1062,6 +1062,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "De voertuigservice heeft het verzoek geweigerd. Open Instellingen als dit aanhoudt.";
 "The vehicle service returned an unexpected response." = "De voertuigservice gaf een onverwachte reactie.";
 "The vehicle service took too long to respond. Retrying automatically." = "Het duurde te lang voordat de voertuigservice reageerde. Automatisch opnieuw proberen.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "De opdrachtenlijst van het voertuig kon niet worden vernieuwd. De capaciteitsantwoorden kunnen verouderd zijn.";
 "The vehicle's privacy setting prevented this command." = "De privacy-instelling van het voertuig heeft deze opdracht verhinderd.";
 "There is no software update waiting to be installed on this vehicle." = "Er wacht geen software-update op installatie op dit voertuig.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Deze schakelaars waarschuwen je pas als meldingen voor Hisingen zijn toegestaan.";

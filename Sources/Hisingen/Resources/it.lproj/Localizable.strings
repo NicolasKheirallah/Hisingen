@@ -1062,6 +1062,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "Il servizio del veicolo ha rifiutato la richiesta. Apri Impostazioni se il problema persiste.";
 "The vehicle service returned an unexpected response." = "Il servizio del veicolo ha restituito una risposta imprevista.";
 "The vehicle service took too long to respond. Retrying automatically." = "Il servizio del veicolo ha impiegato troppo tempo per rispondere. Riprovo automaticamente.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "Non è stato possibile aggiornare l'elenco dei comandi del veicolo. Le risposte sulle capacità potrebbero non essere aggiornate.";
 "The vehicle's privacy setting prevented this command." = "L'impostazione privacy del veicolo ha impedito questo comando.";
 "There is no software update waiting to be installed on this vehicle." = "Non ci sono aggiornamenti software in attesa di installazione su questo veicolo.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Questi interruttori non ti avviseranno finché le notifiche non saranno consentite per Hisingen.";

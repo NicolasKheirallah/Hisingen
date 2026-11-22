@@ -278,6 +278,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   writes against that upgraded store; `VehicleDatabaseOpenGuardTests` covers the downgrade
   refusal and both quarantine paths; `SparkleFeedTests` drives Sparkle's real updater against
   fixture appcasts served over loopback, for a newer version and a malformed feed.
+- The **Volvo command list** behind the remote controls now has an age rule. Past fifteen minutes
+  Hisingen re-reads the car's `/commands` list before using it to decide whether lock, climate,
+  engine and honk/flash are offered, instead of gating on a copy that could be an hour old. A read
+  that fails keeps the last known list rather than dropping it, so one failed request no longer
+  makes a control the car supports look unsupported; the capability matrix says the answers may be
+  out of date. The list that gates a control and the endpoint dispatch posts to also come from the
+  same catalog now, so the two cannot disagree.
+
 - A **Volvo sign-in callback** is checked against the registered scheme, host and path before its
   code is exchanged. The browser presenter resumed on any HTTPS URL and matched the callback path
   by prefix, so a crafted redirect could take the place of the genuine one; the exchange now

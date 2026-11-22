@@ -1062,6 +1062,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "Køyretøystenesta avviste førespurnaden. Opna Innstillingar om dette held fram.";
 "The vehicle service returned an unexpected response." = "Køyretøystenesta returnerte eit uventa svar.";
 "The vehicle service took too long to respond. Retrying automatically." = "Køyretøystenesta brukte for lang tid på å svare. Prøver automatisk igjen.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "Kommandolista til køyretøyet kunne ikkje oppdaterast. Kapasitetssvara kan vere utdaterte.";
 "The vehicle's privacy setting prevented this command." = "Kjøretøyets personverninnstilling forhindret denne kommandoen.";
 "There is no software update waiting to be installed on this vehicle." = "Det venter ingen programvareoppdatering på installasjon på dette kjøretøyet.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Disse bryterne varsler deg ikke før varsler er tillatt for Hisingen.";

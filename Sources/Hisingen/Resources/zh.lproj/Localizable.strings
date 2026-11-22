@@ -1062,6 +1062,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "车辆服务拒绝了该请求。如果问题持续，请打开“设置”。";
 "The vehicle service returned an unexpected response." = "车辆服务返回了异常响应。";
 "The vehicle service took too long to respond. Retrying automatically." = "车辆服务响应超时。正在自动重试。";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "无法刷新车辆的指令列表。功能回答可能已过时。";
 "The vehicle's privacy setting prevented this command." = "车辆的隐私设置阻止了此指令。";
 "There is no software update waiting to be installed on this vehicle." = "车辆上没有等待安装的软件更新。";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "在 Hisingen 获得通知权限之前，这些开关不会提醒您。";
