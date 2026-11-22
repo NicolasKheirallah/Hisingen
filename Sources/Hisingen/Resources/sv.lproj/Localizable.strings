@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "Batterigaranti (återstående)";
 "Battery and Power" = "Batteri och effekt";
 "Battery and Range" = "Batteri och räckvidd";
+"Available optimised charging" = "Tillgänglig optimerad laddning";
+"Bidirectional charging" = "Dubbelriktad laddning";
 "Position relative to car" = "Placering i förhållande till bilen";
 "First reading" = "Första värdet";
 "Above" = "Ovanför";

@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "배터리 보증 (잔여)";
 "Battery and Power" = "배터리 및 전력";
 "Battery and Range" = "배터리 및 주행 가능 거리";
+"Available optimised charging" = "사용 가능한 최적화 충전";
+"Bidirectional charging" = "양방향 충전";
 "Position relative to car" = "차량 기준 위치";
 "First reading" = "첫 번째 표시 항목";
 "Above" = "위";

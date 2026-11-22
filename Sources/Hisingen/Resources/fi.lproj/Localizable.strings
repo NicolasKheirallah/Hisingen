@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "Akkutakuu (jäljellä)";
 "Battery and Power" = "Akku ja teho";
 "Battery and Range" = "Akku ja toimintamatka";
+"Available optimised charging" = "Saatavilla oleva optimoitu lataus";
+"Bidirectional charging" = "Kaksisuuntainen lataus";
 "Position relative to car" = "Sijainti auton suhteen";
 "First reading" = "Ensimmäinen lukema";
 "Above" = "Yläpuolella";
