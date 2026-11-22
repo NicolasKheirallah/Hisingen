@@ -4306,3 +4306,4 @@
 "Volvo connected, but not saved" = "Volvo tilkopla, men ikkje lagra";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo godtar ikkje lenger denne appen sin klient-ID. Logg inn med Volvo-ID-en din, eller oppgi påloggingsinformasjon for det nye innloggingssystemet i Innstillingar.";
 "Watts per square metre" = "Watt per kvadratmeter";
+"A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "Ein nyare versjon av Hisingen skreiv denne historikkdatabasen (databaseskjema %d; denne versjonen les opptil %d). Dataa dine er urørde. Oppdater Hisingen for å lese dei.";

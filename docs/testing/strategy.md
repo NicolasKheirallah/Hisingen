@@ -40,6 +40,8 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 | Volvo REST decoding | | ✓ (`VolvoDecodingTests`, 26 tests) | | ✓ (read path only) |
 | Input boundary validation | ✓ (`InputBoundaryTests`) | | | |
 | Desktop widget snapshot (writer, reader, staleness) | ✓ (`WidgetSnapshotWriterTests`, `WidgetSnapshotRoundTripTests`) | | | |
+| SQLite schema parity, downgrade and corruption guards | ✓ (`VehicleDatabaseSchemaParityTests`, `VehicleDatabaseOpenGuardTests`) | ✓ (`legacy-database-v0.sql`, `database-schema.txt`) | | |
+| Sparkle update feed (newer and malformed appcast) | ✓ (`SparkleFeedTests`, loopback fixture server) | ✓ (`appcast-newer.xml`, `appcast-malformed.xml`) | | |
 | UI rendering | | | | none, manual verification only |
 
 ## Known gaps
@@ -50,6 +52,19 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
   Security framework itself; unit tests use isolated service names and verify
   email migration plus separation between draft and committed credentials.
 - **No cross-provider concurrency test** exercises Polestar and Volvo sessions running at once, since only one brand is ever active at a time in the current UI; see [architecture/technical-debt.md](../architecture/technical-debt.md).
+
+## Schema and updater guardrails
+
+`VehicleDatabaseSchemaParityTests` keeps three SQLite surfaces in step: a checked-in
+`Fixtures/database-schema.txt` describes the app's real schema (regenerate it with
+`HISINGEN_WRITE_SCHEMA_FIXTURE=1` and commit the diff), `Fixtures/legacy-database-v0.sql` is the
+schema an install from before `PRAGMA user_version` has and must upgrade to exactly the
+fresh-install schema, and every table and column named by an `INSERT`/`UPDATE`/`DELETE` in
+`Sources/Hisingen` must exist on that upgraded store. `VehicleDatabaseOpenGuardTests` covers the
+refusal of a store written by a newer build and the quarantine of damaged files.
+`SparkleFeedTests` serves `Fixtures/appcast-newer.xml` and `appcast-malformed.xml` from a
+loopback HTTP server to Sparkle's real updater, so the feed parser and the app's delegate
+mapping are exercised without internet access.
 
 ## Live integration tests
 

@@ -4306,3 +4306,4 @@
 "Volvo connected, but not saved" = "Volvo 연결됨, 하지만 저장되지 않음";
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo에서 이 앱의 클라이언트 ID를 더 이상 허용하지 않습니다. Volvo ID로 로그인하거나 설정에서 새 로그인 시스템의 자격 증명을 입력하세요.";
 "Watts per square metre" = "제곱미터당 와트";
+"A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "더 새로운 버전의 Hisingen이 이 기록 데이터베이스를 작성했습니다(데이터베이스 스키마 %d, 이 버전은 최대 %d까지 읽습니다). 데이터는 그대로입니다. 읽으려면 Hisingen을 업데이트하세요.";

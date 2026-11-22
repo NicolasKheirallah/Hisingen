@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Hisingen</title>
+    <link>https://hisingen.invalid/updates/appcast.xml</link>
+    <description>Fixture feed for the update check test. Never published.</description>
+    <language>en</language>
+    <item>
+      <title>Version 999.0.0</title>
+      <sparkle:version>999</sparkle:version>
+      <sparkle:shortVersionString>999.0.0</sparkle:shortVersionString>
+      <description>A newer version than the fixture host advertises.</description>
+      <pubDate>Sat, 22 Nov 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://hisingen.invalid/updates/Hisingen-fixture.app.zip"
+        length="1234"
+        type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>

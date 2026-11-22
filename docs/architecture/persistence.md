@@ -100,7 +100,9 @@ The database is opened and managed by `VehicleDatabase`.
 
 If the database cannot be opened, Hisingen degrades to a closed handle (`SQLiteDatabase.unavailable`): every write is logged and dropped rather than crashing. If the Application Support directory itself is unavailable, `VehicleDatabase` also uses a closed handle; it must **not** fall back to a temporary directory, which macOS purges and which previously made "my history vanished" indistinguishable from an OS housekeeping sweep.
 
-On open, a pre-existing file that fails `PRAGMA quick_check` is renamed aside to `hisingen.sqlite3.corrupt-<timestamp>` (with its `-wal`/`-shm` siblings) and a fresh database is created, so a corrupt file is recoverable by hand rather than silently recreated empty.
+On open, a pre-existing file that fails `PRAGMA quick_check` is renamed aside to `hisingen.sqlite3.corrupt-<timestamp>` (with its `-wal`/`-shm` siblings) and a fresh database is created, so a corrupt file is recoverable by hand rather than silently recreated empty. A file that cannot be opened as SQLite at all (garbage, a truncated header) takes the same path, because it is unreadable by any build; failures that may clear on their own, such as a lock or a read-only volume, leave the file untouched and keep the closed handle.
+
+A store whose `PRAGMA user_version` is higher than `VehicleDatabase.latestSchemaVersion` was written by a newer build and is refused before any ledger reads it: `VehicleDatabase.schemaIncompatibility` carries both versions, the handle is closed, and Settings → SQLite Storage & Data explains that the data is untouched and that updating Hisingen will read it. The file is not migrated, backed up or quarantined, so the newer build can open it again unchanged.
 
 Immediately before a schema migration runs (`PRAGMA user_version` is about to increase on a pre-existing database), `VehicleDatabase` writes a one-shot `VACUUM INTO` copy to `hisingen.sqlite3.pre-v<target>.bak`. It is never overwritten once present.
 
@@ -624,6 +626,8 @@ The application should be able to obtain a fresh state from the provider after c
 
 SQLite schema changes must use explicit, `PRAGMA user_version`-gated migrations in `VehicleDatabase.runMigrations(from:)`, additive only (`ALTER TABLE ADD COLUMN`, `CREATE TABLE/INDEX IF NOT EXISTS`, in-place `UPDATE`). A migration must never `DROP` or recreate a table that can hold user history. Bump `VehicleDatabase.latestSchemaVersion` in lockstep with each new block. `DataRetentionHardeningTests.schemaMigrationPreservesExistingRows` opens a pre-`user_version` database with a row and asserts it survives the upgrade.
 
+A column added to `createTables()` without a migration only reaches new installs, so `VehicleDatabaseSchemaParityTests` upgrades `Fixtures/legacy-database-v0.sql` and asserts the result is identical to a fresh install; it also checks every table and column the persistence layer writes, and pins the schema in `Fixtures/database-schema.txt`. `VehicleDatabaseOpenGuardTests` exercises the downgrade refusal and both quarantine paths.
+
 Note on `CFBundleIdentifier`: `UserDefaults.standard` is keyed on it, so changing it orphans every stored preference. `PreferencesStore.migrateLegacyDefaults()` runs once at launch to carry values forward from `PreferencesStore.legacyDefaultsDomains`; add any new legacy identifier there. The Keychain service (`io.kheirallah.hisingen`) and the SQLite path are independent of the bundle identifier.
 
 ---
@@ -683,8 +687,10 @@ Persistence tests should cover at least:
 - battery-health milestone deduplication;
 - global wipe;
 - sign-out-triggered local state clearing (snapshot always, history only with `erase_history_on_sign_out`);
-- schema-migration row preservation and the pre-migration backup; and
-- corrupt-database quarantine (`PRAGMA quick_check`).
+- schema-migration row preservation and the pre-migration backup;
+- schema parity between a pre-`user_version` store, a fresh install and the write surface;
+- the refusal of a store written by a newer build; and
+- corrupt-database quarantine (`PRAGMA quick_check`, and files that are not SQLite at all).
 
 Any test using VINs, coordinates, account identifiers, or authentication material must use sanitized fixtures.
 
