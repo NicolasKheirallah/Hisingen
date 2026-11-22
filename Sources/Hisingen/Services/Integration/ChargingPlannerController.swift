@@ -64,6 +64,18 @@ final class ChargingPlannerController {
     private var autoStartedWindowStarts: [String: Date] = [:]
     /// VIN → the window end whose stop command is in flight, so a minute tick cannot send it twice.
     private var stopInFlight: [String: Date] = [:]
+    /// Refused sends of the start and of the stop, per VIN. `.refused` also covers a provider
+    /// request that failed on the network, and both commands are safe to repeat, so one
+    /// refusal does not end the window.
+    private var refusedStarts: [String: Int] = [:]
+    private var refusedStops: [String: Int] = [:]
+    /// VIN → when a start that was refused `maxRefusedSends` times may be tried again. The plan
+    /// is recomputed every tick, so the guard on the window start alone would not hold it back.
+    private var gaveUpStartsUntil: [String: Date] = [:]
+
+    /// How many refused sends of one planner command end the attempt. At the minute tick this is
+    /// about five minutes of trying, then the window is given up and the failure banner stands.
+    static let maxRefusedSends = 5
 
     /// How often the planner re-evaluates. Cheap: the common path is two guards and one
     /// actor hop onto a warm price cache.
@@ -221,6 +233,8 @@ final class ChargingPlannerController {
             // The target is met: there is no window to guard and no planned charge to stop.
             preferences.setPlannerWindow(nil, for: vin)
             autoStartedWindowStarts[vin] = nil
+            refusedStarts[vin] = nil
+            gaveUpStartsUntil[vin] = nil
             sleepPrevention.release()
             return
         }
@@ -337,6 +351,7 @@ final class ChargingPlannerController {
             chargingState: state.energy.chargingState
         ) else { return }
         guard autoStartedWindowStarts[vin] != plan.start else { return }
+        if let until = gaveUpStartsUntil[vin], now() < until { return }
         // Held while the dispatch is in flight so an intervening tick cannot double-send;
         // released below when the outcome is retryable.
         autoStartedWindowStarts[vin] = plan.start
@@ -349,19 +364,29 @@ final class ChargingPlannerController {
             }
             let outcome = await self.startCharging(vin)
             AppLog.logger("elpriser").notice("Planner auto-start outcome: \(String(describing: outcome), privacy: .public)")
-            // Mirror CalendarPreconditioningDispatchDecision.consumesOccurrence: only an
-            // acknowledged send or a terminal refusal consumes the window. .deferred (command
-            // pipeline busy, vehicle context changed mid-flight, shell still loading) must
-            // stay retryable – the next 60 s tick re-evaluates while `now < plan.end` holds.
+            // .deferred (command pipeline busy, vehicle context changed mid-flight, shell still
+            // loading) stays retryable: the next 60 s tick re-evaluates while `now < plan.end`
+            // holds. .refused is retried too, up to `maxRefusedSends`, because a network failure
+            // arrives as a refusal.
             switch outcome {
             case .sent:
+                self.refusedStarts[vin] = nil
+                self.gaveUpStartsUntil[vin] = nil
                 // The window's end is now fixed: the stop command is due there even if the
                 // remaining energy pushes the recomputed plan past it.
                 self.preferences.setPlannerWindow(
                     DateInterval(start: plan.start, end: plan.end), for: vin
                 )
             case .refused:
-                self.preferences.setPlannerWindow(nil, for: vin)
+                let refused = (self.refusedStarts[vin] ?? 0) + 1
+                if refused < Self.maxRefusedSends {
+                    self.refusedStarts[vin] = refused
+                    self.autoStartedWindowStarts[vin] = nil
+                } else {
+                    self.refusedStarts[vin] = nil
+                    self.gaveUpStartsUntil[vin] = plan.end
+                    self.preferences.setPlannerWindow(nil, for: vin)
+                }
             case .deferred:
                 self.autoStartedWindowStarts[vin] = nil
             }
@@ -381,9 +406,18 @@ final class ChargingPlannerController {
                   !self.plannerOwnedByHomeAssistant(vin) else { return }
             let outcome = await self.stopCharging(vin)
             AppLog.logger("elpriser").notice("Planner window-end stop outcome: \(String(describing: outcome), privacy: .public)")
-            // .sent and .refused consume the window: a terminal refusal is not retried, and a
-            // deferred send is tried again on the next tick while the window is still fresh.
+            // A stop that never lands leaves the car charging into the dearer hours, so a refusal
+            // is retried on the next ticks before the window is given up. A deferred send is
+            // retried without a limit while the window is still fresh.
+            if case .refused = outcome {
+                let refused = (self.refusedStops[vin] ?? 0) + 1
+                if refused < Self.maxRefusedSends {
+                    self.refusedStops[vin] = refused
+                    return
+                }
+            }
             if CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
+                self.refusedStops[vin] = nil
                 self.preferences.setPlannerWindow(nil, for: vin)
                 self.autoStartedWindowStarts[vin] = nil
             }

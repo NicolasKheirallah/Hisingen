@@ -18,6 +18,7 @@ All notable changes to Hisingen are documented in this file. The project follows
   the reader sets, then stays quiet for a configurable period so a volatile quarter-hour series
   cannot fill the notification list. It compares the price after the reader's rate policy, and it
   posts nothing at all when the series is missing or does not cover the hour in question.
+
 - **GPX and XLSX exports.** The History export menu now offers an XLSX workbook beside every CSV
   entry and a GPX track file for trips. The workbook carries the CSV's rows on a data sheet with
   real numeric cells, so a spreadsheet can sum energy, distance, duration and cost without
@@ -310,6 +311,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   by prefix, so a crafted redirect could take the place of the genuine one; the exchange now
   applies the same rule itself instead of trusting that gate. A refused callback is named in the
   log by the component that did not match, never the query that carries the code.
+
+- **The Charging Planner no longer drops a window on one failed send.** A start or a stop that
+  the command pipeline refused, which includes a request lost to the network, ended the window for
+  good: a failed stop at the window's end left the car charging into the dearer hours with no
+  second try. The planner now repeats a refused start or stop on the next minute ticks, up to five
+  sends, before it gives the window up. Both commands are safe to repeat.
 
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
@@ -1679,6 +1686,7 @@ These screenshots use a sample NexBlue charger.
   - **Daily quota tracking**: Built-in tracking for the portal's 10,000 requests/day quota with UTC calendar rollover and live meter display in Settings.
   - **Official OpenAPI 3.1.0 specification & documentation**: Bundled complete OpenAPI schema and step-by-step onboarding guide (`docs/api/polestar-developer-portal.md`) with co-located portal screenshots for landing, API credentials overview, and M2M key management.
   - **Build-time secret injection tooling**: `Scripts/inject-secrets.sh` obfuscates developer credentials and compiles fallback accessors in `BuiltinPolestarSecrets`.
+
 - **EU Data Act telemetry and smart energy expansion.** Complete integration of all telemetry fields and remote charging management capabilities from the official Polestar OpenAPI 3.1.0 specification:
   - **Battery & Smart Energy**:
     - Bidirectional / V2X power sharing monitoring (`isBidirectionalChargingEnabled`) with vehicle-enforced `minimumSoc` discharge thresholds.
@@ -1711,8 +1719,11 @@ These screenshots use a sample NexBlue charger.
 ### Fixed
 
 - **Polestar 2 remote climate actuation.** When starting preconditioning on Polestar 2 (where cabin temperature is vehicle-managed), the remote command now explicitly provides the 22.0 °C comfort default on the wire. Omitting the temperature field previously caused the vehicle's climate control module (CCM) to quietly drop the command, leaving the cabin unconditioned while optimistic UI state masked the refusal.
+
 - **Climate card button gating & overlay synchronization.** The Start Climate button's disabled state and in-flight spinner overlay now track the actual command being dispatched rather than the probe command, keeping the button interactive and showing clear in-flight progress.
+
 - **Sparkle updater Swift 6 concurrency.** Conformed `UpdateService` to `SPUStandardUserDriverDelegate` with `nonisolated` delegate methods to prevent protocol isolation errors under Swift 6 strict concurrency.
+
 - **Web sign-in window teardown.** Cleaned up WKWebView and window references upon dismissal to prevent retained views during re-authentication.
 
 ### Changed
@@ -1732,12 +1743,14 @@ These screenshots use a sample NexBlue charger.
   roofline, and the tyre rings and lamp glows sit on its own wheels and lights. The three
   outlines are drawn at a matched size, so switching cars no longer changes how large the
   car is in the card. Polestar 1, 2, 5 and 6 and every Volvo keep the outline they had.
+
 - **Tabs & Cards: every card is now the reader's to place.** A new Settings pane
   (Settings → Tabs & Cards) lists every card, section and banner in the app, per tab,
   and lets each one be switched off, moved — by button or by dragging it onto another
   card — or removed. The order the pane shows is the order the tab draws, and the
   shipped tabs read the same layout record, so what Settings shows is what the panel
   draws.
+
 - **Tabs of your own.** Build a tab from anything in Hisingen: name it, pick an icon,
   and add cards from any of the shipped tabs — the charging card beside the lock
   controls, the render beside the tyre schematic. Cards are drawn by the same views
@@ -1745,9 +1758,11 @@ These screenshots use a sample NexBlue charger.
   Cards that own a tab's own state (the History charts, the Info section bars) stay on
   the tab that gives them that state, and are named as such instead of silently
   missing.
+
 - **Shipped tabs can be hidden.** Any of Vehicle, Info, History and Controls can be
   hidden from the tab bar; Settings is always there, because it is where the list is
   managed.
+
 - **Card switches double as data switches.** A card's own setting is a feature the
   provider fetch already consulted, so switching a card off is also the instruction to
   stop requesting the telemetry behind it — but only once no card the reader can still
@@ -1773,6 +1788,7 @@ These screenshots use a sample NexBlue charger.
   canvas in the light, with the chip fill inset from it in turn. The contrast check models the
   card surface it actually renders on rather than the canvas it used to sit on, and covers
   both appearances for every theme.
+
 - **The footer gear no longer kicks the panel back to another tab.** Settings was reachable
   two ways at once — a controller-owned mode and a tab — and the two could disagree: with the
   Settings tab already selected, tapping the gear flipped the mode off and the panel fell back
@@ -1780,29 +1796,35 @@ These screenshots use a sample NexBlue charger.
   tab, the gear, `⌘,`, the menu-bar item, a sign-in that ends inside Settings) writes that one
   selection, so the two cannot disagree. Backing out returns to the tab Settings was opened
   over.
+
 - **Settings draws the same header navigation as every other tab again.** The Settings
   screen replaced the panel's tab bar with a header of its own — a back button, a centred
   title and a close button — so the one navigation a reader had learned disappeared the
   moment they opened Settings. Settings is a tab like the others now: the tab bar stays on
   screen and marks the current tab exactly as it does everywhere else. Settings keeps its
   own header only before sign-in, where there is no tab bar to leave by.
+
 - **The card list in Settings → Tabs & Cards no longer appears twice.** The card rows were
   rendered once by the tab's controls and again by the page below them.
+
 - **A rejected password no longer replays on every launch.** With a password saved, Hisingen
   offered it again at each launch even after the sign-in service had refused it, because the
   "can resume" flag counted any stored password as a way in. A credential the IdP actually
   rejects is dropped now, so the app asks instead of repeating a failed sign-in against
   PingFederate's per-client attempt budget. A transient refusal — a 5xx, a timeout — still
   keeps the session, so an outage never costs you a sign-in.
+
 - **A restriction learned on one car no longer switches off the same reading on another.**
   Volvo stand-downs were recorded under the endpoint alone, so a vehicle that answered
   "region restricted" for, say, the environment reading made Hisingen skip that reading on
   every other car in the garage for the rest of the stand-down. It is scoped to the vehicle
   that earned it now.
+
 - **One slow vehicle service no longer holds up the whole refresh.** The PCCS readings are
   optional, and a hung one was allowed the full ten-second session budget before giving up;
   they now give up at six, and that service stands down instead of every other reading
   waiting on it.
+
 - **The C3 discovery fallback is no longer recorded as a failure.** Every launch wrote one
   error for a request that then succeeded: the version-shape rejection that makes Hisingen
   fall back is the fallback working, not a fault. It is classified as expected now, so a
@@ -1818,9 +1840,11 @@ These screenshots use a sample NexBlue charger.
   you have already completed finishes in a blink. Declining the sheet is not treated as a
   failure, and if the sheet cannot be presented at all Hisingen falls back to opening the
   page in your own browser as before.
+
 - **Settings is one entry point again.** The Settings tab in the tab bar and the gear
   in the footer now take the same path into Settings and the same path back out, so
   neither can leave the panel in a state the other cannot leave.
+
 - **The section row inside Settings reads like the tab bar.** The destinations
   (All, Accounts, Appearance, …) wore accent-filled pills of their own; they now use the
   tab bar's icon-and-label treatment, its ink emphasis and the same indicator moving under
@@ -1834,6 +1858,7 @@ These screenshots use a sample NexBlue charger.
   no longer exists.
 - The Vehicle tab's two side-by-side rows follow the layout: hiding or moving one of a
   pair no longer leaves a card trying to share a row with something that is not there.
+
 - **Diagnostics name the failure rather than the code.** A non-zero gRPC status now keeps
   its status and the server's own message next to a stable operation name, the token
   endpoint's OAuth error code is recorded without retaining the response body, a request
@@ -1857,6 +1882,7 @@ These screenshots use a sample NexBlue charger.
   archive restored on a new Mac is a first run there and sees the pass. An install
   that upgrades with session material already on the Keychain counts as past the
   pass, and a popover closed mid-pass reopens onto it instead of skipping it.
+
 - **Start Cabin Pre-Cleaning from Shortcuts.** The new App Intent dispatches through
   the normal command path, so a vehicle without the pre-cleaning capability answers
   with the same refusal the in-app control gets.
@@ -1873,21 +1899,25 @@ These screenshots use a sample NexBlue charger.
   confirmation, receipt supersession, and presentation logic all read the same row.
   Adding a command becomes one table row instead of coordinated edits across four
   files.
+
 - **Command receipts have a single ledger owner.** The pending-receipt records,
   confirmation deadlines, suspension across sleep and brand switches, relaunch
   restore, timeouts, and persistence moved into one module. Receipts for a vehicle
   that is not the currently selected one are recorded under that vehicle's VIN by
   the same ledger instead of hand-written persistence in the app shell, so they
   survive relaunch and supersede correctly when that vehicle is selected later.
+
 - **Vehicle state snapshots merge per cluster.** Each snapshot (energy and charging,
   identity, maintenance and health, freshness, trip computer, fuel system) carries
   its own merge and freshness policy, and the in-progress charging-sample buffer
   lives with the energy snapshot instead of inside the state-wide merge. Encoded
   state is unchanged; older persisted snapshots decode as before.
+
 - **Live streaming sits behind one engine.** The connection task, reconnect loop
   with backoff and circuit breaker, authorization recovery, and stream metrics moved
   out of the refresh coordinator, whose hand-maintained reset lists could (and did)
   drift apart. Switching vehicles now fully resets stream state.
+
 - **History tables page through one shared section.** The six hand-wired pagers
   (trips, fuel, charging sessions, command log, air-cleaning, observed changes)
   collapsed into one paginated section that owns page state, display-safe clamping,
@@ -1897,14 +1927,17 @@ These screenshots use a sample NexBlue charger.
 - Vehicle weather now comes from a dedicated Open-Meteo client instead of an HTTP
   call buried in gRPC capability plumbing; Polestar's own weather reports share its
   WMO code table.
+
 - **History loading does less work for the period on screen.** Dashboard queries now
   apply their comparison horizon in SQLite, trip derivation has a 12,000-row input
   ceiling, and presentation aggregates are prepared away from the main actor. Filter
   edits reuse the loaded dashboard instead of querying the database again.
+
 - **Snapshot persistence is bounded and no longer occupies the main actor.** One
   serial writer keeps only the newest pending observation per VIN while preserving
   vehicle order. SQLite dashboard reads use a separate WAL read connection, so a
   history write does not make the History tab wait for the writer handle.
+
 - **Live updates keep the popover's SwiftUI root in place.** Telemetry now updates one
   observable snapshot instead of replacing the hosting controller's root view.
   Identical stream frames are discarded, and presentation comparisons use image
@@ -1994,6 +2027,7 @@ practice are gone.
     when the vehicle is plugged in, not already charging, and below its charge limit,
     and only while the Charging Controls feature is on. Auto-start is not part of any
     bulk-enable action and never transfers through a settings archive.
+
 - **Market-price session costs.** Completed charging sessions are priced against the
   actual spot price of every interval they covered (charging power integrated across
   price slots, split at rate boundaries, scaled to the session's authoritative energy),
@@ -2002,13 +2036,16 @@ practice are gone.
   uncosted rather than being priced with invented rates; spot prices exclude taxes and
   grid fees, and the database migrates legacy installs to the new column on first
   launch.
+
 - **Climate commands confirm from telemetry.** Start/Stop Climate receipts are
   confirmed when a fresh climate-status reading shows the requested state, and hidden
   once confirmed because the climate activity itself is the durable confirmation.
+
 - **Acknowledged, a new receipt outcome for providers without telemetry proof.** When
   a provider accepts a command but exposes no reading that could verify it (currently
   Volvo's climate status), the receipt finishes as *acknowledged by the vehicle
   service* rather than silently polling until timeout.
+
 - **Nothing the Polestar backend sends is silently dropped.** Every `GetMyCars` wire
   field Hisingen has not decoded, top-level or nested (shown as "Field 35.5"), is
   retained raw and listed under a new "Undecoded Backend Fields" disclosure in the
@@ -2024,6 +2061,7 @@ practice are gone.
 - Air-quality readings carry when the cabin air was last *measured* (wire field 2,
   verified live: the sensor also samples on vehicle wakes, not only during
   purification), shown as an "Observed" row and distinct from the frame report time.
+
 - **Charging sessions carry their market-price cost.** Every recorded session is
   priced against the hourly spot-price series for the configured zone: recorded
   charging power is integrated per interval and priced at that interval's rate, then
@@ -2061,26 +2099,32 @@ practice are gone.
   - Diagnostic exports include every receipt's state, audit correlation IDs are
     written through to the SQLite command log, and the unified log records each
     lifecycle step.
+
 - **Shortcuts, deep links, and menu-bar actions target vehicles directly.** A command
   from Shortcuts or a `hisingen://` link resolves and prepares its named vehicle
   through one awaited boundary (up to 30 seconds) instead of a racy select-then-send,
   and reports "Command accepted; waiting for the vehicle to report the result"
   instead of claiming the outcome. The menu-bar lock and resume-schedule actions send
   against their own vehicle without switching the selection.
+
 - **Calendar preconditioning awaits the dispatch outcome.** A deferred command (for
   example, no session yet) leaves the occurrence scheduled for retry instead of being
   consumed, and a refused one is consumed with the reason recorded.
+
 - **Notifications no longer react to command echoes.** The optimistic display
   projection cannot advance transition baselines or post alerts, a pending Start
   Climate cannot trigger a stray "Climate stopped", and a climate stop now requires
   two consecutive vehicle-timestamped readings before notifying.
+
 - **Battery state of health is one auditable number:** the vehicle-reported range at
   100% charge divided by the configured WLTP range. Hisingen remembers the result and
   updates it only after another 100% reading. The multi-signal weighted estimate and
   its smoothing are gone. Range estimation needs to be in Standard and not dynamic in car for this to be as close to accurate as possible
+
 - **The vehicle state snapshot is organized into named clusters** (identity, energy
   and charging, exterior, health, and snapshot freshness) with the vocabulary
   documented in the glossary, replacing flat struct sprawl.
+
 - **The main SwiftUI screens now compose dedicated card views.** Vehicle status,
   remote controls, and Settings cards moved out of `VehicleTabView`,
   `ControlsTabView`, and `SettingsView`. Each extracted Settings card owns its local
@@ -2089,6 +2133,7 @@ practice are gone.
   gating now live beside their cards; command receipts, unavailable-feature states,
   registration badges, and charging-history export are reusable components. Card
   order, availability rules, command behavior, and displayed data are unchanged.
+
 - **The charging bar's motion is now a particle flow, not a loading sweep.** While
   the vehicle actively charges, the filled section of the battery gauge carries a few
   small GPU-driven light points (a Core Animation emitter, ~4 visible at a time) that
@@ -2101,6 +2146,7 @@ practice are gone.
   but paused vehicle stays fully static; and Reduce Motion (and the flat Polestar
   theme) disables all motion for a plain bar. SoC calculation and bar layout are
   unchanged.
+
 - **Tyre presentation on iTPMS vehicles (Polestar 2 and other warning-only cars)
   reflects an owner decision:** an unflagged reading *is* the all-clear the system can
   give, so quiet tyres now render green "OK" instead of a neutral "unknown", while a
@@ -2110,6 +2156,7 @@ practice are gone.
 - C3 host discovery requests the version-dependent document with the v2 Accept header
   first and falls back to v1 on any version-shape rejection, so a future removal of
   the v1 document cannot take vehicle telemetry discovery down with it.
+
 - **Custom menu-bar icon set.** The SF-Symbol glyphs are replaced by the bundled
   Hisingen artwork (`menubar-hisingen-*.png`, downscaled from the `icons/` originals):
   a car front that picks up a plug cable, charging bolt, completion checkmark,
