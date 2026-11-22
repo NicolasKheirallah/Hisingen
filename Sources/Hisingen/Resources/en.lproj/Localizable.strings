@@ -4082,3 +4082,6 @@
 "No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
 "Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+"Timers" = "Timers";
+"No timers reported." = "No timers reported.";
+"Save Current Location…" = "Save Current Location…";

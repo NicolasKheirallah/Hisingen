@@ -76,9 +76,15 @@ Depending on your preferences this can include:
 * icon-only status
 
 **Quick Controls** in the menu bar panel include windows, Charge Now / Resume Schedule and
-pre-cleaning, where the car supports them. The menu bar item has VoiceOver actions,
-custom tab icons have descriptive labels in every language, and the price curve reads out the hour
-and price.
+pre-cleaning, where the car supports them. The status item's menu also carries **Timers**,
+**Software Updates** and **Charge Locations**: pause or resume a charging window or cabin timer
+the car reports, install or schedule an update it has already downloaded, save the car's current
+position as a charge location, and switch optimised charging at a saved location. A row that
+cannot run is dimmed with the same reason the Controls tab shows, and every row is reachable with
+the keyboard and through the VoiceOver Actions rotor. Anything that needs a typed value, such as
+a new schedule or a charge target, stays in the Controls tab. The menu bar item has VoiceOver
+actions, custom tab icons have descriptive labels in every language, and the price curve reads out
+the hour and price.
 
 ### Launch at Login
 

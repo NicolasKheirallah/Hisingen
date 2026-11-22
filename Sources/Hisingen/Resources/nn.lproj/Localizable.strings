@@ -4065,3 +4065,6 @@
 "This vehicle service reports this value but cannot change it." = "Denne køyretøystenesta viser denne verdien, men kan ikkje endre han.";
 "No active Volvo subscription" = "Ingen aktiv Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Fjernkommandoar krev eit aktivt abonnement på denne bilen.";
+"Timers" = "Tidsur";
+"No timers reported." = "Ingen tidsur rapporterte.";
+"Save Current Location…" = "Lagre gjeldande posisjon…";
