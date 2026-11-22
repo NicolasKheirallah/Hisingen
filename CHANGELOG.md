@@ -241,6 +241,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A scheduled action that could not be sent is now tried again.** A Mac that woke just after the
+  scheduled minute, before the car's data had loaded, lost the occurrence: the timer was set for
+  the next day while the catch-up window lasted fifteen minutes. A deferred occurrence now retries
+  every minute inside that window, and a failed send, including one lost to the network, is
+  repeated up to three times before the occurrence is given up.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and

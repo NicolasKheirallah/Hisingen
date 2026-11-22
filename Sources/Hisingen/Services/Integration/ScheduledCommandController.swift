@@ -20,6 +20,15 @@ final class ScheduledCommandController {
     private let calendar: Calendar
     private let scheduler: AsyncTimerLoop
     private var evaluationInProgress = false
+    /// Failed sends of the occurrence in flight, by occurrence key. Cleared on success or when
+    /// the limit ends the retries.
+    private var failedSends: [String: Int] = [:]
+
+    /// How long to wait before trying a deferred or failed occurrence again.
+    static let retryInterval: TimeInterval = 60
+
+    /// How many failed sends of one occurrence end its retries.
+    static let maxFailedSends = 3
 
     /// Never sleep longer than this, so a missed wake notification still gets caught up within
     /// a few hours.
@@ -77,6 +86,7 @@ final class ScheduledCommandController {
         let schedules = preferences.scheduledCommands
         preferences.pruneScheduledCommandFiredOccurrences(keeping: Set(schedules.map(\.id)))
 
+        var retryNeeded = false
         for schedule in schedules {
             guard let fireDate = schedule.isDue(now: moment, calendar: calendar) else { continue }
             let key = ScheduledCommand.occurrenceKey(id: schedule.id, fireDate: fireDate, calendar: calendar)
@@ -85,22 +95,43 @@ final class ScheduledCommandController {
             // the next tick send the same occurrence again.
             preferences.setScheduledCommandFiredOccurrence(key, for: schedule.id)
             logger.info("Scheduled command \(schedule.command.identifier, privacy: .public) firing")
-            let result = await send(schedule.command)
-            if case .deferred = result {
-                // A pre-send deferral is safe to retry, so the occurrence goes back in the ledger
-                // and the next tick tries again inside the catch-up window.
+            switch await send(schedule.command) {
+            case .deferred:
+                // Nothing reached the car, so the occurrence goes back in the ledger and a short
+                // timer tries it again for as long as the catch-up window lasts.
                 preferences.setScheduledCommandFiredOccurrence(nil, for: schedule.id)
+                retryNeeded = true
+            case .failed:
+                // A failure includes a request lost to the network, and every action a schedule
+                // can carry is safe to repeat, so it is retried a few times before the
+                // occurrence is given up.
+                let failures = (failedSends[key] ?? 0) + 1
+                if failures < Self.maxFailedSends {
+                    failedSends[key] = failures
+                    preferences.setScheduledCommandFiredOccurrence(nil, for: schedule.id)
+                    retryNeeded = true
+                } else {
+                    failedSends[key] = nil
+                }
+            case .sent:
+                failedSends[key] = nil
+            case .alreadyQueued, .coolingDown:
+                break
             }
         }
-        scheduleNext(after: moment)
+        scheduleNext(after: max(moment, now()), retrying: retryNeeded)
     }
 
     /// Arms a single tick for the next due moment (or the idle ceiling when nothing is scheduled).
-    private func scheduleNext(after moment: Date) {
+    /// After a deferral or a failure the tick comes sooner, so the catch-up window is used.
+    private func scheduleNext(after moment: Date, retrying: Bool) {
         scheduler.cancel()
         let fallback = moment.addingTimeInterval(Self.maxIdleInterval)
         let next = nextFire(now: moment)?.date
-        let target = min(max(next ?? fallback, moment.addingTimeInterval(1)), fallback)
+        var target = min(max(next ?? fallback, moment.addingTimeInterval(1)), fallback)
+        if retrying {
+            target = min(target, moment.addingTimeInterval(Self.retryInterval))
+        }
         scheduler.scheduleOnce(after: max(1, target.timeIntervalSince(moment))) { [weak self] in
             await self?.evaluate()
         }

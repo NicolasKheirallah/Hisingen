@@ -119,6 +119,59 @@ struct ScheduledCommandControllerTests {
     }
 
     @Test
+    func aDeferredSendArmsAShortRetryInsteadOfWaitingForTomorrow() async {
+        let harness = ScheduleHarness(
+            now: moment(2026, 11, 18, 7, 30),
+            outcomes: [.deferred(reason: "Vehicle data is still loading.")])
+        harness.preferences.scheduledCommands = [
+            ScheduledCommand(hour: 7, minute: 30, command: .lock)
+        ]
+
+        await harness.controller.evaluate()
+        await settle()
+
+        let requested = await harness.timer.firstRequestedDelay()
+        #expect(requested == ScheduledCommandController.retryInterval)
+        harness.controller.stop()
+    }
+
+    @Test
+    func aFailedSendIsRetriedAFewTimesAndThenGivenUp() async {
+        let harness = ScheduleHarness(
+            now: moment(2026, 11, 18, 7, 30),
+            outcomes: Array(repeating: .failed(reason: "network"), count: 8))
+        harness.preferences.scheduledCommands = [
+            ScheduledCommand(hour: 7, minute: 30, command: .lock)
+        ]
+
+        for _ in 0..<(ScheduledCommandController.maxFailedSends + 2) {
+            await harness.controller.evaluate()
+        }
+        await settle()
+
+        #expect(harness.sent.count == ScheduledCommandController.maxFailedSends)
+        let requested = await harness.timer.firstRequestedDelay()
+        #expect(requested == ScheduledCommandController.retryInterval)
+        harness.controller.stop()
+    }
+
+    @Test
+    func aFailedSendThatLaterSucceedsIsNotRepeated() async {
+        let harness = ScheduleHarness(
+            now: moment(2026, 11, 18, 7, 30),
+            outcomes: [.failed(reason: "network"), .sent])
+        harness.preferences.scheduledCommands = [
+            ScheduledCommand(hour: 7, minute: 30, command: .lock)
+        ]
+
+        for _ in 0..<4 {
+            await harness.controller.evaluate()
+        }
+
+        #expect(harness.sent == [.lock, .lock])
+    }
+
+    @Test
     func theNextFireIsTomorrowOnceTodaysMomentHasPassed() {
         let harness = ScheduleHarness(now: moment(2026, 11, 18, 8, 0))
         harness.preferences.scheduledCommands = [
