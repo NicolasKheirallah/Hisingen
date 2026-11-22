@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Ce service véhicule indique cette valeur mais ne peut pas la modifier.";
 "No active Volvo subscription" = "Aucun abonnement Volvo actif";
 "Remote commands need an active subscription on this car." = "Les commandes à distance nécessitent un abonnement actif pour cette voiture.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Attendez %@ avant de renvoyer %@.";
+"%@ is already on its way to this vehicle." = "%@ est déjà en route vers ce véhicule.";
+"%@ is already queued for this vehicle." = "%@ est déjà en file d'attente pour ce véhicule.";
+"No vehicles are configured for this account." = "Aucun véhicule n'est configuré pour ce compte.";
+"%@ sent to %d vehicles." = "%@ envoyé à %d véhicules.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ envoyé à %d véhicules sur %d. Échec : %@.";
+"Every day" = "Tous les jours";
+"Weekdays" = "Jours de semaine";
+"Scheduled Actions" = "Actions planifiées";
+"Add scheduled action" = "Ajouter une action planifiée";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Exécute une action à l'heure et les jours choisis, sur le véhicule actif à ce moment-là. Seules les actions sans confirmation peuvent être planifiées.";
+"No scheduled actions yet." = "Aucune action planifiée pour l'instant.";
+"Enable %@" = "Activer %@";
+"Arrival & Departure" = "Arrivée et départ";
+"Add location trigger" = "Ajouter un déclencheur de lieu";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Compare la position que Hisingen lit déjà depuis la voiture aux lieux de recharge enregistrés. Aucune autorisation de service de localisation n'est demandée, et les déclencheurs ne s'exécutent que pendant que Hisingen tourne.";
+"No arrival or departure triggers yet." = "Aucun déclencheur d'arrivée ou de départ pour l'instant.";
+"Arrive" = "À l'arrivée";
+"Leave" = "Au départ";
+"Any saved charge location" = "N'importe quel lieu de recharge enregistré";
+"Send to Every Vehicle" = "Envoyer à tous les véhicules";
+"Send now" = "Envoyer maintenant";

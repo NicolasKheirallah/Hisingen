@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Este serviço do veículo indica este valor, mas não o pode alterar.";
 "No active Volvo subscription" = "Sem subscrição Volvo ativa";
 "Remote commands need an active subscription on this car." = "Os comandos remotos exigem uma subscrição ativa para este carro.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Aguarde %@ antes de enviar %@ novamente.";
+"%@ is already on its way to this vehicle." = "%@ já está a caminho deste veículo.";
+"%@ is already queued for this vehicle." = "%@ já está na fila para este veículo.";
+"No vehicles are configured for this account." = "Não há veículos configurados para esta conta.";
+"%@ sent to %d vehicles." = "%@ enviado para %d veículos.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ enviado para %d de %d veículos. Falhou: %@.";
+"Every day" = "Todos os dias";
+"Weekdays" = "Dias úteis";
+"Scheduled Actions" = "Ações agendadas";
+"Add scheduled action" = "Adicionar ação agendada";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Executa uma ação à hora e nos dias escolhidos, no veículo ativo nesse momento. Só é possível agendar ações que não exijam confirmação.";
+"No scheduled actions yet." = "Ainda não há ações agendadas.";
+"Enable %@" = "Ativar %@";
+"Arrival & Departure" = "Chegada e partida";
+"Add location trigger" = "Adicionar gatilho de local";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Compara a posição que a Hisingen já lê do carro com os locais de carregamento guardados. Não é pedida autorização dos Serviços de Localização, e os gatilhos só funcionam enquanto a Hisingen está em execução.";
+"No arrival or departure triggers yet." = "Ainda não há gatilhos de chegada ou partida.";
+"Arrive" = "Chega";
+"Leave" = "Parte";
+"Any saved charge location" = "Qualquer local de carregamento guardado";
+"Send to Every Vehicle" = "Enviar para todos os veículos";
+"Send now" = "Enviar agora";

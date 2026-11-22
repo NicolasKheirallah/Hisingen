@@ -4072,3 +4072,27 @@
 "This vehicle service reports this value but cannot change it." = "Denne køretøjstjeneste kan vise værdien, men ikke ændre den.";
 "No active Volvo subscription" = "Intet aktivt Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Fjernkommandoer kræver et aktivt abonnement på denne bil.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Vent %@, før du sender %@ igen.";
+"%@ is already on its way to this vehicle." = "%@ er allerede på vej til denne bil.";
+"%@ is already queued for this vehicle." = "%@ står allerede i kø til denne bil.";
+"No vehicles are configured for this account." = "Der er ingen biler opsat til denne konto.";
+"%@ sent to %d vehicles." = "%@ sendt til %d biler.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ sendt til %d af %d biler. Mislykkedes: %@.";
+"Every day" = "Hver dag";
+"Weekdays" = "Hverdage";
+"Scheduled Actions" = "Planlagte handlinger";
+"Add scheduled action" = "Tilføj planlagt handling";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Kører én handling på det tidspunkt og de dage, du vælger, mod den bil der er aktiv da. Kun handlinger, der ikke kræver bekræftelse, kan planlægges.";
+"No scheduled actions yet." = "Ingen planlagte handlinger endnu.";
+"Enable %@" = "Aktivér %@";
+"Arrival & Departure" = "Ankomst og afgang";
+"Add location trigger" = "Tilføj pladsudløser";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Sammenligner den position, Hisingen allerede læser fra bilen, med de ladepladser, du har gemt. Der bedes ikke om tilladelse til Placeringstjenester, og udløsere kører kun, mens Hisingen kører.";
+"No arrival or departure triggers yet." = "Ingen ankomst- eller afgangsudløsere endnu.";
+"Arrive" = "Ankommer";
+"Leave" = "Forlader";
+"Any saved charge location" = "Enhver gemt ladeplads";
+"Send to Every Vehicle" = "Send til alle biler";
+"Send now" = "Send nu";

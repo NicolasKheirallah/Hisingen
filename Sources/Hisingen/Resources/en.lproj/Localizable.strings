@@ -4082,3 +4082,27 @@
 "No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
 "Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Wait %@ before sending %@ again.";
+"%@ is already on its way to this vehicle." = "%@ is already on its way to this vehicle.";
+"%@ is already queued for this vehicle." = "%@ is already queued for this vehicle.";
+"No vehicles are configured for this account." = "No vehicles are configured for this account.";
+"%@ sent to %d vehicles." = "%@ sent to %d vehicles.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ sent to %d of %d vehicles. Failed: %@.";
+"Every day" = "Every day";
+"Weekdays" = "Weekdays";
+"Scheduled Actions" = "Scheduled Actions";
+"Add scheduled action" = "Add scheduled action";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled.";
+"No scheduled actions yet." = "No scheduled actions yet.";
+"Enable %@" = "Enable %@";
+"Arrival & Departure" = "Arrival & Departure";
+"Add location trigger" = "Add location trigger";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running.";
+"No arrival or departure triggers yet." = "No arrival or departure triggers yet.";
+"Arrive" = "Arrive";
+"Leave" = "Leave";
+"Any saved charge location" = "Any saved charge location";
+"Send to Every Vehicle" = "Send to Every Vehicle";
+"Send now" = "Send now";

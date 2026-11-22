@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Questo servizio del veicolo riporta questo valore ma non può modificarlo.";
 "No active Volvo subscription" = "Nessun abbonamento Volvo attivo";
 "Remote commands need an active subscription on this car." = "I comandi remoti richiedono un abbonamento attivo per questa vettura.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Attendi %@ prima di inviare di nuovo %@.";
+"%@ is already on its way to this vehicle." = "%@ è già in viaggio verso questo veicolo.";
+"%@ is already queued for this vehicle." = "%@ è già in coda per questo veicolo.";
+"No vehicles are configured for this account." = "Nessun veicolo è configurato per questo account.";
+"%@ sent to %d vehicles." = "%@ inviato a %d veicoli.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ inviato a %d veicoli su %d. Non riuscito: %@.";
+"Every day" = "Ogni giorno";
+"Weekdays" = "Giorni feriali";
+"Scheduled Actions" = "Azioni pianificate";
+"Add scheduled action" = "Aggiungi azione pianificata";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Esegue un'azione all'ora e nei giorni scelti, sul veicolo attivo in quel momento. Solo le azioni che non richiedono conferma possono essere pianificate.";
+"No scheduled actions yet." = "Nessuna azione pianificata.";
+"Enable %@" = "Attiva %@";
+"Arrival & Departure" = "Arrivo e partenza";
+"Add location trigger" = "Aggiungi attivatore di posizione";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Confronta la posizione che Hisingen legge già dall'auto con i luoghi di ricarica salvati. Non viene richiesta l'autorizzazione ai Servizi di localizzazione e gli attivatori funzionano solo mentre Hisingen è in esecuzione.";
+"No arrival or departure triggers yet." = "Nessun attivatore di arrivo o partenza.";
+"Arrive" = "Arriva";
+"Leave" = "Parte";
+"Any saved charge location" = "Qualsiasi luogo di ricarica salvato";
+"Send to Every Vehicle" = "Invia a tutti i veicoli";
+"Send now" = "Invia ora";

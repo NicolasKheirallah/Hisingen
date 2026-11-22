@@ -157,8 +157,16 @@ extension AppDelegate {
             updateController.applyConfiguration()
         case .checkForUpdates:
             updateController.checkNow()
+        case .broadcastCommand(let command):
+            Task { @MainActor [weak self] in
+                await self?.runFleetBroadcast(command)
+            }
         case .automation:
             calendarPreconditioning.reload()
+            scheduledCommands.reload()
+            // The reader may have changed what a trigger watches; the next snapshot should
+            // establish where the car is rather than compare against a location they removed.
+            locationTriggers.resetObservations()
         }
         render()
     }

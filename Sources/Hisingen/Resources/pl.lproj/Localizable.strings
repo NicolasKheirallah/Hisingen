@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Ta usługa pojazdu zgłasza tę wartość, ale nie może jej zmienić.";
 "No active Volvo subscription" = "Brak aktywnej subskrypcji Volvo";
 "Remote commands need an active subscription on this car." = "Polecenia zdalne wymagają aktywnej subskrypcji dla tego samochodu.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Odczekaj %@, zanim wyślesz %@ ponownie.";
+"%@ is already on its way to this vehicle." = "%@ jest już w drodze do tego pojazdu.";
+"%@ is already queued for this vehicle." = "%@ jest już w kolejce dla tego pojazdu.";
+"No vehicles are configured for this account." = "Dla tego konta nie skonfigurowano żadnych pojazdów.";
+"%@ sent to %d vehicles." = "Wysłano %@ do %d pojazdów.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "Wysłano %@ do %d z %d pojazdów. Nie udało się: %@.";
+"Every day" = "Codziennie";
+"Weekdays" = "Dni robocze";
+"Scheduled Actions" = "Zaplanowane działania";
+"Add scheduled action" = "Dodaj zaplanowane działanie";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Wykonuje jedną akcję o wybranej godzinie i w wybrane dni na pojeździe, który jest wtedy aktywny. Zaplanować można tylko działania niewymagające potwierdzenia.";
+"No scheduled actions yet." = "Nie ma jeszcze zaplanowanych działań.";
+"Enable %@" = "Włącz %@";
+"Arrival & Departure" = "Przyjazd i wyjazd";
+"Add location trigger" = "Dodaj wyzwalacz lokalizacji";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Porównuje pozycję, którą Hisingen już odczytuje z auta, z zapisanymi miejscami ładowania. Aplikacja nie prosi o zgodę na Usługi lokalizacji, a wyzwalacze działają tylko, gdy Hisingen jest uruchomiony.";
+"No arrival or departure triggers yet." = "Nie ma jeszcze wyzwalaczy przyjazdu ani wyjazdu.";
+"Arrive" = "Przyjeżdża";
+"Leave" = "Odjeżdża";
+"Any saved charge location" = "Dowolne zapisane miejsce ładowania";
+"Send to Every Vehicle" = "Wyślij do wszystkich pojazdów";
+"Send now" = "Wyślij teraz";

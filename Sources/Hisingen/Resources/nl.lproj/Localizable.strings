@@ -4073,3 +4073,27 @@
 "This vehicle service reports this value but cannot change it." = "Deze voertuigdienst toont deze waarde, maar kan die niet wijzigen.";
 "No active Volvo subscription" = "Geen actief Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Opdrachten op afstand vereisen een actief abonnement voor deze auto.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Wacht %@ voordat je %@ opnieuw verstuurt.";
+"%@ is already on its way to this vehicle." = "%@ is al onderweg naar dit voertuig.";
+"%@ is already queued for this vehicle." = "%@ staat al in de wachtrij voor dit voertuig.";
+"No vehicles are configured for this account." = "Er zijn geen voertuigen ingesteld voor dit account.";
+"%@ sent to %d vehicles." = "%@ verzonden naar %d voertuigen.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ verzonden naar %d van %d voertuigen. Mislukt: %@.";
+"Every day" = "Elke dag";
+"Weekdays" = "Werkdagen";
+"Scheduled Actions" = "Geplande acties";
+"Add scheduled action" = "Geplande actie toevoegen";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Voert één actie uit op de tijd en dagen die je kiest, op het voertuig dat dan actief is. Alleen acties zonder bevestiging kunnen worden gepland.";
+"No scheduled actions yet." = "Nog geen geplande acties.";
+"Enable %@" = "%@ inschakelen";
+"Arrival & Departure" = "Aankomst en vertrek";
+"Add location trigger" = "Locatietrigger toevoegen";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Vergelijkt de positie die Hisingen al uit de auto leest met de opgeslagen laadlocaties. Er wordt geen toestemming voor Locatievoorzieningen gevraagd, en triggers werken alleen terwijl Hisingen draait.";
+"No arrival or departure triggers yet." = "Nog geen aankomst- of vertrektriggers.";
+"Arrive" = "Komt aan";
+"Leave" = "Vertrekt";
+"Any saved charge location" = "Elke opgeslagen laadlocatie";
+"Send to Every Vehicle" = "Naar alle voertuigen sturen";
+"Send now" = "Nu sturen";

@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Denne køyretøystenesta viser denne verdien, men kan ikkje endre han.";
 "No active Volvo subscription" = "Ingen aktiv Volvo-abonnement";
 "Remote commands need an active subscription on this car." = "Fjernkommandoar krev eit aktivt abonnement på denne bilen.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Vent %@ før du sender %@ igjen.";
+"%@ is already on its way to this vehicle." = "%@ er allereie på veg til denne bilen.";
+"%@ is already queued for this vehicle." = "%@ står allereie i kø for denne bilen.";
+"No vehicles are configured for this account." = "Ingen bilar er konfigurerte for denne kontoen.";
+"%@ sent to %d vehicles." = "%@ sendt til %d bilar.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ sendt til %d av %d bilar. Mislykkast: %@.";
+"Every day" = "Kvar dag";
+"Weekdays" = "Kvardagar";
+"Scheduled Actions" = "Planlagde handlingar";
+"Add scheduled action" = "Legg til planlagd handling";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Køyrer éi handling på tidspunktet og dagane du vel, mot bilen som er aktiv då. Berre handlingar som ikkje krev stadfesting kan planleggjast.";
+"No scheduled actions yet." = "Ingen planlagde handlingar enno.";
+"Enable %@" = "Aktiver %@";
+"Arrival & Departure" = "Kome og avreise";
+"Add location trigger" = "Legg til stadutløysar";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Samanliknar posisjonen Hisingen allereie les frå bilen med ladestadene du har lagra. Ingen løyve for Stadtenester blir bedt om, og utløysarar køyrer berre medan Hisingen køyrer.";
+"No arrival or departure triggers yet." = "Ingen kome- eller avreiseutløysarar enno.";
+"Arrive" = "Kjem";
+"Leave" = "Dreg";
+"Any saved charge location" = "Kvar som helst lagra ladestad";
+"Send to Every Vehicle" = "Send til alle bilar";
+"Send now" = "Send no";

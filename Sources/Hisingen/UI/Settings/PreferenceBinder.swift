@@ -19,6 +19,8 @@ enum SettingsChange {
     case updater
     case checkForUpdates
     case automation
+    /// One command sent to every configured vehicle, from the Automations card.
+    case broadcastCommand(RemoteCommand)
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case polestarCommandAuthorizationForceLogin

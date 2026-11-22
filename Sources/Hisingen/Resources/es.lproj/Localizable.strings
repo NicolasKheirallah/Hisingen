@@ -4065,3 +4065,27 @@
 "This vehicle service reports this value but cannot change it." = "Este servicio del vehículo indica este valor, pero no puede cambiarlo.";
 "No active Volvo subscription" = "Sin suscripción de Volvo activa";
 "Remote commands need an active subscription on this car." = "Los comandos remotos requieren una suscripción activa para este coche.";
+
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Espera %@ antes de volver a enviar %@.";
+"%@ is already on its way to this vehicle." = "%@ ya está en camino a este vehículo.";
+"%@ is already queued for this vehicle." = "%@ ya está en cola para este vehículo.";
+"No vehicles are configured for this account." = "No hay vehículos configurados para esta cuenta.";
+"%@ sent to %d vehicles." = "%@ enviado a %d vehículos.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ enviado a %d de %d vehículos. Falló: %@.";
+"Every day" = "Todos los días";
+"Weekdays" = "Días laborables";
+"Scheduled Actions" = "Acciones programadas";
+"Add scheduled action" = "Añadir acción programada";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Ejecuta una acción a la hora y los días que elijas, sobre el vehículo activo en ese momento. Solo se pueden programar acciones que no pidan confirmación.";
+"No scheduled actions yet." = "Aún no hay acciones programadas.";
+"Enable %@" = "Activar %@";
+"Arrival & Departure" = "Llegada y salida";
+"Add location trigger" = "Añadir desencadenante de ubicación";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Compara la posición que Hisingen ya lee del coche con los lugares de carga guardados. No se solicita permiso de Localización y los desencadenantes solo se ejecutan mientras Hisingen está abierto.";
+"No arrival or departure triggers yet." = "Aún no hay desencadenantes de llegada o salida.";
+"Arrive" = "Llega";
+"Leave" = "Sale";
+"Any saved charge location" = "Cualquier lugar de carga guardado";
+"Send to Every Vehicle" = "Enviar a todos los vehículos";
+"Send now" = "Enviar ahora";

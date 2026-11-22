@@ -7,6 +7,16 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Automations.** Settings → Automations gains scheduled actions, arrival and departure triggers,
+  and a one-tap broadcast to every configured vehicle. A scheduled action runs once per occurrence
+  on the days you pick, catches up a tick that lands late, and skips rather than replays a schedule
+  missed by hours. Arrival and departure triggers compare the position Hisingen already reads from
+  the car with the saved charge locations, so no Location Services permission is asked for. Every
+  unattended send crosses one queue, so two triggers firing together do not collide, and a repeat
+  inside a per-command cooldown is refused with the wait in the message. Only actions that need no
+  confirmation can be scheduled or triggered; everything else stays a deliberate tap.
+### Added
+
 ### Added
 
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging
