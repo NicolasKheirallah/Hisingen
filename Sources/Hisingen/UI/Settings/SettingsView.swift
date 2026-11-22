@@ -216,10 +216,13 @@ struct SettingsView: View {
         case .general:
             SettingsDisplayCard(binder: binder)
         case .electricity:
-            if let homeCharging {
-                SettingsElectricityWithSupplier(model: homeCharging, binder: binder, state: state)
-            } else {
-                SettingsElectricityCard(binder: binder, state: state)
+            VStack(alignment: .leading, spacing: HisingenTheme.sectionSpacing) {
+                if let homeCharging {
+                    SettingsElectricityWithSupplier(model: homeCharging, binder: binder, state: state)
+                } else {
+                    SettingsElectricityCard(binder: binder, state: state)
+                }
+                SettingsChargingFeesCard(binder: binder, pairings: homeCharging?.pairings ?? [])
             }
         case .plannerSettings:
             let action: (() -> Void)? = onNavigateToPlan.map { navigate in { navigate(.controlsRoutines) } }

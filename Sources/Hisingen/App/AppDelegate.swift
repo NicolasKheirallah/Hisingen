@@ -47,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var commandCoordinator: CommandCoordinator!
     var calendarPreconditioning: CalendarPreconditioningController!
     var chargingPlannerController: ChargingPlannerController!
+    /// Watches the market price against the reader's alert level, independently of the planner.
+    var priceAlertController: PriceAlertController!
     /// The single lane every unattended command crosses: queue, per-command cooldown, dispatch.
     var automationDispatcher: AutomationCommandDispatcher!
     /// Fires the reader's scheduled actions.
@@ -228,6 +230,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
                 return await self.stopPlannerCharging(targetVIN: vin)
             }
         )
+        priceAlertController = PriceAlertController(
+            preferences: preferences,
+            notifier: notifier,
+            priceSource: PlannerPriceProvider.shared
+        )
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
@@ -294,6 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             garageScanner.startLoop()
             calendarPreconditioning.start()
             chargingPlannerController.reload()
+            priceAlertController.reload()
             scheduledCommands.start()
             recurringReports.start()
             homeCharging.start()
@@ -322,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         scheduledCommands.stop()
         recurringReports.stop()
         chargingPlannerController.stop()
+        priceAlertController.stop()
         garageScanner.stop()
         vehicleSession.stop()
 
