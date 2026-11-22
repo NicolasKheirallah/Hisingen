@@ -305,7 +305,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   clamped to a fixed 6–32 A even though the Home Assistant `number` entity publishes its own
   minimum and maximum, so a 16 A charger was sent values it would reject. Hisingen now narrows
   the fixed range to the entity's `min` and `max` before it sends, and keeps the fixed range when
-  the entity gives none or gives nonsense.
+  the entity gives none or gives nonsense. The stepper on the charger card uses the same range, so
+  it no longer offers values that are cut down on the way out, and the write reuses the entity the
+  poll already read instead of fetching it again.
 
 - **A scheduled or triggered climate start now uses the climate settings you saved.** The action
   a schedule or a location trigger stores carries no temperature and no seat or steering-wheel

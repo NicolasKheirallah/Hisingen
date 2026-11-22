@@ -136,8 +136,8 @@ struct HomeChargerSection: View {
         if input.pairing.entities.currentLimitNumber != nil {
             let reported = input.telemetry.currentLimitAmps.flatMap { $0.value > 0 ? Int($0.value.rounded()) : nil }
             HomeChargerCurrentLimitRow(
-                initialAmps: reported ?? HomeChargingModel.chargerCurrentLimitRange.lowerBound,
-                range: HomeChargingModel.chargerCurrentLimitRange,
+                initialAmps: reported ?? model.currentLimitRange.lowerBound,
+                range: model.currentLimitRange,
                 apply: { amps in await model.setChargerCurrentLimit(amps) }
             )
         }

@@ -1367,6 +1367,18 @@ final class HomeChargingModel: ObservableObject {
         min(max(amps, range.lowerBound), range.upperBound)
     }
 
+    /// What the paired charger's current-limit entity accepts right now: the entity's own range
+    /// inside the outer bound, or the outer bound until the poll has read the entity.
+    var currentLimitRange: ClosedRange<Int> {
+        Self.currentLimitRange(in: table, entity: pairing?.entities.currentLimitNumber)
+    }
+
+    static func currentLimitRange(in table: [String: HAEntityState], entity: String?) -> ClosedRange<Int> {
+        entity.flatMap { table[$0] }
+            .map { currentLimitRange(fromEntityAttributes: $0.attributes) }
+            ?? chargerCurrentLimitRange
+    }
+
     /// The outer bound narrowed to what the charger's own `number` entity accepts. Home Assistant
     /// publishes that as `min` and `max` attributes; a missing, non-numeric or contradictory pair
     /// leaves the outer bound alone.
@@ -1396,10 +1408,13 @@ final class HomeChargingModel: ObservableObject {
             return L10n.text("Hisingen is not connected to Home Assistant yet.")
         }
         // The entity's own range is the authority; the outer bound only caps what is ever sent.
-        // A failed read is not a failed write, so it falls back to the outer bound.
-        let entityRange = ((try? await client.state(of: entity)) ?? nil)
-            .map { Self.currentLimitRange(fromEntityAttributes: $0.attributes) }
-        let clamped = Self.clampedCurrentLimit(amps, within: entityRange ?? Self.chargerCurrentLimitRange)
+        // The poll already holds the entity, so the write needs no read of its own. Without it, a
+        // failed read is not a failed write, and the outer bound applies.
+        var range = currentLimitRange
+        if table[entity] == nil, let state = (try? await client.state(of: entity)) ?? nil {
+            range = Self.currentLimitRange(fromEntityAttributes: state.attributes)
+        }
+        let clamped = Self.clampedCurrentLimit(amps, within: range)
         do {
             _ = try await client.callService(
                 domain: "number",
