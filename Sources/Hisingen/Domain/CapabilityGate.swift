@@ -62,7 +62,8 @@ struct CapabilityGate: Sendable {
         polestarConnectionMode: PolestarConnectionMode,
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool,
-        volvoRestrictedScopesEnabled: Bool = true
+        volvoRestrictedScopesEnabled: Bool = true,
+        volvoGrantedScopes: Set<String> = []
     ) -> CommandAvailability {
         evaluate(
             command: command,
@@ -70,7 +71,8 @@ struct CapabilityGate: Sendable {
             commandCatalog: ProviderCommandCatalog(brand: brand, polestarConnectionMode: polestarConnectionMode),
             enabledFeatures: enabledFeatures,
             commandInProgress: commandInProgress,
-            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled
+            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled,
+            volvoGrantedScopes: volvoGrantedScopes
         )
     }
 
@@ -80,7 +82,8 @@ struct CapabilityGate: Sendable {
         commandCatalog: ProviderCommandCatalog,
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool,
-        volvoRestrictedScopesEnabled: Bool = true
+        volvoRestrictedScopesEnabled: Bool = true,
+        volvoGrantedScopes: Set<String> = []
     ) -> CommandAvailability {
         Self.evaluate(
             command: command,
@@ -88,7 +91,8 @@ struct CapabilityGate: Sendable {
             commandCatalog: commandCatalog,
             enabledFeatures: enabledFeatures,
             commandInProgress: commandInProgress,
-            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled
+            volvoRestrictedScopesEnabled: volvoRestrictedScopesEnabled,
+            volvoGrantedScopes: volvoGrantedScopes
         )
     }
 
@@ -98,7 +102,8 @@ struct CapabilityGate: Sendable {
         commandCatalog: ProviderCommandCatalog,
         enabledFeatures: Set<AppFeature>,
         commandInProgress: Bool,
-        volvoRestrictedScopesEnabled: Bool
+        volvoRestrictedScopesEnabled: Bool,
+        volvoGrantedScopes: Set<String>
     ) -> CommandAvailability {
         guard enabledFeatures.contains(command.feature) else { return .disabledBySettings }
         guard commandCatalog.implements(command) else {
@@ -109,11 +114,16 @@ struct CapabilityGate: Sendable {
             return .unimplementedByProvider()
         }
         // Volvo's lock/unlock/locate, honk/flash and engine writes need the restricted
-        // ("Approved") scope tier on the signed-in token; without it the provider would
+        // ("Approved") scopes on the signed-in token; without them the provider would
         // reject the command after the fact. Engine start is easy to miss because it shares
         // `.remoteClimate` with the unrestricted cabin climate command, so this asks the
         // command itself rather than its feature. One shared precondition keeps every entry
         // point's answer identical.
+        //
+        // Grants are per scope since the token echo started being recorded: a car whose
+        // application lacks `location:read` approval may still carry `conve:lock`. A
+        // recorded set answers per scope; an empty set (a session from before the echo was
+        // recorded) falls back to the whole opt-in flag, which is what those sessions had.
         let requiresVolvoApproval: Bool = {
             switch command {
             case .lock, .lockReducedGuard, .unlock,
@@ -124,8 +134,13 @@ struct CapabilityGate: Sendable {
                 return false
             }
         }()
-        if commandCatalog.brand == .volvo, !volvoRestrictedScopesEnabled, requiresVolvoApproval {
-            return .requiresAccountApproval
+        if commandCatalog.brand == .volvo, requiresVolvoApproval {
+            // A command the mapping does not know yet has no scope to ask about, so it
+            // takes the flag answer rather than slipping past the approval check.
+            let granted = VolvoAPI.requiredScope(for: command).flatMap {
+                VolvoAPI.hasGranted($0, in: volvoGrantedScopes)
+            } ?? volvoRestrictedScopesEnabled
+            if !granted { return .requiresAccountApproval }
         }
         if commandCatalog.brand == .polestar, state.otaCapabilities?.honkFlashMode?.permits(command) == false {
             return .unsupportedByVehicle

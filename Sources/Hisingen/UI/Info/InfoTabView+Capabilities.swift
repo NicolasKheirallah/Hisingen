@@ -258,3 +258,90 @@ extension InfoTabView {
         })
     }
 }
+
+// MARK: - Provider connection inspector
+
+extension InfoTabView {
+    /// What the active connection was granted, and which readings the provider answered with a
+    /// status instead of a value. A Volvo token response states the granted scopes; a portal
+    /// refresh states which channel served it. Both travel on `state.providerReport`, so the
+    /// card explains the same snapshot the rest of the tab is showing.
+    var providerConnectionInspectorCard: some View {
+        guard let report = state.providerReport else { return AnyView(EmptyView()) }
+        let scopeRows = report.grants.filter { $0.state != .notRequested }
+        let degraded = report.degradedReadings
+        let fallbackNote = report.connectionNote
+            ?? (report.servedByFallback
+                ? L10n.text("The fallback connection served this refresh.")
+                : nil)
+
+        return AnyView(Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeader(symbol: "person.badge.key",
+                           title: L10n.text("Provider access"),
+                           color: HisingenTheme.chartInfo)
+                Text(report.hasScopeEvidence
+                     ? L10n.text("Scopes this connection was granted, and readings the provider answered with a status.")
+                     : L10n.text("No scope grant has been recorded yet. Sign in again to record what the provider granted."))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 6) {
+                    KVRow(L10n.text("Connection"),
+                          "\(report.channel.displayName) · \(report.providerName)",
+                          symbol: "network")
+                    if let granted = report.grantedScopes {
+                        KVRow(L10n.text("Granted scopes"), granted.joined(separator: " "),
+                              symbol: "checkmark.seal")
+                    }
+                    if !report.requestedScopes.isEmpty {
+                        KVRow(L10n.text("Requested scopes"),
+                              report.requestedScopes.joined(separator: " "),
+                              symbol: "paperplane")
+                    }
+                    KVRow(L10n.text("Domains this connection can read"),
+                          report.supportedDomains.map(\.title).joined(separator: ", "),
+                          symbol: "point.3.connected.trianglepath.dotted")
+                    if let fallbackNote {
+                        KVRow(L10n.text("Fallback"),
+                              fallbackNote,
+                              symbol: "arrow.triangle.swap")
+                    }
+                }
+
+                if !scopeRows.isEmpty {
+                    DisclosureGroup(L10n.text("Scopes by feature")) {
+                        VStack(spacing: 6) {
+                            ForEach(scopeRows, id: \.id) { grant in
+                                KVRow(grant.domain.title, grant.state.label,
+                                      symbol: grant.state.symbolName,
+                                      info: grant.scopes.joined(separator: " · "))
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
+                    .disclosureGroupStyle(WholeRowDisclosureStyle())
+                }
+
+                if !degraded.isEmpty {
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    Text(L10n.text("Readings the provider answered with a status"))
+                        .hisType(.label, weight: .semibold)
+                    Text(L10n.text("These are the provider's own status and reason, not a generic unavailability."))
+                        .hisType(.micro)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(spacing: 6) {
+                        ForEach(degraded, id: \.id) { reading in
+                            KVRow(reading.label,
+                                  reading.providerText ?? L10n.text("Unknown"),
+                                  symbol: "exclamationmark.triangle",
+                                  info: reading.field)
+                        }
+                    }
+                }
+            }
+        })
+    }
+}

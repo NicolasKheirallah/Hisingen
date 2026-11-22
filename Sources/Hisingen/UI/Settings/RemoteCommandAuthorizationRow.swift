@@ -124,6 +124,26 @@ struct SettingsRemoteAuthorizationCard: View {
         }
     }
 
+    /// Per-scope status for the current session: what the token echo actually granted.
+    /// Empty recorded set (a session from before grants were recorded) shows nothing, so
+    /// the row keeps its pre-per-scope look instead of reporting an unknown as "none".
+    private var grantedPermissionsSummary: String? {
+        let granted = Set(prefs.volvoGrantedScopes)
+        guard !granted.isEmpty else { return nil }
+        let labels: [(scope: String, label: String)] = [
+            ("conve:lock", L10n.text("Lock")),
+            ("conve:unlock", L10n.text("Unlock")),
+            ("conve:engine_start_stop", L10n.text("Engine start")),
+            ("conve:honk_flash", L10n.text("Honk & Flash")),
+            ("location:read", L10n.text("Location"))
+        ]
+        let grantedLabels = labels.filter { granted.contains($0.scope) }.map { $0.label }
+        guard !grantedLabels.isEmpty else {
+            return L10n.text("None of the approved permissions are granted on the current session.")
+        }
+        return L10n.format("Granted on the current session: %@", grantedLabels.joined(separator: ", "))
+    }
+
     private var volvoPermissions: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -134,6 +154,13 @@ struct SettingsRemoteAuthorizationCard: View {
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.secondary)
+                if let summary = grantedPermissionsSummary {
+                    Text(summary)
+                        .hisType(.micro)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Toggle("", isOn: Binding(

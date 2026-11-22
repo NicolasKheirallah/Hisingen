@@ -143,6 +143,14 @@ extension PreferencesStore {
         get { d.bool(forKey: "volvo_restricted_scopes_enabled") }
         set { d.set(newValue, forKey: "volvo_restricted_scopes_enabled") }
     }
+    /// The scopes Volvo's identity provider actually granted on the current session, echoed
+    /// by every token response's `scope` field. Empty means the session predates the
+    /// recording (or there is no session), so consumers fall back to the opt-in flag above
+    /// instead of trusting per-scope answers that were never observed.
+    var volvoGrantedScopes: [String] {
+        get { d.stringArray(forKey: "volvo_granted_scopes") ?? [] }
+        set { d.set(newValue, forKey: "volvo_granted_scopes") }
+    }
     private func vinKey(for brand: VehicleBrand) -> String { brand == .volvo ? "volvo_vin" : "polestar_vin" }
     var vin: String { get { d.string(forKey: vinKey(for: activeBrand)) ?? "" } set { d.set(newValue, forKey: vinKey(for: activeBrand)); cachedHasResumableSession[activeBrand] = nil; syncAppThemeStorageKey() } }
     func vin(for brand: VehicleBrand) -> String { d.string(forKey: vinKey(for: brand)) ?? "" }

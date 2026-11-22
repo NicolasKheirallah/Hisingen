@@ -28,6 +28,11 @@ extension VolvoAPI {
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
         let needsFuel = Self.needsFuelRead(powertrain: powertrain, fuelType: details.fuelType)
+        // A session recorded without `location:read` gets a hard 403 from /location/, and
+        // the optional() wrapper would stand the endpoint down for an hour on every answer.
+        // Skipping the read entirely leaves the map card to its existing "no location"
+        // handling and keeps the request off the wire. Nil (nothing recorded) still reads.
+        let locationScopeGranted = await hasGranted("location:read")
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
             try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel", scope: .vehicle(vin))
         }
@@ -57,7 +62,7 @@ extension VolvoAPI {
             enabled: needsStatistics, key: "statistics", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics", scope: .vehicle(vin)) }
         async let locationTask: VolvoLocationDTO? = optional(
-            enabled: features.contains(.vehicleLocation), key: "location", vin: vin
+            enabled: features.contains(.vehicleLocation) && locationScopeGranted != false, key: "location", vin: vin
         ) { try await self.get("/location/v1/vehicles/\(vin)/location", scope: .vehicle(vin)) }
         async let brakesTask: VolvoBrakesDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin
@@ -111,6 +116,12 @@ extension VolvoAPI {
         let commandAccessibility = try await commandAccessibilityTask
         let commands = try await commandsTask
         let hasPremiumSubscription = await subscriptionTask
+        // The provider names why a wrapped field has no value. Collect those answers once per
+        // sweep; the capability inspector shows them, and a domain whose every reading failed
+        // is marked unavailable with the provider's own reason rather than a generic one.
+        let degradedReadings = VolvoScopeCatalog.degradedReadings(
+            energy: energy, availability: commandAccessibility,
+            doors: doors, windows: windows, odometer: odometer)
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -177,6 +188,12 @@ extension VolvoAPI {
         // live), so `.vehicleWeather` is always unavailable for this provider.
         unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
         unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
+        let energyAnsweredNothing = energy != nil
+            && energy?.batteryChargeLevel?.value == nil
+            && energy?.rangeKm == nil
+            && energy?.chargingStateValue == nil
+        unavailable.mark(.chargingDetails, when: features.contains(.chargingDetails)
+                         && energyAnsweredNothing && !degradedReadings.isEmpty)
 
         var openings: [OpeningReading] = []
         let doorFields: [(VehicleOpening, String?)] = [
@@ -484,6 +501,21 @@ extension VolvoAPI {
             .compactMap { $0 }.min()
         state.freshness.readingDates[.odometer] = odometer?.odometer?.updatedAt
         state.freshness.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
+        // Scope evidence is persisted with the grant; the refresh only reads it back. Attaching
+        // it here keeps the inspector's answer travelling with the snapshot the reader is
+        // looking at, including one restored from the offline copy.
+        let scopeRecord = await MainActor.run {
+            (requested: preferences.volvoRequestedScopes,
+             granted: preferences.volvoGrantedScopes.isEmpty ? nil : preferences.volvoGrantedScopes,
+             tier: preferences.volvoGrantTier.flatMap(VolvoAPI.ScopeTier.init(rawValue:)),
+             recordedAt: preferences.volvoScopeGrantRecordedAt)
+        }
+        state.providerReport = VolvoScopeCatalog.report(
+            requestedScopes: scopeRecord.requested,
+            grantedScopes: scopeRecord.granted,
+            tier: scopeRecord.tier,
+            recordedAt: scopeRecord.recordedAt,
+            degradedReadings: degradedReadings)
         return state
     }
 

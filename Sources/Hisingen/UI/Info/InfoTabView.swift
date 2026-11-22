@@ -406,8 +406,16 @@ struct InfoTabView: View {
         add(.factoryBuild, factoryBuildCard)
         if state.otaCapabilities != nil, !state.isVolvo {
             add(.capabilities, capabilitySection(capabilityInspectorCard))
-        } else if !capabilityProfileEntries.positive.isEmpty || !capabilityProfileEntries.negative.isEmpty {
-            add(.capabilities, capabilitySection(vehicleCapabilityCard))
+        } else if !capabilityProfileEntries.positive.isEmpty
+                    || !capabilityProfileEntries.negative.isEmpty
+                    || state.providerReport != nil {
+            // The connection inspector explains what the account was granted and why a field
+            // came back without a value. It belongs with the capability card because both
+            // answer the same question, and it must survive a snapshot that has no profile rows.
+            add(.capabilities, capabilitySection(VStack(alignment: .leading, spacing: 6) {
+                vehicleCapabilityCard
+                providerConnectionInspectorCard
+            }))
         }
         // Present from the first paint, with a placeholder until the read lands and an explicit
         // empty state after it, rather than appearing only once it has something to show.

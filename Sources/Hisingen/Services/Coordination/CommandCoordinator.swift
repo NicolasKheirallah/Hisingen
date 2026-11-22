@@ -187,7 +187,8 @@ final class CommandCoordinator {
             polestarConnectionMode: preferences.polestarConnectionMode,
             enabledFeatures: preferences.features.enabled,
             commandInProgress: isInProgress || isAuthorizing,
-            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled
+            volvoRestrictedScopesEnabled: preferences.volvoRestrictedScopesEnabled,
+            volvoGrantedScopes: Set(preferences.volvoGrantedScopes)
         )
         guard availability == .available else {
             if availability == .unavailableUntilRefresh, origin != .automation {

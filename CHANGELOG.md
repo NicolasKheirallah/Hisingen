@@ -55,6 +55,15 @@ All notable changes to Hisingen are documented in this file. The project follows
   inside a per-command cooldown is refused with the wait in the message. Only actions that need no
   confirmation can be scheduled or triggered; everything else stays a deliberate tap.
 ### Added
+- **Volvo access, stated honestly.** The Info tab's capability section gains a provider access
+  inspector: it shows which Volvo scopes the token response granted, which requested scopes were
+  refused or never asked for, and, per feature, the provider's own `status` and
+  `unavailableReason` when a field came back without a value instead of a generic unavailable.
+  Developer Portal (`dataPortal`) mode gains a Polestar ID fallback: a revoked grant, a spent
+  daily quota or a missing credential no longer leaves every card dark, and the inspector names
+  the channel, the domains it can read and any fallback that served the refresh. The entitlement
+  probe and domain-support map live with the provider layer. New strings are translated in all
+  14 locales.
 
 ### Added
 
@@ -178,6 +187,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 - `PRIVACY.md` now matches the code: signing out clears cached snapshots, charging baselines and
   command receipts, and clears the vehicle-history database only when **Erase local history on
   sign out** is enabled (off by default).
+
+### Changed
+
+- Volvo's approved permissions are now tracked per scope instead of all-or-nothing. When Volvo
+  rejects a sign-in over one unapproved scope, Hisingen first retries without `location:read` —
+  the permission developer applications most often lack — so a car without location approval
+  keeps remote locks, engine start, and honk/flash instead of losing every remote control. The
+  token response echoes the scope set Volvo actually granted, and each control now asks about
+  its own scope: a missing location approval no longer dims the lock cards or stands the
+  vehicle-location read down for an hour. The Approved Volvo permissions row in Settings shows
+  which of the five permissions the current session carries.
 
 ## [3.0.2] - 2026-11-21
 

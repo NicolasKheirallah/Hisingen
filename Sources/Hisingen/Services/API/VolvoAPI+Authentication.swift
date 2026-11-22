@@ -1,11 +1,13 @@
 import Foundation
 
 extension VolvoAPI {
-    /// `tier` selects how wide a scope set to request. The caller cascades `.full` → `.standard`
-    /// → `.core` when Volvo answers `invalid_scope` ("exceeds that which the client is permitted
-    /// to request"), which it does for the whole authorization if any single requested scope is
-    /// not approved for the application.
-    func beginSignIn(tier: ScopeTier = .full) async throws -> URL {
+    /// `tier` selects how wide a scope set to request. The caller cascades `.full` →
+    /// `.full` without `location:read` → `.standard` → `.core` when Volvo answers
+    /// `invalid_scope` ("exceeds that which the client is permitted to request"), which it
+    /// does for the whole authorization if any single requested scope is not approved for
+    /// the application. `dropsLocation` is that middle step: the one scope accounts most
+    /// often lack, retried once before the coarser tiers give up all remote controls.
+    func beginSignIn(tier: ScopeTier = .full, dropsLocation: Bool = false) async throws -> URL {
         guard isConfigured, let clientID else { throw VolvoError.appNotConfigured }
         // A browser authorization begins a new token generation. Cancel an older refresh so
         // its rotated token cannot land after the authorization-code grant and overwrite it.
@@ -24,11 +26,18 @@ extension VolvoAPI {
         switch tier {
         case .full:
             scopes = Self.readScopes + provider.additionalReadScopes
-                + (restrictedScopesWanted ? Self.restrictedScopes : [])
+                + Self.restrictedScopeList(wanted: restrictedScopesWanted,
+                                           dropsLocation: dropsLocation)
         case .standard:
             scopes = Self.readScopes + provider.additionalReadScopes
         case .core:
             scopes = Self.coreReadScopes
+        }
+        // The inspector compares this request with the token response's grant, so the ask is
+        // recorded before the browser round trip. A cancelled sign-in leaves it in place: it
+        // still describes what Hisingen asked Volvo for.
+        await MainActor.run {
+            preferences.recordVolvoScopeRequest(scopes, tier: tier.rawValue)
         }
         components.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
@@ -115,9 +124,13 @@ extension VolvoAPI {
         optionalTelemetryCache = [:]
         carImageData = [:]
         interiorImageData = [:]
+        // The recorded grant set belongs to the session that earned it; a reset without a
+        // new grant must not leave per-scope answers describing a session that is gone.
+        await MainActor.run { preferences.volvoGrantedScopes = [] }
         // Preserve persisted permission/market back-offs across a session reset. Re-signing
         // does not make an unapproved provider scope available and must not trigger a probe storm.
         remoteCommandsInFlight = []
+        await MainActor.run { preferences.clearVolvoScopeGrant() }
         // Rebuilt from the old configuration rather than makeSession(), so a reset keeps the
         // transport the session was given. Sign-out's revocation runs on the replacement.
         let configuration = session.configuration

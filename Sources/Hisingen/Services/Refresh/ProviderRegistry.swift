@@ -13,6 +13,9 @@ final class ProviderRegistry {
     private let polestar: any VehicleProviding
     private let polestarDataPortal: (any VehicleProviding)?
     private let polestarAugmented: (any VehicleProviding)?
+    /// Developer Portal mode with the Polestar ID session as its fallback. `.dataPortal` used to
+    /// get the bare portal adapter, so a revoked grant or a spent quota silenced the whole app.
+    private let polestarPortalFallback: (any VehicleProviding)?
     private let volvo: any VehicleProviding
     private let preferences: PreferencesStore
 
@@ -29,8 +32,13 @@ final class ProviderRegistry {
                 telemetryProvider: polestarDataPortal,
                 commandProvider: polestar
             )
+            self.polestarPortalFallback = PortalFallbackProvider(
+                portal: polestarDataPortal,
+                consumer: polestar
+            )
         } else {
             self.polestarAugmented = nil
+            self.polestarPortalFallback = nil
         }
         self.volvo = volvo
         self.preferences = preferences
@@ -41,6 +49,7 @@ final class ProviderRegistry {
         case .polestar:
             switch preferences.polestarConnectionMode {
             case .dataPortal:
+                if let polestarPortalFallback { return polestarPortalFallback }
                 if let polestarDataPortal { return polestarDataPortal }
             case .augmented:
                 if let polestarAugmented { return polestarAugmented }
