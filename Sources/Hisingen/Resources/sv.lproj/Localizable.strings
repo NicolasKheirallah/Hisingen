@@ -1049,6 +1049,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "Fordonstjänsten avvisade begäran. Öppna Inställningar om detta fortsätter.";
 "The vehicle service returned an unexpected response." = "Fordonstjänsten returnerade ett oväntat svar.";
 "The vehicle service took too long to respond. Retrying automatically." = "Fordonstjänsten tog för lång tid på sig att svara. Försöker igen automatiskt.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "Fordonets kommandolista kunde inte uppdateras. Kapacitetssvaren kan vara inaktuella.";
 "The vehicle's privacy setting prevented this command." = "Fordonets sekretessinställning förhindrade detta kommando.";
 "There is no software update waiting to be installed on this vehicle." = "Det finns ingen programvaruuppdatering som väntar på installation på det här fordonet.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Dessa reglage varnar dig inte förrän aviseringar tillåts för Hisingen.";

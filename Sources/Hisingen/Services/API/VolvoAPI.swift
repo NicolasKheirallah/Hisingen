@@ -163,12 +163,36 @@ actor VolvoAPI {
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
+    /// The car's `/commands` list per VIN. Kept apart from `optionalTelemetryCache` because this
+    /// list decides whether lock, climate, engine and honk/flash are offered at all: it has its
+    /// own age rule and it survives a failed refresh instead of answering "no list".
+    var commandListCache: [String: AdvertisedCommandList] = [:]
     /// Where the durable per-endpoint stand-downs live: one owner for both providers, so an
     /// erase reaches them and a test can inject one over an in-memory database.
     let backoffs: ProviderBackoffStore
     var remoteCommandsInFlight: Set<String> = []
     var carImageData: [String: Data] = [:]
     var interiorImageData: [String: Data] = [:]
+
+    /// How old the car's advertised command list may be before it is refreshed again. Shorter
+    /// than the display-oriented optional-telemetry TTLs because this list is what dims or
+    /// offers a control: a list that changed with a software update or a re-granted subscription
+    /// must not keep a supported command looking unsupported for an hour. Long enough that the
+    /// ten-requests-per-minute command budget is never the reason a refresh is skipped.
+    static let commandListFreshnessWindow: TimeInterval = 15 * 60
+
+    /// The car's advertised command names, with the moment the provider confirmed them.
+    struct AdvertisedCommandList: Sendable {
+        let names: Set<String>
+        let fetchedAt: Date
+        /// The last refresh failed, so these are the last known names rather than current ones.
+        /// The probe carries this to the capability answer so the app can say so.
+        let isStale: Bool
+
+        func isFresh(within window: TimeInterval) -> Bool {
+            !isStale && Date().timeIntervalSince(fetchedAt) < window
+        }
+    }
 
     /// Volvo caps the invocation/command endpoints at 10 requests/minute per Volvo ID + client.
     /// `dispatchCommand` spaces its POSTs at least this far apart so a burst of taps waits
@@ -693,29 +717,46 @@ actor VolvoAPI {
             backoffs.unblock(subject)
             return value
         } catch {
-            if Self.isGlobalFailure(error) { throw error }
-            let isRestricted: Bool
-            switch error as? VolvoError {
-            case .regionRestricted, .permissionDenied: isRestricted = true
-            // A 404 is stable: the resource is simply not exposed for this vehicle/market
-            // (e.g. `/environment` on a model without the sensor). A 410 means Volvo removed the
-            // API version, which is just as permanent. Back off long and persist both so they
-            // are not re-probed every few minutes for the life of the install.
-            case .client(let statusCode) where statusCode == 404 || statusCode == 410: isRestricted = true
-            default: isRestricted = false
-            }
-            // Both durations are durable now that the owner is one store: the 5-minute ones
-            // expire long before a relaunch can read them back, so the split the defaults
-            // dictionary kept – restricted entries persisted, transient ones process-local – was
-            // a distinction the retention rule already made for it.
-            let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)
-            backoffs.block(subject, until: Date().addingTimeInterval(duration), reason: nil)
-            if isRestricted {
+            guard let standDown = Self.optionalStandDown(for: error) else { throw error }
+            backoffs.block(subject, until: Date().addingTimeInterval(standDown.duration), reason: nil)
+            switch standDown {
+            case .permanent:
                 logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
-            } else {
+            case .transient:
                 logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) – \(String(describing: error), privacy: .public)")
             }
             return nil
+        }
+    }
+
+    /// How long an endpoint stands down after `error`, and the two durations that answer it.
+    /// A 404 is stable: the resource is simply not exposed for this vehicle or market (e.g.
+    /// `/environment` on a model without the sensor). A 410 means Volvo removed the API version,
+    /// which is just as permanent. Standing those down for an hour keeps a settled answer from
+    /// being re-probed on every refresh; anything else is transient and gets five minutes.
+    enum StandDown {
+        case permanent
+        case transient
+
+        var duration: TimeInterval {
+            switch self {
+            case .permanent: return 60 * 60
+            case .transient: return 5 * 60
+            }
+        }
+    }
+
+    /// Nil means the failure is request-level and must reach the caller instead of being
+    /// swallowed into a fallback.
+    static func optionalStandDown(for error: Error) -> StandDown? {
+        guard !isGlobalFailure(error) else { return nil }
+        switch error as? VolvoError {
+        case .regionRestricted, .permissionDenied:
+            return .permanent
+        case .client(let statusCode) where statusCode == 404 || statusCode == 410:
+            return .permanent
+        default:
+            return .transient
         }
     }
 
@@ -724,7 +765,9 @@ actor VolvoAPI {
     /// diagnostics and static capability lists.
     static func optionalTelemetryTTL(for key: String) -> TimeInterval {
         switch key {
-        case "commands", "voc-subscription":
+        // `commands` left this list with the command-list age rule in `advertisedCommandList`:
+        // it gates controls, so it is refreshed on its own shorter window instead of this TTL.
+        case "voc-subscription":
             return 60 * 60
         case "odometer", "statistics", "fuel", "location", "brakes":
             return 15 * 60

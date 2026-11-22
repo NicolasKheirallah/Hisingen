@@ -195,6 +195,7 @@
 "Charger power" = "Charger power";
 "Charging" = "Charging";
 "Save token" = "Save token";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "The vehicle's command list could not be refreshed. Capability answers may be out of date.";
 "This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
 "The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
 "This is already the highest setting." = "This is already the highest setting.";

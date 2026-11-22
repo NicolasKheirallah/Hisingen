@@ -88,10 +88,12 @@ extension VolvoAPI {
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: needsCommandAccessibility, key: "command-accessibility", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility", scope: .vehicle(vin)) }
+        // The command list gates the remote controls, so it has its own age rule rather than the
+        // display TTL the other optional endpoints use: refreshed once it is older than the
+        // freshness window, and kept (marked stale) when that refresh fails.
         let needsCommandCapabilities = !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
-        async let commandsTask: [VolvoCommandDTO]? = optional(
-            enabled: needsCommandCapabilities, key: "commands", vin: vin
-        ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands", scope: .vehicle(vin)) }
+        async let commandsTask: AdvertisedCommandList? = advertisedCommandList(
+            vin: vin, enabled: needsCommandCapabilities)
 
         // Premium VOC subscription, which Volvo documents as applying only to PHEV Classic. On a
         // BEV the flag has no meaning, so this skips the request rather than asking a question
@@ -258,8 +260,12 @@ extension VolvoAPI {
             probes.record(.tyrePressureValues, as: .supported)
         }
         if let commands {
-            let names = Set(commands.compactMap(\.normalizedName))
+            // A stale list still answers. Dropping it here would leave every command probe
+            // unrecorded, and the model table would then decide whether a control the car does
+            // support is offered. The probe carries the caveat instead.
+            let names = commands.names
             probes.reportedCommandNames = names.sorted()
+            probes.commandListIsStale = commands.isStale
             func advertised(_ kinds: [VolvoCommandCatalog.Kind]) -> Bool {
                 kinds.contains { VolvoCommandCatalog.isAdvertised($0, in: names) }
             }

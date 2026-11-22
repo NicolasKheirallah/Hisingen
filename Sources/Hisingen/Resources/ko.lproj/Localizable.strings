@@ -1047,6 +1047,7 @@
 "The vehicle service rejected the request. Open Settings if this continues." = "차량 서비스에서 요청을 거부했습니다. 문제가 지속되면 설정을 확인하세요.";
 "The vehicle service returned an unexpected response." = "차량 서비스에서 예기치 않은 응답을 반환했습니다.";
 "The vehicle service took too long to respond. Retrying automatically." = "차량 서비스의 응답 시간이 초과되었습니다. 자동으로 다시 시도합니다.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "차량의 명령 목록을 새로 고치지 못했습니다. 기능 응답이 오래되었을 수 있습니다.";
 "The vehicle's privacy setting prevented this command." = "차량의 개인정보 보호 설정 때문에 이 명령이 실행되지 않았습니다.";
 "There is no software update waiting to be installed on this vehicle." = "이 차량에 설치 대기 중인 소프트웨어 업데이트가 없습니다.";
 "These toggles won't alert you until notifications are allowed for Hisingen." = "Hisingen 알림을 허용하기 전까지 이 스위치는 알림을 보내지 않습니다.";

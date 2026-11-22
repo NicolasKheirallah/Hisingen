@@ -216,6 +216,9 @@ struct GraphQLDecodingTests {
         #expect(VolvoAPI.optionalTelemetryTTL(for: "location") == 15 * 60)
         #expect(VolvoAPI.optionalTelemetryTTL(for: "odometer") == 15 * 60)
         #expect(VolvoAPI.optionalTelemetryTTL(for: "brakes") == 15 * 60)
-        #expect(VolvoAPI.optionalTelemetryTTL(for: "commands") == 60 * 60)
+        // The command list left this table: it gates the remote controls, so it is refreshed on
+        // its own window (see `VolvoAPI.commandListFreshnessWindow`) instead of a display TTL.
+        #expect(VolvoAPI.optionalTelemetryTTL(for: "commands") == 0)
+        #expect(VolvoAPI.commandListFreshnessWindow == 15 * 60)
     }
 }
