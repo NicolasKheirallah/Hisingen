@@ -36,6 +36,9 @@ extension InfoTabView {
         if let upholstery = state.identity.upholstery, !upholstery.isEmpty {
             rows.append(KVRow(L10n.text("Interior Trim"), upholstery, symbol: "carseat.left"))
         }
+        if let seats = state.identity.numberOfSeats, seats > 0 {
+            rows.append(KVRow(L10n.text("Seats"), "\(seats)", symbol: "person.2"))
+        }
         if let steering = state.formattedSteeringOrientation, !steering.isEmpty {
             rows.append(KVRow(L10n.text("Steering Orientation"), steering, symbol: "steeringwheel"))
         }
@@ -50,6 +53,9 @@ extension InfoTabView {
             }
             if let ventilation = climate.ventilationName, climate.activity.isActiveSession {
                 rows.append(KVRow(L10n.text("Ventilation"), ventilation, symbol: "wind"))
+            }
+            if let main = climate.mainClimateRunningName {
+                rows.append(KVRow(L10n.text("Main Climate"), main, symbol: "thermostat"))
             }
             if let interior = climate.interiorTemperatureCelsius {
                 rows.append(KVRow(L10n.text("Cabin Temperature"),
@@ -79,6 +85,11 @@ extension InfoTabView {
             if let reason = climate.startReason,
                climate.activity != .idle && climate.activity != .unknown {
                 rows.append(KVRow(L10n.text("Started By"), reason.displayName, symbol: "play.circle"))
+            } else if climate.timerTriggered,
+               climate.activity != .idle && climate.activity != .unknown {
+                // The gRPC surface keeps reporting the timer origin through
+                // `timerTriggered` when no named start reason is available.
+                rows.append(KVRow(L10n.text("Started By"), VehicleStartReason.timer.displayName, symbol: "play.circle"))
             }
             if let startedAt = climate.sessionStartedAt,
                climate.activity != .idle && climate.activity != .unknown {
@@ -132,6 +143,12 @@ extension InfoTabView {
         var rows: [KVRow] = []
 
         rows.append(KVRow(L10n.text("Architecture"), state.powertrain.displayName, symbol: "bolt.car"))
+        if let driveType = state.identity.driveType, !driveType.isEmpty {
+            rows.append(KVRow(L10n.text("Drive Type"), driveType, symbol: "car.2"))
+        }
+        if let power = state.identity.enginePowerKw, power > 0 {
+            rows.append(KVRow(L10n.text("Engine Power"), L10n.format("%d kW", Int(power.rounded())), symbol: "speedometer"))
+        }
         let specification = preferences.vehicleSpecificationOverride(for: state.identity.vin)
         let capacityReference = state.powertrain.hasElectricRange
             ? state.measuredCapacityReference(specification: specification)
@@ -184,6 +201,9 @@ extension InfoTabView {
                 symbol: "scalemass",
                 info: L10n.text("Maximum permissible weight reported by the vehicle's backend, not the car's current weight.")
             ))
+        } else if let weight = state.identity.grossWeightKg, weight > 0 {
+            // Same weight as the backend figure above, so one row is enough.
+            rows.append(KVRow(L10n.text("Gross Weight"), L10n.format("%d kg", weight), symbol: "scalemass"))
         }
         if let gearbox = state.identity.gearbox, !gearbox.isEmpty {
             rows.append(KVRow(L10n.text("Transmission"), gearbox.capitalized, symbol: "gearshape.2"))
@@ -448,6 +468,15 @@ extension InfoTabView {
                             Format.dateFormatter.string(from: userInServiceDate),
                             symbol: "calendar.badge.checkmark",
                             info: L10n.text("User-entered from warranty or delivery documents. The vehicle API does not provide this date.")
+                        )
+                    }
+
+                    if let status = warranty?.status, !status.isEmpty {
+                        KVRow(
+                            L10n.text("Warranty Status"),
+                            status,
+                            symbol: "checkmark.shield",
+                            info: L10n.text("The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does.")
                         )
                     }
 

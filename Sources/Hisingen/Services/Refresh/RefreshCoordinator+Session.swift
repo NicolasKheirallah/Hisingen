@@ -175,18 +175,41 @@ extension RefreshCoordinator {
         if !eraseSucceeded { lastError = .localDataErasure }
         onEvent?(.vehiclesCleared)
         publishDiagnostics()
-        task = Task {
+        // The widget's snapshot went with the session's cars; the panel drops its cached
+        // copy on the same paths.
+        publishWidgetSnapshot?(nil)
+        // Kept off `task` on purpose: switching to another connected vehicle immediately after
+        // sign-out retires this coordinator, and that must not cancel the credential deletion
+        // and grant revocation still in flight. The provider is captured strongly so the work
+        // survives this object; the generation check still stops a late failure from reporting
+        // against the session that replaced it.
+        let api = api
+        let onRevocationFailure = onSignOutRevocationFailure
+        revocationTask = Task { [weak self] in
             do {
                 try await api.signOut()
             } catch {
-                guard requestGeneration == generation, !Task.isCancelled else { return }
-                logger.error("Remote session revocation failed: \(String(describing: error), privacy: .public)")
+                onRevocationFailure?(api.brand)
+                guard let self, requestGeneration == self.generation, !Task.isCancelled else { return }
+                self.logger.error("Remote session revocation failed: \(String(describing: error), privacy: .public)")
                 if eraseSucceeded { self.lastError = .secureStorage }
             }
-            guard requestGeneration == generation, !Task.isCancelled else { return }
-            task = nil
-            if let lastError { self.onEvent?(.failed(lastError)) }
+            guard let self, requestGeneration == self.generation, !Task.isCancelled else { return }
+            if let lastError = self.lastError { self.onEvent?(.failed(lastError)) }
             self.publishDiagnostics()
+        }
+    }
+
+    /// Drops one vehicle from the provider's discovered list after a per-vehicle sign-out. The
+    /// selection that replaces it is started separately; this only keeps the retired car out of
+    /// any fleet list the coordinator would build before that switch settles.
+    func forgetCar(vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        cars.removeAll { $0.vin.normalizedVIN == key }
+        if latest?.identity.vin.normalizedVIN == key {
+            latest = nil
+            latestAuthoritative = nil
         }
     }
 
@@ -219,7 +242,15 @@ extension RefreshCoordinator {
                 try await sessionManager.restore(api: api, preferences: preferences,
                                                  preferredVIN: preferredVIN, intent: sessionIntent)
                 guard requestGeneration == generation, !Task.isCancelled else { return }
-                guard let vin = await api.resolvedVIN(preferred: preferredVIN) else {
+                let providerCars = await api.cars
+                let detached = preferences.detachedVehicleVINs(for: api.brand)
+                let visibleCars = providerCars.filter { !detached.contains($0.vin.normalizedVIN) }
+                var resolvedVIN = await api.resolvedVIN(preferred: preferredVIN)
+                if let resolved = resolvedVIN, detached.contains(resolved.normalizedVIN) {
+                    resolvedVIN = visibleCars.first?.vin
+                }
+                if resolvedVIN == nil { resolvedVIN = visibleCars.first?.vin }
+                guard let vin = resolvedVIN else {
                     throw VehicleServiceError.notConfigured
                 }
                 preferences.vin = vin
@@ -239,7 +270,7 @@ extension RefreshCoordinator {
                 // is superseded and its retry budget resets.
                 requestedSelectionVIN = nil
                 selectionRetryCount = 0
-                cars = await api.cars
+                cars = visibleCars
                 onEvent?(.sessionEstablished(cars: cars, selectedVIN: vin))
                 sessionReady = true
                 sessionIntent = .resume

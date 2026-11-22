@@ -65,4 +65,60 @@ struct SessionPriceSeriesTests {
         #expect(retail.basis == .spotWithRates)
         #expect(abs((retail.slots.first?.pricePerKwh ?? 0) - automatic.retailPrice(spotSekPerKwh: 1)) < 1e-9)
     }
+
+    @Test("The cheapest slots fill first, each limited to what the rate can deliver in the window")
+    func cheapestSlots() throws {
+        let points = [slot(0, 3), slot(15, 1), slot(30, 2), slot(45, 4)]
+        let series = try #require(SessionPriceSeries.tibber(points, gridTariff: .none, from: at(0), to: at(60)))
+        // 4 kW holds 1 kWh per slot: 1 kWh at 1, then 1 kWh at 2.
+        let best = try #require(series.cheapest(energyKwh: 2, rateKw: 4))
+        #expect(abs(best.cost - 3) < 1e-9)
+        #expect(best.slots.map(\.start) == [at(15), at(30)])
+        // More energy than the window can hold at that rate has no answer.
+        #expect(series.cheapest(energyKwh: 20, rateKw: 4) == nil)
+    }
+
+    @Test("A slot is limited to the window, so a half slot holds half the energy")
+    func cheapestRespectsWindow() throws {
+        let series = try #require(SessionPriceSeries.tibber([slot(0, 1)], gridTariff: .none, from: at(0), to: at(7.5)))
+        let best = try #require(series.cheapest(energyKwh: 1, rateKw: 8))
+        #expect(abs(best.cost - 1) < 1e-9)
+        #expect(series.cheapest(energyKwh: 1.5, rateKw: 8) == nil)
+    }
+
+    @Test("An hourly contract prices the chart by the hour's average, with the grid fee on top")
+    func hourlyContract() throws {
+        // Aligned to a whole hour, since a contract only folds slots that sit inside one.
+        let top = Date(timeIntervalSince1970: 1_794_999_600)
+        var points: [HomePricePoint] = []
+        for index in 0..<4 {
+            let start = top.addingTimeInterval(TimeInterval(index) * 900)
+            points.append(HomePricePoint(start: start, end: start.addingTimeInterval(900), pricePerKwh: TimeInterval(index + 1)))
+        }
+        let end = top.addingTimeInterval(3_600)
+        let hourly = try #require(SessionPriceSeries.tibber(points, gridTariff: .flat(orePerKwh: 50), contract: .hourly,
+                                                            from: top, to: end))
+        #expect(hourly.slots.count == 1)
+        #expect(abs(hourly.slots[0].pricePerKwh - 3.0) < 1e-9)
+        let quarter = try #require(SessionPriceSeries.tibber(points, gridTariff: .flat(orePerKwh: 50), from: top, to: end))
+        #expect(quarter.slots.count == 4)
+    }
+
+    @Test("Tibber's level survives the grid fee and reads back at a moment")
+    func levelAtMoment() throws {
+        var cheap = slot(0, 1)
+        cheap.level = .veryCheap
+        let series = try #require(SessionPriceSeries.tibber([cheap], gridTariff: .flat(orePerKwh: 44.5), from: at(0), to: at(15)))
+        #expect(series.level(at: at(5)) == .veryCheap)
+        #expect(series.level(at: at(20)) == nil)
+    }
+
+    @Test("The export has one row per slot with its basis")
+    func csvRows() throws {
+        let series = try #require(SessionPriceSeries.tibber([slot(0, 1), slot(15, 2)], gridTariff: .none, from: at(0), to: at(30)))
+        let lines = series.csv(currency: "kr").split(separator: "\n").map(String.init)
+        #expect(lines.count == 3)
+        #expect(lines[0].hasPrefix("Start,End,Price per kWh"))
+        #expect(lines[1].contains("1.0000") && lines[1].contains("tibber_with_grid_fee"))
+    }
 }

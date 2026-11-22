@@ -139,6 +139,43 @@ extension ChargingSessionLedger {
 
     // MARK: - Legacy reconciliation
 
+    /// Rows whose energy was integrated over part of the session only. See
+    /// `ChargingSessionSummaryCalculator.undercountRatio`.
+    static let undercountedPredicate = "(energy_source = 'observed_power_integration' AND sample_coverage < 0.9)"
+
+    /// Recomputes the energy of finished sessions that an older build integrated over 70 to 90% of
+    /// the time and stored as if it were all of it. A row changes only when the current calculation
+    /// prefers the charge-level estimate; the stored costs follow the energy, and the market-price
+    /// cost is cleared so the next backfill prices the corrected figure. Idempotent.
+    func repairUndercountedIntegrations(for vin: String, usableCapacityKwh: Double?) {
+        let rows = recentChargingSessions(for: vin, limit: 1_000).filter {
+            $0.energySource == .observedPowerIntegration && $0.endedAt != nil
+                && ($0.sampleCoverage ?? 1) < ChargingSessionSummaryCalculator.partialCoverageLimit
+        }
+        for row in rows {
+            guard let endedAt = row.endedAt, let capacity = row.usableCapacityKwh ?? usableCapacityKwh, capacity > 0 else { continue }
+            let summary = ChargingSessionSummaryCalculator.calculate(
+                startSoc: row.startSoc, terminalSoc: row.endSoc ?? row.startSoc, startedAt: row.startedAt, endedAt: endedAt,
+                samples: reconciledSamples(for: row), usableCapacityKwh: capacity)
+            guard summary.source == .socCapacityEstimate, summary.energyKwh > row.energyDeliveredKwh else { continue }
+            let ratio = row.energyDeliveredKwh > 0 ? summary.energyKwh / row.energyDeliveredKwh : 1
+            logOnFailure("session undercount repair") {
+                try sql.query(sql: """
+                    UPDATE charging_sessions SET
+                        energy_delivered_kwh = ?, energy_source = 'soc_capacity_estimate', confidence = ?,
+                        estimated_cost = estimated_cost * ?, spot_estimated_cost = NULL
+                    WHERE id = ? AND ended_at IS NOT NULL;
+                    """) { stmt in
+                    try stmt.bindDouble(summary.energyKwh, at: 1)
+                    try stmt.bindText(summary.confidence.rawValue, at: 2)
+                    try stmt.bindDouble(ratio, at: 3)
+                    try stmt.bindText(row.id, at: 4)
+                    try stmt.executeUpdate()
+                } process: { _ in }
+            }
+        }
+    }
+
     /// VINs that still carry at least one completed session whose stored summary is stale or
     /// zero-valued. Enumerated once per launch so reconciliation does not re-scan on every
     /// snapshot.
@@ -147,7 +184,7 @@ extension ChargingSessionLedger {
         SELECT DISTINCT vin FROM charging_sessions
         WHERE ended_at IS NOT NULL
           AND lifecycle_state IN ('completed', 'interrupted')
-          AND (end_soc <= start_soc OR energy_delivered_kwh <= 0)
+          AND (end_soc <= start_soc OR energy_delivered_kwh <= 0 OR \(Self.undercountedPredicate))
         ORDER BY vin;
         """
         return (try? sql.query(sql: query) { _ in } process: { stmt -> [String] in
@@ -163,6 +200,7 @@ extension ChargingSessionLedger {
     /// (from the caller's current preference state) is only the fallback for rows that never
     /// stored one. Run once per launch from the store, not per snapshot.
     func reconcileLegacySummaries(for vin: String, usableCapacityKwh: Double?) {
+        repairUndercountedIntegrations(for: vin, usableCapacityKwh: usableCapacityKwh)
         let candidates = recentChargingSessions(for: vin, limit: 1_000).filter {
             $0.energyDeliveredKwh <= 0 || ($0.endSoc ?? $0.startSoc) <= $0.startSoc
         }

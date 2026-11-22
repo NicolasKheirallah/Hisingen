@@ -1,5 +1,4 @@
 import CoreSpotlight
-import CryptoKit
 import Foundation
 import OSLog
 import UniformTypeIdentifiers
@@ -38,11 +37,28 @@ enum SpotlightIndexer {
         }
     }
 
-    /// Removes every Hisingen entry – used on sign-out so a signed-out vehicle never keeps
-    /// surfacing stale telemetry in search.
+    /// Removes every Hisingen entry. Used when an account signs out, so none of its vehicles
+    /// keep surfacing stale telemetry in search.
     static func removeAll() {
         guard CSSearchableIndex.isIndexingAvailable() else { return }
         CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [domainIdentifier]) { _ in }
+    }
+
+    /// Removes one vehicle, for a sign-out that leaves the account connected.
+    static func removeVehicle(_ vin: String) {
+        removeVehicles([vin])
+    }
+
+    /// Removes the signed-out account's vehicles without clearing another brand's entries.
+    static func removeVehicles(_ vins: [String]) {
+        let identifiers = vins
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty }
+            .map(opaqueVehicleIdentifier)
+        guard CSSearchableIndex.isIndexingAvailable(), !identifiers.isEmpty else { return }
+        CSSearchableIndex.default().deleteSearchableItems(
+            withIdentifiers: identifiers
+        ) { _ in }
     }
 
     /// True when an incoming user activity is one of ours; lets the app delegate decide to
@@ -51,13 +67,25 @@ enum SpotlightIndexer {
         activity.activityType == CSSearchableItemActionType
     }
 
+    /// Resolves a Spotlight activation identifier back to the vehicle it indexes. The index
+    /// itself never stores the VIN, so the match is computed from the vehicles this Mac
+    /// already knows rather than from anything the system holds.
+    static func vin(forActivityIdentifier identifier: String, among knownVINs: [String]) -> String? {
+        knownVINs.first { opaqueVehicleIdentifier($0) == identifier }
+    }
+
+    /// The identifier an index write uses. Internal so the activation round-trip is testable
+    /// without exposing the digest itself.
+    static func activityIdentifier(for vin: String) -> String {
+        opaqueVehicleIdentifier(vin)
+    }
+
     /// Stable, non-reversible index key. The VIN was the `uniqueIdentifier`, which put the
     /// full identifier into the system index despite the README promising it stays out.
-    /// A salted-per-install value would break updates, so a plain digest is the right
-    /// trade: stable across launches, useless as a VIN.
+    /// The digest rule lives beside the VIN type so the diagnostic log's partition keys use
+    /// the same scheme rather than inventing a second one.
     private static func opaqueVehicleIdentifier(_ vin: String) -> String {
-        let digest = SHA256.hash(data: Data(vin.utf8))
-        return "vehicle-" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+        VehicleOpaqueIdentifier.value(for: vin, byteCount: 16)
     }
 
     private static func attributeSet(for state: VehicleState,

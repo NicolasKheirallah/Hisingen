@@ -298,6 +298,8 @@ struct TyreAndWarningHistoryTests {
             return Int(stmt.columnInt64(at: 0) ?? 0)
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
-        #expect(VehicleDatabase.latestSchemaVersion == 9)
+        // A canary, so a schema change is reviewed rather than silently absorbed by the equality
+        // above. 10 added the charging place for public sessions.
+        #expect(VehicleDatabase.latestSchemaVersion == 10)
     }
 }

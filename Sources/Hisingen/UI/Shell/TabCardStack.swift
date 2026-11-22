@@ -36,7 +36,8 @@ enum ComposableCards {
         onOpenPlan: ((TabItemID) -> Void)? = nil,
         onOpenCar: ((TabItemID) -> Void)? = nil,
         onOpenSession: ((String) -> Void)? = nil,
-        compact: Bool = false,
+        viewType: CardViewType = .full,
+        showsHomePlan: Bool = true,
         repeatsDisconnectedStatus: Bool = true,
         showsExceptions: Bool = false,
         showsCommandReceipts: Bool = false,
@@ -86,14 +87,14 @@ enum ComposableCards {
             case .vehicleHomeCharger:
                 HomeChargerCard(
                     state: state,
-                    onOpenPlan: (compact && planItems.contains(.vehicleHomeCharger) ? onOpenPlan : nil)
+                    onOpenPlan: (viewType == .summary && planItems.contains(.vehicleHomeCharger) ? onOpenPlan : nil)
                         .map { navigate in { navigate(.vehicleHomeCharger) } }
                 )
 
             case .vehicleChargingPlanner, .controlsChargingPlanner:
                 ChargingPlannerCard(
-                    state: state,
-                    onOpenPlanner: (compact && planItems.contains(.controlsChargingPlanner) ? onOpenPlan : nil).map { navigate in
+                    state: state, showsHomePlan: showsHomePlan,
+                    onOpenPlanner: (viewType == .summary && planItems.contains(.controlsChargingPlanner) ? onOpenPlan : nil).map { navigate in
                         { navigate(.controlsChargingPlanner) }
                     }
                 )
@@ -101,7 +102,7 @@ enum ComposableCards {
             case .vehicleOpenings:
                 ComposableOpeningsCard(
                     state: state,
-                    onOpenCar: (compact && carItems.contains(.infoDoors) ? onOpenCar : nil)
+                    onOpenCar: (viewType == .summary && carItems.contains(.infoDoors) ? onOpenCar : nil)
                         .map { navigate in { navigate(.infoDoors) } }
                 )
 
@@ -109,9 +110,9 @@ enum ComposableCards {
                 VehicleTyresCard(state: state)
 
             case .vehicleReadiness:
-                if let onOpenPlan, compact {
+                if viewType == .summary, let onOpenPlan {
                     DepartureSummary(state: state, compact: usesCompactNow) { onOpenPlan(.vehicleReadiness) }
-                } else if compact {
+                } else if viewType == .summary {
                     DepartureCheckDisclosure(state: state).padding(.horizontal, HisingenTheme.cardPadding)
                 } else {
                     VehicleReadinessCard(state: state, lowBatteryThreshold: preferences.lowBatteryThreshold)
@@ -121,8 +122,8 @@ enum ComposableCards {
                 ComposableLocationCard(
                     state: state,
                     reverseGeocoder: reverseGeocoder,
-                    compact: compact,
-                    onOpenCar: (carItems.contains(.infoLocation) ? onOpenCar : nil)
+                    compact: viewType == .summary,
+                    onOpenCar: (viewType == .summary && carItems.contains(.infoLocation) ? onOpenCar : nil)
                         .map { navigate in { navigate(.infoLocation) } }
                 )
 
@@ -304,6 +305,8 @@ struct TabCardStack: View {
                     onOpenPlan: onOpenPlan,
                     onOpenCar: onOpenCar,
                     onOpenSession: onOpenSession,
+                    viewType: composition.viewType(for: item, on: tab),
+                    showsHomePlan: !placed.contains(.vehicleHomeCharger),
                     showsCommandReceipts: placed.contains(.vehicleReceipts)
                 )
                 .transition(.opacity)

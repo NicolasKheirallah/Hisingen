@@ -222,6 +222,35 @@ struct NexBlueProviderTests {
         }
     }
 
+    @Test func sessionsGetTheirEnergyProfileFromTheHourlyReadings() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/sessions/charger/" + serial, .json("""
+            {"data":[{"start_timestamp":1779995400,"end_timestamp":1779997800,"consumption":4}]}
+            """))
+        transport.route("GET", root + "/measurement/chargers/" + serial, .json("""
+            {"data":[{"year":2026,"month":5,"day":28,"hour":19,"consumption":4.0,"date":"2026-05-28T19:00:00+00:00"}],"granularity":"hourly","total":4}
+            """))
+        let candidates = try await provider(transport).sessions(chargerID: serial, from: now.addingTimeInterval(-7_200), to: now)
+        let session = try #require(candidates.first)
+        #expect(abs(session.intervalEnergyKwh - 4) < 1e-9)
+        #expect(session.hasPriceableIntervals)
+        #expect(session.energyProfileNote == HomeEnergyProfile.note)
+        let request = try #require(transport.requests(path: root + "/measurement/chargers/" + serial).first)
+        let query = URLComponents(url: try #require(request.url), resolvingAgainstBaseURL: false)?.queryItems
+        #expect(query?.first { $0.name == "granularity" }?.value == "hourly")
+    }
+
+    @Test func sessionsKeepTheirTotalWhenTheHourlyReadingsFail() async throws {
+        let transport = cloud()
+        transport.route("GET", root + "/sessions/charger/" + serial, .json("""
+            {"data":[{"start_timestamp":1779995400,"end_timestamp":1779997800,"consumption":4}]}
+            """))
+        transport.route("GET", root + "/measurement/chargers/" + serial, .json(#"{"code":"x"}"#, status: 500))
+        let candidates = try await provider(transport).sessions(chargerID: serial, from: now.addingTimeInterval(-7_200), to: now)
+        let session = try #require(candidates.first)
+        #expect(session.energyKwh == 4 && session.intervals.isEmpty && session.energyProfileNote == nil)
+    }
+
     @Test func historyUsesFinishedWindowsAndNormalizesEpochUnits() async throws {
         let transport = cloud()
         let path = root + "/sessions/charger/" + serial
@@ -427,6 +456,13 @@ struct NexBlueProviderTests {
         let receipt = try #require(restored.lastNexBlueImport)
         #expect(receipt.importedAt == now)
         #expect(receipt.range.duration == 30 * 86_400)
+        // The first import is followed once by a pass that prices the stored sessions again.
+        let repriceDeadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !store.nexBlueRepriced, ContinuousClock.now < repriceDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.nexBlueRepriced)
+        #expect(restored.lastNexBlueImport?.range.duration == TimeInterval(30 * 86_400))
         await restored.syncSessions()
         #expect(database.charging.recentChargingSessions(for: "VIN").count == 1)
         await restored.send(.start)

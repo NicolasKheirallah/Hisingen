@@ -62,6 +62,19 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
 
     var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? .current }
 
+    /// Stable identity for one charger on one vehicle: the source, the charger's own id in that
+    /// service, and the VIN. Two chargers of one vendor differ by `chargerID`; the same charger
+    /// paired to a second car is a second pairing, because session attribution is per vehicle.
+    /// Computed rather than stored so pairings saved before a second charger existed keep decoding.
+    var identity: String {
+        "\(source.rawValue)|\(chargerID)|\(vin.normalizedVIN)"
+    }
+
+    /// Whether this pairing is the one described by `other` – same charger, same vehicle.
+    func isSameCharger(as other: HomeChargingPairing) -> Bool {
+        identity == other.identity
+    }
+
     /// Whether the account may read or write this charger's schedule. NexBlue allows only the
     /// owner. A pairing saved before the role was stored carries no role and keeps the control;
     /// the provider still refuses a non-owner when the schedule is read.

@@ -33,6 +33,8 @@ struct SettingsHomeChargingCard: View {
     @State var isSigningIn = false
     @State var isResuming = false
     @State private var seededSource = false
+    /// Reveals the setup form below an existing pairing, for a second charger.
+    @State private var isAddingCharger = false
 
     var body: some View {
         SettingsConnectedServiceCard(
@@ -40,10 +42,28 @@ struct SettingsHomeChargingCard: View {
             symbol: "powerplug",
             detail: "Connect a charger to view its status, control charging, and import sessions."
         ) {
-            if let pairing = model.pairing {
-                pairedView(pairing)
-            } else {
+            if model.pairings.isEmpty {
                 setupView
+            } else {
+                chargerList
+                if let pairing = model.pairing {
+                    PanelRule()
+                    pairedView(pairing)
+                }
+                if isAddingCharger {
+                    PanelRule()
+                    setupView
+                    Button { isAddingCharger = false } label: {
+                        Text(L10n.text("Cancel")).frame(minHeight: 24)
+                    }
+                    .buttonStyle(.hisSecondary)
+                } else {
+                    Button { isAddingCharger = true; discovery = nil; failure = nil } label: {
+                        Text(L10n.text("Add another charger")).frame(minHeight: 24)
+                    }
+                    .buttonStyle(.hisSecondary)
+                    .accessibilityHint(L10n.text("Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading."))
+                }
             }
         }
         .onAppear {
@@ -133,9 +153,11 @@ struct SettingsHomeChargingCard: View {
         if !discovery.usedDeviceRegistry {
             Text(L10n.text("This token could not read the device list, so chargers were found by their entity names. An administrator token also finds the serial number."))
                 .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
+            Text(L10n.text("Easee and Zaptec chargers are found through the device list, so they need an administrator token."))
+                .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
         }
 
-        field(L10n.text("Charger"), detail: discovery.chargers.isEmpty ? L10n.text("No NexBlue charger was found. Map the entities by hand below.") : nil) {
+        field(L10n.text("Charger"), detail: discovery.chargers.isEmpty ? L10n.text("No charger was found. Map the entities by hand below.") : nil) {
             Picker("", selection: $selectedCharger) {
                 Text(L10n.text("Map by hand")).tag("")
                 ForEach(discovery.chargers) { Text($0.name).tag($0.id) }
@@ -158,6 +180,10 @@ struct SettingsHomeChargingCard: View {
                 entityPicker(L10n.text("Charging switch"), \.chargingSwitch, domain: "switch", discovery)
                 entityPicker(L10n.text("Lifetime energy"), \.lifetimeEnergy, domain: "sensor", discovery, optional: true)
                 entityPicker(L10n.text("Current limit"), \.currentLimit, domain: "sensor", discovery, optional: true)
+                // Reading and writing the limit are different entities in most integrations: a
+                // sensor reports it, a `number` entity changes it. Mapping the number is what
+                // enables the control on the charger card.
+                entityPicker(L10n.text("Writable current limit"), \.currentLimitNumber, domain: "number", discovery, optional: true)
                 entityPicker(L10n.text("Charging enabled"), \.chargingEnabled, domain: "binary_sensor", discovery, optional: true)
                 entityPicker(L10n.text("Cable lock"), \.cableLock, domain: "binary_sensor", discovery, optional: true)
             }
@@ -188,6 +214,57 @@ struct SettingsHomeChargingCard: View {
         Button { pair(discovery) } label: { Text(L10n.text("Pair charger")).frame(minHeight: 24) }
             .buttonStyle(.hisProminent)
             .disabled(!map.isUsable || vin.isEmpty)
+    }
+
+    // MARK: - Every paired charger
+
+    /// Both chargers, with the one that holds the live connection marked. Selecting a row switches
+    /// the connection to it; the other keeps its last reading, with the time it was read.
+    private var chargerList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.text("Chargers"))
+                .hisType(.caption, weight: .semibold)
+                .foregroundStyle(HisingenTheme.inkMuted)
+            ForEach(model.pairings, id: \.identity) { candidate in
+                let isLive = candidate.identity == model.pairing?.identity
+                Button { model.selectCharger(identity: candidate.identity) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(candidate.chargerName)
+                                .hisType(.label, weight: .medium)
+                                .foregroundStyle(HisingenTheme.ink)
+                            Text(chargerDetail(candidate, isLive: isLive))
+                                .hisType(.micro)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                        }
+                        Spacer(minLength: 6)
+                        if isLive {
+                            Text(L10n.text("Live connection"))
+                                .hisType(.micro, weight: .medium)
+                                .foregroundStyle(HisingenTheme.accent)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+                .help(isLive
+                      ? L10n.text("This charger holds the live connection.")
+                      : L10n.text("Show this charger's readings and commands."))
+                .accessibilityAddTraits(isLive ? .isSelected : [])
+            }
+        }
+    }
+
+    private func chargerDetail(_ candidate: HomeChargingPairing, isLive: Bool) -> String {
+        let vehicle = vehicleTitle(candidate.vin)
+        let place = candidate.locationAlias.isEmpty ? L10n.text("None") : candidate.locationAlias
+        var parts = [vehicle, place]
+        if isLive {
+            parts.append(linkText)
+        } else if let contact = model.lastContact(for: candidate) {
+            parts.append(L10n.format("Last read %@", HomeChargingTime.time(contact, in: candidate.timeZone)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Paired

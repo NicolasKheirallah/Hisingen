@@ -42,7 +42,7 @@ Neither provider records an explicit "unsupported" observation from a failed pro
 - Tyre-pressure support additionally requires the health response to contain at least one *numeric* pressure value, not just a successful call with only warning flags; a successful-but-empty response does not record `.tyrePressureValues` as supported.
 
 **Volvo** (`VolvoAPI.optional`):
-- The `/energy/v2/vehicles/{vin}/capabilities` endpoint is the one explicit, backend-provided capability signal Volvo offers: cached 1 hour per VIN, and its `targetBatteryLevel`/`chargingPower` flags directly set `.chargeTarget`/`.chargingCurrentLimit` to a definite `.supported` or `.unavailable` (Volvo is the only place in the codebase where a probe *can* record `.unavailable`, because this is an explicit backend answer, not an inferred one).
+- The `/energy/v2/vehicles/{vin}/capabilities` endpoint is the one explicit, backend-provided capability signal Volvo offers: cached 1 hour per VIN, and all ten decoded flags record their matching `VehicleCapability` (battery charge level, electric range, charger connection status, charging system status, charging type, charger power status, charging power, estimated charging time to target, charging current limit, charge target) as a definite `.supported` or `.unavailable` (Volvo is the only place in the codebase where a probe *can* record `.unavailable`, because this is an explicit backend answer, not an inferred one). A probed `.unavailable` also gates the matching charging-card read row, so a merged last-known value cannot resurface for a field the car says it cannot report.
 - Every other optional field failure gets a flat 5-minute `endpointBackoff` per `"\(vin)|\(key)"`.
 - `.authenticationRequired`, `.appNotConfigured`, `.rateLimited` are global failures, same exemption as Polestar.
 
@@ -60,6 +60,26 @@ From `VehicleCapabilityProfile.support(for:)`:
 | Unrecognized model | `.backendDependent` across the board |
 
 This table is intentionally conservative; a Polestar 3 or 4 owner will typically see more capabilities marked `.supported` than a Polestar 1/5/6 owner not because Hisingen has verified less about those models, but because the table only asserts what's been reasonably confirmed. See [domain/capability-matrix.md](../domain/capability-matrix.md) for the full per-model, per-capability table with confidence labels.
+
+## Evidence in the inspector
+
+Two facts sit beside the capability flags but are not flags: what the account was granted, and
+why a field had no value. Volvo's token response names the granted scopes, and each wrapped
+Volvo field carries a `status` plus `unavailableReason`. Both are attached to the snapshot as a
+`ProviderCapabilityReport` (`VolvoScopeCatalog.report`) and rendered in the Info capabilities
+section: per-domain grant rows, the requested versus granted scope lists, and a row per degraded
+reading with the provider's own status and reason. `UnavailableFeatureCard` uses the same report
+to replace its generic "did not report this capability" line with the provider's reason when one
+exists. This is display evidence only; it never changes `support(for:)` or permits a command.
+
+The same report also carries the connection's domain-support map
+(`ProviderDomainSupportMap`). Developer Portal mode composes `PortalFallbackProvider` around the
+portal adapter: the map says which domains the portal structurally cannot serve (software,
+connectivity, commands), so a portal refresh fills those from the consumer session instead of
+reporting them missing, and a portal whose entitlement probe names a revoked grant, spent quota
+or missing credential is skipped in favour of the Polestar ID session with
+`freshness.servedByFallback` recorded. Developer Portal mode stays read-only regardless of the
+fallback; the command catalog and the provider both refuse writes.
 
 ## Consequence for remote commands
 

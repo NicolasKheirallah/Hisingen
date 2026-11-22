@@ -56,6 +56,7 @@ These files should all be treated as parts of the same local database.
 | Precise coordinates in historical telemetry/charging sessions | SQLite | Disabled by default; only written after explicit user opt-in, then follows the parent history retention |
 | Battery-health milestones | SQLite | Long-term; retained until local history is cleared |
 | Remote-command audit records | SQLite | Retained until local history is cleared |
+| API diagnostic log (redacted requests, one partition per vehicle) | `Application Support/Hisingen/api-diagnostics.json` | 24 hours; 10,000 rows and 8 MB of payloads per partition, 30,000 rows / 32 MB in total; erased with a vehicle's local data |
 | Reverse-geocode cache | Memory | Process lifetime |
 | Temporary provider capability/request caches | Memory | Short-lived, provider-specific |
 | Exported CSV files | User-selected filesystem location | Controlled by the user after export |
@@ -360,7 +361,21 @@ build, an accidentally dismissed Keychain prompt, or a stray sign-out does not
 discard months of data. The deliberate way to remove it is the separately
 confirmed "Erase local vehicle data" action in the same pane.
 
-Provider-specific sign-out then handles the associated authentication state.
+When the account still has another car, signing out one car does not reach provider-specific
+sign-out. Hisingen records that VIN as signed out of the connected account, hides it from the
+fleet, and clears the snapshot, command receipts, charging baseline and planner latch for that
+car only. The reader-authored stores (nickname, theme, mute, hidden trips, specification
+overrides and the rest) stay, because the car is still on the account and Bring Back should
+restore it as the reader knew it. The session and the account's other cars stay. Saving
+credentials or signing in again clears the record and the car reappears.
+
+While the account stays connected, the signed-out VINs, their brands and their last labels are
+stored in `detached_vehicles_v1`. The account's discovered VIN set is stored per brand
+(`polestar_known_vins_v1`, `volvo_known_vins_v1`) so a later sign-out can tell a one-car account
+from one with siblings even before a refresh. A full account sign-out clears both.
+
+Provider-specific sign-out then handles the associated authentication state when the account's
+last car signs out.
 
 ---
 

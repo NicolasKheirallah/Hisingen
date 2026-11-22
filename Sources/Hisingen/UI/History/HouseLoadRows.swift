@@ -28,6 +28,10 @@ struct HouseLoadRows: View {
     var body: some View {
         KVRow(L10n.text("Car Share of House Load"), Format.percent(share.carShare * 100), symbol: "house", info: shareInfo)
         KVRow(L10n.text("House Consumption"), Format.energyKwh(share.houseKwh, decimals: 0), symbol: "bolt.horizontal")
+        if let production = share.productionKwh {
+            KVRow(L10n.text("House Production"), Format.energyKwh(production, decimals: 0), symbol: "sun.max",
+                  info: L10n.text("Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out."))
+        }
         KVRow(L10n.text("Car at Home"), Format.energyKwh(share.carKwh, decimals: 0), symbol: "car")
         KVRow(L10n.text("Rest of the House"), Format.energyKwh(share.restKwh, decimals: 0), symbol: "house")
         if let houseCost = share.houseCost, let carCost = share.carCost {

@@ -65,7 +65,7 @@ struct HomeChargerSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .hisTelemetryValue(phases, reduceMotion: reduceMotion)
         }
-        HouseMeterLines(meter: model.houseMeter, carKw: currentCarKw(input))
+        HouseMeterLines(meter: model.houseMeter, tibber: model.tibberLive, carKw: currentCarKw(input))
         if let plan = card.planLine {
             Text(plan)
                 .hisType(.label)
@@ -85,6 +85,9 @@ struct HomeChargerSection: View {
             Text(freshness)
                 .hisType(.micro)
                 .foregroundStyle(HisingenTheme.inkMuted)
+        }
+        if let limitRow = currentLimitRow(input) {
+            limitRow
         }
         // The buttons that act on the charger stay where the reader is, with or without a link to
         // Plan. Editing the plan is a place to go, so it is a row, not another command box.
@@ -122,6 +125,21 @@ struct HomeChargerSection: View {
             }
             .disclosureGroupStyle(WholeRowDisclosureStyle())
             .hisType(.body, weight: .medium)
+        }
+    }
+
+    /// Sets the charger's current ceiling through Home Assistant. Shown only when a writable
+    /// `number` entity is mapped: every other charger control here needs one, and offering a
+    /// stepper that cannot send would repeat the bug this app spent a release fixing.
+    @ViewBuilder
+    private func currentLimitRow(_ input: HomeChargingCardInput) -> (some View)? {
+        if input.pairing.entities.currentLimitNumber != nil {
+            let reported = input.telemetry.currentLimitAmps.flatMap { $0.value > 0 ? Int($0.value.rounded()) : nil }
+            HomeChargerCurrentLimitRow(
+                initialAmps: reported ?? model.currentLimitRange.lowerBound,
+                range: model.currentLimitRange,
+                apply: { amps in await model.setChargerCurrentLimit(amps) }
+            )
         }
     }
 
@@ -187,11 +205,20 @@ struct HomeChargerSection: View {
     }
 
     private func perform(_ kind: HomeChargingCardModel.Action.Kind) {
+        // The card shows one charger; a second pairing must be commanded on its own reading, not
+        // through whichever charger happens to hold the live connection.
+        let identity = model.cardInput(for: state)?.pairing.identity
         switch kind {
-        case .chargeNow: Task { await model.send(.start) }
-        case .pause: Task { await model.send(.pause) }
-        case .resume: Task { try? await model.resumePlan() }
-        case .editPlan: showsPlanEditor = true
+        case .chargeNow:
+            if let identity { Task { await model.send(.start, for: identity) } }
+        case .pause:
+            if let identity { Task { await model.send(.pause, for: identity) } }
+        case .resume:
+            if let identity { model.selectCharger(identity: identity) }
+            Task { try? await model.resumePlan() }
+        case .editPlan:
+            if let identity { model.selectCharger(identity: identity) }
+            showsPlanEditor = true
         }
     }
 }
@@ -215,6 +242,61 @@ struct HomeChargerCard: View {
                 state: state, model: homeCharging,
                 showsScheduleActions: onOpenPlan == nil, onOpenPlan: onOpenPlan
             )
+        }
+    }
+}
+
+
+/// A stepper plus Apply for the charger's current ceiling. It reports its own failure text instead
+/// of pretending the write landed, because the reading comes back on the next poll and a silent
+/// failure would look like "the charger ignored me".
+@MainActor
+private struct HomeChargerCurrentLimitRow: View {
+    let initialAmps: Int
+    let range: ClosedRange<Int>
+    let apply: (Int) async -> String?
+
+    @State private var amps: Int
+    @State private var isSending = false
+    @State private var failure: String?
+
+    init(initialAmps: Int, range: ClosedRange<Int>, apply: @escaping (Int) async -> String?) {
+        self.initialAmps = initialAmps
+        self.range = range
+        self.apply = apply
+        _amps = State(initialValue: min(max(initialAmps, range.lowerBound), range.upperBound))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(L10n.text("Current limit"))
+                    .hisType(.label, weight: .medium)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                Spacer()
+                Stepper(value: $amps, in: range) {
+                    Text(L10n.format("%d A", amps))
+                        .hisType(.label, weight: .medium)
+                        .monospacedDigit()
+                }
+                .fixedSize()
+                Button(L10n.text("Apply")) {
+                    isSending = true
+                    failure = nil
+                    Task {
+                        failure = await apply(amps)
+                        isSending = false
+                    }
+                }
+                .buttonStyle(.hisSecondary)
+                .disabled(isSending)
+            }
+            if let failure {
+                Text(failure)
+                    .hisType(.micro)
+                    .foregroundStyle(HisingenTheme.semanticCritical)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

@@ -15,7 +15,8 @@ extension VolvoAPI {
             if Self.isRequestLevelFailure(error) { throw error }
             details = VolvoVehicleDetailsDTO(
                 vin: vin, modelYear: nil, descriptions: nil,
-                fuelType: nil, externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil
+                fuelType: nil, externalColour: nil, gearbox: nil, batteryCapacityKWH: nil, images: nil,
+                specifications: nil
             )
         }
         let powertrain = VolvoPowertrain.classify(fuelType: details.fuelType)
@@ -27,43 +28,48 @@ extension VolvoAPI {
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
         let needsFuel = Self.needsFuelRead(powertrain: powertrain, fuelType: details.fuelType)
+        // A session recorded without `location:read` gets a hard 403 from /location/, and
+        // the optional() wrapper would stand the endpoint down for an hour on every answer.
+        // Skipping the read entirely leaves the map card to its existing "no location"
+        // handling and keeps the request off the wire. Nil (nothing recorded) still reads.
+        let locationScopeGranted = await hasGranted("location:read")
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
-            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel")
+            try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel", scope: .vehicle(vin))
         }
 
         async let energyTask: VolvoEnergyStateDTO? = optional(enabled: needsEnergy, key: "energy-state", vin: vin) {
-            try await self.get("/energy/v2/vehicles/\(vin)/state")
+            try await self.get("/energy/v2/vehicles/\(vin)/state", scope: .vehicle(vin))
         }
         async let doorsTask: VolvoDoorsDTO? = optional(
             enabled: features.contains(.exteriorStatus) || features.contains(.remoteLocks), key: "doors", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/doors") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/doors", scope: .vehicle(vin)) }
         async let windowsTask: VolvoWindowsDTO? = optional(
             enabled: features.contains(.exteriorStatus) || features.contains(.remoteWindows), key: "windows", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/windows") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/windows", scope: .vehicle(vin)) }
         async let tyresTask: VolvoTyresDTO? = optional(
             enabled: features.contains(.tyreAndWarnings), key: "tyres", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/tyres") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/tyres", scope: .vehicle(vin)) }
         async let diagnosticsTask: VolvoDiagnosticsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "diagnostics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/diagnostics") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/diagnostics", scope: .vehicle(vin)) }
         async let engineDiagnosticsTask: VolvoDiagnosticsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "engine-diagnostics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine", scope: .vehicle(vin)) }
         async let odometerTask: VolvoOdometerDTO? = optional(
             enabled: features.contains(.vehicleHealth), key: "odometer", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/odometer") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/odometer", scope: .vehicle(vin)) }
         async let statisticsTask: VolvoStatisticsDTO? = optional(
             enabled: needsStatistics, key: "statistics", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics", scope: .vehicle(vin)) }
         async let locationTask: VolvoLocationDTO? = optional(
-            enabled: features.contains(.vehicleLocation), key: "location", vin: vin
-        ) { try await self.get("/location/v1/vehicles/\(vin)/location") }
+            enabled: features.contains(.vehicleLocation) && locationScopeGranted != false, key: "location", vin: vin
+        ) { try await self.get("/location/v1/vehicles/\(vin)/location", scope: .vehicle(vin)) }
         async let brakesTask: VolvoBrakesDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/brakes") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/brakes", scope: .vehicle(vin)) }
         async let warningsTask: VolvoWarningsDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "warnings", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/warnings", scope: .vehicle(vin)) }
         // engine-status only feeds `fuelSystem.isEngineRunning`, so fetch it when the
         // fuel/powertrain information is actually part of the requested features instead of
         // paying two round trips on every narrow fetch (garage scans, trip-meters-only).
@@ -74,18 +80,27 @@ extension VolvoAPI {
                 && powertrain != .bev)
         async let engineStatusTask: VolvoEngineStatusDTO? = optional(
             enabled: needsEngineStatus, key: "engine-status", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/engine-status", scope: .vehicle(vin)) }
         // command-accessibility backs the availability badge and the remote-control cards;
         // its results are TTL-throttled, so fetch it only when one of those is requested.
         let needsCommandAccessibility = features.contains(.vehicleAvailability)
             || !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
         async let commandAccessibilityTask: VolvoCommandAccessibilityDTO? = optional(
             enabled: needsCommandAccessibility, key: "command-accessibility", vin: vin
-        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility") }
+        ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/command-accessibility", scope: .vehicle(vin)) }
+        // The command list gates the remote controls, so it has its own age rule rather than the
+        // display TTL the other optional endpoints use: refreshed once it is older than the
+        // freshness window, and kept (marked stale) when that refresh fails.
         let needsCommandCapabilities = !features.enabled.isDisjoint(with: AppFeature.remoteFeatures)
-        async let commandsTask: [VolvoCommandDTO]? = optional(
-            enabled: needsCommandCapabilities, key: "commands", vin: vin
-        ) { try await self.getList("/connected-vehicle/v2/vehicles/\(vin)/commands") }
+        async let commandsTask: AdvertisedCommandList? = advertisedCommandList(
+            vin: vin, enabled: needsCommandCapabilities)
+
+        // Premium VOC subscription, which Volvo documents as applying only to PHEV Classic. On a
+        // BEV the flag has no meaning, so this skips the request rather than asking a question
+        // that cannot apply to the car.
+        async let subscriptionTask: Bool? = fetchVOCSubscriptionIfRelevant(
+            vin: vin, powertrain: powertrain
+        )
 
         let fuel = try await fuelTask
         let energy = try await energyTask
@@ -102,6 +117,13 @@ extension VolvoAPI {
         let engineStatus = try await engineStatusTask
         let commandAccessibility = try await commandAccessibilityTask
         let commands = try await commandsTask
+        let hasPremiumSubscription = await subscriptionTask
+        // The provider names why a wrapped field has no value. Collect those answers once per
+        // sweep; the capability inspector shows them, and a domain whose every reading failed
+        // is marked unavailable with the provider's own reason rather than a generic one.
+        let degradedReadings = VolvoScopeCatalog.degradedReadings(
+            energy: energy, availability: commandAccessibility,
+            doors: doors, windows: windows, odometer: odometer)
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -168,6 +190,12 @@ extension VolvoAPI {
         // live), so `.vehicleWeather` is always unavailable for this provider.
         unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
         unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
+        let energyAnsweredNothing = energy != nil
+            && energy?.batteryChargeLevel?.value == nil
+            && energy?.rangeKm == nil
+            && energy?.chargingStateValue == nil
+        unavailable.mark(.chargingDetails, when: features.contains(.chargingDetails)
+                         && energyAnsweredNothing && !degradedReadings.isEmpty)
 
         var openings: [OpeningReading] = []
         let doorFields: [(VehicleOpening, String?)] = [
@@ -187,6 +215,43 @@ extension VolvoAPI {
             ? ExteriorSnapshot(openings: openings, isLocked: doors?.isLocked, alarmTriggered: nil)
             : nil
 
+        // Exterior timestamp: the newest reading across every door, lid and window field.
+        let exteriorFields: [VolvoField<String>?] = [
+            doors?.centralLock, doors?.frontLeftDoor, doors?.frontRightDoor, doors?.rearLeftDoor,
+            doors?.rearRightDoor, doors?.hood, doors?.tailgate, doors?.tankLid,
+            windows?.frontLeftWindow, windows?.frontRightWindow, windows?.rearLeftWindow,
+            windows?.rearRightWindow, windows?.sunroof
+        ]
+        let exteriorReportedAt: Date? = exteriorFields.compactMap { $0?.updatedAt }.max()
+
+        /// Volvo refreshes each resource on its own schedule: on one live account the doors
+        /// carried today's timestamp while the odometer, tyres and diagnostics sat a day behind,
+        /// and the energy state was three hours old. Folding every field into one `reportedAt`
+        /// stamped all of them with the newest timestamp in the sweep, so a day-old odometer read
+        /// as a fresh one. Carrying each endpoint's own `updatedAt` per reading lets every card
+        /// report the age of the value it actually shows.
+        var readingDates: [VehicleReading: Date] = [:]
+        if let date = energy?.batteryChargeLevel?.updatedAt { readingDates[.battery] = date }
+        if let date = energy?.electricRange?.updatedAt { readingDates[.range] = date }
+        if let date = (energy?.chargingStatus ?? energy?.chargingSystemStatus
+                        ?? energy?.chargerConnectionStatus)?.updatedAt {
+            readingDates[.charging] = date
+        }
+        if let date = doors?.centralLock?.updatedAt { readingDates[.locks] = date }
+        if let date = exteriorReportedAt { readingDates[.openings] = date }
+        if let date = odometer?.odometer?.updatedAt { readingDates[.odometer] = date }
+        if let date = [diagnostics?.serviceWarning?.updatedAt, tyres?.frontLeft?.updatedAt,
+                       brakes?.frontBrakePadStatus?.updatedAt,
+                       engineDiagnostics?.oilLevelWarning?.updatedAt]
+            .compactMap({ $0 }).max() {
+            readingDates[.health] = date
+        }
+        if let date = (fuel?.fuelLevelPercent ?? fuel?.fuelAmount)?.updatedAt { readingDates[.fuel] = date }
+        if let date = location?.properties?.timestamp { readingDates[.location] = date }
+        if let date = commandAccessibility?.availabilityStatus?.updatedAt {
+            readingDates[.availability] = date
+        }
+
         let energyCaps = needsEnergy ? try? await fetchEnergyCapabilities(vin: vin) : nil
         var probes = VehicleProbedCapabilities()
         if doors != nil || windows != nil { probes.record(.exteriorStatus, as: .supported) }
@@ -195,27 +260,44 @@ extension VolvoAPI {
             probes.record(.tyrePressureValues, as: .supported)
         }
         if let commands {
-            let names = Set(commands.compactMap(\.normalizedName))
-            let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
-            let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
-            let supportsLocate = names.contains("honk") || names.contains("flash")
-                || names.contains("honk-flash") || names.contains("honk-and-flash")
-            let supportsEngine = names.contains("engine-start") || names.contains("engine-stop")
-            probes.record(.climateStartStop, as: supportsClimate ? .supported : .unavailable)
-            probes.record(.locks, as: supportsLocks ? .supported : .unavailable)
-            probes.record(.reducedGuardLock, as: names.contains("lock-reduced-guard") ? .supported : .unavailable)
-            probes.record(.honkAndFlash, as: supportsLocate ? .supported : .unavailable)
-            probes.record(.engineStart, as: supportsEngine ? .supported : .unavailable)
+            // A stale list still answers. Dropping it here would leave every command probe
+            // unrecorded, and the model table would then decide whether a control the car does
+            // support is offered. The probe carries the caveat instead.
+            let names = commands.names
+            probes.reportedCommandNames = names.sorted()
+            probes.commandListIsStale = commands.isStale
+            func advertised(_ kinds: [VolvoCommandCatalog.Kind]) -> Bool {
+                kinds.contains { VolvoCommandCatalog.isAdvertised($0, in: names) }
+            }
+            probes.record(.climateStartStop, as: advertised([.climateStart, .climateStop]) ? .supported : .unavailable)
+            probes.record(.locks, as: advertised([.lock, .unlock]) ? .supported : .unavailable)
+            probes.record(.reducedGuardLock, as: advertised([.lockReducedGuard]) ? .supported : .unavailable)
+            probes.record(.honkAndFlash, as: advertised([.honkAndFlash, .flash, .honk]) ? .supported : .unavailable)
+            probes.record(.engineStart, as: advertised([.engineStart, .engineStop]) ? .supported : .unavailable)
         }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
         }
 
-        if let supported = energyCaps?.targetBatteryChargeLevel?.isSupported {
-            probes.record(.chargeTarget, as: supported ? .supported : .unavailable)
-        }
-        if let supported = energyCaps?.chargingCurrentLimit?.isSupported {
-            probes.record(.chargingCurrentLimit, as: supported ? .supported : .unavailable)
+        // Volvo's energy-capabilities response is the one place a backend states, per VIN,
+        // which energy fields the car can report. Probe every decoded flag so a field the
+        // car cannot report reads as "not available" (and its charging-card row hides)
+        // instead of as a blank that might just have failed to decode.
+        let energyFlagProbes: [(capability: VehicleCapability, supported: Bool?)] = [
+            (.batteryChargeLevel, energyCaps?.batteryChargeLevel?.isSupported),
+            (.electricRange, energyCaps?.electricRange?.isSupported),
+            (.chargerConnectionStatus, energyCaps?.chargerConnectionStatus?.isSupported),
+            (.chargingSystemStatus, energyCaps?.chargingSystemStatus?.isSupported),
+            (.chargingType, energyCaps?.chargingType?.isSupported),
+            (.chargerPowerStatus, energyCaps?.chargerPowerStatus?.isSupported),
+            (.chargingPower, energyCaps?.chargingPower?.isSupported),
+            (.estimatedChargingTimeToTarget, energyCaps?.estimatedChargingTimeToTargetBatteryChargeLevel?.isSupported),
+            (.chargingCurrentLimit, energyCaps?.chargingCurrentLimit?.isSupported),
+            (.chargeTarget, energyCaps?.targetBatteryChargeLevel?.isSupported)
+        ]
+        for (capability, supported) in energyFlagProbes {
+            guard let supported else { continue }
+            probes.record(capability, as: supported ? .supported : .unavailable)
         }
 
         let batteryPct: Double? = energy?.batteryChargeLevel?.value ?? fuel?.batteryChargeLevel?.value
@@ -360,9 +442,10 @@ extension VolvoAPI {
             freshness: SnapshotFreshness(
                 fetchedAt: Date(),
                 vehicleReportedAt: reportedAt,
+                readingDates: readingDates,
                 dataWarnings: activeBulbWarnings,
                 unavailableFeatures: unavailable.features
-            ),
+            ).recordedSource(.volvo),
             exteriorStatus: exterior,
             softwareInfo: software,
             climateStatus: climate,
@@ -381,15 +464,26 @@ extension VolvoAPI {
         state.identity.gearbox = details.gearbox.volvoMeaningful
         state.maintenance.service.engineHoursToService = diagnostics?.engineHoursToService?.value
         state.tripComputer.averageSpeedKmH = statistics?.averageSpeedKmH
+        state.tripComputer.manualAverageSpeedKmH = statistics?.averageSpeedManualKmH.map { Int($0.rounded()) }
+        state.tripComputer.automaticAverageSpeedKmH = statistics?.averageSpeedAutomaticKmH.map { Int($0.rounded()) }
         state.fuelSystem.amountLiters = fuelLiters
         state.fuelSystem.averageConsumptionLPer100Km = avgFuelConsumption
         state.fuelSystem.isEngineRunning = isEngineRunning
         state.fuelSystem.type = details.fuelType.volvoMeaningful
         state.identity.upholstery = details.descriptions?.upholstery.volvoMeaningful
         state.identity.steeringOrientation = details.descriptions?.steering.volvoMeaningful
+        state.identity.driveType = details.specifications?.driveType.volvoMeaningful
+        state.identity.enginePowerKw = details.specifications?.enginePowerKw
+        state.identity.grossWeightKg = details.specifications?.grossWeightKg
+        state.identity.numberOfSeats = details.specifications?.numberOfSeats
+        state.identity.availabilityReportedAt = commandAccessibility?.availabilityStatus?.updatedAt
+        state.identity.hasPremiumSubscription = hasPremiumSubscription
         state.maintenance.service.trigger = diagnostics?.serviceTrigger?.value.volvoMeaningful
         state.tripComputer.electricRangeKm = statistics?.distanceToEmptyBatteryKm
         state.energy.currentLimitAmps = currentLimitAmps
+        state.energy.currentLimitReportedAt = energy?.chargingCurrentLimit?.updatedAt
+        state.energy.targetPercentageReportedAt = energy?.targetBatteryChargeLevel?.updatedAt
+        state.exteriorStatus?.reportedAt = exteriorReportedAt
         state.identity.interiorImageData = interiorImg
         state.tripComputer.electricDistanceKm = statistics?.electricDistanceKm
         state.tripComputer.fuelDistanceKm = statistics?.fuelDistanceKm
@@ -413,6 +507,21 @@ extension VolvoAPI {
             .compactMap { $0 }.min()
         state.freshness.readingDates[.odometer] = odometer?.odometer?.updatedAt
         state.freshness.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
+        // Scope evidence is persisted with the grant; the refresh only reads it back. Attaching
+        // it here keeps the inspector's answer travelling with the snapshot the reader is
+        // looking at, including one restored from the offline copy.
+        let scopeRecord = await MainActor.run {
+            (requested: preferences.volvoRequestedScopes,
+             granted: preferences.volvoGrantedScopes.isEmpty ? nil : preferences.volvoGrantedScopes,
+             tier: preferences.volvoGrantTier.flatMap(VolvoAPI.ScopeTier.init(rawValue:)),
+             recordedAt: preferences.volvoScopeGrantRecordedAt)
+        }
+        state.providerReport = VolvoScopeCatalog.report(
+            requestedScopes: scopeRecord.requested,
+            grantedScopes: scopeRecord.granted,
+            tier: scopeRecord.tier,
+            recordedAt: scopeRecord.recordedAt,
+            degradedReadings: degradedReadings)
         return state
     }
 
@@ -433,7 +542,9 @@ extension VolvoAPI {
     private func fetchCarImage(vin: String, imageUrlString: String?) async {
         if carImageData[vin] != nil || imageCache.image(for: vin) != nil { return }
         guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
-        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle image"),
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000,
+                                                        operation: "vehicle image",
+                                                        scope: .vehicle(vin)),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         carImageData[vin] = bytes
@@ -443,7 +554,9 @@ extension VolvoAPI {
     private func fetchInteriorImage(vin: String, imageUrlString: String?) async {
         if interiorImageData[vin] != nil || imageCache.interiorImage(for: vin) != nil { return }
         guard let imageUrlString, let url = URL(string: imageUrlString), url.scheme == "https" else { return }
-        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000, operation: "vehicle interior image"),
+        guard let (bytes, response) = try? await perform(URLRequest(url: url), limit: 5_000_000,
+                                                        operation: "vehicle interior image",
+                                                        scope: .vehicle(vin)),
               response.statusCode == 200,
               bytes.count <= 5_000_000 else { return }
         interiorImageData[vin] = bytes

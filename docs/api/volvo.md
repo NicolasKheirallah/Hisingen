@@ -26,7 +26,7 @@ See [authentication.md](authentication.md#volvo-oauth2-pkce-with-a-redirect-uri-
 |---|---|---|---|
 | Vehicle identity | `GET /connected-vehicle/v2/vehicles/{vin}` | Model, model year, colour (flat `externalColour` string or `externalColours` array), gearbox, battery capacity (kWh), fuel type, exterior/interior image URLs | `modelName`, `modelYear`, `externalColour`, `gearbox`, `powertrain` (see below), image |
 | Energy state | `GET /energy/v2/vehicles/{vin}/state` | Battery SOC, range, charging status/type, charger connection/power state, current limit, power in watts, target SOC, time to target | `batteryPercentage`, `rangeKm`, `chargingState`, `chargingType`, `chargingPowerWatts`, etc. |
-| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Feeds `.chargeTarget`/`.chargingCurrentLimit` capability probes; see [architecture/capabilities.md](../architecture/capabilities.md) |
+| Energy capabilities | `GET /energy/v2/vehicles/{vin}/capabilities` | Per-field hardware support flags | Every decoded flag probes its matching `VehicleCapability` (battery level, range, connection, charging status, charging type, charger power status, charging power, estimated time to target, current limit, charge target), which gates the charging card's rows and the Info capabilities sheet; see [architecture/capabilities.md](../architecture/capabilities.md) |
 | Doors | `GET /connected-vehicle/v2/vehicles/{vin}/doors` | Central lock, door/hood/tailgate/charge-lid state | `exteriorStatus` |
 | Windows | `GET /connected-vehicle/v2/vehicles/{vin}/windows` | Window/sunroof state | `exteriorStatus` |
 | Tyres | `GET /connected-vehicle/v2/vehicles/{vin}/tyres` | Per-wheel warning enum (no numeric pressure); `NO_SENSOR` / `SYSTEM_FAULT` map to a distinct `.sensorFault` state | `healthDetails.tyres` (warning only, `kilopascals` always `nil`) |
@@ -72,9 +72,22 @@ Both fields live inside the single vehicle-details response (`GET /connected-veh
 
 `GET /energy/v2/vehicles/{vin}/capabilities` returns a nested `getEnergyState` capability whose
 children describe individual energy fields. Hisingen decodes that documented nested shape (and
-the older flat shape defensively), caches it for one hour, and feeds charge-target and
-charging-current-limit probes. The Connected Vehicle command list supplies the equivalent
-per-VIN probes for remote controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
+the older flat shape defensively), caches it for one hour, and probes every decoded flag into the
+per-VIN capability record: a `false` flag reads as "this car does not report that", so the
+charging card hides a row the car cannot report instead of showing whatever happened to decode,
+and the Info capabilities sheet shows each flag's support with "Recent service response" as its
+source. The Connected Vehicle command list supplies the equivalent per-VIN probes for remote
+controls. See [architecture/capabilities.md](../architecture/capabilities.md) and [domain/capability-matrix.md](../domain/capability-matrix.md).
+
+The token response's `scope` member is the one place Volvo states what an authorization actually
+granted. `VolvoScopeCatalog` records the requested scopes when a sign-in starts and the granted
+list on every token grant, persists both, and turns them into a per-domain grant
+(`granted`/`partly granted`/`not granted`/`not requested`/`unknown`). Wrapped fields keep their
+`status` and `unavailableReason`; every field that did not answer with a value is carried into
+the provider report, so the Info inspector shows Volvo's own reason (`ERROR ·
+PROPERTY_NOT_FOUND`) instead of a generic unavailable. A reported degradation also survives the
+snapshot encoder, so a restored offline copy keeps the explanation. The evidence is diagnostic:
+it never widens a control the capability profile or command catalog refuses.
 
 ## Remote commands
 
@@ -122,4 +135,4 @@ Volvo's response envelope is inconsistent across endpoints/versions in practice:
 
 ## Relevant tests
 
-`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, run on demand via `live-integration.yml`; see [operations/ci.md](../operations/ci.md).
+`Tests/HisingenTests/Unit/VolvoDecodingTests.swift` (the largest Volvo test file), `VolvoEndpointFixtureTests.swift` (one sanitized fixture per called GET resource, plus the explicit no-fixture exemptions), `VolvoCapabilityInspectorTests.swift` (scope grants and degraded-field reasons, including a full refresh against a sanitized transport), `VolvoModelIdentificationTests.swift`, `VolvoKeychainIsolationTests.swift`; live (credential-gated, opt-in) coverage in `Tests/HisingenTests/Integration/LiveVolvoIntegrationTests.swift`'s `LiveVolvoReadOnlyIntegrationTests`, including `testLiveSweepExercisesEveryFixturedEndpoint`, which walks the same `VolvoFixturedEndpoint` inventory as the fixture tests through the production adapter; run on demand via `live-integration.yml`; see [operations/ci.md](../operations/ci.md).

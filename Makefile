@@ -1,6 +1,11 @@
 OUTPUT_DIR ?= releases
 APP     ?= $(OUTPUT_DIR)/Hisingen.app
 BINARY  = .build/release/Hisingen
+# The widget extension binary SwiftPM builds beside the app; the .appex bundle is
+# hand-assembled from it inside $(APP)/Contents/PlugIns the same way the .app is.
+WIDGET_BINARY = .build/release/HisingenWidget
+WIDGET_APPEX = $(APP)/Contents/PlugIns/HisingenWidget.appex
+WIDGET_INFO_PLIST = Resources/HisingenWidget-Info.plist
 DMG     ?= $(OUTPUT_DIR)/Hisingen.dmg
 ZIP     ?= $(OUTPUT_DIR)/Hisingen.zip
 DMG_STAGING ?= $(OUTPUT_DIR)/dmg-staging
@@ -40,7 +45,7 @@ NOTARYTOOL_PROFILE ?= hisingen-notary
 export NOTARIZE
 export NOTARYTOOL_PROFILE
 
-.PHONY: all dist ci doctor build build-arch lipo-universal package-universal universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets
+.PHONY: all dist ci doctor build build-arch lipo-universal package-universal universal app app-universal dmg package-dmg notarize run test clean release setup-cert inject-secrets hooks
 
 ## Default target: build both .app bundle and .dmg installer
 all: dmg
@@ -63,6 +68,11 @@ inject-secrets:
 setup-cert:
 	sh Scripts/setup-dev-cert.sh
 
+## Install this repository's git hooks (a pre-commit gate for localization and docs links).
+## Hooks are per clone, so a fresh checkout runs this once; re-run after a hook changes.
+hooks:
+	sh Scripts/install-hooks.sh
+
 ## Build the release binary
 build: doctor inject-secrets
 	swift build -c release $(SWIFT_FLAGS)
@@ -77,12 +87,16 @@ build-arch: doctor inject-secrets
 		*/.build-$(ARCH)/$(ARCH)-apple-macosx/release) ;; \
 		*) echo "Unexpected SwiftPM output layout: $$bin" >&2; exit 1 ;; \
 	esac; \
-	test -x "$$bin/Hisingen" || { echo "Missing $$bin/Hisingen" >&2; exit 1; }
+	for product in Hisingen HisingenWidget; do \
+		test -x "$$bin/$$product" || { echo "Missing $$bin/$$product" >&2; exit 1; }; \
+	done
 
 ## Merge two per-architecture builds into the single binary the app bundle packages.
 lipo-universal:
 	@for arch in arm64 x86_64; do \
-		test -x ".build-$$arch/$$arch-apple-macosx/release/Hisingen" || { echo "Missing the $$arch build; run make build-arch ARCH=$$arch" >&2; exit 1; }; \
+		for product in Hisingen HisingenWidget; do \
+			test -x ".build-$$arch/$$arch-apple-macosx/release/$$product" || { echo "Missing the $$arch $$product build; run make build-arch ARCH=$$arch" >&2; exit 1; }; \
+		done; \
 	done
 	mkdir -p .build/release
 	lipo -create \
@@ -90,6 +104,11 @@ lipo-universal:
 		.build-x86_64/x86_64-apple-macosx/release/Hisingen \
 		-output $(BINARY)
 	lipo $(BINARY) -verify_arch arm64 x86_64
+	lipo -create \
+		.build-arm64/arm64-apple-macosx/release/HisingenWidget \
+		.build-x86_64/x86_64-apple-macosx/release/HisingenWidget \
+		-output $(WIDGET_BINARY)
+	lipo $(WIDGET_BINARY) -verify_arch arm64 x86_64
 
 ## Build a universal binary for distribution.
 universal: doctor inject-secrets
@@ -115,6 +134,14 @@ app: $(if $(SKIP_BUILD),,build)
 	mkdir -p $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/$(RESOURCE_BUNDLE)/
 	cp -R Sources/Hisingen/Resources/. $(APP)/Contents/Resources/
+	@# App Intents metadata. SwiftPM cannot ask the compiler for the constant values the processor
+	@# reads, so a build step produces them; without this bundle Shortcuts, Siri, the Focus filter
+	@# and interactive widget buttons cannot discover any intent. SKIP_APPINTENTS=1 leaves it out.
+	@if [ -n "$(SKIP_APPINTENTS)" ]; then \
+		echo "note: App Intents metadata skipped; Shortcuts will not list this build's intents" >&2; \
+	else \
+		sh Scripts/generate-appintents-metadata.sh --output "$(APP)/Contents/Resources/Metadata.appintents"; \
+	fi
 	@if [ -n "$(SPARKLE_FRAMEWORK)" ] && [ -d "$(SPARKLE_FRAMEWORK)" ]; then \
 		cp -R "$(SPARKLE_FRAMEWORK)" "$(APP)/Contents/Frameworks/"; \
 	else \
@@ -123,8 +150,35 @@ app: $(if $(SKIP_BUILD),,build)
 	@if ! otool -l "$(APP)/Contents/MacOS/Hisingen" | grep -Fq '@executable_path/../Frameworks'; then \
 		install_name_tool -add_rpath '@executable_path/../Frameworks' "$(APP)/Contents/MacOS/Hisingen"; \
 	fi
+	plutil -lint $(WIDGET_INFO_PLIST)
+	mkdir -p $(WIDGET_APPEX)/Contents/MacOS $(WIDGET_APPEX)/Contents/Resources
+	cp $(WIDGET_BINARY) $(WIDGET_APPEX)/Contents/MacOS/HisingenWidget
+	cp $(WIDGET_INFO_PLIST) $(WIDGET_APPEX)/Contents/Info.plist
+	@# Keep the appex version strings in lockstep with the app's, so no validation ever
+	@# sees a pair that disagrees.
+	@v=$$(plutil -extract CFBundleShortVersionString raw -o - Resources/Info.plist); \
+	b=$$(plutil -extract CFBundleVersion raw -o - Resources/Info.plist); \
+	plutil -replace CFBundleShortVersionString -string "$$v" $(WIDGET_APPEX)/Contents/Info.plist; \
+	plutil -replace CFBundleVersion -string "$$b" $(WIDGET_APPEX)/Contents/Info.plist
+	@# The widget resolves its strings against its own bundle, so it carries the same
+	@# language tables the app ships.
+	cp -R Sources/Hisingen/Resources/*.lproj $(WIDGET_APPEX)/Contents/Resources/
+	@# App Intents metadata for the extension. The widget-facing intents live in the shared
+	@# HisingenIntents target, which both binaries link; the processor folds that module's
+	@# metadata into the extension bundle so a button can resolve the same intent the app runs.
+	@if [ -n "$(SKIP_APPINTENTS)" ]; then \
+		echo "note: widget App Intents metadata skipped; interactive buttons will not run" >&2; \
+	else \
+		sh Scripts/generate-widget-appintents-metadata.sh --appex "$(WIDGET_APPEX)"; \
+	fi
+	@# The extension signs first with its own entitlements, then the app signs without
+	@# --deep so this signature survives: codesign's --deep would push the app's
+	@# entitlements into every nested bundle ("almost never what you want" per its man
+	@# page). Sparkle arrives ad-hoc signed, so a production build re-signs its nested
+	@# code with this identity before signing the app around it.
 ifeq ($(IDENTITY),-)
-	codesign --force --deep -s - $(APP)
+	codesign --force -s - --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force -s - --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "⚠️  Self-signed (ad-hoc) build — this identity changes on every rebuild, so macOS will re-prompt for Keychain/Accessibility access each time you rebuild. Pass IDENTITY=\"<your cert name>\" or run 'make setup-cert' to avoid repeated prompts."
 else
 	@if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$(IDENTITY)\""; then \
@@ -132,11 +186,25 @@ else
 		else echo "Requested signing identity is unavailable: $(IDENTITY)" >&2; exit 1; fi; \
 	fi
 ifneq (,$(findstring Developer ID,$(IDENTITY)))
-	codesign --force --deep --options runtime --timestamp -s "$(IDENTITY)" $(APP)
+	@# Sparkle ships its helpers ad-hoc signed. Apple's notary requires a Developer ID
+	@# signature with a secure timestamp on every executable in the bundle, so each one is
+	@# re-signed here, innermost first, then the framework that contains them, then the app.
+	@for nested in \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" \
+		"$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"; do \
+		codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$$nested" || exit 1; \
+	done
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$(APP)/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" "$(APP)/Contents/Frameworks/Sparkle.framework"
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force --options runtime --timestamp -s "$(IDENTITY)" --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "✅ Signed with Developer ID identity \"$(IDENTITY)\" — production signing."
 	sh Scripts/notarize.sh $(APP)
 else
-	codesign --force --deep -s "$(IDENTITY)" $(APP)
+	codesign --force -s "$(IDENTITY)" --entitlements Resources/HisingenWidget.entitlements $(WIDGET_APPEX)
+	codesign --force -s "$(IDENTITY)" --entitlements Resources/Hisingen.entitlements $(APP)
 	@echo "✅ Signed with stable local identity \"$(IDENTITY)\" — persistent across rebuilds (Keychain & Accessibility permissions remembered)."
 endif
 endif

@@ -157,6 +157,8 @@ enum HomeSessionSync {
                 client: client, home: pairing.tibberHome, from: priceFrom, to: priceTo, timeZone: pairing.timeZone)
             tibberSource = HomeSessionPricer.tibberSource
         }
+        // An hourly contract bills the hour's average, so the slots are folded the way the planner folds them.
+        tibber = environment.fallback.policy.contract.settle(tibber)
         try Task.checkCancellation()
         guard environment.canWrite() else { throw CancellationError() }
 

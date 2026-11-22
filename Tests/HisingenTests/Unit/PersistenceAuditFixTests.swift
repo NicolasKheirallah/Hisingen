@@ -4,6 +4,15 @@ import Testing
 
 @MainActor
 struct PersistenceAuditFixTests {
+    /// A scoped Keychain service beside the scoped defaults domain. A full-fleet erase asks
+    /// the account store for stored secrets, and the real app service would prompt in a test
+    /// process; a throwaway service has no item to protect.
+    private func scopedPreferences(_ defaults: UserDefaults) -> PreferencesStore {
+        PreferencesStore(
+            defaults: defaults,
+            keychain: KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)"))
+    }
+
     @Test
     func activationDeletesLegacyPlistCachesWithoutImportingThem() throws {
         let suite = "HisingenTests.LegacyMirrors.\(UUID())"
@@ -53,7 +62,7 @@ struct PersistenceAuditFixTests {
         let state = vehicle(vin: "YSM-TEST", battery: 72, brand: .polestar)
         db.snapshots.saveSnapshot(state)
         try db.db.execute(sql: "DROP TABLE command_receipts;")
-        let eraser = LocalDataEraser(database: db, preferences: PreferencesStore(defaults: defaults), imageCache: .shared)
+        let eraser = LocalDataEraser(database: db, preferences: scopedPreferences(defaults), imageCache: CarImageCache())
         #expect(throws: (any Error).self) { try eraser.perform(.session(.vehicle("YSM-TEST"))) }
         #expect(db.snapshots.loadSnapshot(for: "YSM-TEST") != nil)
     }
@@ -87,7 +96,7 @@ struct PersistenceAuditFixTests {
         let db = VehicleDatabase.inMemory()
         let entered = DispatchSemaphore(value: 0)
         let resume = DispatchSemaphore(value: 0)
-        let prefs = PreferencesStore(defaults: defaults)
+        let prefs = scopedPreferences(defaults)
         let recorder = VehicleHistoryRecorder(database: db, preferences: prefs, beforePersist: {
             entered.signal()
             _ = resume.wait(timeout: .now() + 5)
@@ -102,7 +111,7 @@ struct PersistenceAuditFixTests {
             }
         }
         try #require(didEnter)
-        let eraser = LocalDataEraser(database: db, preferences: prefs, imageCache: .shared)
+        let eraser = LocalDataEraser(database: db, preferences: prefs, imageCache: CarImageCache())
         try eraser.perform(.everything(.vehicle(state.identity.vin)))
         resume.signal()
         await recorder.drain()
@@ -117,7 +126,7 @@ struct PersistenceAuditFixTests {
         let entered = DispatchSemaphore(value: 0)
         let resume = DispatchSemaphore(value: 0)
         defer { resume.signal(); resume.signal() }
-        let prefs = PreferencesStore(defaults: defaults)
+        let prefs = scopedPreferences(defaults)
         let recorder = VehicleHistoryRecorder(database: db, preferences: prefs, beforePersist: {
             entered.signal()
             _ = resume.wait(timeout: .now() + 5)
@@ -142,7 +151,8 @@ struct PersistenceAuditFixTests {
         }
         try #require(didEnter)
         recorder.record(b)
-        let eraser = LocalDataEraser(database: db, preferences: prefs, imageCache: .shared)
+        let eraser = LocalDataEraser(
+            database: db, preferences: prefs, imageCache: CarImageCache(), clearAccounts: {})
         switch scope {
         case "locationsVehicle": try await eraser.performInBackground(.locations(.vehicle(vinA)))
         case "sessionVehicle": try eraser.perform(.session(.vehicle(vinA)))
@@ -169,16 +179,33 @@ struct PersistenceAuditFixTests {
     }
 
     @Test
+    func fullFleetEraseCallsTheInjectedAccountClearHookOnly() throws {
+        let suite = "HisingenTests.AccountHook.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var clears = 0
+        let eraser = LocalDataEraser(
+            database: VehicleDatabase.inMemory(), preferences: scopedPreferences(defaults),
+            imageCache: CarImageCache(), clearAccounts: { clears += 1 })
+
+        try eraser.perform(.everything(.all))
+        #expect(clears == 1, "a full-fleet erase must clear the accounts")
+
+        try eraser.perform(.everything(.vehicle("YSM-HOOK-VIN")))
+        #expect(clears == 1, "a per-vehicle erase must leave the accounts alone")
+    }
+
+    @Test
     func admissionFenceRejectsObservationsDuringBackgroundErase() async throws {
         let suite = "HisingenTests.AdmissionFence.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let db = VehicleDatabase.inMemory()
-        let prefs = PreferencesStore(defaults: defaults)
+        let prefs = scopedPreferences(defaults)
         let entered = DispatchSemaphore(value: 0)
         let resume = DispatchSemaphore(value: 0)
         defer { resume.signal() }
-        let eraser = LocalDataEraser(database: db, preferences: prefs, imageCache: .shared, beforeSQL: {
+        let eraser = LocalDataEraser(database: db, preferences: prefs, imageCache: CarImageCache(), beforeSQL: {
             entered.signal()
             _ = resume.wait(timeout: .now() + 5)
         })
@@ -224,10 +251,10 @@ struct PersistenceAuditFixTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let database = VehicleDatabase.inMemory()
-        let preferences = PreferencesStore(defaults: defaults)
+        let preferences = scopedPreferences(defaults)
         preferences.persistLocationHistory = true
         try database.db.execute(sql: "DROP TABLE telemetry_logs;")
-        let eraser = LocalDataEraser(database: database, preferences: preferences, imageCache: .shared)
+        let eraser = LocalDataEraser(database: database, preferences: preferences, imageCache: CarImageCache())
         do {
             try await eraser.performInBackground(.locations(.vehicle("VIN-FAIL")))
             Issue.record("Expected the missing telemetry table to make erasure fail")

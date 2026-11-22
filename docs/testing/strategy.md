@@ -14,6 +14,8 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 
 **Regression tests** (`RegressionFixTests.swift`): named after specific past bugs (update-checker URL pointing at the right fork, "available" vs. "installed" software-version semantics not being conflated, Digital Twin climate-off never misreported as ventilating/heating, service warnings surviving a transient health-fetch failure but clearing on a genuinely clean response, rain/evening-unlocked condition detection). This is where "we broke this once, don't break it again" lives.
 
+**Widget snapshot tests** (`Tests/HisingenWidgetTests/`): a second test target importing both the app and the extension binary. The wire types have one definition (`HisingenIntents`), but the writer still lives in the app and the reader in the extension, so `WidgetSnapshotRoundTripTests` writes with one and decodes with the other, pinning the exchange end to end.
+
 ## What belongs in each layer
 
 - **Pure logic** (formatting, model classification, merge rules, capability resolution, error mapping) → unit test, no fixture needed.
@@ -37,6 +39,9 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
 | GraphQL decoding, error handling | ✓ | ✓ (`GraphQLDecodingTests`) | | |
 | Volvo REST decoding | | ✓ (`VolvoDecodingTests`, 26 tests) | | ✓ (read path only) |
 | Input boundary validation | ✓ (`InputBoundaryTests`) | | | |
+| Desktop widget snapshot (writer, reader, staleness) | ✓ (`WidgetSnapshotWriterTests`, `WidgetSnapshotRoundTripTests`) | | | |
+| SQLite schema parity, downgrade and corruption guards | ✓ (`VehicleDatabaseSchemaParityTests`, `VehicleDatabaseOpenGuardTests`) | ✓ (`legacy-database-v0.sql`, `database-schema.txt`) | | |
+| Sparkle update feed (newer and malformed appcast) | ✓ (`SparkleFeedTests`, loopback fixture server) | ✓ (`appcast-newer.xml`, `appcast-malformed.xml`) | | |
 | UI rendering | | | | none, manual verification only |
 
 ## Known gaps
@@ -47,6 +52,19 @@ Hisingen migrated its entire test suite to Apple's **Swift Testing** framework (
   Security framework itself; unit tests use isolated service names and verify
   email migration plus separation between draft and committed credentials.
 - **No cross-provider concurrency test** exercises Polestar and Volvo sessions running at once, since only one brand is ever active at a time in the current UI; see [architecture/technical-debt.md](../architecture/technical-debt.md).
+
+## Schema and updater guardrails
+
+`VehicleDatabaseSchemaParityTests` keeps three SQLite surfaces in step: a checked-in
+`Fixtures/database-schema.txt` describes the app's real schema (regenerate it with
+`HISINGEN_WRITE_SCHEMA_FIXTURE=1` and commit the diff), `Fixtures/legacy-database-v0.sql` is the
+schema an install from before `PRAGMA user_version` has and must upgrade to exactly the
+fresh-install schema, and every table and column named by an `INSERT`/`UPDATE`/`DELETE` in
+`Sources/Hisingen` must exist on that upgraded store. `VehicleDatabaseOpenGuardTests` covers the
+refusal of a store written by a newer build and the quarantine of damaged files.
+`SparkleFeedTests` serves `Fixtures/appcast-newer.xml` and `appcast-malformed.xml` from a
+loopback HTTP server to Sparkle's real updater, so the feed parser and the app's delegate
+mapping are exercised without internet access.
 
 ## Live integration tests
 
@@ -89,6 +107,40 @@ it deliberately if you want to reproduce a contention bug.
 This is a property of the runner, not of the tests: if the suite moves to a larger runner, or
 the timing-sensitive suites get injected clocks, re-measure before assuming serialization is
 still needed.
+
+### Shared state the suite still owns, and why
+
+No test is skipped to hide an order dependency. (Eight render suites are opt-in image
+generators gated by `HISINGEN_*_RENDERS`-style environment variables; they are skipped because
+they write PNG artifacts, not to avoid a dependency.) A few suites still touch state that
+outlives one test, and the reasons are recorded here instead:
+
+- `PreferencesStore.shared` is what the panel, settings and render paths read. Inspection and
+  render suites (`PanelInspectionTests`, `HomeChargingInspectionTests`,
+  `DirectChargingInspectionTests`, `HouseMeterInspectionTests`, `DesignRenderTests`) read or
+  temporarily set it, restoring the previous value in `defer`. They are order-independent
+  because they restore, but they cannot run in parallel with another suite that changes the
+  same preference. Threading a store through those views would be a production change, not a
+  test cleanup.
+- Keychain presence bits are a production contract in `UserDefaults.standard` (they let views
+  ask "is a session saved" without a Security.framework read). `PolestarDataPortalTests` and
+  `AccountConnectionModelTests` save and restore the bits they set.
+- `PolestarDataPortalAPI.quotaStateStore` is a process-global test seam. Every test that seeds
+  it now releases it with `defer`, including `PolestarPortalHardeningTests`, which previously
+  leaked the first seeding into later tests.
+- A full-fleet erase reaches the account store and therefore the Keychain. `LocalDataEraser`
+  takes an injectable `clearAccounts` hook, exactly like `clearWidgetSnapshot` and
+  `memoryCaches`; erase suites pass a no-op and a fresh `CarImageCache`, so none can block on
+  an authorization prompt. `LocalDataEraserTests.theWholeFleetEraseClearsEveryAccount` still
+  exercises the default path (on a throwaway Keychain service) so the app's real account
+  clearing stays covered. `VehicleDatabaseOpenGuardTests` and the widget suites use the same
+  scoped-service discipline.
+- Reminder tests used to register their defaults suite in `UserDefaults.standard` and sweep it
+  on the next call; they now own a UUID-scoped suite that removes itself in `deinit`.
+- Swift Testing randomizes suite and test order even with `--no-parallel` and exposes no seed
+  on this toolchain, so repeatability is checked by running the same command twice and
+  comparing the executed set and per-test statuses rather than a fixed sequence. The two runs
+  below executed different orders and both passed, which is the stronger property.
 
 ## Test framework (2026-08-22)
 

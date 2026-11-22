@@ -60,8 +60,20 @@ struct NowInstrument: View {
     private var modelName: String { state.identity.modelName ?? state.model.displayName }
 
     private var ageLine: String {
-        L10n.format("Checked %@", Format.relativeAge(since: state.fetchedAt))
+        // The panel used to report only when Hisingen fetched. On a car whose cloud data is hours
+        // old that read "Checked just now" above an odometer from the previous day, which is the
+        // one line a reader trusts to judge everything below it. When the vehicle's own report is
+        // materially behind the fetch, say so and give its time instead.
+        guard let reportedAt = state.vehicleReportedAt,
+              state.fetchedAt.timeIntervalSince(reportedAt) > Self.reportLagThreshold else {
+            return L10n.format("Checked %@", Format.relativeAge(since: state.fetchedAt))
+        }
+        return L10n.format("Reported %@", Format.relativeAge(since: reportedAt))
     }
+
+    /// How far the vehicle's own report may trail the fetch before the header quotes it instead
+    /// of quoting the fetch. Ten minutes covers ordinary delivery lag without alarming on it.
+    static let reportLagThreshold: TimeInterval = 600
 
     static func readingAge(_ reading: VehicleReading, in state: VehicleState, now: Date = Date()) -> String? {
         guard let reportedAt = state.reportedDate(for: reading) else {
@@ -80,8 +92,13 @@ struct NowInstrument: View {
     private var sharedReadingAge: String? {
         var readings: [VehicleReading] = [.locks, .climateStatus]
         if state.powertrain.hasElectricRange { readings += [.battery, .charging] }
-        readings.append(.range)
-        let ages = Set(readings.map { Self.readingAge($0, in: state) ?? "" })
+        // Odometer, location and health are on the panel too, and providers refresh them far less
+        // often than the doors. Leaving them out meant the shared line could agree on "3 hr ago"
+        // while the odometer beside it was a day old.
+        readings += [.range, .odometer, .location, .health]
+        // A reading with no report time is not a disagreement: it has nothing to say about age.
+        let ages = Set(readings.filter { state.reportedDate(for: $0) != nil }
+            .map { Self.readingAge($0, in: state) ?? "" })
         guard ages.count == 1, let only = ages.first, !only.isEmpty else { return nil }
         return only
     }
@@ -549,7 +566,23 @@ struct NowInstrument: View {
         preferences.remoteRearLeftSeatHeating != .unspecified || preferences.remoteRearRightSeatHeating != .unspecified
     }
 
-    private var climateRunning: Bool { state.isClimateActive && state.hasFreshReading(.climateStatus) }
+    /// A provider with no climate-status resource has no freshness to check, so the receipt-backed
+    /// activity is enough to spin the fan; the countdown below still requires a real reading.
+    private var climateRunning: Bool {
+        guard state.isClimateActive else { return false }
+        return state.climateStatus == nil || state.hasFreshReading(.climateStatus)
+    }
+
+    /// The car's own activity word when it reports one. "Unavailable" used to stand in for
+    /// "this provider cannot report climate status", which read as a missing feature while the
+    /// command itself worked.
+    private var climateValue: String {
+        if let name = state.climateStatus?.activity.displayName { return name }
+        if state.isClimateActive { return L10n.text("Running") }
+        return state.capabilityProfile.permits(.climateStartStop)
+            ? L10n.text("Not reported")
+            : L10n.text("Unavailable")
+    }
 
     /// The car's own remaining time with the moment it said so, which the card counts down from.
     private var climateCountdown: CardCountdownSource? {
@@ -574,8 +607,9 @@ struct NowInstrument: View {
         return quickControl(
             symbol: "fan",
             name: L10n.text("Climate"),
-            value: state.climateStatus?.activity.displayName ?? L10n.text("Unavailable"),
-            reading: .climateStatus, hasReading: state.climateStatus != nil,
+            value: climateValue,
+            reading: .climateStatus,
+            hasReading: state.climateStatus != nil || state.receiptClimateIsRunning,
             activity: climateRunning ? .running : nil,
             symbolMotion: climateRunning ? .spin : .still,
             countdown: climateCountdown,
@@ -626,6 +660,7 @@ struct NowInstrument: View {
             name: L10n.text("Charge Limit"),
             unit: "%", range: chargeBounds.targetRange, current: current,
             queued: state.energy.diagnostics?.unappliedTargetPercentage(current: current),
+            changedAt: state.energy.targetPercentageReportedAt,
             format: { Format.percent(Double($0)) },
             command: { .setChargeTarget($0) }
         )
@@ -638,9 +673,23 @@ struct NowInstrument: View {
             name: L10n.text("Current Limit"),
             unit: "A", range: chargeBounds.amperageRange, current: current,
             queued: state.energy.diagnostics?.unappliedLimitAmps(current: current),
+            changedAt: state.energy.currentLimitReportedAt,
             format: Format.amps,
             command: { .setAmpLimit($0) }
         )
+    }
+
+    /// The note line under a limit stepper's value. A queued change says what is coming, the
+    /// top of the range says why the verb reads "Lower", and otherwise a setting the car has
+    /// not touched for over a month says when it was last set, with the same wording the
+    /// charging card's rows carry. Static so tests can pin the choice without rendering.
+    static func limitControlNote(
+        queued: Int?, base: Int?, upperBound: Int, changedAt: Date?,
+        format: (Int) -> String, now: Date = Date()
+    ) -> String? {
+        if let queued { return L10n.format("%@ queued · applies when the car wakes", format(queued)) }
+        if base.map({ $0 >= upperBound }) == true { return L10n.text("Maximum") }
+        return VehicleChargingCard.staleSettingNote(reportedAt: changedAt, now: now)
     }
 
     private func limitControl(
@@ -650,14 +699,17 @@ struct NowInstrument: View {
         range: ClosedRange<Int>,
         current: Int?,
         queued: Int?,
+        changedAt: Date? = nil,
         format: (Int) -> String,
         command: @escaping (Int) -> RemoteCommand
     ) -> some View {
         // Step from the queued value so repeated presses advance before the car applies them.
         let base = queued ?? current
         let press = base.map { LimitStepping.pressed($0, within: range, step: preferences.nowLimitStep) }
-        let note = queued.map { L10n.format("%@ queued · applies when the car wakes", format($0)) }
-            ?? (base.map { $0 >= range.upperBound } == true ? L10n.text("Maximum") : nil)
+        let note = Self.limitControlNote(
+            queued: queued, base: base, upperBound: range.upperBound,
+            changedAt: changedAt, format: format
+        )
         let action = press.map {
             $0.restarts
                 ? L10n.format("Lower to %@", format($0.value))
@@ -673,6 +725,23 @@ struct NowInstrument: View {
                 LimitEntry(title: name, unit: unit, range: range, current: $0,
                            rangeText: L10n.format("From %1$@ to %2$@", format(range.lowerBound), format(range.upperBound)),
                            command: command)
+            },
+            // One VoiceOver adjustment gesture: increment matches the card's press (a step up,
+            // or the restart value at the ceiling); decrement is the same step downwards, which
+            // the pointer never needed because the card only climbs.
+            adjustment: { direction in
+                guard let base else { return nil }
+                let limitDirection: LimitStepping.Direction?
+                switch direction {
+                case .increment: limitDirection = .up
+                case .decrement: limitDirection = .down
+                @unknown default: limitDirection = nil
+                }
+                guard let limitDirection else { return nil }
+                return LimitStepping.adjusted(base, within: range,
+                                              step: preferences.nowLimitStep,
+                                              direction: limitDirection)
+                    .map(command)
             },
             action: action,
             command: command(press?.value ?? base ?? range.upperBound)
@@ -693,6 +762,7 @@ struct NowInstrument: View {
         note: String? = nil,
         entry: LimitEntry? = nil,
         valueIsWarning: Bool = false,
+        adjustment: ((AccessibilityAdjustmentDirection) -> RemoteCommand?)? = nil,
         action: String?,
         command: RemoteCommand
     ) -> some View {
@@ -731,6 +801,11 @@ struct NowInstrument: View {
             .accessibilityLabel(sending ? visibleAction : commandTitle)
             .accessibilityValue(spoken)
             .accessibilityHint(availability.shortReason ?? "")
+            .accessibilityAdjustableActionIf(adjustment != nil) { direction in
+                guard let next = adjustment?(direction),
+                      commandGate.availability(next).isAvailable else { return }
+                commandGate.send(next)
+            }
             .overlay(alignment: .bottomTrailing) {
                 if let entry {
                     LimitEntryButton(
@@ -855,11 +930,14 @@ struct InstrumentVehicleProfile: View {
     var fillsWidth = false
 
     @Environment(\.preferencesStore) private var preferences
+    /// The stored render, read off the main thread and only when the snapshot carries none.
+    /// `body` used to query the image tier directly.
+    @State private var storedRender: (vin: String, data: Data)?
 
     var body: some View {
         let vin = state.identity.vin
         let angle = preferences.carRenderAngle.rawValue
-        let data = state.identity.imageData ?? imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin)
+        let data = state.identity.imageData ?? (storedRender?.vin == vin ? storedRender?.data : nil)
 
         Group {
             if preferences.features.contains(.vehicleImage), let data {
@@ -876,5 +954,14 @@ struct InstrumentVehicleProfile: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipped()
+        .task(id: "\(vin)|\(angle)|\(state.identity.imageData == nil)") {
+            guard state.identity.imageData == nil else { storedRender = nil; return }
+            let cache = imageCache
+            let loaded = await Task.detached(priority: .userInitiated) {
+                cache.image(for: vin, angle: angle) ?? cache.image(for: vin)
+            }.value
+            guard !Task.isCancelled else { return }
+            storedRender = loaded.map { (vin: vin, data: $0) }
+        }
     }
 }

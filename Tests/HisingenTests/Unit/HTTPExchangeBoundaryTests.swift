@@ -13,7 +13,7 @@ struct HTTPExchangeBoundaryTests {
         let (bytes, response) = try await HTTPExchange.data(
             for: URLRequest(url: URL(string: "https://pc-api.polestar.com/test")!),
             using: session, limit: 16_384, operation: "boundary test", provider: .polestar,
-            diagnosticLog: APIDiagnosticLogStore()
+            scope: .account, diagnosticLog: APIDiagnosticLogStore()
         )
         #expect(bytes.count == 16_384)
         #expect(response.statusCode == 200)
@@ -31,7 +31,7 @@ struct HTTPExchangeBoundaryTests {
             _ = try await HTTPExchange.data(
                 for: URLRequest(url: URL(string: "https://pc-api.polestar.com/test")!),
                 using: session, limit: 16, operation: "boundary test", provider: .polestar,
-                diagnosticLog: log, logicalOperationID: id, attempt: 2
+                scope: .account, diagnosticLog: log, logicalOperationID: id, attempt: 2
             )
             Issue.record("An oversized response must fail")
         } catch PolestarError.responseTooLarge { }
@@ -44,7 +44,7 @@ struct HTTPExchangeBoundaryTests {
     }
 }
 
-private final class BoundaryProtocol: URLProtocol, @unchecked Sendable {
+private final class BoundaryProtocol: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var storedBody = Data()
     static var body: Data {

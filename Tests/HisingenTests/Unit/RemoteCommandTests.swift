@@ -781,7 +781,7 @@ private final class DeferredCommandAuthorizer: RemoteActionAuthorizing {
     private var requestContinuation: CheckedContinuation<Void, Never>?
     private var authorizationRequested = false
 
-    func authorize(_ command: RemoteCommand, vehicle: String) async -> Bool {
+    func authorize(_ command: RemoteCommand, vehicle: String, origin: RemoteCommandOrigin) async -> Bool {
         authorizationRequested = true
         requestContinuation?.resume()
         requestContinuation = nil

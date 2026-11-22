@@ -18,6 +18,60 @@ esac
 test -d "$APP_PATH" || { echo "Missing app: $APP_PATH" >&2; exit 1; }
 test -s "$DMG_PATH" || { echo "Missing or empty DMG: $DMG_PATH" >&2; exit 1; }
 test -x "$APP_PATH/Contents/MacOS/Hisingen"
+
+# The widget is a hand-assembled .appex, so nothing in Xcode's build checks its shape. An app
+# extension must be typed XPC! and declare the widget point, or pluginkit ignores it while every
+# other check here still passes. Assert it before the signature, so a missing/wrong bundle fails
+# the build instead of shipping a widget that never appears.
+appex="$APP_PATH/Contents/PlugIns/HisingenWidget.appex"
+test -d "$appex" || { echo "Missing widget appex: $appex" >&2; exit 1; }
+test -x "$appex/Contents/MacOS/HisingenWidget" || { echo "Missing widget binary" >&2; exit 1; }
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$appex/Contents/Info.plist" 2>/dev/null)" = 'XPC!' || {
+    echo 'Widget appex is not typed XPC!' >&2; exit 1; }
+test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$appex/Contents/Info.plist" 2>/dev/null)" = 'com.apple.widgetkit-extension' || {
+    echo 'Widget appex does not declare the WidgetKit extension point' >&2; exit 1; }
+plutil -lint "$appex/Contents/Info.plist" >/dev/null
+codesign --verify --strict --verbose=2 "$appex"
+
+# App Intents metadata is what makes the intents discoverable, and nothing else in the build
+# notices when it is absent: the app runs, and Shortcuts simply lists nothing. A release either
+# carries a populated bundle or says explicitly that it was built without one.
+if [ "${REQUIRE_APPINTENTS:-true}" = true ]; then
+    metadata="$APP_PATH/Contents/Resources/Metadata.appintents"
+    test -d "$metadata" || { echo "Missing App Intents metadata: $metadata" >&2; exit 1; }
+    test -s "$metadata/version.json" || { echo 'App Intents metadata has no version.json' >&2; exit 1; }
+    test -s "$metadata/extract.actionsdata" || { echo 'App Intents metadata has no actions data' >&2; exit 1; }
+    python3 -c '
+import json, sys
+document = json.load(open(sys.argv[1], encoding="utf-8"))
+intents = document.get("actions") or {}
+shortcuts = document.get("autoShortcuts") or []
+if not intents:
+    raise SystemExit("App Intents metadata lists no intents")
+if not shortcuts:
+    raise SystemExit("App Intents metadata lists no App Shortcuts")
+print(f"App Intents metadata: {len(intents)} intents, {len(shortcuts)} shortcut groups")
+' "$metadata/extract.actionsdata"
+
+    # The widget extension carries its own metadata: its intents live in the shared
+    # HisingenIntents module, and a missing bundle makes every interactive button inert
+    # without failing any other build step.
+    widget_metadata="$appex/Contents/Resources/Metadata.appintents"
+    test -d "$widget_metadata" || { echo "Missing widget App Intents metadata: $widget_metadata" >&2; exit 1; }
+    test -s "$widget_metadata/version.json" || { echo 'Widget App Intents metadata has no version.json' >&2; exit 1; }
+    test -s "$widget_metadata/extract.actionsdata" || { echo 'Widget App Intents metadata has no actions data' >&2; exit 1; }
+    python3 -c '
+import json, sys
+document = json.load(open(sys.argv[1], encoding="utf-8"))
+intents = document.get("actions") or {}
+expected = {"WidgetLockVehicleIntent", "WidgetUnlockVehicleIntent", "WidgetStartClimateIntent", "WidgetHonkVehicleIntent", "WidgetChargeNowIntent", "WidgetStartPreCleaningIntent", "WidgetRefreshVehicleIntent"}
+missing = sorted(expected - intents.keys())
+if missing:
+    raise SystemExit("Widget App Intents metadata is missing: " + ", ".join(missing))
+print(f"Widget App Intents metadata: {len(intents)} intents")
+' "$widget_metadata/extract.actionsdata"
+fi
+
 plutil -lint "$APP_PATH/Contents/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP_PATH/Contents/Info.plist")" = true
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

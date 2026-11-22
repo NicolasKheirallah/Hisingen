@@ -49,6 +49,7 @@ extension HistoryDashboardView {
                             HistorySectionHeading(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"),
                                        color: HisingenTheme.semanticGood)
                             Spacer()
+                            editSessionButton
                             closeSessionButton
                         }
                         Text(Format.dateTimeFormatter.string(from: selectedSession.startedAt))
@@ -67,6 +68,18 @@ extension HistoryDashboardView {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var editSessionButton: some View {
+        if let selectedSession, selectedSession.endedAt != nil {
+            Button { beginEditingChargingSession(selectedSession) } label: {
+                Image(systemName: "pencil").hisType(.label)
+            }
+            .buttonStyle(.pressable)
+            .help(L10n.text("Edit"))
+            .accessibilityLabel(L10n.text("Edit"))
         }
     }
 
@@ -106,6 +119,12 @@ extension HistoryDashboardView {
                 ?? (stored.summaryVersion < 2 ? preferences.electricityPricePerKwh * stored.energyDeliveredKwh : nil)
         }
         let costFigure = session.flatMap { sessionCostFigure($0, estimate: estimatedCost) }
+        let cheapest = session.flatMap { cheapestOption(for: $0) }
+        let pluggedMinutes: Int? = session.flatMap { stored -> Int? in
+            guard let from = stored.wallbox?.startedAt, let to = stored.wallbox?.endedAt else { return nil }
+            let minutes = Int(to.timeIntervalSince(from) / 60)
+            return minutes > (durationMinutes ?? 0) + 10 ? minutes : nil
+        }
         let tariffSplit = tariffSplitForSelectedSession()
         let isAnomalous = session.map { snapshot.anomalousSessionIDs.contains($0.id) } ?? false
         let curveGapCount = zip(curve, curve.dropFirst()).filter {
@@ -141,12 +160,19 @@ extension HistoryDashboardView {
                             .foregroundStyle(badgeColor)
                     }
                     Spacer()
+                    editSessionButton
                     closeSessionButton
                 }
-                if let session, let name = session.locationName, !name.isEmpty {
-                    Label(name, systemImage: "mappin.and.ellipse")
-                        .hisType(.micro, weight: .medium)
-                        .foregroundStyle(.secondary)
+                if let session {
+                    HStack(spacing: 8) {
+                        Label(session.place.displayName,
+                              systemImage: session.place == .home ? "house" : "bolt.car")
+                        if let name = session.locationName, !name.isEmpty {
+                            Label(name, systemImage: "mappin.and.ellipse")
+                        }
+                    }
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(.secondary)
                 }
                 if isAnomalous {
                     footnote("exclamationmark.triangle.fill",
@@ -169,8 +195,11 @@ extension HistoryDashboardView {
                 }
                 curveStatsRow(session: session, socGain: socGain, durationMinutes: durationMinutes, peak: peak,
                               cost: costFigure)
-                if tenToEighty != nil || idleTail != nil || lossPct != nil {
+                if tenToEighty != nil || idleTail != nil || lossPct != nil || pluggedMinutes != nil {
                     HStack(spacing: 12) {
+                        if let pluggedMinutes {
+                            curveStat(L10n.text("Plugged In"), Format.shortDuration(minutes: pluggedMinutes))
+                        }
                         if let tenToEighty {
                             curveStat("10→80%", Format.shortDuration(minutes: max(1, Int(tenToEighty / 60))))
                         }
@@ -189,9 +218,23 @@ extension HistoryDashboardView {
                                        record.value.map { (record.timestamp, $0) }
                                    },
                                    prices: loadedSessionPricesID == session?.id ? selectedSessionPrices : nil,
+                                   cheapestSlots: cheapest?.slots ?? [],
                                    currencySymbol: session?.wallbox?.currency ?? session?.currencySymbol ?? preferences.currencySymbol,
                                    chartHeight: chartHeight, animationKey: sessionCurveKey)
-                if let session { wallboxRows(session) }
+                if let session, session.endedAt != nil, loadedSessionPricesID == session.id, selectedSessionPrices == nil {
+                    Text(homeCharging?.tibberHome == nil
+                         ? L10n.text("No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices.")
+                         : L10n.text("No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days."))
+                        .hisType(.micro).foregroundStyle(.secondary)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let session { wallboxRows(session, cheapest: cheapest) }
+                if let session, let fee = overstayFee(for: session) {
+                    KVRow(L10n.text("Idle and Overstay Fee"),
+                          Format.currency(fee.amount, symbol: fee.rule.currencySymbol),
+                          symbol: "parkingsign", warning: true, info: overstayFeeInfo(fee))
+                }
                 if let tariffSplit, tariffSplit.nightEnergyKwh > 0 {
                     HStack(spacing: 12) {
                         curveStat(L10n.text("Day Energy"), Format.energyKwh(tariffSplit.dayEnergyKwh))
@@ -285,6 +328,20 @@ extension HistoryDashboardView {
         .historyYAxis(unit)
         .frame(height: chartHeight * 0.62)
         .accessibilityLabel("\(title): \(L10n.text("This session")), \(L10n.text("Previous"))")
+        .accessibilityValue(
+            L10n.format("%@: %@", L10n.text("This session"), chartAccessibilityValue(points: current.map(\.value)))
+            + " · "
+            + L10n.format("%@: %@", L10n.text("Previous"), chartAccessibilityValue(points: previous.map(\.value)))
+        )
+        .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+            title: title,
+            xLabel: L10n.text("Minutes"),
+            yLabel: unit,
+            series: [
+                .init(name: L10n.text("This session"), points: current.map { ($0.minutes, $0.value) }),
+                .init(name: L10n.text("Previous"), points: previous.map { ($0.minutes, $0.value) })
+            ]
+        ))
     }
 
     /// The cost a session card leads with, its label, and how it was reached.
@@ -292,6 +349,43 @@ extension HistoryDashboardView {
         var label: String
         var value: String
         var note: String?
+        /// The total over the energy it paid for, e.g. "2.07 kr/kWh".
+        var average: String?
+    }
+
+    /// The same energy drawn in the cheapest slots of the time the cable was in.
+    struct CheapestOption {
+        var cost: Double
+        var saving: Double
+        var slots: [HomePricePoint]
+        var rateKw: Double
+    }
+
+    /// Only for a session priced slot by slot from Tibber: against an estimate or a spot basis the
+    /// two figures would not be on the same footing.
+    func cheapestOption(for session: HistoricalChargingSession) -> CheapestOption? {
+        guard let wallbox = session.wallbox, let paid = wallbox.cost, wallbox.energyKwh > 0,
+              wallbox.costMethod == HomeSessionCost.Method.intervalTibber.rawValue,
+              loadedSessionPricesID == session.id, let series = selectedSessionPrices,
+              series.basis == .tibberWithGridFee else { return nil }
+        let rate = session.peakPowerKw > 0 ? session.peakPowerKw : preferences.electricityChargerPowerKw
+        guard let best = series.cheapest(energyKwh: wallbox.energyKwh, rateKw: rate) else { return nil }
+        return CheapestOption(cost: best.cost, saving: paid - best.cost, slots: best.slots, rateKw: rate)
+    }
+
+    /// A parking-style fee is its own line: the rate policy owns the energy figure, and adding a
+    /// per-minute charge into it would make both numbers wrong.
+    func overstayFee(for session: HistoricalChargingSession) -> ChargingOverstayFee? {
+        ChargingOverstayFee.resolve(session: session, rules: preferences.chargingOverstayRules)
+    }
+
+    func overstayFeeInfo(_ fee: ChargingOverstayFee) -> String {
+        let ended = Format.dateTimeFormatter.string(from: fee.pluggedUntil)
+        let duration = Format.shortDuration(minutes: max(1, Int((fee.overstay / 60).rounded())))
+        let recorded = L10n.format("Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed.",
+                                   ended, duration, fee.billableMinutes)
+        let rule = L10n.format("Rule: %@ after %d minutes of grace.", fee.rule.rateText, max(0, fee.rule.graceMinutes))
+        return recorded + " " + rule
     }
 
     /// The charger's own energy priced at Tibber's rate with the grid fee when the charger measured
@@ -301,7 +395,10 @@ extension HistoryDashboardView {
             let symbol = wallbox.currency ?? session.currencySymbol ?? preferences.currencySymbol
             let note = wallbox.costAssumptions.isEmpty ? nil : wallbox.costAssumptions.joined(separator: ". ") + "."
             if let cost = wallbox.cost {
-                return SessionCostFigure(label: L10n.text("Total Price"), value: Format.currency(cost, symbol: symbol), note: note)
+                return SessionCostFigure(
+                    label: L10n.text("Total Price"), value: Format.currency(cost, symbol: symbol), note: note,
+                    average: wallbox.energyKwh > 0
+                        ? Format.currency(cost / wallbox.energyKwh, symbol: "\(symbol)/kWh") : nil)
             }
             if let partial = wallbox.partialCost {
                 return SessionCostFigure(label: L10n.text("Priced So Far"), value: Format.currency(partial, symbol: symbol), note: note)
@@ -332,6 +429,9 @@ extension HistoryDashboardView {
                 Spacer(minLength: 12)
                 curveStat(cost.label, cost.value)
                     .help(cost.note ?? "")
+                if let average = cost.average {
+                    curveStat(L10n.text("Average Price"), average)
+                }
             }
         }
     }
@@ -370,6 +470,10 @@ extension HistoryDashboardView {
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
                         .hisType(.micro).foregroundStyle(.secondary)
+                    Button(L10n.text("Add Session")) { beginAddingChargingSession() }
+                        .buttonStyle(.hisSecondary)
+                        .controlSize(.small)
+                        .help(L10n.text("Log a public charge from a receipt, or add a missing session."))
                 }
                 if let sessionFilter {
                     HStack(spacing: 6) {
@@ -400,6 +504,11 @@ extension HistoryDashboardView {
                             chargingSessionRow(session, flagged: anomalies.contains(session.id))
                         }
                         .buttonStyle(.pressable)
+                        .contextMenu {
+                            if session.endedAt != nil {
+                                Button(L10n.text("Edit")) { beginEditingChargingSession(session) }
+                            }
+                        }
                         if session.id != rows.last?.id { Divider().opacity(HisingenTheme.dividerOpacity) }
                     }
                     footer
@@ -484,6 +593,13 @@ extension HistoryDashboardView {
                 }
             }
             Spacer()
+            if let fee = overstayFee(for: session) {
+                Label(Format.currency(fee.amount, symbol: fee.rule.currencySymbol), systemImage: "parkingsign")
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .labelStyle(.titleAndIcon)
+                    .help(overstayFeeInfo(fee))
+            }
             if let cost {
                 Text(Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol))
                     .hisType(.caption, weight: .bold, design: .rounded)
@@ -510,6 +626,9 @@ extension HistoryDashboardView {
         parts.append(Format.energyKwh(session.energyDeliveredKwh))
         if session.peakPowerKw > 0 { parts.append(Format.powerKw(session.peakPowerKw)) }
         if let cost { parts.append(Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol)) }
+        if let fee = overstayFee(for: session) {
+            parts.append(L10n.format("%@ fee", Format.currency(fee.amount, symbol: fee.rule.currencySymbol)))
+        }
         if flagged { parts.append(L10n.text("Low peak power for this location")) }
         return parts.joined(separator: ", ")
     }
@@ -784,6 +903,15 @@ extension HistoryDashboardView {
                 } else {
                     KVRow(L10n.text("Estimated Cost"), L10n.text("Mixed currencies"), symbol: "creditcard",
                           info: L10n.text("Costs in different currencies are kept separate and are not added together."))
+                }
+                if let split = chargingCostSplit(), !chargingSessions.isEmpty {
+                    KVRow(L10n.text("Home Charging"),
+                          Format.currency(split.home.amount, symbol: split.currency),
+                          symbol: "house",
+                          info: L10n.text("Includes every session recorded automatically until its place is changed."))
+                    KVRow(L10n.text("Public Charging"),
+                          Format.currency(split.publicCharging.amount, symbol: split.currency),
+                          symbol: "bolt.car")
                 }
                 spotSavingsRow
                 if let houseLoad { HouseLoadRows(share: houseLoad) }

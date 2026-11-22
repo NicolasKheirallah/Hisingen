@@ -239,7 +239,7 @@ When suitable coordinates are available, Hisingen may send:
 - latitude; and
 - longitude
 
-to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location.
+to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
 
 The Open-Meteo request does not need to contain:
 
@@ -251,6 +251,8 @@ The Open-Meteo request does not need to contain:
 - developer API credentials.
 
 If you do not want vehicle coordinates sent to Open-Meteo, leave Vehicle Weather disabled.
+
+The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends the same rounded latitude and longitude to Open-Meteo to read the next day's hourly solar radiation, and keeps the answer for 30 minutes. With Vehicle Weather disabled, the forecast is not requested.
 
 Weather information returned to Hisingen may itself be stored as part of locally cached or historical vehicle information.
 
@@ -268,7 +270,7 @@ Apple operates independently from Hisingen and processes information according t
 
 ## 9. Open-Meteo
 
-Hisingen may use Open-Meteo for optional vehicle-weather functionality.
+Hisingen may use Open-Meteo for optional vehicle-weather and solar-forecast functionality.
 
 The request may contain the vehicle's coordinates because those coordinates are necessary to determine weather at the vehicle's location.
 
@@ -338,6 +340,10 @@ When you choose Easee or Zaptec directly, Hisingen sends your account email and 
 If you connect Tibber, Hisingen sends your Tibber access token to Tibber's API to read your home's name and 15-minute import prices. The token is stored in the macOS Keychain, is not written to settings archives, exports, logs or diagnostics, and is deleted when you disconnect Tibber or erase all data. Only the Tibber home and its currency are kept in preferences. No charging data is sent to Tibber.
 
 Charger sessions are written to the charging history only when **Store charging history** is on. Each keeps the charger's identifier and the energy it measured. Sessions that cannot be tied to one of your vehicles are kept without a vehicle.
+
+### Grid carbon (optional)
+
+Electricity Maps is used only when you save an Electricity Maps token in Settings. Hisingen then sends the token and your electricity price zone code (for example `SE-SE3`) to read the zone's current carbon intensity. The request does not contain coordinates, a VIN or any vehicle data. The token is kept in the macOS Keychain, is not exported, and is deleted when you remove it or erase all data.
 
 ---
 
@@ -414,7 +420,7 @@ In summary:
 - charging-session summaries may remain after individual charging samples are pruned;
 - battery-health milestones are retained for long-term history;
 - remote-command audit information remains until local data is cleared; and
-- signing out currently clears Hisingen's local vehicle database and cached vehicle state in addition to ending the provider session.
+- signing out clears cached vehicle snapshots, charging-state baselines and remote-command receipts in addition to ending the provider session. The vehicle-history database is removed only when *Erase local history on sign out* is turned on, which is off by default.
 
 Retention behavior may change as Hisingen evolves. The technical retention document should be updated whenever persistence behavior changes.
 
@@ -428,8 +434,10 @@ In the current implementation, signing out clears:
 
 - locally cached vehicle snapshots;
 - charging-state baselines;
-- Hisingen's local vehicle-history database; and
+- remote-command receipts; and
 - provider authentication state handled by the applicable provider integration.
+
+The vehicle-history database is cleared on sign-out only when *Erase local history on sign out* is enabled. That switch is off by default, so a sign-out normally keeps charging sessions, trips, odometer readings and the rest of the local history on this Mac. Clear it separately from Settings → Privacy & Data, or turn the switch on before signing out.
 
 Application preferences that are not part of vehicle history may remain.
 

@@ -32,6 +32,7 @@ struct PolestarGRPCResetHardeningTests {
     @Test func liveStreamCannotConnectAfterReset() async throws {
         let gate = GRPCResetGate()
         GRPCResetProtocol.gate = gate
+        defer { GRPCResetProtocol.gate = nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GRPCResetProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -53,6 +54,7 @@ struct PolestarGRPCResetHardeningTests {
     @Test func delayedMyCarsCannotRepopulateAfterReset() async throws {
         let gate = GRPCResetGate()
         GRPCResetProtocol.gate = gate
+        defer { GRPCResetProtocol.gate = nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GRPCResetProtocol.self]
         let session = URLSession(configuration: configuration)
@@ -96,7 +98,7 @@ private final class GRPCResetGate: @unchecked Sendable {
     func release() { releaseSignal.signal() }
 }
 
-private final class GRPCResetProtocol: URLProtocol, @unchecked Sendable {
+private final class GRPCResetProtocol: URLProtocol {
     nonisolated(unsafe) static var gate: GRPCResetGate?
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -112,14 +114,15 @@ private final class GRPCResetProtocol: URLProtocol, @unchecked Sendable {
         }
         guard let gate = Self.gate else { return }
         gate.markArrived()
+        nonisolated(unsafe) let loader = self
         DispatchQueue.global().async {
             gate.waitForRelease()
             let car = Protobuf.stringField(1, "VIN-A") + Protobuf.stringField(9, "5.1.9")
             let payload = Protobuf.messageField(1, Protobuf.messageField(1, car))
             let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            self.client?.urlProtocol(self, didLoad: Protobuf.grpcFrame(payload))
-            self.client?.urlProtocolDidFinishLoading(self)
+            loader.client?.urlProtocol(loader, didReceive: response, cacheStoragePolicy: .notAllowed)
+            loader.client?.urlProtocol(loader, didLoad: Protobuf.grpcFrame(payload))
+            loader.client?.urlProtocolDidFinishLoading(loader)
         }
     }
 }

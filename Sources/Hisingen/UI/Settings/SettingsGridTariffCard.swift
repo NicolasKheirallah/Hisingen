@@ -157,11 +157,17 @@ struct SettingsGridTariffCard: View {
             Picker("", selection: kindBinding) {
                 Text(L10n.text("No grid fee")).tag(GridTariff.Kind.none)
                 Text(L10n.text("Flat fee")).tag(GridTariff.Kind.flat)
-                // Published presets exist for Sweden only. Offering them elsewhere would apply
-                // Swedish rates to a foreign invoice.
-                if tariff.region.hasPublishedRates {
+                // Each market gets only the preset whose published rates belong to it. Norway is
+                // the one market beyond Sweden the tariff model can express; Denmark needs three
+                // periods, Germany has no national tariff and the Netherlands bills capacity.
+                switch tariff.region {
+                case .sweden:
                     Text(L10n.text("Vattenfall single tariff (E4)")).tag(GridTariff.Kind.vattenfallSingle)
                     Text(L10n.text("Vattenfall time tariff (T4)")).tag(GridTariff.Kind.vattenfallTime)
+                case .norway:
+                    Text(L10n.text("Elvia day and night tariff")).tag(GridTariff.Kind.elviaNorway)
+                case .denmark, .germany, .netherlands:
+                    EmptyView()
                 }
                 Text(L10n.text("Custom time-of-use")).tag(GridTariff.Kind.custom)
             }
@@ -187,6 +193,13 @@ struct SettingsGridTariffCard: View {
             next.fixedKrPerYear = current.fixedKrPerYear
         case .vattenfallSingle, .vattenfallTime:
             next = .vattenfall(kind, fuseAmps: current.fuseAmps ?? defaultFuseAmps)
+        case .elviaNorway:
+            // The Norwegian preset carries its own market, unlike the Swedish factories, so the
+            // region is not put back over it below.
+            next = .elvia()
+            model.updateGridTariff(next)
+            loadFields()
+            return
         case .custom:
             next = current
             next.kind = .custom
@@ -199,7 +212,8 @@ struct SettingsGridTariffCard: View {
                 next.peakWeekdaysOnly = true
             }
         }
-        // The factories above build a Swedish tariff, so the market is put back over the top.
+        // The Swedish factories build a Swedish tariff, so the market is put back over the top.
+        // Elvia returned above with its own market.
         next.region = current.region
         model.updateGridTariff(next)
         loadFields()

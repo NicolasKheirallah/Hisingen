@@ -18,6 +18,11 @@ enum CommandConfirmationStatus: Codable, Equatable, Sendable {
         return false
     }
 
+    var isTimedOut: Bool {
+        if case .timedOut = self { return true }
+        return false
+    }
+
     var isAcknowledged: Bool {
         if case .acknowledged = self { return true }
         return false

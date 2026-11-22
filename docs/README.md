@@ -11,7 +11,7 @@ Hisingen is a native macOS menu bar app for Polestar and Volvo. The app uses App
 | [Install and connect your car](install.md) | Homebrew, signed downloads, updates, Polestar account modes and Volvo ID. |
 | [Product tour](product-tour.md) | Sample screenshots of Now, Plan, Log, Car, charger integrations and Settings. |
 | [Vehicle support and readings](vehicle-features.md) | Recognised models, battery and fuel, climate, trips, location, software and diagnostics. |
-| [Remote controls](remote-controls.md) | Commands by brand, vehicle capabilities, authorization, routines, Retry and Undo. |
+| [Remote controls](remote-controls.md) | Commands by brand, vehicle capabilities, authorization, routines, Retry and Undo, and the `hisingen cli` command line with its exit codes. |
 | [Home charging and electricity prices](home-charging.md) | NexBlue, Easee, Zaptec, Home Assistant, Tibber, fees, tariffs and charging plans. |
 | [Using Hisingen](using-hisingen.md) | Garage, notifications, macOS integration, themes, layout, backups and privacy. |
 | [Help](help.md) | Sign-in problems, stale readings, missing features, known limitations and issue reporting. |

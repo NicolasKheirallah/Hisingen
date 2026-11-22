@@ -407,7 +407,8 @@ extension PolestarGRPC {
         default: status = .unknown
         }
         let network = [1: "Unknown", 2: "CDMA 1X", 3: "CDMA EVDO", 4: "WCDMA", 5: "GSM", 6: "LTE", 7: "5G"]
-        let signal = [1: "Unknown", 2: "Poor", 3: "Good", 4: "Strong"]
+        // The words reach the connectivity card beside the bar count, so they localize.
+        let signal = [1: L10n.text("Unknown"), 2: L10n.text("Poor"), 3: L10n.text("Good"), 4: L10n.text("Strong")]
         let signalRaw = Self.varint(fields, 4)
         let bars: Int? = signalRaw.flatMap {
             switch $0 {
@@ -581,7 +582,7 @@ extension PolestarGRPC {
            let lat = location.latitude, let lon = location.longitude,
            lat.isFinite, lon.isFinite, (-90...90).contains(lat), (-180...180).contains(lon) {
             if let weather = await OpenMeteoWeatherClient(session: session, diagnosticLog: diagnosticLog)
-                .weatherWithForecast(latitude: lat, longitude: lon) {
+                .weatherWithForecast(latitude: lat, longitude: lon, scope: .vehicle(vin)) {
                 return weather
             }
         }
@@ -727,6 +728,7 @@ extension PolestarGRPC {
             }
         }
         var lightFailures: [String] = []
+        var unnamedLightFailureIds: [Int] = []
         let lightDescriptions: [Int: String] = [
             14: L10n.text("Left brake light"),
             15: L10n.text("Center brake light"),
@@ -756,15 +758,26 @@ extension PolestarGRPC {
             }
         }
         let nestedLights = message(fields, field: 46).map(Protobuf.fields) ?? []
-        for field in nestedLights where field.wire == 0 && field.varint == 2 {
-            if let name = VehicleLightCoverage.healthName(field.number), !lightFailures.contains(name) {
-                lightFailures.append(name)
+        for field in nestedLights where field.wire == 0 && (1...2).contains(field.varint) {
+            if let name = VehicleLightCoverage.healthName(field.number) {
+                if field.varint == 2, !lightFailures.contains(name) {
+                    lightFailures.append(name)
+                }
+            } else if field.varint == 2, !unnamedLightFailureIds.contains(field.number) {
+                // Polestar can add lights past the named range (IDs above 41). A failing
+                // one is kept as its raw wire ID instead of dropping the report, but it is
+                // a reported value, not a named bulb failure, so it never renders through
+                // the lamp-name mapping.
+                unnamedLightFailureIds.append(field.number)
             }
         }
+        // Any reported light, named or not, makes the category reported; the warning flip
+        // keeps the field-29 precedent: a failing light the car cannot name still warns.
         if (14...35).contains(where: { varint(fields, $0) != nil })
-            || nestedLights.contains(where: { $0.wire == 0 && VehicleLightCoverage.healthName($0.number) != nil && (1...2).contains($0.varint) }) {
+            || nestedLights.contains(where: { $0.wire == 0 && (1...2).contains($0.varint) }) {
             reportedWarnings.append(.exteriorLight)
-            if !lightFailures.isEmpty || (14...35).contains(where: { varint(fields, $0) == 2 }) {
+            if !lightFailures.isEmpty || !unnamedLightFailureIds.isEmpty
+                || (14...35).contains(where: { varint(fields, $0) == 2 }) {
                 warnings.append(.exteriorLight)
             }
         }
@@ -785,7 +798,8 @@ extension PolestarGRPC {
                 tyres: tyres,
                 warnings: warnings,
                 reportedWarnings: reportedWarnings,
-                lightFailures: lightFailures
+                lightFailures: lightFailures,
+                unnamedLightFailureIds: unnamedLightFailureIds
             ),
             daysToService: positiveInt(varint(fields, 3)),
             distanceToServiceKm: positiveInt(varint(fields, 4)),

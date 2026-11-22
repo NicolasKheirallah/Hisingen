@@ -57,6 +57,32 @@ struct PolestarTelemetryPresentationTests {
         #expect(!withConnection.contains { $0.key == L10n.text("Observed") })
     }
 
+    @Test func connectivityDetailRowsFollowTheReportedSignal() {
+        // No connectivity reading: no detail rows, so the card draws only the state line.
+        #expect(InfoTabView.connectivityDetailRows(nil).isEmpty)
+
+        // The car's own word "Unknown" hides the strength row; a bar count already says
+        // more than the word would.
+        let wordless = VehicleConnectivity(state: .connected, signalStrength: L10n.text("Unknown"))
+        #expect(InfoTabView.connectivityDetailRows(wordless).isEmpty)
+
+        let reported = VehicleConnectivity(
+            state: .connected,
+            networkType: "LTE",
+            signalStrength: L10n.text("Good"),
+            signalBars: 3,
+            wakeReason: L10n.text("Charging Active")
+        )
+        let rows = InfoTabView.connectivityDetailRows(reported)
+        #expect(rows.map(\.key) == [
+            L10n.text("Awake Because"), L10n.text("Network"),
+            L10n.text("Signal"), L10n.text("Signal Strength")
+        ])
+        #expect(rows.first?.value == L10n.text("Charging Active"))
+        #expect(rows.contains { $0.key == L10n.text("Signal") && $0.value == "3/4" })
+        #expect(rows.contains { $0.key == L10n.text("Signal Strength") && $0.value == L10n.text("Good") })
+    }
+
     @Test func rendersDecodedTelemetryAtBothWidthsAndAppearances() throws {
         let scoped = ScopedPreferences(label: "decoded-gui-render")
         let identity = VehicleIdentitySnapshot(availability: .unknown, vin: "TEST", usageMode: "INACTIVE")

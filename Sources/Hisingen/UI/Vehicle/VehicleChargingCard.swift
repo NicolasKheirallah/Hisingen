@@ -16,6 +16,9 @@ struct VehicleChargingCard: View {
     @Environment(\.homeCharging) private var homeCharging
     @State private var homeHistoryRevision = 0
     @State private var persistentSessions: [ChargingSession] = []
+    /// Volvo supplies no since-charge energy figure of its own; this holds the locally
+    /// derived estimate for the row that would otherwise stay Polestar-only.
+    @State private var estimatedEnergyUsedSinceChargeWh: Double?
     /// Price per kWh in effect right now, settled the way the user's contract bills it and
     /// including the markup. Only loaded in automatic rate mode; nil until the first fetch lands
     /// or when none exists.
@@ -59,7 +62,10 @@ struct VehicleChargingCard: View {
         .onReceive(homeCharging?.$historyRevision.eraseToAnyPublisher() ?? Empty<Int, Never>().eraseToAnyPublisher()) {
             homeHistoryRevision = $0
         }
-        .task(id: loadIdentifier) { await loadPersistentSessions() }
+        .task(id: loadIdentifier) {
+            await loadPersistentSessions()
+            await loadEnergyUsedEstimate()
+        }
         .task(id: "\(preferences.electricityRateMode.rawValue)|\(preferences.electricityPriceZone.rawValue)|\(preferences.electricityPriceContract.rawValue)|\(loadIdentifier)") {
             await loadCurrentSpotPrice()
         }
@@ -131,27 +137,75 @@ struct VehicleChargingCard: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var details: [KVRow] {
+    private var details: [(id: String, row: KVRow)] {
         taggedDetails.enumerated().sorted { lhs, rhs in
             let left = preferences.chargingStatOrder.firstIndex(of: lhs.element.id) ?? .max
             let right = preferences.chargingStatOrder.firstIndex(of: rhs.element.id) ?? .max
             return left == right ? lhs.offset < rhs.offset : left < right
-        }.map(\.element.row)
+        }.map(\.element)
+    }
+
+    private func detailRow(_ index: Int) -> some View {
+        let detail = details[index]
+        return VStack(alignment: .leading, spacing: 0) {
+            detail.row
+            if let note = trailingNote(forDetail: detail.id) {
+                Text(note)
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.inkMuted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    /// The "Last changed" note shared by every surface that shows a charge target or current
+    /// limit: a setting the car itself has not touched for over 30 days says so, with the date.
+    /// One threshold and one wording everywhere, so the same number cannot read as fresh on
+    /// one surface and dated on another.
+    static func staleSettingNote(reportedAt: Date?, now: Date = Date()) -> String? {
+        guard let reportedAt, reportedAt < now.addingTimeInterval(-30 * 86_400) else { return nil }
+        return L10n.format("Last changed %@", Format.dateFormatter.string(from: reportedAt))
+    }
+
+    /// The trailing note under one charging detail row. The charge target carries the car's
+    /// own mode (Daily, Long trip or Custom) beside its value, and both settings carry the
+    /// "Last changed" note once the car has not touched them for a month.
+    private func trailingNote(forDetail id: String) -> String? {
+        switch id {
+        case "target":
+            let parts = [state.energy.chargeTargetSettingMode?.displayName,
+                         Self.staleSettingNote(reportedAt: state.energy.targetPercentageReportedAt)]
+            let joined = parts.compactMap { $0 }.joined(separator: " · ")
+            return joined.isEmpty ? nil : joined
+        case "limit":
+            return Self.staleSettingNote(reportedAt: state.energy.currentLimitReportedAt)
+        default:
+            return nil
+        }
+    }
+
+    /// False only when the car itself has said it cannot report the field. Volvo's
+    /// energy-capability flags are a per-VIN backend answer, so they outrank a merged
+    /// last-known value: a field the car does not report must not resurface as a stale
+    /// number. `nil` (no probe yet, other brands) leaves the row exactly as it was.
+    private func reports(_ capability: VehicleCapability) -> Bool {
+        state.probedCapabilities?.support(for: capability) != .unavailable
     }
 
     private var taggedDetails: [(id: String, row: KVRow)] {
         var rows: [(id: String, row: KVRow)] = []
         if features.contains(.chargingDetails) {
-            if state.energy.connection != .unknown { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug", valueWarning: state.energy.connection == .fault))) }
-            if state.energy.type != .unknown, state.energy.type != .none { rows.append(("type", KVRow(L10n.text("Charging Type"), state.energy.type.displayName, symbol: "bolt.circle"))) }
+            if state.energy.connection != .unknown, reports(.chargerConnectionStatus) { rows.append(("connection", KVRow(L10n.text("Charger Connection"), state.energy.connection.displayName, symbol: "powerplug", valueWarning: state.energy.connection == .fault))) }
+            if state.energy.type != .unknown, state.energy.type != .none, reports(.chargingType) { rows.append(("type", KVRow(L10n.text("Charging Type"), state.energy.type.displayName, symbol: "bolt.circle"))) }
             if let amps = state.energy.currentAmps, amps > 0 { rows.append(("draw", KVRow(L10n.text("Current Draw"), "\(amps) A", symbol: "waveform.path.ecg", info: L10n.text("Live Telematics. Active AC or DC current drawn from the EVSE charger.")))) }
-            if let amps = state.energy.currentLimitAmps, amps > 0 {
+            if let amps = state.energy.currentLimitAmps, amps > 0, reports(.chargingCurrentLimit) {
                 var value = "\(amps) A"
                 if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.limitSource) { value += " (\(suffix))" }
                 rows.append(("limit", KVRow(L10n.text("Current Limit"), value, symbol: "gauge.with.dots.needle.bottom.100percent", info: L10n.text("User Setting. Max AC charging current limit configured in vehicle charging settings."))))
             }
             if let volts = state.energy.voltageVolts, volts > 0 { rows.append(("voltage", KVRow(L10n.text("Voltage"), "\(volts) V", symbol: "bolt", info: L10n.text("Live Telematics. Active AC input voltage or DC bus voltage measured by onboard charger.")))) }
-            if let target = state.energy.targetPercentage {
+            if let target = state.energy.targetPercentage, reports(.chargeTarget) {
                 var value = "\(target)%"
                 if let suffix = Self.chargingSourceSuffix(state.energy.diagnostics?.targetSource) { value += " (\(suffix))" }
                 rows.append(("target", KVRow(L10n.text("Target Limit"), value, symbol: "target", info: L10n.text("User Setting. Selected high-voltage battery charge limit target."))))
@@ -169,7 +223,7 @@ struct VehicleChargingCard: View {
             // one figure never appears twice in one card.
             let timeToTargetShownInDiagnostics = features.contains(.batteryDiagnostics)
                 && state.energy.diagnostics?.timeToTargetMinutes != nil
-            if let minutes = state.energy.estimatedTimeToTargetMinutes, !timeToTargetShownInDiagnostics {
+            if let minutes = state.energy.estimatedTimeToTargetMinutes, !timeToTargetShownInDiagnostics, reports(.estimatedChargingTimeToTarget) {
                 rows.append(("timeToTargetEstimate", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target."))))
             }
             if let minutes = state.energy.diagnostics?.timeToTargetDistanceMinutes {
@@ -180,13 +234,19 @@ struct VehicleChargingCard: View {
             }
         }
         if features.contains(.batteryDiagnostics), let diagnostics = state.energy.diagnostics {
-            if diagnostics.chargerPowerState != .unknown { rows.append(("powerModule", KVRow(L10n.text("Power Module"), diagnostics.chargerPowerState.displayName, symbol: "batteryblock", valueWarning: diagnostics.chargerPowerState == .fault))) }
-            if let minutes = diagnostics.timeToTargetMinutes { rows.append(("timeToTarget", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target.")))) }
+            if diagnostics.chargerPowerState != .unknown, reports(.chargerPowerStatus) { rows.append(("powerModule", KVRow(L10n.text("Power Module"), diagnostics.chargerPowerState.displayName, symbol: "batteryblock", valueWarning: diagnostics.chargerPowerState == .fault))) }
+            if let minutes = diagnostics.timeToTargetMinutes, reports(.estimatedChargingTimeToTarget) { rows.append(("timeToTarget", KVRow(L10n.text("Time to Target"), Format.shortDuration(minutes: minutes), symbol: "timer", info: L10n.text("Vehicle Dynamic Calculation. Estimated time remaining until the high-voltage battery reaches the configured charge target.")))) }
             if let minutes = diagnostics.timeToMinimumSOCMinutes { rows.append(("timeToMinSoc", KVRow(L10n.text("Time to Min SOC"), Format.shortDuration(minutes: minutes), symbol: "battery.50percent", info: L10n.text("Vehicle Dynamic Calculation. Estimated time to reach minimum operating state of charge.")))) }
             if let value = diagnostics.averageConsumption { rows.append(("avgConsumption", KVRow(L10n.text("Avg Consumption"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Lifetime or long-term average energy consumption from trip computer.")))) }
             if let value = diagnostics.averageConsumptionSinceCharge { rows.append(("avgSinceCharge", KVRow(L10n.text("Avg Since Last Charge"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption recorded since the vehicle was last unplugged.")))) }
             if let value = diagnostics.averageConsumptionAutomatic { rows.append(("avgAutoTrip", KVRow(L10n.text("Avg (Automatic Trip)"), Format.energyConsumption(kwhPer100Km: value, unit: preferences.energyConsumptionUnit), symbol: "chart.line.uptrend.xyaxis", info: L10n.text("Vehicle Calculation. Average electric consumption over the automatic trip-meter period.")))) }
             if let wattHours = diagnostics.energyUsedSinceChargeWh { rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"), Format.energyKwh(wattHours / 1_000), symbol: "leaf", info: L10n.text("Vehicle Calculation. Total high-voltage energy consumed by powertrain and HVAC since the last charge.")))) }
+            else if let wattHours = estimatedEnergyUsedSinceChargeWh {
+                rows.append(("energySinceCharge", KVRow(L10n.text("Energy Since Charge"),
+                    Format.energyKwh(wattHours / 1_000) + " · " + L10n.text("estimated"),
+                    symbol: "leaf",
+                    info: L10n.text("Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records."))))
+            }
             if let powerLimit = diagnostics.powerLimitKw, powerLimit > 0 {
                 rows.append(("powerLimit", KVRow(L10n.text("Power Limit"), String(format: "%.0f kW", locale: L10n.displayLocale, powerLimit), symbol: "gauge.with.needle", info: L10n.text("Instantaneous drivetrain output power ceiling."))))
             }
@@ -382,7 +442,7 @@ struct VehicleChargingCard: View {
                 if !activeSamples.isEmpty { ChargingCurveView(samples: activeSamples, targetPercentage: state.energy.targetPercentage, readyDate: hasLastKnownChargingReadings ? nil : state.estimatedChargingCompletion, isLive: state.isCharging && !hasLastKnownChargingReadings, currentPowerWatts: hasLastKnownChargingReadings ? nil : state.energy.powerWatts).transition(.opacity) }
                 if !details.isEmpty {
                     Text(state.chargingExplanation).hisType(.caption).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
-                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { details[$0] } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
+                    DisclosureGroup(L10n.text("Charging Details")) { VStack(spacing: 6) { ForEach(details.indices, id: \.self) { detailRow($0) } }.padding(.top, 6) }.disclosureGroupStyle(WholeRowDisclosureStyle()).hisType(.body, weight: .medium)
                 }
                 if !persistentSessions.isEmpty { historySection }
                 batteryDetailsLink
@@ -430,5 +490,30 @@ struct VehicleChargingCard: View {
         let sessions = await history.persistentChargingSessions(vin: state.identity.vin, state: state)
         guard !Task.isCancelled else { return }
         persistentSessions = sessions
+    }
+
+    /// Estimates since-charge energy for Volvos, whose API supplies the since-charge
+    /// consumption figure but no energy total. Needs the ledger's latest completed
+    /// session and an odometer sample near its end; anything missing keeps the row
+    /// silent rather than guessing.
+    private func loadEnergyUsedEstimate() async {
+        guard VehicleBrand.isVolvoVIN(state.identity.vin),
+              let diagnostics = state.energy.diagnostics,
+              diagnostics.energyUsedSinceChargeWh == nil,
+              let odometerNow = state.maintenance.odometerKm.map(Double.init)
+        else { estimatedEnergyUsedSinceChargeWh = nil; return }
+        let sessions = await history.persistentChargingSessions(vin: state.identity.vin, state: state)
+        guard let lastEnd = sessions.first?.endDate else {
+            estimatedEnergyUsedSinceChargeWh = nil
+            return
+        }
+        let telemetry = await history.recentTelemetry(for: state.identity.vin)
+        estimatedEnergyUsedSinceChargeWh = VolvoChargeEnergyEstimator.energyUsedSinceChargeWh(
+            consumptionSinceChargeKwhPer100Km: diagnostics.averageConsumptionSinceCharge,
+            odometerKmNow: odometerNow,
+            odometerKmAtLastChargeEnd: VolvoChargeEnergyEstimator.odometerKm(
+                in: telemetry, nearest: lastEnd
+            )
+        )
     }
 }

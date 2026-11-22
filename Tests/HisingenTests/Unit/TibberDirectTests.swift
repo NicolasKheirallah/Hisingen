@@ -21,6 +21,9 @@ private final class MockTibber: @unchecked Sendable {
     private var httpStatus = 200
     private var _consumption: [(Date, Double?)] = []
     private var _upcoming: [(Date, Double)] = []
+    private var _production: [(Date, Double?)] = []
+    private var _liveEnabled = false
+    private var _liveURL: String? = nil
     private(set) var queries: [String] = []
     private(set) var beforeCursors: [String?] = []
     private(set) var authorization: [String?] = []
@@ -45,6 +48,16 @@ private final class MockTibber: @unchecked Sendable {
     func setConsumption(hours: Int, startingAt start: Date = base, kwh: @escaping (Int) -> Double? = { _ in 1.0 }) {
         lock.withLock { _consumption = (0..<hours).map { (start.addingTimeInterval(Double($0) * 3_600), kwh($0)) } }
     }
+    /// Hourly production readings, oldest first; `nil` is an hour without one, which the API sends
+    /// as a null node.
+    func setProduction(hours: Int, startingAt start: Date = base, kwh: @escaping (Int) -> Double? = { _ in 1.0 }) {
+        lock.withLock { _production = (0..<hours).map { (start.addingTimeInterval(Double($0) * 3_600), kwh($0)) } }
+    }
+    /// Whether the home's features say a live reader is paired, and the URL the API names for
+    /// subscriptions.
+    func setLiveStream(enabled: Bool, url: String? = nil) {
+        lock.withLock { _liveEnabled = enabled; _liveURL = url }
+    }
     func setFailure(_ errors: String?) { lock.withLock { failure = errors } }
     func setStatus(_ status: Int) { lock.withLock { httpStatus = status } }
     var requestCount: Int { lock.withLock { queries.count } }
@@ -53,11 +66,11 @@ private final class MockTibber: @unchecked Sendable {
         let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
         let query = body["query"] as? String ?? ""
         let variables = body["variables"] as? [String: Any] ?? [:]
-        let (slots, failure, status, hours, upcoming) = lock.withLock { () -> ([(Date, Double)], String?, Int, [(Date, Double?)], [(Date, Double)]) in
+        let (slots, failure, status, hours, upcoming, production, liveEnabled, liveURL) = lock.withLock { () -> ([(Date, Double)], String?, Int, [(Date, Double?)], [(Date, Double)], [(Date, Double?)], Bool, String?) in
             queries.append(query)
             beforeCursors.append(variables["before"] as? String)
             authorization.append(request.value(forHTTPHeaderField: "Authorization"))
-            return (_slots, self.failure, httpStatus, _consumption, _upcoming)
+            return (_slots, self.failure, httpStatus, _consumption, _upcoming, _production, _liveEnabled, _liveURL)
         }
         if status != 200 { return .json(#"{"message":"nope"}"#, status: status) }
         if let failure { return .json(#"{"errors":[\#(failure)],"data":null}"#) }
@@ -75,6 +88,20 @@ private final class MockTibber: @unchecked Sendable {
             // Like the real API: today in full and tomorrow when it is out, each slot with its level.
             let rows = upcoming.map { #"{"total":\#($0.1),"startsAt":"\#(iso($0.0))","level":"NORMAL"}"# }
             return .json(#"{"data":{"viewer":{"home":{"currentSubscription":{"priceInfo":{"today":[\#(rows.joined(separator: ","))],"tomorrow":[]}}}}}}"#)
+        }
+        if query.contains("websocketSubscriptionUrl") {
+            let url = liveURL.map { #""\#($0)""# } ?? "null"
+            return .json(#"{"data":{"viewer":{"websocketSubscriptionUrl":\#(url),"home":{"features":{"realTimeConsumptionEnabled":\#(liveEnabled)}}}}}"#)
+        }
+        if query.contains("production(") {
+            var end = production.count
+            if let before = variables["before"] as? String, let index = Int(before.dropFirst(4)) { end = index }
+            let start = max(0, end - pageLimit)
+            let edges = (start..<end).map { index -> String in
+                let value = production[index].1.map { String($0) } ?? "null"
+                return #"{"cursor":"cur-\#(index)","node":{"from":"\#(iso(production[index].0))","to":"\#(iso(production[index].0.addingTimeInterval(3_600)))","production":\#(value)}}"#
+            }
+            return .json(#"{"data":{"viewer":{"home":{"production":{"edges":[\#(edges.joined(separator: ","))]}}}}}"#)
         }
         if query.contains("consumption(") {
             var end = hours.count
@@ -214,6 +241,52 @@ struct TibberClientTests {
         _ = try await TibberClient(token: "t", transport: tibber.transport).consumption(
             homeID: "home-1", from: base.addingTimeInterval(6 * 3_600), to: base.addingTimeInterval(20 * 3_600))
         #expect(tibber.requestCount == 1)
+    }
+
+    @Test("Hourly production pages the same way consumption does, and an hour without a reading is left out")
+    func production() async throws {
+        let tibber = MockTibber(pageLimit: 12)
+        tibber.setProduction(hours: 24) { $0 == 5 ? nil : 1.5 }
+        let hours = try await TibberClient(token: "t", transport: tibber.transport).production(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(24 * 3_600))
+        #expect(hours.count == 23)
+        #expect(!hours.contains { $0.start == base.addingTimeInterval(5 * 3_600) })
+        #expect(hours.allSatisfy { $0.kwh == 1.5 && $0.end.timeIntervalSince($0.start) == 3_600 })
+        #expect(tibber.beforeCursors == [nil, "cur-12"])
+        #expect(hours == hours.sorted { $0.start < $1.start })
+    }
+
+    @Test("A home without a production metering point answers with no hours, which stays an empty answer")
+    func productionAbsent() async throws {
+        let tibber = MockTibber(pageLimit: 100)
+        let hours = try await TibberClient(token: "t", transport: tibber.transport).production(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(24 * 3_600))
+        #expect(hours.isEmpty)
+        #expect(tibber.requestCount == 1)
+    }
+
+    @Test("Production paging is bounded")
+    func productionIsBounded() async throws {
+        let tibber = MockTibber(pageLimit: 2)
+        tibber.setProduction(hours: 1_000)
+        _ = try await TibberClient(token: "t", transport: tibber.transport).production(
+            homeID: "home-1", from: base, to: base.addingTimeInterval(1_000 * 3_600))
+        #expect(tibber.requestCount == TibberClient.maximumProductionPages)
+    }
+
+    @Test("The live-stream check reads whether a reader is paired and the URL the API names")
+    func liveStream() async throws {
+        let tibber = MockTibber()
+        tibber.setLiveStream(enabled: true, url: "wss://api.tibber.com/v1-beta/gql/subscriptions")
+        let stream = try await TibberClient(token: "t", transport: tibber.transport).liveStream(homeID: "home-1")
+        #expect(stream.realTimeEnabled)
+        #expect(stream.url == TibberLiveSocket.subscriptionURL)
+        tibber.setLiveStream(enabled: false)
+        let refused = try await TibberClient(token: "t", transport: tibber.transport).liveStream(homeID: "home-1")
+        #expect(!refused.realTimeEnabled)
+        #expect(refused.url == nil)
+        // The query asks for the fields the schema documents, and nothing else.
+        #expect(tibber.queries.allSatisfy { $0.contains("realTimeConsumptionEnabled") && $0.contains("websocketSubscriptionUrl") })
     }
 
     @Test("One page is enough when it already reaches back far enough")

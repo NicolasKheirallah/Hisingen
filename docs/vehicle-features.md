@@ -76,6 +76,10 @@ For electric and plug-in hybrid vehicles, Hisingen can show information such as:
 * charging power
 * current and voltage
 * charge target
+* charge-target mode (Polestar): Daily, Long trip or Custom, shown beside the target on the
+  charging card when the car names one
+* "Last changed" date beside the charge target and current limit when the car last set them
+  over 30 days ago, on the charging card, the limit steppers and the vehicle report
 * charging-current limit
 * estimated charging completion
 * energy consumption
@@ -157,6 +161,14 @@ Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage 
 the business/private distance split per month with CSV export. Tags are stored locally per
 vehicle.
 
+Public charging can be logged by hand from the **Charging Sessions** card: **Add Session**
+records the charging place (home or public), a location, the start and end time, the energy, and
+the price as a total, a price per kWh, or both. A stored session can be edited from its context
+menu or the pencil in its detail card, so a public charge the car recorded without a price can be
+corrected. The **Charging Trends** card separates **Home Charging** and **Public Charging** cost;
+the two lines add up to the total. Sessions recorded automatically count as home until their
+place is changed. Everything is stored locally and no provider is asked for a price.
+
 A few more things that follow from the same history:
 
 * scheduled charging says whether it will finish, including "cannot complete" and "smart
@@ -170,6 +182,23 @@ A few more things that follow from the same history:
 ### Home charging and electricity
 
 Pair NexBlue, Easee or Zaptec directly, or connect through Home Assistant. You can also price charging from a fixed tariff, Swedish spot prices or a connected Tibber home. [Home charging and electricity guide](home-charging.md)
+
+Home Assistant discovery reads NexBlue's entity names without any special token; with an
+administrator token it also groups Easee and Zaptec entities by device and maps their status,
+power and energy readings. A charging switch is only mapped automatically when the status sensor
+can confirm a command, so discovery never offers a write it cannot check; a charger with
+unrecognised states is still listed for its readings and can be mapped by hand.
+
+When Vehicle Weather is on and Open-Meteo answers, the **Charging Planner** draws a **solar
+forecast** line of global shortwave radiation for the next day at the car's location, with its
+peak time. The request carries the position rounded to two decimals, and the answer is kept for 30
+minutes. It is radiation,
+not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
+kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+provider named beneath it. The line and its setting exist for Swedish price zones only, because
+the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
+rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
+the History emissions estimate.
 
 ### Doors, windows & locks
 
@@ -216,6 +245,10 @@ On top of the live readings Hisingen keeps some local context:
 * **Usage mode.** The reported vehicle usage mode shows in the connectivity details, including on
   vehicles without separate network diagnostics.
 * **Weight.** The reported gross vehicle weight shows on the Car specs card (Polestar).
+* **Reminders.** The service, tyre and low-battery warning surfaces each offer an Add Reminder
+  action that writes a reminder through macOS Reminders with a default due date, and the
+  plug-in alert can create it automatically once you opt in. See
+  [Using Hisingen](using-hisingen.md#reminders).
 
 ### Climate
 
@@ -250,8 +283,12 @@ type the car reports and whether the car heats the seats and steering wheel on i
 weather.
 
 Before a scheduled departure, Hisingen can hint at frost or a cold battery using an hourly
-forecast. A notice appears once per climate session when the run time is nearly used up or the
-battery is too low.
+forecast on the climate card. The weather readout adds one line of climate advice when the
+forecast before the departure is cold, wet or windy. The next departure comes from the car's own
+departure timers, or from the calendar preconditioning schedule when it is enabled and its next
+event is sooner; with no departure time or no forecast hour at the departure, nothing is shown.
+A notice appears once per climate session when the run time is nearly used up or the battery is
+too low.
 
 ### Location
 
@@ -271,8 +308,13 @@ Weather data comes from [Open-Meteo](https://open-meteo.com/).
 
 Because coordinates are needed to retrieve local weather, the vehicle's latitude and longitude are sent to Open-Meteo while this feature is enabled.
 
-The hourly forecast that drives the pre-departure frost hint is fetched in the same request as the
-current weather.
+The hourly forecast that drives the pre-departure hints is fetched in the same request as the
+current weather. Both carry wind speed, gusts and precipitation, which the weather readout shows
+beside the temperature; wind speeds follow the reader's distance unit, and precipitation is
+millimetres of water regardless of whether it falls as rain or snow.
+
+Live check: the request shape was verified against Open-Meteo without a key, but the readout's
+calendar-based advice line has not been exercised against a real calendar and a live refresh.
 
 ### Vehicle software
 

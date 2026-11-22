@@ -41,6 +41,11 @@ enum SignInFailureKind: Equatable, Sendable {
             return .transient
         case .notConfigured:
             return .sessionExpired
+        // Nothing the owner typed is wrong and no stored password is at fault: the provider
+        // retired the application's own credentials. Signing in again is still the way back,
+        // which is what `.sessionExpired` offers.
+        case .appCredentialsRejected:
+            return .sessionExpired
         case .permissionDenied where provider == .polestar:
             return .interactiveChallenge
         case .client, .permissionDenied, .responseTooLarge, .unsupported, .secureStorage,

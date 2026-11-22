@@ -1248,3 +1248,191 @@ struct TabCompositionTests {
         #expect(scoped.defaults.data(forKey: PreferencesStore.unreadableTabCompositionKey) == original)
     }
 }
+
+/// A card with a summary and a full form keeps one identity in the catalogue; the placement
+/// decides which form it draws. These tests pin the parts the tabs and Settings share.
+@MainActor
+struct CardViewCompositionTests {
+    @Test
+    func theCatalogueSaysWhichCardsHaveTwoFormsAndWhereTheFullFormLives() {
+        #expect(CardViewSupport.hasMultipleViews(.controlsChargingPlanner))
+        #expect(CardViewSupport.hasMultipleViews(.vehicleChargingPlanner))
+        #expect(CardViewSupport.hasMultipleViews(.vehicleHomeCharger))
+        #expect(CardViewSupport.hasMultipleViews(.vehicleReadiness))
+        #expect(CardViewSupport.hasMultipleViews(.vehicleOpenings))
+        #expect(CardViewSupport.hasMultipleViews(.vehicleLocation))
+
+        #expect(!CardViewSupport.hasMultipleViews(.vehicleCharging))
+        #expect(!CardViewSupport.hasMultipleViews(.vehicleHero))
+        #expect(!CardViewSupport.hasMultipleViews(.controlsCharging))
+
+        #expect(CardViewSupport.destination(for: .controlsChargingPlanner) == .controls)
+        #expect(CardViewSupport.destination(for: .vehicleHomeCharger) == .controls)
+        #expect(CardViewSupport.destination(for: .vehicleReadiness) == .controls)
+        #expect(CardViewSupport.destination(for: .vehicleOpenings) == .info)
+        #expect(CardViewSupport.destination(for: .vehicleLocation) == .info)
+    }
+
+    @Test
+    func nowDefaultsToTheSummaryAndEveryOtherTabToTheFullCard() {
+        #expect(CardViewSupport.defaultType(for: .controlsChargingPlanner, on: .vehicle) == .summary)
+        #expect(CardViewSupport.defaultType(for: .vehicleHomeCharger, on: .vehicle) == .summary)
+        #expect(CardViewSupport.defaultType(for: .vehicleOpenings, on: .vehicle) == .summary)
+        #expect(CardViewSupport.defaultType(for: .vehicleLocation, on: .vehicle) == .summary)
+
+        #expect(CardViewSupport.defaultType(for: .controlsChargingPlanner, on: .controls) == .full)
+        #expect(CardViewSupport.defaultType(for: .vehicleOpenings, on: .info) == .full)
+        #expect(CardViewSupport.defaultType(for: .vehicleOpenings, on: .custom("mine")) == .full)
+    }
+
+    @Test
+    func theFullCardDoesNotOfferASummaryThatLinksToItself() {
+        #expect(CardViewSupport.choices(for: .controlsChargingPlanner, on: .vehicle) == [.summary, .full])
+        #expect(CardViewSupport.choices(for: .controlsChargingPlanner, on: .controls) == [.full])
+        #expect(CardViewSupport.choices(for: .vehicleHomeCharger, on: .vehicle) == [.summary, .full])
+        #expect(CardViewSupport.choices(for: .vehicleOpenings, on: .vehicle) == [.summary, .full])
+        #expect(CardViewSupport.choices(for: .vehicleOpenings, on: .info) == [.full])
+    }
+
+    @Test
+    func aViewChoiceBelongsToOnePlacementAndClearsWhenItMatchesTheTabsNaturalForm() {
+        var composition = TabComposition.default
+
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: .vehicle) == .summary)
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: .controls) == .full)
+
+        composition.setViewType(.full, for: .controlsChargingPlanner, on: .vehicle)
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: .vehicle) == .full)
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: .controls) == .full,
+                "the Plan placement keeps its own form")
+
+        composition.setViewType(.summary, for: .controlsChargingPlanner, on: .vehicle)
+        #expect(composition.storedViewType(for: .controlsChargingPlanner, on: .vehicle) == nil,
+                "choosing the natural form stores no departure")
+    }
+
+    @Test
+    func aFullCardOnNowIsOneCardAndDoesNotChangeAnotherPlacement() {
+        var composition = TabComposition.default
+        composition.setViewType(.full, for: .vehicleOpenings, on: .vehicle)
+        let mine = composition.addCustomTab(name: "Mine")
+        composition.addItem(.controlsChargingPlanner, to: mine)
+        composition.setViewType(.summary, for: .controlsChargingPlanner, on: mine)
+
+        let now = TabLayout.resolve(composition, for: .vehicle)
+        #expect(now.viewType(for: .vehicleOpenings) == .full)
+        #expect(now.viewType(for: .controlsChargingPlanner) == .summary)
+        #expect(now.viewType(for: .vehicleCharging) == .full, "a single-form card has no view choice")
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: mine) == .summary,
+                "a tab of the reader's own can keep the summary while Now keeps its own form")
+
+        let plan = TabLayout.resolve(composition, for: .controls)
+        #expect(plan.viewType(for: .controlsChargingPlanner) == .full)
+    }
+
+    @Test
+    func normalizationDropsChoicesForRemovedPlacementsAndForbiddenForms() throws {
+        var composition = TabComposition.default
+        composition.version = 5
+        composition.tabContents[TabRef.controls.storageKey] = [
+            .controlsClimate, .controlsChargingPlanner, .controlsRoutines
+        ]
+        composition.cardViewTypes = [
+            TabRef.vehicle.storageKey: [
+                TabItemID.controlsChargingPlanner.rawValue: .full,
+                TabItemID.vehicleOpenings.rawValue: .full
+            ],
+            TabRef.controls.storageKey: [
+                TabItemID.controlsChargingPlanner.rawValue: .summary
+            ],
+            TabRef.settings.storageKey: [
+                TabItemID.controlsChargingPlanner.rawValue: .full
+            ],
+            "builtin:custom-that-does-not-exist": [
+                TabItemID.vehicleOpenings.rawValue: .full
+            ]
+        ]
+
+        var repaired = composition.normalized()
+        #expect(repaired.storedViewType(for: .controlsChargingPlanner, on: .vehicle) == .full)
+        #expect(repaired.storedViewType(for: .vehicleOpenings, on: .vehicle) == .full)
+        #expect(repaired.storedViewType(for: .controlsChargingPlanner, on: .controls) == nil,
+                "Plan is the summary's destination, so a summary there would link to itself")
+        #expect(repaired.storedViewType(for: .controlsChargingPlanner, on: .settings) == nil)
+        #expect(repaired.storedViewType(for: .controlsChargingPlanner, on: .custom("mine")) == nil)
+
+        let custom = repaired.addCustomTab(name: "Mine")
+        var placedButNoChoice = repaired
+        placedButNoChoice.setItems([.vehicleHero, .vehicleCharging], for: custom)
+        placedButNoChoice.cardViewTypes[TabRef.custom(custom.customID!).storageKey] = [
+            TabItemID.controlsChargingPlanner.rawValue: .full
+        ]
+        #expect(placedButNoChoice.normalized().storedViewType(
+            for: .controlsChargingPlanner, on: custom
+        ) == nil, "a card this tab does not place has no view choice")
+    }
+
+    @Test
+    func aStoredViewChoiceRoundTripsAndUnknownFormsDropOutAlone() throws {
+        var composition = TabComposition.default
+        composition.setViewType(.full, for: .controlsChargingPlanner, on: .vehicle)
+
+        let data = try JSONEncoder().encode(composition)
+        let decoded = try JSONDecoder().decode(TabComposition.self, from: data).normalized()
+        #expect(decoded.storedViewType(for: .controlsChargingPlanner, on: .vehicle) == .full)
+
+        let legacy = Data("""
+        {"version":5,"tabContents":{},"cardViewTypes":{
+          "builtin:vehicle":{"controls-charging-planner":"from-the-future"}
+        }}
+        """.utf8)
+        let fromLegacy = try JSONDecoder().decode(TabComposition.self, from: legacy).normalized()
+        #expect(fromLegacy.storedViewType(for: .controlsChargingPlanner, on: .vehicle) == nil)
+    }
+
+    @Test
+    func aFullCardOnNowLiftsOutOfVehicleDetails() {
+        var composition = TabComposition.default
+        var layout = TabLayout.resolve(composition, for: .vehicle)
+        #expect(!VehicleTabView.compactOverviewItems(layout: layout).contains(.controlsChargingPlanner),
+                "the summary stays inside the fold")
+
+        composition.setViewType(.full, for: .controlsChargingPlanner, on: .vehicle)
+        layout = TabLayout.resolve(composition, for: .vehicle)
+        let overview = VehicleTabView.compactOverviewItems(layout: layout)
+        #expect(overview.contains(.controlsChargingPlanner))
+        #expect(overview.contains(.vehicleHero), "the shipped overview cards stay")
+        #expect(!overview.contains(.vehicleLocation), "a card left on its summary stays folded")
+    }
+
+    @Test
+    func clearingATabReturnsEveryCardToItsNaturalForm() {
+        var composition = TabComposition.default
+        composition.setViewType(.full, for: .controlsChargingPlanner, on: .vehicle)
+        composition.setViewType(.full, for: .vehicleOpenings, on: .vehicle)
+        composition.clearViewTypes(on: .vehicle)
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: .vehicle) == .summary)
+        #expect(composition.viewType(for: .vehicleOpenings, on: .vehicle) == .summary)
+    }
+
+    @Test
+    func removingAPlacementForgetsItsViewChoice() {
+        var composition = TabComposition.default
+        composition.setViewType(.full, for: .controlsChargingPlanner, on: .vehicle)
+        composition.removeItem(.controlsChargingPlanner, from: .vehicle)
+        #expect(composition.storedViewType(for: .controlsChargingPlanner, on: .vehicle) == nil)
+    }
+
+    @Test
+    func duplicatingATabCarriesItsViewChoices() {
+        var composition = TabComposition()
+        let source = composition.addCustomTab(name: "Mine")
+        composition.addItem(.controlsChargingPlanner, to: source)
+        composition.setViewType(.summary, for: .controlsChargingPlanner, on: source)
+
+        let copy = composition.duplicateCustomTab(source.customID!)
+        #expect(copy != nil)
+        #expect(composition.viewType(for: .controlsChargingPlanner, on: copy!) == .summary,
+                "the copied tab draws the same forms as its source")
+    }
+}

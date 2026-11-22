@@ -6,7 +6,8 @@ struct GetChargingStatusIntent: AppIntent {
     static let description = IntentDescription("Returns charging state, power, target, and time remaining.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -33,10 +34,13 @@ struct SetChargeTargetIntent: AppIntent {
     static let description = IntentDescription("Sets the vehicle's target charge level percentage.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Charge Target (%)", default: 80, inclusiveRange: (40, 100))
+    @Parameter(title: "Charge Target (%)",
+               description: "Percentage to charge to, between 40 and 100.",
+               default: 80, inclusiveRange: (40, 100))
     var percent: Int
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -54,7 +58,8 @@ struct StartChargingOverrideIntent: AppIntent {
     static let description = IntentDescription("Overrides the active charging schedule so the vehicle charges immediately.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -69,7 +74,8 @@ struct StopChargingOverrideIntent: AppIntent {
     static let description = IntentDescription("Ends a charging override so the vehicle returns to its charging schedule.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -86,10 +92,13 @@ struct SetAmpLimitIntent: AppIntent {
     static let description = IntentDescription("Sets the vehicle's charging current limit in amperes.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Current (A)", default: 16, inclusiveRange: (6, 32))
+    @Parameter(title: "Current (A)",
+               description: "Charging current in amperes, between 6 and 32.",
+               default: 16, inclusiveRange: (6, 32))
     var amps: Int
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor

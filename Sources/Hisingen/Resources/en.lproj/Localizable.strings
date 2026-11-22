@@ -1,3 +1,8 @@
+"\"%@\" is a switch and takes no value." = "\"%@\" is a switch and takes no value.";
+"\"%@\" is not a valid value." = "\"%@\" is not a valid value.";
+"\"%@\" is not an option of \"%@\"." = "\"%@\" is not an option of \"%@\".";
+"\"%@\" needs a value." = "\"%@\" needs a value.";
+"\"%@\" takes a different number of values." = "\"%@\" takes a different number of values.";
 "%.1f s request" = "%.1f s request";
 "%@ Capabilities" = "%@ Capabilities";
 "%@ Open" = "%@ Open";
@@ -45,6 +50,7 @@
 "A software installation can only be scheduled between %d minutes and %d days from now." = "A software installation can only be scheduled between %d minutes and %d days from now.";
 "A software update is available. The vehicle downloads it automatically." = "A software update is available. The vehicle downloads it automatically.";
 "A software update is ready to install." = "A software update is ready to install.";
+"A timer needs --start and --stop times, for example --start 07:30 --stop 17:00." = "A timer needs --start and --stop times, for example --start 07:30 --stop 17:00.";
 "A vehicle service is temporarily unavailable. Retrying automatically." = "A vehicle service is temporarily unavailable. Retrying automatically.";
 "AQI & particulate matter sensors" = "AQI & particulate matter sensors";
 "About Hisingen" = "About Hisingen";
@@ -132,6 +138,22 @@
 "Battery Warranty Remaining" = "Battery Warranty Remaining";
 "Battery and Power" = "Battery and Power";
 "Battery and Range" = "Battery and Range";
+"Available optimised charging" = "Available optimised charging";
+"Bidirectional charging" = "Bidirectional charging";
+"Blocked:" = "Blocked:";
+"Commands:" = "Commands:";
+"Dock icon" = "Dock icon";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records.";
+"estimated" = "estimated";
+"Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry.";
+"Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen asks before it sends %@. Add --confirm to send it anyway.";
+"Hisingen command line" = "Hisingen command line";
+"Name the command to send, for example \"hisingen cli send lock\"." = "Name the command to send, for example \"hisingen cli send lock\".";
+"No vehicle is set up in Hisingen. Sign in on this Mac first." = "No vehicle is set up in Hisingen. Sign in on this Mac first.";
+"Ready: %@" = "Ready: %@";
+"Show Hisingen in the Dock, the app switcher and the warning badge" = "Show Hisingen in the Dock, the app switcher and the warning badge";
+"Show a dock badge while any vehicle reports warnings or an alarm" = "Show a dock badge while any vehicle reports warnings or an alarm";
+"Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show." = "Show a dock badge while any vehicle reports warnings or an alarm. Turn on the Dock icon (Appearance → Menu Bar) for the badge to show.";
 "Hisingen is not connected to Home Assistant yet." = "Hisingen is not connected to Home Assistant yet.";
 "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect." = "Home Assistant rejected the saved token. Paste a new long-lived token to reconnect.";
 "Needed to keep charger sessions in Hisingen's local history." = "Needed to keep charger sessions in Hisingen's local history.";
@@ -189,6 +211,8 @@
 "Charger power" = "Charger power";
 "Charging" = "Charging";
 "Save token" = "Save token";
+"The charge level must be between %d%% and %d%%." = "The charge level must be between %d%% and %d%%.";
+"The vehicle's command list could not be refreshed. Capability answers may be out of date." = "The vehicle's command list could not be refreshed. Capability answers may be out of date.";
 "This vehicle accepts %@ to %@." = "This vehicle accepts %@ to %@.";
 "The car cannot be driven while this installs." = "The car cannot be driven while this installs.";
 "This is already the highest setting." = "This is already the highest setting.";
@@ -198,9 +222,12 @@
 "Choose a vehicle first; muting applies to one car at a time." = "Choose a vehicle first; muting applies to one car at a time.";
 "Next service projection has no date." = "Next service projection has no date.";
 "Finding the address…" = "Finding the address…";
+"Unknown command \"%@\"." = "Unknown command \"%@\".";
+"Unknown option \"%@\"." = "Unknown option \"%@\".";
 "Unrecognised state: %@" = "Unrecognised state: %@";
 "No charging telemetry has been reported for this vehicle yet." = "No charging telemetry has been reported for this vehicle yet.";
 "Try Again" = "Try Again";
+"Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help" = "Usage: hisingen cli vehicles [--json] [--refresh]\n       hisingen cli send <command> [value] [--vin <vin or name>] [--confirm] [--json]\n       hisingen cli help";
 "kr per kWh" = "kr per kWh";
 "%@ kr" = "%@ kr";
 "This is the newest page." = "This is the newest page.";
@@ -231,6 +258,8 @@
 "Unlocks the vehicle." = "Unlocks the vehicle.";
 "Locks the vehicle." = "Locks the vehicle.";
 "Lock State Not Reported" = "Lock State Not Reported";
+"Portal" = "Portal";
+"Weather" = "Weather";
 "Window State Not Reported" = "Window State Not Reported";
 "Windows Closed" = "Windows Closed";
 "Windows Open" = "Windows Open";
@@ -709,6 +738,7 @@
 "Open Hisingen Settings to reconnect your %@ account." = "Open Hisingen Settings to reconnect your %@ account.";
 "Open Hisingen Settings to reconnect your Polestar account." = "Open Hisingen Settings to reconnect your Polestar account.";
 "Open Hisingen for details." = "Open Hisingen for details.";
+"Open Hisingen to send this command." = "Open Hisingen to send this command.";
 "Open Release Page" = "Open Release Page";
 "Open Settings" = "Open Settings";
 "Open Settings & Sign In" = "Open Settings & Sign In";
@@ -1173,6 +1203,7 @@
 "VIN is invalid" = "VIN is invalid";
 "VIN:" = "VIN:";
 "Vehicle" = "Vehicle";
+"Vehicle %@" = "Vehicle %@";
 "Vehicle & Identity" = "Vehicle & Identity";
 "Vehicle Alarm Triggered" = "Vehicle Alarm Triggered";
 "Vehicle Availability" = "Vehicle Availability";
@@ -1819,8 +1850,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Card Layout";
+"Card view" = "Card view";
 "How mid-size cards flow on wide panels" = "How mid-size cards flow on wide panels";
 "Full Width" = "Full Width";
+"Full" = "Full";
 "Two Columns" = "Two Columns";
 "Every card uses the entire panel width" = "Every card uses the entire panel width";
 "Cards flow side by side in two columns" = "Cards flow side by side in two columns";
@@ -1963,6 +1996,13 @@
 
 // Settings navigation, validation, and data-management feedback
 "Accounts" = "Accounts";
+"Add Account" = "Add Account";
+"Switch" = "Switch";
+"Demo mode" = "Demo mode";
+"Relaunch Hisingen to apply." = "Relaunch Hisingen to apply.";
+"The account could not be added." = "The account could not be added.";
+"The account could not be switched." = "The account could not be switched.";
+"Demo mode: commands are not sent to a vehicle." = "Demo mode: commands are not sent to a vehicle.";
 "Privacy & Data" = "Privacy & Data";
 "Updates" = "Updates";
 "About" = "About";
@@ -2752,6 +2792,7 @@
 "Choose what each tab shows, move cards into the order you want, or build a tab of your own from anything in Hisingen. Switching a card off also stops Hisingen requesting the data behind it." = "Choose what each tab shows, move cards into the order you want, or build a tab of your own from anything in Hisingen. Switching a card off also stops Hisingen requesting the data behind it.";
 "Clear Log" = "Clear Log";
 "Clear the redacted API request log?" = "Clear the redacted API request log?";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ entries will be discarded. New requests are recorded again as they happen.";
 "Clear trip classification" = "Clear trip classification";
 "Climate Energy" = "Climate Energy";
 "Close" = "Close";
@@ -3138,7 +3179,7 @@
 "Volvo sign-in restarted" = "Volvo sign-in restarted";
 
 "Projected by midnight UTC: %d calls" = "Projected by midnight UTC: %d calls";
-"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window.";
+"Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-." = "Register a free API application at developer.volvocars.com to get a Client ID, Client Secret, and VCC API Key, then sign in with your Volvo ID below. Hisingen never sees your Volvo ID password directly, because sign-in happens in a system browser window. New applications in the Volvo Developer Portal get a Client ID starting with vid-.";
 "The vehicle will delete “%@” and its per-location charge limits." = "The vehicle will delete “%@” and its per-location charge limits.";
 "At %@" = "At %@";
 "At %@ since %@" = "At %@ since %@";
@@ -3431,7 +3472,6 @@
 "No charging switch is mapped for this charger." = "No charging switch is mapped for this charger.";
 "No charging window found before the deadline." = "No charging window found before the deadline.";
 "No new reading arrived from the charger." = "No new reading arrived from the charger.";
-"No NexBlue charger was found. Map the entities by hand below." = "No NexBlue charger was found. Map the entities by hand below.";
 "No plan" = "No plan";
 "Not checked yet" = "Not checked yet";
 "Not imported yet" = "Not imported yet";
@@ -3624,6 +3664,18 @@
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
+
+/* Electricity supplier: house energy */
+"By Day" = "By Day";
+"By Month" = "By Month";
+"House Energy" = "House Energy";
+"Hours" = "Hours";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Hours at each of Tibber's price levels in the prices published for today and tomorrow.";
+"Level" = "Level";
+"Price Levels" = "Price Levels";
+"Production" = "Production";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "What Tibber billed for these days of energy, taxes included. The grid fee is not in it.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours.";
 
 "At the charger" = "At the charger";
 "Remotely" = "Remotely";
@@ -3876,7 +3928,470 @@
 "No charger measured this session, so the battery-side energy is priced with your rate settings." = "No charger measured this session, so the battery-side energy is priced with your rate settings.";
 "Pricing" = "Pricing";
 "Session total at the average price" = "Session total at the average price";
-"Per 15 minutes" = "Per 15 minutes";
 "Tibber's price per 15 minutes with the grid transfer fee added." = "Tibber's price per 15 minutes with the grid transfer fee added.";
 "Spot price with the markup, other charges and VAT from your rate settings." = "Spot price with the markup, other charges and VAT from your rate settings.";
 "Spot price only. Taxes and grid fees are not included." = "Spot price only. Taxes and grid fees are not included.";
+"Average Price" = "Average Price";
+"Charging Loss" = "Charging Loss";
+"Could Have Saved" = "Could Have Saved";
+"Plugged In" = "Plugged In";
+"Cheapest slots" = "Cheapest slots";
+"%d of the cheapest slots fall outside this chart" = "%d of the cheapest slots fall outside this chart";
+"No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices." = "No price covers this session. Connect Tibber under Electricity to price it from Tibber's prices.";
+"No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days." = "No price covers this session. Tibber keeps about a month of prices, and no market prices could be read for these days.";
+"Selected Session Prices (CSV)" = "Selected Session Prices (CSV)";
+"By when the energy flowed" = "By when the energy flowed";
+"The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger." = "The charger's energy minus the battery-side energy, as a share of what the charger delivered. The battery side is itself an estimate, so a figure far from the usual one points at the estimate as often as at the charger.";
+"The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that." = "The same energy in the cheapest slots while the cable was in, at up to %@, would have cost %@. A floor: it lets the charger pause as often as the prices ask, and a car that has to be ready by a set time cannot always do that.";
+
+// Added 2026-11-21: Volvo sign-in notice, specification labels, and change time.
+"Volvo moved to a new sign-in system. Sign in again to keep your vehicle data." = "Volvo moved to a new sign-in system. Sign in again to keep your vehicle data.";
+"Drive Type" = "Drive Type";
+"Engine Power" = "Engine Power";
+"Gross Weight" = "Gross Weight";
+"Seats" = "Seats";
+"Last changed %@" = "Last changed %@";
+"%d kW" = "%d kW";
+"%d kg" = "%d kg";
+
+// Vehicles signed out of a connected multi-vehicle account
+
+"Sign Out This Vehicle" = "Sign Out This Vehicle";
+"This removes this vehicle from Hisingen. Your %@ account stays signed in for your other vehicles." = "This removes this vehicle from Hisingen. Your %@ account stays signed in for your other vehicles.";
+"Signed Out Vehicles" = "Signed Out Vehicles";
+"Bring Back" = "Bring Back";
+"Bring back %@" = "Bring back %@";
+
+// Sign-out fallback, larger accounts, and charger recovery
+
+"Sign Out Entire Account…" = "Sign Out Entire Account…";
+"These vehicles stay on your account. Bring one back to use it here." = "These vehicles stay on your account. Bring one back to use it here.";
+"Sign out did not finish" = "Sign out did not finish";
+"Hisingen could not finish signing out of %@. The account was removed from this Mac, but the service did not confirm revocation. Sign in and out again to retry." = "Hisingen could not finish signing out of %@. The saved session may still exist here or at the service. Sign in and out again to retry.";
+"Home charger unpaired" = "Home charger unpaired";
+"The charger was paired to this vehicle. Pair it again from Settings after you bring the vehicle back." = "The charger was paired to this vehicle. Pair it again from Settings after you bring the vehicle back.";
+
+// Charge-target mode label
+
+"Long trip" = "Long trip";
+
+// EventKit reminders and calendar write-back
+
+"Plug in %@" = "Plug in %@";
+"Battery at %.0f%% and unplugged when Hisingen created this reminder." = "Battery at %.0f%% and unplugged when Hisingen created this reminder.";
+"Battery below the plug-in threshold and unplugged when Hisingen created this reminder." = "Battery below the plug-in threshold and unplugged when Hisingen created this reminder.";
+"Book service for %@" = "Book service for %@";
+"The vehicle reported a service inspection warning." = "The vehicle reported a service inspection warning.";
+"%d km" = "%d km";
+"Service inspection due." = "Service inspection due.";
+"Check tyre pressures on %@" = "Check tyre pressures on %@";
+"Add Plug-In Reminder" = "Add Plug-In Reminder";
+"Add Service Reminder" = "Add Service Reminder";
+"Add Tyre Reminder" = "Add Tyre Reminder";
+"Added to Reminders." = "Added to Reminders.";
+"Already in Reminders." = "Already in Reminders.";
+"Reminders access is denied. Allow Hisingen in System Settings → Privacy & Security → Reminders." = "Reminders access is denied. Allow Hisingen in System Settings → Privacy & Security → Reminders.";
+"No default Reminders list is available." = "No default Reminders list is available.";
+"The reminder could not be saved." = "The reminder could not be saved.";
+"Also Add to Reminders" = "Also Add to Reminders";
+"Write a Reminder through macOS Reminders each time the plug-in alert fires" = "Write a Reminder through macOS Reminders each time the plug-in alert fires";
+"Add to Calendar…" = "Add to Calendar…";
+"Loading writable calendars…" = "Loading writable calendars…";
+"No writable calendars are available." = "No writable calendars are available.";
+"Destination" = "Destination";
+"Added to %@." = "Added to %@.";
+"Already on %@." = "Already on %@.";
+"The schedule has no upcoming start." = "The schedule has no upcoming start.";
+"The event could not be saved." = "The event could not be saved.";
+"Add to %@" = "Add to %@";
+"Created by Hisingen from a vehicle schedule." = "Created by Hisingen from a vehicle schedule.";
+
+// Polestar info-tab fields: climate, warranty, air-quality, raw IDs
+
+"Main Climate" = "Main Climate";
+"Warranty Status" = "Warranty Status";
+"Cycle Started" = "Cycle Started";
+"Last Cycle Finished" = "Last Cycle Finished";
+"Light %d" = "Light %d";
+"The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does." = "The provider's own word for the warranty state, shown exactly as reported. No connected provider returns one today, so the row stays hidden until one does.";
+"A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports." = "A light the backend reports by its wire ID. Hisingen has no name for it yet, so the ID is shown raw and reported unchanged in support exports.";
+"Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports." = "Air-quality field the portal sent but Hisingen has not yet decoded. Shown raw so new backend data is visible; reported unchanged in support exports.";
+
+// Share vehicle report and Focus filter
+
+"Share Vehicle Report…" = "Share Vehicle Report…";
+"The vehicle report could not be created." = "The vehicle report could not be created.";
+"Data from %@." = "Data from %@.";
+"Vehicle and notifications" = "Vehicle and notifications";
+"%@: notifications muted" = "%@: notifications muted";
+"%@: notifications on" = "%@: notifications on";
+
+// Tibber live house power and production
+
+"Production %@" = "Production %@";
+"Pulse last read %@ ago" = "Pulse last read %@ ago";
+"House Production" = "House Production";
+"Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out." = "Hourly production Tibber reported for the home's production meter over the same period. A home without a production metering point reports none, and the row is left out.";
+"Live House Power" = "Live House Power";
+"Reading live" = "Reading live";
+"No Pulse paired" = "No Pulse paired";
+"Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one." = "Tibber streams live power from a Pulse or Watty reader paired to the home. The charging card then shows the live house load, and production while the home is producing. Hourly prices and meter readings work without one.";
+
+// Volvo energy-capability rows
+
+"Battery charge level" = "Battery charge level";
+"Electric range" = "Electric range";
+"Charger connection status" = "Charger connection status";
+"Charging system status" = "Charging system status";
+"Charging type" = "Charging type";
+"Charger power status" = "Charger power status";
+"Charging power" = "Charging power";
+"Estimated charging time to target" = "Estimated charging time to target";
+
+// Weather readout and climate-timer advice
+
+"Wind" = "Wind";
+"Gusts" = "Gusts";
+"Precipitation" = "Precipitation";
+"Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin." = "Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin.";
+"Strong wind forecast at %@ (%@). A climate timer would warm the cabin." = "Strong wind forecast at %@ (%@). A climate timer would warm the cabin.";
+
+// Widget controls
+
+"Vehicle status" = "Vehicle status";
+"Battery, range, charging and the next departure, as the app last read them." = "Battery, range, charging and the next departure, as the app last read them.";
+"Lock car" = "Lock car";
+"Opens Hisingen with the lock command ready to confirm." = "Opens Hisingen with the lock command ready to confirm.";
+"Start climate" = "Start climate";
+"Opens Hisingen with the climate command ready to confirm." = "Opens Hisingen with the climate command ready to confirm.";
+"Choose which car the widget shows." = "Choose which car the widget shows.";
+"Vehicle not on file — showing %@" = "Vehicle not on file — showing %@";
+
+// The diagnostic inspector: which partition of the API log an exchange belongs to.
+"Log partition" = "Log partition";
+"The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet.";
+
+// Volvo command outcomes the API can report beyond the common set.
+"This vehicle does not support this command." = "This vehicle does not support this command.";
+"The command expired before the vehicle acted on it." = "The command expired before the vehicle acted on it.";
+"The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
+"No active Volvo subscription" = "No active Volvo subscription";
+"Remote commands need an active subscription on this car." = "Remote commands need an active subscription on this car.";
+"Services" = "Services";
+"Help" = "Help";
+"Hisingen Help" = "Hisingen Help";
+"Minimize" = "Minimize";
+"Bring All to Front" = "Bring All to Front";
+"Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used." = "Connect Tibber or choose Sweden to use market prices and the charging planner. Without a price source, a typed-in rate is used.";
+"Commands Reported by the Vehicle" = "Commands Reported by the Vehicle";
+"Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active." = "Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active.";
+"A timer link needs start and stop times, for example start=07:30&stop=17:00." = "A timer link needs start and stop times, for example start=07:30&stop=17:00.";
+"A timer delete link needs the timer id, for example id=123." = "A timer delete link needs the timer id, for example id=123.";
+"A charge-location link needs a name, for example alias=Home." = "A charge-location link needs a name, for example alias=Home.";
+"A charge-location rename needs the location id and a name." = "A charge-location rename needs the location id and a name.";
+"A charge-location amps link needs the location id and amps." = "A charge-location amps link needs the location id and amps.";
+"A charge-location target link needs the location id and soc." = "A charge-location target link needs the location id and soc.";
+"A charge-location link needs the location id." = "A charge-location link needs the location id.";
+"A charge-location delete link needs the location id." = "A charge-location delete link needs the location id.";
+"Percentage to charge to, between 40 and 100." = "Percentage to charge to, between 40 and 100.";
+"Charging current in amperes, between 6 and 32." = "Charging current in amperes, between 6 and 32.";
+"How long the engine runs, between 5 and 15 minutes." = "How long the engine runs, between 5 and 15 minutes.";
+"Flashes the headlights so the car is easier to find." = "Flashes the headlights so the car is easier to find.";
+"Sounds the horn and flashes the lights together." = "Sounds the horn and flashes the lights together.";
+"View Details" = "View Details";
+"Open Windows" = "Open Windows";
+"Install Software Update" = "Install Software Update";
+"Cancel Software Update" = "Cancel Software Update";
+"Set Charging Timer" = "Set Charging Timer";
+"Set Climate Timer" = "Set Climate Timer";
+"List Saved Charge Locations" = "List Saved Charge Locations";
+"Opens the tailgate." = "Opens the tailgate.";
+"Closes the tailgate." = "Closes the tailgate.";
+"Opens the windows to the ventilation position." = "Opens the windows to the ventilation position.";
+"Closes every window." = "Closes every window.";
+"Starts installing the software update the car has downloaded." = "Starts installing the software update the car has downloaded.";
+"Cancels a software update installation that has not started yet." = "Cancels a software update installation that has not started yet.";
+"Sets the car's charging window for every day." = "Sets the car's charging window for every day.";
+"Sets a pre-conditioning timer for every day." = "Sets a pre-conditioning timer for every day.";
+"Returns the charge locations the car has saved." = "Returns the charge locations the car has saved.";
+"Stop Time" = "Stop Time";
+"When charging may begin, as HH:MM." = "When charging may begin, as HH:MM.";
+"When charging must stop, as HH:MM." = "When charging must stop, as HH:MM.";
+"When pre-conditioning starts, as HH:MM." = "When pre-conditioning starts, as HH:MM.";
+"When pre-conditioning stops, as HH:MM." = "When pre-conditioning stops, as HH:MM.";
+"The %@ must be written as HH:MM, for example 07:30. Received “%@”." = "The %@ must be written as HH:MM, for example 07:30. Received “%@”.";
+"Hisingen has no saved snapshot for that vehicle yet." = "Hisingen has no saved snapshot for that vehicle yet.";
+"This vehicle has no saved charge locations." = "This vehicle has no saved charge locations.";
+"%d A" = "%d A";
+"%d%% minimum" = "%d%% minimum";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Polestar cloud";
+"Polestar portal" = "Polestar portal";
+"Live stream" = "Live stream";
+"Weather service" = "Weather service";
+"Volvo cloud" = "Volvo cloud";
+"Writable current limit" = "Writable current limit";
+"No writable current-limit entity is mapped for this charger." = "No writable current-limit entity is mapped for this charger.";
+"Hisingen is not connected to a charger yet." = "Hisingen is not connected to a charger yet.";
+"This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+"Timers" = "Timers";
+"No timers reported." = "No timers reported.";
+"Save Current Location…" = "Save Current Location…";
+// Added 2026-11-22: planner window-end stop and opt-in sleep prevention.
+"Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours." = "Charging stops when the window ends, so the car does not keep charging into the next, more expensive hours.";
+"Keep the Mac Awake for the Window" = "Keep the Mac Awake for the Window";
+"Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep.";
+"Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac.";
+"Turn on Auto-Start Charging in the Window to use this." = "Turn on Auto-Start Charging in the Window to use this.";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Wait %@ before sending %@ again.";
+"%@ is already on its way to this vehicle." = "%@ is already on its way to this vehicle.";
+"%@ is already queued for this vehicle." = "%@ is already queued for this vehicle.";
+"No vehicles are configured for this account." = "No vehicles are configured for this account.";
+"%@ sent to %d vehicles." = "%@ sent to %d vehicles.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ sent to %d of %d vehicles. Failed: %@.";
+"Every day" = "Every day";
+"Weekdays" = "Weekdays";
+"Scheduled Actions" = "Scheduled Actions";
+"Add scheduled action" = "Add scheduled action";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled.";
+"No scheduled actions yet." = "No scheduled actions yet.";
+"Enable %@" = "Enable %@";
+"Arrival & Departure" = "Arrival & Departure";
+"Add location trigger" = "Add location trigger";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running.";
+"No arrival or departure triggers yet." = "No arrival or departure triggers yet.";
+"Arrive" = "Arrive";
+"Leave" = "Leave";
+"Any saved charge location" = "Any saved charge location";
+"Send to Every Vehicle" = "Send to Every Vehicle";
+"Send now" = "Send now";
+// Provider capability inspector and Developer Portal fallback
+"Vehicle telemetry" = "Vehicle telemetry";
+"Energy readings" = "Energy readings";
+"Engine" = "Engine";
+"Vehicle health" = "Vehicle health";
+"Granted" = "Granted";
+"Partly granted" = "Partly granted";
+"Not granted" = "Not granted";
+"Not requested" = "Not requested";
+"Provider access" = "Provider access";
+"Scopes this connection was granted, and readings the provider answered with a status." = "Scopes this connection was granted, and readings the provider answered with a status.";
+"No scope grant has been recorded yet. Sign in again to record what the provider granted." = "No scope grant has been recorded yet. Sign in again to record what the provider granted.";
+"Granted scopes" = "Granted scopes";
+"Requested scopes" = "Requested scopes";
+"Domains this connection can read" = "Domains this connection can read";
+"Fallback" = "Fallback";
+"Scopes by feature" = "Scopes by feature";
+"Readings the provider answered with a status" = "Readings the provider answered with a status";
+"These are the provider's own status and reason, not a generic unavailability." = "These are the provider's own status and reason, not a generic unavailability.";
+"The fallback connection served this refresh." = "The fallback connection served this refresh.";
+"The provider reported %@." = "The provider reported %@.";
+"No Developer Portal credentials are configured." = "No Developer Portal credentials are configured.";
+"Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app." = "Developer Portal access to this vehicle was not granted. Re-enable data sharing in the Polestar app.";
+"The Developer Portal daily call limit has been reached." = "The Developer Portal daily call limit has been reached.";
+"Developer Portal access could not be verified." = "Developer Portal access could not be verified.";
+"The Developer Portal refresh failed." = "The Developer Portal refresh failed.";
+"Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode." = "Developer Portal is read-only. Remote controls need Polestar ID or Augmented mode.";
+"Volvo connected – location unavailable" = "Volvo connected – location unavailable";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map.";
+"Granted on the current session: %@" = "Granted on the current session: %@";
+"None of the approved permissions are granted on the current session." = "None of the approved permissions are granted on the current session.";
+"Engine start" = "Engine start";
+// Reporting: period reports, maintenance log and depreciation.
+"Period Report" = "Period Report";
+"No trips in this period." = "No trips in this period.";
+"No maintenance entries in this period." = "No maintenance entries in this period.";
+"Assumes %@ a year from %@ paid on %@. Hisingen does not estimate a market value." = "Assumes %@ a year from %@ paid on %@. Hisingen does not estimate a market value.";
+"Enter what you paid and how fast the car loses value. Depreciation is arithmetic on that, not a market estimate." = "Enter what you paid and how fast the car loses value. Depreciation is arithmetic on that, not a market estimate.";
+"Repair" = "Repair";
+"Inspection" = "Inspection";
+"Give the entry a name, for example “Front brake pads”." = "Give the entry a name, for example “Front brake pads”.";
+"Enter the cost as a number, or leave it empty." = "Enter the cost as a number, or leave it empty.";
+"Enter the odometer as a number, or leave it empty." = "Enter the odometer as a number, or leave it empty.";
+"Period" = "Period";
+"Totals" = "Totals";
+"Odometer Covered" = "Odometer Covered";
+"Energy Used" = "Energy Used";
+"Charges" = "Charges";
+"Estimated Trip Cost" = "Estimated Trip Cost";
+"Charging Cost" = "Charging Cost";
+"Maintenance" = "Maintenance";
+"Depreciation" = "Depreciation";
+"Value at Start" = "Value at Start";
+"Value at End" = "Value at End";
+"Loss in Period" = "Loss in Period";
+"Maintenance Log" = "Maintenance Log";
+"Costs are estimates from your electricity rate; depreciation is arithmetic on the figures you entered." = "Costs are estimates from your electricity rate; depreciation is arithmetic on the figures you entered.";
+"%@ driven · %@ energy used · %@ estimated cost" = "%@ driven · %@ energy used · %@ estimated cost";
+"%@ report · %@" = "%@ report · %@";
+"No report for this period" = "No report for this period";
+"Pick another week or month, or drive the car so there is something to report." = "Pick another week or month, or drive the car so there is something to report.";
+"Copy report" = "Copy report";
+"Report period" = "Report period";
+"Earlier period" = "Earlier period";
+"Later period" = "Later period";
+"Ownership figures" = "Ownership figures";
+"%d more in the exported report" = "%d more in the exported report";
+"No consumption reading" = "No consumption reading";
+"%@ · fixed rate" = "%@ · fixed rate";
+"Add entry" = "Add entry";
+"Export…" = "Export…";
+"Report copied" = "Report copied";
+"The report could not be saved." = "The report could not be saved.";
+"Report saved to %@" = "Report saved to %@";
+"Add Maintenance Entry" = "Add Maintenance Entry";
+"Kind" = "Kind";
+"What was done" = "What was done";
+"Cost, optional" = "Cost, optional";
+"Notes, optional" = "Notes, optional";
+"Maintenance entries stay on this Mac and appear in the period report." = "Maintenance entries stay on this Mac and appear in the period report.";
+"The entry could not be saved." = "The entry could not be saved.";
+"Maintenance entry saved" = "Maintenance entry saved";
+"Ownership Figures" = "Ownership Figures";
+"Purchase price" = "Purchase price";
+"Purchase date" = "Purchase date";
+"Annual value decline (%)" = "Annual value decline (%)";
+"The ownership figures could not be saved." = "The ownership figures could not be saved.";
+"Ownership figures saved" = "Ownership figures saved";
+"Recurring Report" = "Recurring Report";
+"Recurring report" = "Recurring report";
+"Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac.";
+// Added 2026-11-22: public charging entry, per-session price and the home/public split.
+"Public" = "Public";
+"Add Session" = "Add Session";
+"Log Charging Session" = "Log Charging Session";
+"Edit Charging Session" = "Edit Charging Session";
+"Charging place" = "Charging place";
+"Energy (kWh)" = "Energy (kWh)";
+"Total price" = "Total price";
+"Enter the energy in kWh, greater than zero." = "Enter the energy in kWh, greater than zero.";
+"Enter the total price as a number." = "Enter the total price as a number.";
+"Enter the price per kWh as a number." = "Enter the price per kWh as a number.";
+"Enter a total price or a price per kWh." = "Enter a total price or a price per kWh.";
+"The session must end after it starts." = "The session must end after it starts.";
+"Entered by hand" = "Entered by hand";
+"Stored with the session and included in the home and public charging totals." = "Stored with the session and included in the home and public charging totals.";
+"Public Charging" = "Public Charging";
+"Includes every session recorded automatically until its place is changed." = "Includes every session recorded automatically until its place is changed.";
+"Log a public charge from a receipt, or add a missing session." = "Log a public charge from a receipt, or add a missing session.";
+"Stored cost: %@" = "Stored cost: %@";
+"Entered from a receipt: the energy and price are your figures, not a measurement." = "Entered from a receipt: the energy and price are your figures, not a measurement.";
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Solar forecast";
+"Solar forecast chart" = "Solar forecast chart";
+"Peak %@ at %@" = "Peak %@ at %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo radiation at the car's location; it is not panel output.";
+"Grid carbon now" = "Grid carbon now";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Live grid carbon";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Shows the carbon intensity now beside the charging plan. Without a key, no live line appears.";
+"Electricity Maps API key" = "Electricity Maps API key";
+"Key saved" = "Key saved";
+"Remove" = "Remove";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported.";
+"Source: %@" = "Source: %@";
+"No charger was found. Map the entities by hand below." = "No charger was found. Map the entities by hand below.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee and Zaptec chargers are found through the device list, so they need an administrator token.";
+// Home Charging: a second paired charger.
+"Add another charger" = "Add another charger";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading.";
+"Chargers" = "Chargers";
+"Live connection" = "Live connection";
+"This charger holds the live connection." = "This charger holds the live connection.";
+"Show this charger's readings and commands." = "Show this charger's readings and commands.";
+"Last read %@" = "Last read %@";
+"Elvia day and night tariff" = "Elvia day and night tariff";
+// App Intents titles, descriptions, parameters and Focus filter choices.
+// Data freshness and sign-in strings.
+"All notifications" = "All notifications";
+"Asks Hisingen to fetch fresh vehicle data from the provider now." = "Asks Hisingen to fetch fresh vehicle data from the provider now.";
+"Charge Target (%)" = "Charge Target (%)";
+"Charging Status" = "Charging Status";
+"Ends a charging override so the vehicle returns to its charging schedule." = "Ends a charging override so the vehicle returns to its charging schedule.";
+"Hisingen Focus Filter" = "Hisingen Focus Filter";
+"Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading." = "Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading.";
+"Locks the vehicle doors." = "Locks the vehicle doors.";
+"Muted" = "Muted";
+"Oldest reading %@" = "Oldest reading %@";
+"Overrides the active charging schedule so the vehicle charges immediately." = "Overrides the active charging schedule so the vehicle charges immediately.";
+"Recent Trips" = "Recent Trips";
+"Returns charging state, power, target, and time remaining." = "Returns charging state, power, target, and time remaining.";
+"Returns locally derived trip distance and driving time for the last seven days." = "Returns locally derived trip distance and driving time for the last seven days.";
+"Returns lock, opening, and attention status from the latest Hisingen snapshot." = "Returns lock, opening, and attention status from the latest Hisingen snapshot.";
+"Returns the battery level, range, and charging status of a vehicle." = "Returns the battery level, range, and charging status of a vehicle.";
+"Returns the current tire pressures and statuses for all wheels." = "Returns the current tire pressures and statuses for all wheels.";
+"Returns the last reported parking position of the active vehicle." = "Returns the last reported parking position of the active vehicle.";
+"Returns the status of all vehicles in your garage." = "Returns the status of all vehicles in your garage.";
+"Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning." = "Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.";
+"Runtime (minutes)" = "Runtime (minutes)";
+"Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on." = "Sets the active vehicle and whether that vehicle's notifications are muted when a Focus turns on.";
+"Sets the vehicle's charging current limit in amperes." = "Sets the vehicle's charging current limit in amperes.";
+"Sets the vehicle's target charge level percentage." = "Sets the vehicle's target charge level percentage.";
+"Sign in again to keep this up to date" = "Sign in again to keep this up to date";
+"Sign in again: Hisingen cannot refresh" = "Sign in again: Hisingen cannot refresh";
+"Some readings are from an earlier report" = "Some readings are from an earlier report";
+"Starts cabin climate preconditioning." = "Starts cabin climate preconditioning.";
+"Starts the cabin pre-cleaning cycle that purifies the interior air before departure." = "Starts the cabin pre-cleaning cycle that purifies the interior air before departure.";
+"Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support)." = "Starts the combustion engine to precondition the cabin (Volvo vehicles with engine start support).";
+"Stops a remotely started combustion engine." = "Stops a remotely started combustion engine.";
+"Stops a running cabin pre-cleaning cycle." = "Stops a running cabin pre-cleaning cycle.";
+"Stops cabin climate preconditioning." = "Stops cabin climate preconditioning.";
+"Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart." = "Telemetry is flowing now, but macOS could not store the credentials. Check free disk space, then sign in again so the session survives a restart.";
+"The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current." = "The vehicle reported these values at the time shown, not with this refresh. Hisingen labels them instead of presenting them as current.";
+"Unlocks the vehicle doors." = "Unlocks the vehicle doors.";
+"Vehicle Battery" = "Vehicle Battery";
+"Vehicle nickname or VIN (optional)" = "Vehicle nickname or VIN (optional)";
+"Volvo connected, but not saved" = "Volvo connected, but not saved";
+"Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings.";
+"Watts per square metre" = "Watts per square metre";
+"A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it.";
+// Idle and overstay fees, and price threshold alerts (C11).
+"Per hour" = "Per hour";
+"Per minute" = "Per minute";
+"Idle and Overstay Fees" = "Idle and Overstay Fees";
+"Charge a fee when a car stays plugged in after charging finishes. Hisingen shows it on a session only where the paired charger recorded the session running past the charge's end." = "Charge a fee when a car stays plugged in after charging finishes. Hisingen shows it on a session only where the paired charger recorded the session running past the charge's end.";
+"No fee rules yet. Add one for a charger or a location." = "No fee rules yet. Add one for a charger or a location.";
+"%@ after %d min grace" = "%@ after %d min grace";
+"Options for the %@ rule" = "Options for the %@ rule";
+"Rule applies to" = "Rule applies to";
+"Pair a charger first." = "Pair a charger first.";
+"Grace period" = "Grace period";
+"Fee" = "Fee";
+"Fee unit" = "Fee unit";
+"Add Rule" = "Add Rule";
+"Price Threshold Alert" = "Price Threshold Alert";
+"Alert when the current or next hour's price crosses a level you set" = "Alert when the current or next hour's price crosses a level you set";
+"Price level, %@/kWh" = "Price level, %@/kWh";
+"Quiet period" = "Quiet period";
+"Compared with the price you pay under Electricity settings. One alert per crossing, then quiet for the period above." = "Compared with the price you pay under Electricity settings. One alert per crossing, then quiet for the period above.";
+"Enter a price level to start alerts." = "Enter a price level to start alerts.";
+"Electricity price alert" = "Electricity price alert";
+"The price is now %@/kWh, above your %@/kWh level." = "The price is now %@/kWh, above your %@/kWh level.";
+"The next hour costs %@/kWh from %@, above your %@/kWh level." = "The next hour costs %@/kWh from %@, above your %@/kWh level.";
+"Idle and Overstay Fee" = "Idle and Overstay Fee";
+"Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed." = "Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed.";
+"Rule: %@ after %d minutes of grace." = "Rule: %@ after %d minutes of grace.";
+"%@ fee" = "%@ fee";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX Workbook";
+"GPX Tracks" = "GPX Tracks";
+"Selected Period" = "Selected Period";
+"Full History" = "Full History";
+"Selected Session Samples (XLSX)" = "Selected Session Samples (XLSX)";
+"Field" = "Field";
+"Value" = "Value";
+"Dataset" = "Dataset";
+"Scope" = "Scope";
+"Rows" = "Rows";
+"Rows with coordinates" = "Rows with coordinates";
+"Selected period" = "Selected period";
+"Full history" = "Full history";
+"Trip %@" = "Trip %@";
+"%@ trip tracks" = "%@ trip tracks";
+"The XLSX workbook could not be created." = "The XLSX workbook could not be created.";
+"The GPX track could not be created." = "The GPX track could not be created.";
+"Selected Session Samples" = "Selected Session Samples";
+"Selected session" = "Selected session";

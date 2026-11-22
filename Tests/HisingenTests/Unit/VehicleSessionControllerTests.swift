@@ -42,6 +42,31 @@ struct VehicleSessionControllerTests {
         #expect(context.authenticationRequiredCount == 0)
     }
 
+    @Test func demoModeServesAPopulatedVehicleWithoutStartingTheProvider() async throws {
+        let scoped = ScopedPreferences(label: "demo-mode")
+        let preferences = scoped.store
+        preferences.isDemoMode = true
+        let store = VehicleStateStore(defaults: scoped.defaults, database: .inMemory(), preferences: preferences)
+        let context = SessionTestContext()
+        let provider = SessionTestProvider(brand: .polestar)
+        let controller = VehicleSessionController(
+            context: context, preferences: preferences, stateStore: store, imageCache: CarImageCache(),
+            sessionManager: SessionManager(readPassword: { nil }, clearPassword: {}),
+            providers: ProviderRegistry(polestar: provider, volvo: SessionTestProvider(brand: .volvo)),
+            fleetStore: FleetStore(stateStore: store, preferences: preferences), observesEnvironment: false)
+        defer { controller.stop() }
+
+        controller.primeDisplayState()
+        controller.resume()
+
+        #expect(controller.latest?.identity.vin == DemoMode.vin)
+        #expect(controller.latest?.energy.batteryPercentage == 72)
+        #expect(!controller.signInRequired)
+        #expect(context.receivedStates > 0)
+        let providerCalls = await provider.calls
+        #expect(providerCalls.isEmpty)
+    }
+
     @Test func aRefreshDoesNotDiscardAnUnconfirmedCommandReceipt() async throws {
         let suite = "VehicleSessionControllerTests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -240,6 +265,7 @@ private final class SessionTestContext: VehicleSessionControllerContext {
         authentication.yield(())
     }
     func authenticationSucceeded() {}
+    func signOutRevocationFailed(brand: VehicleBrand) {}
     func vehicleSwitchDidPause() {}
     func sessionDidEstablish() {}
     func sessionCredentialsDidChange() {

@@ -55,7 +55,7 @@ struct PolestarCommandStreamTimeoutTests {
 
 /// Answers 200, delivers `wire`, then fails like the request session's idle timeout does: after a
 /// pause, so the reader has consumed the bytes first.
-private final class StalledCommandStream: URLProtocol, @unchecked Sendable {
+private final class StalledCommandStream: URLProtocol {
     nonisolated(unsafe) static var wire = Data()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -66,8 +66,9 @@ private final class StalledCommandStream: URLProtocol, @unchecked Sendable {
             headerFields: ["Content-Type": "application/grpc"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         if !Self.wire.isEmpty { client?.urlProtocol(self, didLoad: Self.wire) }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [self] in
-            client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+        nonisolated(unsafe) let loader = self
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            loader.client?.urlProtocol(loader, didFailWithError: URLError(.timedOut))
         }
     }
 }

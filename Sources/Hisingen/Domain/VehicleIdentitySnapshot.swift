@@ -7,6 +7,9 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var availabilityReportedAt: Date? = nil
     /// Undecoded availability wire fields, captured raw for future classification.
     var availabilityUnknownWireFields: [VehicleRawWireField]? = nil
+    /// Premium VOC subscription state, from the Energy API. `nil` when the provider has no such
+    /// resource (Polestar) or the read failed, which is distinct from a known lapse (`false`).
+    var hasPremiumSubscription: Bool? = nil
     var modelName: String?
     var modelYear: String?
     var registrationNo: String?
@@ -20,6 +23,10 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
     var accountMarket: String?
     var upholstery: String?
     var steeringOrientation: String?
+    var driveType: String?
+    var enginePowerKw: Double?
+    var grossWeightKg: Int?
+    var numberOfSeats: Int?
     var imageData: Data?
     var interiorImageData: Data?
     var usageMode: String?
@@ -59,10 +66,15 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         accountMarket: String? = nil,
         upholstery: String? = nil,
         steeringOrientation: String? = nil,
+        driveType: String? = nil,
+        enginePowerKw: Double? = nil,
+        grossWeightKg: Int? = nil,
+        numberOfSeats: Int? = nil,
         imageData: Data? = nil,
         interiorImageData: Data? = nil,
         usageMode: String? = nil,
-        unavailableReason: String? = nil
+        unavailableReason: String? = nil,
+        hasPremiumSubscription: Bool? = nil
     ) {
         self.availability = availability
         self.availabilityReportedAt = availabilityReportedAt
@@ -80,10 +92,15 @@ struct VehicleIdentitySnapshot: Codable, Equatable, Sendable {
         self.accountMarket = accountMarket
         self.upholstery = upholstery
         self.steeringOrientation = steeringOrientation
+        self.driveType = driveType
+        self.enginePowerKw = enginePowerKw
+        self.grossWeightKg = grossWeightKg
+        self.numberOfSeats = numberOfSeats
         self.imageData = imageData
         self.interiorImageData = interiorImageData
         self.usageMode = usageMode
         self.unavailableReason = unavailableReason
+        self.hasPremiumSubscription = hasPremiumSubscription
     }
 
     /// Fills this snapshot's nil identity metadata from a richer source. Presence facts the

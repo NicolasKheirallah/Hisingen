@@ -33,7 +33,7 @@ struct PanelActions {
     let onSelectCar: (String) -> Void
     let onDismissCommandReceipt: (UUID) -> Void
     let onSettingsChanged: (SettingsChange) -> Void
-    let onSignOut: () -> Void
+    let onSignOut: (SignOutSelection) -> Void
     let onTestConnection: (VehicleBrand) async -> ConnectionCheck
     let onCompleteSetup: () -> Void
 }
@@ -49,16 +49,20 @@ final class PanelModel: ObservableObject {
     let accountConnection: AccountConnectionModel
     let reverseGeocoder: ReverseGeocoder
     let imageCache: CarImageCache
+    /// Live fleet reads for surfaces that must not act on the display snapshot alone.
+    let fleetStore: FleetStore?
 
     init(display: PanelDisplay, actions: PanelActions,
          history: HistoryWorkspace, accountConnection: AccountConnectionModel,
-         reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache) {
+         reverseGeocoder: ReverseGeocoder, imageCache: CarImageCache,
+         fleetStore: FleetStore? = nil) {
         self.display = display
         self.actions = actions
         self.history = history
         self.accountConnection = accountConnection
         self.reverseGeocoder = reverseGeocoder
         self.imageCache = imageCache
+        self.fleetStore = fleetStore
     }
 
     func update(_ display: PanelDisplay) {

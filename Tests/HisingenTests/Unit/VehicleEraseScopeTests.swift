@@ -40,7 +40,7 @@ struct VehicleEraseScopeTests {
                 defaults: scoped.defaults, database: database, preferences: scoped.store)
             eraser = LocalDataEraser(
                 database: database, preferences: scoped.store, imageCache: CarImageCache(),
-                memoryCaches: registry)
+                memoryCaches: registry, clearAccounts: {})
         }
 
         var preferences: PreferencesStore { scoped.store }

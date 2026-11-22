@@ -25,6 +25,8 @@ SOURCES = ROOT / "Sources"
 # Hosts that appear in the sources but are not outside services Hisingen sends data to.
 ALLOWED_HOSTS = {
     "www.w3.org",                  # XML namespace URIs
+    "schemas.openxmlformats.org",  # spreadsheet XML namespace URIs, identifiers rather than calls
+    "www.topografix.com",          # GPX 1.1 XML namespace URI, an identifier rather than a call
     "github.com",                  # links to the project and its author
     "nicolaskheirallah.github.io",  # Hisingen's own OAuth callback page
 }

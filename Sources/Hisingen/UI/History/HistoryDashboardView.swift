@@ -110,6 +110,18 @@ struct HistoryDashboardView: View {
 
     @State var fuelEntryPendingDeletion: HistoryWorkspace.FuelEntry?
 
+    // The charging-session entry sheet. One set of fields covers both logging a session by hand
+    // and editing a stored one; `editingChargingSession` says which.
+    @State var showChargingSessionSheet = false
+    @State var editingChargingSession: HistoricalChargingSession?
+    @State var sessionStartedAt = Date().addingTimeInterval(-1_800)
+    @State var sessionEndedAt = Date()
+    @State var sessionLocationText = ""
+    @State var sessionEnergyText = ""
+    @State var sessionTotalPriceText = ""
+    @State var sessionPricePerKwhText = ""
+    @State var sessionPlace: ChargingSessionPlace = .publicCharging
+
     @State var exportError: String?
 
     @State var exportNotice: String?
@@ -325,7 +337,7 @@ struct HistoryDashboardView: View {
             case "charging-sessions", "charging-curve": return .sessions
             case "charging-history", "monthly-charging", "charge-locations": return .chargingSummary
             case "trips", "driving-patterns", "distance", "monthly-mileage", "odometer": return .driving
-            case "efficiency", "consumption", "fuel-economy", "recent-fills", "emissions": return .energy
+            case "efficiency", "consumption", "fuel-economy", "recent-fills", "emissions", "reports": return .energy
             case "air-cleaning", "air-quality", "cabin-climate": return .cabin
             case "activity", "warnings", "automations": return .activity
             case "battery-health", "tyre-pressure": return .status
@@ -384,6 +396,7 @@ struct HistoryDashboardView: View {
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charge-locations", title: L10n.text("Charge Locations"),
                            isVisible: !chargingSessions.isEmpty),
+            HistorySection(id: "reports", title: L10n.text("Period Report"), isVisible: true),
             HistorySection(id: "charging-history", title: L10n.text("Charging Trends"),
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "fuel-economy", title: L10n.text("Fuel Economy"), isVisible: !fuelEntries.isEmpty),
@@ -517,6 +530,7 @@ struct HistoryDashboardView: View {
         case "driving-patterns": drivingPatternsCard
         case "distance": distanceChartCard
         case "monthly-mileage": monthlyMileageReportCard
+        case "reports": PeriodReportCard(history: history, state: state)
         case "trips": tripListCard
         case "charging-sessions": chargingSessionsCard
         case "charging-curve":
@@ -608,6 +622,7 @@ struct HistoryDashboardView: View {
         }
 
         .sheet(isPresented: $showFuelSheet) { fuelEntrySheet }
+        .sheet(isPresented: $showChargingSessionSheet) { chargingSessionEntrySheet }
         .alert(L10n.text("Export failed"), isPresented: Binding(
             get: { exportError != nil },
             set: { if !$0 { exportError = nil } }
@@ -987,20 +1002,19 @@ struct HistoryDashboardView: View {
     /// did: it said saved tariffs were used instead of recalculating with today's settings, while
     /// silently falling back to the current price for every session without one.
     func aggregateChargingCost() -> (amount: Double, currency: String, fallbackSessions: Int)? {
-        let currencies = Set(chargingSessions.map {
-            let saved = $0.currencySymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (saved?.isEmpty == false ? saved : nil) ?? preferences.currencySymbol
-        })
-        guard currencies.count <= 1 else { return nil }
-        let currency = currencies.first ?? preferences.currencySymbol
-        var fallbackSessions = 0
-        let policy = preferences.electricityRatePolicy
-        let total = chargingSessions.reduce(0.0) { total, session in
-            let resolved = session.resolvedCost(policy: policy, fallbackPricePerKwh: preferences.electricityPricePerKwh)
-            if resolved.usedFallback { fallbackSessions += 1 }
-            return total + resolved.amount
-        }
-        return (total, currency, fallbackSessions)
+        guard let split = chargingCostSplit() else { return nil }
+        return (split.totalAmount, split.currency, split.fallbackSessions)
+    }
+
+    /// The same calculation, kept as buckets so the trends card can show home and public
+    /// charging as separate lines that add up to the total.
+    func chargingCostSplit() -> ChargingCostSplit? {
+        ChargingCostSplit.resolve(
+            sessions: chargingSessions,
+            policy: preferences.electricityRatePolicy,
+            fallbackPricePerKwh: preferences.electricityPricePerKwh,
+            defaultCurrency: preferences.currencySymbol
+        )
     }
 
     /// The per-kWh price behind lifetime cost-per-distance. A fixed rate is used as typed; in

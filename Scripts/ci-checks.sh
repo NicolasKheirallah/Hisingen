@@ -35,12 +35,15 @@ macos_test() {
 macos_build_arch() {
     arch=$1
     make build-arch ARCH="$arch" SWIFT_FLAGS=--force-resolved-versions
-    staged=".build-$arch/$arch-apple-macosx/release/Hisingen"
+    staged=".build-$arch/$arch-apple-macosx/release/Hisingen .build-$arch/$arch-apple-macosx/release/HisingenWidget"
     framework=$(find ".build-$arch" -type d -name Sparkle.framework -print | sed -n 1p)
     license=$(find ".build-$arch" -path '*artifacts/sparkle/Sparkle/LICENSE' -print | sed -n 1p)
     test -n "$framework" || { echo "Sparkle.framework was not produced for $arch" >&2; exit 1; }
-    # shellcheck disable=SC2086 # license is a single path or empty by construction
-    tar -cf "$output/arch-$arch.tar" "$staged" "$framework" $license
+    for product in $staged; do
+        test -x "$product" || { echo "Missing $product" >&2; exit 1; }
+    done
+    # shellcheck disable=SC2086 # staged and license are plain paths without spaces, or empty
+    tar -cf "$output/arch-$arch.tar" $staged "$framework" $license
     echo "Staged $arch build: $(wc -c < "$output/arch-$arch.tar") bytes"
 }
 

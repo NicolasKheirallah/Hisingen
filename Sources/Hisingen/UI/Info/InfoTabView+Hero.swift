@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 extension InfoTabView {
     var hasVehiclePhotos: Bool {
         state.identity.imageData != nil || state.identity.interiorImageData != nil
-            || !availableExteriorAngles.isEmpty || imageCache.interiorImage(for: state.identity.vin) != nil
+            || !availableExteriorAngles.isEmpty || artwork.interior != nil
     }
 
     // MARK: - Hero visual
@@ -15,16 +15,16 @@ extension InfoTabView {
         let isInterior = selectedAngleIndex == -1
         let currentImageData: Data? = {
             if isInterior {
-                return state.identity.interiorImageData ?? imageCache.interiorImage(for: state.identity.vin)
+                return state.identity.interiorImageData ?? artwork.interior
             }
-            return imageCache.image(for: state.identity.vin, angle: selectedAngleIndex)
+            return artwork.exterior[selectedAngleIndex]
                  ?? (selectedAngleIndex == preferences.carRenderAngle.rawValue ? state.identity.imageData : nil)
         }()
 
         let exteriorAngles = availableExteriorAngles
         let supportsMultipleAngles = exteriorAngles.count > 1
         let hasInterior = (state.identity.interiorImageData != nil)
-            || (imageCache.interiorImage(for: state.identity.vin) != nil)
+            || (artwork.interior != nil)
         let angleTitle = CarRenderAngle(rawValue: selectedAngleIndex)?.title ?? L10n.text("Exterior")
 
         return Card {

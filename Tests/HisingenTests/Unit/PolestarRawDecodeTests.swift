@@ -459,6 +459,36 @@ struct PolestarRawDecodeTests {
         #expect(tyres[3].referenceKilopascals == 270)
     }
 
+    @Test func healthKeepsUnnamedNestedLightFailuresRaw() throws {
+        // Field 46 carries per-light statuses. ID 12 is named (high beam left); 43 sits
+        // past the named range, so its failure stays as a raw ID instead of vanishing or
+        // being dressed up as a lamp name.
+        var nested = Protobuf.intField(12, 2)
+        nested += Protobuf.intField(43, 2)
+        var payload = Data()
+        payload += Protobuf.messageField(46, nested)
+        let report = PolestarGRPC.parseHealth(payload)
+        let named = try #require(VehicleLightCoverage.healthName(12))
+        #expect(report.details.lightFailures == [named])
+        #expect(report.details.unnamedLightFailureIds == [43])
+        // The failing unnamed light warns like the flat field-29 precedent, and the
+        // category counts as reported.
+        #expect(report.details.warnings.contains(.exteriorLight))
+        #expect(report.details.reportedWarnings.contains(.exteriorLight))
+    }
+
+    @Test func healthReportsUnnamedLightWithoutInventingAFailure() throws {
+        // A light past the named range reporting OK (varint 1) is a reported value, not a
+        // bulb failure: the category reads as reported, nothing warns.
+        var payload = Data()
+        payload += Protobuf.messageField(46, Protobuf.intField(43, 1))
+        let report = PolestarGRPC.parseHealth(payload)
+        #expect(report.details.unnamedLightFailureIds.isEmpty)
+        #expect(report.details.lightFailures.isEmpty)
+        #expect(report.details.reportedWarnings.contains(.exteriorLight))
+        #expect(!report.details.warnings.contains(.exteriorLight))
+    }
+
     @Test func climateDecodesStartReasonAndErrors() throws {
         var payload = Data()
         payload += Protobuf.messageField(1, Protobuf.intField(1, 1_789_130_617))

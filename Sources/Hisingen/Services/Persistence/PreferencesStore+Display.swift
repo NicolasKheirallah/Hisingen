@@ -110,6 +110,9 @@ extension PreferencesStore {
     var interfaceLanguage: InterfaceLanguage { get { InterfaceLanguage(rawValue: d.string(forKey: "interface_language") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "interface_language") } }
     var tintMenuBarIcon: Bool { get { d.object(forKey: "tint_menu_bar_icon") == nil || d.bool(forKey: "tint_menu_bar_icon") } set { d.set(newValue, forKey: "tint_menu_bar_icon") } }
     var launchAtLogin: Bool { get { d.bool(forKey: "launch_at_login") } set { d.set(newValue, forKey: "launch_at_login") } }
+    /// Off by default: the bundle declares LSUIElement, so the Dock icon exists only when
+    /// the reader asks for it. The warning badge needs this on to be visible at all.
+    var showDockIcon: Bool { get { d.bool(forKey: "show_dock_icon") } set { d.set(newValue, forKey: "show_dock_icon") } }
     var appearanceMode: AppearanceMode { get { AppearanceMode(rawValue: d.string(forKey: "his_appearanceMode") ?? "") ?? .system } set { d.set(newValue.rawValue, forKey: "his_appearanceMode"); applyAppearance() } }
 
     func theme(for vin: String, brand: VehicleBrand? = nil) -> AppTheme {

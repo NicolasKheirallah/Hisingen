@@ -19,6 +19,26 @@
             "target": "Hisingen",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release Hisingen"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Hisingen}",
+            "name": "Debug HisingenWidget",
+            "target": "HisingenWidget",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug HisingenWidget"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Hisingen}",
+            "name": "Release HisingenWidget",
+            "target": "HisingenWidget",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release HisingenWidget"
         }
     ]
 }

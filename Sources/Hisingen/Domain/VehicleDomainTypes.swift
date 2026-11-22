@@ -397,21 +397,29 @@ struct VehicleHealthDetails: Codable, Equatable, Sendable {
     /// this separate prevents an absent response from being displayed as a healthy reading.
     var reportedWarnings: [VehicleWarning]
     var lightFailures: [String]
+    /// Nested health-light wire IDs the car reported as failing but this build has not
+    /// named (Polestar can add lights past the named range, IDs above 41). Kept so the
+    /// report stays visible, and rendered as a raw ID; it is a reported value, so it
+    /// counts toward the reported warning, and never renders through the lamp-name
+    /// mapping as if the bulb were named.
+    var unnamedLightFailureIds: [Int] = []
 
     init(
         tyres: [TyrePressure],
         warnings: [VehicleWarning],
         reportedWarnings: [VehicleWarning] = [],
-        lightFailures: [String] = []
+        lightFailures: [String] = [],
+        unnamedLightFailureIds: [Int] = []
     ) {
         self.tyres = tyres
         self.warnings = warnings
         self.reportedWarnings = reportedWarnings
         self.lightFailures = lightFailures
+        self.unnamedLightFailureIds = unnamedLightFailureIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case tyres, warnings, reportedWarnings, lightFailures
+        case tyres, warnings, reportedWarnings, lightFailures, unnamedLightFailureIds
     }
 
     init(from decoder: Decoder) throws {
@@ -420,6 +428,7 @@ struct VehicleHealthDetails: Codable, Equatable, Sendable {
         warnings = try c.decode([VehicleWarning].self, forKey: .warnings)
         reportedWarnings = try c.decodeIfPresent([VehicleWarning].self, forKey: .reportedWarnings) ?? []
         lightFailures = try c.decodeIfPresent([String].self, forKey: .lightFailures) ?? []
+        unnamedLightFailureIds = try c.decodeIfPresent([Int].self, forKey: .unnamedLightFailureIds) ?? []
     }
 }
 
@@ -731,6 +740,25 @@ struct VehicleClimateStatus: Codable, Equatable, Sendable {
             .capitalized
     }
 
+    /// The main climate's own running state (`ParkingClimatizationState.mainClimateRunningStatus`,
+    /// distinct from the parking-climate session's `activity`). The OpenAPI spec declares the
+    /// `MAIN_CLIMATE_RUNNING_STATUS_*` vocabulary; unspecified and absent hide, and a token
+    /// outside the set renders cleaned-up rather than guessed. Live check: the field never
+    /// appeared in captured frames or portal rows, so the ON/OFF words rest on the spec.
+    var mainClimateRunningName: String? {
+        guard let mainClimateRunningStatus, !mainClimateRunningStatus.isEmpty else { return nil }
+        switch mainClimateRunningStatus {
+        case "MAIN_CLIMATE_RUNNING_STATUS_ON": return L10n.text("On")
+        case "MAIN_CLIMATE_RUNNING_STATUS_OFF": return L10n.text("Off")
+        case "MAIN_CLIMATE_RUNNING_STATUS_UNSPECIFIED": return nil
+        default:
+            return mainClimateRunningStatus
+                .replacingOccurrences(of: "MAIN_CLIMATE_RUNNING_STATUS_", with: "")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
+    }
+
     init(
         activity: ClimateActivity,
         timeRemainingMinutes: Int?,
@@ -957,6 +985,10 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
     /// field is visible in diagnostics instead of dropped. `nil` in snapshots persisted
     /// before retention existed and when the backend sent nothing unparsed.
     var unknownWireFields: [VehicleRawWireField]? = nil
+    /// JSON keys the Data Portal's pre-cleaning payload carried beyond the fields this
+    /// build decodes, kept raw for the same reason as `unknownWireFields`. `nil` on the
+    /// gRPC path and in older snapshots.
+    var unknownPortalFields: [VehicleRawPortalField]? = nil
 
     init(
         cleaningState: AirCleaningState,
@@ -975,7 +1007,8 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         errorKind: AirCleaningError? = nil,
         measuredAt: Date? = nil,
         lastCycleCompleted: Date? = nil,
-        unknownWireFields: [VehicleRawWireField]? = nil
+        unknownWireFields: [VehicleRawWireField]? = nil,
+        unknownPortalFields: [VehicleRawPortalField]? = nil
     ) {
         self.cleaningState = cleaningState
         self.airQualityIndex = airQualityIndex
@@ -994,6 +1027,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         self.measuredAt = measuredAt
         self.lastCycleCompleted = lastCycleCompleted
         self.unknownWireFields = unknownWireFields
+        self.unknownPortalFields = unknownPortalFields
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -1001,7 +1035,7 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         case externalParticulateMatter25, filterRemainingPercent, runtimeRemainingMinutes
         case hasError, reportedAt, startedAt, endingAt, startReason, lastCycleValid, errorKind
         case measuredAt, lastCycleCompleted
-        case unknownWireFields
+        case unknownWireFields, unknownPortalFields
     }
 
     /// Whether a one-tap pre-clean toggle may be shown for this reading: the backend reported
@@ -1028,7 +1062,16 @@ struct VehicleAirQuality: Codable, Equatable, Sendable {
         measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
         lastCycleCompleted = try c.decodeIfPresent(Date.self, forKey: .lastCycleCompleted)
         unknownWireFields = try c.decodeIfPresent([VehicleRawWireField].self, forKey: .unknownWireFields)
+        unknownPortalFields = try c.decodeIfPresent([VehicleRawPortalField].self, forKey: .unknownPortalFields)
     }
+}
+
+/// One undecoded key from a Data Portal JSON payload, the JSON counterpart of
+/// `VehicleRawWireField`. The key is kept verbatim and the value rendered raw so a new
+/// backend field stays visible until it is identified and decoded.
+struct VehicleRawPortalField: Codable, Equatable, Sendable {
+    let key: String
+    let value: String
 }
 
 
@@ -1351,8 +1394,14 @@ struct VehicleWeather: Codable, Equatable, Sendable {
     let condition: String?
     let apparentTemperatureCelsius: Double?
     let relativeHumidity: Int?
+    /// Mean wind at the car, in km/h, when the request asked Open-Meteo for it.
+    let windSpeedKmh: Double?
+    /// Gusts at the car, in km/h. Open-Meteo reports them alongside the mean wind.
+    let windGustsKmh: Double?
+    /// Precipitation in the current hour, in mm of water (rain, showers or snow).
+    let precipitationMm: Double?
     let timestamp: Date?
-    /// Forecast air temperature by hour, nil when the hourly request was not made or failed.
+    /// Forecast hours by wall-clock time, nil when the hourly request was not made or failed.
     var hourlyTemperatures: [HourlyTemperature]?
 
     var hasCurrentConditions: Bool {
@@ -1365,6 +1414,9 @@ struct VehicleWeather: Codable, Equatable, Sendable {
         condition: String? = nil,
         apparentTemperatureCelsius: Double? = nil,
         relativeHumidity: Int? = nil,
+        windSpeedKmh: Double? = nil,
+        windGustsKmh: Double? = nil,
+        precipitationMm: Double? = nil,
         timestamp: Date? = nil,
         hourlyTemperatures: [HourlyTemperature]? = nil
     ) {
@@ -1372,14 +1424,24 @@ struct VehicleWeather: Codable, Equatable, Sendable {
         self.condition = condition
         self.apparentTemperatureCelsius = apparentTemperatureCelsius
         self.relativeHumidity = relativeHumidity
+        self.windSpeedKmh = windSpeedKmh
+        self.windGustsKmh = windGustsKmh
+        self.precipitationMm = precipitationMm
         self.timestamp = timestamp
         self.hourlyTemperatures = hourlyTemperatures
     }
 }
 
+/// One forecast hour. Wind and precipitation are nil in hours the request did not ask for.
 struct HourlyTemperature: Codable, Equatable, Sendable {
     let time: Date
     let temperatureCelsius: Double
+    /// Mean wind in the hour, in km/h, when the request asked for it.
+    var windSpeedKmh: Double? = nil
+    /// Gusts in the hour, in km/h, when the request asked for them.
+    var windGustsKmh: Double? = nil
+    /// Precipitation in the hour, in mm of water (rain, showers or snow).
+    var precipitationMm: Double? = nil
 }
 
 

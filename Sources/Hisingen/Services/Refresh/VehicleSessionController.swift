@@ -1,5 +1,28 @@
 import Foundation
 
+/// What a sign-out will actually remove. A connected account with another car on it keeps its
+/// session and only hides the car being signed out; the account itself is revoked only when no
+/// connected car remains on it.
+enum VehicleSignOutPlan: Equatable {
+    case disconnectVehicle(vin: String, nextVIN: String)
+    case signOutAccount(fallback: SignOutFallback?)
+}
+
+struct SignOutFallback: Equatable {
+    let brand: VehicleBrand
+    /// `nil` when the account is connected but no vehicle has been discovered for it yet.
+    let vin: String?
+}
+
+enum VehicleSignOutOutcome: Equatable {
+    case vehicleDisconnected(vin: String)
+    /// The account was signed out and another brand carries the session. `signedOutVINs` is
+    /// every VIN whose Spotlight entry belonged to the removed account; empty when discovery
+    /// never reported one.
+    case switchedToBrand(VehicleBrand, vin: String?, signedOutVINs: [String])
+    case signedOut
+}
+
 /// What the session controller needs from the app shell. The controller owns the
 /// `RefreshCoordinator` lifecycle, the active brand / vehicle selection, and the
 /// session-derived display state (`latest`, `lastError`, `sessionValid`, `lastDiagnostics`);
@@ -16,6 +39,9 @@ protocol VehicleSessionControllerContext: AnyObject {
     func didReceiveVehicleState(_ state: VehicleState)
     func authenticationRequired()
     func authenticationSucceeded()
+    /// A sign-out fell back to another vehicle, so a revocation failure has no error surface
+    /// left on the old brand. The shell should say so without blaming the current vehicle.
+    func signOutRevocationFailed(brand: VehicleBrand)
     func vehicleSwitchDidPause()
     /// Reconcile settings after brand adoption and before restarting the session.
     func sessionCredentialsDidChange()
@@ -96,9 +122,14 @@ final class VehicleSessionController {
     /// Seeds the display from persisted state (no network) and renders once, so the status
     /// item shows the last known vehicle immediately at launch.
     func primeDisplayState() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
         let brand = preferences.activeBrand
         signInRequired = initiallyRequiresSignIn(for: brand)
-        let vin = preferences.vin(for: brand)
+        let savedVIN = preferences.vin(for: brand)
+        let vin = preferences.isVehicleDetached(savedVIN) ? "" : savedVIN
         let nickname = preferences.vehicleNickname(for: vin)
         if !vin.isEmpty {
             setFleet(
@@ -111,12 +142,36 @@ final class VehicleSessionController {
 
     /// Kicks off stored-session restoration.
     func resume() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
         resumeStoredSession()
+    }
+
+    /// Serves the local sample vehicle and never starts the provider. The shell reads `latest`
+    /// exactly as it does a real snapshot, so every tab renders populated data with no network.
+    func enterDemoMode() {
+        refreshCoordinator.stop()
+        let state = DemoMode.state()
+        latest = state
+        sessionValid = true
+        signInRequired = false
+        lastError = nil
+        setFleet([DemoMode.carSummary], activeVIN: DemoMode.vin)
+        context?.didReceiveVehicleState(state)
+        context?.sessionStateDidChange()
     }
 
     // MARK: - Passthroughs
 
-    func refreshNow() { refreshCoordinator.refreshNow() }
+    func refreshNow() {
+        if preferences.isDemoMode {
+            enterDemoMode()
+            return
+        }
+        refreshCoordinator.refreshNow()
+    }
     func beginCommandConfirmation(
         _ receipt: CommandReceipt,
         optimisticState: VehicleState?
@@ -126,9 +181,101 @@ final class VehicleSessionController {
     func dismissCommandReceipt(id: UUID) {
         refreshCoordinator.dismissCommandReceipt(id: id)
     }
-    func refreshIfStale() { refreshCoordinator.refreshIfStale() }
-    func reloadVehicleMetadata() { refreshCoordinator.reloadVehicleMetadata() }
-    func signOut() { refreshCoordinator.signOut() }
+    func refreshIfStale() {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        refreshCoordinator.refreshIfStale()
+    }
+
+    func reloadVehicleMetadata() {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        refreshCoordinator.reloadVehicleMetadata()
+    }
+
+    /// Signs out of the active vehicle, then keeps the reader on another registered vehicle
+    /// when one can carry the session. See `signOutPlan()` for the decision.
+    @discardableResult
+    func signOut(forceAccount: Bool = false) -> VehicleSignOutOutcome {
+        let plan = forceAccount
+            ? .signOutAccount(fallback: fallbackCandidate(excluding: preferences.activeBrand))
+            : signOutPlan()
+        switch plan {
+        case .disconnectVehicle(let vin, let nextVIN):
+            disconnectVehicle(vin: vin, selecting: nextVIN)
+            return .vehicleDisconnected(vin: vin)
+        case .signOutAccount(let fallback):
+            let signedOutBrand = preferences.activeBrand
+            let signedOutVINs = signedOutVINs(for: signedOutBrand)
+            if fallback != nil {
+                // The fallback session owns the UI when the revoke answer arrives, so the old
+                // coordinator's error channel is gone by generation; use the notice path.
+                refreshCoordinator.onSignOutRevocationFailure = { [weak self] brand in
+                    self?.context?.signOutRevocationFailed(brand: brand)
+                }
+            }
+            refreshCoordinator.signOut()
+            preferences.clearKnownVINs(for: signedOutBrand)
+            preferences.clearDetachedVehicles(for: signedOutBrand)
+            guard let fallback else { return .signedOut }
+            switchActiveBrand(to: fallback.brand, targetVin: fallback.vin)
+            resumeStoredSession(targetVin: fallback.vin)
+            return .switchedToBrand(fallback.brand, vin: fallback.vin, signedOutVINs: signedOutVINs)
+        }
+    }
+
+    /// The sign-out decision, split out so it can be tested without driving the UI or a network.
+    ///
+    /// 1. Another connected car on the active account: keep the account, hide the active car,
+    ///    select the next one.
+    /// 2. No sibling, but another brand has a resumable session: revoke the active account, then
+    ///    switch to that brand and resume its stored vehicle.
+    /// 3. Neither: revoke the account and let the shell show the login screen.
+    func signOutPlan() -> VehicleSignOutPlan {
+        let brand = preferences.activeBrand
+        let activeVIN = currentSignOutVIN(for: brand)
+        if !activeVIN.isEmpty {
+            let siblings = registeredVehicleVINs(for: brand).filter { $0 != activeVIN }
+            if let nextVIN = orderedVINs(siblings).first {
+                return .disconnectVehicle(vin: activeVIN, nextVIN: nextVIN)
+            }
+        }
+        return .signOutAccount(fallback: fallbackCandidate(excluding: brand))
+    }
+
+    /// Every vehicle the app knows for one brand, minus the ones already signed out of it.
+    /// Direct provider discovery supplies same-account siblings before the garage scan has had a
+    /// chance to retain them; the fleet store covers the dormant account and relaunches.
+    func registeredVehicleVINs(for brand: VehicleBrand) -> [String] {
+        var values = preferences.knownVINs(for: brand)
+        values += fleetStore.knownVINs(for: brand)
+        if brand == preferences.activeBrand {
+            values += refreshCoordinator.cars.map(\.vin)
+            if let latest, latest.model.brand == brand {
+                values.append(latest.identity.vin)
+            }
+        }
+        let detached = preferences.detachedVehicleVINs(for: brand)
+        var seen = Set<String>()
+        return values
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty && !detached.contains($0) && seen.insert($0).inserted }
+    }
+
+    /// Brings a vehicle signed out of this account back. The account session was never revoked,
+    /// so this is a selection change, not a sign-in.
+    func reconnectVehicle(vin: String) {
+        let normalized = vin.normalizedVIN
+        guard !normalized.isEmpty else { return }
+        let brand = preferences.detachedVehicle(for: normalized)?.brand
+        preferences.reconnectVehicle(vin: normalized)
+        if let brand, preferences.activeBrand != brand {
+            preferences.setVin(normalized, for: brand)
+            switchActiveBrand(to: brand, targetVin: normalized)
+            resumeStoredSession(targetVin: normalized)
+        } else {
+            selectVehicle(vin: normalized)
+        }
+    }
+
     func stop() { refreshCoordinator.stop() }
 
     func currentProvider() -> any VehicleProviding { activeProvider }
@@ -137,27 +284,28 @@ final class VehicleSessionController {
 
     func resolvedBrand(for vin: String) -> VehicleBrand {
         let upper = vin.normalizedVIN
-        if let snapshot = fleetStore.snapshot(for: upper) {
-            return snapshot.model.brand
-        }
-        if !preferences.vin(for: .volvo).isEmpty && upper == preferences.vin(for: .volvo).uppercased() {
-            return .volvo
-        }
-        if !preferences.vin(for: .polestar).isEmpty && upper == preferences.vin(for: .polestar).uppercased() {
-            return .polestar
-        }
-        if VehicleBrand.isVolvoVIN(upper) {
-            return .volvo
-        }
-        if upper.hasPrefix("YS") || upper.hasPrefix("LP") {
-            return .polestar
-        }
-        return preferences.activeBrand
+        // The brand rule lives in `VehicleBrandResolver` because the command-line surface asks
+        // the same question from a process with no shell; the snapshot this controller already
+        // holds answers the dormant-account case for both of them.
+        return VehicleBrandResolver.brand(
+            for: upper,
+            snapshotBrand: fleetStore.snapshot(for: upper)?.model.brand,
+            preferences: preferences)
     }
 
-    func selectVehicle(vin: String) {
+    @discardableResult
+    func selectVehicle(vin: String) -> Bool {
         let trimmedVIN = vin.normalizedVIN
-        guard !trimmedVIN.isEmpty else { return }
+        guard !trimmedVIN.isEmpty else { return false }
+        if preferences.isDemoMode {
+            guard trimmedVIN == DemoMode.vin else { return false }
+            enterDemoMode()
+            return true
+        }
+        // A signed-out vehicle has no active session in Hisingen. Deep links, Shortcuts and old
+        // notifications must not silently re-add it; Bring Back in Settings is the explicit
+        // path, and it goes through `reconnectVehicle`.
+        guard !preferences.isVehicleDetached(trimmedVIN) else { return false }
         let targetBrand = resolvedBrand(for: trimmedVIN)
         if preferences.activeBrand == targetBrand {
             preferences.setVin(trimmedVIN, for: targetBrand)
@@ -167,6 +315,7 @@ final class VehicleSessionController {
             switchActiveBrand(to: targetBrand, targetVin: trimmedVIN)
             resumeStoredSession(targetVin: trimmedVIN)
         }
+        return true
     }
 
     /// Resolves selection and first telemetry before a command is gated or sent. This makes
@@ -175,22 +324,38 @@ final class VehicleSessionController {
     func prepareVehicle(vin: String, timeout: TimeInterval = 30) async -> Bool {
         let target = vin.normalizedVIN
         guard !target.isEmpty else { return sessionValid && latest != nil }
+        if preferences.isDemoMode { return target == DemoMode.vin && latest != nil }
         if sessionValid, latest?.identity.vin.uppercased() == target,
            !refreshCoordinator.isBusy { return true }
-        selectVehicle(vin: target)
+        guard selectVehicle(vin: target) else { return false }
         // Read after `selectVehicle`: a brand switch rebuilds the coordinator, and the
         // rebuilt instance owns the selection that is now in flight.
         return await refreshCoordinator.selectionSettled(vin: target, timeout: timeout)
     }
 
     /// Settings "switch to <brand>": adopt the brand and resume its stored session.
+    /// Settings selected another account for the active brand. The account store has already
+    /// moved the credentials and preferences; this rebuilds the provider against the new
+    /// session and resumes it.
+    func accountDidSwitch(to brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        switchActiveBrand(to: brand, force: true)
+        resumeStoredSession()
+    }
+
     func switchToBrandAndResume(_ brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
         switchActiveBrand(to: brand)
         resumeStoredSession()
     }
 
     /// After an interactive sign-in: force past the idempotence guard, then resume.
     func adoptBrandAfterSignIn(_ brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        // A successful sign-in registers the account from scratch; cars signed out of the
+        // previous session on this brand come back with it.
+        preferences.clearDetachedVehicles(for: brand)
+        preferences.clearKnownVINs(for: brand)
         switchActiveBrand(to: brand, force: true)
         resumeStoredSession()
     }
@@ -201,6 +366,11 @@ final class VehicleSessionController {
     /// mode flip changes the backing adapter, but must not destroy the coordinator (and its
     /// remembered `accountEmail`) on ordinary same-brand credential updates.
     func credentialsDidChange(for brand: VehicleBrand) {
+        if preferences.isDemoMode { enterDemoMode(); return }
+        // Saving credentials is an explicit re-registration of the account, so vehicles signed
+        // out of its previous session are visible again.
+        preferences.clearDetachedVehicles(for: brand)
+        preferences.clearKnownVINs(for: brand)
         let brandChanged = preferences.activeBrand != brand
         let modeChanged = (brand == .polestar && currentPolestarMode != preferences.polestarConnectionMode)
         if brandChanged || modeChanged {
@@ -213,8 +383,11 @@ final class VehicleSessionController {
     }
 
     private func resumeStoredSession(targetVin: String? = nil) {
-        refreshCoordinator.start(
-            preferredVIN: targetVin ?? (preferences.vin.isEmpty ? nil : preferences.vin))
+        let stored = preferences.vin.isEmpty ? nil : preferences.vin
+        let preferred = targetVin ?? stored.flatMap {
+            preferences.isVehicleDetached($0) ? nil : $0
+        }
+        refreshCoordinator.start(preferredVIN: preferred)
     }
 
     private func switchActiveBrand(to brand: VehicleBrand, targetVin: String? = nil, force: Bool = false) {
@@ -247,6 +420,93 @@ final class VehicleSessionController {
         context?.sessionStateDidChange()
     }
 
+    /// The VIN the reader is signing out: the stored selection, else the displayed car, else the
+    /// provider's first known car. A detached VIN is never treated as the current one.
+    private func currentSignOutVIN(for brand: VehicleBrand) -> String {
+        let stored = preferences.vin(for: brand).normalizedVIN
+        if !stored.isEmpty && !preferences.isVehicleDetached(stored) { return stored }
+        if let latest, latest.model.brand == brand,
+           !preferences.isVehicleDetached(latest.identity.vin) {
+            return latest.identity.vin.normalizedVIN
+        }
+        return refreshCoordinator.cars
+            .map { $0.vin.normalizedVIN }
+            .first { !$0.isEmpty && !preferences.isVehicleDetached($0) } ?? ""
+    }
+
+    private func orderedVINs(_ vins: [String]) -> [String] {
+        let order = preferences.garageVehicleOrder.map { $0.normalizedVIN }
+        return vins.sorted {
+            let left = order.firstIndex(of: $0) ?? Int.max
+            let right = order.firstIndex(of: $1) ?? Int.max
+            return left == right ? $0 < $1 : left < right
+        }
+    }
+
+    private func fallbackCandidate(excluding brand: VehicleBrand) -> SignOutFallback? {
+        for other in VehicleBrand.allCases where other != brand {
+            guard preferences.hasResumableSession(for: other) else { continue }
+            let known = orderedVINs(registeredVehicleVINs(for: other))
+            let selected = preferences.vin(for: other).normalizedVIN
+            if let selectedVIN = known.first(where: { $0 == selected }) {
+                return SignOutFallback(brand: other, vin: selectedVIN)
+            }
+            if let first = known.first {
+                return SignOutFallback(brand: other, vin: first)
+            }
+            // A connected account with no known car can still discover one. A brand whose whole
+            // known fleet is signed out must not bounce the reader into its login screen either;
+            // it simply is not a fallback.
+            if preferences.detachedVehicles(for: other).isEmpty {
+                return SignOutFallback(brand: other, vin: nil)
+            }
+        }
+        return nil
+    }
+
+    private func disconnectVehicle(vin: String, selecting nextVIN: String) {
+        let brand = preferences.activeBrand
+        // Read the label before `clear` drops the reader-authored nickname and theme.
+        let title = preferences.privacyRedactionEnabled ? "" : displayTitle(for: vin, brand: brand)
+        let erased = stateStore.detach(vin: vin, eraseHistory: preferences.eraseHistoryOnSignOut)
+        preferences.detachVehicle(vin: vin, brand: brand, title: title)
+        fleetStore.forget(vin: vin)
+        refreshCoordinator.forgetCar(vin: vin)
+        if erased {
+            lastError = nil
+        } else {
+            handleFailure(.localDataErasure)
+        }
+        latest = fleetStore.snapshot(for: nextVIN)
+        signInRequired = initiallyRequiresSignIn(for: brand)
+        preferences.setVin(nextVIN, for: brand)
+        context?.sessionStateDidChange()
+        refreshCoordinator.selectCar(vin: nextVIN)
+    }
+
+    private func displayTitle(for vin: String, brand: VehicleBrand) -> String {
+        let cached = fleetStore.snapshot(for: vin)
+        let state = latest?.identity.vin.normalizedVIN == vin.normalizedVIN ? latest : cached
+        return preferences.formattedVehicleTitle(
+            vin: vin,
+            modelName: state?.identity.modelName,
+            modelYear: state?.identity.modelYear,
+            registrationNo: state?.identity.registrationNo,
+            fallbackBrand: brand
+        )
+    }
+
+    private func signedOutVINs(for brand: VehicleBrand) -> [String] {
+        var values = refreshCoordinator.cars.map(\.vin)
+        values += preferences.knownVINs(for: brand)
+        values.append(preferences.vin(for: brand))
+        values += preferences.detachedVehicles(for: brand).map(\.vin)
+        var seen = Set<String>()
+        return values
+            .map { $0.normalizedVIN }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     private func initiallyRequiresSignIn(for brand: VehicleBrand) -> Bool {
         if preferences.hasExplicitSignOut(for: brand) { return true }
         // A saved vehicle can predate the Keychain presence flags. The provider still reads
@@ -255,8 +515,13 @@ final class VehicleSessionController {
     }
 
     private func setFleet(_ cars: [CarSummary], activeVIN: String?) {
-        fleetStore.updateCars(cars)
-        context?.setActiveVIN(activeVIN)
+        let detached = preferences.detachedVehicleVINs(for: preferences.activeBrand)
+        let visibleCars = cars.filter { !detached.contains($0.vin.normalizedVIN) }
+        let visibleActiveVIN = activeVIN.flatMap {
+            preferences.isVehicleDetached($0) ? nil : $0
+        }
+        fleetStore.updateCars(visibleCars)
+        context?.setActiveVIN(visibleActiveVIN)
     }
 
     // MARK: - RefreshCoordinator wiring

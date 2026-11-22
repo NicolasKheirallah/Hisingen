@@ -168,6 +168,21 @@ struct ChargingControlsCard: View {
         ))
     }
 
+    /// Whether this vehicle service can change these settings at all. Volvo's public API reports
+    /// the charge target and the current limit but exposes no write for either, so both controls
+    /// rendered as sliders that were present, reachable and permanently disabled. A read-only line
+    /// says what is true instead of inviting a drag that can never land.
+    private var canWriteChargingSettings: Bool {
+        ProviderCommandCatalog(brand: gate.brand).implements(.setChargeTarget(0))
+    }
+
+    private var readOnlySettingLine: some View {
+        Text(L10n.text("This vehicle service reports this value but cannot change it."))
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var chargeTargetPresets: [Int] { chargeBounds.targetPresets() }
 
     private var chargeTargetControls: some View {
@@ -184,7 +199,9 @@ struct ChargingControlsCard: View {
                     .hisTelemetryValue(displayedChargeTarget, reduceMotion: reduceMotion)
             }
 
-            if let chargeTarget {
+            if !canWriteChargingSettings {
+                readOnlySettingLine
+            } else if let chargeTarget {
                 Slider(
                     value: Binding(
                         get: { chargeTargetDraft ?? Double(chargeTarget) },
@@ -237,6 +254,10 @@ struct ChargingControlsCard: View {
             }
             if let queued = state.energy.diagnostics?.unappliedTargetPercentage(current: chargeTarget) {
                 pendingSyncLine(Format.percent(Double(queued)))
+            } else if let note = VehicleChargingCard.staleSettingNote(
+                reportedAt: state.energy.targetPercentageReportedAt
+            ) {
+                staleSettingNoteLine(note)
             }
         }
         .hisAnimation(Motion.layout, value: chargeTarget)
@@ -262,6 +283,16 @@ struct ChargingControlsCard: View {
         .transition(.opacity)
     }
 
+    /// The same "Last changed" note the charging card's detail rows carry: a setting the car
+    /// has not touched for over a month should not read as fresh on the sliders either.
+    private func staleSettingNoteLine(_ note: String) -> some View {
+        Text(note)
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .transition(.opacity)
+    }
+
     private func amperageEntry(title: String, current: Int?, command: @escaping (Int) -> RemoteCommand) -> LimitEntry {
         let range = chargeBounds.amperageRange
         return LimitEntry(
@@ -282,7 +313,7 @@ struct ChargingControlsCard: View {
                                       subject: L10n.text("Current Limit"))
                 }
                 Spacer()
-                if let ampLimit {
+                if let ampLimit, canWriteChargingSettings {
                     LimitEntryButton(
                         entry: amperageEntry(title: L10n.text("Current Limit"), current: ampLimit) { .setAmpLimit($0) },
                         isAvailable: !gate.isDisabled(.setAmpLimit(ampLimit)),
@@ -296,7 +327,9 @@ struct ChargingControlsCard: View {
                     .hisTelemetryValue(displayedAmpLimit, reduceMotion: reduceMotion)
             }
 
-            if let ampLimit {
+            if !canWriteChargingSettings {
+                readOnlySettingLine
+            } else if let ampLimit {
                 let presets = chargeBounds.amperagePresets()
                 if presets.count > 1 {
                     // The reported limit is underlined, so the row reads as "where it is now" and a
@@ -340,6 +373,10 @@ struct ChargingControlsCard: View {
             }
             if let queued = state.energy.diagnostics?.unappliedLimitAmps(current: ampLimit) {
                 pendingSyncLine(Format.amps(queued))
+            } else if let note = VehicleChargingCard.staleSettingNote(
+                reportedAt: state.energy.currentLimitReportedAt
+            ) {
+                staleSettingNoteLine(note)
             }
         }
         .hisAnimation(Motion.layout, value: ampLimit)
@@ -390,9 +427,25 @@ struct ChargingControlsCard: View {
                     ? L10n.text("Charge now queued · applies when the car wakes")
                     : L10n.text("Resume schedule queued · applies when the car wakes"))
             }
+            if let note = chargeOverrideStateNote {
+                Text(note)
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .hisAnimation(Motion.stateChange, value: state.energy.chargeNowActive)
         .hisAnimation(Motion.layout, value: state.energy.pendingChargeNowOverride)
+    }
+
+    /// The Polestar ID path can send an override but cannot read one back, so the card would
+    /// otherwise say nothing after the reader pressed Charge Now. The note names the action and
+    /// the gap; it never claims the override is still active. It appears only within the note
+    /// window, so it explains a recent press instead of nagging permanently.
+    private var chargeOverrideStateNote: String? {
+        guard state.energy.chargeNowActive == nil,
+              ChargeOverrideEvidence.hasRecentOverride(state.commandState.receipts) else { return nil }
+        return L10n.text("Hisingen sent Charge Now, but this provider does not report whether the schedule override is still active.")
     }
 
     @ViewBuilder
@@ -495,6 +548,14 @@ struct ChargingControlsCard: View {
             }
             if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
                 KVRow(L10n.text("Optimised charging"), mode)
+            } else if !location.optimisedChargingEnabled, let offer = location.optimisedChargingModeName {
+                // The mode row above speaks once the switch is on; this is what the backend
+                // offers while it is still off, in the same words.
+                KVRow(L10n.text("Available optimised charging"), offer)
+            }
+            if let bidirectional = location.isBidirectionalChargingEnabled {
+                KVRow(L10n.text("Bidirectional charging"),
+                      bidirectional ? L10n.text("On") : L10n.text("Off"))
             }
             if !preferences.privacyRedactionEnabled, let lat = location.latitude, let lon = location.longitude {
                 KVRow(L10n.text("Coordinates"), String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon))

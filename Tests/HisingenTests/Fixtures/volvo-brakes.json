@@ -1,0 +1,8 @@
+{
+  "data": {
+    "brakeFluidLevelWarning": { "value": "NO_WARNING", "timestamp": "2026-08-15T09:00:00Z" },
+    "frontBrakePadStatus": { "value": "OK", "timestamp": "2026-08-15T09:00:00Z" },
+    "rearBrakePadStatus": { "value": "LOW", "timestamp": "2026-08-15T09:00:00Z" },
+    "parkingBrakeStatus": { "value": "ENGAGED", "timestamp": "2026-08-15T09:00:00Z" }
+  }
+}

@@ -34,6 +34,10 @@ jobs:
     runs-on: macos-26-intel
     # Runs on the Intel runner because CodeQL's Swift extractor is an x86_64 binary: on an
     # arm64 runner the compiler and extractor both run under Rosetta, which extracted the app
+    # WRONG (see the audit). GitHub retires the hosted Intel runners in December 2026; before
+    # then this job must move to arm64 with an extractor version that no longer needs
+    # Rosetta, or to a self-hosted Intel runner. Revisit when the extractor lands arm64
+    # support and re-verify the extraction diff against this run's results.
     # module at about 15 seconds per file (386 files). Dependencies are compiled before CodeQL
     # starts tracing, so the instrumented build only extracts this repository's own module.
     timeout-minutes: 90

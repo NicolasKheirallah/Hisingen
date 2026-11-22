@@ -10,13 +10,14 @@ actor VolvoAPI {
     let logger = AppLog.logger("volvo-api")
 
 
-    private let identityHost = URL(string: "https://volvoid.eu.volvocars.com")!
-    let authorizationPath = "/as/authorization.oauth2"
-    private let tokenPath = "/as/token.oauth2"
+    /// Which Volvo ID system the configured client belongs to; see `VolvoIdentityProvider`.
+    var identityProvider: VolvoIdentityProvider { VolvoIdentityProvider(clientID: clientID) }
     private let apiBaseURL = URL(string: "https://api.volvocars.com")!
 
 
-    let redirectURI = URL(string: "https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html")!
+    /// What the authorization request registers and the token request repeats. One definition,
+    /// shared with the callback gate that refuses every other redirect (`VolvoCallback`).
+    let redirectURI = VolvoCallback.hostedRedirectURL
 
 
     /// Pure telemetry reads plus what vehicle discovery needs. Every published Volvo
@@ -54,6 +55,71 @@ actor VolvoAPI {
         case full       // readScopes + restrictedScopes (when the preference wants them)
         case standard   // readScopes only – telemetry + remote climate, no lock/unlock/locate
         case core       // coreReadScopes only – telemetry, no remote controls at all
+    }
+
+    /// The bounded sign-in attempt sequence: full, full without `location:read`, standard,
+    /// core. Each step is one browser round trip, and the list is fixed so a caller can
+    /// neither loop forever nor retry a tier that cannot narrow further. Tests pin both.
+    static let signInCascade: [(tier: ScopeTier, dropsLocation: Bool)] = [
+        (.full, false), (.full, true), (.standard, false), (.core, false)
+    ]
+
+    /// The restricted scope list for one sign-in request. `dropsLocation` removes
+    /// `location:read` for the cascade's middle step: it is the scope developer applications
+    /// most often lack approval for, and Volvo rejects the whole authorization over that one
+    /// missing scope, so retrying without it keeps lock/unlock, engine and honk/flash alive.
+    /// Pure so tests can pin the cascade's scope lists without a network round trip.
+    static func restrictedScopeList(wanted: Bool, dropsLocation: Bool) -> [String] {
+        guard wanted else { return [] }
+        guard dropsLocation else { return restrictedScopes }
+        return restrictedScopes.filter { $0 != "location:read" }
+    }
+
+    /// Parses a token response's `scope` echo (space-separated) into the granted set. Pure.
+    static func parseGrantedScopes(_ raw: String?) -> Set<String> {
+        guard let raw else { return [] }
+        return Set(raw.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" }).map(String.init))
+    }
+
+    /// Whether `scope` is in the recorded grant set. Nil when the set is empty — a session
+    /// from before grants were recorded — so callers fall back to the whole opt-in flag
+    /// instead of reading absence as refusal. Pure; the actor wraps it below.
+    static func hasGranted(_ scope: String, in granted: Set<String>) -> Bool? {
+        guard !granted.isEmpty else { return nil }
+        return granted.contains(scope)
+    }
+
+    /// Whether the session's recorded grant set answers `scope`. Nil with nothing recorded.
+    func hasGranted(_ scope: String) async -> Bool? {
+        let granted = await MainActor.run { preferences.volvoGrantedScopes }
+        return Self.hasGranted(scope, in: Set(granted))
+    }
+
+    /// The restricted scope a remote command's dispatch needs on the token; nil for commands
+    /// outside the restricted tier (cabin climate rides on `conve:climatization_start_stop`,
+    /// which no application approval gates). One mapping, so every gate answers identically.
+    static func requiredScope(for command: RemoteCommand) -> String? {
+        switch command {
+        case .lock, .lockReducedGuard: "conve:lock"
+        case .unlock: "conve:unlock"
+        case .honkAndFlash, .flashLights, .honkHorn: "conve:honk_flash"
+        case .startEngine, .stopEngine: "conve:engine_start_stop"
+        default: nil
+        }
+    }
+
+    /// Persists the scope set this token actually carries. Both the authorization-code
+    /// exchange and every refresh flow through `requestToken`, so this is the one place the
+    /// recorded set tracks the live session. A response without a `scope` echo leaves the
+    /// previous record untouched rather than wiping it with unknowns.
+    private func recordGrantedScopes(_ raw: String?) async {
+        let granted = Self.parseGrantedScopes(raw)
+        guard !granted.isEmpty else { return }
+        // The array is the per-scope gate's answer; the timestamp is the inspector's evidence
+        // of when the echo was last observed. One write keeps them from disagreeing.
+        await MainActor.run {
+            preferences.recordVolvoGrantedScopes(granted.sorted(), at: Date())
+        }
     }
 
 
@@ -97,12 +163,36 @@ actor VolvoAPI {
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
+    /// The car's `/commands` list per VIN. Kept apart from `optionalTelemetryCache` because this
+    /// list decides whether lock, climate, engine and honk/flash are offered at all: it has its
+    /// own age rule and it survives a failed refresh instead of answering "no list".
+    var commandListCache: [String: AdvertisedCommandList] = [:]
     /// Where the durable per-endpoint stand-downs live: one owner for both providers, so an
     /// erase reaches them and a test can inject one over an in-memory database.
     let backoffs: ProviderBackoffStore
     var remoteCommandsInFlight: Set<String> = []
     var carImageData: [String: Data] = [:]
     var interiorImageData: [String: Data] = [:]
+
+    /// How old the car's advertised command list may be before it is refreshed again. Shorter
+    /// than the display-oriented optional-telemetry TTLs because this list is what dims or
+    /// offers a control: a list that changed with a software update or a re-granted subscription
+    /// must not keep a supported command looking unsupported for an hour. Long enough that the
+    /// ten-requests-per-minute command budget is never the reason a refresh is skipped.
+    static let commandListFreshnessWindow: TimeInterval = 15 * 60
+
+    /// The car's advertised command names, with the moment the provider confirmed them.
+    struct AdvertisedCommandList: Sendable {
+        let names: Set<String>
+        let fetchedAt: Date
+        /// The last refresh failed, so these are the last known names rather than current ones.
+        /// The probe carries this to the capability answer so the app can say so.
+        let isStale: Bool
+
+        func isFresh(within window: TimeInterval) -> Bool {
+            !isStale && Date().timeIntervalSince(fetchedAt) < window
+        }
+    }
 
     /// Volvo caps the invocation/command endpoints at 10 requests/minute per Volvo ID + client.
     /// `dispatchCommand` spaces its POSTs at least this far apart so a burst of taps waits
@@ -176,26 +266,14 @@ actor VolvoAPI {
 
 
     func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
-        let commandName: String
-        var bodyData = "{}".data(using: .utf8)
-        switch command {
-        case .lock: commandName = "lock"
-        case .lockReducedGuard: commandName = "lock-reduced-guard"
-        case .unlock: commandName = "unlock"
-        case .startClimate: commandName = "climatization-start"
-        case .stopClimate: commandName = "climatization-stop"
-        case .startEngine(let runtimeMinutes):
-            commandName = "engine-start"
-            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
-        case .stopEngine:
-            commandName = "engine-stop"
-        // The command list reports this as `HONK_AND_FLASH` but its `href` – and therefore the
-        // real invocation path – is `honk-flash` (verified live against a production vehicle).
-        case .honkAndFlash: commandName = "honk-flash"
-        case .flashLights: commandName = "flash"
-        case .honkHorn: commandName = "honk"
-        default:
+        // The endpoint name and the names the car advertises come from one table, so the
+        // capability the UI shows and the path this posts to cannot drift apart.
+        guard let commandName = VolvoCommandCatalog.endpoint(for: command) else {
             throw RemoteCommandError.unsupported
+        }
+        var bodyData = "{}".data(using: .utf8)
+        if case .startEngine(let runtimeMinutes) = command {
+            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
         }
         guard let vccApiKey else { throw VolvoError.appNotConfigured }
 
@@ -209,7 +287,16 @@ actor VolvoAPI {
         request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
-        let (data, response) = try await perform(request, operation: "command: \(commandName)")
+        let data: Data
+        let response: HTTPURLResponse
+        do {
+            (data, response) = try await perform(request, operation: "command: \(commandName)",
+                                                 scope: .vehicle(vin))
+        } catch VolvoError.network(let urlError) where !Self.commandNeverLeftTheMac(urlError) {
+            // A timeout or a dropped connection can land after Volvo already acted. Reporting it
+            // as a plain network failure reads as "nothing happened" and invites a second send.
+            throw VolvoError.commandOutcomeUnknown(operation: commandName)
+        }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: commandName) {
             if let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
                let text = detail.text {
@@ -224,12 +311,23 @@ actor VolvoAPI {
                     (HTTP \(response.statusCode, privacy: .public)): \(DiagnosticRedaction.redact(text), privacy: .private)
                     """)
             }
+            // A 5xx does not say whether the vehicle acted; every 4xx is a refusal before it did.
+            if case .server = failure { throw VolvoError.commandOutcomeUnknown(operation: commandName) }
+            // 422 is Volvo understanding the request and declining it for this vehicle or state.
+            // Its own reason is the useful message; "rejected the request" sends the reader to
+            // Settings for a problem Settings cannot fix.
+            if response.statusCode == 422,
+               let detail = try? JSONDecoder.volvo.decode(VolvoCommandErrorDTO.self, from: data),
+               let text = detail.text {
+                throw RemoteCommandError.rejected(text)
+            }
             throw failure
         }
         guard let envelope = try? JSONDecoder.volvo.decode(
             VolvoEnvelope<VolvoCommandResponseDTO>.self, from: data
         ), let payload = envelope.data else {
-            throw VolvoError.decoding(operation: "command: \(commandName)")
+            // Volvo answered 2xx, so it accepted the request. An unreadable body is not a refusal.
+            throw VolvoError.commandOutcomeUnknown(operation: commandName)
         }
         if let failureReason = payload.failureReason {
             throw RemoteCommandError.rejected(payload.text.map { "\(failureReason) (\($0))" } ?? failureReason)
@@ -249,6 +347,22 @@ actor VolvoAPI {
         // Connected Vehicle API v2 commands are synchronous and Volvo removed the old sent-
         // command status endpoints. Never poll /commands/{id}; it is not part of v2.
         return RemoteCommandResult(outcome: .accepted, message: payload.text)
+    }
+
+    /// URL errors raised before the request left the Mac, so the command cannot have run. Any
+    /// other transport error (a timeout, a lost connection, a cancelled request) may have
+    /// happened after Volvo received it.
+    private static func commandNeverLeftTheMac(_ error: URLError) -> Bool {
+        switch error.code {
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff,
+             .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost,
+             .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+             .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Serialises command POSTs to at most one per `minCommandInterval`. Concurrent callers
@@ -283,14 +397,6 @@ actor VolvoAPI {
         return url.absoluteURL
     }
 
-    func identityURL(path: String) throws -> URL {
-        let clean = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        guard let url = URL(string: clean, relativeTo: identityHost) else {
-            throw VolvoError.invalidResponse(operation: path)
-        }
-        return url.absoluteURL
-    }
-
     func discoverVehicles(preferredVIN: String?) async throws {
         let requestEpoch = sessionEpoch
         let savedVIN: String? = if let preferredVIN, !preferredVIN.isEmpty {
@@ -299,7 +405,8 @@ actor VolvoAPI {
             await MainActor.run { preferences.vin(for: .volvo) }
         }
         do {
-            let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles")
+            let list: [VolvoVehicleSummaryDTO] = try await getList("/connected-vehicle/v2/vehicles",
+                                                                   scope: .account)
             var summaries: [CarSummary] = []
             for entry in list {
                 let details: VolvoVehicleDetailsDTO?
@@ -352,7 +459,8 @@ actor VolvoAPI {
 
     func vehicleDetails(vin: String) async throws -> VolvoVehicleDetailsDTO {
         if let cached = vehicleDetailsCache[vin] { return cached }
-        let details: VolvoVehicleDetailsDTO = try await get("/connected-vehicle/v2/vehicles/\(vin)")
+        let details: VolvoVehicleDetailsDTO = try await get("/connected-vehicle/v2/vehicles/\(vin)",
+                                                            scope: .vehicle(vin))
         vehicleDetailsCache[vin] = details
         return details
     }
@@ -360,7 +468,7 @@ actor VolvoAPI {
     func exchangeCodeForToken(_ code: String, verifier: String) async throws {
         let epoch = sessionEpoch
         guard let clientID, let clientSecret else { throw VolvoError.appNotConfigured }
-        var request = URLRequest(url: try identityURL(path: tokenPath))
+        var request = URLRequest(url: identityProvider.tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -378,6 +486,8 @@ actor VolvoAPI {
             accessToken: token.accessToken,
             refreshToken: token.refreshToken,
             expiresIn: TimeInterval(token.expiresIn)))
+        let issuer = identityProvider
+        await MainActor.run { preferences.volvoSessionIdentity = issuer }
     }
 
     /// The most recent successful grant is the freshest token obtainable, so a caller arriving
@@ -416,6 +526,7 @@ actor VolvoAPI {
         // the configuration guard lives inside it, where a grant already in flight is awaited
         // rather than failed. The lifecycle decides whether a grant is needed at all.
         let configuration = (clientID: clientID, secret: clientSecret, refresh: refreshToken)
+        let tokenURL = identityProvider.tokenURL
         let outcome = try await tokens.refresh(
             reason,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
@@ -425,9 +536,7 @@ actor VolvoAPI {
                       let refreshToken = configuration.refresh, !refreshToken.isEmpty else {
                     throw VolvoError.authenticationRequired(.noStoredSession)
                 }
-                let path = self.tokenPath
-                let url = try await self.identityURL(path: path)
-                var request = URLRequest(url: url)
+                var request = URLRequest(url: tokenURL)
                 request.httpMethod = "POST"
                 request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
                 Self.applyBasicAuth(&request, clientID: clientID, clientSecret: clientSecret)
@@ -453,9 +562,11 @@ actor VolvoAPI {
     /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
     /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
-    private func discardDeadRefreshToken() async {
+    func discardDeadRefreshToken() async {
         tokens.reset()
         try? keychain.deleteVolvoSessionToken()
+        // The grant died with the session, so its recorded scopes stop answering gates.
+        await MainActor.run { preferences.volvoGrantedScopes = [] }
         await MainActor.run { preferences.invalidateSessionCache() }
     }
 
@@ -463,6 +574,7 @@ actor VolvoAPI {
         let isRefreshGrant = (request.httpBody.map { String(decoding: $0, as: UTF8.self) } ?? "")
             .contains("grant_type=refresh_token")
         let (data, response) = try await perform(request, operation: "Volvo token request",
+                                                 scope: .account,
                                                  semanticError: { data, _ in Self.oauthErrorCode(in: data) })
         if response.statusCode == 400 || response.statusCode == 401 {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -475,7 +587,11 @@ actor VolvoAPI {
                 // users to re-enter a password that was never the issue.
                 switch err {
                 case "invalid_client", "unauthorized_client":
-                    throw VolvoError.appNotConfigured
+                    // The application's own credentials are refused, not the owner's account. It
+                    // is what Volvo returned once it retired the original `dc-` applications, and
+                    // reporting "add your client ID" there sent the owner to re-enter the same
+                    // dead values.
+                    throw VolvoError.appCredentialsRejected
                 case let code where OAuthErrorBody.deadGrantCodes.contains(code):
                     if isRefreshGrant { throw TokenRequestFailure.deadRefreshToken }
                     throw VolvoError.authenticationRequired(.invalidCredentials)
@@ -496,10 +612,11 @@ actor VolvoAPI {
               decoded.expiresIn > 0 else {
             throw VolvoError.decoding(operation: "token response")
         }
+        await recordGrantedScopes(decoded.scope)
         return decoded
     }
 
-    private func authenticatedGET(_ path: String) async throws -> (Data, HTTPURLResponse) {
+    private func authenticatedGET(_ path: String, scope: VehicleLogScope) async throws -> (Data, HTTPURLResponse) {
         try await refreshTokenIfNeeded()
         guard var token = accessToken, let vccApiKey else {
             throw VolvoError.authenticationRequired(.expiredSession)
@@ -509,7 +626,7 @@ actor VolvoAPI {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue(vccApiKey, forHTTPHeaderField: "vcc-api-key")
             request.setValue("Hisingen/\(Self.appVersion)", forHTTPHeaderField: "User-Agent")
-            let (data, response) = try await perform(request, operation: path)
+            let (data, response) = try await perform(request, operation: path, scope: scope)
             if response.statusCode == 401 {
                 let bodyString = String(data: data, encoding: .utf8) ?? ""
                 if bodyString.localizedCaseInsensitiveContains("VCC-API-KEY") || bodyString.localizedCaseInsensitiveContains("API-KEY") {
@@ -529,18 +646,20 @@ actor VolvoAPI {
         throw VolvoError.authenticationRequired(.expiredSession)
     }
 
-    func get<T: Decodable & Sendable>(_ path: String) async throws -> T {
-        let (data, response) = try await authenticatedGET(path)
+    func get<T: Decodable & Sendable>(_ path: String, scope: VehicleLogScope) async throws -> T {
+        let (data, response) = try await authenticatedGET(path, scope: scope)
         if response.statusCode == 403 {
-            // Only per-vehicle telemetry GETs route through this helper, and for those a 403
-            // is empirically a market/model gate rather than a token problem: the same token
-            // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
-            // not use this path, so their 403s stay `.permissionDenied` – the asymmetry is
-            // deliberate. This is tuned from observed behaviour, not Volvo documentation.
-            if path.hasPrefix("/location/") {
-                throw VolvoError.regionRestricted(service: path)
-            }
+            // Volvo documents 403 as "scopes missing in the Bearer token". That is not a market
+            // gate: for `/location/` it means `location:read` was not granted, and the fix is the
+            // approved-permissions switch in Settings. Reporting it as a regional restriction told
+            // the reader to give up on something they could turn on.
             throw VolvoError.permissionDenied(operation: path)
+        }
+        if path.hasPrefix("/location/"), response.statusCode == 404 {
+            // Volvo documents this 404 as "No location found for vin": the car has no stored
+            // location yet, which resolves the moment it parks somewhere. Treated as a structural
+            // 404 it stood the endpoint down for an hour, so moving the car left location dark.
+            throw VolvoError.temporarilyUnavailable(service: path)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
@@ -559,8 +678,8 @@ actor VolvoAPI {
         }
     }
 
-    func getList<T: Decodable & Sendable>(_ path: String) async throws -> [T] {
-        let (data, response) = try await authenticatedGET(path)
+    func getList<T: Decodable & Sendable>(_ path: String, scope: VehicleLogScope) async throws -> [T] {
+        let (data, response) = try await authenticatedGET(path, scope: scope)
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         if let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<[T]>.self, from: data), let list = envelope.data {
             return list
@@ -598,28 +717,46 @@ actor VolvoAPI {
             backoffs.unblock(subject)
             return value
         } catch {
-            if Self.isGlobalFailure(error) { throw error }
-            let isRestricted: Bool
-            switch error as? VolvoError {
-            case .regionRestricted, .permissionDenied: isRestricted = true
-            // A 404 is stable: the resource is simply not exposed for this vehicle/market
-            // (e.g. `/environment` on a model without the sensor). Back off long and persist
-            // it so it is not re-probed every few minutes for the life of the install.
-            case .client(let statusCode) where statusCode == 404: isRestricted = true
-            default: isRestricted = false
-            }
-            // Both durations are durable now that the owner is one store: the 5-minute ones
-            // expire long before a relaunch can read them back, so the split the defaults
-            // dictionary kept – restricted entries persisted, transient ones process-local – was
-            // a distinction the retention rule already made for it.
-            let duration: TimeInterval = isRestricted ? 3600 : (5 * 60)
-            backoffs.block(subject, until: Date().addingTimeInterval(duration), reason: nil)
-            if isRestricted {
+            guard let standDown = Self.optionalStandDown(for: error) else { throw error }
+            backoffs.block(subject, until: Date().addingTimeInterval(standDown.duration), reason: nil)
+            switch standDown {
+            case .permanent:
                 logger.info("Optional Volvo endpoint restricted: \(key, privacy: .public)")
-            } else {
+            case .transient:
                 logger.warning("Optional Volvo endpoint unavailable: \(key, privacy: .public) – \(String(describing: error), privacy: .public)")
             }
             return nil
+        }
+    }
+
+    /// How long an endpoint stands down after `error`, and the two durations that answer it.
+    /// A 404 is stable: the resource is simply not exposed for this vehicle or market (e.g.
+    /// `/environment` on a model without the sensor). A 410 means Volvo removed the API version,
+    /// which is just as permanent. Standing those down for an hour keeps a settled answer from
+    /// being re-probed on every refresh; anything else is transient and gets five minutes.
+    enum StandDown {
+        case permanent
+        case transient
+
+        var duration: TimeInterval {
+            switch self {
+            case .permanent: return 60 * 60
+            case .transient: return 5 * 60
+            }
+        }
+    }
+
+    /// Nil means the failure is request-level and must reach the caller instead of being
+    /// swallowed into a fallback.
+    static func optionalStandDown(for error: Error) -> StandDown? {
+        guard !isGlobalFailure(error) else { return nil }
+        switch error as? VolvoError {
+        case .regionRestricted, .permissionDenied:
+            return .permanent
+        case .client(let statusCode) where statusCode == 404 || statusCode == 410:
+            return .permanent
+        default:
+            return .transient
         }
     }
 
@@ -628,7 +765,9 @@ actor VolvoAPI {
     /// diagnostics and static capability lists.
     static func optionalTelemetryTTL(for key: String) -> TimeInterval {
         switch key {
-        case "commands":
+        // `commands` left this list with the command-list age rule in `advertisedCommandList`:
+        // it gates controls, so it is refreshed on its own shorter window instead of this TTL.
+        case "voc-subscription":
             return 60 * 60
         case "odometer", "statistics", "fuel", "location", "brakes":
             return 15 * 60
@@ -644,7 +783,7 @@ actor VolvoAPI {
     private static func isGlobalFailure(_ error: Error) -> Bool {
         guard let error = error as? VolvoError else { return false }
         switch error {
-        case .authenticationRequired, .appNotConfigured, .rateLimited: return true
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected, .rateLimited: return true
         default: return false
         }
     }
@@ -653,7 +792,7 @@ actor VolvoAPI {
     /// auth problems, rate limiting, server outages, transport breakdowns.
     static func isRequestLevelFailure(_ error: Error) -> Bool {
         switch error as? VolvoError {
-        case .authenticationRequired, .appNotConfigured, .rateLimited, .server,
+        case .authenticationRequired, .appNotConfigured, .appCredentialsRejected, .rateLimited, .server,
              .network, .invalidResponse, .responseTooLarge:
             return true
         default:
@@ -662,7 +801,7 @@ actor VolvoAPI {
     }
 
 
-    private static func applyBasicAuth(_ request: inout URLRequest, clientID: String, clientSecret: String) {
+    static func applyBasicAuth(_ request: inout URLRequest, clientID: String, clientSecret: String) {
         let credentials = Data("\(clientID):\(clientSecret)".utf8).base64EncodedString()
         request.setValue("Basic \(credentials)", forHTTPHeaderField: "Authorization")
     }

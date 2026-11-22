@@ -51,7 +51,44 @@ final class MainMenuController: NSObject {
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
+        // Services: without a real Services menu, text selected in a Settings field cannot be
+        // handed to another app. The menu is empty until an app offers a service, which is the
+        // standard behaviour — the point is that macOS has somewhere to put them.
+        let servicesMenu = NSMenu(title: L10n.text("Services"))
+        let servicesItem = NSMenuItem(title: L10n.text("Services"), action: nil, keyEquivalent: "")
+        servicesItem.submenu = servicesMenu
+        NSApp.servicesMenu = servicesMenu
+        mainMenu.addItem(servicesItem)
+
+        // Window: the Settings window is the only one, but Minimize and Bring All to Front are
+        // what a reader expects from a Mac app, and AppKit routes them without custom code.
+        let windowMenu = NSMenu(title: L10n.text("Window"))
+        windowMenu.addItem(withTitle: L10n.text("Minimize"),
+                           action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: L10n.text("Bring All to Front"),
+                           action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        let windowItem = NSMenuItem(title: L10n.text("Window"), action: nil, keyEquivalent: "")
+        windowItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
+        mainMenu.addItem(windowItem)
+
+        // Help: opens the published help page. A menu-bar app has no window to attach help to,
+        // so the menu points at the documentation instead of inventing an in-app browser.
+        let helpMenu = NSMenu(title: L10n.text("Help"))
+        let helpItem = helpMenu.addItem(withTitle: L10n.text("Hisingen Help"),
+                                        action: #selector(openHelp), keyEquivalent: "?")
+        helpItem.target = self
+        let helpMenuItem = NSMenuItem(title: L10n.text("Help"), action: nil, keyEquivalent: "")
+        helpMenuItem.submenu = helpMenu
+        NSApp.helpMenu = helpMenu
+        mainMenu.addItem(helpMenuItem)
+
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func openHelp() {
+        guard let url = URL(string: "https://github.com/NicolasKheirallah/Hisingen/blob/main/docs/help.md") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func openSettingsMenuItem() {

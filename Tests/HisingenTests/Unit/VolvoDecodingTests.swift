@@ -81,10 +81,38 @@ struct VolvoDecodingTests {
     @Test
     func testEnergyCapabilitiesFixtureDecodes() throws {
         let caps = try loadFixture("volvo-energy-capabilities", as: VolvoEnergyCapabilitiesDTO.self)
-        #expect(caps.chargingPower?.isSupported == true)
-        #expect(caps.targetBatteryLevel?.isSupported == false)
-        #expect(caps.chargingCurrentLimit?.isSupported == true)
+        // Every flag the documented nested shape carries, supported and unsupported alike.
+        #expect(caps.batteryChargeLevel?.isSupported == true)
+        #expect(caps.electricRange?.isSupported == true)
+        #expect(caps.chargerConnectionStatus?.isSupported == true)
+        #expect(caps.chargingSystemStatus?.isSupported == true)
         #expect(caps.chargingType?.isSupported == true)
+        #expect(caps.chargerPowerStatus?.isSupported == true)
+        #expect(caps.chargingPower?.isSupported == true)
+        #expect(caps.chargingCurrentLimit?.isSupported == true)
+        #expect(caps.estimatedChargingTimeToTargetBatteryChargeLevel?.isSupported == true)
+        #expect(caps.targetBatteryChargeLevel?.isSupported == false)
+        #expect(caps.targetBatteryLevel?.isSupported == false)
+    }
+
+    @Test
+    func testEnergyCapabilitiesFlatFixtureDecodesLegacyKeys() throws {
+        let caps = try loadFixture("volvo-energy-capabilities-flat", as: VolvoEnergyCapabilitiesDTO.self)
+        // The older flat shape, with the legacy `chargingStatus` / `targetBatteryLevel`
+        // spellings sitting next to the modern keys and saying the opposite: the modern
+        // key has to win, so the fixture proves the fallback order rather than just
+        // tolerance of the old names.
+        #expect(caps.batteryChargeLevel?.isSupported == true)
+        #expect(caps.electricRange?.isSupported == false)
+        #expect(caps.chargerConnectionStatus?.isSupported == true)
+        #expect(caps.chargingSystemStatus?.isSupported == false)
+        #expect(caps.chargingType?.isSupported == true)
+        #expect(caps.chargerPowerStatus?.isSupported == false)
+        #expect(caps.chargingPower?.isSupported == true)
+        #expect(caps.chargingCurrentLimit?.isSupported == false)
+        #expect(caps.estimatedChargingTimeToTargetBatteryChargeLevel?.isSupported == true)
+        #expect(caps.targetBatteryChargeLevel?.isSupported == true)
+        #expect(caps.targetBatteryLevel?.isSupported == true)
     }
 
     @Test

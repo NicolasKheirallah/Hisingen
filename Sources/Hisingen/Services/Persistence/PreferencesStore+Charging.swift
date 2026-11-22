@@ -49,9 +49,25 @@ extension PreferencesStore {
         }
         set { d.set(newValue.rawValue, forKey: "electricity_market_country") }
     }
-    /// The planner needs Swedish spot prices, so the feature switch alone is not enough.
+    /// True when a Tibber home is connected. The home id is the non-secret marker; the token
+    /// lives in the Keychain and `HomeChargingStore.clearTibber()` removes both together.
+    var hasConnectedTibberHome: Bool {
+        d.data(forKey: HomeChargingStore.tibberHomeKey) != nil
+    }
+
+    /// Whether any price series can be read at all. The selected supplier decides it: Tibber when
+    /// the reader connected a home, otherwise the Swedish spot series. A supplier that publishes
+    /// no series leaves this false, and the planner and price UI stay off rather than showing a
+    /// number the app cannot source. This replaces the old "country is Sweden" question, which
+    /// hid the planner from a Tibber home in Norway even though Tibber already returned its prices.
+    var hasPriceSource: Bool {
+        if electricityProvider == .tibber, hasConnectedTibberHome { return true }
+        return marketCountry.offersMarketPricing
+    }
+
+    /// The planner needs a price series, so the feature switch alone is not enough.
     var smartChargingPlannerAvailable: Bool {
-        marketCountry.offersMarketPricing && features.contains(.smartChargingPlanner)
+        hasPriceSource && features.contains(.smartChargingPlanner)
     }
     /// Fixed rate (the typed-in price per kWh) or automatic (spot price plus provider markup).
     /// Fixed by default so existing installs keep their figures until the user opts in.
@@ -81,7 +97,7 @@ extension PreferencesStore {
     var electricityIncludesVAT: Bool { get { boolDefaultTrue("electricity_includes_vat") } set { d.set(newValue, forKey: "electricity_includes_vat") } }
     var electricityRatePolicy: ElectricityRatePolicy {
         ElectricityRatePolicy(
-            mode: marketCountry.offersMarketPricing ? electricityRateMode : .fixed, provider: electricityProvider, contract: electricityPriceContract,
+            mode: hasPriceSource ? electricityRateMode : .fixed, provider: electricityProvider, contract: electricityPriceContract,
             markupOrePerKwh: electricityMarkupOrePerKwh, otherChargesOrePerKwh: electricityOtherChargesOrePerKwh,
             includesVAT: electricityIncludesVAT
         )
@@ -98,8 +114,45 @@ extension PreferencesStore {
     /// through settings archives and not part of any bulk-enable action.
     var plannerAutoStartEnabled: Bool { get { d.bool(forKey: "planner_auto_start_enabled") } set { d.set(newValue, forKey: "planner_auto_start_enabled") } }
 
+    /// Opt-in sleep prevention. Off by default, and off unless auto-start is also on: with no
+    /// command to send at the window, there is nothing to stay awake for. Not transferable
+    /// with settings archives, like the auto-start consent it belongs to.
+    var plannerKeepAwakeEnabled: Bool { get { d.bool(forKey: "planner_keep_awake_enabled") } set { d.set(newValue, forKey: "planner_keep_awake_enabled") } }
+
+    /// The window the planner's auto-start is running for a vehicle. Its end is fixed when the
+    /// start command is acknowledged, so slower-than-planned charging stops there instead of
+    /// extending the plan. Persisted so a relaunch inside the window still ends it.
+    func plannerWindow(for vin: String) -> DateInterval? {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty,
+              let all = d.dictionary(forKey: "planner_windows_v1") as? [String: [Double]],
+              let pair = all[key], pair.count == 2 else { return nil }
+        let start = Date(timeIntervalSince1970: pair[0])
+        let end = Date(timeIntervalSince1970: pair[1])
+        guard end > start else { return nil }
+        return DateInterval(start: start, end: end)
+    }
+
+    func setPlannerWindow(_ window: DateInterval?, for vin: String) {
+        let key = vin.normalizedVIN
+        guard !key.isEmpty else { return }
+        var all = d.dictionary(forKey: "planner_windows_v1") as? [String: [Double]] ?? [:]
+        if let window {
+            all[key] = [window.start.timeIntervalSince1970, window.end.timeIntervalSince1970]
+        } else {
+            all.removeValue(forKey: key)
+        }
+        d.set(all, forKey: "planner_windows_v1")
+    }
+
     /// Well-to-wheel grid carbon intensity used only for the History tab's indicative
     /// "emissions avoided vs petrol" figure. Defaults to a middle-of-the-road European blend;
     /// a Nordic grid is far cleaner, a coal-heavy one dirtier, hence it is user-adjustable.
     var gridCarbonIntensityGramsPerKwh: Double { get { let value = d.double(forKey: "grid_carbon_intensity_g_per_kwh"); return value > 0 ? value : 120 } set { d.set(min(max(newValue, 0), 1_200), forKey: "grid_carbon_intensity_g_per_kwh") } }
+
+    /// The optional Electricity Maps token behind the live grid-carbon line. The key itself is
+    /// in the Keychain; this asks only whether one is saved. No key means no live line at all.
+    var hasElectricityMapsKey: Bool { keychain.hasStoredElectricityMapsKey }
+    func saveElectricityMapsKey(_ key: String) throws { try keychain.saveElectricityMapsKey(key) }
+    func clearElectricityMapsKey() { try? keychain.deleteElectricityMapsKey() }
 }

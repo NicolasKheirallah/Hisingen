@@ -43,7 +43,7 @@ private final class MetadataRetryClock: @unchecked Sendable {
     func advance(_ seconds: TimeInterval) { lock.withLock { value.addTimeInterval(seconds) } }
 }
 
-private final class MetadataRetryProtocol: URLProtocol, @unchecked Sendable {
+private final class MetadataRetryProtocol: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var requests = 0
     static var count: Int { lock.withLock { requests } }

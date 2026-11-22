@@ -47,4 +47,19 @@ struct SignInFailureKindTests {
         #expect(!SignInFailureKind.transient.interactiveSignInHelps)
         #expect(!SignInFailureKind.unspecified.interactiveSignInHelps)
     }
+
+    /// Volvo retired the original `dc-` applications and answered their grants with
+    /// `invalid_client`. Classifying that as bad owner credentials sent the owner to retype the
+    /// same dead values; signing in again with new credentials is the way back.
+    @Test
+    func aRetiredApplicationIsNotTheOwnersTypingMistake() {
+        let error = VolvoError.appCredentialsRejected.asVehicleServiceError
+        #expect(error.requiresAuthentication)
+        #expect(!error.allowsAutomaticRetry)
+        #expect(!error.isRejectedCredential)
+        #expect(SignInFailureKind.classify(error, provider: .volvo) == .sessionExpired)
+        #expect(SignInFailureKind.classify(error, provider: .volvo).interactiveSignInHelps)
+        // The message has to point at the credentials, not at an empty Settings form.
+        #expect(error.errorDescription?.contains("client ID") == true)
+    }
 }

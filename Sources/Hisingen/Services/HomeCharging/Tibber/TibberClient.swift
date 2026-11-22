@@ -39,6 +39,14 @@ struct TibberConsumptionHour: Equatable, Sendable {
     var currency: String? = nil
 }
 
+/// One hour of production from the home's production metering point, as Tibber reports it. A home
+/// without one answers with no hours at all, which stays an empty answer and never becomes zeros.
+struct TibberProductionHour: Equatable, Sendable {
+    var start: Date
+    var end: Date
+    var kwh: Double
+}
+
 /// Tibber's own API (developer.tibber.com), read with the reader's personal access token. It is
 /// the electricity-supplier side of Home Charging: it prices charger sessions, and needs neither a
 /// charger nor Home Assistant.
@@ -231,6 +239,220 @@ struct TibberClient: Sendable {
             let currency = (node["currency"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             return ConsumptionEdge(cursor: cursor, hour: TibberConsumptionHour(start: start, end: end, kwh: kwh, cost: cost, currency: currency))
         }
+    }
+
+    // MARK: Production
+
+    /// Hourly production from the home's production metering point. A page is 744 hours, 31 days,
+    /// the cap the schema sets for HOURLY, and two pages reach about two months back.
+    static let productionQuery = """
+    query ($homeId: ID!, $last: Int!, $before: String) { viewer { home(id: $homeId) { \
+    production(resolution: HOURLY, last: $last, before: $before) { \
+    edges { cursor node { from to production } } } } } }
+    """
+    static let productionPageSize = 744
+    static let maximumProductionPages = 2
+
+    /// Hourly production covering `[from, to]`, read back from the newest hour the same way
+    /// consumption is. An hour without a reading is left out, so a gap stays a gap.
+    func production(homeID: String, from: Date, to: Date) async throws -> [TibberProductionHour] {
+        var collected: [Date: TibberProductionHour] = [:]
+        var before: String?
+        for _ in 0..<Self.maximumProductionPages {
+            var variables: [String: Any] = ["homeId": homeID, "last": Self.productionPageSize]
+            if let before { variables["before"] = before }
+            let object = try await run(Self.productionQuery, variables: variables)
+            let page = Self.productionEdges(in: object)
+            guard !page.isEmpty else { break }
+            for edge in page { collected[edge.hour.start] = edge.hour }
+            guard let oldest = page.min(by: { $0.hour.start < $1.hour.start }), oldest.cursor != before else { break }
+            if oldest.hour.start <= from { break }
+            before = oldest.cursor
+        }
+        return collected.values
+            .filter { $0.end > from && $0.start < to }
+            .sorted { $0.start < $1.start }
+    }
+
+    private struct ProductionEdge {
+        var cursor: String
+        var hour: TibberProductionHour
+    }
+
+    private static func productionEdges(in object: [String: Any]) -> [ProductionEdge] {
+        let home = (object["viewer"] as? [String: Any])?["home"] as? [String: Any]
+        let rows = ((home?["production"] as? [String: Any])?["edges"]) as? [[String: Any]] ?? []
+        return rows.compactMap { row in
+            guard let cursor = row["cursor"] as? String, let node = row["node"] as? [String: Any],
+                  let start = LooseJSON.date(node["from"]), let end = LooseJSON.date(node["to"]), end > start else { return nil }
+            // A null `production` is an hour without a reading, not an hour of zero.
+            guard let kwh = LooseJSON.double(node["production"]), kwh.isFinite, kwh >= 0 else { return nil }
+            return ProductionEdge(cursor: cursor, hour: TibberProductionHour(start: start, end: end, kwh: kwh))
+        }
+    }
+
+    // MARK: Day and month totals
+
+    /// The meter resolutions past the hour that Hisingen reads. The schema also documents WEEKLY
+    /// and ANNUAL, which nothing here asks for.
+    enum TibberEnergyResolution: String, Sendable {
+        case daily = "DAILY"
+        case monthly = "MONTHLY"
+    }
+
+    /// One day or month of whole-home consumption from the grid meter, as Tibber reports the
+    /// period total.
+    struct TibberConsumptionPeriod: Equatable, Sendable {
+        var start: Date
+        var end: Date
+        var kwh: Double
+        /// What Tibber billed for the period's energy, taxes included and the grid fee not. `nil`
+        /// when Tibber gave none.
+        var cost: Double? = nil
+        var currency: String? = nil
+    }
+
+    /// One day or month of production from the home's production metering point. A home without one
+    /// answers with no periods at all, which stays an empty answer and never becomes zeros.
+    struct TibberProductionPeriod: Equatable, Sendable {
+        var start: Date
+        var end: Date
+        var kwh: Double
+    }
+
+    /// Day- or month-total whole-home consumption, the same edges the hourly query reads.
+    static func consumptionQuery(resolution: TibberEnergyResolution) -> String {
+        """
+        query ($homeId: ID!, $last: Int!, $before: String) { viewer { home(id: $homeId) { \
+        consumption(resolution: \(resolution.rawValue), last: $last, before: $before) { \
+        edges { cursor node { from to consumption cost currency } } } } } }
+        """
+    }
+
+    /// A page is 90 days of daily totals, and two pages reach about six months back.
+    static let dailyPageSize = 90
+    static let maximumDailyPages = 2
+    /// A page is 24 monthly totals, and two pages reach four years back.
+    static let monthlyPageSize = 24
+    static let maximumMonthlyPages = 2
+
+    /// Day or month consumption totals covering `[from, to]`, read back from the newest period and
+    /// paged the way the hourly fetch is. A period without a reading is left out, so a gap stays a
+    /// gap.
+    func consumption(homeID: String, resolution: TibberEnergyResolution, from: Date, to: Date) async throws -> [TibberConsumptionPeriod] {
+        let pageSize = resolution == .daily ? Self.dailyPageSize : Self.monthlyPageSize
+        let maximumPages = resolution == .daily ? Self.maximumDailyPages : Self.maximumMonthlyPages
+        let query = Self.consumptionQuery(resolution: resolution)
+        var collected: [Date: TibberConsumptionPeriod] = [:]
+        var before: String?
+        for _ in 0..<maximumPages {
+            var variables: [String: Any] = ["homeId": homeID, "last": pageSize]
+            if let before { variables["before"] = before }
+            let object = try await run(query, variables: variables)
+            let page = Self.consumptionPeriodEdges(in: object)
+            guard !page.isEmpty else { break }
+            for edge in page { collected[edge.period.start] = edge.period }
+            guard let oldest = page.min(by: { $0.period.start < $1.period.start }), oldest.cursor != before else { break }
+            if oldest.period.start <= from { break }
+            before = oldest.cursor
+        }
+        return collected.values
+            .filter { $0.end > from && $0.start < to }
+            .sorted { $0.start < $1.start }
+    }
+
+    private struct ConsumptionPeriodEdge {
+        var cursor: String
+        var period: TibberConsumptionPeriod
+    }
+
+    private static func consumptionPeriodEdges(in object: [String: Any]) -> [ConsumptionPeriodEdge] {
+        let home = (object["viewer"] as? [String: Any])?["home"] as? [String: Any]
+        let rows = ((home?["consumption"] as? [String: Any])?["edges"]) as? [[String: Any]] ?? []
+        return rows.compactMap { row in
+            guard let cursor = row["cursor"] as? String, let node = row["node"] as? [String: Any],
+                  let start = LooseJSON.date(node["from"]), let end = LooseJSON.date(node["to"]), end > start else { return nil }
+            // A null `consumption` is a period without a reading, not a period of zero.
+            guard let kwh = LooseJSON.double(node["consumption"]), kwh.isFinite, kwh >= 0 else { return nil }
+            let cost = LooseJSON.double(node["cost"]).flatMap { $0.isFinite ? $0 : nil }
+            let currency = (node["currency"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return ConsumptionPeriodEdge(cursor: cursor, period: TibberConsumptionPeriod(start: start, end: end, kwh: kwh, cost: cost, currency: currency))
+        }
+    }
+
+    /// Day- or month-total production, the same edges the hourly production query reads.
+    static func productionQuery(resolution: TibberEnergyResolution) -> String {
+        """
+        query ($homeId: ID!, $last: Int!, $before: String) { viewer { home(id: $homeId) { \
+        production(resolution: \(resolution.rawValue), last: $last, before: $before) { \
+        edges { cursor node { from to production } } } } } }
+        """
+    }
+
+    /// Day or month production totals covering `[from, to]`, read back the same way consumption is.
+    /// A period without a reading is left out, so a gap stays a gap.
+    func production(homeID: String, resolution: TibberEnergyResolution, from: Date, to: Date) async throws -> [TibberProductionPeriod] {
+        let pageSize = resolution == .daily ? Self.dailyPageSize : Self.monthlyPageSize
+        let maximumPages = resolution == .daily ? Self.maximumDailyPages : Self.maximumMonthlyPages
+        let query = Self.productionQuery(resolution: resolution)
+        var collected: [Date: TibberProductionPeriod] = [:]
+        var before: String?
+        for _ in 0..<maximumPages {
+            var variables: [String: Any] = ["homeId": homeID, "last": pageSize]
+            if let before { variables["before"] = before }
+            let object = try await run(query, variables: variables)
+            let page = Self.productionPeriodEdges(in: object)
+            guard !page.isEmpty else { break }
+            for edge in page { collected[edge.period.start] = edge.period }
+            guard let oldest = page.min(by: { $0.period.start < $1.period.start }), oldest.cursor != before else { break }
+            if oldest.period.start <= from { break }
+            before = oldest.cursor
+        }
+        return collected.values
+            .filter { $0.end > from && $0.start < to }
+            .sorted { $0.start < $1.start }
+    }
+
+    private struct ProductionPeriodEdge {
+        var cursor: String
+        var period: TibberProductionPeriod
+    }
+
+    private static func productionPeriodEdges(in object: [String: Any]) -> [ProductionPeriodEdge] {
+        let home = (object["viewer"] as? [String: Any])?["home"] as? [String: Any]
+        let rows = ((home?["production"] as? [String: Any])?["edges"]) as? [[String: Any]] ?? []
+        return rows.compactMap { row in
+            guard let cursor = row["cursor"] as? String, let node = row["node"] as? [String: Any],
+                  let start = LooseJSON.date(node["from"]), let end = LooseJSON.date(node["to"]), end > start else { return nil }
+            // A null `production` is a period without a reading, not a period of zero.
+            guard let kwh = LooseJSON.double(node["production"]), kwh.isFinite, kwh >= 0 else { return nil }
+            return ProductionPeriodEdge(cursor: cursor, period: TibberProductionPeriod(start: start, end: end, kwh: kwh))
+        }
+    }
+
+    /// The prices published for today and tomorrow, with their levels. It is the same priceInfo
+    /// answer the price range ends with, fetched on its own so a reader of the current levels only
+    /// need not page back through the quarter-hours.
+    func currentPrices(homeID: String) async throws -> [HomePricePoint] {
+        var collected: [Date: (price: Double, level: TibberPriceLevel?)] = [:]
+        for edge in try await upcomingPrices(homeID: homeID) { collected[edge.start] = (edge.price, edge.level) }
+        return Self.points(from: collected, from: .distantPast, to: .distantFuture)
+    }
+
+    // MARK: Live stream
+
+    /// What the API names for the live stream: whether the home has a live reader (the schema calls
+    /// it a Pulse or Watty device) paired, and the URL websocket subscriptions go to.
+    static let liveStreamQuery = """
+    query ($homeId: ID!) { viewer { websocketSubscriptionUrl home(id: $homeId) { features { realTimeConsumptionEnabled } } } }
+    """
+
+    func liveStream(homeID: String) async throws -> TibberLiveStream {
+        let object = try await run(Self.liveStreamQuery, variables: ["homeId": homeID])
+        let viewer = object["viewer"] as? [String: Any]
+        let enabled = LooseJSON.bool(((viewer?["home"] as? [String: Any])?["features"] as? [String: Any])?["realTimeConsumptionEnabled"]) ?? false
+        let url = (viewer?["websocketSubscriptionUrl"] as? String).flatMap(URL.init(string:))
+        return TibberLiveStream(realTimeEnabled: enabled, url: url)
     }
 
     // MARK: GraphQL

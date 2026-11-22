@@ -32,6 +32,33 @@ enum ChargingScheduleOutcome: String, Codable, Sendable {
     var isWarning: Bool { self != .willComplete }
 }
 
+/// The car's own name for which preset the charge target belongs to
+/// (`chargeTargetLevelSettingType` on the Polestar Data Portal target read: DAILY,
+/// LONG_TRIP or CUSTOM). Volvo has no mode, and a portal read without the field keeps
+/// nil, so a mode is shown only when the car named one.
+enum ChargeTargetSettingMode: String, Codable, Sendable {
+    case daily
+    case longTrip
+    case custom
+
+    init?(wireToken: String?) {
+        switch wireToken?.uppercased() {
+        case "DAILY": self = .daily
+        case "LONG_TRIP": self = .longTrip
+        case "CUSTOM": self = .custom
+        default: return nil
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .daily: return L10n.text("Daily")
+        case .longTrip: return L10n.text("Long trip")
+        case .custom: return L10n.text("Custom")
+        }
+    }
+}
+
 enum ChargingState: Codable, Equatable, Sendable {
     case charging
     case smartCharging

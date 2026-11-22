@@ -17,6 +17,9 @@ enum AuthFailureReason: String, Codable, Sendable {
     case invalidCredentials
     case expiredSession
     case callbackRejected
+    /// The stored session came from a sign-in system the configured client no longer uses (Volvo
+    /// moved developer applications to a new server), so it cannot be resumed.
+    case signInSystemChanged
 }
 
 enum PolestarError: Error, LocalizedError {
@@ -43,6 +46,8 @@ enum PolestarError: Error, LocalizedError {
             return L10n.text("Sign in failed. Check your Polestar ID and password.")
         case .authenticationRequired(.callbackRejected):
             return L10n.text("Polestar requested an additional or changed sign-in step. Open Settings and try again.")
+        case .authenticationRequired(.signInSystemChanged):
+            return L10n.text("Sign in is required.")
         case .authenticationRequired:
             return L10n.text("Sign in is required.")
         case .network(let error):

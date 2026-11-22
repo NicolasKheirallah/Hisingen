@@ -17,6 +17,8 @@ struct SessionCurveCharts: View {
     let chargerPower: [(Date, Double)]
     /// The price per kWh through the session, when a price source covers it.
     var prices: SessionPriceSeries? = nil
+    /// The slots the same energy would have cost least in, shaded on the price chart.
+    var cheapestSlots: [HomePricePoint] = []
     var currencySymbol: String = ""
     let chartHeight: CGFloat
     let animationKey: String
@@ -186,6 +188,14 @@ struct SessionCurveCharts: View {
         let unit = "\(currencySymbol)/kWh"
         return VStack(alignment: .leading, spacing: 3) {
             Chart {
+                ForEach(Array(cheapestSlots.enumerated()), id: \.offset) { _, slot in
+                    if slot.end > domain.lowerBound, slot.start < domain.upperBound {
+                        RectangleMark(xStart: .value(timeLabel, max(slot.start, domain.lowerBound)),
+                                      xEnd: .value(timeLabel, min(slot.end, domain.upperBound)),
+                                      yStart: .value(priceLabel, bottom), yEnd: .value(priceLabel, max(top * 1.25, 0.1)))
+                            .foregroundStyle(HisingenTheme.ink.opacity(0.08))
+                    }
+                }
                 ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                     LineMark(x: .value(timeLabel, step.0), y: .value(priceLabel, step.1),
                              series: .value(segmentLabel, "price"))
@@ -212,6 +222,18 @@ struct SessionCurveCharts: View {
                 points: slots.map { ($0.start, $0.pricePerKwh) },
                 valueFormat: { Format.number($0, decimals: 2) }))
             .hisAnimation(Motion.progress, value: animationKey)
+            if !cheapestSlots.isEmpty {
+                let outside = cheapestSlots.filter { $0.end <= domain.lowerBound || $0.start >= domain.upperBound }.count
+                HStack(spacing: 10) {
+                    HistoryChartLegendItem(color: HisingenTheme.inkMuted.opacity(0.35),
+                                           label: L10n.text("Cheapest slots"), band: true)
+                    if outside > 0 {
+                        Text(L10n.format("%d of the cheapest slots fall outside this chart", outside))
+                            .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted)
+                    }
+                    Spacer()
+                }
+            }
             Text(priceBasisNote(series.basis))
                 .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -335,6 +357,7 @@ struct SessionCurveCharts: View {
         if let power = point.powerKw { parts.append(Format.powerKw(power)) }
         if let price = prices?.price(at: point.timestamp) {
             parts.append(Format.currency(price, symbol: "\(currencySymbol)/kWh"))
+            if let level = prices?.level(at: point.timestamp) { parts.append(level.title) }
         }
         if let amps = point.currentAmps { parts.append(Format.number(amps, decimals: 1) + " A") }
         if let volts = point.voltageVolts { parts.append(Format.number(volts, decimals: 0) + " V") }

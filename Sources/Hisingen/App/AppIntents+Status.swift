@@ -6,7 +6,8 @@ struct GetVehicleBatteryIntent: AppIntent {
     static let description = IntentDescription("Returns the battery level, range, and charging status of a vehicle.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -88,7 +89,8 @@ struct GetVehicleStatusIntent: AppIntent {
     static let description = IntentDescription("Returns lock, opening, and attention status from the latest Hisingen snapshot.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -114,7 +116,8 @@ struct GetRecentTripsIntent: AppIntent {
     static let description = IntentDescription("Returns locally derived trip distance and driving time for the last seven days.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -155,7 +158,8 @@ struct GetEnergyBreakdownIntent: AppIntent {
     static let description = IntentDescription("Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -189,7 +193,8 @@ struct GetTirePressuresIntent: AppIntent {
     static let description = IntentDescription("Returns the current tire pressures and statuses for all wheels.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor

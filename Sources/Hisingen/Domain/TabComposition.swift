@@ -143,6 +143,12 @@ struct TabComposition: Equatable, Sendable {
     /// there does not take it off the tab it came from.
     var hiddenPlacements: [String: Set<TabItemID>] = [:]
 
+    /// The cards drawn in their non-default form, keyed by the tab's storage key and the card's
+    /// canonical id. Absent means the tab's natural form: a summary on Now, the full card
+    /// everywhere else. Keyed per placement so one card can stay compact on Now and complete on
+    /// a tab of the reader's own.
+    var cardViewTypes: [String: [String: CardViewType]] = [:]
+
     /// Built-in tabs the reader hid. Settings is excluded — see `BuiltInTab.isHideable`.
     var hiddenTabs: Set<BuiltInTab> = []
 
@@ -200,6 +206,44 @@ struct TabComposition: Equatable, Sendable {
     func hiddenItems(for tab: TabRef) -> Set<TabItemID> {
         let owned = Set(hiddenItems.filter { ownsVisibility(of: $0, on: tab) })
         return hiddenItems.intersection(owned).union(hiddenPlacements[tab.storageKey] ?? [])
+    }
+
+    /// The form the reader chose for this placement, or nil when it still draws the tab's
+    /// natural form.
+    func storedViewType(for item: TabItemID, on tab: TabRef) -> CardViewType? {
+        cardViewTypes[tab.storageKey]?[TabItemCatalog.canonicalID(item).rawValue]
+    }
+
+    /// What this placement draws. A missing choice follows `CardViewSupport.defaultType`, so a
+    /// reader who never opens the card-view control keeps the layout they already had.
+    func viewType(for item: TabItemID, on tab: TabRef) -> CardViewType {
+        storedViewType(for: item, on: tab) ?? CardViewSupport.defaultType(for: item, on: tab)
+    }
+
+    /// Stores one placement's form. Choosing the tab's natural form clears the entry, so the
+    /// stored composition stays a record of departures from the shipped layout.
+    mutating func setViewType(_ type: CardViewType, for item: TabItemID, on tab: TabRef) {
+        let id = TabItemCatalog.canonicalID(item)
+        guard TabItemCatalog.canRender(id, on: tab),
+              items(for: tab).contains(id),
+              CardViewSupport.choices(for: id, on: tab).contains(type) else { return }
+        var values = cardViewTypes[tab.storageKey] ?? [:]
+        if type == CardViewSupport.defaultType(for: id, on: tab) {
+            values.removeValue(forKey: id.rawValue)
+        } else {
+            values[id.rawValue] = type
+        }
+        if values.isEmpty {
+            cardViewTypes.removeValue(forKey: tab.storageKey)
+        } else {
+            cardViewTypes[tab.storageKey] = values
+        }
+    }
+
+    /// Returns every card on `tab` to the tab's natural form. Used by Reset Tab, which restores
+    /// the shipped arrangement rather than only its list of cards.
+    mutating func clearViewTypes(on tab: TabRef) {
+        cardViewTypes.removeValue(forKey: tab.storageKey)
     }
 
     func customTab(_ id: String) -> CustomTab? { customTabs.first { $0.id == id } }
@@ -464,6 +508,10 @@ struct TabComposition: Equatable, Sendable {
         }
         current.removeAll { $0 == item }
         setItems(current, for: tab)
+        cardViewTypes[tab.storageKey]?.removeValue(forKey: TabItemCatalog.canonicalID(item).rawValue)
+        if cardViewTypes[tab.storageKey]?.isEmpty == true {
+            cardViewTypes.removeValue(forKey: tab.storageKey)
+        }
         if ownsCard {
             hiddenItems.insert(item)
         } else {
@@ -501,6 +549,7 @@ struct TabComposition: Equatable, Sendable {
         customTabs.removeAll { $0.id == id }
         tabContents.removeValue(forKey: reference.storageKey)
         hiddenPlacements.removeValue(forKey: reference.storageKey)
+        cardViewTypes.removeValue(forKey: reference.storageKey)
         tabOrder.removeAll { $0 == reference.storageKey }
         // Removing the tab can leave the stored order equal to the shipped one. Re-canonicalise
         // so that state is stored as "no override": otherwise Restore stays offered with nothing
@@ -516,6 +565,10 @@ struct TabComposition: Equatable, Sendable {
         let carried = visibleItems(for: source.reference)
         let copy = addCustomTab(name: L10n.format("%@ copy", source.name), symbol: source.symbol)
         setItems(carried, for: copy)
+        for item in carried {
+            guard let type = storedViewType(for: item, on: source.reference) else { continue }
+            setViewType(type, for: item, on: copy)
+        }
         return copy
     }
 
@@ -633,6 +686,25 @@ struct TabComposition: Equatable, Sendable {
             let filtered = Set(hidden.map(TabItemCatalog.canonicalID)).intersection(Set(result.items(for: tab)))
             if !filtered.isEmpty { kept[key] = filtered }
         }
+        // A view choice needs a tab that exists and still places the card, and a form that tab
+        // offers. A choice equal to the tab's natural form carries no information, so drop it
+        // and let `viewType(for:on:)` answer.
+        result.cardViewTypes = result.cardViewTypes.reduce(into: [String: [String: CardViewType]]()) { kept, entry in
+            let (key, values) = entry
+            guard let tab = TabRef(storageKey: key), tab.builtIn != .settings,
+                  tab.customID.map(customIDs.contains) ?? true else { return }
+            let placed = Set(result.items(for: tab).map(TabItemCatalog.canonicalID))
+            var filtered: [String: CardViewType] = [:]
+            for (raw, type) in values {
+                guard let item = TabItemID(rawValue: raw) else { continue }
+                let id = TabItemCatalog.canonicalID(item)
+                guard placed.contains(id),
+                      CardViewSupport.choices(for: id, on: tab).contains(type),
+                      type != CardViewSupport.defaultType(for: id, on: tab) else { continue }
+                filtered[id.rawValue] = type
+            }
+            if !filtered.isEmpty { kept[key] = filtered }
+        }
         // The stored order is a preference, not a roster: a key that no longer names a tab and
         // a key named twice would both make `orderedTabs` skip or repeat a place. Dropping them
         // here leaves the unlisted tabs to the appended tail, which is the shipped order.
@@ -662,6 +734,7 @@ extension TabComposition: Codable {
         case tabContents
         case hiddenItems
         case hiddenPlacements
+        case cardViewTypes
         case hiddenTabs
         case customTabs
         case tabOrder
@@ -680,6 +753,15 @@ extension TabComposition: Codable {
         hiddenItems = Set(hidden.compactMap(TabItemID.init(rawValue:)))
         let placements = try container.decodeIfPresent([String: [String]].self, forKey: .hiddenPlacements) ?? [:]
         hiddenPlacements = placements.mapValues { Set($0.compactMap(TabItemID.init(rawValue:))) }
+        let views = try container.decodeIfPresent([String: [String: String]].self, forKey: .cardViewTypes) ?? [:]
+        cardViewTypes = views.reduce(into: [String: [String: CardViewType]]()) { kept, entry in
+            var values: [String: CardViewType] = [:]
+            for (raw, type) in entry.value {
+                guard let type = CardViewType(rawValue: type) else { continue }
+                values[raw] = type
+            }
+            if !values.isEmpty { kept[entry.key] = values }
+        }
         let tabs = try container.decodeIfPresent([String].self, forKey: .hiddenTabs) ?? []
         hiddenTabs = Set(tabs.compactMap(BuiltInTab.init(rawValue:)))
         customTabs = try container.decodeIfPresent([CustomTab].self, forKey: .customTabs) ?? []
@@ -707,30 +789,56 @@ struct TabLayout: Equatable, Sendable {
     /// layout reads; nil keeps the older "draw anything" behaviour for a layout built by hand.
     let roster: Set<TabItemID>?
 
+    /// The tab this layout describes. Needed for a card's natural form, which follows the tab;
+    /// nil for a layout assembled by hand, where every card keeps its full form.
+    let tab: TabRef?
+
+    /// The form each multi-view card draws here, keyed by canonical card id. A card absent here
+    /// has one form, or falls back to its natural form for `tab`.
+    let viewTypes: [TabItemID: CardViewType]
+
     private let rank: [TabItemID: Int]
 
     /// A tab the reader has not customised: everything, exactly as designed.
     static let everything = TabLayout(items: [], hidden: [], includesNewItems: true)
 
     init(items: [TabItemID], hidden: Set<TabItemID> = [], includesNewItems: Bool = false,
-         roster: Set<TabItemID>? = nil) {
+         roster: Set<TabItemID>? = nil, tab: TabRef? = nil,
+         viewTypes: [TabItemID: CardViewType] = [:]) {
         self.items = items
         self.hidden = hidden
         self.includesNewItems = includesNewItems
         self.roster = roster
+        self.tab = tab
+        self.viewTypes = viewTypes
         self.rank = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($1, $0) })
     }
 
     /// Builds the layout a tab renders from.
     static func resolve(_ composition: TabComposition, for tab: TabRef) -> TabLayout {
-        TabLayout(
-            items: composition.visibleItems(for: tab),
+        let items = composition.visibleItems(for: tab)
+        var viewTypes: [TabItemID: CardViewType] = [:]
+        for item in items where CardViewSupport.hasMultipleViews(item) {
+            viewTypes[TabItemCatalog.canonicalID(item)] = composition.viewType(for: item, on: tab)
+        }
+        return TabLayout(
+            items: items,
             hidden: composition.hiddenItems(for: tab),
             // A hidden tab draws nothing, so it must not accept an item it never hears of
             // either. `isShipped` alone is true for a hidden, never-arranged tab.
             includesNewItems: composition.isShipped(for: tab) && composition.isVisible(tab),
-            roster: TabItemCatalog.roster(for: tab)
+            roster: TabItemCatalog.roster(for: tab),
+            tab: tab,
+            viewTypes: viewTypes
         )
+    }
+
+    /// The form this card draws in this tab's layout.
+    func viewType(for item: TabItemID) -> CardViewType {
+        let id = TabItemCatalog.canonicalID(item)
+        if let stored = viewTypes[id] { return stored }
+        guard let tab else { return .full }
+        return CardViewSupport.defaultType(for: id, on: tab)
     }
 
     var isDefault: Bool { includesNewItems && items.isEmpty }

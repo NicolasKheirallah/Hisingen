@@ -207,6 +207,24 @@ final class VehicleImageLedger: @unchecked Sendable {
         return deleted != nil
     }
 
+    /// The exterior angles stored for one VIN, in one read. The interior (-1) and bare primary
+    /// (-2) sentinels are excluded, so the result names only real `CarRenderAngle` rows.
+    func vehicleImageAngles(for vin: String) -> [Int] {
+        let cleanVIN = vin.normalizedVIN
+        guard !cleanVIN.isEmpty else { return [] }
+        return (try? db.readQuery(
+            sql: "SELECT angle FROM vehicle_images WHERE vin = ? AND angle >= 0 ORDER BY angle;",
+            bindings: { try $0.bindText(cleanVIN, at: 1) },
+            process: { stmt -> [Int] in
+                var angles: [Int] = []
+                while try stmt.stepOrThrow() {
+                    if let angle = stmt.columnInt64(at: 0) { angles.append(Int(angle)) }
+                }
+                return angles
+            }
+        )) ?? []
+    }
+
     func hasVehicleImage(for vin: String, angle: Int) -> Bool {
         let cleanVIN = vin.normalizedVIN
         guard !cleanVIN.isEmpty else { return false }

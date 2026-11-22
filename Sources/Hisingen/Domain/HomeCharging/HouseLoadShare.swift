@@ -31,6 +31,9 @@ struct HouseLoadShare: Equatable, Sendable {
     var currency: String? = nil
     /// The costs include the grid transfer fee from the reader's grid tariff.
     var includesGridFee: Bool = false
+    /// What the home's production meter reported in the same hours, added up. `nil` unless the home
+    /// reports production, so a house without a production metering point never sees the row.
+    var productionKwh: Double? = nil
 
     var restKwh: Double { max(0, houseKwh - carKwh) }
     /// The car's part of the house total, 0 to 1.

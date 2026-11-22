@@ -2,6 +2,16 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 
+/// `NSMenuItem.representedObject` crosses into Objective-C, so the exact command a row sends
+/// travels in an object rather than a boxed Swift enum with associated values.
+private final class QuickControlCommand: NSObject {
+    let command: RemoteCommand
+
+    init(_ command: RemoteCommand) {
+        self.command = command
+    }
+}
+
 @MainActor
 final class StatusItemController: NSObject {
     enum CoreContextAction: String, CaseIterable, Sendable {
@@ -75,7 +85,7 @@ final class StatusItemController: NSObject {
     var onCommandBrand: () -> VehicleBrand = { .polestar }
     var onDismissCommandReceipt: (UUID) -> Void = { _ in }
     var onSettingsChanged: (SettingsChange) -> Void = { _ in }
-    var onSignOut: () -> Void = {}
+    var onSignOut: (SignOutSelection) -> Void = { _ in }
     var onTestConnection: (VehicleBrand) async -> ConnectionCheck = { _ in
         ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
     }
@@ -452,6 +462,20 @@ final class StatusItemController: NSObject {
 
             let remoteSection = menu.addItem(withTitle: L10n.text("Quick Controls"), action: nil, keyEquivalent: "")
             remoteSection.submenu = controlsMenu
+
+            // Timers, OTA and charge locations sit beside the quick controls but stay their own
+            // sections: each row is a complete action, and everything that needs a value from
+            // the reader stays in the Controls tab.
+            let gate = commandGate(for: state)
+            if let timersItem = timersMenuItem(for: state, gate: gate) {
+                menu.addItem(timersItem)
+            }
+            if let softwareItem = softwareMenuItem(for: state, gate: gate) {
+                menu.addItem(softwareItem)
+            }
+            if let locationsItem = chargeLocationsMenuItem(for: state, gate: gate) {
+                menu.addItem(locationsItem)
+            }
         }
 
         // Quick panel geometry switching without a trip into Settings → General.
@@ -565,6 +589,209 @@ final class StatusItemController: NSObject {
         )
         item.target = self
         return item
+    }
+
+    // MARK: - Timers, software updates and charge locations
+
+    /// The gate the Controls tab builds, from the same authority the dispatch uses: the live
+    /// session's brand, not `preferences.activeBrand`. Every new row below is asked of it, and
+    /// every row dispatches through `gate.send`, so the menu cannot offer what the tab refuses.
+    private func commandGate(for state: VehicleState) -> ControlsCommandGate {
+        ControlsCommandGate(
+            state: state,
+            brand: onCommandBrand(),
+            preferences: preferences,
+            remoteCommandInProgress: remoteCommandInProgress,
+            inFlightCommandID: inFlightRemoteCommandID,
+            onRemoteCommand: onRemoteCommand
+        )
+    }
+
+    /// Nil when the reader switched schedules off or the provider cannot write them. The section
+    /// must not claim "No timers reported." for a question the app never asked.
+    private func timersMenuItem(for state: VehicleState, gate: ControlsCommandGate) -> NSMenuItem? {
+        guard MenuBarQuickControls.canOfferTimers(gate: gate) else { return nil }
+        let submenu = NSMenu()
+        let rows = MenuBarQuickControls.timerRows(for: state, gate: gate)
+        if rows.isEmpty {
+            // A blank submenu looks broken. This row says the car reported none, which is a
+            // different statement from "this Mac has none" and is the one the app can make.
+            let empty = NSMenuItem(title: L10n.text("No timers reported."), action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        } else {
+            for (index, row) in rows.enumerated() {
+                let item = quickControlItem(
+                    title: row.title, command: row.command,
+                    availability: row.availability, index: index
+                )
+                item.state = row.isOn ? .on : .off
+                submenu.addItem(item)
+            }
+        }
+        let item = NSMenuItem(title: L10n.text("Timers"), action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    /// Nil when the car reports no software state that the tab would act on. An installable or
+    /// scheduled update is the only reason a menu row exists; every other state is status, and
+    /// status stays in the tab.
+    private func softwareMenuItem(for state: VehicleState, gate: ControlsCommandGate) -> NSMenuItem? {
+        let rows = MenuBarQuickControls.softwareRows(for: state.softwareInfo, gate: gate)
+        guard !rows.isEmpty else { return nil }
+
+        let submenu = NSMenu()
+        var scheduleMenu: NSMenu?
+        for row in rows {
+            if case .schedule = row.kind {
+                let menu = scheduleMenu ?? NSMenu()
+                scheduleMenu = menu
+                menu.addItem(quickControlItem(
+                    title: row.title, command: row.command,
+                    availability: row.availability, index: menu.items.count
+                ))
+            } else {
+                let item = quickControlItem(
+                    title: row.title, command: row.command,
+                    availability: row.availability, index: nil
+                )
+                switch row.kind {
+                case .installNow: item.keyEquivalent = "i"
+                case .cancel: item.keyEquivalent = "c"
+                case .schedule: break
+                }
+                submenu.addItem(item)
+            }
+        }
+        if let scheduleMenu {
+            let scheduleItem = NSMenuItem(title: L10n.text("Schedule"), action: nil, keyEquivalent: "")
+            scheduleItem.submenu = scheduleMenu
+            scheduleItem.keyEquivalent = "s"
+            // The direct install stays first; the three delays are one level in, the same order
+            // the OTA card draws them.
+            submenu.insertItem(scheduleItem, at: min(1, submenu.items.count))
+        }
+
+        let item = NSMenuItem(title: L10n.text("Software Updates"), action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    private func chargeLocationsMenuItem(for state: VehicleState, gate: ControlsCommandGate) -> NSMenuItem? {
+        guard gate.features.contains(.chargeLocations) else { return nil }
+        let submenu = NSMenu()
+
+        if MenuBarQuickControls.canSaveCurrentLocation(in: state, gate: gate) {
+            let add = NSMenuItem(
+                title: L10n.text("Save Current Location…"),
+                action: #selector(contextSaveCurrentLocation),
+                keyEquivalent: "a"
+            )
+            add.target = self
+            add.toolTip = L10n.text("Saves the vehicle's current position. Do this while parked where you normally charge.")
+            submenu.addItem(add)
+        }
+
+        let rows = MenuBarQuickControls.locationRows(for: state, gate: gate)
+        if !rows.isEmpty {
+            if !submenu.items.isEmpty { submenu.addItem(.separator()) }
+            for (index, row) in rows.enumerated() {
+                let item = quickControlItem(
+                    title: row.title, command: row.command,
+                    availability: row.availability, index: index
+                )
+                item.state = row.isOn ? .on : .off
+                submenu.addItem(item)
+            }
+        }
+
+        guard !submenu.items.isEmpty else { return nil }
+        let item = NSMenuItem(title: L10n.text("Charge Locations"), action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    /// One row bound to the exact command it sends. The row is disabled when the gate would
+    /// refuse it, and the reason rides along as the tooltip so a dimmed row explains itself.
+    private func quickControlItem(
+        title: String,
+        command: RemoteCommand,
+        availability: CommandAvailability,
+        index: Int?
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(contextRunQuickControl(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = QuickControlCommand(command)
+        item.isEnabled = availability.isAvailable
+        item.toolTip = availability.shortReason
+        if let index, index < 9 {
+            // A menu item's key equivalent is live only while a menu is tracking. It is not a
+            // global shortcut, which keeps remote commands off a keystroke the reader did not
+            // ask for (DESIGN.md leaves those to a separate decision).
+            item.keyEquivalent = "\(index + 1)"
+        }
+        return item
+    }
+
+    @objc private func contextRunQuickControl(_ sender: NSMenuItem) {
+        guard let control = sender.representedObject as? QuickControlCommand else { return }
+        runQuickControl(control.command)
+    }
+
+    private func runQuickControl(_ command: RemoteCommand) {
+        guard let state = latestState else { return }
+        commandGate(for: state).send(command)
+    }
+
+    @objc private func contextSaveCurrentLocation() {
+        guard let state = latestState else { return }
+        let gate = commandGate(for: state)
+        guard MenuBarQuickControls.canSaveCurrentLocation(in: state, gate: gate) else { return }
+        guard let alias = Self.promptForChargeLocationAlias() else { return }
+
+        // A name is the only value the car needs. The other fields take the sheet's defaults,
+        // so saving this parking spot does not require opening the panel.
+        let bounds = VehicleChargeBounds(capabilities: state.otaCapabilities).amperageRange
+        let reported = state.energy.currentLimitAmps.flatMap { $0 > 0 ? $0 : nil } ?? 16
+        gate.send(.createChargeLocationAtCar(
+            alias: alias,
+            ampLimit: min(bounds.upperBound, max(bounds.lowerBound, reported)),
+            minimumSoc: 0,
+            optimisedCharging: false
+        ))
+    }
+
+    /// A blank name used to become an unnamed location, so an empty Save is refused with the
+    /// same sentence the sheet shows, instead of saving something the reader did not name.
+    private static func promptForChargeLocationAlias() -> String? {
+        var problem: String?
+        while true {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = L10n.text("Save Charge Location")
+            alert.informativeText = [
+                L10n.text("Saves the vehicle's current position. Do this while parked where you normally charge."),
+                problem
+            ]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+            field.placeholderString = L10n.text("Home, Office…")
+            field.setAccessibilityLabel(L10n.text("Name"))
+            alert.accessoryView = field
+            alert.addButton(withTitle: L10n.text("Save"))
+            alert.addButton(withTitle: L10n.text("Cancel"))
+            alert.window.initialFirstResponder = field
+
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+            let alias = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !alias.isEmpty { return alias }
+            problem = L10n.text("Give this location a name.")
+        }
     }
 
     @objc private func contextOpenMaps() {
@@ -751,7 +978,8 @@ final class StatusItemController: NSObject {
         popover.contentSize = NSSize(width: layout.width, height: layout.height)
         let model = PanelModel(display: currentPanelDisplay(), actions: makePanelActions(),
                                history: history, accountConnection: accountConnection,
-                               reverseGeocoder: reverseGeocoder, imageCache: imageCache)
+                               reverseGeocoder: reverseGeocoder, imageCache: imageCache,
+                               fleetStore: fleetStore)
         panelModel = model
         let root = AnyView(PopoverRootView(model: model) { [weak self] panel in
             self?.makeRootView(panel: panel) ?? AnyView(EmptyView())
@@ -867,6 +1095,38 @@ final class StatusItemController: NSObject {
                     : L10n.format("Start Climate (%@)", Format.temperature(celsius: preferences.remoteClimateTemperature, unit: preferences.temperatureUnit, decimals: 0))
                 actions.append(NSAccessibilityCustomAction(name: climateTitle) { [weak self] in
                     self?.contextToggleClimate()
+                    return true
+                })
+            }
+
+            // The same rows the menu carries, so a reader who cannot open a pointer-driven
+            // context menu still reaches them. Only rows the gate would allow right now are
+            // listed; the menu is where the dimmed rows and their reasons stay visible.
+            let gate = commandGate(for: state)
+            for row in MenuBarQuickControls.timerRows(for: state, gate: gate)
+            where row.availability.isAvailable {
+                let name = (row.isOn ? L10n.text("Disable Timer") : L10n.text("Enable Timer"))
+                    + " · " + row.title
+                actions.append(NSAccessibilityCustomAction(name: name) { [weak self] in
+                    self?.runQuickControl(row.command)
+                    return true
+                })
+            }
+            for row in MenuBarQuickControls.softwareRows(for: state.softwareInfo, gate: gate)
+            where row.availability.isAvailable {
+                // Three delay rows would crowd the rotor; Install Now and Cancel are the two
+                // actions a reader needs without the menu.
+                if case .schedule = row.kind { continue }
+                actions.append(NSAccessibilityCustomAction(name: row.title) { [weak self] in
+                    self?.runQuickControl(row.command)
+                    return true
+                })
+            }
+            if MenuBarQuickControls.canSaveCurrentLocation(in: state, gate: gate) {
+                actions.append(NSAccessibilityCustomAction(
+                    name: L10n.text("Save Current Location…")
+                ) { [weak self] in
+                    self?.contextSaveCurrentLocation()
                     return true
                 })
             }
@@ -1007,6 +1267,11 @@ final class StatusItemController: NSObject {
             let prefix = isCurrent ? "● " : "○ "
             lines.append(prefix + parts.joined(separator: " · "))
         }
+        // The tooltip is the only menu-bar statement that does not depend on notification
+        // permission or on the panel being opened, so the stand-down belongs here too.
+        if signInRequired {
+            lines.insert(L10n.text("Sign in again: Hisingen cannot refresh"), at: 0)
+        }
         statusItem.button?.toolTip = lines.isEmpty ? "Hisingen" : lines.joined(separator: "\n")
     }
 
@@ -1099,7 +1364,7 @@ final class StatusItemController: NSObject {
                 self?.onDismissCommandReceipt(id)
             },
             onSettingsChanged: { [weak self] change in self?.onSettingsChanged(change) },
-            onSignOut: { [weak self] in self?.onSignOut() },
+            onSignOut: { [weak self] selection in self?.onSignOut(selection) },
             onTestConnection: { [weak self] brand in
                 await self?.onTestConnection(brand) ?? ConnectionCheck(success: false, message: L10n.text("Connection testing is not available."), failureKind: nil)
             },
@@ -1128,6 +1393,9 @@ final class StatusItemController: NSObject {
         // instead of the window snapping while content springs.
         let layout = PanelLayout.resolve(from: preferences)
         let newSize = NSSize(width: layout.width, height: layout.height)
+        // Every coalesced telemetry refresh lands here; most do not change the geometry, and an
+        // animation group over an unchanged size still costs the popover a layout pass.
+        guard popover.contentSize != newSize || hosting.preferredContentSize != newSize else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.large
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
