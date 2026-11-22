@@ -33,6 +33,21 @@ enum AutomationCommandPolicy {
         ].filter(allows)
     }
 
+    /// Whether sending `command` a second time after an unclear failure does no harm. A failure
+    /// can be a request the car already acted on (a timeout), so an unattended retry is only made
+    /// for commands that end in the same state however many times they run. An allowlist rather
+    /// than the risk class: a new routine command is not retried until someone has decided it can
+    /// be.
+    static func isSafeToRepeat(_ command: RemoteCommand) -> Bool {
+        switch command {
+        case .lock, .closeWindows, .startClimate, .stopClimate, .startPreCleaning, .stopPreCleaning,
+             .startChargingOverride, .stopChargingOverride:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// The climate settings the reader saved for remote starts.
     struct SavedClimate: Equatable, Sendable {
         var temperatureCelsius: Float

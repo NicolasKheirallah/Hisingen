@@ -156,6 +156,29 @@ struct ScheduledCommandControllerTests {
     }
 
     @Test
+    func aFailedSendOfACommandThatIsNotSafeToRepeatIsNotRetried() async {
+        let harness = ScheduleHarness(
+            now: moment(2026, 11, 18, 7, 30),
+            outcomes: Array(repeating: .failed(reason: "network"), count: 8))
+        harness.preferences.scheduledCommands = [
+            ScheduledCommand(hour: 7, minute: 30, command: .setChargeTarget(80))
+        ]
+
+        for _ in 0..<4 {
+            await harness.controller.evaluate()
+        }
+
+        #expect(harness.sent.count == 1)
+    }
+
+    @Test
+    func everyActionTheEditorOffersIsSafeToRepeat() {
+        for command in AutomationCommandPolicy.choices() {
+            #expect(AutomationCommandPolicy.isSafeToRepeat(command), "\(command.identifier)")
+        }
+    }
+
+    @Test
     func aFailedSendThatLaterSucceedsIsNotRepeated() async {
         let harness = ScheduleHarness(
             now: moment(2026, 11, 18, 7, 30),

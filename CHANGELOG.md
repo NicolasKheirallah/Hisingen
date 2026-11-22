@@ -352,7 +352,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   scheduled minute, before the car's data had loaded, lost the occurrence: the timer was set for
   the next day while the catch-up window lasted fifteen minutes. A deferred occurrence now retries
   every minute inside that window, and a failed send, including one lost to the network, is
-  repeated up to three times before the occurrence is given up.
+  repeated up to three times before the occurrence is given up. Only an action that ends in the
+  same state however often it runs is repeated, because a lost request may already have reached
+  the car.
 
 - **Weather requests now send the car's position rounded to two decimals.** The current-conditions
   and hourly-forecast requests to Open-Meteo carried the coordinates at full precision. Weather is

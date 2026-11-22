@@ -20,9 +20,13 @@ final class ScheduledCommandController {
     private let calendar: Calendar
     private let scheduler: AsyncTimerLoop
     private var evaluationInProgress = false
-    /// Failed sends of the occurrence in flight, by occurrence key. Cleared on success or when
-    /// the limit ends the retries.
-    private var failedSends: [String: Int] = [:]
+    /// Failed sends of the occurrence in flight, per schedule. Dropped on success, when the limit
+    /// ends the retries, and as soon as the schedule is no longer due.
+    private struct FailedSends {
+        var occurrence: String
+        var count: Int
+    }
+    private var failedSends: [UUID: FailedSends] = [:]
 
     /// How long to wait before trying a deferred or failed occurrence again.
     static let retryInterval: TimeInterval = 60
@@ -85,10 +89,14 @@ final class ScheduledCommandController {
         let moment = reference ?? now()
         let schedules = preferences.scheduledCommands
         preferences.pruneScheduledCommandFiredOccurrences(keeping: Set(schedules.map(\.id)))
+        failedSends = failedSends.filter { id, _ in schedules.contains { $0.id == id } }
 
         var retryNeeded = false
         for schedule in schedules {
-            guard let fireDate = schedule.isDue(now: moment, calendar: calendar) else { continue }
+            guard let fireDate = schedule.isDue(now: moment, calendar: calendar) else {
+                failedSends[schedule.id] = nil
+                continue
+            }
             let key = ScheduledCommand.occurrenceKey(id: schedule.id, fireDate: fireDate, calendar: calendar)
             guard preferences.scheduledCommandFiredOccurrence(for: schedule.id) != key else { continue }
             // The ledger is written before the send: a provider that answers slowly must not let
@@ -102,19 +110,20 @@ final class ScheduledCommandController {
                 preferences.setScheduledCommandFiredOccurrence(nil, for: schedule.id)
                 retryNeeded = true
             case .failed:
-                // A failure includes a request lost to the network, and every action a schedule
-                // can carry is safe to repeat, so it is retried a few times before the
-                // occurrence is given up.
-                let failures = (failedSends[key] ?? 0) + 1
-                if failures < Self.maxFailedSends {
-                    failedSends[key] = failures
+                // A failure includes a request lost to the network, which the car may still have
+                // acted on. Only a command that is safe to repeat is retried, a few times, before
+                // the occurrence is given up.
+                let earlier = failedSends[schedule.id]?.occurrence == key ? (failedSends[schedule.id]?.count ?? 0) : 0
+                let failures = earlier + 1
+                if failures < Self.maxFailedSends, AutomationCommandPolicy.isSafeToRepeat(schedule.command) {
+                    failedSends[schedule.id] = FailedSends(occurrence: key, count: failures)
                     preferences.setScheduledCommandFiredOccurrence(nil, for: schedule.id)
                     retryNeeded = true
                 } else {
-                    failedSends[key] = nil
+                    failedSends[schedule.id] = nil
                 }
             case .sent:
-                failedSends[key] = nil
+                failedSends[schedule.id] = nil
             case .alreadyQueued, .coolingDown:
                 break
             }
