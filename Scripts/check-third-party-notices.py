@@ -132,13 +132,42 @@ def check_hosts(notices: str) -> list[str]:
     return errors
 
 
+def fix_versions(notices: str, pins: list[dict]) -> tuple[str, list[str]]:
+    """Bring the pinned-version cells and versioned license links in line with Package.resolved.
+
+    This is bookkeeping for a dependency bump. It does not judge licenses: whoever merges the
+    bump still confirms the package's LICENSE and NOTICE files did not change."""
+    changes = []
+    for pin in pins:
+        repo = pin["location"].removesuffix(".git").split("github.com/")[-1]
+        version = pin["state"].get("version")
+        if not version:
+            continue
+        row = re.compile(rf"(\|\s*\[[^\]]*\]\(https://github\.com/{re.escape(repo)}\)\s*\|\s*)([0-9][^\s|]*)(\s*\|)", re.IGNORECASE)
+        link = re.compile(rf"({re.escape(repo)}/blob/)([^/]+)(/)", re.IGNORECASE)
+        for pattern in (row, link):
+            def replace(match):
+                if match.group(2) != version:
+                    changes.append(f"{repo}: {match.group(2)} -> {version}")
+                return match.group(1) + version + match.group(3)
+            notices = pattern.sub(replace, notices)
+    return notices, changes
+
+
 def main() -> int:
     notices = NOTICES.read_text()
+    if "--fix" in sys.argv[1:]:
+        notices, changes = fix_versions(notices, json.loads(RESOLVED.read_text())["pins"])
+        if changes:
+            NOTICES.write_text(notices)
+        print("\n".join(f"updated {change}" for change in changes) or "No pinned version differed from Package.resolved.")
     errors = check_packages(notices) + check_hosts(notices) + check_projects(notices)
     if errors:
         print("THIRD_PARTY_NOTICES.md is out of date:", file=sys.stderr)
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
+        print("Version drift after a dependency bump: run `python3 Scripts/check-third-party-notices.py --fix`,"
+              " then confirm the license and notice texts did not change.", file=sys.stderr)
         return 1
     print("THIRD_PARTY_NOTICES.md matches Package.resolved, the hosts and the projects named in Sources/.")
     return 0

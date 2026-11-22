@@ -6,32 +6,33 @@ Deploy site, Live Account Integration, Auto Release, Prepare Release, and Releas
 ## Required validation
 
 `ci.yml` runs on main pushes, main pull requests, merge groups, and manual dispatch.
-It cancels superseded runs for the same branch or pull request. Its jobs are:
+A pull request's run is cancelled when a newer push arrives. Main pushes and merge
+groups are never cancelled, so every merged commit gets a complete run. Its jobs are:
 
 | Job | Contract |
 | --- | --- |
-| `portable-checks` | Shared lint, source hygiene, localization, documentation, notices, VIN scoping, contrast, source invariants, updater checks, and release/test-runner regressions. |
-| `build-and-test (macos-15)` | Native arm64 build/tests and universal app/DMG packaging on the deployment baseline. |
-| `build-and-test (macos-26-intel)` | Native x86_64 build/tests on the newer supported runtime. |
-| `ci-required` | Runs even after failure/cancellation and accepts only success from every required validation job. |
+| `changes` | Reports whether the diff can affect the app. Documentation, `site/`, `home-assistant/` and issue templates cannot; anything else, an empty diff or an unknown base commit can. |
+| `portable-checks` | Shared lint, workflow security audit (zizmor), source hygiene, localization, documentation, notices, VIN scoping, contrast, source invariants, updater checks, and release/test-runner regressions. |
+| `build-and-test (macos-15)` | Native arm64 build, tests and coverage floor on the deployment baseline. |
+| `build-and-test (macos-26-intel)` | Native x86_64 build, tests and coverage floor on the newer supported runtime. |
+| `package-arch (arm64)`, `package-arch (x86_64)` | Each architecture's release binary, built natively on its own runner in parallel with the tests. |
+| `package` | Merges the two binaries, builds the ad-hoc app and DMG, validates both and runs the smoke test. |
+| `ci-required` | Runs even after failure or cancellation. Accepts only success from every job above, except that the macOS jobs may be skipped when `changes` reported a documentation-only diff. |
 
-Temporary compatibility jobs emit the previous required-check names during the
-protection migration. They depend on the complete portable phase. After the new
-workflow succeeds on main, switch the main ruleset to `ci-required` with:
+`ci-required` is the only status check the `protect-main` ruleset requires, so jobs can be
+renamed or added without touching repository settings. Inspect or re-apply the ruleset with
+`python3 Scripts/configure-ci-protection.py --aggregate` (add `--apply` to change it). See
+[releases.md](releases.md) for production restrictions.
 
-```sh
-python3 Scripts/configure-ci-protection.py --apply --aggregate --enable-immutable
-```
-
-The command refuses the aggregate migration until that check has succeeded on
-main. Its default migration mode requires the existing check names and removes
-the obsolete macOS 14 requirement. Inspect settings without changing them by
-omitting `--apply`. See [releases.md](releases.md) for production restrictions.
+Release reads the same results: when CI's `ci-required`, both `build-and-test` jobs and
+`package` all succeeded for the tagged commit, Release skips its own repeat of the test
+suites. Anything less, including a documentation-only CI run, and Release runs them itself.
 
 ## Shared local and hosted phases
 
-`Scripts/ci-checks.sh portable` and `Scripts/ci-checks.sh macos` are the executable
-phase definitions. Workflows and local CI call these scripts rather than copying
+`Scripts/ci-checks.sh` defines the phases: `portable`, `macos-test`, `build-arch ARCH`
+and `package` are what the hosted jobs run, and `macos` runs the test phase plus the
+universal package in one go, which is what local CI and Release's dry run use. Workflows and local CI call these scripts rather than copying
 the validation commands into multiple places.
 
 ```sh
@@ -61,6 +62,10 @@ CodeQL job builds the dependencies before the tracer starts, then touches the ap
 sources so the instrumented build compiles and extracts only this repository's
 module.
 
+Line coverage has a committed floor in `.github/coverage-floor.json`. A run below it fails,
+and a run two or more points above it prints a reminder. Raise the floor in the change that
+adds the tests; it only moves up.
+
 ## Credential-free tests and packaging
 
 Normal CI sets `HISINGEN_BUILD_CONFIGURATION=fixture`. Secret injection then
@@ -89,18 +94,25 @@ creating AppDelegate, opening persistence, or starting account/network activity.
 
 Build/test jobs upload results and diagnostic files even after failure, with
 bounded retention. Their summaries record commit, runner and selected toolchain.
-Build failures remain failures when output is piped into a log. Test discovery
-compiles the app and test targets once, with coverage and warnings-as-errors;
-execution reuses that build. Discovery compiler diagnostics are retained even
-when the build fails before tests start.
+Build failures remain failures when output is piped into a log. `Scripts/test.sh` compiles
+the app and test targets once with `swift build --build-tests`, using the run's coverage and
+warnings-as-errors flags. Discovery and execution then use `--skip-build`. Discovery must not
+build: `swift test list` ignores `--enable-code-coverage`, so letting it compile left
+uninstrumented products and forced a second full compile in the run. The compiler output is
+kept in `build.log` even when the build fails before tests start, and the log marks the build,
+discover and run stages with elapsed seconds.
 
-`security.yml` runs Swift CodeQL on main changes, on its weekly schedule, and by
-manual dispatch. Its fixture build uses the same pinned Xcode. CodeQL is advisory
+`security.yml` runs Swift CodeQL on main pushes, on its weekly schedule, by manual dispatch,
+and on pull requests that touch `Sources/`, `Resources/`, the package files or the CodeQL
+build inputs. Its fixture build uses the same pinned Xcode. CodeQL is advisory
 to publication unless its result is explicitly added to the repository policy;
 compilation success alone is not a claim that no security alerts exist.
 
 Dependency Review runs for pull requests and rejects high/critical dependency
-findings. Dependabot tracks pinned Actions and Swift dependencies. The package
+findings. Dependabot tracks pinned Actions and Swift dependencies and waits seven days after a release
+before proposing it; security updates skip that wait. A bump that moves a pinned version breaks
+`check-third-party-notices.py` by design: run it with `--fix` on the branch, then confirm the
+package's license and notice texts did not change. The package
 now includes Sparkle and gRPC/NIO dependencies; see Package.resolved and the
 third-party notices for the resolved set.
 
@@ -114,9 +126,10 @@ contains no credentials.
 Pages serves the Volvo OAuth callback and the signed Sparkle appcast. Release
 calls the reusable Pages workflow with its verified release artifact and waits
 for deployment. The deployment verifier checks byte equality over HTTPS and
-availability/length of referenced release assets. A callback-only main deployment
-preserves the latest published release feed instead of restoring a stale source
-copy.
+availability/length of referenced release assets. The feed's release notes ship in
+the same Pages artifact, so the verifier also compares their bytes. A callback-only
+main deployment preserves the live feed and its notes instead of restoring a stale
+source copy.
 
 Live integration remains manual and separate from deterministic CI. Hosted soak
 duration must be 60 through 1800 seconds; longer soaks run locally. Polestar

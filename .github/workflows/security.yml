@@ -3,8 +3,19 @@ name: Security
 on:
   push:
     branches: [main]
+  # Pull requests run CodeQL only when they can change what it analyzes. A documentation or
+  # script-only change would spend up to an hour of macOS time and add no findings.
   pull_request:
     branches: [main]
+    paths:
+      - "Sources/**"
+      - "Package.swift"
+      - "Package.resolved"
+      - "Resources/**"
+      - "Scripts/inject-secrets.sh"
+      - "Scripts/select-xcode.sh"
+      - ".github/ci-toolchain.json"
+      - ".github/workflows/security.yml"
   schedule:
     # 04:17 UTC every Monday — off-peak, avoids stacking with other scheduled jobs.
     - cron: "17 4 * * 1"

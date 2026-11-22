@@ -15,7 +15,7 @@ A lightweight, practical pass, not a compliance exercise. Scope: the Hisingen ma
 | VIN | Cached state, notification identifiers, logs (never full state) | Identifies a specific physical vehicle |
 | Account information (email, nickname) | Email: Keychain; nickname: `UserDefaults` | Privacy |
 | Future/experimental remote-control credentials or capability | Compile-time flag, in-memory only today | If ever enabled broadly, would allow physical vehicle actuation |
-| Release artifacts (`Hisingen.dmg`, `Hisingen.zip`) | GitHub Releases | Supply-chain integrity: a tampered build would run with the user's Polestar/Volvo credentials |
+| Release artifacts (`Hisingen.dmg`, `Hisingen.app.zip`, `SHA256SUMS`) | GitHub Releases | Supply-chain integrity: a tampered build would run with the user's Polestar/Volvo credentials |
 
 ## Threats (STRIDE, where it actually helps)
 

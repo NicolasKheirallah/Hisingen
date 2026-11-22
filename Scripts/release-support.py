@@ -17,6 +17,15 @@ from datetime import datetime, timezone
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 
+# Everything a person downloads from a release: the installer, the app archive and the
+# checksums that cover both. The feed, notes and manifest are pipeline inputs, not downloads.
+PUBLIC_ASSETS = ("Hisingen.dmg", "Hisingen.app.zip", "SHA256SUMS")
+
+# Check runs that must all have succeeded, from GitHub Actions, on the commit being released
+# before Release may skip its own test job.
+GITHUB_ACTIONS_APP_ID = 15368
+CI_PROOF_CHECKS = ("ci-required", "build-and-test (macos-15)", "build-and-test (macos-26-intel)", "package")
+
 
 def run(*args, check=True, input=None):
     result = subprocess.run(args, text=True, input=input, capture_output=True, timeout=180)
@@ -227,24 +236,77 @@ def monotonic(tag):
         raise ValueError("A newer version is already published; refusing distribution rollback")
 
 
+def ci_proof(sha):
+    """True when the newest GitHub Actions run of every required check on `sha` succeeded."""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ValueError("ci-proof needs a full commit SHA")
+    listing = run("gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100", "--jq", ".check_runs[] | {name, conclusion, completed_at, app: .app.id}").stdout
+    return ci_proof_from(json.loads(line) for line in listing.splitlines() if line.strip())
+
+
+def ci_proof_from(check_runs):
+    newest = {}
+    for check in check_runs:
+        if check.get("app") != GITHUB_ACTIONS_APP_ID or check.get("name") not in CI_PROOF_CHECKS:
+            continue
+        if check.get("name") not in newest or (check.get("completed_at") or "") > (newest[check["name"]].get("completed_at") or ""):
+            newest[check["name"]] = check
+    return all(newest.get(name, {}).get("conclusion") == "success" for name in CI_PROOF_CHECKS)
+
+
+def release_notes_header():
+    return """## Verify your download
+
+This release has three files: `Hisingen.dmg` (installer), `Hisingen.app.zip` (the app archive Hisingen's updater downloads) and `SHA256SUMS` (checksums for both).
+
+Run these in the folder holding the files you downloaded.
+
+```sh
+# Checksum, for the file you downloaded
+grep Hisingen.dmg SHA256SUMS | shasum -a 256 -c -
+
+# Build provenance, signed by GitHub Actions for this repository
+gh attestation verify Hisingen.dmg --owner NicolasKheirallah
+
+# Developer ID signature and Apple notarization ticket
+xcrun stapler validate Hisingen.dmg
+spctl -a -t open --context context:primary-signature -vv Hisingen.dmg
+```
+
+For `Hisingen.app.zip`, use its name in the commands above, unzip it, then run `spctl -a -t exec -vv Hisingen.app`.
+"""
+
+
 def publish(tag):
     data = verify_manifest("release-manifest.json", tag)
+    missing = [name for name in PUBLIC_ASSETS if name not in data["files"]]
+    if missing:
+        raise ValueError("Release manifest is missing public assets: " + ", ".join(missing))
     monotonic(tag)
-    found = run("gh", "release", "view", tag, "--json", "isDraft", check=False)
+    found = run("gh", "release", "view", tag, "--json", "isDraft,assets", check=False)
     if found.returncode:
         if "not found" not in found.stderr.lower() and "404" not in found.stderr:
             raise RuntimeError(found.stderr)
-        run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", tag, "--generate-notes")
-        is_draft = True
+        run("gh", "release", "create", tag, "--verify-tag", "--draft", "--title", tag, "--generate-notes", "--notes", release_notes_header())
+        is_draft, existing = True, []
     else:
-        is_draft = json.loads(found.stdout)["isDraft"]
-    files = list(data["files"]) + ["release-manifest.json"]
+        details = json.loads(found.stdout)
+        is_draft, existing = details["isDraft"], [asset["name"] for asset in details.get("assets", [])]
+    files = list(PUBLIC_ASSETS)
     if is_draft:
+        for name in existing:
+            if name not in PUBLIC_ASSETS:
+                run("gh", "release", "delete-asset", tag, name, "--yes")
         run("gh", "release", "upload", tag, *files, "--clobber")
     with tempfile.TemporaryDirectory(prefix="hisingen-published-") as temp:
         run("gh", "release", "download", tag, "--dir", temp)
+        if is_draft:
+            unexpected = sorted(path.name for path in Path(temp).iterdir() if path.name not in PUBLIC_ASSETS)
+            if unexpected:
+                raise ValueError("Draft release has unexpected assets: " + ", ".join(unexpected))
         for file in files:
-            if digest(Path(temp) / Path(file).name) != digest(file):
+            published = Path(temp) / Path(file).name
+            if not published.is_file() or digest(published) != digest(file):
                 raise ValueError(f"Published asset differs from checkpoint: {file}")
     if is_draft:
         monotonic(tag)
@@ -329,7 +391,7 @@ def notarize(artifact):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("validate", "prepare", "auto", "manifest", "verify-manifest", "monotonic", "publish", "notarize"))
+    parser.add_argument("command", choices=("validate", "prepare", "auto", "manifest", "verify-manifest", "monotonic", "publish", "notarize", "ci-proof"))
     parser.add_argument("values", nargs="*")
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -349,6 +411,14 @@ def main():
         publish(*args.values)
     elif args.command == "notarize":
         notarize(*args.values)
+    elif args.command == "ci-proof":
+        # Anything short of a clear green result means "run the tests", never "block the release".
+        try:
+            proven = ci_proof(*args.values)
+        except (RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            print(f"No CI proof available: {error}", file=sys.stderr)
+            proven = False
+        print("true" if proven else "false")
 
 
 if __name__ == "__main__":

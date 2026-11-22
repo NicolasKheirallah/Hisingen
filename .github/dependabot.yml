@@ -7,6 +7,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Wait a week after a release before proposing it, so a compromised or yanked version is
+    # usually withdrawn first. Security updates ignore the cooldown.
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
@@ -20,6 +24,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       swift-packages:
         patterns:
