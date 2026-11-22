@@ -68,6 +68,51 @@ struct SolarAndGridCarbonTests {
         #expect(items.contains { $0.name == "forecast_days" && $0.value == "2" })
     }
 
+    @Test
+    func solarURLCarriesCoordinatesRoundedToTwoDecimals() throws {
+        let url = try #require(SolarForecastClient.url(latitude: 57.708870123, longitude: 11.974559876))
+        let items = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first { $0.name == "latitude" }?.value == "57.71")
+        #expect(items.first { $0.name == "longitude" }?.value == "11.97")
+        #expect(!url.absoluteString.contains("708870"))
+        #expect(!url.absoluteString.contains("974559"))
+    }
+
+    @Test
+    func roundingKeepsTheSignAndPadsToTwoDecimals() {
+        #expect(SolarForecastClient.roundedCoordinate(-33.8688) == "-33.87")
+        #expect(SolarForecastClient.roundedCoordinate(11.9) == "11.90")
+        #expect(SolarForecastClient.roundedCoordinate(0) == "0.00")
+    }
+
+    @Test
+    func theSolarCacheServesAnAnswerUntilItsLifetimeEnds() async {
+        let cache = SolarForecastCache()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let forecast = SolarForecast(points: [SolarForecastPoint(time: start, wattsPerSquareMeter: 120)])
+
+        await cache.store(forecast, for: "gothenburg", now: start)
+
+        let fresh = await cache.entry(for: "gothenburg", now: start.addingTimeInterval(29 * 60))
+        #expect(fresh?.forecast == forecast)
+        let stale = await cache.entry(for: "gothenburg", now: start.addingTimeInterval(31 * 60))
+        #expect(stale == nil)
+    }
+
+    @Test
+    func aFailedSolarAnswerIsRememberedBrieflyAndNotAsAForecast() async {
+        let cache = SolarForecastCache()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+        await cache.store(nil, for: "gothenburg", now: start)
+
+        let held = await cache.entry(for: "gothenburg", now: start.addingTimeInterval(4 * 60))
+        #expect(held != nil)
+        #expect(held?.forecast == nil)
+        let expired = await cache.entry(for: "gothenburg", now: start.addingTimeInterval(6 * 60))
+        #expect(expired == nil)
+    }
+
     // MARK: - Grid carbon
 
     private let carbonJSON = """

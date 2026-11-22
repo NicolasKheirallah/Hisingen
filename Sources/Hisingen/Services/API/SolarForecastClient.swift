@@ -5,18 +5,33 @@ import Foundation
 /// Hisingen knows neither the panel array nor the inverter, and it will not invent either.
 struct SolarForecastClient: Sendable {
     let http: ThirdPartyHTTP
+    let cache: SolarForecastCache
 
-    init(session: URLSession = .shared, diagnosticLog: APIDiagnosticLogStore = .shared) {
+    init(session: URLSession = .shared,
+         diagnosticLog: APIDiagnosticLogStore = .shared,
+         cache: SolarForecastCache = .shared) {
         http = ThirdPartyHTTP(session: session, diagnosticLog: diagnosticLog)
+        self.cache = cache
     }
 
     func forecast(latitude: Double, longitude: Double) async -> SolarForecast? {
         guard latitude.isFinite, longitude.isFinite,
               (-90...90).contains(latitude), (-180...180).contains(longitude),
-              let url = Self.url(latitude: latitude, longitude: longitude),
-              let json = await http.json(url, operation: "Open-Meteo solar forecast")
+              let url = Self.url(latitude: latitude, longitude: longitude)
         else { return nil }
-        return Self.forecast(from: json)
+        let key = url.absoluteString
+        if let cached = await cache.entry(for: key, now: Date()) { return cached.forecast }
+        let json = await http.json(url, operation: "Open-Meteo solar forecast")
+        let result = json.flatMap(Self.forecast(from:))
+        await cache.store(result, for: key, now: Date())
+        return result
+    }
+
+    /// The request's coordinates are rounded to two decimals, about a kilometre. A radiation
+    /// forecast does not get better with more digits, and the car's exact position stays out of
+    /// the request.
+    static func roundedCoordinate(_ value: Double) -> String {
+        String(format: "%.2f", (value * 100).rounded() / 100)
     }
 
     static func url(latitude: Double, longitude: Double) -> URL? {
@@ -25,8 +40,8 @@ struct SolarForecastClient: Sendable {
         components.host = "api.open-meteo.com"
         components.path = "/v1/forecast"
         components.queryItems = [
-            URLQueryItem(name: "latitude", value: String(latitude)),
-            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "latitude", value: roundedCoordinate(latitude)),
+            URLQueryItem(name: "longitude", value: roundedCoordinate(longitude)),
             URLQueryItem(name: "hourly", value: "shortwave_radiation"),
             URLQueryItem(name: "forecast_days", value: "2"),
             // Local wall-clock hours, so the line's peak time reads like the clock on the wall.
@@ -60,5 +75,37 @@ struct SolarForecastClient: Sendable {
             ))
         }
         return points.isEmpty ? nil : SolarForecast(points: points)
+    }
+}
+
+/// Remembers the last forecast per rounded location, so the planner card does not ask Open-Meteo
+/// again on every vehicle refresh. A failed answer is remembered for a shorter time, so an outage
+/// is not retried every minute either.
+actor SolarForecastCache {
+    static let shared = SolarForecastCache()
+
+    struct Entry: Sendable {
+        let forecast: SolarForecast?
+        let storedAt: Date
+    }
+
+    static let successLifetime: TimeInterval = 30 * 60
+    static let failureLifetime: TimeInterval = 5 * 60
+
+    private var entries: [String: Entry] = [:]
+
+    func entry(for key: String, now: Date) -> Entry? {
+        guard let entry = entries[key] else { return nil }
+        let lifetime = entry.forecast == nil ? Self.failureLifetime : Self.successLifetime
+        let age = now.timeIntervalSince(entry.storedAt)
+        guard age >= 0, age < lifetime else {
+            entries[key] = nil
+            return nil
+        }
+        return entry
+    }
+
+    func store(_ forecast: SolarForecast?, for key: String, now: Date) {
+        entries[key] = Entry(forecast: forecast, storedAt: now)
     }
 }
