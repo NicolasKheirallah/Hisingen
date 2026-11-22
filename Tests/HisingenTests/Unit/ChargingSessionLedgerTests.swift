@@ -225,8 +225,13 @@ let raw = try SQLiteDatabase.inMemory()
 
         let repaired = try #require(ledger.recentChargingSessions(for: vin).first)
         #expect(repaired.energySource == .socCapacityEstimate)
-        #expect(abs(repaired.energyDeliveredKwh - 0.70 * 79) < 0.01)
-        #expect(abs((repaired.estimatedCost ?? 0) - 14.245 * (0.70 * 79) / 38.5) < 0.01)
+        // Split into typed steps: one expression mixing `??` with several literal operations
+        // exceeds the type checker's time limit on Swift 6.2.
+        let expectedEnergy: Double = 0.70 * 79
+        let expectedCost: Double = 14.245 * expectedEnergy / 38.5
+        let actualCost: Double = repaired.estimatedCost ?? 0
+        #expect(abs(repaired.energyDeliveredKwh - expectedEnergy) < 0.01)
+        #expect(abs(actualCost - expectedCost) < 0.01)
         #expect(repaired.spotEstimatedCost == nil)
         #expect(ledger.legacySummaryVINs().isEmpty)
     }
