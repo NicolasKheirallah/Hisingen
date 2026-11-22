@@ -1363,8 +1363,20 @@ final class HomeChargingModel: ObservableObject {
     /// this is the outer bound the app is willing to send at all.
     static let chargerCurrentLimitRange = 6...32
 
-    static func clampedCurrentLimit(_ amps: Int) -> Int {
-        min(max(amps, chargerCurrentLimitRange.lowerBound), chargerCurrentLimitRange.upperBound)
+    static func clampedCurrentLimit(_ amps: Int, within range: ClosedRange<Int> = chargerCurrentLimitRange) -> Int {
+        min(max(amps, range.lowerBound), range.upperBound)
+    }
+
+    /// The outer bound narrowed to what the charger's own `number` entity accepts. Home Assistant
+    /// publishes that as `min` and `max` attributes; a missing, non-numeric or contradictory pair
+    /// leaves the outer bound alone.
+    static func currentLimitRange(fromEntityAttributes attributes: [String: HAJSONValue]) -> ClosedRange<Int> {
+        let outer = chargerCurrentLimitRange
+        guard let minimum = attributes["min"]?.doubleValue, let maximum = attributes["max"]?.doubleValue,
+              abs(minimum) < 1_000_000, abs(maximum) < 1_000_000 else { return outer }
+        let lower = max(outer.lowerBound, Int(minimum.rounded(.up)))
+        let upper = min(outer.upperBound, Int(maximum.rounded(.down)))
+        return lower <= upper ? lower...upper : outer
     }
 
     /// Sets the charger's current limit through Home Assistant.
@@ -1383,7 +1395,11 @@ final class HomeChargingModel: ObservableObject {
         guard let client else {
             return L10n.text("Hisingen is not connected to Home Assistant yet.")
         }
-        let clamped = Self.clampedCurrentLimit(amps)
+        // The entity's own range is the authority; the outer bound only caps what is ever sent.
+        // A failed read is not a failed write, so it falls back to the outer bound.
+        let entityRange = ((try? await client.state(of: entity)) ?? nil)
+            .map { Self.currentLimitRange(fromEntityAttributes: $0.attributes) }
+        let clamped = Self.clampedCurrentLimit(amps, within: entityRange ?? Self.chargerCurrentLimitRange)
         do {
             _ = try await client.callService(
                 domain: "number",
