@@ -263,6 +263,10 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A widget button or Shortcut no longer hangs when the app never finishes launching.** An intent
+  performed while Hisingen was still starting waited for the app to install its command handler,
+  with no limit. It now waits 30 seconds and then answers "Open Hisingen to send this command."
+
 - **A history database written by a newer Hisingen is refused instead of read with the wrong
   schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes
   the handle before any ledger reads it, so the app cannot show half-decoded rows or migrate a
