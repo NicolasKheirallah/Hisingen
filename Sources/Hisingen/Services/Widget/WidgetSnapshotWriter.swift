@@ -1,14 +1,11 @@
 import Foundation
+import HisingenIntents
 import OSLog
 import WidgetKit
 
 /// Writes the desktop widget's snapshot into the App Group container after each completed
 /// vehicle refresh, and asks WidgetKit to reload the timelines.
 enum WidgetSnapshotWriter {
-    /// Derived from the app's bundle id (`io.kheirallah.hisingen`), as the App Group rules
-    /// require. Both the app and the appex entitlements declare it.
-    static let appGroupID = "group.io.kheirallah.hisingen"
-
     private static let logger = AppLog.logger("widget")
 
     /// True only inside the real app bundle. The refresh coordinator keeps the publication
@@ -209,14 +206,10 @@ enum WidgetSnapshotWriter {
     }
 
     private static func fileURL(directory: URL?) -> URL? {
-        let base = directory
-            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
-        return base?.appendingPathComponent(VehicleWidgetSnapshot.fileName)
+        WidgetSnapshotFile.url(named: VehicleWidgetSnapshot.fileName, directory: directory)
     }
 
     private static func garageFileURL(directory: URL?) -> URL? {
-        let base = directory
-            ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
-        return base?.appendingPathComponent(VehicleWidgetGarageSnapshot.fileName)
+        WidgetSnapshotFile.url(named: VehicleWidgetGarageSnapshot.fileName, directory: directory)
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import HisingenIntents
 import Testing
 @testable import Hisingen
 
@@ -12,14 +13,20 @@ struct WidgetSnapshotWriterTests {
     /// discipline without depending on that file (it belongs to the other test target).
     private final class ScopedDefaults {
         nonisolated(unsafe) let defaults: UserDefaults
+        let keychain: KeychainStore
         private let suiteName: String
 
         init() {
             suiteName = "WidgetSnapshotWriterTests.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: suiteName)!
+            keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         }
 
         deinit { defaults.removePersistentDomain(forName: suiteName) }
+
+        @MainActor func preferences() -> PreferencesStore {
+            PreferencesStore(defaults: defaults, keychain: keychain)
+        }
     }
 
     private let fixedNow = Date(timeIntervalSince1970: 1_770_000_000)

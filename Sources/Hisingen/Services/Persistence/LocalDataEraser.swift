@@ -66,16 +66,23 @@ final class LocalDataEraser {
     /// Removes the desktop widget's App Group mirror. Injectable so a test can assert the erase
     /// reaches it without touching the real container.
     private let clearWidgetSnapshot: @Sendable () -> Void
+    /// Clears the per-brand account records and the Keychain bundles that hold their secrets.
+    /// `nil` means the real account store. Injectable for the same reason as
+    /// `clearWidgetSnapshot`: a full-fleet erase must clear accounts in the app, but no test
+    /// should block on an interactive Keychain authorization prompt to finish.
+    private let clearAccounts: (() -> Void)?
 
     init(database: VehicleDatabase, preferences: PreferencesStore, imageCache: CarImageCache,
          memoryCaches: VehicleMemoryCacheRegistry = .shared, beforeSQL: (@Sendable () -> Void)? = nil,
-         clearWidgetSnapshot: @escaping @Sendable () -> Void = { WidgetSnapshotWriter.remove() }) {
+         clearWidgetSnapshot: @escaping @Sendable () -> Void = { WidgetSnapshotWriter.remove() },
+         clearAccounts: (() -> Void)? = nil) {
         self.database = database
         self.preferences = preferences
         self.imageCache = imageCache
         self.memoryCaches = memoryCaches
         self.beforeSQL = beforeSQL
         self.clearWidgetSnapshot = clearWidgetSnapshot
+        self.clearAccounts = clearAccounts
     }
 
     /// The complete sequence on the calling actor. The session teardown path uses this: it must
@@ -142,7 +149,7 @@ final class LocalDataEraser {
         // A full erase is the only destructive action that also takes every account. A
         // per-vehicle erase and a sign-out leave other accounts alone.
         if case .everything(.all) = scope {
-            preferences.accountStore.removeAll()
+            if let clearAccounts { clearAccounts() } else { preferences.accountStore.removeAll() }
         }
         // The widget mirrors the active car from an App Group file the database never touches.
         // A wipe that covers that car, or the whole fleet, has to take it too: otherwise

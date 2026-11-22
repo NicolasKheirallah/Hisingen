@@ -23,7 +23,7 @@ struct PolestarPortalHardeningTests {
 
 @Suite(.serialized)
 struct PolestarPortalRequestHardeningTests {
-    @MainActor private func client(diagnosticLog: APIDiagnosticLogStore = .shared) async -> PolestarDataPortalAPI {
+    @MainActor private func client(diagnosticLog: APIDiagnosticLogStore = APIDiagnosticLogStore()) async -> PolestarDataPortalAPI {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PortalHardeningProtocol.self]
         let api = PolestarDataPortalAPI(preferences: .shared, diagnosticLog: diagnosticLog)
@@ -51,6 +51,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func rejectsAnotherVehiclesPayload() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { _ in (200, Data(#"{"vin":"OTHER","batteryChargeLevelPercentage":50}"#.utf8)) }
         do {
@@ -74,6 +75,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func unrequestedReadingsHaveNoFreshObservation() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { _ in (200, Data(#"{"vin":"VIN","availabilityStatus":"AVAILABLE"}"#.utf8)) }
         let state = try await api.fetchVehicleState(vin: "VIN", features: FeatureSelection(enabled: [.vehicleAvailability]))
@@ -84,6 +86,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func chargingCommandObservationsTrackTheirOwnEndpoints() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { request in
             if request.url?.path.hasSuffix("/target-soc") == true {
@@ -99,6 +102,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func currentLimitObservationDoesNotImplyTargetObservation() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { request in
             if request.url?.path.hasSuffix("/amp-limit") == true {
@@ -114,6 +118,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func quotaRollsOverAtUTCDayBoundary() async throws {
         ownQuotaStore(seed: PolestarDataPortalAPI.dailyCallLimit, date: Date(timeIntervalSinceNow: -172_800))
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { _ in (200, Data(#"{"vin":"VIN","availabilityStatus":"AVAILABLE"}"#.utf8)) }
         _ = try await api.fetchVehicleState(vin: "VIN", features: FeatureSelection(enabled: [.vehicleAvailability]))
@@ -122,6 +127,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func vinDenialDoesNotBlockAnotherVehicle() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         PortalHardeningProtocol.handler = { request in
             if request.url?.path.contains("/DENIED/") == true {
@@ -139,6 +145,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func credentialReplacementRejectsLateResponse() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         let entered = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)
@@ -160,6 +167,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func resetRejectsDelayedDiscovery() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         let entered = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)
@@ -182,6 +190,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func signOutRejectsDelayedDiscovery() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let suite = "io.kheirallah.hisingen.portal-signout.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -220,6 +229,7 @@ struct PolestarPortalRequestHardeningTests {
             #"{"accessToken":"token","expiresIn":3600,"tokenType":"Basic"}"#
         ] {
             ownQuotaStore(seed: 0, date: Date())
+            defer { releaseQuotaStore() }
             let api = await client()
             await api.configure(clientID: "new-client", clientSecret: "secret")
             PortalHardeningProtocol.handler = { _ in (200, Data(body.utf8)) }
@@ -232,6 +242,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func lateUnauthorizedResponseReusesReplacementGrant() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let log = APIDiagnosticLogStore()
         let api = await client(diagnosticLog: log)
         let counter = PortalAttemptCounter()
@@ -290,6 +301,7 @@ struct PolestarPortalRequestHardeningTests {
 
     @Test @MainActor func transportFailuresKeepPortalErrorPolicy() async throws {
         ownQuotaStore(seed: 0, date: Date())
+        defer { releaseQuotaStore() }
         let api = await client()
         defer { PortalHardeningProtocol.failure = nil }
         PortalHardeningProtocol.failure = URLError(.notConnectedToInternet)

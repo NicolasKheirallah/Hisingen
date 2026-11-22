@@ -1,31 +1,37 @@
 import Foundation
+import HisingenIntents
 import Testing
 @testable import Hisingen
 @testable import HisingenWidget
 
-/// Pins the wire pair no shared module can hold together: the app's snapshot writer
-/// (Hisingen target) and the widget's snapshot reader (HisingenWidget target) exchange a
-/// hand-shaped JSON file, so these tests write with one side and decode with the other.
-///
-/// The two targets both define `VehicleWidgetSnapshot`; qualified names keep the pairs
-/// explicit instead of relying on the file's active import.
+/// Pins the exchange between the app's snapshot writer (Hisingen target) and the widget's
+/// snapshot reader (HisingenWidget target). Both use the one wire definition in
+/// `HisingenIntents`, so these tests write with one side and decode with the other: a
+/// change to the shape cannot land on only one of them.
 @Suite("Widget snapshot")
 @MainActor
 struct WidgetSnapshotRoundTripTests {
     private static let fixedNow = try! fixedDate(hour: 12, minute: 0)
 
-    /// A UUID-scoped preferences domain, so no assertion here can read the developer's real
-    /// defaults (the app suite's ScopedPreferences cannot cross test targets).
+    /// A UUID-scoped preferences domain and Keychain service, so no assertion here can read
+    /// the developer's real defaults or app keychain (the app suite's `ScopedPreferences`
+    /// cannot cross test targets).
     private final class ScopedDefaults {
         nonisolated(unsafe) let defaults: UserDefaults
+        let keychain: KeychainStore
         private let suiteName: String
 
         init() {
             suiteName = "HisingenWidgetTests.\(UUID().uuidString)"
             defaults = UserDefaults(suiteName: suiteName)!
+            keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
         }
 
         deinit { defaults.removePersistentDomain(forName: suiteName) }
+
+        @MainActor func preferences() -> PreferencesStore {
+            PreferencesStore(defaults: defaults, keychain: keychain)
+        }
     }
 
     private func fixtureState(
@@ -45,7 +51,8 @@ struct WidgetSnapshotRoundTripTests {
     @Test("the app's writer and the widget's reader agree on the wire shape")
     func writerFeedReader() throws {
         let directory = try temporaryDirectory()
-        let preferences = PreferencesStore(defaults: ScopedDefaults().defaults)
+        let scoped = ScopedDefaults()
+        let preferences = scoped.preferences()
         let state = fixtureState(fetchedAt: Self.fixedNow)
 
         let written = Hisingen.WidgetSnapshotWriter.publish(
@@ -63,7 +70,7 @@ struct WidgetSnapshotRoundTripTests {
         #expect(read.fetchedAt == appSide.fetchedAt)
         #expect(read.writtenAt == appSide.writtenAt)
         #expect(read.languageCode == appSide.languageCode)
-        #expect(read.schemaVersion == HisingenWidget.VehicleWidgetSnapshot.currentSchemaVersion)
+        #expect(read.schemaVersion == VehicleWidgetSnapshot.currentSchemaVersion)
 
         // The display values themselves, not just agreement: the reader side renders them.
         #expect(read.name == "Polestar 2 · 2023")
@@ -77,7 +84,8 @@ struct WidgetSnapshotRoundTripTests {
     @Test("a state with no battery or range keeps them missing rather than zero")
     func missingReadingsStayMissing() throws {
         let directory = try temporaryDirectory()
-        let preferences = PreferencesStore(defaults: ScopedDefaults().defaults)
+        let scoped = ScopedDefaults()
+        let preferences = scoped.preferences()
         let state = fixtureState(battery: nil, rangeKm: nil, charging: .idle, fetchedAt: Self.fixedNow)
 
         let written = Hisingen.WidgetSnapshotWriter.publish(
@@ -94,7 +102,8 @@ struct WidgetSnapshotRoundTripTests {
     @Test("the sign-out path removes the file, and the widget falls back to its placeholder")
     func removalIsVisibleToTheReader() throws {
         let directory = try temporaryDirectory()
-        let preferences = PreferencesStore(defaults: ScopedDefaults().defaults)
+        let scoped = ScopedDefaults()
+        let preferences = scoped.preferences()
         let state = fixtureState(fetchedAt: Self.fixedNow)
         #expect(Hisingen.WidgetSnapshotWriter.publish(
             state, preferences: preferences, now: Self.fixedNow, directory: directory) != nil)
@@ -107,13 +116,13 @@ struct WidgetSnapshotRoundTripTests {
     @Test("a snapshot from a newer schema is refused, not half-read")
     func futureSchemaIsRefused() throws {
         let directory = try temporaryDirectory()
-        let snapshot = HisingenWidget.VehicleWidgetSnapshot(
-            schemaVersion: HisingenWidget.VehicleWidgetSnapshot.currentSchemaVersion + 1,
+        let snapshot = VehicleWidgetSnapshot(
+            schemaVersion: VehicleWidgetSnapshot.currentSchemaVersion + 1,
             vin: "YSMWIDGET01", name: "Polestar 2", batteryText: "78%", rangeText: "213 km",
             chargingKind: "charging", chargingText: "Charging", departureText: nil,
             fetchedAt: Self.fixedNow, writtenAt: Self.fixedNow, languageCode: nil)
         try JSONEncoder().encode(snapshot).write(
-            to: directory.appendingPathComponent(HisingenWidget.VehicleWidgetSnapshot.fileName))
+            to: directory.appendingPathComponent(VehicleWidgetSnapshot.fileName))
 
         #expect(HisingenWidget.WidgetSnapshotStore.load(directory: directory) == nil)
     }
@@ -122,7 +131,7 @@ struct WidgetSnapshotRoundTripTests {
     func corruptFileIsRefused() throws {
         let directory = try temporaryDirectory()
         try Data("not a snapshot".utf8).write(
-            to: directory.appendingPathComponent(HisingenWidget.VehicleWidgetSnapshot.fileName))
+            to: directory.appendingPathComponent(VehicleWidgetSnapshot.fileName))
 
         #expect(HisingenWidget.WidgetSnapshotStore.load(directory: directory) == nil)
     }
@@ -132,8 +141,8 @@ struct WidgetSnapshotRoundTripTests {
     @Test("the age line follows the app's thresholds")
     func ageLineThresholds() throws {
         let base = try Self.fixedDate(hour: 12, minute: 0)
-        func snapshot(fetchedMinutesAgo: Int) -> HisingenWidget.VehicleWidgetSnapshot {
-            HisingenWidget.VehicleWidgetSnapshot(
+        func snapshot(fetchedMinutesAgo: Int) -> VehicleWidgetSnapshot {
+            VehicleWidgetSnapshot(
                 schemaVersion: 1, vin: "YSMWIDGET01", name: "Polestar 2",
                 batteryText: nil, rangeText: nil, chargingKind: "idle", chargingText: nil,
                 departureText: nil, fetchedAt: base.addingTimeInterval(TimeInterval(-fetchedMinutesAgo * 60)),
@@ -153,7 +162,8 @@ struct WidgetSnapshotRoundTripTests {
     @Test("entries map snapshots to deep links and placeholder to the panel toggle")
     func entryMapping() throws {
         let directory = try temporaryDirectory()
-        let preferences = PreferencesStore(defaults: ScopedDefaults().defaults)
+        let scoped = ScopedDefaults()
+        let preferences = scoped.preferences()
         let state = fixtureState(fetchedAt: Self.fixedNow)
         #expect(Hisingen.WidgetSnapshotWriter.publish(
             state, preferences: preferences, now: Self.fixedNow, directory: directory) != nil)

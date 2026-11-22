@@ -1,4 +1,5 @@
 import AppIntents
+import HisingenIntents
 import Foundation
 
 /// One car the widget can be pinned to. The VIN is the stored identity — WidgetKit

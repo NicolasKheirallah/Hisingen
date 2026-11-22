@@ -67,14 +67,16 @@ yet") and links to the panel toggle instead of a car.
 The extension reloads on its own every 15 minutes so the age line stays honest, and again
 on every completed refresh.
 
-The two sides of the wire shape live in separate targets with no shared module:
-`Sources/Hisingen/Services/Widget/VehicleWidgetSnapshot.swift` writes (single car plus
-garage), `Sources/HisingenWidget/VehicleWidgetSnapshot.swift` reads, and the selection
-resolver lives with it in `Sources/HisingenWidget/VehicleConfiguration.swift`.
-`WidgetSnapshotRoundTripTests` (Tests/HisingenWidgetTests) imports both binaries and pins
-the exchange end to end; `WidgetSnapshotWriterTests` (Tests/HisingenTests/Unit) pins the
-app-side mapping, and `VehicleWidgetGarageTests` (Tests/HisingenTests/Unit) pins garage
-enumeration, selection and fallback; staleness thresholds are pinned widget side.
+The wire shape has one definition, `Sources/HisingenIntents/VehicleWidgetSnapshot.swift`,
+compiled into both binaries: the app writes the single-car and garage files through
+`WidgetSnapshotWriter`, the extension reads them through `WidgetSnapshotStore` (which also
+holds the age line, the one value it derives itself), and the selection resolver lives in
+`Sources/HisingenWidget/VehicleConfiguration.swift`. A field or JSON key cannot be changed
+on one side only. `WidgetSnapshotRoundTripTests` (Tests/HisingenWidgetTests) still writes
+with the app's writer and decodes with the widget's reader, pinning the exchange end to end;
+`WidgetSnapshotWriterTests` (Tests/HisingenTests/Unit) pins the app-side mapping, and
+`VehicleWidgetGarageTests` (Tests/HisingenTests/Unit) pins garage enumeration, selection and
+fallback; staleness thresholds are pinned widget side.
 
 ## Localization
 
