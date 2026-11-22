@@ -4325,3 +4325,23 @@
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo 不再接受本应用的客户端 ID。请使用你的 Volvo ID 登录，或在设置中输入新登录系统的凭据。";
 "Watts per square metre" = "瓦特每平方米";
 "A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "较新版本的 Hisingen 写入了此历史数据库（数据库架构 %d；此版本最高读取 %d）。你的数据未被改动。请更新 Hisingen 以读取。";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX 工作簿";
+"GPX Tracks" = "GPX 轨迹";
+"Selected Period" = "所选时段";
+"Full History" = "完整历史";
+"Selected Session Samples (XLSX)" = "所选场次样本 (XLSX)";
+"Field" = "字段";
+"Value" = "值";
+"Dataset" = "数据集";
+"Scope" = "范围";
+"Rows" = "行数";
+"Rows with coordinates" = "含坐标的行数";
+"Selected period" = "所选时段";
+"Full history" = "完整历史";
+"Trip %@" = "行程 %@";
+"%@ trip tracks" = "%@ 的行程轨迹";
+"The XLSX workbook could not be created." = "无法创建 XLSX 工作簿。";
+"The GPX track could not be created." = "无法创建 GPX 轨迹。";
+"Selected Session Samples" = "所选场次样本";
+"Selected session" = "所选场次";

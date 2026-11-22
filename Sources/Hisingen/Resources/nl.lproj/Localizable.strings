@@ -4333,3 +4333,23 @@
 "Volvo no longer accepts this application's client ID. Sign in with your Volvo ID, or enter credentials for the new sign-in system in Settings." = "Volvo accepteert de client-ID van deze app niet meer. Meld je aan met je Volvo-ID of voer de inloggegevens voor het nieuwe aanmeldsysteem in bij Instellingen.";
 "Watts per square metre" = "Watt per vierkante meter";
 "A newer version of Hisingen wrote this history database (database schema %d; this build reads up to %d). Your data is untouched. Update Hisingen to read it." = "Een nieuwere versie van Hisingen heeft deze geschiedenisdatabase geschreven (databaseschema %d; deze versie leest tot %d). Je gegevens zijn onaangeroerd. Werk Hisingen bij om ze te lezen.";
+// GPX and XLSX exports (C14).
+"XLSX Workbook" = "XLSX-werkmap";
+"GPX Tracks" = "GPX-tracks";
+"Selected Period" = "Geselecteerde periode";
+"Full History" = "Volledige geschiedenis";
+"Selected Session Samples (XLSX)" = "Sessiemonsters (XLSX)";
+"Field" = "Veld";
+"Value" = "Waarde";
+"Dataset" = "Gegevensset";
+"Scope" = "Bereik";
+"Rows" = "Rijen";
+"Rows with coordinates" = "Rijen met coördinaten";
+"Selected period" = "Geselecteerde periode";
+"Full history" = "Volledige geschiedenis";
+"Trip %@" = "Rit %@";
+"%@ trip tracks" = "Ritsporen voor %@";
+"The XLSX workbook could not be created." = "De XLSX-werkmap kon niet worden gemaakt.";
+"The GPX track could not be created." = "Het GPX-spoor kon niet worden gemaakt.";
+"Selected Session Samples" = "Sessiemonsters";
+"Selected session" = "Geselecteerde sessie";

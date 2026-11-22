@@ -7,6 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **GPX and XLSX exports.** The History export menu now offers an XLSX workbook beside every CSV
+  entry and a GPX track file for trips. The workbook carries the CSV's rows on a data sheet with
+  real numeric cells, so a spreadsheet can sum energy, distance, duration and cost without
+  re-typing them, plus a summary sheet with the dataset, vehicle, scope, row count, rows with
+  coordinates and totals for columns every row carries. GPX 1.1 writes one track segment per trip
+  with a recorded start or end position; a trip with no position produces no track at all rather
+  than a point at 0,0, and a trip with only one recorded end keeps that single point.
+
 - **A command line for remote commands.** `hisingen cli vehicles` lists every vehicle this Mac
   knows, which one is selected, how old its reading is and what each command's capability gate
   answer is, with the gate's own sentence for anything blocked. `hisingen cli send` sends one

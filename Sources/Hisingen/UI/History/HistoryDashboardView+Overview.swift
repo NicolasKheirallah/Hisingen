@@ -205,18 +205,76 @@ extension HistoryDashboardView {
         }
     }
 
+    private enum WorkspaceExportFormat {
+        case csv
+        case xlsx
+    }
+
+    /// The label the workbook's data sheet and summary carry. It is the same wording as the menu
+    /// entry, so a reader opening the file recognises the dataset they picked.
+    private func workbookTitle(for kind: HistoryWorkspace.ExportKind) -> String {
+        switch kind {
+        case .trips: return L10n.text("Trips")
+        case .chargingSessions: return L10n.text("Charging Sessions")
+        case .sessionSamples: return L10n.text("Selected Session Samples")
+        case .batteryHealth: return L10n.text("Battery Health")
+        case .airQuality: return L10n.text("Air Quality")
+        case .telemetry: return L10n.text("Telemetry")
+        case .commandAudits: return L10n.text("Automation Log")
+        case .fuelEntries: return L10n.text("Fuel Fill-Ups")
+        case .cabinClimate: return L10n.text("Cabin Climate")
+        }
+    }
+
+    private var vehicleExportName: String {
+        let vin = state.identity.vin
+        let nickname = preferences.vehicleNickname(for: vin).trimmingCharacters(in: .whitespacesAndNewlines)
+        return nickname.isEmpty ? String(vin.suffix(6)) : nickname
+    }
+
     /// One path for every export entry: the workspace decides how the CSV is built
-    /// (period rows it is handed, or a full-history ledger query off-main).
+    /// (period rows it is handed, or a full-history ledger query off-main). The workbook is
+    /// derived from that same CSV, so the two formats cannot describe different rows.
     private func exportThroughWorkspace(_ kind: HistoryWorkspace.ExportKind, name: String,
-                                        scope: HistoryWorkspace.ExportScope = .fullHistory) {
+                                        scope: HistoryWorkspace.ExportScope = .fullHistory,
+                                        format: WorkspaceExportFormat = .csv) {
         let vin = state.identity.vin
         let sessionID = selectedSession?.id
         let periodTrips = aggregateTrips
         let periodSessions = chargingSessions
+        let title = workbookTitle(for: kind)
+        let vehicle = vehicleExportName
         Task { @MainActor in
-            let csv = await history.exportCSV(kind, scope: scope, vin: vin, selectedSessionID: sessionID,
-                                              periodTrips: periodTrips, periodSessions: periodSessions)
-            exportCSV(csv, name: name)
+            switch format {
+            case .csv:
+                let csv = await history.exportCSV(kind, scope: scope, vin: vin, selectedSessionID: sessionID,
+                                                  periodTrips: periodTrips, periodSessions: periodSessions)
+                exportCSV(csv, name: name)
+            case .xlsx:
+                guard let data = await history.exportXLSX(
+                    kind, scope: scope, vin: vin, selectedSessionID: sessionID,
+                    periodTrips: periodTrips, periodSessions: periodSessions,
+                    title: title, vehicle: vehicle
+                ) else {
+                    exportError = L10n.text("The XLSX workbook could not be created.")
+                    return
+                }
+                exportXLSX(data, name: name)
+            }
+        }
+    }
+
+    /// GPS tracks for the trips in scope. A trip whose row has no position is skipped by the
+    /// builder, so a trackless trip leaves no point at 0,0 behind.
+    private func exportTripTracks(scope: HistoryWorkspace.ExportScope) {
+        let vin = state.identity.vin
+        let periodTrips = aggregateTrips
+        let vehicle = vehicleExportName
+        Task { @MainActor in
+            let data = await history.exportTripsGPX(
+                scope: scope, vin: vin, periodTrips: periodTrips, vehicleName: vehicle
+            )
+            exportGPX(data, name: "Trips")
         }
     }
 
@@ -253,6 +311,62 @@ extension HistoryDashboardView {
                 exportThroughWorkspace(.sessionSamples, name: "Charging-Samples")
             }
             .disabled(selectedSession == nil || selectedSessionSamples.isEmpty)
+
+            Menu(L10n.text("XLSX Workbook")) {
+                Menu(L10n.text("Selected Period")) {
+                    Button(L10n.text("Trips")) {
+                        exportThroughWorkspace(.trips, name: "Trips", scope: .selectedPeriod, format: .xlsx)
+                    }
+                    .disabled(aggregateTrips.isEmpty)
+                    Button(L10n.text("Charging Sessions")) {
+                        exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions",
+                                               scope: .selectedPeriod, format: .xlsx)
+                    }
+                    .disabled(chargingSessions.isEmpty)
+                }
+                Menu(L10n.text("Full History")) {
+                    Button(L10n.text("Trips")) {
+                        exportThroughWorkspace(.trips, name: "Trips", format: .xlsx)
+                    }
+                    Button(L10n.text("Charging Sessions")) {
+                        exportThroughWorkspace(.chargingSessions, name: "Charging-Sessions", format: .xlsx)
+                    }
+                    Button(L10n.text("Battery Health")) {
+                        exportThroughWorkspace(.batteryHealth, name: "Battery-Health", format: .xlsx)
+                    }
+                    Button(L10n.text("Air Quality")) {
+                        exportThroughWorkspace(.airQuality, name: "Air-Quality", format: .xlsx)
+                    }
+                    Button(L10n.text("Telemetry")) {
+                        exportThroughWorkspace(.telemetry, name: "Telemetry", format: .xlsx)
+                    }
+                    Button(L10n.text("Automation Log")) {
+                        exportThroughWorkspace(.commandAudits, name: "Automation-Log", format: .xlsx)
+                    }
+                    if state.powertrain.hasCombustionEngine {
+                        Button(L10n.text("Fuel Fill-Ups")) {
+                            exportThroughWorkspace(.fuelEntries, name: "Fuel", format: .xlsx)
+                        }
+                    }
+                    Button(L10n.text("Cabin Climate")) {
+                        exportThroughWorkspace(.cabinClimate, name: "Cabin-Climate", format: .xlsx)
+                    }
+                }
+                Button(L10n.text("Selected Session Samples (XLSX)")) {
+                    exportThroughWorkspace(.sessionSamples, name: "Charging-Samples", format: .xlsx)
+                }
+                .disabled(selectedSession == nil || selectedSessionSamples.isEmpty)
+            }
+
+            Menu(L10n.text("GPX Tracks")) {
+                Button(L10n.text("Selected Period")) {
+                    exportTripTracks(scope: .selectedPeriod)
+                }
+                .disabled(aggregateTrips.isEmpty)
+                Button(L10n.text("Full History")) {
+                    exportTripTracks(scope: .fullHistory)
+                }
+            }
             Button(L10n.text("Selected Session Prices (CSV)")) {
                 guard let series = selectedSessionPrices else { return }
                 let symbol = selectedSession?.wallbox?.currency ?? selectedSession?.currencySymbol ?? preferences.currencySymbol
@@ -510,6 +624,26 @@ extension HistoryDashboardView {
     func exportCSV(_ contents: String, name: String) {
         FileExport.save(contents, type: .commaSeparatedText,
                         filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).csv", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
+        }
+    }
+
+    func exportXLSX(_ data: Data, name: String) {
+        let type = UTType(filenameExtension: "xlsx") ?? .data
+        FileExport.save(data, type: type,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).xlsx", modal: true) { url, error in
+            if let error {
+                exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
+            }
+        }
+    }
+
+    func exportGPX(_ data: Data, name: String) {
+        let type = UTType(filenameExtension: "gpx", conformingTo: .xml) ?? .xml
+        FileExport.save(data, type: type,
+                        filename: "Hisingen-\(name)-\(state.identity.vin.suffix(6)).gpx", modal: true) { url, error in
             if let error {
                 exportError = L10n.format("Could not write %@: %@", url.lastPathComponent, error.localizedDescription)
             }
