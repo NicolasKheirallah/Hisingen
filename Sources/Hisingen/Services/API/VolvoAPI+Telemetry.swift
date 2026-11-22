@@ -240,16 +240,14 @@ extension VolvoAPI {
         if let commands {
             let names = Set(commands.compactMap(\.normalizedName))
             probes.reportedCommandNames = names.sorted()
-            let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
-            let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
-            let supportsLocate = names.contains("honk") || names.contains("flash")
-                || names.contains("honk-flash") || names.contains("honk-and-flash")
-            let supportsEngine = names.contains("engine-start") || names.contains("engine-stop")
-            probes.record(.climateStartStop, as: supportsClimate ? .supported : .unavailable)
-            probes.record(.locks, as: supportsLocks ? .supported : .unavailable)
-            probes.record(.reducedGuardLock, as: names.contains("lock-reduced-guard") ? .supported : .unavailable)
-            probes.record(.honkAndFlash, as: supportsLocate ? .supported : .unavailable)
-            probes.record(.engineStart, as: supportsEngine ? .supported : .unavailable)
+            func advertised(_ kinds: [VolvoCommandCatalog.Kind]) -> Bool {
+                kinds.contains { VolvoCommandCatalog.isAdvertised($0, in: names) }
+            }
+            probes.record(.climateStartStop, as: advertised([.climateStart, .climateStop]) ? .supported : .unavailable)
+            probes.record(.locks, as: advertised([.lock, .unlock]) ? .supported : .unavailable)
+            probes.record(.reducedGuardLock, as: advertised([.lockReducedGuard]) ? .supported : .unavailable)
+            probes.record(.honkAndFlash, as: advertised([.honkAndFlash, .flash, .honk]) ? .supported : .unavailable)
+            probes.record(.engineStart, as: advertised([.engineStart, .engineStop]) ? .supported : .unavailable)
         }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)

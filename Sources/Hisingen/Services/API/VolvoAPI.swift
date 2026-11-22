@@ -178,26 +178,14 @@ actor VolvoAPI {
 
 
     func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
-        let commandName: String
-        var bodyData = "{}".data(using: .utf8)
-        switch command {
-        case .lock: commandName = "lock"
-        case .lockReducedGuard: commandName = "lock-reduced-guard"
-        case .unlock: commandName = "unlock"
-        case .startClimate: commandName = "climatization-start"
-        case .stopClimate: commandName = "climatization-stop"
-        case .startEngine(let runtimeMinutes):
-            commandName = "engine-start"
-            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
-        case .stopEngine:
-            commandName = "engine-stop"
-        // The command list reports this as `HONK_AND_FLASH` but its `href` – and therefore the
-        // real invocation path – is `honk-flash` (verified live against a production vehicle).
-        case .honkAndFlash: commandName = "honk-flash"
-        case .flashLights: commandName = "flash"
-        case .honkHorn: commandName = "honk"
-        default:
+        // The endpoint name and the names the car advertises come from one table, so the
+        // capability the UI shows and the path this posts to cannot drift apart.
+        guard let commandName = VolvoCommandCatalog.endpoint(for: command) else {
             throw RemoteCommandError.unsupported
+        }
+        var bodyData = "{}".data(using: .utf8)
+        if case .startEngine(let runtimeMinutes) = command {
+            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
         }
         guard let vccApiKey else { throw VolvoError.appNotConfigured }
 

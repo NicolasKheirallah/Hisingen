@@ -57,6 +57,11 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
+  lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
+  nothing comparing them; the catalog is the single answer for which endpoint a command posts to and
+  which advertised names mean the car offers it. Five tests pin the mapping, including that
+  commands Volvo's public API cannot run have no endpoint.
 - The **Reading Freshness** rows now name the service each value came from — the portal, the
   Polestar cloud, a live stream, or Volvo's cloud. The snapshot already recorded an observation for
   live-stream readings but never for a normal refresh, so most rows could not say where the value
