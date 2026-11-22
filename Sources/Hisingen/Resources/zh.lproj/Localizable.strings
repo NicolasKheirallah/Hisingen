@@ -4053,3 +4053,9 @@
 "This vehicle has no saved charge locations." = "该车辆没有已保存的充电位置。";
 "%d A" = "%d A";
 "%d%% minimum" = "最低 %d%%";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Polestar 云";
+"Polestar portal" = "Polestar 门户";
+"Live stream" = "实时数据流";
+"Weather service" = "天气服务";
+"Volvo cloud" = "Volvo 云";

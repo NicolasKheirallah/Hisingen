@@ -57,6 +57,11 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- The **Reading Freshness** rows now name the service each value came from — the portal, the
+  Polestar cloud, a live stream, or Volvo's cloud. The snapshot already recorded an observation for
+  live-stream readings but never for a normal refresh, so most rows could not say where the value
+  came from. An assembler now stamps its own producer, a live-stream observation keeps its more
+  specific source, and a reading the refresh did not carry stays unknown instead of inheriting one.
 - The **Cloud Connectivity** row now shows the reason the provider gives — "car is asleep",
   "subscription lapsed" — instead of only the status word. That reason is the part a reader can act
   on, and both providers were already sending it.

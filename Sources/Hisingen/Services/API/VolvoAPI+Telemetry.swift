@@ -421,7 +421,7 @@ extension VolvoAPI {
                 readingDates: readingDates,
                 dataWarnings: activeBulbWarnings,
                 unavailableFeatures: unavailable.features
-            ),
+            ).recordedSource(.volvo),
             exteriorStatus: exterior,
             softwareInfo: software,
             climateStatus: climate,

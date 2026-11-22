@@ -227,7 +227,7 @@ enum PolestarPortalSnapshotAssembler {
             // The consumer-exclusive commands are never portal-served; the rest of the
             // list is what this refresh actually asked for and failed to read.
             unavailableFeatures: failedFeatures + [.remoteLocks, .remoteWindows, .remoteHonkFlash, .remoteOTA]
-        )
+        ).recordedSource(.polestarPortal)
 
         let timerSettings = bundle.parkingClimateTimer?.timerSettings
         func timerSeatLevel(_ raw: String?) -> Int? {

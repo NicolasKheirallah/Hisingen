@@ -4053,3 +4053,9 @@
 "This vehicle has no saved charge locations." = "이 차량에는 저장된 충전 위치가 없습니다.";
 "%d A" = "%d A";
 "%d%% minimum" = "최소 %d%%";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Polestar 클라우드";
+"Polestar portal" = "Polestar 포털";
+"Live stream" = "실시간 스트림";
+"Weather service" = "날씨 서비스";
+"Volvo cloud" = "Volvo 클라우드";

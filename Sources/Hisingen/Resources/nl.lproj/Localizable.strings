@@ -4061,3 +4061,9 @@
 "This vehicle has no saved charge locations." = "Dit voertuig heeft geen opgeslagen laadlocaties.";
 "%d A" = "%d A";
 "%d%% minimum" = "%d %% minimum";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Polestar-cloud";
+"Polestar portal" = "Polestar-portaal";
+"Live stream" = "Livestream";
+"Weather service" = "Weerdienst";
+"Volvo cloud" = "Volvo-cloud";

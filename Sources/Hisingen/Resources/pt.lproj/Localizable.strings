@@ -4053,3 +4053,9 @@
 "This vehicle has no saved charge locations." = "Este veículo não tem locais de carregamento guardados.";
 "%d A" = "%d A";
 "%d%% minimum" = "%d %% mínimo";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Nuvem Polestar";
+"Polestar portal" = "Portal Polestar";
+"Live stream" = "Fluxo direto";
+"Weather service" = "Serviço meteorológico";
+"Volvo cloud" = "Nuvem Volvo";

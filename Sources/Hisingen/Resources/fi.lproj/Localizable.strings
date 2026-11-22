@@ -4053,3 +4053,9 @@
 "This vehicle has no saved charge locations." = "Tällä ajoneuvolla ei ole tallennettuja latauspaikkoja.";
 "%d A" = "%d A";
 "%d%% minimum" = "%d %% vähintään";
+"Polestar GraphQL" = "Polestar GraphQL";
+"Polestar cloud" = "Polestarin pilvi";
+"Polestar portal" = "Polestar-portaali";
+"Live stream" = "Suora virta";
+"Weather service" = "Sääpalvelu";
+"Volvo cloud" = "Volvon pilvi";
