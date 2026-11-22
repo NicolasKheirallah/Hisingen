@@ -930,11 +930,14 @@ struct InstrumentVehicleProfile: View {
     var fillsWidth = false
 
     @Environment(\.preferencesStore) private var preferences
+    /// The stored render, read off the main thread and only when the snapshot carries none.
+    /// `body` used to query the image tier directly.
+    @State private var storedRender: (vin: String, data: Data)?
 
     var body: some View {
         let vin = state.identity.vin
         let angle = preferences.carRenderAngle.rawValue
-        let data = state.identity.imageData ?? imageCache.image(for: vin, angle: angle) ?? imageCache.image(for: vin)
+        let data = state.identity.imageData ?? (storedRender?.vin == vin ? storedRender?.data : nil)
 
         Group {
             if preferences.features.contains(.vehicleImage), let data {
@@ -951,5 +954,14 @@ struct InstrumentVehicleProfile: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipped()
+        .task(id: "\(vin)|\(angle)|\(state.identity.imageData == nil)") {
+            guard state.identity.imageData == nil else { storedRender = nil; return }
+            let cache = imageCache
+            let loaded = await Task.detached(priority: .userInitiated) {
+                cache.image(for: vin, angle: angle) ?? cache.image(for: vin)
+            }.value
+            guard !Task.isCancelled else { return }
+            storedRender = loaded.map { (vin: vin, data: $0) }
+        }
     }
 }

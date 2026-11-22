@@ -517,6 +517,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **The Car tab no longer reads car images from the database while it draws.** Every time the
+  tab's body was evaluated it asked the image store about each of the six angles, the interior
+  render and the selected angle, about fifteen SQLite round trips on the main thread, and a
+  render missing from memory was read back as a multi-megabyte blob. Those reads queued on the
+  one shared read lock, so any History query running in the background stalled the panel. The
+  tab now reads all of a vehicle's stored renders once, on a background task keyed to the
+  vehicle and its latest reading, and draws from that. Nothing about a miss is remembered, so a
+  render the provider downloads later still appears on the next reading. The Now and Car
+  passport's fallback render uses the same background read, and a telemetry refresh that does
+  not change the panel's size no longer starts a window-resize animation.
+
 - **The App Intents metadata builds again, so Shortcuts, Siri, the Focus filter and the widget's
   buttons can find the intents.** The localization pass had turned every intent title, description,
   parameter title and shortcut title into a runtime call, `LocalizedStringResource(stringLiteral:

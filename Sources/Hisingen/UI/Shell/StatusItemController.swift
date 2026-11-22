@@ -1393,6 +1393,9 @@ final class StatusItemController: NSObject {
         // instead of the window snapping while content springs.
         let layout = PanelLayout.resolve(from: preferences)
         let newSize = NSSize(width: layout.width, height: layout.height)
+        // Every coalesced telemetry refresh lands here; most do not change the geometry, and an
+        // animation group over an unchanged size still costs the popover a layout pass.
+        guard popover.contentSize != newSize || hosting.preferredContentSize != newSize else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.large
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
