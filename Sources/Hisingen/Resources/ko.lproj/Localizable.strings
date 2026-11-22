@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "배터리 보증 (잔여)";
 "Battery and Power" = "배터리 및 전력";
 "Battery and Range" = "배터리 및 주행 가능 거리";
+"Available optimised charging" = "사용 가능한 최적화 충전";
+"Bidirectional charging" = "양방향 충전";
 "Dock icon" = "Dock 아이콘";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Dock, 앱 전환기 및 경고 배지에 Hisingen 표시";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "차량이 경고나 알람을 보고하는 동안 Dock 배지 표시";
@@ -1202,6 +1204,8 @@
 "Washer Fluid" = "워셔액";
 "Washer fluid" = "워셔액";
 "Washer fluid level" = "워셔액 수위";
+"Portal" = "포털";
+"Weather" = "날씨";
 "Wed" = "수";
 "Welcome to Hisingen" = "Hisingen에 오신 것을 환영합니다";
 "Window Controls" = "창문 제어";

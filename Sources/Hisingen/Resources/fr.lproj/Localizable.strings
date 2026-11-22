@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "Garantie batterie (restante)";
 "Battery and Power" = "Batterie et puissance";
 "Battery and Range" = "Batterie et autonomie";
+"Available optimised charging" = "Recharge optimisée disponible";
+"Bidirectional charging" = "Recharge bidirectionnelle";
 "Dock icon" = "Icône du Dock";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Afficher Hisingen dans le Dock, le sélecteur d'apps et comme badge d'alerte";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Afficher un badge dans le Dock tant qu'un véhicule signale des alertes ou une alarme";
@@ -1202,6 +1204,8 @@
 "Washer Fluid" = "Liquide lave-glace";
 "Washer fluid" = "Liquide lave-glace";
 "Washer fluid level" = "Niveau de liquide lave-glace";
+"Portal" = "Portail";
+"Weather" = "Météo";
 "Wed" = "Mer";
 "Welcome to Hisingen" = "Bienvenue dans Hisingen";
 "Window Controls" = "Contrôles des vitres";

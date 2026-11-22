@@ -532,6 +532,14 @@ struct ChargingControlsCard: View {
             }
             if let mode = location.optimisedChargingModeName, location.optimisedChargingEnabled {
                 KVRow(L10n.text("Optimised charging"), mode)
+            } else if !location.optimisedChargingEnabled, let offer = location.optimisedChargingModeName {
+                // The mode row above speaks once the switch is on; this is what the backend
+                // offers while it is still off, in the same words.
+                KVRow(L10n.text("Available optimised charging"), offer)
+            }
+            if let bidirectional = location.isBidirectionalChargingEnabled {
+                KVRow(L10n.text("Bidirectional charging"),
+                      bidirectional ? L10n.text("On") : L10n.text("Off"))
             }
             if !preferences.privacyRedactionEnabled, let lat = location.latitude, let lon = location.longitude {
                 KVRow(L10n.text("Coordinates"), String(format: "%.4f, %.4f", locale: L10n.displayLocale, lat, lon))

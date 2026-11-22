@@ -132,6 +132,8 @@
 "Battery Warranty Remaining" = "Battery Warranty Remaining";
 "Battery and Power" = "Battery and Power";
 "Battery and Range" = "Battery and Range";
+"Available optimised charging" = "Available optimised charging";
+"Bidirectional charging" = "Bidirectional charging";
 "Dock icon" = "Dock icon";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Show Hisingen in the Dock, the app switcher and the warning badge";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Show a dock badge while any vehicle reports warnings or an alarm";
@@ -235,6 +237,8 @@
 "Unlocks the vehicle." = "Unlocks the vehicle.";
 "Locks the vehicle." = "Locks the vehicle.";
 "Lock State Not Reported" = "Lock State Not Reported";
+"Portal" = "Portal";
+"Weather" = "Weather";
 "Window State Not Reported" = "Window State Not Reported";
 "Windows Closed" = "Windows Closed";
 "Windows Open" = "Windows Open";

@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "Batterigaranti (resterende)";
 "Battery and Power" = "Batteri og effekt";
 "Battery and Range" = "Batteri og rækkevidde";
+"Available optimised charging" = "Tilgængelig optimeret opladning";
+"Bidirectional charging" = "Tokvejsopladning";
 "Dock icon" = "Dockikon";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Vis Hisingen i Dock'en, programskifteren og som advarselsmærke";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Vis et Dock-mærke, mens en bil rapporterer advarsler eller alarm";
@@ -1202,6 +1204,8 @@
 "Washer Fluid" = "Sprinklervæske";
 "Washer fluid" = "Sprinklervæske";
 "Washer fluid level" = "Sprinklervæskeniveau";
+"Portal" = "Portal";
+"Weather" = "Vejr";
 "Wed" = "Ons";
 "Welcome to Hisingen" = "Velkommen til Hisingen";
 "Window Controls" = "Vinduesstyring";

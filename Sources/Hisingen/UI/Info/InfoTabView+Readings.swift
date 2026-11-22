@@ -18,7 +18,8 @@ extension InfoTabView {
                     if let date = state.reportedDate(for: reading) {
                         KVRow(reading.title,
                               Self.freshnessValue(reportedAt: date,
-                                                  receivedAt: state.freshness.metaReceivedDates?[reading]),
+                                                  receivedAt: state.freshness.metaReceivedDates?[reading],
+                                                  source: state.freshness.readingObservations?[reading]?.source),
                               symbol: "clock",
                               valueWarning: Self.readingLags(reading, in: state))
                     }
@@ -39,7 +40,8 @@ extension InfoTabView {
 
     /// One freshness row's value: the vehicle's report time, plus the portal queue time
     /// when that gap is large enough to explain a stale domain next to a fresh one.
-    static func freshnessValue(reportedAt: Date, receivedAt: Date?, now: Date = Date()) -> String {
+    static func freshnessValue(reportedAt: Date, receivedAt: Date?, now: Date = Date(),
+                               source: VehicleReadingSource? = nil) -> String {
         // Relative age first, because "how old" is the question this section answers; the clock
         // time follows so the row still lines up with History's timestamps.
         var value = L10n.format("%@ · %@", Format.relativeAge(since: reportedAt, now: now),
@@ -47,6 +49,10 @@ extension InfoTabView {
         if let lag = portalIngestLagMinutes(receivedAt: receivedAt, reportedAt: reportedAt) {
             value += " · " + L10n.format("portal +%d min", lag)
         }
+        // The default transport stays silent: in Polestar ID mode every row would repeat
+        // the same word. Portal mode is where the word explains a stale domain next to a
+        // fresh one, so the non-default transports are the ones that get named.
+        if let source, source != .polestarGraphQL { value += " · " + source.readoutWord }
         return value
     }
 

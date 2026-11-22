@@ -120,6 +120,11 @@ The Polestar integration can obtain the core state needed for the main Hisingen 
 
 Additional data is requested only when the corresponding Hisingen feature is enabled.
 
+Each portal telemetry answer also carries a `metaEventId`. Hisingen keeps it in the stored
+response payload for support correlation — matching one exchange to a Polestar-side event —
+and deliberately does not surface it in the interface or persist it as its own column: it is
+an opaque identifier with no reader-facing meaning.
+
 This helps avoid making unnecessary provider requests for features the user has disabled.
 
 ---

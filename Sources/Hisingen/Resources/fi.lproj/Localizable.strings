@@ -136,6 +136,8 @@
 "Battery Warranty Remaining" = "Akkutakuu (jäljellä)";
 "Battery and Power" = "Akku ja teho";
 "Battery and Range" = "Akku ja toimintamatka";
+"Available optimised charging" = "Saatavilla oleva optimoitu lataus";
+"Bidirectional charging" = "Kaksisuuntainen lataus";
 "Dock icon" = "Dock-kuvake";
 "Show Hisingen in the Dock, the app switcher and the warning badge" = "Näytä Hisingen Dockissa, sovellusvaihtajassa ja varoitusmerkkinä";
 "Show a dock badge while any vehicle reports warnings or an alarm" = "Näytä Dock-merkki, kun jokin ajoneuvo ilmoittaa varoituksia tai hälytyksen";
@@ -1202,6 +1204,8 @@
 "Washer Fluid" = "Lasinpesuneste";
 "Washer fluid" = "Pesuneste";
 "Washer fluid level" = "Pesunesteen taso";
+"Portal" = "Portaali";
+"Weather" = "Sää";
 "Wed" = "Ke";
 "Welcome to Hisingen" = "Tervetuloa Hisingeniin";
 "Window Controls" = "Ikkunoiden hallinta";

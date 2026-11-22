@@ -25,6 +25,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   seed with the feed the release just published. The seed had stayed behind since 2.0.10,
   and the fallback Pages path could have served it after a rollback or a new checkout. The
   live feed itself already deploys from the release artifact and needs no merge.
+- Saved charge locations now say what the backend offers at each place: the optimised
+  charging mode it can run while the switch is still off, in the same words the active mode
+  uses, and whether the location supports bidirectional charging when the vehicle reports it.
+- Reading Freshness names the transport that answered each reading — Portal, gRPC, Live or
+  Weather — whenever it is not the usual Polestar app transport, and stays silent when it is.
+  In Developer Portal mode this explains a stale domain sitting next to a fresh one.
 
 ## [3.0.2] - 2026-11-21
 

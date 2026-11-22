@@ -4,6 +4,20 @@ enum VehicleReadingSource: String, Codable, Sendable {
     case polestarGraphQL, polestarGRPC, polestarPortal, liveStream, weather
 }
 
+extension VehicleReadingSource {
+    /// The word the Reading Freshness rows use for the transport that answered. Short on
+    /// purpose: the row already carries the age and the portal queue time.
+    var readoutWord: String {
+        switch self {
+        case .polestarGraphQL: return L10n.text("App")
+        case .polestarGRPC: return "gRPC"
+        case .polestarPortal: return L10n.text("Portal")
+        case .liveStream: return L10n.text("Live")
+        case .weather: return L10n.text("Weather")
+        }
+    }
+}
+
 struct VehicleReadingObservation: Codable, Equatable, Sendable {
     let fetchedAt: Date
     let source: VehicleReadingSource

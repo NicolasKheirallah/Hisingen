@@ -1,0 +1,568 @@
+{
+  "name": "hisingen-should-completion",
+  "id": "hisingen-should-completion",
+  "description": "Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.",
+  "captainSessionId": "session-5fde377e-c66d-400e-a265-f29d0499c8f6",
+  "createdAt": 1795312385776,
+  "phase": "running",
+  "members": [
+    {
+      "id": "d2086f04-b37b-461f-9946-628a623dd1e6",
+      "name": "platform-intents",
+      "role": "platform engineer: shared App Intents target, interactive widget buttons, Control Center actions, multi-account",
+      "provider": "ollama-cloud",
+      "model": "deepseek-v4.1-flash:1017",
+      "executionPrompt": "You own the platform track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: create it with `git worktree add .agents/worktrees/shared-intents -b shared-intents must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before any compiler-driven command: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"`, write owner info inside, and `rm -rf` it when done. Build with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin swift build` and test with `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Generated secrets files (Sources/Hisingen/Services/API/Generated*Secrets.swift) are gitignored; copy them from the main checkout if a build needs them and never print or commit them. Any new user-facing string must be added to en.lproj AND translated in all 14 other locales, then `python3 Scripts/check-localization.py` and `node Scripts/verify-l10n-usage.mjs` must pass. Commit on your own branch with a clear message. Report: branch, commit, changed paths, exact commands run with results, and anything left undone.",
+      "joinedAt": 1795312385776,
+      "status": "working",
+      "runtimeSetup": {
+        "persona": "You are platform-intents, a member of the multi-agent team \"hisingen-should-completion\" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member with the role: platform engineer: shared App Intents target, interactive widget buttons, Control Center actions, multi-account.\n\nTeam context:\n- Team id: hisingen-should-completion\n- Your name inside the team (use it as `from`/identity): platform-intents\n- Team goal: Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.\n- Profile protocol: (none)\n- Execution guidance:\nYou own the platform track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: create it with `git worktree add .agents/worktrees/shared-intents -b shared-intents must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before any compiler-driven command: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"`, write owner info inside, and `rm -rf` it when done. Build with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin swift build` and test with `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Generated secrets files (Sources/Hisingen/Services/API/Generated*Secrets.swift) are gitignored; copy them from the main checkout if a build needs them and never print or commit them. Any new user-facing string must be added to en.lproj AND translated in all 14 other locales, then `python3 Scripts/check-localization.py` and `node Scripts/verify-l10n-usage.mjs` must pass. Commit on your own branch with a clear message. Report: branch, commit, changed paths, exact commands run with results, and anything left undone.\n- The team state lives under .agent-teams/hisingen-should-completion/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.\n- The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.\nWhen you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.\n\nWorking rules:\n1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.\n2. Work thoroughly with your available tools; do not cut corners.\n3. When finishing a task:\n   - use status=completed only when the task's success criteria are satisfied;\n   - use status=failed when blocking findings or validation failures mean downstream work must not proceed;\n   - include a concise output in either case;\n   - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.\n   claimed cannot jump to completed. Mark in_progress first, then completed or failed.\n   Include attempt_id on every update. Then report once as described below and become idle.\n4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.\n5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).\n6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.\n7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.\n8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.\n9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.\n10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.",
+        "toolFilter": {
+          "deny": [
+            "agent_teams_create",
+            "agent_teams_approve",
+            "agent_teams_edit_plan",
+            "agent_teams_add_member",
+            "agent_teams_remove_member",
+            "agent_teams_create_task",
+            "agent_teams_reassign_task",
+            "agent_teams_amend_task",
+            "agent_teams_resume",
+            "agent_teams_delete"
+          ]
+        }
+      }
+    },
+    {
+      "id": "a10145b5-f414-4a05-9341-146f05471844",
+      "name": "charging-depth",
+      "role": "charging engineer: planner stop/sleep prevention, public charging, solar and carbon, second charger, charger brands, tariff rate research",
+      "provider": "ollama-cloud",
+      "model": "deepseek-v4.1-flash:1017",
+      "executionPrompt": "You own the charging and planner track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/charging-depth -b charging-depth must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Use sanitized fixtures; never invent provider numbers or prices. Wake-a-sleeping-Mac is impossible without root: do not promise it. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and open questions.",
+      "joinedAt": 1795312385776,
+      "status": "working",
+      "runtimeSetup": {
+        "persona": "You are charging-depth, a member of the multi-agent team \"hisingen-should-completion\" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member with the role: charging engineer: planner stop/sleep prevention, public charging, solar and carbon, second charger, charger brands, tariff rate research.\n\nTeam context:\n- Team id: hisingen-should-completion\n- Your name inside the team (use it as `from`/identity): charging-depth\n- Team goal: Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.\n- Profile protocol: (none)\n- Execution guidance:\nYou own the charging and planner track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/charging-depth -b charging-depth must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Use sanitized fixtures; never invent provider numbers or prices. Wake-a-sleeping-Mac is impossible without root: do not promise it. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and open questions.\n- The team state lives under .agent-teams/hisingen-should-completion/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.\n- The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.\nWhen you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.\n\nWorking rules:\n1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.\n2. Work thoroughly with your available tools; do not cut corners.\n3. When finishing a task:\n   - use status=completed only when the task's success criteria are satisfied;\n   - use status=failed when blocking findings or validation failures mean downstream work must not proceed;\n   - include a concise output in either case;\n   - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.\n   claimed cannot jump to completed. Mark in_progress first, then completed or failed.\n   Include attempt_id on every update. Then report once as described below and become idle.\n4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.\n5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).\n6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.\n7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.\n8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.\n9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.\n10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.",
+        "toolFilter": {
+          "deny": [
+            "agent_teams_create",
+            "agent_teams_approve",
+            "agent_teams_edit_plan",
+            "agent_teams_add_member",
+            "agent_teams_remove_member",
+            "agent_teams_create_task",
+            "agent_teams_reassign_task",
+            "agent_teams_amend_task",
+            "agent_teams_resume",
+            "agent_teams_delete"
+          ]
+        }
+      }
+    },
+    {
+      "id": "c88f1fa3-66f4-4703-b249-89a617568991",
+      "name": "volvo-depth",
+      "role": "Volvo provider engineer: capability inspector, portal fallback and entitlements, per-scope grants, fixture integrity",
+      "provider": "ollama-cloud",
+      "model": "deepseek-v4.1-flash:1017",
+      "executionPrompt": "You own the Volvo track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/volvo-depth -b volvo-depth must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Keep provider payloads and decoding in the provider layer; preserve capability and authorization gates; represent missing readings as unknown. Never print or commit credentials; fixtures must be sanitized. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and remaining unknowns.",
+      "joinedAt": 1795312385776,
+      "status": "working",
+      "runtimeSetup": {
+        "persona": "You are volvo-depth, a member of the multi-agent team \"hisingen-should-completion\" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member with the role: Volvo provider engineer: capability inspector, portal fallback and entitlements, per-scope grants, fixture integrity.\n\nTeam context:\n- Team id: hisingen-should-completion\n- Your name inside the team (use it as `from`/identity): volvo-depth\n- Team goal: Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.\n- Profile protocol: (none)\n- Execution guidance:\nYou own the Volvo track for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/volvo-depth -b volvo-depth must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Keep provider payloads and decoding in the provider layer; preserve capability and authorization gates; represent missing readings as unknown. Never print or commit credentials; fixtures must be sanitized. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and remaining unknowns.\n- The team state lives under .agent-teams/hisingen-should-completion/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.\n- The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.\nWhen you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.\n\nWorking rules:\n1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.\n2. Work thoroughly with your available tools; do not cut corners.\n3. When finishing a task:\n   - use status=completed only when the task's success criteria are satisfied;\n   - use status=failed when blocking findings or validation failures mean downstream work must not proceed;\n   - include a concise output in either case;\n   - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.\n   claimed cannot jump to completed. Mark in_progress first, then completed or failed.\n   Include attempt_id on every update. Then report once as described below and become idle.\n4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.\n5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).\n6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.\n7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.\n8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.\n9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.\n10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.",
+        "toolFilter": {
+          "deny": [
+            "agent_teams_create",
+            "agent_teams_approve",
+            "agent_teams_edit_plan",
+            "agent_teams_add_member",
+            "agent_teams_remove_member",
+            "agent_teams_create_task",
+            "agent_teams_reassign_task",
+            "agent_teams_amend_task",
+            "agent_teams_resume",
+            "agent_teams_delete"
+          ]
+        }
+      }
+    },
+    {
+      "id": "077235bb-ec80-4af1-90e6-793853e7fb7f",
+      "name": "automation-reporting",
+      "role": "automation and reporting engineer: command queueing, triggers, at-charge-location detection, recurring reports and cost tracking",
+      "provider": "ollama-cloud",
+      "model": "deepseek-v4.1-flash:1017",
+      "executionPrompt": "You own automation and reporting for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/automation-reporting -b automation-reporting must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Arrival/departure detection must be in-app location comparison; do not require Location Services permission beyond what the app already asks. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and open questions.",
+      "joinedAt": 1795312385776,
+      "status": "working",
+      "runtimeSetup": {
+        "persona": "You are automation-reporting, a member of the multi-agent team \"hisingen-should-completion\" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member with the role: automation and reporting engineer: command queueing, triggers, at-charge-location detection, recurring reports and cost tracking.\n\nTeam context:\n- Team id: hisingen-should-completion\n- Your name inside the team (use it as `from`/identity): automation-reporting\n- Team goal: Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.\n- Profile protocol: (none)\n- Execution guidance:\nYou own automation and reporting for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftPM). Work ONLY in your own worktree: `git worktree add .agents/worktrees/automation-reporting -b automation-reporting must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Arrival/departure detection must be in-app location comparison; do not require Location Services permission beyond what the app already asks. Every new user-facing string needs en.lproj plus all 14 locale translations, with check-localization.py and verify-l10n-usage.mjs passing. Commit on your own branch. Report branch, commit, paths, commands with results, and open questions.\n- The team state lives under .agent-teams/hisingen-should-completion/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.\n- The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.\nWhen you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.\n\nWorking rules:\n1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.\n2. Work thoroughly with your available tools; do not cut corners.\n3. When finishing a task:\n   - use status=completed only when the task's success criteria are satisfied;\n   - use status=failed when blocking findings or validation failures mean downstream work must not proceed;\n   - include a concise output in either case;\n   - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.\n   claimed cannot jump to completed. Mark in_progress first, then completed or failed.\n   Include attempt_id on every update. Then report once as described below and become idle.\n4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.\n5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).\n6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.\n7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.\n8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.\n9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.\n10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.",
+        "toolFilter": {
+          "deny": [
+            "agent_teams_create",
+            "agent_teams_approve",
+            "agent_teams_edit_plan",
+            "agent_teams_add_member",
+            "agent_teams_remove_member",
+            "agent_teams_create_task",
+            "agent_teams_reassign_task",
+            "agent_teams_amend_task",
+            "agent_teams_resume",
+            "agent_teams_delete"
+          ]
+        }
+      }
+    },
+    {
+      "id": "d1559055-dda2-4a3d-9cc2-9fed4c5378fc",
+      "name": "ui-l10n",
+      "role": "UI, accessibility and localization engineer: menu-bar quick controls, accessibility pass, remaining translations",
+      "provider": "ollama-cloud",
+      "model": "deepseek-v4.1-flash:1017",
+      "executionPrompt": "You own menu-bar UI, accessibility and localization for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftUI/AppKit). Work ONLY in your own worktree: `git worktree add .agents/worktrees/ui-l10n -b ui-l10n must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Follow DESIGN.md and the accessibility expectations in AGENTS.md: keyboard focus, VoiceOver labels, reduce-motion. Translations must be real translations, not English placeholders except for genuine product names, and the untranslated ratchet must not grow. Run `python3 Scripts/check-localization.py` and `node Scripts/verify-l10n-usage.mjs` before committing. Commit on your own branch. Report branch, commit, paths, commands with results, and which locales or items remain.",
+      "joinedAt": 1795312385776,
+      "status": "working",
+      "runtimeSetup": {
+        "persona": "You are ui-l10n, a member of the multi-agent team \"hisingen-should-completion\" running inside DeepSeek Harness AgentTeams. The captain leads the team; you are a worker member with the role: UI, accessibility and localization engineer: menu-bar quick controls, accessibility pass, remaining translations.\n\nTeam context:\n- Team id: hisingen-should-completion\n- Your name inside the team (use it as `from`/identity): ui-l10n\n- Team goal: Finish the remaining 19 Should items from docs/feature-priorities.md for the Hisingen macOS app: the shared intents target that unblocks interactive widget buttons and real Control Center actions, plus charging/planner depth, Volvo depth, automation and reporting, menu-bar and accessibility work, and the remaining translations. Each member works in its own git worktree and branch from must-should-fixes, translates its own new strings in all 14 locales, and reports evidence; the captain integrates in dependency order and merges to main after verification.\n- Profile protocol: (none)\n- Execution guidance:\nYou own menu-bar UI, accessibility and localization for Hisingen (macOS menu-bar app, Swift 6, macOS 15+, SwiftUI/AppKit). Work ONLY in your own worktree: `git worktree add .agents/worktrees/ui-l10n -b ui-l10n must-should-fixes` from /Users/nicolaskheirallah/Documents/GitHub/Hisingen, then cd into it. Never edit the main checkout or another member's worktree. Claim the shared build lane before compiler-driven commands: `mkdir \"$(git rev-parse --path-format=absolute --git-common-dir)/hisingen-build-lane\"` with owner info inside, `rm -rf` when done. Build/tests: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin` then `swift build`, and `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter <Suite>`. Follow DESIGN.md and the accessibility expectations in AGENTS.md: keyboard focus, VoiceOver labels, reduce-motion. Translations must be real translations, not English placeholders except for genuine product names, and the untranslated ratchet must not grow. Run `python3 Scripts/check-localization.py` and `node Scripts/verify-l10n-usage.mjs` before committing. Commit on your own branch. Report branch, commit, paths, commands with results, and which locales or items remain.\n- The team state lives under .agent-teams/hisingen-should-completion/ (team.json and inbox/*.jsonl). You may inspect these files read-only for diagnostics, but never edit them directly; use the agent_teams_* tools so JSON escaping and concurrent updates stay safe.\n- The captain and your teammates reach you through messages. Coordination arrives at your nearest model step. Apply it to your current attempt; a task assignment starts a separate turn.\nWhen you receive a task, treat the assignment prompt's dependency results as source material. Do not ignore them.\n\nWorking rules:\n1. When you receive a task assignment, call agent_teams_claim_task with the task id. Keep the returned attempt_id: include it in every agent_teams_update_task call for that execution attempt. Then mark the task in_progress.\n2. Work thoroughly with your available tools; do not cut corners.\n3. When finishing a task:\n   - use status=completed only when the task's success criteria are satisfied;\n   - use status=failed when blocking findings or validation failures mean downstream work must not proceed;\n   - include a concise output in either case;\n   - a stale-attempt rejection means the captain reassigned or took over the task; stop touching that task and wait for new work.\n   claimed cannot jump to completed. Mark in_progress first, then completed or failed.\n   Include attempt_id on every update. Then report once as described below and become idle.\n4. Send one short report with agent_teams_send_message (to=captain) when you complete a task or hit a blocker. Include source_task_id and source_attempt_id in task reports; a stale source rejection means stop, never relabel an old result with a new attempt. The captain is also your parent: this single message satisfies both reporting duties. Do not repeat it through the native send_message tool or send acknowledgments that add no new information.\n5. To ask a teammate something, use agent_teams_send_message with to=<teammate name>; the message lands in their mailbox and wakes them directly — teammates talk to each other without the captain in the loop. The same applies to the captain (to=captain).\n6. After your turn becomes idle, the shared task scheduler may assign your next ready task automatically. Never claim a second task while you still own unfinished work.\n7. If you already own an open attempt (claimed or in_progress) and receive mail, treat it as guidance for that same attempt_id unless the mail explicitly tells you to stop or fail. Do not claim a new task in that turn.\n8. Do not start a teammate's assigned task. Do not privately tell the next-stage member to start; the scheduler assigns unlocked work after you become idle.\n9. You are a worker: do not create or delete teams, reassign tasks, or add/remove members — that is the captain's job.\n10. Quality-gate kinds carry a contract (kind, objective, inScope, acceptance, verify). Stay inside inScope. Do not mark your own implementation as review pass. Review/requirements complete only with verdict=pass; needs_revision/reject must fail with findings. Mail is not a formal next review. Completed work must not be repeated to attach late evidence: call update_task on the original task with its attempt_id and acceptanceResults/commandsRun/evidence_note; supplements are append-only and cannot change its verdict.",
+        "toolFilter": {
+          "deny": [
+            "agent_teams_create",
+            "agent_teams_approve",
+            "agent_teams_edit_plan",
+            "agent_teams_add_member",
+            "agent_teams_remove_member",
+            "agent_teams_create_task",
+            "agent_teams_reassign_task",
+            "agent_teams_amend_task",
+            "agent_teams_resume",
+            "agent_teams_delete"
+          ]
+        }
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "profileSeedId": "shared-intents",
+      "subject": "Shared intents target so widget and app can run the same AppIntent",
+      "description": "Create a small shared library target (for example Sources/HisingenIntents) linked by BOTH the app and Sources/HisingenWidget, holding the widget-facing AppIntent types plus a handler seam the app registers at launch (the widget cannot import the app executable). Then extend Scripts/generate-appintents-metadata.sh (or add a sibling) so the widget module's Metadata.appintents is built too, and install it in the widget .appex. Acceptance: swift build green; both metadata bundles are produced and inspected for intent counts; no widget button exists yet, this is the foundation only. Do not merge to main; commit on branch shared-intents.",
+      "status": "claimed",
+      "assignee": "platform-intents",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312403849,
+      "attemptId": "90a1b6fe-39ca-4829-8f93-40437de027ff",
+      "reassigning": false
+    },
+    {
+      "id": "t2",
+      "profileSeedId": "widget-buttons",
+      "subject": "Interactive widget buttons using the shared intents (S1)",
+      "description": "Add interactive widget buttons (Button(intent:)) for the highest-value commands: lock, unlock, climate start, refresh. Buttons must dispatch through the app's real command path and capability gates, not a side channel, and must fail visibly when the command is refused. Acceptance: widget metadata lists the intents; tapping runs the command in the app process; a refused command reports a reason; focused tests pass. Evidence required in the report: metadata intent count and the test output.",
+      "status": "pending",
+      "assignee": "platform-intents",
+      "dependencies": [
+        "t1"
+      ],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t3",
+      "profileSeedId": "control-center",
+      "subject": "Control Center actions that actually run (S3)",
+      "description": "Real Control Center actions (unlock, honk, charge-now, pre-cleaning) where they run through the shared intents, keeping the existing URL launchers working. Acceptance: ControlWidgets compile and appear; each action dispatches through the same gates as the Controls tab; URL launcher fallbacks still work; tests for the mapping pass.",
+      "status": "pending",
+      "assignee": "platform-intents",
+      "dependencies": [
+        "t1"
+      ],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t4",
+      "profileSeedId": "multi-account",
+      "subject": "Multiple accounts per brand and a demo mode (S27)",
+      "description": "Multiple accounts per brand plus a demo mode that works without any provider session. Must not disturb existing single-account installs: upgrade path matters, credentials must stay per-account in the Keychain, and the sign-out/erase paths must cover every account. Acceptance: an existing install keeps its session after upgrade; two Polestar accounts can be added and switched; demo mode shows a populated UI with no network; erase clears all accounts. Tests for the account store and the migration.",
+      "status": "pending",
+      "assignee": "platform-intents",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t5",
+      "profileSeedId": "planner-stop",
+      "subject": "Planner stops at the window end and can prevent sleep (S12)",
+      "description": "The planner stops at the end of its cheap window instead of running to target, and offers opt-in sleep prevention while it waits. Waking a sleeping Mac is impossible without root, so do not promise it and do not add a control that implies it. Acceptance: plan stops at window end; the sleep-prevention toggle is opt-in, off by default, documented in the UI; planner tests cover both.",
+      "status": "completed",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795315583041,
+      "attemptId": "de592994-d572-43a4-93f2-d8a410df4156",
+      "reassigning": false,
+      "output": "S12 shipped on branch `charging-depth`, commit 4a1b4a0a.\n\nStop at window end: the planner records the window it auto-starts (persisted per vehicle), ends its charge-now override (`stopChargingOverride`) when that fixed end passes while the car is still drawing power, and clears the record on target/disconnect/stale windows. `ChargingPlannerDecisions.shouldStopChargingAtWindowEnd` holds the policy, including a one-hour grace so a late stop cannot interrupt a manual charge.\n\nSleep prevention: `SleepPrevention` wraps IOPMAssertion (`kIOPMAssertionTypePreventUserIdleSystemSleep`), driven through a `SleepPreventing` protocol. New `plannerKeepAwakeEnabled` defaults false and only acts with auto-start; the Settings → Automations toggle is disabled until auto-start is on, and both the caption and info button state that Hisingen cannot wake an already-sleeping Mac. The planner holds the assertion while a window is waiting or running and releases it when the target is met, the planner disarms, or Home Assistant owns the car.\n\nAcceptance evidence:\n- Plan stops at window end: unit decisions + controller tests (`aChargeStillRunningAtTheWindowEndIsStoppedOnce`, `theRecordedWindowEndDoesNotSlideWhileTheCarCharges`, deferred/refused stop handling).\n- Opt-in, off by default, documented: `sleepPreventionIsOffByDefault`, `sleepPreventionHoldsTheAssertionWhileAWindowWaits`, settings-archive exclusion test, UI copy, docs/home-charging.md.\n- Tests: 76 tests in 13 suites with `--filter ChargingPlanner`, plus 18 SettingsPreferenceTests; build with `-warnings-as-errors`; localization/l10n-usage/UI-discipline checks pass; 5 new strings translated in all 14 locales.\n\nChanged paths: Sources/Hisingen/Services/Integration/{ChargingPlannerController,SleepPrevention}.swift, Domain/ElectricityPrices.swift, Services/Persistence/PreferencesStore+Charging.swift, App/AppDelegate{,+Automation}.swift, UI/Settings/{SettingsChargingPlannerCard,SettingsNavigation}.swift, all 15 Localizable.strings, Tests/HisingenTests/Unit/{ChargingPlannerControllerTests,ChargingPlannerTests,SettingsPreferenceTests}.swift, docs/home-charging.md, CHANGELOG.md.\n\nEnvironment note: `Scripts/test.sh` here needs `SDKROOT` pinned to Xcode's MacOSX26.5.sdk because the Python 3.13 launcher injects the CommandLineTools SDK; that is unrelated to the change.\n\nOpen questions for integration: (1) if the slots after a stopped window are still the cheapest, the next tick may commit a new window — documented as a new plan rather than extending the old one; (2) sleep prevention holds while any window is ahead, which can be most of the day (documented) — it is not limited to plugged-in periods; (3) the only stop-like provider command is `stopChargingOverride` (resume schedule), which ends the planner's override but cannot override an active car schedule.",
+      "changedPaths": [
+        "Sources/Hisingen/Services/Integration/SleepPrevention.swift",
+        "Sources/Hisingen/Services/Integration/ChargingPlannerController.swift",
+        "Sources/Hisingen/Domain/ElectricityPrices.swift",
+        "Sources/Hisingen/Services/Persistence/PreferencesStore+Charging.swift",
+        "Sources/Hisingen/App/AppDelegate.swift",
+        "Sources/Hisingen/App/AppDelegate+Automation.swift",
+        "Sources/Hisingen/UI/Settings/SettingsChargingPlannerCard.swift",
+        "Sources/Hisingen/UI/Settings/SettingsNavigation.swift",
+        "Sources/Hisingen/Resources/en.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/de.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/sv.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/da.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nb.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nn.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/fi.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/fr.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/es.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/it.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nl.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/pl.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/pt.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/ko.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/zh.lproj/Localizable.strings",
+        "Tests/HisingenTests/Unit/ChargingPlannerControllerTests.swift",
+        "Tests/HisingenTests/Unit/ChargingPlannerTests.swift",
+        "Tests/HisingenTests/Unit/SettingsPreferenceTests.swift",
+        "docs/home-charging.md",
+        "CHANGELOG.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "Plan stops at the window end instead of running to target",
+          "status": "passed",
+          "evidence": "ChargingPlannerController records the auto-started window end (persisted per VIN), and ChargingPlannerDecisions.shouldStopChargingAtWindowEnd + stopChargingAtWindowEnd send stopChargingOverride at that fixed end while the car is still charging. Tests: ChargingPlannerWindowEndTests (5 decisions), ChargingPlannerControllerTests aChargeStillRunningAtTheWindowEndIsStoppedOnce, theRecordedWindowEndDoesNotSlideWhileTheCarCharges, aDeferredStopIsRetriedOnTheNextPass, aTerminalStopRefusalConsumesTheWindow, theWindowEndStopNeedsNoAutoStartConsentOfItsOwn. 76 tests in 13 suites passed with --filter ChargingPlanner."
+        },
+        {
+          "criterion": "The sleep-prevention toggle is opt-in, off by default and documented in the UI",
+          "status": "passed",
+          "evidence": "PreferencesStore.plannerKeepAwakeEnabled is d.bool (false default); PlannerAutoStartControl shows a disabled-until-auto-start toggle with an InformationButton and captions saying it cannot wake a sleeping Mac; test sleepPreventionIsOffByDefault; SettingsPreferenceTests plannerSleepPreventionIsOffByDefaultAndStaysOutOfSettingsArchives; 5 new strings translated in en + 14 locales and verify-l10n-usage/check-localization pass."
+        },
+        {
+          "criterion": "Planner tests cover both behaviors",
+          "status": "passed",
+          "evidence": "ChargingPlannerWindowEndTests and ChargingPlannerSleepPreventionTests cover the pure decisions; ChargingPlannerControllerTests adds 15 stop/sleep tests with a fake SleepPreventing and a mutable clock. Documented commands: HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter ChargingPlanner -> 76 tests in 13 suites passed; --filter SettingsPreferenceTests -> 18 tests passed. swift build -Xswiftc -warnings-as-errors -> Build complete."
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture swift build -Xswiftc -warnings-as-errors",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Build complete! (147.39s) after a fixture secret stub was generated; a later incremental rebuild after the final edit also passed (30.74s)."
+        },
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter ChargingPlanner",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Test run with 76 tests in 13 suites passed after 0.593 seconds; Swift test execution verified."
+        },
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter SettingsPreferenceTests",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Test run with 18 tests in 1 suite passed after 0.369 seconds; Swift test execution verified."
+        },
+        {
+          "command": "python3 Scripts/check-localization.py",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "All 14 locales 3972/3972 keys; untranslated counts match the baseline; parity, uniqueness and ratchet checks passed."
+        },
+        {
+          "command": "node Scripts/verify-l10n-usage.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "L10N USAGE OK (3221 keys checked, 11 known-unkeyed)."
+        },
+        {
+          "command": "git diff --check",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "No whitespace errors in the working tree or staged diff."
+        },
+        {
+          "command": "node Scripts/audit-l10n-literals.mjs && node Scripts/verify-ui-discipline.mjs && node Scripts/verify-surface-discipline.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "AUDIT_L10N_PASSED; UI DISCIPLINE OK; surface discipline verified."
+        },
+        {
+          "command": "python3 Scripts/check-docs-links.py",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "All Markdown links OK (80 files); the output's 'not committed' notes are pre-existing on must-should-fixes."
+        }
+      ]
+    },
+    {
+      "id": "t6",
+      "profileSeedId": "public-charging",
+      "subject": "Public charging sessions and home-versus-public cost split (S13)",
+      "description": "Public charging: manual session entry with location, energy and price; per-session price; and a home-versus-public split in the cost figures. Local data model only, no new provider calls. Acceptance: a session can be entered and edited; cost lines separate home and public; existing history totals stay consistent; tests for the split arithmetic and for upgrade of stored history.",
+      "status": "in_progress",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795315599537,
+      "attemptId": "977af510-efca-400c-a61f-3077e8b056b0",
+      "reassigning": false
+    },
+    {
+      "id": "t7",
+      "profileSeedId": "solar-carbon",
+      "subject": "Solar forecast and live grid carbon (S16)",
+      "description": "Solar forecast from Open-Meteo radiation data and live grid carbon intensity where the reader supplies a provider key. No key means the carbon line stays absent rather than showing a guessed value. Acceptance: a forecast line appears when Open-Meteo answers; carbon requires a configured key and shows its source; failures degrade to nothing, not to a number; tests with fixtures.",
+      "status": "pending",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t8",
+      "profileSeedId": "second-charger",
+      "subject": "Two chargers per install (S17)",
+      "description": "Support a second charger per installation: model, storage and UI must handle two pairings without losing the existing single-charger behaviour. Acceptance: an existing single pairing still loads; two chargers can be added, viewed and commanded independently; the storage upgrade is covered by a test.",
+      "status": "pending",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t9",
+      "profileSeedId": "brand-depth",
+      "subject": "More charger brands and Home Assistant discovery depth (S15)",
+      "description": "Deepen one or two additional charger brands or extend Home Assistant discovery beyond NexBlue's entity shape. Do not invent vendor endpoints: the spike at docs/research/charger-write-depth-spike-2026-11-22.md records that Easee and Zaptec publish nothing usable for writes, so depth here means discovery and mapping, not new writes. Acceptance: the new shape is discoverable and mappable; a fixture covers it; no write is offered that cannot be confirmed.",
+      "status": "pending",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t10",
+      "profileSeedId": "tariff-rates",
+      "subject": "Verified per-market grid tariff rates for presets (S18)",
+      "description": "Research task, not code: find verified published grid-tariff rates for Norway, Denmark, Germany and the Netherlands that can be encoded as presets, with a source for each. If no defensible source exists for a market, say so instead of inventing figures. Deliverable: a short research note under docs/research/ naming the source, the peak/off-peak windows and the unit per market, plus a recommendation on which markets are safe to ship.",
+      "status": "pending",
+      "assignee": "charging-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t11",
+      "profileSeedId": "volvo-inspector",
+      "subject": "Volvo capability inspector, portal fallback and entitlements (S19, S20)",
+      "description": "Volvo capability inspector: show per-scope display of what was granted, and surface the degraded status/unavailableReason the provider sends instead of a generic unavailable. Combine with the portal fallback for .dataPortal, an entitlement probe and a domain-support map. Acceptance: the inspector distinguishes granted scopes; degraded reads show the provider's own reason; portal fallback is exercised by a fixture; tests cover both.",
+      "status": "claimed",
+      "assignee": "volvo-depth",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312404101,
+      "attemptId": "6c4a4745-c6cb-49d3-8f0c-39fad212a025",
+      "reassigning": false
+    },
+    {
+      "id": "t12",
+      "profileSeedId": "volvo-scopes",
+      "subject": "Volvo per-scope grants for locks without location (S30)",
+      "description": "Per-scope grants: lock and unlock should work when the grant includes the locks scope even if Location was refused, using bounded OAuth subset attempts. Acceptance: a subset grant yields working locks with the rest clearly unavailable; the attempt sequence is bounded and tested with fixtures; no scope is requested that the provider rejects silently.",
+      "status": "pending",
+      "assignee": "volvo-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t13",
+      "profileSeedId": "volvo-fixtures",
+      "subject": "Volvo endpoint fixtures and a working live sweep (S31)",
+      "description": "Evidence integrity for Volvo: add sanitized fixtures for the seven called endpoints that lack them, and fix the live sweep so it actually exercises them. Acceptance: each endpoint has a fixture proving its decoding; the live sweep runs the same set and is opt-in; report which endpoints still have no fixture and why.",
+      "status": "pending",
+      "assignee": "volvo-depth",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t14",
+      "profileSeedId": "automation-suite",
+      "subject": "Command queue, triggers and at-charge-location detection (S25, S21)",
+      "description": "Command queue with per-command cooldown, fleet broadcast across vehicles, scheduled lock/windows, and arrival/departure triggers based on in-app location comparison. Also finish at-charge-location detection (S21) using the saved charge locations and the vehicle position already in state. Acceptance: a queued command runs once; cooldown refuses a duplicate send with a reason; broadcast reaches every configured vehicle or reports which failed; a scheduled action fires at its time; arrival detection does not require extra permissions; tests for each.",
+      "status": "in_progress",
+      "assignee": "automation-reporting",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312414748,
+      "attemptId": "c020632c-11f4-4eba-bcc7-db454a002364",
+      "reassigning": false,
+      "output": "Starting: command queue, cooldown, fleet broadcast, scheduled actions, arrival/departure triggers, at-charge-location detection (S25, S21)."
+    },
+    {
+      "id": "t15",
+      "profileSeedId": "reporting",
+      "subject": "Recurring reports, trip cost, maintenance log and depreciation (S26)",
+      "description": "Reporting: recurring reports (weekly or monthly), trip-level cost, a maintenance log and depreciation. Local data only. Acceptance: a report can be produced for a range and exported or shown; trip rows carry cost from the existing rate policy; a maintenance entry can be recorded; depreciation is derived from a stated assumption rather than a guessed market value; tests for the arithmetic.",
+      "status": "pending",
+      "assignee": "automation-reporting",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    },
+    {
+      "id": "t16",
+      "profileSeedId": "menubar-controls",
+      "subject": "Menu-bar quick controls for timers, OTA and locations (S8)",
+      "description": "Menu-bar quick controls for timers, OTA and charge locations, reachable without opening the main window. Acceptance: the menu-bar menu exposes these without duplicating the whole Controls tab; each action goes through the existing gate; keyboard reachable; tests where the surface is testable.",
+      "status": "completed",
+      "assignee": "ui-l10n",
+      "dependencies": [],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795315477094,
+      "attemptId": "5cf1693d-956f-431a-8434-9a21ee1c94ef",
+      "reassigning": false,
+      "output": "Menu-bar quick controls for timers, OTA and charge locations are in the status item's menu on branch ui-l10n (commit 9f14b9d8), with all new strings translated in every locale and a 21-test model suite.\n\nWhat shipped\n- New `MenuBarQuickControls` model (UI/Shell) builds the rows from `ControlsCommandGate`: reported charging-window and cabin timers as pause/resume switches that preserve backendID/index/times/weekdays; OTA install-now, schedule in 2/8/12 h and cancel, using the card's own delays and state rules; per-saved-location optimised-charging switches; and a gate probe for \"Save Current Location…\". Rows that are temporarily blocked (busy, stale) stay visible and disabled with the gate's reason; permanently refused ones are omitted, matching the existing Actions-rotor rule.\n- `StatusItemController` adds Timers, Software Updates and Charge Locations submenus after Quick Controls, plus the save-location NSAlert prompt. Every row is dispatched through `gate.send`, so the capability gate re-checks at press time. No status duplication: OTA appears only when an install/schedule/cancel action exists, timers only when the gate could allow one, and charge locations only when the feature is on.\n- Keyboard: key equivalents on every new row while the menu is open (not global shortcuts, which DESIGN.md leaves undecided), standard NSMenu keyboard navigation, and the primary actions mirrored in the status item's VoiceOver Actions rotor (timer toggles, install/cancel, save location).\n- Localization: three new keys (Timers, No timers reported., Save Current Location…) translated in 14 locales. \"Timers\" is allowlisted in Scripts/check-localization.py because Swedish and Dutch spell it identically; ratchet counts stay at the baseline.\n- Changelog and docs/using-hisingen.md updated.\n\nVerification\n- `swift build` (fixture config, after `sh Scripts/inject-secrets.sh`): Build complete, 0 errors.\n- `sh Scripts/test.sh --skip Live --no-parallel --filter MenuBarQuickControlsTests`: 21 tests passed.\n- Adjacent suites (ControlsCommandGateTests, MenuBarGlyphTests, MenuBarIconStateTests, PanelPresentationTests, VehicleFeatureCompletionTests): 40 tests passed.\n- `python3 Scripts/check-localization.py`, `node Scripts/verify-l10n-usage.mjs`, `node Scripts/verify-ui-discipline.mjs`: all pass.\n- Full serial suite and a live app click-through were not run here; the menu surface itself is AppKit-only, which is why the decisions live in the tested model.\n\nNotes for integration\n- Build needs `HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/inject-secrets.sh` first, plus `SDKROOT=$(xcrun --sdk macosx --show-sdk-path)`; without SDKROOT the test script's manifest compile picks the CommandLineTools SDK and fails on this machine.\n- The shared build lane was held by other sessions for ~20 minutes; I queued, then built after it freed. Other sessions were building without the lane at the same time, and the disk briefly hit 0 bytes free (it recovered).\n- Antislop gate: PASS (no em dash in new copy, every row has real behavior or is disabled with a reason, keyboard and state coverage above, no fabricated content, DESIGN.md direction followed).",
+      "changedPaths": [
+        "Sources/Hisingen/UI/Shell/MenuBarQuickControls.swift",
+        "Sources/Hisingen/UI/Shell/StatusItemController.swift",
+        "Tests/HisingenTests/Unit/MenuBarQuickControlsTests.swift",
+        "Sources/Hisingen/Resources/en.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/da.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/de.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/es.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/fi.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/fr.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/it.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/ko.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nb.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nl.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/nn.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/pl.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/pt.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/sv.lproj/Localizable.strings",
+        "Sources/Hisingen/Resources/zh.lproj/Localizable.strings",
+        "Scripts/check-localization.py",
+        "docs/using-hisingen.md",
+        "CHANGELOG.md"
+      ],
+      "acceptanceResults": [
+        {
+          "criterion": "The menu-bar menu exposes timers, OTA and charge locations without duplicating the whole Controls tab",
+          "status": "passed",
+          "evidence": "StatusItemController adds Timers, Software Updates and Charge Locations submenus; MenuBarQuickControls offers only self-contained actions (pause/resume timer, install/schedule/cancel OTA, optimised-charging switch, save current location) and omits values that need a sheet or slider. OTA section appears only when an action exists; timers only when the gate could allow one; no status rows duplicated from the tab. Tests: chargingWindowAndCabinTimersBecomeRows, aDownloadedUpdateOffersInstallAndTheCardsDelays, eachSavedLocationOffersItsOptimisedChargingSwitch."
+        },
+        {
+          "criterion": "Each action goes through the existing gate",
+          "status": "passed",
+          "evidence": "Every row is built from ControlsCommandGate (same brand/preferences/busy inputs as ControlsTabView) and dispatched through gate.send, which re-checks availability at press time. Rows the gate permanently refuses are omitted; temporary refusals stay visible and disabled with availability.shortReason as the tooltip. Tests: theGateRefusesTheCommandItsRowWouldDisable, permanentRefusalsAreHiddenAndTemporaryOnesStayVisible, aBusyCommandKeepsTheRowVisibleWithItsReason, aStaleReadingBlocksTheRowWithoutHidingIt."
+        },
+        {
+          "criterion": "Keyboard reachable",
+          "status": "passed",
+          "evidence": "NSMenuItem rows are standard keyboard-navigable menu items; each new row carries a key equivalent active while the menu is open (not a global shortcut, which DESIGN.md leaves as an open decision), and timer toggles, OTA install/cancel and save-location are mirrored as NSAccessibilityCustomAction entries on the status item's Actions rotor (updateAccessibilityActions). Save-location prompt is an NSAlert with a labelled text field and Save/Cancel default actions."
+        },
+        {
+          "criterion": "Tests where the surface is testable",
+          "status": "passed",
+          "evidence": "New Tests/HisingenTests/Unit/MenuBarQuickControlsTests.swift: 21 tests covering timer row eligibility and toggle-command identity, busy/stale/feature-off states, OTA state rules and the card's 120/480/720 delays, per-location optimised-charging commands, privacy redaction, section visibility probes, offersRow policy and gate dispatch refusal. Command: HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter MenuBarQuickControlsTests (21 passed)."
+        }
+      ],
+      "commandsRun": [
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/inject-secrets.sh && HISINGEN_BUILD_CONFIGURATION=fixture swift build",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Build complete! (105.12s), 0 errors in /tmp/ui-l10n-build2.log"
+        },
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter MenuBarQuickControlsTests",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Test run with 21 tests in 1 suite passed; /tmp/ui-l10n-tests2.log"
+        },
+        {
+          "command": "HISINGEN_BUILD_CONFIGURATION=fixture sh Scripts/test.sh --skip Live --no-parallel --filter \"ControlsCommandGateTests|MenuBarGlyphTests|MenuBarIconStateTests|PanelPresentationTests|VehicleFeatureCompletionTests\"",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "Test run with 40 tests in 6 suites passed; /tmp/ui-l10n-tests3.log"
+        },
+        {
+          "command": "python3 Scripts/check-localization.py",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "3970 keys in parity for all 14 locales; every untranslated count equals its baseline; /tmp/ui-l10n-l10n.log"
+        },
+        {
+          "command": "node Scripts/verify-l10n-usage.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "L10N USAGE OK (3222 keys checked, 11 known-unkeyed)"
+        },
+        {
+          "command": "node Scripts/verify-ui-discipline.mjs",
+          "status": "passed",
+          "exitCode": 0,
+          "evidence": "UI DISCIPLINE OK (menus, ax, keyboard, help, copy checks included)"
+        }
+      ]
+    },
+    {
+      "id": "t17",
+      "profileSeedId": "accessibility",
+      "subject": "Accessibility: chart descriptors, adjustable actions, focus order (S28)",
+      "description": "Accessibility pass: chart descriptors that VoiceOver can read, adjustable actions for the steppers and sliders, and a keyboard focus order that matches the visual order. Follow DESIGN.md and the accessibility expectations in AGENTS.md, including reduce-motion. Acceptance: charts have labels and value descriptions; adjustable controls respond to increment/decrement; focus order is verified on the popover and Settings; reduce-motion honoured.",
+      "status": "in_progress",
+      "assignee": "ui-l10n",
+      "dependencies": [
+        "t16"
+      ],
+      "attempt": 1,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795315492012,
+      "attemptId": "14f24c32-33b8-401f-a1dd-fb1ef88c3d43",
+      "reassigning": false
+    },
+    {
+      "id": "t18",
+      "profileSeedId": "translations",
+      "subject": "Finish the remaining translations per locale (S29)",
+      "description": "Translate the remaining English strings per locale, in batches, starting with the locales closest to complete. Real translations only; product names may stay as-is and go in the checker's exemption list with a reason. Do not grow the untranslated ratchet. Acceptance: state the before/after count per locale; check-localization.py and verify-l10n-usage.mjs pass; each batch is its own commit with the locales named.",
+      "status": "pending",
+      "assignee": "ui-l10n",
+      "dependencies": [],
+      "attempt": 0,
+      "createdAt": 1795312385776,
+      "updatedAt": 1795312385776
+    }
+  ],
+  "taskSeq": 18,
+  "approvedAt": 1795312403841
+}
