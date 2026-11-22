@@ -7,6 +7,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Real Control Center actions.** Unlock, Honk and Flash, Charge Now and Start Cabin
+  Pre-Cleaning are now controls that dispatch through Hisingen's shared intents. Each one opens
+  the app and runs in its process, so the command takes the same capability gate, confirmation
+  and audit path as the Controls tab, and a refusal is shown instead of disappearing. Lock and
+  Start Climate keep their existing `hisingen://` URL launchers, so those routes and their tests
+  still work. All six controls are macOS 26 or later.
 - **Interactive widget buttons.** The vehicle status widget now carries lock, unlock, start
   climate and refresh in a square action row under the data, when a snapshot names a car. Each
   button is an App Intent that opens Hisingen and runs in the app process, so it takes the same

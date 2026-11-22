@@ -64,7 +64,7 @@ print(f"App Intents metadata: {len(intents)} intents, {len(shortcuts)} shortcut 
 import json, sys
 document = json.load(open(sys.argv[1], encoding="utf-8"))
 intents = document.get("actions") or {}
-expected = {"WidgetLockVehicleIntent", "WidgetUnlockVehicleIntent", "WidgetStartClimateIntent", "WidgetRefreshVehicleIntent"}
+expected = {"WidgetLockVehicleIntent", "WidgetUnlockVehicleIntent", "WidgetStartClimateIntent", "WidgetHonkVehicleIntent", "WidgetChargeNowIntent", "WidgetStartPreCleaningIntent", "WidgetRefreshVehicleIntent"}
 missing = sorted(expected - intents.keys())
 if missing:
     raise SystemExit("Widget App Intents metadata is missing: " + ", ".join(missing))

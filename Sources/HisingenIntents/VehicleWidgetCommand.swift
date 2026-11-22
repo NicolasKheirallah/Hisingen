@@ -10,4 +10,7 @@ public enum VehicleWidgetCommand: String, Codable, Sendable, CaseIterable {
     case unlock
     case startClimate
     case refresh
+    case honkAndFlash
+    case startChargingOverride
+    case startPreCleaning
 }

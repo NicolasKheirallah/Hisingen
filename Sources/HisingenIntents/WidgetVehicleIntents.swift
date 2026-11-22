@@ -5,7 +5,7 @@ import Foundation
 /// cannot import the app executable: the extension names the same types the app links, and
 /// `Metadata.appintents` for the extension is built from this module as a dependency.
 ///
-/// All four set `openAppWhenRun`: the app performs them through
+/// All seven set `openAppWhenRun`: the app performs them through
 /// `VehicleWidgetCommandRouter`, so a button never reaches a vehicle backend from inside the
 /// extension and the command takes the app's confirmation and capability gates.
 
@@ -72,6 +72,72 @@ public struct WidgetStartClimateIntent: AppIntent {
     @MainActor
     public func perform() async throws -> some ProvidesDialog {
         try await WidgetVehicleIntentDialog.result(for: .startClimate, vehicle: vehicle)
+    }
+}
+
+public struct WidgetHonkVehicleIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Honk and Flash Vehicle"
+    public static let description = IntentDescription("Sounds the horn and flashes the lights together.")
+    public static let openAppWhenRun = true
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
+
+    @MainActor
+    public func perform() async throws -> some ProvidesDialog {
+        try await WidgetVehicleIntentDialog.result(for: .honkAndFlash, vehicle: vehicle)
+    }
+}
+
+public struct WidgetChargeNowIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Charge Now"
+    public static let description = IntentDescription("Overrides the active charging schedule so the vehicle charges immediately.")
+    public static let openAppWhenRun = true
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
+
+    @MainActor
+    public func perform() async throws -> some ProvidesDialog {
+        try await WidgetVehicleIntentDialog.result(for: .startChargingOverride, vehicle: vehicle)
+    }
+}
+
+public struct WidgetStartPreCleaningIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Start Cabin Pre-Cleaning"
+    public static let description = IntentDescription("Starts the cabin pre-cleaning cycle that purifies the interior air before departure.")
+    public static let openAppWhenRun = true
+
+    @Parameter(title: "Vehicle", description: "Vehicle nickname or VIN (optional)")
+    public var vehicle: String?
+
+    public init() {
+        self.vehicle = nil
+    }
+
+    public init(vehicle: String?) {
+        self.vehicle = vehicle
+    }
+
+    @MainActor
+    public func perform() async throws -> some ProvidesDialog {
+        try await WidgetVehicleIntentDialog.result(for: .startPreCleaning, vehicle: vehicle)
     }
 }
 

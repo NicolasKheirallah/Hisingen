@@ -12,6 +12,8 @@ struct URLCommandRouterCoverageTests {
     @MainActor
     func polestarRoutesHandOverTheirCommand() {
         let cases: [(String, RemoteCommand)] = [
+            ("hisingen://unlock", .unlock),
+            ("hisingen://honk", .honkAndFlash),
             ("hisingen://precleaning/start", .startPreCleaning),
             ("hisingen://precleaning/stop", .stopPreCleaning),
             ("hisingen://windows/open", .openWindows),

@@ -1,5 +1,6 @@
 import Testing
 @testable import HisingenIntents
+@testable import HisingenWidget
 
 /// Pins the seam the widget buttons rely on: the shared intent types open the app, and the
 /// router hands each command and vehicle to whatever the app installed. Serialized because the
@@ -24,12 +25,50 @@ struct WidgetIntentRoutingTests {
         #expect(WidgetLockVehicleIntent.openAppWhenRun)
         #expect(WidgetUnlockVehicleIntent.openAppWhenRun)
         #expect(WidgetStartClimateIntent.openAppWhenRun)
+        #expect(WidgetHonkVehicleIntent.openAppWhenRun)
+        #expect(WidgetChargeNowIntent.openAppWhenRun)
+        #expect(WidgetStartPreCleaningIntent.openAppWhenRun)
         #expect(WidgetRefreshVehicleIntent.openAppWhenRun)
     }
 
     @Test
-    func theWidgetFacingCommandsAreTheFourButtons() {
-        #expect(Set(VehicleWidgetCommand.allCases) == Set([.lock, .unlock, .startClimate, .refresh]))
+    func theWidgetFacingCommandsCoverButtonsAndControls() {
+        #expect(Set(VehicleWidgetCommand.allCases) == Set([
+            .lock, .unlock, .startClimate, .refresh,
+            .honkAndFlash, .startChargingOverride, .startPreCleaning,
+        ]))
+    }
+
+    /// Each real Control Center control names the same shared command the app adapter maps back
+    /// to its Remote Command; the kind is the stable identity Control Center stores.
+    @Test
+    func controlCenterActionsMapToTheirSharedCommand() {
+        #expect(VehicleControlAction.unlock.command == .unlock)
+        #expect(VehicleControlAction.honk.command == .honkAndFlash)
+        #expect(VehicleControlAction.chargeNow.command == .startChargingOverride)
+        #expect(VehicleControlAction.preCleaning.command == .startPreCleaning)
+        #expect(Set(VehicleControlAction.allCases.map(\.kind)).count == VehicleControlAction.allCases.count)
+        #expect(VehicleControlAction.allCases.allSatisfy { $0.kind.hasPrefix("io.kheirallah.hisingen.control.") })
+    }
+
+    /// The four real Control Center intents are the controls' actual actions, so this is the
+    /// mapping that matters: each one hands its command to the installed app handler.
+    @Test
+    @MainActor
+    func controlIntentsSendTheirCommandThroughTheRouter() async throws {
+        VehicleWidgetCommandRouter.resetForTesting()
+        defer { VehicleWidgetCommandRouter.resetForTesting() }
+
+        let recorder = Recorder()
+        VehicleWidgetCommandRouter.install(recorder)
+
+        _ = try await WidgetUnlockVehicleIntent(vehicle: "YSMWIDGET01").perform()
+        _ = try await WidgetHonkVehicleIntent(vehicle: "YSMWIDGET01").perform()
+        _ = try await WidgetChargeNowIntent(vehicle: "YSMWIDGET01").perform()
+        _ = try await WidgetStartPreCleaningIntent(vehicle: "YSMWIDGET01").perform()
+
+        #expect(recorder.commands == [.unlock, .honkAndFlash, .startChargingOverride, .startPreCleaning])
+        #expect(recorder.vins == ["YSMWIDGET01", "YSMWIDGET01", "YSMWIDGET01", "YSMWIDGET01"])
     }
 
     @Test

@@ -23,6 +23,10 @@ struct HisingenWidgetBundle: WidgetBundle {
         if #available(macOS 26.0, *) {
             VehicleLockControl()
             VehicleClimateControl()
+            VehicleUnlockControl()
+            VehicleHonkControl()
+            VehicleChargeNowControl()
+            VehiclePreCleaningControl()
         }
     }
 }
