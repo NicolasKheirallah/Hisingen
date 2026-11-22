@@ -283,6 +283,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A confirmation alert nobody sees no longer blocks every command.** The alert a deep link or a
+  Shortcut raises for confirmation did not bring Hisingen to the front, so it could open behind the
+  windows in use, and it stayed open indefinitely while holding the command lane: every later
+  command and automation answered "busy". Hisingen now activates before the alert, and an alert
+  left for two minutes counts as declined.
+
 - **A history database written by a newer Hisingen is refused instead of read with the wrong
   schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes
   the handle before any ledger reads it, so the app cannot show half-decoded rows or migrate a
