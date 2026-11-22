@@ -5,6 +5,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Inactive issues close after 30 days.** A daily workflow labels an issue `stale` and comments
+  after 23 days without activity, then closes it as not planned a week later. A reply removes the
+  label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
+  with an assignee or a milestone, are skipped, and pull requests are not touched.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the

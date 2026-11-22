@@ -1,0 +1,45 @@
+name: Close Inactive Issues
+
+# GitHub has no per-issue archive, so an issue with no activity for 30 days is closed as "not
+# planned". It gets a stale label and a comment after 23 days, which leaves a week to reply.
+# Any comment or label change removes the stale label and restarts the clock. Pull requests are
+# not touched.
+
+on:
+  schedule:
+    # 03:41 UTC daily, off-peak and clear of the Monday security scan.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: stale-issues
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Close Inactive Issues
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Mark and close inactive issues
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-issue-stale: 23
+          days-before-issue-close: 7
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          close-issue-reason: not_planned
+          stale-issue-label: stale
+          exempt-issue-labels: help wanted,good first issue
+          exempt-all-issue-assignees: true
+          exempt-all-issue-milestones: true
+          operations-per-run: 200
+          stale-issue-message: >
+            This issue has had no activity for 23 days. It will be closed in 7 days unless someone
+            comments. A comment here keeps it open, and a closed issue can be reopened at any time.
+          close-issue-message: >
+            Closed after 30 days without activity. Comment to reopen it if this still applies.
