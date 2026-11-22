@@ -147,6 +147,8 @@
 "Blocked:" = "Blockiert:";
 "Commands:" = "Befehle:";
 "Dock icon" = "Dock-Symbol";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "Schätzung. Die seit der letzten Ladung vom Fahrzeug selbst erfasste Verbrauchsangabe über die seit der letzten abgeschlossenen Ladesitzung gefahrene Strecke, aus Hisingens lokalen Aufzeichnungen.";
+"estimated" = "geschätzt";
 "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Exit-Codes: 0 gesendet, 2 unbrauchbare Argumente, 3 abgelehnt, 4 nicht autorisiert, 5 nicht gesendet und sicher zu wiederholen.";
 "Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen fragt nach, bevor es %@ sendet. Füge --confirm hinzu, um trotzdem zu senden.";
 "Hisingen command line" = "Hisingen-Befehlszeile";

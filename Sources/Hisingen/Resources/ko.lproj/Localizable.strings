@@ -147,6 +147,8 @@
 "Blocked:" = "차단됨:";
 "Commands:" = "명령:";
 "Dock icon" = "Dock 아이콘";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "추정치입니다. 마지막 완료된 충전 세션 이후 주행한 거리에 대한 차량 자체의 충전 후 소비 수치로, Hisingen의 로컬 기록에서 산출합니다.";
+"estimated" = "추정";
 "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "종료 코드: 0 전송됨, 2 사용할 수 없는 인수, 3 거부됨, 4 승인되지 않음, 5 전송되지 않았으며 다시 시도해도 안전합니다.";
 "Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen은 %@을(를) 보내기 전에 확인합니다. 그래도 보내려면 --confirm을 추가하세요.";
 "Hisingen command line" = "Hisingen 명령줄";

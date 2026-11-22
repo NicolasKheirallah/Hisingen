@@ -456,6 +456,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   so ships without the App Intents metadata a SwiftPM build cannot emit — that metadata remains
   parked for Shortcuts and Siri discovery only.
 
+- **Energy Since Charge (estimated)** on the charging card for Volvos, whose API supplies
+  the car's since-charge consumption figure but no energy total. Hisingen derives the
+  missing total from that figure over the distance driven since the last completed
+  charging session in its local ledger, labels the row as an estimate, and keeps it
+  silent when the distance or the odometer samples make the answer untrustworthy.
+
 ### Changed
 
 - A release now opens a reviewable PR that syncs the checked-in `site/updates/appcast.xml`

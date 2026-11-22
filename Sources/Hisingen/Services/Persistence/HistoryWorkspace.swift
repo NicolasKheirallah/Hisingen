@@ -85,6 +85,14 @@ final class HistoryWorkspace {
         }.value
     }
 
+    /// Recorded odometer/telemetry samples, newest first, for the since-charge estimate.
+    func recentTelemetry(for vin: String) async -> [HistoricalTelemetryRecord] {
+        let database = database
+        return await Task.detached(priority: .userInitiated) {
+            database.history.recentTelemetry(for: vin, limit: 500)
+        }.value
+    }
+
     /// Trips derived from recorded telemetry, for the handover pack. Entries carry coordinates;
     /// the caller decides what leaves the Mac.
     func tripHistory(vin: String) async -> [TripHistoryEntry] {

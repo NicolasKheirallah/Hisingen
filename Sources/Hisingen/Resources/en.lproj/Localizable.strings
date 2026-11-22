@@ -143,6 +143,8 @@
 "Blocked:" = "Blocked:";
 "Commands:" = "Commands:";
 "Dock icon" = "Dock icon";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records.";
+"estimated" = "estimated";
 "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry.";
 "Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen asks before it sends %@. Add --confirm to send it anyway.";
 "Hisingen command line" = "Hisingen command line";

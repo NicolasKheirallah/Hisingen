@@ -147,6 +147,8 @@
 "Blocked:" = "Blokkert:";
 "Commands:" = "Kommandoer:";
 "Dock icon" = "Dock-ikon";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "Anslag. Bilens eget forbrukstall siden siste lading over distansen kjørt siden dens siste fullførte ladeøkt, fra Hisingens lokale opptegnelser.";
+"estimated" = "anslag";
 "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "Avslutningskoder: 0 sendt, 2 ubrukelige argumenter, 3 avvist, 4 ikke autorisert, 5 ikke sendt og trygt å prøve igjen.";
 "Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen spør før den sender %@. Legg til --confirm for å sende likevel.";
 "Hisingen command line" = "Hisingen-kommandolinjen";

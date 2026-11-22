@@ -147,6 +147,8 @@
 "Blocked:" = "受阻：";
 "Commands:" = "命令";
 "Dock icon" = "Dock 图标";
+"Estimate. The car's own since-charge consumption figure over the distance driven since its last completed charging session, from Hisingen's local records." = "估算值。根据 Hisingen 的本地记录，以车辆自有的充电后消耗数值乘以上次完成的充电会话之后行驶的距离得出。";
+"estimated" = "估算";
 "Exit codes: 0 sent, 2 unusable arguments, 3 refused, 4 not authorized, 5 not sent and safe to retry." = "退出码：0 已发送，2 参数不可用，3 已拒绝，4 未获授权，5 未发送且可安全重试。";
 "Hisingen asks before it sends %@. Add --confirm to send it anyway." = "Hisingen 在发送 %@ 前会询问。加上 --confirm 即可照常发送。";
 "Hisingen command line" = "Hisingen 命令行";
