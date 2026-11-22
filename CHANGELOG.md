@@ -324,6 +324,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   every minute inside that window, and a failed send, including one lost to the network, is
   repeated up to three times before the occurrence is given up.
 
+- **The solar forecast no longer sends the car's exact position, and follows Vehicle Weather.**
+  The Charging Planner asked Open-Meteo for radiation with the coordinates at full precision, on
+  every vehicle refresh, with no setting behind it. The request now carries the position rounded to
+  two decimals (about a kilometre), the answer is kept for 30 minutes, and nothing is requested
+  while Vehicle Weather is off. `PRIVACY.md` describes the solar request and the optional
+  Electricity Maps carbon reading, which sends only a token and a price-zone code.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and

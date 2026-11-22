@@ -189,8 +189,10 @@ power and energy readings. A charging switch is only mapped automatically when t
 can confirm a command, so discovery never offers a write it cannot check; a charger with
 unrecognised states is still listed for its readings and can be mapped by hand.
 
-When Open-Meteo answers, the **Charging Planner** draws a **solar forecast** line of global
-shortwave radiation for the next day at the car's location, with its peak time. It is radiation,
+When Vehicle Weather is on and Open-Meteo answers, the **Charging Planner** draws a **solar
+forecast** line of global shortwave radiation for the next day at the car's location, with its
+peak time. The request carries the position rounded to two decimals, and the answer is kept for 30
+minutes. It is radiation,
 not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
 kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
 provider named beneath it. Without a token, or whenever the provider fails, the line stays absent

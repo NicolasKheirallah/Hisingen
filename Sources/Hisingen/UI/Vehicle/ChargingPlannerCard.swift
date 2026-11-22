@@ -71,7 +71,7 @@ struct ChargingPlannerCard: View {
             // the card's own insertion/removal, not snap it.
             .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
             .task(id: plannerTaskID) {
-                async let solar = Self.solarForecast(for: state)
+                async let solar = Self.solarForecast(for: state, preferences: preferences)
                 async let carbon = Self.gridCarbon(preferences: preferences, zone: zone)
                 let answer = await provider.resolve(zone: zone)
                 let forecast = await solar
@@ -88,9 +88,11 @@ struct ChargingPlannerCard: View {
     }
 
     /// Open-Meteo radiation at the car's coordinates, when the car has reported them. The
-    /// forecast adds a line only; a failure is nil and the card simply has no line.
-    private static func solarForecast(for state: VehicleState) async -> SolarForecast? {
-        guard let latitude = state.location?.latitude, let longitude = state.location?.longitude else { return nil }
+    /// forecast adds a line only; a failure is nil and the card simply has no line. It sends
+    /// the car's position to Open-Meteo, so it follows the Vehicle Weather setting.
+    private static func solarForecast(for state: VehicleState, preferences: PreferencesStore) async -> SolarForecast? {
+        guard preferences.features.contains(.vehicleWeather),
+              let latitude = state.location?.latitude, let longitude = state.location?.longitude else { return nil }
         return await SolarForecastClient().forecast(latitude: latitude, longitude: longitude)
     }
 
