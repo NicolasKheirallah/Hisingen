@@ -70,6 +70,15 @@ ALLOWED_VALUES = {
     "SPA/CMA Sensus",       # Infotainment platform.
     "you@example.com",      # Example placeholder in a field description, not a sentence.
     "Google Maps",          # Map service named in a link label.
+    "Charcoal Gold",        # Theme name; theme names are not translated.
+    "Volvo Connected Vehicle API",  # Volvo's official API name.
+    "Plug & Charge",        # Standard charging feature name.
+    "Celsius (°C)",         # Scale name with its symbol, identical in every locale.
+    "Fahrenheit (°F)",      # Scale name with its symbol, identical in every locale.
+    "SE1 · Luleå", "SE2 · Sundsvall", "SE3 · Stockholm", "SE4 · Malmö",  # Swedish price areas.
+    # Fuel name spelled the same in every locale that uses it; only Korean, Chinese and Spanish
+    # localise it, and they already do.
+    "Diesel",
 }
 # A value left as this literal means the translation was never filled in, which made Siri
 # phrases read "undefined" in every locale but de and sv.
