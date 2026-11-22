@@ -19,6 +19,34 @@ struct ChargerCurrentLimitTests {
     }
 
     @Test
+    func theEntitysOwnRangeNarrowsTheOuterBound() {
+        let attributes: [String: HAJSONValue] = ["min": .number(6), "max": .number(16)]
+        let range = HomeChargingModel.currentLimitRange(fromEntityAttributes: attributes)
+        #expect(range == 6...16)
+        #expect(HomeChargingModel.clampedCurrentLimit(32, within: range) == 16)
+        #expect(HomeChargingModel.clampedCurrentLimit(10, within: range) == 10)
+    }
+
+    @Test
+    func anEntityRangeNeverWidensTheOuterBound() {
+        let wide: [String: HAJSONValue] = ["min": .number(0), "max": .number(63)]
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: wide) == 6...32)
+        let narrowLow: [String: HAJSONValue] = ["min": .number(10.2), "max": .number(24.9)]
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: narrowLow) == 11...24)
+    }
+
+    @Test
+    func aMissingOrContradictoryEntityRangeFallsBackToTheOuterBound() {
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: [:]) == 6...32)
+        let reversed: [String: HAJSONValue] = ["min": .number(40), "max": .number(50)]
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: reversed) == 6...32)
+        let huge: [String: HAJSONValue] = ["min": .number(1e300), "max": .number(.infinity)]
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: huge) == 6...32)
+        let text: [String: HAJSONValue] = ["min": .string("low"), "max": .string("high")]
+        #expect(HomeChargingModel.currentLimitRange(fromEntityAttributes: text) == 6...32)
+    }
+
+    @Test
     func theWritableEntityIsCarriedInTheMap() {
         let map = HomeChargerEntityMap(currentLimit: "sensor.limit", currentLimitNumber: "number.limit")
         #expect(map.allEntityIDs.contains("number.limit"))

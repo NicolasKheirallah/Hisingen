@@ -300,6 +300,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   performed while Hisingen was still starting waited for the app to install its command handler,
   with no limit. It now waits 30 seconds and then answers "Open Hisingen to send this command."
 
+- **The charger current limit now respects the range the charger itself accepts.** The write was
+  clamped to a fixed 6–32 A even though the Home Assistant `number` entity publishes its own
+  minimum and maximum, so a 16 A charger was sent values it would reject. Hisingen now narrows
+  the fixed range to the entity's `min` and `max` before it sends, and keeps the fixed range when
+  the entity gives none or gives nonsense.
+
 - **A history database written by a newer Hisingen is refused instead of read with the wrong
   schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes
   the handle before any ledger reads it, so the app cannot show half-decoded rows or migrate a
