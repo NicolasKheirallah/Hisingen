@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "卡片布局";
+"Card view" = "卡片视图";
 "How mid-size cards flow on wide panels" = "中等尺寸卡片在宽面板上的排布方式";
 "Full Width" = "全宽";
+"Full" = "完整";
 "Two Columns" = "两列";
 "Every card uses the entire panel width" = "每张卡片使用整个面板宽度";
 "Cards flow side by side in two columns" = "卡片并排分为两列";

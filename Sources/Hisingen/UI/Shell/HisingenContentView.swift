@@ -749,7 +749,9 @@ struct HisingenContentView: View {
                     onAuthorizeRemoteCommands: { onSettingsChanged(.polestarCommandAuthorization) },
                     onOpenPlan: planLink,
                     onOpenCar: carLink,
-                    onOpenSession: sessionLink
+                    onOpenSession: sessionLink,
+                    viewType: preferences.tabComposition.viewType(for: item, on: tab),
+                    showsHomePlan: !preferences.tabComposition.visibleItems(for: tab).contains(.vehicleHomeCharger)
                 )
             }
         }

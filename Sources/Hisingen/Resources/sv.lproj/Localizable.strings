@@ -1749,8 +1749,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kortlayout";
+"Card view" = "Kortvy";
 "How mid-size cards flow on wide panels" = "Hur mellanstora kort flyter på breda paneler";
 "Full Width" = "Full bredd";
+"Full" = "Fullständig";
 "Two Columns" = "Två kolumner";
 "Every card uses the entire panel width" = "Varje kort använder hela panelens bredd";
 "Cards flow side by side in two columns" = "Kort läggs sida vid sida i två kolumner";

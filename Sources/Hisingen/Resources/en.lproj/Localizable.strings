@@ -1819,8 +1819,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Card Layout";
+"Card view" = "Card view";
 "How mid-size cards flow on wide panels" = "How mid-size cards flow on wide panels";
 "Full Width" = "Full Width";
+"Full" = "Full";
 "Two Columns" = "Two Columns";
 "Every card uses the entire panel width" = "Every card uses the entire panel width";
 "Cards flow side by side in two columns" = "Cards flow side by side in two columns";

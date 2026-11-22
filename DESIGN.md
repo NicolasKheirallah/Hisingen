@@ -65,7 +65,7 @@ charts and time fields to 12-hour time. Times retain their original time zone an
 - **Charts:** in the Monochrome Precision palette, ink for the primary series, greys for supporting ones, a deep gold for attention.
 - **Icons:** outline SF Symbols throughout; filled glyphs remain only for warning, success, and error marks.
 
-Now and Plan share the charging planner and command receipts. Now shows the next cheap window and links to Plan when the full planner is there. The latest saved charging session opens in Log. Car carries the tyre schematic by default. A reader can still place it on Now.
+Now and Plan share the charging planner and command receipts. Each card that has a summary and a full form draws the form the reader chose for that placement in Settings → Tabs & Cards: Now defaults to the summary, whose link opens the full card, and every other tab defaults to the full card. Choosing **Full** on Now draws the planner, home charger, departure check, doors and location in place, with the information their full form carries. A card on the tab its summary would open keeps the full form only. The latest saved charging session opens in Log. Car carries the tyre schematic by default. A reader can still place it on Now.
 
 The shipped Now layout places a warning notice between the header and the car profile. A tyre warning names the affected wheels and opens Tyres in Car when that section is visible. Live charging power and the estimated finish sit on the Charging control. The departure link follows the controls. Vehicle details folds the supporting cards below the quick view. An explicit card arrangement keeps its own order.
 
@@ -73,7 +73,7 @@ Log places charging sessions and recent activity after the period summary and be
 
 Now puts the current weather symbol at the top right, with the outside temperature beside it. The symbol and temperature open the weather readings and observation time. When the vehicle overview is hidden, the weather item can still draw on its own.
 
-Settings keeps account permissions and vehicle-specific references in Accounts, card layout in Tabs & Cards, and retention, redaction, authentication and backups in Privacy & Data. Notifications owns alert preferences, including charging planner alerts. Electricity owns charging prices, zone and connected services. Appearance sets a brand theme default, and Garage can override it for each car.
+Settings keeps account permissions and vehicle-specific references in Accounts, card layout and the per-placement card view in Tabs & Cards, and retention, redaction, authentication and backups in Privacy & Data. Notifications owns alert preferences, including charging planner alerts. Electricity owns charging prices, zone and connected services. Appearance sets a brand theme default, and Garage can override it for each car.
 
 ## Motion and input
 

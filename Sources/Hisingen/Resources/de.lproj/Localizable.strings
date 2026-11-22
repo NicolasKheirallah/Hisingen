@@ -1721,8 +1721,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kartenlayout";
+"Card view" = "Kartenansicht";
 "How mid-size cards flow on wide panels" = "Wie mittelgroße Karten auf breiten Panels fließen";
 "Full Width" = "Volle Breite";
+"Full" = "Vollständig";
 "Two Columns" = "Zwei Spalten";
 "Every card uses the entire panel width" = "Jede Karte nutzt die gesamte Panelbreite";
 "Cards flow side by side in two columns" = "Karten fließen in zwei Spalten nebeneinander";

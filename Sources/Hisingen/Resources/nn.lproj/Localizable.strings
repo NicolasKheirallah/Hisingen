@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kortoppsett";
+"Card view" = "Kortvising";
 "How mid-size cards flow on wide panels" = "Korleis mellomstore kort flyt på breie panel";
 "Full Width" = "Full breidd";
+"Full" = "Fullstendig";
 "Two Columns" = "To kolonnar";
 "Every card uses the entire panel width" = "Kvart kort brukar heile panelbreidda";
 "Cards flow side by side in two columns" = "Korta ligg side om side i to kolonnar";

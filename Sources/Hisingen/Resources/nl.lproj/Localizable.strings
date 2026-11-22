@@ -1719,8 +1719,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kaartindeling";
+"Card view" = "Kaartweergave";
 "How mid-size cards flow on wide panels" = "Hoe middelgrote kaarten op brede panelen stromen";
 "Full Width" = "Volle breedte";
+"Full" = "Volledig";
 "Two Columns" = "Twee kolommen";
 "Every card uses the entire panel width" = "Elke kaart gebruikt de volledige paneelbreedte";
 "Cards flow side by side in two columns" = "Kaarten staan in twee kolommen naast elkaar";

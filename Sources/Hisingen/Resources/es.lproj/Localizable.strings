@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Diseño de tarjetas";
+"Card view" = "Vista de tarjeta";
 "How mid-size cards flow on wide panels" = "Cómo fluyen las tarjetas medianas en paneles anchos";
 "Full Width" = "Ancho completo";
+"Full" = "Completa";
 "Two Columns" = "Dos columnas";
 "Every card uses the entire panel width" = "Cada tarjeta usa todo el ancho del panel";
 "Cards flow side by side in two columns" = "Las tarjetas fluyen en dos columnas";
