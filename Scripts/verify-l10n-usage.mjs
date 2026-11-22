@@ -7,8 +7,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const sourcesDir = path.join(root, 'Sources', 'Hisingen');
-const tablePath = path.join(sourcesDir, 'Resources', 'en.lproj', 'Localizable.strings');
+// Every target that ships user-facing copy is walked: the app, the widget extension and the
+// shared intents module. The widget and intents hold displayName/description strings and
+// LocalizedStringResource titles, and a gate that only looked at Sources/Hisingen could not
+// see a new one, so those literals silently escaped both checks.
+const sourceDirs = [
+    path.join(root, 'Sources', 'Hisingen'),
+    path.join(root, 'Sources', 'HisingenWidget'),
+    path.join(root, 'Sources', 'HisingenIntents'),
+];
+const appDir = sourceDirs[0];
+const tablePath = path.join(appDir, 'Resources', 'en.lproj', 'Localizable.strings');
 const KEY_RE = /^"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;\s*$/;
 
 function walkSwift(dir) {
@@ -62,7 +71,7 @@ if (mode === '--retention') {
     'Charging samples and telemetry older than %d days will be permanently removed. Summary sessions are kept.',
     'Off by default. Signing out keeps charging, trip and health history on this Mac; turn on to remove it with the session.',
   ];
-  const resources = path.join(sourcesDir, 'Resources');
+  const resources = path.join(appDir, 'Resources');
   const locales = fs.readdirSync(resources).filter((d) => d.endsWith('.lproj') && !d.startsWith('en.'));
   let failures = 0;
   for (const locale of locales) {
@@ -82,7 +91,8 @@ if (mode === '--retention') {
 }
 
 const used = new Map(); // key -> first site
-for (const file of walkSwift(sourcesDir)) {
+for (const dir of sourceDirs) {
+for (const file of walkSwift(dir)) {
   const text = fs.readFileSync(file, 'utf8');
   const lines = text.split(/\r?\n/);
   const re = /\bL10n\.(?:text|format)\(\s*"((?:[^"\\]|\\.)*)"/g;
@@ -93,6 +103,7 @@ for (const file of walkSwift(sourcesDir)) {
       if (!used.has(key)) used.set(key, `${path.relative(root, file)}:${i + 1}`);
     }
   });
+}
 }
 
 const missing = [...used.keys()].filter((k) => !table.has(k)).sort();
