@@ -3998,9 +3998,9 @@
 "Log partition" = "Lokin osio";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "Rivi näkyy, kun lähtötunnin lämpötila on 0 °C tai alle, siihen osuu sade tai lumi, tai tuuli tai puuskat yltävät 40 km/h. Ilmastointiajastin, joka käynnistyy kahden tunnin sisällä ennen lähtöä, katsotaan kattavaksi, ja silloin rivi pysyy vaiti.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "Ei aktiivista Volvo-tilausta";
-"Remote commands need an active subscription on this car." = "Etäkomennot vaativat tähän autoon aktiivisen tilauksen.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "Komento vanheni ennen kuin auto ehti suorittaa sen.";
 "The vehicle reported a problem with this command." = "Auto ilmoitti ongelmasta tässä komennossa.";
 "This vehicle does not support this command." = "Tämä auto ei tue tätä komentoa.";
+
+"This vehicle service reports this value but cannot change it." = "Tämä ajoneuvopalvelu näyttää tämän arvon mutta ei voi muuttaa sitä.";

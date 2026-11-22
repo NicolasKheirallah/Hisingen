@@ -168,6 +168,21 @@ struct ChargingControlsCard: View {
         ))
     }
 
+    /// Whether this vehicle service can change these settings at all. Volvo's public API reports
+    /// the charge target and the current limit but exposes no write for either, so both controls
+    /// rendered as sliders that were present, reachable and permanently disabled. A read-only line
+    /// says what is true instead of inviting a drag that can never land.
+    private var canWriteChargingSettings: Bool {
+        ProviderCommandCatalog(brand: gate.brand).implements(.setChargeTarget(0))
+    }
+
+    private var readOnlySettingLine: some View {
+        Text(L10n.text("This vehicle service reports this value but cannot change it."))
+            .hisType(.micro)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var chargeTargetPresets: [Int] { chargeBounds.targetPresets() }
 
     private var chargeTargetControls: some View {
@@ -184,7 +199,9 @@ struct ChargingControlsCard: View {
                     .hisTelemetryValue(displayedChargeTarget, reduceMotion: reduceMotion)
             }
 
-            if let chargeTarget {
+            if !canWriteChargingSettings {
+                readOnlySettingLine
+            } else if let chargeTarget {
                 Slider(
                     value: Binding(
                         get: { chargeTargetDraft ?? Double(chargeTarget) },
@@ -296,7 +313,7 @@ struct ChargingControlsCard: View {
                                       subject: L10n.text("Current Limit"))
                 }
                 Spacer()
-                if let ampLimit {
+                if let ampLimit, canWriteChargingSettings {
                     LimitEntryButton(
                         entry: amperageEntry(title: L10n.text("Current Limit"), current: ampLimit) { .setAmpLimit($0) },
                         isAvailable: !gate.isDisabled(.setAmpLimit(ampLimit)),
@@ -310,7 +327,9 @@ struct ChargingControlsCard: View {
                     .hisTelemetryValue(displayedAmpLimit, reduceMotion: reduceMotion)
             }
 
-            if let ampLimit {
+            if !canWriteChargingSettings {
+                readOnlySettingLine
+            } else if let ampLimit {
                 let presets = chargeBounds.amperagePresets()
                 if presets.count > 1 {
                     // The reported limit is underlined, so the row reads as "where it is now" and a

@@ -95,9 +95,6 @@ actor VolvoAPI {
     var sessionEpoch = 0
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
-    /// Last `voc-subscription` answer per vehicle. A subscription changes when the customer
-    /// renews or lets it lapse, not between polls, so an hour matches the capability list.
-    var subscriptionCache: [String: (value: Bool, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
     /// Where the durable per-endpoint stand-downs live: one owner for both providers, so an
     /// erase reaches them and a test can inject one over an in-memory database.
@@ -570,15 +567,17 @@ actor VolvoAPI {
     func get<T: Decodable & Sendable>(_ path: String, scope: VehicleLogScope) async throws -> T {
         let (data, response) = try await authenticatedGET(path, scope: scope)
         if response.statusCode == 403 {
-            // Only per-vehicle telemetry GETs route through this helper, and for those a 403
-            // is empirically a market/model gate rather than a token problem: the same token
-            // keeps working on sibling endpoints. Vehicle discovery and command dispatch do
-            // not use this path, so their 403s stay `.permissionDenied` – the asymmetry is
-            // deliberate. This is tuned from observed behaviour, not Volvo documentation.
-            if path.hasPrefix("/location/") {
-                throw VolvoError.regionRestricted(service: path)
-            }
+            // Volvo documents 403 as "scopes missing in the Bearer token". That is not a market
+            // gate: for `/location/` it means `location:read` was not granted, and the fix is the
+            // approved-permissions switch in Settings. Reporting it as a regional restriction told
+            // the reader to give up on something they could turn on.
             throw VolvoError.permissionDenied(operation: path)
+        }
+        if path.hasPrefix("/location/"), response.statusCode == 404 {
+            // Volvo documents this 404 as "No location found for vin": the car has no stored
+            // location yet, which resolves the moment it parks somewhere. Treated as a structural
+            // 404 it stood the endpoint down for an hour, so moving the car left location dark.
+            throw VolvoError.temporarilyUnavailable(service: path)
         }
         if let failure = VolvoError.httpFailure(statusCode: response.statusCode, retryAfter: ServiceResponseClassifier.retryAfter(from: response), operation: path) { throw failure }
         let envelope = try? JSONDecoder.volvo.decode(VolvoEnvelope<T>.self, from: data)
@@ -667,7 +666,7 @@ actor VolvoAPI {
     /// diagnostics and static capability lists.
     static func optionalTelemetryTTL(for key: String) -> TimeInterval {
         switch key {
-        case "commands":
+        case "commands", "voc-subscription":
             return 60 * 60
         case "odometer", "statistics", "fuel", "location", "brakes":
             return 15 * 60

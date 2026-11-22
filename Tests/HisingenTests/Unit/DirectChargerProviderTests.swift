@@ -372,6 +372,10 @@ struct ZaptecProviderTests {
 
         let lte = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (150, "LTE")]), now: now)
         #expect(lte.network?.value == .mobile)
+        // "none" is one of the modes Zaptec documents, so it is a reported state rather than an
+        // unknown one. Reading it as nil would hide that the charger has no network mode.
+        let noNetwork = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (150, "none")]), now: now)
+        #expect(noNetwork.network?.value == HomeChargerNetwork.none)
         // PLC and a SetPhases value outside Zaptec's table are left out rather than guessed.
         let plc = try ZaptecProvider.telemetry(from: zaptecState([(710, "3"), (150, "PLC")]), now: now)
         #expect(plc.network == nil)

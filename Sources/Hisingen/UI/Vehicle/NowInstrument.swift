@@ -566,7 +566,23 @@ struct NowInstrument: View {
         preferences.remoteRearLeftSeatHeating != .unspecified || preferences.remoteRearRightSeatHeating != .unspecified
     }
 
-    private var climateRunning: Bool { state.isClimateActive && state.hasFreshReading(.climateStatus) }
+    /// A provider with no climate-status resource has no freshness to check, so the receipt-backed
+    /// activity is enough to spin the fan; the countdown below still requires a real reading.
+    private var climateRunning: Bool {
+        guard state.isClimateActive else { return false }
+        return state.climateStatus == nil || state.hasFreshReading(.climateStatus)
+    }
+
+    /// The car's own activity word when it reports one. "Unavailable" used to stand in for
+    /// "this provider cannot report climate status", which read as a missing feature while the
+    /// command itself worked.
+    private var climateValue: String {
+        if let name = state.climateStatus?.activity.displayName { return name }
+        if state.isClimateActive { return L10n.text("Running") }
+        return state.capabilityProfile.permits(.climateStartStop)
+            ? L10n.text("Not reported")
+            : L10n.text("Unavailable")
+    }
 
     /// The car's own remaining time with the moment it said so, which the card counts down from.
     private var climateCountdown: CardCountdownSource? {
@@ -591,8 +607,9 @@ struct NowInstrument: View {
         return quickControl(
             symbol: "fan",
             name: L10n.text("Climate"),
-            value: state.climateStatus?.activity.displayName ?? L10n.text("Unavailable"),
-            reading: .climateStatus, hasReading: state.climateStatus != nil,
+            value: climateValue,
+            reading: .climateStatus,
+            hasReading: state.climateStatus != nil || state.receiptClimateIsRunning,
             activity: climateRunning ? .running : nil,
             symbolMotion: climateRunning ? .spin : .still,
             countdown: climateCountdown,

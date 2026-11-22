@@ -114,6 +114,28 @@ extension VehicleState {
     /// the age instead.
     static let retainedDataHorizon: TimeInterval = 7 * 24 * 3600
 
+    /// Whether a snapshot holds a value for `feature`, so a retained mark has something to stand
+    /// in for. Without this a dwell on a domain the provider structurally never serves kept the
+    /// last-known banner alive indefinitely.
+    func hasRetainedValue(for feature: AppFeature) -> Bool {
+        switch feature {
+        case .softwareUpdates: return softwareInfo != nil
+        case .vehicleWeather: return weather != nil
+        case .chargingSchedule: return !energy.schedules.isEmpty || !climateTimers.isEmpty
+        case .exteriorStatus: return exteriorStatus != nil
+        case .tyreAndWarnings: return healthDetails != nil
+        case .tripMeters: return tripComputer.manualTripKm != nil || tripComputer.automaticTripKm != nil
+        case .connectivityDiagnostics: return connectivity != nil
+        case .airQuality: return airQuality != nil
+        case .batteryDiagnostics: return energy.diagnostics != nil
+        case .vehicleLocation: return location != nil
+        case .climateStatus: return climateStatus != nil
+        case .vehicleHealth: return healthDetails != nil
+        // Capabilities and write features have no reading of their own to retain.
+        default: return false
+        }
+    }
+
     /// The date a carried-forward domain's data is anchored to, for horizon checks.
     private func lastKnownAnchorDate(for reading: VehicleReading) -> Date? {
         reportedDate(for: reading) ?? freshness.retainedDataAt
@@ -245,7 +267,13 @@ extension VehicleState {
         markRetained(.batteryDiagnostics, currentIsMissing: batteryDiagnostics == nil, previousWasPresent: previous.batteryDiagnostics != nil)
         markRetained(.vehicleWeather, currentIsMissing: weather == nil, previousWasPresent: previous.weather != nil)
         markRetained(.vehicleLocation, currentIsMissing: location == nil, previousWasPresent: previous.location != nil)
-        retained.formUnion(policy.failedFeatures.filter { features.contains($0) })
+        // Only a feature this snapshot can actually show as last-known earns a retained mark.
+        // A provider that never serves a domain reports it unavailable on every refresh, and
+        // unioning those unconditionally pinned the "Showing last-known values" banner on data
+        // from hours earlier: it could never clear, because the feature could never be refreshed.
+        retained.formUnion(policy.failedFeatures.filter {
+            features.contains($0) && previous.hasRetainedValue(for: $0)
+        })
         merged.freshness.retainedDataCategories = retained.sorted { $0.title < $1.title }
         merged.freshness.retainedDataAt = retained.isEmpty ? nil : (previous.retainedDataAt ?? previous.vehicleReportedAt ?? previous.fetchedAt)
         merged.retainReadingsNewerThanIncoming(incoming: self, previous: previous)

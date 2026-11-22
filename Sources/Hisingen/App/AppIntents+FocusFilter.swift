@@ -52,7 +52,7 @@ enum FocusFilterMapping {
 
     /// The summary Focus settings shows for this filter once it has run.
     static func displaySummary(_ applied: Applied) -> String {
-        guard let vin = applied.vin else {
+        guard applied.vin != nil else {
             return L10n.text("No vehicle in Hisingen matches that name or VIN.")
         }
         let name = applied.vehicleName ?? L10n.text("Vehicle")

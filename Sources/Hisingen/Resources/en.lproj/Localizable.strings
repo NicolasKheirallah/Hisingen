@@ -4017,10 +4017,9 @@
 "Log partition" = "Log partition";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet.";
 
-// Volvo command outcomes the API can report beyond the common set, and the premium
-// subscription state that explains a refusal no other signal accounts for.
+// Volvo command outcomes the API can report beyond the common set.
 "This vehicle does not support this command." = "This vehicle does not support this command.";
 "The command expired before the vehicle acted on it." = "The command expired before the vehicle acted on it.";
 "The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
-"No active Volvo subscription" = "No active Volvo subscription";
-"Remote commands need an active subscription on this car." = "Remote commands need an active subscription on this car.";
+
+"This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";

@@ -3998,9 +3998,9 @@
 "Log partition" = "기록 구획";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "출발 시각의 기온이 0 °C 이하이거나 비나 눈이 오거나 바람 또는 돌풍이 40 km/h에 이르면 표시됩니다. 출발 두 시간 이내에 시작하는 공조 타이머가 있으면 덮인 것으로 보고, 그때는 줄이 나타나지 않습니다.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "활성 Volvo 구독이 없습니다";
-"Remote commands need an active subscription on this car." = "원격 명령을 사용하려면 이 차량에 활성 구독이 필요합니다.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "차량이 실행하기 전에 명령이 만료되었습니다.";
 "The vehicle reported a problem with this command." = "차량이 이 명령에서 문제를 보고했습니다.";
 "This vehicle does not support this command." = "이 차량은 이 명령을 지원하지 않습니다.";
+
+"This vehicle service reports this value but cannot change it." = "이 차량 서비스는 이 값을 표시하지만 변경할 수는 없습니다.";

@@ -4005,9 +4005,9 @@
 "Log partition" = "Logpartition";
 "The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet." = "Linjen vises, når afgangstimen er 0 °C eller koldere, har regn eller sne, eller vinden eller vindstødene når 40 km/h. En klimattimer, der starter inden for to timer før afgangen, regnes for at dække den, og så er linjen tavs.";
 
-// Volvo remote-command and subscription failures.
-"No active Volvo subscription" = "Intet aktivt Volvo-abonnement";
-"Remote commands need an active subscription on this car." = "Fjernkommandoer kræver et aktivt abonnement på denne bil.";
+// Volvo remote-command failures.
 "The command expired before the vehicle acted on it." = "Kommandoen udløb, før bilen nåede at udføre den.";
 "The vehicle reported a problem with this command." = "Bilen rapporterede et problem med kommandoen.";
 "This vehicle does not support this command." = "Denne bil understøtter ikke kommandoen.";
+
+"This vehicle service reports this value but cannot change it." = "Denne køretøjstjeneste kan vise værdien, men ikke ændre den.";
