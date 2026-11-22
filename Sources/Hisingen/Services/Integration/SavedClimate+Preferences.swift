@@ -3,6 +3,7 @@ import Foundation
 extension AutomationCommandPolicy.SavedClimate {
     /// The climate the reader saved for remote starts. Calendar preconditioning, schedules and
     /// location triggers all read it here, so they cannot drift apart.
+    @MainActor
     init(preferences: PreferencesStore) {
         self.init(
             temperatureCelsius: Float(preferences.remoteClimateTemperature),
