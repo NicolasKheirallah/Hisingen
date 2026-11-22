@@ -4045,3 +4045,9 @@
 "The vehicle reported a problem with this command." = "The vehicle reported a problem with this command.";
 
 "This vehicle service reports this value but cannot change it." = "This vehicle service reports this value but cannot change it.";
+
+"Volvo connected – location unavailable" = "Volvo connected – location unavailable";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map.";
+"Granted on the current session: %@" = "Granted on the current session: %@";
+"None of the approved permissions are granted on the current session." = "None of the approved permissions are granted on the current session.";
+"Engine start" = "Engine start";

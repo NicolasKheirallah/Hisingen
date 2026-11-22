@@ -28,6 +28,11 @@ extension VolvoAPI {
             || (powertrain.hasFuelRange && features.contains(.batteryDiagnostics))
 
         let needsFuel = Self.needsFuelRead(powertrain: powertrain, fuelType: details.fuelType)
+        // A session recorded without `location:read` gets a hard 403 from /location/, and
+        // the optional() wrapper would stand the endpoint down for an hour on every answer.
+        // Skipping the read entirely leaves the map card to its existing "no location"
+        // handling and keeps the request off the wire. Nil (nothing recorded) still reads.
+        let locationScopeGranted = await hasGranted("location:read")
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
             try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel", scope: .vehicle(vin))
         }
@@ -57,7 +62,7 @@ extension VolvoAPI {
             enabled: needsStatistics, key: "statistics", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics", scope: .vehicle(vin)) }
         async let locationTask: VolvoLocationDTO? = optional(
-            enabled: features.contains(.vehicleLocation), key: "location", vin: vin
+            enabled: features.contains(.vehicleLocation) && locationScopeGranted != false, key: "location", vin: vin
         ) { try await self.get("/location/v1/vehicles/\(vin)/location", scope: .vehicle(vin)) }
         async let brakesTask: VolvoBrakesDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin

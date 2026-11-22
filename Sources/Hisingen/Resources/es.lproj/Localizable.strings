@@ -4026,3 +4026,9 @@
 "This vehicle does not support this command." = "Este coche no admite este comando.";
 
 "This vehicle service reports this value but cannot change it." = "Este servicio del vehículo indica este valor, pero no puede cambiarlo.";
+
+"Volvo connected – location unavailable" = "Volvo conectado: ubicación no disponible";
+"Your Volvo developer application isn't approved for vehicle location. Locks, engine start, and honk/flash connected normally; request location on developer.volvocars.com to see the car on the map." = "Tu aplicación de desarrollador de Volvo no está aprobada para la ubicación del vehículo. El cierre, el arranque del motor y el claxon y destello se han conectado con normalidad; solicita la ubicación en developer.volvocars.com para ver el coche en el mapa.";
+"Granted on the current session: %@" = "Concedido en la sesión actual: %@";
+"None of the approved permissions are granted on the current session." = "Ninguno de los permisos aprobados está concedido en la sesión actual.";
+"Engine start" = "Arranque del motor";

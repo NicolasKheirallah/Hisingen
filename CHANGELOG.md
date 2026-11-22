@@ -18,6 +18,20 @@ All notable changes to Hisingen are documented in this file. The project follows
   levels. Days and months the meter has not reported stay out instead of reading as zero, a home
   without a production metering point shows no production, and a read that fails keeps the last
   good answer and names the reason.
+- Saved charge locations now say what the backend offers at each place: the optimised
+  charging mode it can run while the switch is still off, in the same words the active mode
+  uses, and whether the location supports bidirectional charging when the vehicle reports it.
+- Reading Freshness names the transport that answered each reading — Portal, gRPC, Live or
+  Weather — whenever it is not the usual Polestar app transport, and stays silent when it is.
+  In Developer Portal mode this explains a stale domain sitting next to a fresh one.
+- Volvo's approved permissions are now tracked per scope instead of all-or-nothing. When Volvo
+  rejects a sign-in over one unapproved scope, Hisingen first retries without `location:read` —
+  the permission developer applications most often lack — so a car without location approval
+  keeps remote locks, engine start, and honk/flash instead of losing every remote control. The
+  token response echoes the scope set Volvo actually granted, and each control now asks about
+  its own scope: a missing location approval no longer dims the lock cards or stands the
+  vehicle-location read down for an hour. The Approved Volvo permissions row in Settings shows
+  which of the five permissions the current session carries.
 
 ### Changed
 
@@ -25,12 +39,8 @@ All notable changes to Hisingen are documented in this file. The project follows
   seed with the feed the release just published. The seed had stayed behind since 2.0.10,
   and the fallback Pages path could have served it after a rollback or a new checkout. The
   live feed itself already deploys from the release artifact and needs no merge.
-- Saved charge locations now say what the backend offers at each place: the optimised
-  charging mode it can run while the switch is still off, in the same words the active mode
-  uses, and whether the location supports bidirectional charging when the vehicle reports it.
-- Reading Freshness names the transport that answered each reading — Portal, gRPC, Live or
-  Weather — whenever it is not the usual Polestar app transport, and stays silent when it is.
-  In Developer Portal mode this explains a stale domain sitting next to a fresh one.
+
+## [3.0.2] - 2026-11-21
 
 ## [3.0.2] - 2026-11-21
 
