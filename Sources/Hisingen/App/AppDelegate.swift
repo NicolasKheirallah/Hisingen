@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var locationTriggers: ChargeLocationTriggerController!
     /// Sends one command to every configured vehicle and reports which ones answered.
     var fleetBroadcaster: FleetCommandBroadcaster!
+    /// Posts the weekly or monthly report once each completed window.
+    var recurringReports: RecurringReportController!
+    /// The history seam the report card and the recurring scheduler both read through.
+    lazy var reportingWorkspace = HistoryWorkspace(database: vehicleDatabase, preferences: preferences)
     /// Optional Home Assistant integration for a home charger. Inert until the reader pairs one.
     lazy var homeCharging = HomeChargingModel(preferences: preferences, database: vehicleDatabase)
     var settingsWindow: NSWindow?
@@ -221,6 +225,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
             providers: providerRegistry, fleetStore: fleetStore)
+        recurringReports = RecurringReportController(
+            preferences: preferences,
+            notifier: notifier,
+            activeVehicle: { [weak self] in
+                guard let self, let state = self.vehicleSession.latest,
+                      !state.identity.vin.isEmpty else { return nil }
+                return (state.identity.vin, self.preferences.formattedVehicleTitle(
+                    vin: state.identity.vin,
+                    modelName: state.identity.modelName,
+                    modelYear: state.identity.modelYear,
+                    registrationNo: state.identity.registrationNo,
+                    fallbackBrand: self.vehicleSession.currentProvider().brand))
+            },
+            loadReport: { [weak self] period, name in
+                guard let self else { return nil }
+                let vin = (self.vehicleSession.latest?.identity.vin ?? self.preferences.vin).normalizedVIN
+                guard !vin.isEmpty else { return nil }
+                return await self.reportingWorkspace.periodReport(
+                    vin: vin, vehicleName: name, period: period,
+                    redacted: self.preferences.privacyRedactionEnabled)
+            }
+        )
         signInCoordinator = SignInCoordinator(
             context: self, preferences: preferences,
             polestarAPI: polestarAPI, volvoAPI: volvoAPI)
@@ -253,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         calendarPreconditioning.start()
         chargingPlannerController.reload()
         scheduledCommands.start()
+        recurringReports.start()
         homeCharging.start()
         homeCharging.houseMeter.start()
         if vehicleSession.signInRequired {
@@ -276,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     func applicationWillTerminate(_ notification: Notification) {
         calendarPreconditioning.stop()
         scheduledCommands.stop()
+        recurringReports.stop()
         chargingPlannerController.stop()
         garageScanner.stop()
         vehicleSession.stop()

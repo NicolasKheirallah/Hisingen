@@ -325,7 +325,7 @@ struct HistoryDashboardView: View {
             case "charging-sessions", "charging-curve": return .sessions
             case "charging-history", "monthly-charging", "charge-locations": return .chargingSummary
             case "trips", "driving-patterns", "distance", "monthly-mileage", "odometer": return .driving
-            case "efficiency", "consumption", "fuel-economy", "recent-fills", "emissions": return .energy
+            case "efficiency", "consumption", "fuel-economy", "recent-fills", "emissions", "reports": return .energy
             case "air-cleaning", "air-quality", "cabin-climate": return .cabin
             case "activity", "warnings", "automations": return .activity
             case "battery-health", "tyre-pressure": return .status
@@ -384,6 +384,7 @@ struct HistoryDashboardView: View {
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "charge-locations", title: L10n.text("Charge Locations"),
                            isVisible: !chargingSessions.isEmpty),
+            HistorySection(id: "reports", title: L10n.text("Period Report"), isVisible: true),
             HistorySection(id: "charging-history", title: L10n.text("Charging Trends"),
                            isVisible: !chargingSessions.isEmpty),
             HistorySection(id: "fuel-economy", title: L10n.text("Fuel Economy"), isVisible: !fuelEntries.isEmpty),
@@ -517,6 +518,7 @@ struct HistoryDashboardView: View {
         case "driving-patterns": drivingPatternsCard
         case "distance": distanceChartCard
         case "monthly-mileage": monthlyMileageReportCard
+        case "reports": PeriodReportCard(history: history, state: state)
         case "trips": tripListCard
         case "charging-sessions": chargingSessionsCard
         case "charging-curve":

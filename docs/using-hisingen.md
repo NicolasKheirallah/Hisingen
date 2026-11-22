@@ -47,6 +47,8 @@ Depending on the vehicle and the features you've enabled, notifications can incl
 * a car left in convenience mode for 30 minutes (opt-in), since convenience mode keeps systems on
   and can drain the 12 V battery
 * a daily summary (opt-in)
+* a weekly or monthly report (opt-in): one banner when the window ends, with distance, energy and
+  cost. The full report, including the maintenance log and depreciation, is on History
 * a climate session whose run time is nearly used up, or whose battery is too low
 * interactive banners: Lock and Mute This Vehicle on vehicle alerts, Resume Schedule
   from an interrupted-charging alert
@@ -56,6 +58,24 @@ permission and quiet hours. Sustained alerts keep their elapsed warning time acr
 signed out and asks you to sign in again even when notifications are off.
 
 Notification behaviour can be configured in Settings.
+
+## Reports
+
+History ends with **Period Report**. Pick a week or a month and step back through past windows to
+see what the car drove, the energy it used, what that cost at your electricity rate, and what you
+spent on maintenance. Copy puts the whole report on the clipboard; Export writes it as a text file.
+
+* **Trip costs** are distance × the consumption the car reported × your rate. A trip with no
+  consumption reading shows no cost rather than a zero. In automatic rate mode the price is the
+  average market price over the window, converted with your markup, charges and VAT; when no market
+  series covers the window the report says it used the fixed rate.
+* **Maintenance** is your own log: date, kind, what was done, odometer and cost. It stays on this
+  Mac and is never read from the car.
+* **Depreciation** is arithmetic on figures you enter under **Ownership figures** — what you paid,
+  when, and the annual decline you assume. Hisingen does not estimate a market value, and the
+  report prints the assumption it applied so the number can be checked.
+* **Recurring reports** (Settings → Automations) post one banner when a week or month ends, once
+  per window, with the same figures the report shows.
 
 ## macOS integration
 

@@ -7,6 +7,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Reports.** History gains a **Period Report** card: pick a week or a month (and step back through
+  past windows) and read distance, energy, trip cost, charging cost, the maintenance log and
+  depreciation, then copy or export it as text. Trip costs are distance × the consumption the car
+  reported × your electricity rate — the same rate policy the charging figures use, with the fixed
+  tariff named when no market series covers the window. Maintenance entries are your own local log
+  (date, kind, what was done, odometer, cost). Depreciation is arithmetic on the purchase price,
+  purchase date and annual decline you enter, and the report prints that assumption instead of
+  estimating a market value. An opt-in **Recurring Report** (Settings → Automations) posts one
+  banner per completed week or month with the same figures.
+### Added
+
 - **Automations.** Settings → Automations gains scheduled actions, arrival and departure triggers,
   and a one-tap broadcast to every configured vehicle. A scheduled action runs once per occurrence
   on the days you pick, catches up a tick that lands late, and skips rather than replays a schedule

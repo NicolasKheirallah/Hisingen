@@ -16,6 +16,7 @@ struct AutomationSettingsCards: View {
             ScheduledActionsCard(binder: binder)
             LocationTriggersCard(binder: binder, locations: savedLocations)
             FleetBroadcastCard(binder: binder)
+            RecurringReportCard(binder: binder)
         }
     }
 
@@ -341,6 +342,67 @@ private struct FleetBroadcastCard: View {
                     }
                     .buttonStyle(.pressable)
                     .hisType(.caption, weight: .medium)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Recurring report
+
+/// The weekly or monthly report banner. It is configured here, beside the other things that run
+/// without the reader present, and it reports on the vehicle that is active when the window ends.
+@MainActor
+private struct RecurringReportCard: View {
+    let binder: PreferenceBinder
+
+    private var preferences: PreferencesStore { binder.preferences }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                CardHeaderWithAccessory(
+                    heading: CardHeader(
+                        symbol: "doc.text",
+                        title: L10n.text("Recurring Report"),
+                        color: HisingenTheme.chartAttention)
+                ) {
+                    Toggle("", isOn: Binding(
+                        get: { preferences.recurringReportEnabled },
+                        set: { enabled in
+                            preferences.recurringReportEnabled = enabled
+                            binder.bump()
+                            binder.notify(.reporting)
+                        }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .accessibilityLabel(L10n.text("Recurring report"))
+                }
+                Text(L10n.text("Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac."))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
+                if preferences.recurringReportEnabled {
+                    Picker("", selection: Binding(
+                        get: { preferences.recurringReportCadence },
+                        set: { cadence in
+                            preferences.recurringReportCadence = cadence
+                            binder.bump()
+                            binder.notify(.reporting)
+                        }
+                    )) {
+                        ForEach(ReportCadence.allCases) { cadence in
+                            Text(cadence.title).tag(cadence)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: 180)
+                    .accessibilityLabel(L10n.text("Report period"))
                 }
             }
         }

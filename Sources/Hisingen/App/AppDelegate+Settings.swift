@@ -161,6 +161,8 @@ extension AppDelegate {
             Task { @MainActor [weak self] in
                 await self?.runFleetBroadcast(command)
             }
+        case .reporting:
+            recurringReports.reload()
         case .automation:
             calendarPreconditioning.reload()
             scheduledCommands.reload()
