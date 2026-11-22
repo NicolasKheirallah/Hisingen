@@ -4075,3 +4075,26 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Pitää unen estoa yllä, kunnes suunniteltu latausikkuna päättyy, jotta Hisingen voi lähettää aloitus- ja pysäytyskomennot. Jo nukkuvaa Macia ei voi herättää.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Oletuksena pois. Pitää tämän Macin hereillä, kun latausikkuna odottaa tai on käynnissä; nukkuvaa Macia ei voi herättää.";
 "Turn on Auto-Start Charging in the Window to use this." = "Ota käyttöön ”Käynnistä lataus automaattisesti ikkunassa”, jotta voit käyttää tätä.";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Odota %@ ennen kuin lähetät %@ uudelleen.";
+"%@ is already on its way to this vehicle." = "%@ on jo matkalla tähän autoon.";
+"%@ is already queued for this vehicle." = "%@ on jo jonossa tälle autolle.";
+"No vehicles are configured for this account." = "Tälle tilille ei ole määritetty autoja.";
+"%@ sent to %d vehicles." = "%@ lähetetty %d autoon.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ lähetetty %d/%d autoon. Epäonnistui: %@.";
+"Every day" = "Joka päivä";
+"Weekdays" = "Arkipäivät";
+"Scheduled Actions" = "Ajoitetut toiminnot";
+"Add scheduled action" = "Lisää ajoitettu toiminto";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Suorittaa yhden toiminnon valitsemanasi aikana ja päivinä sille autolle, joka on silloin aktiivinen. Vain toiminnot, jotka eivät vaadi vahvistusta, voidaan ajoittaa.";
+"No scheduled actions yet." = "Ei vielä ajoitettuja toimintoja.";
+"Enable %@" = "Ota käyttöön %@";
+"Arrival & Departure" = "Saapuminen ja lähtö";
+"Add location trigger" = "Lisää sijaintilaukaisin";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Vertaa sijaintia, jonka Hisingen lukee autosta, tallentamiisi latauspaikkoihin. Sijaintipalveluiden lupaa ei pyydetä, ja laukaisimet toimivat vain, kun Hisingen on käynnissä.";
+"No arrival or departure triggers yet." = "Ei vielä saapumis- tai lähtölaukaisimia.";
+"Arrive" = "Saapuu";
+"Leave" = "Lähtee";
+"Any saved charge location" = "Mikä tahansa tallennettu latauspaikka";
+"Send to Every Vehicle" = "Lähetä kaikkiin autoihin";
+"Send now" = "Lähetä nyt";

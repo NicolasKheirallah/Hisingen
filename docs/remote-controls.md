@@ -54,6 +54,27 @@ offered climate setpoints, windows, trunk or charging controls that the public A
   capability check and authorization as a single command, steps run in order, and a routine stops
   at the first failure.
 
+## Automations
+
+**Settings → Automations** can run actions without you present. Three kinds exist, and all of them
+are empty until you add something:
+
+* **Scheduled actions** run one command at a wall-clock time on the days you choose. An action that
+  fires more than fifteen minutes late is skipped rather than replayed, so a Mac that wakes at
+  breakfast does not lock the car six hours late.
+* **Arrival and departure** triggers run a command when the car reaches or leaves a saved charge
+  location. The comparison happens inside Hisingen, using the position the car already reports and
+  the coordinates of the locations you saved — no Location Services permission is requested, and
+  triggers only fire while Hisingen is running. The first snapshot after launch records where the
+  car is; it does not count as an arrival.
+* **Send to every vehicle** sends one command to each car on the connected account, one at a time,
+  and names the ones that did not answer.
+
+Unattended sends share one queue and one per-command cooldown: a command already on its way is not
+sent twice, and a repeat inside the cooldown is refused with the wait spelled out. Only actions that
+need no confirmation can be scheduled or triggered; unlocking, opening windows and anything else a
+person must approve stays a deliberate tap in the Controls tab.
+
 ## When a command's outcome is uncertain
 
 A Polestar command waits up to 15 seconds for the car's reply. Polestar's backend keeps some

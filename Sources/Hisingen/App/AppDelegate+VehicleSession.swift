@@ -18,6 +18,11 @@ extension AppDelegate: VehicleSessionControllerContext {
         notifier.notifyChargingAnomalyIfNeeded(for: state)
         notifier.vehicleStateDidUpdate(state)
         chargingPlannerController.vehicleStateDidUpdate()
+        // A refresh is the only thing that can carry a new position, so it is also the only thing
+        // that can turn into an arrival or a departure.
+        Task { @MainActor [weak self] in
+            await self?.locationTriggers.vehicleStateDidUpdate(state)
+        }
         if !state.commandState.hasAwaitingTelemetryConfirmation {
             fleetStore.retain(state)
         }

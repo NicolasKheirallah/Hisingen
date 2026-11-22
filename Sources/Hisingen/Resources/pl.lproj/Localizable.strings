@@ -4075,3 +4075,26 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Utrzymuje blokadę uśpienia do końca zaplanowanego okna ładowania, aby Hisingen mógł wysłać polecenia rozpoczęcia i zatrzymania. Nie może obudzić Maca, który już śpi.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Domyślnie wyłączone. Utrzymuje tego Maca w stanie czuwania, gdy okno ładowania czeka lub trwa; nie może obudzić uśpionego Maca.";
 "Turn on Auto-Start Charging in the Window to use this." = "Włącz „Automatyczne ładowanie w oknie czasowym”, aby z tego korzystać.";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Odczekaj %@, zanim wyślesz %@ ponownie.";
+"%@ is already on its way to this vehicle." = "%@ jest już w drodze do tego pojazdu.";
+"%@ is already queued for this vehicle." = "%@ jest już w kolejce dla tego pojazdu.";
+"No vehicles are configured for this account." = "Dla tego konta nie skonfigurowano żadnych pojazdów.";
+"%@ sent to %d vehicles." = "Wysłano %@ do %d pojazdów.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "Wysłano %@ do %d z %d pojazdów. Nie udało się: %@.";
+"Every day" = "Codziennie";
+"Weekdays" = "Dni robocze";
+"Scheduled Actions" = "Zaplanowane działania";
+"Add scheduled action" = "Dodaj zaplanowane działanie";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Wykonuje jedną akcję o wybranej godzinie i w wybrane dni na pojeździe, który jest wtedy aktywny. Zaplanować można tylko działania niewymagające potwierdzenia.";
+"No scheduled actions yet." = "Nie ma jeszcze zaplanowanych działań.";
+"Enable %@" = "Włącz %@";
+"Arrival & Departure" = "Przyjazd i wyjazd";
+"Add location trigger" = "Dodaj wyzwalacz lokalizacji";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Porównuje pozycję, którą Hisingen już odczytuje z auta, z zapisanymi miejscami ładowania. Aplikacja nie prosi o zgodę na Usługi lokalizacji, a wyzwalacze działają tylko, gdy Hisingen jest uruchomiony.";
+"No arrival or departure triggers yet." = "Nie ma jeszcze wyzwalaczy przyjazdu ani wyjazdu.";
+"Arrive" = "Przyjeżdża";
+"Leave" = "Odjeżdża";
+"Any saved charge location" = "Dowolne zapisane miejsce ładowania";
+"Send to Every Vehicle" = "Wyślij do wszystkich pojazdów";
+"Send now" = "Wyślij teraz";

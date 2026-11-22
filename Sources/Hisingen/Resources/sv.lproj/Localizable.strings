@@ -4091,3 +4091,26 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "Håller en sömnspärr tills det planerade laddfönstret slutar, så att Hisingen kan skicka start- och stoppkommandona. En Mac som redan sover kan inte väckas.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "Av som standard. Håller den här Macen vaken medan ett laddfönster väntar eller pågår; en sovande Mac kan inte väckas.";
 "Turn on Auto-Start Charging in the Window to use this." = "Slå på ”Starta laddning automatiskt i fönstret” för att använda detta.";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "Vänta %@ innan du skickar %@ igen.";
+"%@ is already on its way to this vehicle." = "%@ är redan på väg till den här bilen.";
+"%@ is already queued for this vehicle." = "%@ står redan i kö för den här bilen.";
+"No vehicles are configured for this account." = "Inga bilar är konfigurerade för det här kontot.";
+"%@ sent to %d vehicles." = "%@ skickat till %d bilar.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@ skickat till %d av %d bilar. Misslyckades: %@.";
+"Every day" = "Varje dag";
+"Weekdays" = "Vardagar";
+"Scheduled Actions" = "Schemalagda åtgärder";
+"Add scheduled action" = "Lägg till schemalagd åtgärd";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Kör en åtgärd vid den tid och de dagar du väljer, mot den bil som är aktiv då. Bara åtgärder som inte kräver bekräftelse kan schemaläggas.";
+"No scheduled actions yet." = "Inga schemalagda åtgärder ännu.";
+"Enable %@" = "Aktivera %@";
+"Arrival & Departure" = "Ankomst och avresa";
+"Add location trigger" = "Lägg till platsutlösare";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Jämför positionen Hisingen redan läser från bilen med de laddplatser du sparat. Ingen behörighet för Platstjänster efterfrågas, och utlösare körs bara medan Hisingen körs.";
+"No arrival or departure triggers yet." = "Inga ankomst- eller avreseutlösare ännu.";
+"Arrive" = "Anländer";
+"Leave" = "Lämnar";
+"Any saved charge location" = "Valfri sparad laddplats";
+"Send to Every Vehicle" = "Skicka till alla bilar";
+"Send now" = "Skicka nu";

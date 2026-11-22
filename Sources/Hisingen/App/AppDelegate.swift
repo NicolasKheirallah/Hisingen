@@ -47,6 +47,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var commandCoordinator: CommandCoordinator!
     var calendarPreconditioning: CalendarPreconditioningController!
     var chargingPlannerController: ChargingPlannerController!
+    /// The single lane every unattended command crosses: queue, per-command cooldown, dispatch.
+    var automationDispatcher: AutomationCommandDispatcher!
+    /// Fires the reader's scheduled actions.
+    var scheduledCommands: ScheduledCommandController!
+    /// Fires the reader's arrival and departure actions from the car's own position.
+    var locationTriggers: ChargeLocationTriggerController!
+    /// Sends one command to every configured vehicle and reports which ones answered.
+    var fleetBroadcaster: FleetCommandBroadcaster!
     /// Optional Home Assistant integration for a home charger. Inert until the reader pairs one.
     lazy var homeCharging = HomeChargingModel(preferences: preferences, database: vehicleDatabase)
     var settingsWindow: NSWindow?
@@ -141,6 +149,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         commandCoordinator = CommandCoordinator(
             context: self, preferences: preferences,
             database: vehicleDatabase, authorizer: remoteAuthorizer)
+        automationDispatcher = AutomationCommandDispatcher(
+            dispatch: { [weak self] command, vin in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.commandCoordinator.perform(
+                    command, origin: .automation, expectedVIN: vin)
+            }
+        )
+        scheduledCommands = ScheduledCommandController(
+            preferences: preferences,
+            send: { [weak self] command in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: nil)
+            }
+        )
+        locationTriggers = ChargeLocationTriggerController(
+            preferences: preferences,
+            send: { [weak self] command in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: nil)
+            }
+        )
+        fleetBroadcaster = FleetCommandBroadcaster(
+            vehicles: { [weak self] in self?.configuredFleetVehicles() ?? [] },
+            send: { [weak self] command, vin in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: vin)
+            }
+        )
         calendarPreconditioning = CalendarPreconditioningController(
             preferences: preferences,
             sendClimateStart: { [weak self] in
@@ -218,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         urlRouter.startHandlingAppleEvents()
         calendarPreconditioning.start()
         chargingPlannerController.reload()
+        scheduledCommands.start()
         homeCharging.start()
         homeCharging.houseMeter.start()
         if vehicleSession.signInRequired {
@@ -240,6 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
 
     func applicationWillTerminate(_ notification: Notification) {
         calendarPreconditioning.stop()
+        scheduledCommands.stop()
         chargingPlannerController.stop()
         garageScanner.stop()
         vehicleSession.stop()

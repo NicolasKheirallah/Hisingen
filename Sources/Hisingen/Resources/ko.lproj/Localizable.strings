@@ -4075,3 +4075,26 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "계획된 시간대가 끝날 때까지 잠자기 방지를 유지하여 Hisingen이 시작 및 중지 명령을 보낼 수 있게 합니다. 이미 잠든 Mac은 깨울 수 없습니다.";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "기본적으로 꺼져 있습니다. 충전 시간대를 기다리거나 진행하는 동안 이 Mac을 깨어 있게 유지하며, 잠든 Mac은 깨울 수 없습니다.";
 "Turn on Auto-Start Charging in the Window to use this." = "이 기능을 사용하려면 ‘지정 시간대에 자동 충전 시작’을 켜세요.";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "%@ 후에 %@을(를) 다시 보내세요.";
+"%@ is already on its way to this vehicle." = "%@이(가) 이미 이 차량으로 전송 중입니다.";
+"%@ is already queued for this vehicle." = "%@이(가) 이미 이 차량의 대기열에 있습니다.";
+"No vehicles are configured for this account." = "이 계정에 구성된 차량이 없습니다.";
+"%@ sent to %d vehicles." = "%@을(를) %d대의 차량에 보냈습니다.";
+"%@ sent to %d of %d vehicles. Failed: %@." = "%@을(를) %d/%d대의 차량에 보냈습니다. 실패: %@.";
+"Every day" = "매일";
+"Weekdays" = "평일";
+"Scheduled Actions" = "예약된 작업";
+"Add scheduled action" = "예약된 작업 추가";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "선택한 시간과 요일에, 그때 활성화된 차량에 대해 작업 하나를 실행합니다. 확인이 필요 없는 작업만 예약할 수 있습니다.";
+"No scheduled actions yet." = "아직 예약된 작업이 없습니다.";
+"Enable %@" = "%@ 활성화";
+"Arrival & Departure" = "도착 및 출발";
+"Add location trigger" = "위치 트리거 추가";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "Hisingen이 차량에서 이미 읽는 위치를 저장한 충전 위치와 비교합니다. 위치 서비스 권한을 요청하지 않으며, 트리거는 Hisingen이 실행 중일 때만 작동합니다.";
+"No arrival or departure triggers yet." = "아직 도착 또는 출발 트리거가 없습니다.";
+"Arrive" = "도착";
+"Leave" = "출발";
+"Any saved charge location" = "저장된 충전 위치 아무 곳";
+"Send to Every Vehicle" = "모든 차량에 보내기";
+"Send now" = "지금 보내기";

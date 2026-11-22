@@ -4075,3 +4075,26 @@
 "Holds a sleep assertion until the planned window ends, so Hisingen can send the start and stop commands. It cannot wake a Mac that is already asleep." = "在计划时段结束前保持睡眠阻止状态，以便 Hisingen 发送开始和停止指令。它无法唤醒已经进入睡眠的 Mac。";
 "Off by default. Keeps this Mac awake while a window is waiting or running; it cannot wake a sleeping Mac." = "默认关闭。在时段等待或进行期间保持此 Mac 唤醒；无法唤醒已经进入睡眠的 Mac。";
 "Turn on Auto-Start Charging in the Window to use this." = "请开启“在时段内自动开始充电”以使用此功能。";
+// Automations: scheduled actions, arrival/departure triggers, fleet broadcast.
+"Wait %@ before sending %@ again." = "请等待 %@ 后再发送 %@。";
+"%@ is already on its way to this vehicle." = "%@ 已在发送到此车辆的途中。";
+"%@ is already queued for this vehicle." = "%@ 已在此车辆的队列中。";
+"No vehicles are configured for this account." = "此账户未配置任何车辆。";
+"%@ sent to %d vehicles." = "已将 %@ 发送至 %d 辆车。";
+"%@ sent to %d of %d vehicles. Failed: %@." = "已将 %@ 发送至 %d/%d 辆车。失败：%@。";
+"Every day" = "每天";
+"Weekdays" = "工作日";
+"Scheduled Actions" = "计划操作";
+"Add scheduled action" = "添加计划操作";
+"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "在你选择的时间和日期，对当时激活的车辆执行一项操作。只有无需确认的操作可以计划。";
+"No scheduled actions yet." = "尚未有已计划的操作。";
+"Enable %@" = "启用 %@";
+"Arrival & Departure" = "到达与离开";
+"Add location trigger" = "添加位置触发器";
+"Compares the position Hisingen already reads from the car with the charge locations you saved. No Location Services permission is asked for, and triggers only fire while Hisingen is running." = "将 Hisingen 已从车辆读取的位置与你保存的充电地点进行比较。不会请求定位服务权限，触发器仅在 Hisingen 运行时生效。";
+"No arrival or departure triggers yet." = "尚未有到达或离开触发器。";
+"Arrive" = "到达";
+"Leave" = "离开";
+"Any saved charge location" = "任意已保存充电地点";
+"Send to Every Vehicle" = "发送到所有车辆";
+"Send now" = "立即发送";
