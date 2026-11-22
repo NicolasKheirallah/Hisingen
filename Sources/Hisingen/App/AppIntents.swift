@@ -130,61 +130,61 @@ struct HisingenShortcuts: AppShortcutsProvider {
                 "What is my \(.applicationName) charge level?",
                 "How much range is left in \(.applicationName)?"
             ],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Vehicle Battery")),
+            shortTitle: "Vehicle Battery",
             systemImageName: "battery.100.bolt"
         )
         AppShortcut(
             intent: LockVehicleIntent(),
             phrases: ["Lock my car with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Lock Vehicle")),
+            shortTitle: "Lock Vehicle",
             systemImageName: "lock.fill"
         )
         AppShortcut(
             intent: UnlockVehicleIntent(),
             phrases: ["Unlock my car with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Unlock Vehicle")),
+            shortTitle: "Unlock Vehicle",
             systemImageName: "lock.open.fill"
         )
         AppShortcut(
             intent: StartClimateIntent(),
             phrases: ["Start my car climate with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Start Climate")),
+            shortTitle: "Start Climate",
             systemImageName: "fan.fill"
         )
         AppShortcut(
             intent: StopClimateIntent(),
             phrases: ["Stop my car climate with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Stop Climate")),
+            shortTitle: "Stop Climate",
             systemImageName: "fan.slash.fill"
         )
         AppShortcut(
             intent: GetVehicleStatusIntent(),
             phrases: ["Check my vehicle with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Vehicle Status")),
+            shortTitle: "Vehicle Status",
             systemImageName: "car.badge.gearshape"
         )
         AppShortcut(
             intent: GetChargingStatusIntent(),
             phrases: ["Check charging with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Charging Status")),
+            shortTitle: "Charging Status",
             systemImageName: "bolt.fill"
         )
         AppShortcut(
             intent: GetRecentTripsIntent(),
             phrases: ["Summarize my trips with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Recent Trips")),
+            shortTitle: "Recent Trips",
             systemImageName: "point.topleft.down.to.point.bottomright.curvepath"
         )
         AppShortcut(
             intent: FlashLightsIntent(),
             phrases: ["Flash my car lights with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Flash Lights")),
+            shortTitle: "Flash Lights",
             systemImageName: "flashlight.on.fill"
         )
         AppShortcut(
             intent: HonkAndFlashIntent(),
             phrases: ["Find my car with \(.applicationName)"],
-            shortTitle: LocalizedStringResource(stringLiteral: L10n.text("Honk and Flash")),
+            shortTitle: "Honk and Flash",
             systemImageName: "horn.fill"
         )
     }

@@ -441,19 +441,20 @@ private final class AuthenticationHandler: @unchecked Sendable {
     }
 }
 
-private final class AuthenticationTransport: URLProtocol, @unchecked Sendable {
+private final class AuthenticationTransport: URLProtocol {
     static let handler = AuthenticationHandler()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
     override func startLoading() {
         let respond = Self.handler.get()
-        Task { @Sendable [self, respond] in
-            let data = await respond(request)
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+        nonisolated(unsafe) let loader = self
+        Task { @Sendable [respond] in
+            let data = await respond(loader.request)
+            let response = HTTPURLResponse(url: loader.request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            loader.client?.urlProtocol(loader, didReceive: response, cacheStoragePolicy: .notAllowed)
+            loader.client?.urlProtocol(loader, didLoad: data)
+            loader.client?.urlProtocolDidFinishLoading(loader)
         }
     }
 }

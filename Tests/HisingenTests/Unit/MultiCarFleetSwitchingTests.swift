@@ -255,7 +255,7 @@ private actor MockFleetProvider: VehicleProviding {
 /// Serves a valid Polestar discovery document and answers the token exchange with a response
 /// supplied by the subclass. Separate subclasses rather than one configurable static: test
 /// suites run in parallel and a mutable static would race.
-private class TokenEndpointTransport: URLProtocol, @unchecked Sendable {
+private class TokenEndpointTransport: URLProtocol {
     class var tokenStatus: Int { 400 }
     class var tokenBody: Data { Data(#"{"error":"invalid_grant"}"#.utf8) }
 
@@ -287,7 +287,7 @@ private class TokenEndpointTransport: URLProtocol, @unchecked Sendable {
 }
 
 /// The OAuth marker of a permanently dead grant (invalid_grant), deterministically.
-private final class DeadGrantTransport: TokenEndpointTransport, @unchecked Sendable {
+private final class DeadGrantTransport: TokenEndpointTransport {
     override class var tokenStatus: Int { 400 }
     override class var tokenBody: Data {
         Data(#"{"error":"invalid_grant","error_description":"Token has been revoked"}"#.utf8)
@@ -295,7 +295,7 @@ private final class DeadGrantTransport: TokenEndpointTransport, @unchecked Senda
 }
 
 /// The IdP answering 5xx, which says nothing about whether the grant is still valid.
-private final class ServerErrorTransport: TokenEndpointTransport, @unchecked Sendable {
+private final class ServerErrorTransport: TokenEndpointTransport {
     override class var tokenStatus: Int { 500 }
     override class var tokenBody: Data { Data(#"{"error":"server_error"}"#.utf8) }
 }
@@ -310,7 +310,7 @@ private final class GrantCounter: @unchecked Sendable {
 
 /// Serves the IdP discovery document, counts token grants, and answers vehicle discovery, so a
 /// restore can run to completion without the live network.
-private final class LiveGrantTransport: URLProtocol, @unchecked Sendable {
+private final class LiveGrantTransport: URLProtocol {
     static let grants = GrantCounter()
 
     override class func canInit(with request: URLRequest) -> Bool { true }

@@ -14,7 +14,7 @@ struct NotificationQuickActionTests {
             ("resume-charge", .resumeChargeSchedule),
             (Notifier.viewDetailsActionID, .viewDetails),
         ]
-        for (identifier, action) in expected {
+        for (identifier, _) in expected {
             #expect(Notifier.quickAction(forActionIdentifier: identifier) != nil, "\(identifier)")
         }
         #expect(Notifier.unlockVehicleActionID == "unlock-vehicle")

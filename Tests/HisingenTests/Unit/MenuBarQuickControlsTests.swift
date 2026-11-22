@@ -356,7 +356,7 @@ struct MenuBarQuickControlsTests {
     @Test func theGateRefusesTheCommandItsRowWouldDisable() {
         var car = state(schedules: [chargingWindow()])
         car.freshness.fetchedAt = Date().addingTimeInterval(-20 * 60)
-        let (scoped, gate) = makeGate(for: car)
+        let (scoped, _) = makeGate(for: car)
         _ = scoped
         var sent: [RemoteCommand] = []
         let sendingGate = ControlsCommandGate(

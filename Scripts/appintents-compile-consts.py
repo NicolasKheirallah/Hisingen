@@ -13,7 +13,7 @@ import sys
 
 # Constant extraction needs the protocols whose conformances carry discoverable metadata. These are
 # the App Intents ones the processor reads; adding more only costs compile time.
-PROTOCOLS = '["AppIntent","AppShortcutsProvider","SetFocusFilterIntent","AppEntity","AppEnum"]'
+PROTOCOLS = '["AppIntent","AppShortcutsProvider","SetFocusFilterIntent","AppEntity","AppEnum","EntityQuery","EntityStringQuery"]'
 
 # Per-file inputs and outputs that do not belong in a whole-module run, and the index flags that
 # would demand one index output per source file.

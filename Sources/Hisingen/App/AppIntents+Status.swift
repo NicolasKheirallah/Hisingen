@@ -2,14 +2,12 @@ import AppIntents
 import Foundation
 
 struct GetVehicleBatteryIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Vehicle Battery")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns the battery level, range, and charging status of a vehicle.")))
-    }
+    static let title: LocalizedStringResource = "Get Vehicle Battery"
+    static let description = IntentDescription("Returns the battery level, range, and charging status of a vehicle.")
     static let openAppWhenRun: Bool = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -45,10 +43,8 @@ struct GetVehicleBatteryIntent: AppIntent {
 }
 
 struct GetGarageStatusIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Garage Status")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns the status of all vehicles in your garage.")))
-    }
+    static let title: LocalizedStringResource = "Get Garage Status"
+    static let description = IntentDescription("Returns the status of all vehicles in your garage.")
     static let openAppWhenRun: Bool = false
 
     @MainActor
@@ -89,14 +85,12 @@ struct GetGarageStatusIntent: AppIntent {
 }
 
 struct GetVehicleStatusIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Vehicle Status")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns lock, opening, and attention status from the latest Hisingen snapshot.")))
-    }
+    static let title: LocalizedStringResource = "Get Vehicle Status"
+    static let description = IntentDescription("Returns lock, opening, and attention status from the latest Hisingen snapshot.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -118,14 +112,12 @@ struct GetVehicleStatusIntent: AppIntent {
 }
 
 struct GetRecentTripsIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Recent Trip Summary")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns locally derived trip distance and driving time for the last seven days.")))
-    }
+    static let title: LocalizedStringResource = "Get Recent Trip Summary"
+    static let description = IntentDescription("Returns locally derived trip distance and driving time for the last seven days.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -147,10 +139,8 @@ struct GetRecentTripsIntent: AppIntent {
 }
 
 struct RefreshTelemetryIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Refresh Vehicle Data")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Asks Hisingen to fetch fresh vehicle data from the provider now.")))
-    }
+    static let title: LocalizedStringResource = "Refresh Vehicle Data"
+    static let description = IntentDescription("Asks Hisingen to fetch fresh vehicle data from the provider now.")
     static let openAppWhenRun = false
 
     @MainActor
@@ -164,14 +154,12 @@ struct RefreshTelemetryIntent: AppIntent {
 }
 
 struct GetEnergyBreakdownIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Energy Breakdown")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.")))
-    }
+    static let title: LocalizedStringResource = "Get Energy Breakdown"
+    static let description = IntentDescription("Returns the vehicle's electrical energy consumption breakdown across driving, climate, and battery conditioning.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor
@@ -201,14 +189,12 @@ struct GetEnergyBreakdownIntent: AppIntent {
 }
 
 struct GetTirePressuresIntent: AppIntent {
-    static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Get Tire Pressures")) }
-    static var description: IntentDescription {
-        IntentDescription(LocalizedStringResource(stringLiteral: L10n.text("Returns the current tire pressures and statuses for all wheels.")))
-    }
+    static let title: LocalizedStringResource = "Get Tire Pressures"
+    static let description = IntentDescription("Returns the current tire pressures and statuses for all wheels.")
     static let openAppWhenRun = false
 
-    @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
-               description: LocalizedStringResource(stringLiteral: L10n.text("Vehicle nickname or VIN (optional)")))
+    @Parameter(title: "Vehicle",
+               description: "Vehicle nickname or VIN (optional)")
     var vehicle: String?
 
     @MainActor

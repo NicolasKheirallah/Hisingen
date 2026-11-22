@@ -116,7 +116,8 @@ struct HistoryInsightsExtrasTests {
         #expect(HistoryInsights.monthEndProjection(monthToDate: 100, now: monthStart + 86_400, calendar: calendar) == nil)
         let days = Double(calendar.range(of: .day, in: .month, for: start)!.count)
         let projected = HistoryInsights.monthEndProjection(monthToDate: 100, now: monthStart + 5 * 86_400, calendar: calendar)
-        #expect(abs((projected ?? 0) - 100 / 5 * days) < 0.001)
+        let expectedProjection: Double = 100 / 5 * days
+        #expect(abs((projected ?? 0) - expectedProjection) < 0.001)
     }
 
     @Test func warrantyOutlookSaysWhichLimitComesFirst() throws {

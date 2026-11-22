@@ -46,6 +46,12 @@ struct InfoTabView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State var vinCopied = false
     @State var asyncData = InfoAsyncData()
+    /// The hero's artwork, read off the main thread. `body` used to query the image tier for
+    /// every angle on every evaluation; it now reads this.
+    @State var heroArtwork = CarImageCache.HeroArtwork()
+    /// Whether the selected angle has been seeded from the reader's preferred angle. The first
+    /// read can land after `onAppear`, when no artwork was known yet.
+    @State var heroAngleSeeded = false
     /// Whether the local read has completed once. The activity section used to be added only when
     /// it had rows, so "nothing recorded" and "not read yet" were both simply silence: the section
     /// appeared out of nowhere a moment after the tab opened, and an empty store looked the same
@@ -267,9 +273,42 @@ struct InfoTabView: View {
 
     var availableExteriorAngles: [CarRenderAngle] {
         CarRenderAngle.allCases.filter { angle in
-            imageCache.hasImage(for: state.identity.vin, angle: angle.rawValue)
+            artwork.exterior[angle.rawValue] != nil
                 || (angle == preferences.carRenderAngle && state.identity.imageData != nil)
         }
+    }
+
+    /// The artwork for the vehicle on screen; empty while another vehicle's is still loaded.
+    var artwork: CarImageCache.HeroArtwork {
+        heroArtwork.vin == state.identity.vin ? heroArtwork : CarImageCache.HeroArtwork()
+    }
+
+    /// Chooses the first angle to show: the reader's preferred one when it exists, otherwise the
+    /// first available. Marks the choice made only once there is something to choose from.
+    func seedSelectedAngle() {
+        let preferred = preferences.carRenderAngle
+        let available = availableExteriorAngles
+        selectedAngleIndex = available.contains(preferred)
+            ? preferred.rawValue
+            : (available.first?.rawValue ?? selectedAngleIndex)
+        if !available.isEmpty { heroAngleSeeded = true }
+    }
+
+    /// After a later read: moves off an angle that is no longer stored, and never overrides a
+    /// choice the reader made or the interior view.
+    private func reconcileSelectedAngle() {
+        guard selectedAngleIndex != -1 else { return }
+        let available = availableExteriorAngles
+        guard !available.isEmpty, !available.contains(where: { $0.rawValue == selectedAngleIndex }) else { return }
+        let preferred = preferences.carRenderAngle
+        selectedAngleIndex = available.contains(preferred) ? preferred.rawValue : available[0].rawValue
+    }
+
+    private func loadHeroArtwork() async {
+        let loaded = await imageCache.heroArtwork(for: state.identity.vin)
+        guard !Task.isCancelled else { return }
+        if loaded != heroArtwork { heroArtwork = loaded }
+        if heroAngleSeeded { reconcileSelectedAngle() } else { seedSelectedAngle() }
     }
 
     var body: some View {
@@ -299,13 +338,9 @@ struct InfoTabView: View {
                 }
             }
             .hisAnimation(Motion.cardChange, value: entries.map(\.id))
-            .onAppear {
-                let preferred = preferences.carRenderAngle
-                selectedAngleIndex = availableExteriorAngles.contains(preferred)
-                    ? preferred.rawValue
-                    : (availableExteriorAngles.first?.rawValue ?? selectedAngleIndex)
-            }
+            .onAppear { seedSelectedAngle() }
             .task(id: "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)") { await loadAsyncData() }
+            .task(id: "\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)") { await loadHeroArtwork() }
             .task(id: coordinateKey) { await resolveAddressIfNeeded() }
             .onChange(of: initialSection, initial: true) { _, target in
                 guard let target, let section = allEntries.first(where: { Self.item(for: $0.id) == target }) else { return }

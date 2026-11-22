@@ -515,6 +515,27 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **The Car tab no longer reads car images from the database while it draws.** Every time the
+  tab's body was evaluated it asked the image store about each of the six angles, the interior
+  render and the selected angle, about fifteen SQLite round trips on the main thread, and a
+  render missing from memory was read back as a multi-megabyte blob. Those reads queued on the
+  one shared read lock, so any History query running in the background stalled the panel. The
+  tab now reads all of a vehicle's stored renders once, on a background task keyed to the
+  vehicle and its latest reading, and draws from that. Nothing about a miss is remembered, so a
+  render the provider downloads later still appears on the next reading. The Now and Car
+  passport's fallback render uses the same background read, and a telemetry refresh that does
+  not change the panel's size no longer starts a window-resize animation.
+
+- **The App Intents metadata builds again, so Shortcuts, Siri, the Focus filter and the widget's
+  buttons can find the intents.** The localization pass had turned every intent title, description,
+  parameter title and shortcut title into a runtime call, `LocalizedStringResource(stringLiteral:
+  L10n.text(...))`, and swapped stored constants for computed properties. The metadata processor
+  reads only stored literal constants, so `make app` stopped at its first step with about a hundred
+  "must be initialized with a call to its initializer or a string literal" errors. Those 112 strings
+  are literals again, and they still localize because every key is in the string tables. The widget
+  step also failed, because the constant extractor was not told to look at `EntityQuery` and
+  `EntityStringQuery`, so the car picker's query was never recorded.
+
 - The command confirmation alert's expiry timer no longer breaks the strict-concurrency build. It
   called `NSApp.abortModal()` from a non-isolated closure; the timer runs on the main run loop, so
   the call now asserts main-actor isolation.

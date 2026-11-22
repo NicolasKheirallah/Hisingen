@@ -422,7 +422,7 @@ struct PolestarPortalRequestHardeningTests {
     }
 }
 
-private final class PortalHardeningProtocol: URLProtocol, @unchecked Sendable {
+private final class PortalHardeningProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
     nonisolated(unsafe) static var failure: URLError?
     override class func canInit(with request: URLRequest) -> Bool { true }

@@ -314,26 +314,27 @@ private final class HardeningHandler: @unchecked Sendable {
     }
 }
 
-private final class HardeningTransport: URLProtocol, @unchecked Sendable {
+private final class HardeningTransport: URLProtocol {
     static let handler = HardeningHandler()
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func stopLoading() {}
     override func startLoading() {
         let respond = Self.handler.get()
-        Task { @Sendable [self, respond] in
-            let data = await respond(request)
+        nonisolated(unsafe) let loader = self
+        Task { @Sendable [respond] in
+            let data = await respond(loader.request)
             let responseURL: URL
-            if request.url?.path == "/authorize", let state = PolestarAPI.queryValue("state", from: request.url) {
+            if loader.request.url?.path == "/authorize", let state = PolestarAPI.queryValue("state", from: loader.request.url) {
                 responseURL = URL(string: "https://www.polestar.com/sign-in-callback?code=code&state=\(state)")!
             } else {
-                responseURL = request.url!
+                responseURL = loader.request.url!
             }
-            let headers = request.url?.path == "/angle2" ? ["Content-Type": "image/png"] : nil
+            let headers = loader.request.url?.path == "/angle2" ? ["Content-Type": "image/png"] : nil
             let response = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: nil, headerFields: headers)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+            loader.client?.urlProtocol(loader, didReceive: response, cacheStoragePolicy: .notAllowed)
+            loader.client?.urlProtocol(loader, didLoad: data)
+            loader.client?.urlProtocolDidFinishLoading(loader)
         }
     }
 }

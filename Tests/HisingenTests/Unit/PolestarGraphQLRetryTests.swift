@@ -79,7 +79,7 @@ private extension PolestarAPI {
 
 /// Scripted responses: `200` is a data answer, `401` an HTTP rejection, and `210` stands for an
 /// HTTP 200 whose body carries a GraphQL `UNAUTHENTICATED` error.
-private final class RetryTransport: URLProtocol, @unchecked Sendable {
+private final class RetryTransport: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var statuses: [Int] = []
     nonisolated(unsafe) private static var refreshes = 0
