@@ -289,6 +289,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   command and automation answered "busy". Hisingen now activates before the alert, and an alert
   left for two minutes counts as declined.
 
+- **An account switch cut short no longer leaves the account signed out.** Switching accounts
+  clears the brand's Keychain slots and then writes the other account's saved credentials. If
+  Hisingen quit or a write failed in between, the account stayed active with empty slots, and
+  switching to it again did nothing. Hisingen now restores the saved credentials at launch and when
+  the active account is selected again. An account the reader signed out of, and one with no saved
+  credentials, is left as it is.
+
 - **A history database written by a newer Hisingen is refused instead of read with the wrong
   schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes
   the handle before any ledger reads it, so the app cannot show half-decoded rows or migrate a

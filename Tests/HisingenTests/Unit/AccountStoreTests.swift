@@ -61,6 +61,60 @@ struct AccountStoreTests {
         #expect(try scoped.keychain.readSessionToken() == "token-second")
     }
 
+    /// Two Polestar accounts with the first active, the way a switch leaves them, and the
+    /// session slots then emptied the way a quit between the clear and the restore would.
+    private func interruptedSwitch(label: String) throws
+    -> (scoped: ScopedPreferences, first: StoredAccount) {
+        let scoped = ScopedPreferences(label: label)
+        let preferences = scoped.store
+        preferences.email = "first@example.invalid"
+        preferences.vin = "YSMREPAIR0000001"
+        try scoped.keychain.saveSessionToken("token-first")
+        let store = preferences.accountStore
+        let first = try #require(store.activeAccount(for: .polestar))
+        _ = try store.addAccount(brand: .polestar, label: "Second")
+        preferences.email = "second@example.invalid"
+        try scoped.keychain.saveSessionToken("token-second")
+        store.commitActiveAccount()
+        try store.switchTo(accountID: first.id)
+
+        try scoped.keychain.deleteSessionToken()
+        try scoped.keychain.deleteEmail()
+        preferences.invalidateSessionCache()
+        #expect(!preferences.hasResumableSession(for: .polestar))
+        return (scoped, first)
+    }
+
+    @Test
+    func anInterruptedSwitchIsRepairedWhenTheStoreReopens() throws {
+        let (scoped, _) = try interruptedSwitch(label: "accounts-repair-reopen")
+
+        _ = AccountStore(preferences: scoped.store, keychain: scoped.keychain, defaults: scoped.defaults)
+
+        #expect(try scoped.keychain.readSessionToken() == "token-first")
+        #expect(scoped.store.hasResumableSession(for: .polestar))
+    }
+
+    @Test
+    func switchingToTheActiveAccountRestoresEmptySlots() throws {
+        let (scoped, first) = try interruptedSwitch(label: "accounts-repair-switch")
+        let store = scoped.store.accountStore
+
+        try store.switchTo(accountID: first.id)
+
+        #expect(try scoped.keychain.readSessionToken() == "token-first")
+    }
+
+    @Test
+    func anAccountTheReaderSignedOutOfIsNotRestored() throws {
+        let (scoped, _) = try interruptedSwitch(label: "accounts-repair-signout")
+        scoped.store.setExplicitSignOut(for: .polestar)
+
+        _ = AccountStore(preferences: scoped.store, keychain: scoped.keychain, defaults: scoped.defaults)
+
+        #expect(try scoped.keychain.readSessionToken() == nil)
+    }
+
     @Test
     func eraseClearsEveryAccountAndItsBundle() throws {
         let scoped = ScopedPreferences(label: "accounts-erase")
