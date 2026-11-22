@@ -1719,8 +1719,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "Kortlayout";
+"Card view" = "Kortvisning";
 "How mid-size cards flow on wide panels" = "Hvordan mellemstore kort flyder på brede paneler";
 "Full Width" = "Fuld bredde";
+"Full" = "Fuld";
 "Two Columns" = "To kolonner";
 "Every card uses the entire panel width" = "Hvert kort bruger hele panelens bredde";
 "Cards flow side by side in two columns" = "Kort lægges side om side i to kolonner";

@@ -1711,8 +1711,10 @@
 
 /* Card layout (General settings) */
 "Card Layout" = "카드 레이아웃";
+"Card view" = "카드 보기";
 "How mid-size cards flow on wide panels" = "넓은 패널에서 중간 크기 카드의 배치 방식";
 "Full Width" = "전체 너비";
+"Full" = "전체";
 "Two Columns" = "두 열";
 "Every card uses the entire panel width" = "각 카드가 패널 전체 너비를 사용합니다";
 "Cards flow side by side in two columns" = "카드가 두 열로 나란히 배치됩니다";

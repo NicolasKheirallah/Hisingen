@@ -66,6 +66,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Changed
 
+- Cards that have a summary and a full form now carry a **Card view** choice in Settings → Tabs &
+  Cards. On Now the summary still links to the full card, but choosing **Full** draws the planner,
+  home charger, departure check, doors and location cards in place, with the information their
+  full form carries, so the reader no longer has to open another tab to read it. The choice
+  belongs to that tab's placement: the same card can stay compact on Now and complete on a tab of
+  the reader's own. A card on the tab its summary would open keeps the full form only.
+
 - NexBlue sessions are now priced by when their energy flowed. The session list gives only a total,
   so each session used to be priced at the average price over every hour the cable was in, idle
   hours included. The charger's hourly energy readings now place the energy in the hours that drew
