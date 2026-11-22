@@ -284,6 +284,14 @@ private struct TibberEnergySection: View {
             .frame(height: levelChartHeight)
             .accessibilityLabel(L10n.text("Price Levels"))
             .accessibilityValue(chartAccessibilityValue(points: TibberPriceLevel.allCases.map { hours[$0] ?? 0 }))
+            .accessibilityChartDescriptor(CategoricalSeriesAXDescriptor(
+                title: L10n.text("Price Levels"),
+                categoryLabel: L10n.text("Level"),
+                valueLabel: L10n.text("Hours"),
+                categories: TibberPriceLevel.allCases.map(\.title),
+                series: [.init(name: L10n.text("Hours"),
+                               values: TibberPriceLevel.allCases.map { hours[$0] ?? 0 })]
+            ))
             Text(L10n.text("Hours at each of Tibber's price levels in the prices published for today and tomorrow."))
                 .hisType(.micro).foregroundStyle(.secondary)
                 .hisCaptionLeading()

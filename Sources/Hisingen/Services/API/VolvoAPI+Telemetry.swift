@@ -116,6 +116,12 @@ extension VolvoAPI {
         let commandAccessibility = try await commandAccessibilityTask
         let commands = try await commandsTask
         let hasPremiumSubscription = await subscriptionTask
+        // The provider names why a wrapped field has no value. Collect those answers once per
+        // sweep; the capability inspector shows them, and a domain whose every reading failed
+        // is marked unavailable with the provider's own reason rather than a generic one.
+        let degradedReadings = VolvoScopeCatalog.degradedReadings(
+            energy: energy, availability: commandAccessibility,
+            doors: doors, windows: windows, odometer: odometer)
 
         if features.contains(.vehicleImage) {
             await fetchCarImage(vin: vin, imageUrlString: details.images?.exteriorImageUrl)
@@ -182,6 +188,12 @@ extension VolvoAPI {
         // live), so `.vehicleWeather` is always unavailable for this provider.
         unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
         unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
+        let energyAnsweredNothing = energy != nil
+            && energy?.batteryChargeLevel?.value == nil
+            && energy?.rangeKm == nil
+            && energy?.chargingStateValue == nil
+        unavailable.mark(.chargingDetails, when: features.contains(.chargingDetails)
+                         && energyAnsweredNothing && !degradedReadings.isEmpty)
 
         var openings: [OpeningReading] = []
         let doorFields: [(VehicleOpening, String?)] = [
@@ -247,16 +259,15 @@ extension VolvoAPI {
         }
         if let commands {
             let names = Set(commands.compactMap(\.normalizedName))
-            let supportsClimate = names.contains("climatization-start") || names.contains("climatization-stop")
-            let supportsLocks = names.contains("lock") || names.contains("unlock") || names.contains("lock-reduced-guard")
-            let supportsLocate = names.contains("honk") || names.contains("flash")
-                || names.contains("honk-flash") || names.contains("honk-and-flash")
-            let supportsEngine = names.contains("engine-start") || names.contains("engine-stop")
-            probes.record(.climateStartStop, as: supportsClimate ? .supported : .unavailable)
-            probes.record(.locks, as: supportsLocks ? .supported : .unavailable)
-            probes.record(.reducedGuardLock, as: names.contains("lock-reduced-guard") ? .supported : .unavailable)
-            probes.record(.honkAndFlash, as: supportsLocate ? .supported : .unavailable)
-            probes.record(.engineStart, as: supportsEngine ? .supported : .unavailable)
+            probes.reportedCommandNames = names.sorted()
+            func advertised(_ kinds: [VolvoCommandCatalog.Kind]) -> Bool {
+                kinds.contains { VolvoCommandCatalog.isAdvertised($0, in: names) }
+            }
+            probes.record(.climateStartStop, as: advertised([.climateStart, .climateStop]) ? .supported : .unavailable)
+            probes.record(.locks, as: advertised([.lock, .unlock]) ? .supported : .unavailable)
+            probes.record(.reducedGuardLock, as: advertised([.lockReducedGuard]) ? .supported : .unavailable)
+            probes.record(.honkAndFlash, as: advertised([.honkAndFlash, .flash, .honk]) ? .supported : .unavailable)
+            probes.record(.engineStart, as: advertised([.engineStart, .engineStop]) ? .supported : .unavailable)
         }
         if statistics?.tripMeterManual != nil || statistics?.tripMeterAutomatic != nil {
             probes.record(.tripMeters, as: .supported)
@@ -428,7 +439,7 @@ extension VolvoAPI {
                 readingDates: readingDates,
                 dataWarnings: activeBulbWarnings,
                 unavailableFeatures: unavailable.features
-            ),
+            ).recordedSource(.volvo),
             exteriorStatus: exterior,
             softwareInfo: software,
             climateStatus: climate,
@@ -490,6 +501,21 @@ extension VolvoAPI {
             .compactMap { $0 }.min()
         state.freshness.readingDates[.odometer] = odometer?.odometer?.updatedAt
         state.freshness.readingDates[.fuel] = fuel?.fuelLevelPercent?.updatedAt ?? fuel?.fuelAmount?.updatedAt
+        // Scope evidence is persisted with the grant; the refresh only reads it back. Attaching
+        // it here keeps the inspector's answer travelling with the snapshot the reader is
+        // looking at, including one restored from the offline copy.
+        let scopeRecord = await MainActor.run {
+            (requested: preferences.volvoRequestedScopes,
+             granted: preferences.volvoGrantedScopes.isEmpty ? nil : preferences.volvoGrantedScopes,
+             tier: preferences.volvoGrantTier.flatMap(VolvoAPI.ScopeTier.init(rawValue:)),
+             recordedAt: preferences.volvoScopeGrantRecordedAt)
+        }
+        state.providerReport = VolvoScopeCatalog.report(
+            requestedScopes: scopeRecord.requested,
+            grantedScopes: scopeRecord.granted,
+            tier: scopeRecord.tier,
+            recordedAt: scopeRecord.recordedAt,
+            degradedReadings: degradedReadings)
         return state
     }
 

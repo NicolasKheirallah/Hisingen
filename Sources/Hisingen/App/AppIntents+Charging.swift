@@ -39,6 +39,7 @@ struct SetChargeTargetIntent: AppIntent {
     static let openAppWhenRun = false
 
     @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Charge Target (%)")),
+               description: LocalizedStringResource(stringLiteral: L10n.text("Percentage to charge to, between 40 and 100.")),
                default: 80, inclusiveRange: (40, 100))
     var percent: Int
 
@@ -102,6 +103,7 @@ struct SetAmpLimitIntent: AppIntent {
     static let openAppWhenRun = false
 
     @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Current (A)")),
+               description: LocalizedStringResource(stringLiteral: L10n.text("Charging current in amperes, between 6 and 32.")),
                default: 16, inclusiveRange: (6, 32))
     var amps: Int
 

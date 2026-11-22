@@ -96,7 +96,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 9
+    static let latestSchemaVersion = 10
 
     /// The Charging Session ledger owns all domain reads and writes over the
     /// `charging_sessions` and `charging_samples` tables; this repository keeps only their
@@ -284,6 +284,7 @@ final class VehicleDatabase: @unchecked Sendable {
             peak_power_kw REAL DEFAULT 0.0,
             average_power_kw REAL DEFAULT 0.0,
             location_name TEXT,
+            charging_place TEXT NOT NULL DEFAULT 'home',
             created_at REAL NOT NULL,
             lifecycle_state TEXT NOT NULL DEFAULT 'active',
             completion_reason TEXT,
@@ -404,6 +405,31 @@ final class VehicleDatabase: @unchecked Sendable {
             odometer_km REAL
         );
         CREATE INDEX IF NOT EXISTS idx_fuel_vin ON fuel_entries(vin, date DESC);
+
+        -- The reader's own maintenance log. Nothing here comes from a provider: a service visit is
+        -- something they know and the car never reports. Additive table, so an existing install
+        -- picks it up on the next launch without a schema-version migration.
+        CREATE TABLE IF NOT EXISTS maintenance_entries (
+            id TEXT PRIMARY KEY NOT NULL,
+            vin TEXT NOT NULL,
+            date REAL NOT NULL,
+            odometer_km INTEGER,
+            kind TEXT NOT NULL,
+            title TEXT NOT NULL,
+            notes TEXT,
+            cost REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_maintenance_vin ON maintenance_entries(vin, date DESC);
+
+        -- The ownership assumption depreciation is derived from. One row per vehicle, entered by
+        -- the reader; there is deliberately no market value column, because Hisingen does not
+        -- estimate one.
+        CREATE TABLE IF NOT EXISTS vehicle_ownership (
+            vin TEXT PRIMARY KEY NOT NULL,
+            purchase_price REAL NOT NULL,
+            purchase_date REAL NOT NULL,
+            annual_decline_percent REAL NOT NULL
+        );
 
         CREATE TABLE IF NOT EXISTS air_quality_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

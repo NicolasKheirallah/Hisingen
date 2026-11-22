@@ -57,9 +57,10 @@ Apple ID/team/app-password variables or a `NOTARYTOOL_PROFILE`, default
 `make build` compiles the `HisingenWidget` extension binary beside the app.
 `make app` then assembles `Contents/PlugIns/HisingenWidget.appex` by hand: the binary, the
 linted plist from `Resources/HisingenWidget-Info.plist` with its version strings synced
-from the app's plist, and the app's `.lproj` folders so the widget resolves the same
-language tables. See [widgets-and-controls.md](../development/widgets-and-controls.md) for
-what the extension does and does not ship.
+from the app's plist, the app's `.lproj` folders so the widget resolves the same
+language tables, and the extension's own `Metadata.appintents`. See
+[widgets-and-controls.md](../development/widgets-and-controls.md) for what the extension
+does and does not ship.
 
 Signing is two steps on purpose: the `.appex` signs first with
 `Resources/HisingenWidget.entitlements`, then the app signs with
@@ -68,9 +69,12 @@ every signing option to all nested content and would stamp the app's entitlement
 extension's. Sparkle keeps its own valid signature instead of being re-signed. The final
 `codesign --verify --deep --strict` still checks the whole tree.
 
-The widget, and the app itself, ship no `Metadata.appintents`: a SwiftPM build cannot produce the
-compiler const values the extractor needs, so the app's intents are invisible to Shortcuts, Siri
-and Focus. The measurements, the reproduction steps and the two ways out are in
+Both the app and the extension carry `Metadata.appintents`: the app's bundle is built from
+its own module, and the extension's folds in the shared `HisingenIntents` module, where the
+widget-facing intents live. SwiftPM cannot ask the compiler for the const values the
+extractor needs, so `Scripts/generate-appintents-metadata.sh` and
+`Scripts/generate-widget-appintents-metadata.sh` replay the modules' compile commands. The
+measurements and the reproduction steps are in
 [app-intents-metadata.md](../development/app-intents-metadata.md); run
 `sh Scripts/appintents-metadata-status.sh` to re-check the current state.
 

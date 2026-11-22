@@ -60,9 +60,17 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.5"),
     ],
     targets: [
+        // Shared with the widget extension: the widget-facing AppIntent types and the seam the
+        // app registers at launch. An extension cannot link the app executable, so the types
+        // and the dispatch protocol must live in a module both targets can depend on.
+        .target(
+            name: "HisingenIntents",
+            path: "Sources/HisingenIntents"
+        ),
         .executableTarget(
             name: "Hisingen",
             dependencies: [
+                "HisingenIntents",
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2Posix", package: "grpc-swift-nio-transport")
@@ -72,11 +80,14 @@ let package = Package(
         ),
         .testTarget(
             name: "HisingenTests",
-            dependencies: ["Hisingen",
-                // The per-car widget's selection resolver and garage reader live in the
-                // widget target, so the fixture suites here import it the same way
-                // HisingenWidgetTests already imports both binaries. No new external
-                // products; the widget target itself stays dependency-free.
+            dependencies: [
+                "Hisingen",
+                // The widget and the app register the same intent types, so the suites that
+                // exercise widget routing link the shared module.
+                "HisingenIntents",
+                // The per-car widget's selection resolver and garage reader live in the widget
+                // target, so the fixture suites import it the same way HisingenWidgetTests
+                // already imports both binaries. No new external products.
                 "HisingenWidget",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
@@ -90,11 +101,13 @@ let package = Package(
         .executableTarget(
             name: "HisingenWidget",
             // WidgetKit extension. The .appex bundle is hand-assembled by the Makefile the
-            // same way the app is; SwiftPM only produces the binary here. The widget stays
-            // display-only and deep-links on hisingen://; its Edit-sheet car picker uses a
-            // WidgetConfigurationIntent, which resolves inside this extension process and
-            // so needs no App Intents metadata emission (a SwiftPM gap that still blocks
-            // Shortcuts/Siri discovery).
+            // same way the app is; SwiftPM only produces the binary here. It links the shared
+            // intent module so the widget and the app register the same intent types; the
+            // extension's Metadata.appintents is assembled from that dependency by
+            // Scripts/generate-widget-appintents-metadata.sh. The Edit-sheet car picker also uses
+            // a `WidgetConfigurationIntent`, which resolves inside this extension process and so
+            // needs no metadata of its own.
+            dependencies: ["HisingenIntents"],
             path: "Sources/HisingenWidget"
         ),
         .testTarget(
@@ -102,7 +115,7 @@ let package = Package(
             // Round-trip tests need both sides: the app's snapshot writer and the widget's
             // snapshot reader live in separate targets with no shared module between them,
             // so this suite imports both and pins the JSON they exchange.
-            dependencies: ["HisingenWidget", "Hisingen"],
+            dependencies: ["HisingenWidget", "Hisingen", "HisingenIntents"],
             path: "Tests/HisingenWidgetTests",
             swiftSettings: testSwiftSettings,
             linkerSettings: testLinkerSettings

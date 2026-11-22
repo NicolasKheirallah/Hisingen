@@ -41,9 +41,20 @@ enum HomeChargingPlanError: Error, Equatable, LocalizedError {
     }
 }
 
+/// What one charger reported the last time it was read. Kept for the chargers that do not hold the
+/// live connection, so a second charger shows its own state (aged by `lastContact`) instead of
+/// disappearing or borrowing the first one's readings.
+struct HomeChargingChargerSnapshot: Equatable, Sendable {
+    var link: HomeChargingModel.Link
+    var telemetry: HomeChargerTelemetry
+    var lastContact: Date?
+    var planStatus: HomeChargingPlanStatus?
+    var sessionPeakKw: Double?
+}
+
 /// The optional Home Charging integration: a live connection to the reader's Home Assistant, one
-/// paired charger, commands acknowledged by the charger, the plan Home Assistant runs, and the
-/// charger's sessions flowing into charging history.
+/// or two paired chargers, commands acknowledged by the charger, the plan Home Assistant runs, and
+/// the charger's sessions flowing into charging history.
 ///
 /// Nothing here is required. With no pairing the model is inert, and when Home Assistant cannot be
 /// reached the rest of the app keeps working from the vehicle's own data.
@@ -85,6 +96,12 @@ final class HomeChargingModel: ObservableObject {
 
     // MARK: Published state
 
+    /// Every charger this install has paired, in the order they were added. One of them is the
+    /// live connection; the others keep their last-known reading.
+    @Published private(set) var pairings: [HomeChargingPairing] = []
+    /// The last-known reading of chargers that are not the live one, so a second charger is still
+    /// visible (with its age) while the first holds the connection.
+    @Published private(set) var lastKnown: [String: HomeChargingChargerSnapshot] = [:]
     @Published private(set) var pairing: HomeChargingPairing?
     @Published private(set) var link: Link = .notConfigured
     @Published private(set) var telemetry = HomeChargerTelemetry()
@@ -133,6 +150,9 @@ final class HomeChargingModel: ObservableObject {
     private var eventTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private var pollSleeper: Task<Void, Never>?
+    /// Reads the chargers that are not the live connection, so a second charger keeps its own
+    /// state visible. It never opens a socket and never commands anything.
+    private var secondaryPollTask: Task<Void, Never>?
     private var generation = 0
     private var sessionPeakKw: Double?
     private var lastSyncAt: Date?
@@ -153,8 +173,9 @@ final class HomeChargingModel: ObservableObject {
         self.houseMeter = HouseMeterModel(preferences: preferences, dependencies: dependencies)
         self.tibberLive = TibberLiveModel(preferences: preferences, dependencies: dependencies)
         self.store = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
-        self.pairing = store.pairing
-        self.planRecord = store.planRecord
+        self.pairings = store.pairings
+        self.pairing = self.pairings.first
+        self.planRecord = self.pairings.first.flatMap { store.planRecord(for: $0) }
         self.tibberHome = store.tibberHome
         // A flat network fee saved by an earlier version becomes a flat tariff, once.
         if let saved = store.gridTariff {
@@ -185,6 +206,8 @@ final class HomeChargingModel: ObservableObject {
         pairingRevision &+= 1
         tibberHome = store.tibberHome
         tibberLive.reset()
+        pairings = store.pairings
+        lastKnown = [:]
         pairing = nil
         lastNexBlueImport = nil
         syncState = .idle
@@ -216,10 +239,13 @@ final class HomeChargingModel: ObservableObject {
         guard pairing != nil, loopTask == nil else { return }
         installWakeObserver()
         launchLoop()
+        launchSecondaryPolls()
     }
 
     func stop() {
+        if let pairing { publishSnapshot(for: pairing) }
         generation &+= 1
+        secondaryPollTask?.cancel(); secondaryPollTask = nil
         loopTask?.cancel(); loopTask = nil
         eventTask?.cancel(); eventTask = nil
         clockTask?.cancel(); clockTask = nil
@@ -390,6 +416,7 @@ final class HomeChargingModel: ObservableObject {
         clock = now
         trackSessionPeak()
         command.observe(telemetry, now: now)
+        publishSnapshot(for: pairing)
     }
 
     private func makeDirectProvider(for pairing: HomeChargingPairing) -> (any DirectChargerProvider)? {
@@ -425,6 +452,18 @@ final class HomeChargingModel: ObservableObject {
     }
 
     private func refreshStates(client: HomeAssistantClient, pairing: HomeChargingPairing) async throws {
+        let latest = try await fetchStates(client: client, pairing: pairing)
+        for id in trackedEntityIDs(pairing) {
+            if let state = latest[id] { apply(state) } else { table[id] = nil }
+        }
+        lastContact = dependencies.now()
+        recompute()
+    }
+
+    /// One read of a charger's tracked entities, without touching the live connection's table. Used
+    /// by the poll that keeps a second charger visible and by the live path itself.
+    private func fetchStates(client: HomeAssistantClient,
+                             pairing: HomeChargingPairing) async throws -> [String: HAEntityState] {
         let ids = trackedEntityIDs(pairing)
         let fetched = try await withThrowingTaskGroup(of: (String, HAEntityState?).self) { group -> [(String, HAEntityState?)] in
             for id in ids { group.addTask { (id, try await client.state(of: id)) } }
@@ -432,11 +471,9 @@ final class HomeChargingModel: ObservableObject {
             for try await entry in group { all.append(entry) }
             return all
         }
-        for (id, state) in fetched {
-            if let state { apply(state) } else { table[id] = nil }
-        }
-        lastContact = dependencies.now()
-        recompute()
+        var latest: [String: HAEntityState] = [:]
+        for (id, state) in fetched { if let state { latest[id] = state } }
+        return latest
     }
 
     private func openSocket(pairing: HomeChargingPairing) async {
@@ -494,8 +531,9 @@ final class HomeChargingModel: ObservableObject {
         let updated = HomeChargingOwnership.updated(planRecord, with: planStatus, now: now)
         if updated != planRecord {
             planRecord = updated
-            store.planRecord = updated
+            store.setPlanRecord(updated, for: pairing)
         }
+        publishSnapshot(for: pairing)
     }
 
     private func trackSessionPeak() {
@@ -519,6 +557,153 @@ final class HomeChargingModel: ObservableObject {
     private func recordChargerPower(_ kilowatts: Double, at timestamp: Date?) {
         guard preferences.storeChargingHistory, let vin = pairing?.vin, !vin.isEmpty, let timestamp else { return }
         database.history.recordChargerPower(vin: vin, kilowatts: kilowatts, timestamp: timestamp)
+    }
+
+    // MARK: - More than one charger
+
+    /// Reads the chargers that are not the live connection every few minutes. One connection keeps
+    /// the sockets, the plan and the command feedback; the others stay visible with their own
+    /// readings and their age, without a second stream of network traffic.
+    static let secondaryPollInterval: TimeInterval = 5 * 60
+
+    private func launchSecondaryPolls() {
+        secondaryPollTask?.cancel()
+        guard pairings.count > 1 else { secondaryPollTask = nil; return }
+        secondaryPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, !Task.isCancelled else { return }
+                await self.pollOtherChargers()
+                do { try await self.dependencies.wait(Self.secondaryPollInterval) } catch { return }
+            }
+        }
+    }
+
+    func pollOtherChargers() async {
+        for candidate in pairings where candidate.identity != pairing?.identity {
+            if let snapshot = try? await readSnapshot(for: candidate) {
+                lastKnown[candidate.identity] = snapshot
+            }
+        }
+    }
+
+    private func readSnapshot(for candidate: HomeChargingPairing) async throws -> HomeChargingChargerSnapshot {
+        let now = dependencies.now()
+        if candidate.source.isDirect {
+            guard let provider = makeDirectProvider(for: candidate) else { throw DirectChargerError.unauthorized }
+            let telemetry = try await provider.telemetry(chargerID: candidate.chargerID, now: now)
+            return HomeChargingChargerSnapshot(
+                link: .live, telemetry: telemetry, lastContact: now, planStatus: nil, sessionPeakKw: nil)
+        }
+        guard let client = makeClient(for: candidate) else { throw HomeAssistantError.unauthorized }
+        let states = try await fetchStates(client: client, pairing: candidate)
+        let telemetry = HomeChargerTelemetry.make(from: states, map: candidate.entities)
+        let plan = states[HomeChargingPlanEntity.id(chargerID: candidate.chargerID)]
+            .flatMap { HomeChargingPlanStatus(entity: $0) }
+        return HomeChargingChargerSnapshot(
+            link: .live, telemetry: telemetry, lastContact: now, planStatus: plan, sessionPeakKw: nil)
+    }
+
+    /// Keeps the snapshot of the live charger current, so switching away and back does not lose its
+    /// last reading.
+    private func publishSnapshot(for active: HomeChargingPairing) {
+        guard pairings.count > 1 else { return }
+        lastKnown[active.identity] = HomeChargingChargerSnapshot(
+            link: link, telemetry: telemetry, lastContact: lastContact,
+            planStatus: planStatus, sessionPeakKw: sessionPeakKw)
+    }
+
+    /// What one charger last reported. The live charger answers from its published state; every
+    /// other from the snapshot taken when it was last read.
+    func snapshot(for target: HomeChargingPairing) -> HomeChargingChargerSnapshot? {
+        if pairing?.identity == target.identity {
+            return HomeChargingChargerSnapshot(
+                link: link, telemetry: telemetry, lastContact: lastContact,
+                planStatus: planStatus, sessionPeakKw: sessionPeakKw)
+        }
+        return lastKnown[target.identity]
+    }
+
+    func telemetry(for target: HomeChargingPairing) -> HomeChargerTelemetry {
+        snapshot(for: target)?.telemetry ?? HomeChargerTelemetry()
+    }
+
+    func link(for target: HomeChargingPairing) -> Link {
+        snapshot(for: target)?.link ?? .connecting
+    }
+
+    func lastContact(for target: HomeChargingPairing) -> Date? {
+        snapshot(for: target)?.lastContact
+    }
+
+    func planStatus(for target: HomeChargingPairing) -> HomeChargingPlanStatus? {
+        snapshot(for: target)?.planStatus
+    }
+
+    /// Which charger holds the live connection. Switching stops the old loop, publishes its last
+    /// reading and connects the chosen one; a charger with no saved login stays unselected.
+    @discardableResult
+    func selectCharger(identity: String) -> Bool {
+        guard let target = pairings.first(where: { $0.identity == identity }) else { return false }
+        guard pairing?.identity != target.identity else { return true }
+        stop()
+        pairingRevision &+= 1
+        pairing = target
+        planRecord = store.planRecord(for: target)
+        table = [:]
+        telemetry = HomeChargerTelemetry()
+        lastContact = nil
+        planStatus = nil
+        sessionPeakKw = nil
+        if let known = lastKnown[target.identity] {
+            telemetry = known.telemetry
+            lastContact = known.lastContact
+            planStatus = known.planStatus
+            sessionPeakKw = known.sessionPeakKw
+        }
+        command = HomeChargerCommandTracker()
+        link = .connecting
+        lastSyncAt = nil
+        syncState = .idle
+        start()
+        return true
+    }
+
+    /// Forgets one charger, keeping the others. The live connection moves to the next charger.
+    func unpair(identity: String) {
+        guard pairings.contains(where: { $0.identity == identity }) else { return }
+        let wasLive = pairing?.identity == identity
+        if wasLive { stop() }
+        pairingRevision &+= 1
+        store.removePairing(identity: identity)
+        pairings = store.pairings
+        lastKnown.removeValue(forKey: identity)
+        lastNexBlueImport = nil
+        syncState = .idle
+        guard wasLive else { return }
+        pairing = nil
+        planRecord = nil
+        planStatus = nil
+        telemetry = HomeChargerTelemetry()
+        table = [:]
+        lastContact = nil
+        if let next = pairings.first {
+            _ = selectCharger(identity: next.identity)
+        } else {
+            link = .notConfigured
+        }
+    }
+
+    /// Whether a charger paired to this vehicle belongs on its card, and which one. A charger at
+    /// the vehicle's saved location wins; otherwise the live one; otherwise the first that could
+    /// show for the car.
+    func chargingPairing(for state: VehicleState) -> HomeChargingPairing? {
+        guard isSignedIn else { return nil }
+        let candidates = pairings.filter { $0.isPaired(toVehicle: state.identity.vin) }
+        if let located = candidates.first(where: { $0.isAtPairedLocation(state.chargeLocationPresence) }) {
+            return located
+        }
+        if let live = candidates.first(where: { $0.identity == pairing?.identity }) { return live }
+        return candidates.first
     }
 
     // MARK: - Setup
@@ -795,9 +980,11 @@ final class HomeChargingModel: ObservableObject {
             lastNexBlueImport = nil
             store.nexBlueImport = nil
         }
-        store.pairing = newPairing
+        store.upsert(newPairing)
+        pairings = store.pairings
         if newPairing.source == .homeAssistant { store.address = newPairing.baseURL }
         pairing = newPairing
+        planRecord = store.planRecord(for: newPairing)
         table = [:]
         telemetry = HomeChargerTelemetry()
         lastContact = nil
@@ -822,7 +1009,8 @@ final class HomeChargingModel: ObservableObject {
     func updateNetworkFee(_ orePerKwh: Double) {
         guard var current = pairing else { return }
         current.networkFeeOrePerKwh = max(0, orePerKwh)
-        store.pairing = current
+        store.upsert(current)
+        pairings = store.pairings
         pairing = current
     }
 
@@ -835,18 +1023,18 @@ final class HomeChargingModel: ObservableObject {
         unpair()
     }
 
+    /// Removes the live charger; another pairing, if any, takes over the connection.
     func unpair() {
-        stop()
-        pairingRevision &+= 1
-        store.clearPairing()
-        pairing = nil
-        lastNexBlueImport = nil
-        syncState = .idle
-        planStatus = nil
-        planRecord = nil
-        telemetry = HomeChargerTelemetry()
-        table = [:]
-        link = .notConfigured
+        guard let pairing else {
+            stop()
+            pairingRevision &+= 1
+            store.clearPairing()
+            pairings = []
+            lastKnown = [:]
+            link = .notConfigured
+            return
+        }
+        unpair(identity: pairing.identity)
     }
 
     /// Everything Home Charging holds, the token included. History rows already written stay.
@@ -859,6 +1047,8 @@ final class HomeChargingModel: ObservableObject {
         gridTariff = .none
         tibberHome = nil
         tibberProblem = nil
+        pairings = []
+        lastKnown = [:]
         pairing = nil
         lastNexBlueImport = nil
         syncState = .idle
@@ -875,31 +1065,47 @@ final class HomeChargingModel: ObservableObject {
     /// saved location it always shows; elsewhere only a dedicated charger that itself reports a cable.
     /// Never without a saved login.
     func shouldShow(for state: VehicleState) -> Bool {
-        guard let pairing, isSignedIn, pairing.isPaired(toVehicle: state.identity.vin) else { return false }
-        if pairing.isAtPairedLocation(state.chargeLocationPresence) { return true }
-        if pairing.locationID == nil { return true }
-        if pairing.isSharedCharger { return false }
-        let evidence = telemetry.connectorEvidence(now: clock, vehicleConnection: nil)
+        guard let target = chargingPairing(for: state) else { return false }
+        return shows(target, for: state)
+    }
+
+    private func shows(_ target: HomeChargingPairing, for state: VehicleState) -> Bool {
+        guard target.isPaired(toVehicle: state.identity.vin) else { return false }
+        if target.isAtPairedLocation(state.chargeLocationPresence) { return true }
+        if target.locationID == nil { return true }
+        if target.isSharedCharger { return false }
+        let evidence = telemetry(for: target).connectorEvidence(now: clock, vehicleConnection: nil)
         return evidence.connected == true && evidence.evidence == .confirmedByCharger
     }
 
     func cardInput(for state: VehicleState) -> HomeChargingCardInput? {
-        guard let pairing, shouldShow(for: state) else { return nil }
+        guard let target = chargingPairing(for: state), shows(target, for: state) else { return nil }
         let name = state.identity.modelName ?? state.model.brand.displayName
+        let reading = snapshot(for: target)
+        let isLive = target.identity == pairing?.identity
         return HomeChargingCardInput(
-            pairing: pairing, telemetry: telemetry, now: clock, link: link, lastContact: lastContact,
+            pairing: target, telemetry: reading?.telemetry ?? HomeChargerTelemetry(), now: clock,
+            link: reading?.link ?? .connecting, lastContact: reading?.lastContact,
             vehicleName: name, vehicleBatteryPercent: state.energy.batteryPercentage,
             vehicleTargetPercent: state.energy.targetPercentage, vehicleConnection: state.energy.connection,
-            plan: planStatus, command: command.phase, vehicleFinish: state.estimatedChargingCompletion,
-            currency: preferences.currencySymbol, sessionPeakKw: sessionPeakKw,
+            plan: reading?.planStatus, command: isLive ? command.phase : .idle,
+            vehicleFinish: state.estimatedChargingCompletion,
+            currency: preferences.currencySymbol, sessionPeakKw: reading?.sessionPeakKw,
             // Always offered with the planner on: when the component is missing the editor says how to install it.
-            canEditPlan: pairing.source.supportsPlans && preferences.features.contains(.smartChargingPlanner)
+            canEditPlan: target.source.supportsPlans && preferences.features.contains(.smartChargingPlanner)
         )
     }
 
-    /// Read by the vehicle-side scheduler: while Home Assistant owns the plan it must not send commands.
+    /// Read by the vehicle-side scheduler: while Home Assistant owns a plan for this vehicle – on
+    /// any of the paired chargers – it must not send commands.
     func ownsPlan(for vin: String) -> Bool {
-        HomeChargingOwnership.isHomeAssistantOwned(vin: vin, record: planRecord ?? store.planRecord, now: dependencies.now())
+        let now = dependencies.now()
+        return pairings.contains { candidate in
+            let record = candidate.identity == pairing?.identity
+                ? (planRecord ?? store.planRecord(for: candidate))
+                : store.planRecord(for: candidate)
+            return HomeChargingOwnership.isHomeAssistantOwned(vin: vin, record: record, now: now)
+        }
     }
 
     // MARK: - Charger commands
@@ -946,6 +1152,30 @@ final class HomeChargingModel: ObservableObject {
             command.rejected(reason: error.localizedDescription, now: dependencies.now())
         }
         objectWillChange.send()
+    }
+
+    /// Commands one named charger, switching the live connection to it first when needed. The
+    /// second charger is commanded on its own reading, never through the first one's state.
+    ///
+    /// Switching primes the connection with one read before the command goes out: the command
+    /// tracker compares against that charger's own readings, and a Home Assistant command needs a
+    /// client. A reader tapping a charger that has never connected still gets the same spoken
+    /// rejection as before, because priming a failed connection leaves the client absent.
+    func send(_ kind: HomeChargerCommandKind, for identity: String) async {
+        guard let target = pairings.first(where: { $0.identity == identity }) else { return }
+        if pairing?.identity != identity {
+            guard selectCharger(identity: identity) else { return }
+            if target.source.isDirect {
+                if let provider = directProvider ?? makeDirectProvider(for: target) {
+                    directProvider = provider
+                    try? await readDirect(provider: provider, pairing: target)
+                }
+            } else if let client = client ?? makeClient(for: target) {
+                self.client = client
+                try? await refreshStates(client: client, pairing: target)
+            }
+        }
+        await send(kind)
     }
 
     private func sendDirect(_ kind: HomeChargerCommandKind, pairing: HomeChargingPairing, now: Date) async {
@@ -1062,11 +1292,15 @@ final class HomeChargingModel: ObservableObject {
 
     private func planCall(_ service: String, _ data: HAJSONValue) async throws -> HomeChargingPlanStatus? {
         if pairing?.source.supportsPlans == false { throw HomeChargingPlanError.needsHomeAssistant }
-        guard let client else { throw HomeChargingPlanError.unreachable }
+        guard let pairing, let resolved = client ?? makeClient(for: pairing) else {
+            throw HomeChargingPlanError.unreachable
+        }
+        if client == nil { self.client = resolved }
+        let client = resolved
         do {
             let result = try await client.callService(domain: Self.componentDomain, service: service, data: data, returnResponse: true)
             componentInstalled = true
-            return Self.planStatus(from: result.response, chargerID: pairing?.chargerID ?? "")
+            return Self.planStatus(from: result.response, chargerID: pairing.chargerID)
         } catch HomeAssistantError.notFound {
             componentInstalled = false
             throw HomeChargingPlanError.componentNotInstalled
@@ -1102,7 +1336,7 @@ final class HomeChargingModel: ObservableObject {
         let record = HomeChargingPlanRecord(planID: request.planID, vin: vin, chargerID: request.chargerID,
                                             deadline: request.deadline, submittedAt: now)
         planRecord = record
-        store.planRecord = record
+        store.setPlanRecord(record, for: pairing)
         if let status { planStatus = status }
         nudgePoll()
     }
@@ -1113,7 +1347,7 @@ final class HomeChargingModel: ObservableObject {
         if var record = planRecord, record.endedAt == nil {
             record.endedAt = dependencies.now()
             planRecord = record
-            store.planRecord = record
+            store.setPlanRecord(record, for: pairing)
         }
         planStatus = status
     }
@@ -1122,6 +1356,50 @@ final class HomeChargingModel: ObservableObject {
         guard let pairing else { throw HomeChargingPlanError.notPaired }
         if let status = try await planCall("pause_plan", .object(["charger_id": .string(pairing.chargerID)])) { planStatus = status }
         nudgePoll()
+    }
+
+    /// The range the app will write for a charger current limit. Chargers differ, but every Home
+    /// Assistant charger integration exposes a `number` entity whose own min/max is the authority;
+    /// this is the outer bound the app is willing to send at all.
+    static let chargerCurrentLimitRange = 6...32
+
+    static func clampedCurrentLimit(_ amps: Int) -> Int {
+        min(max(amps, chargerCurrentLimitRange.lowerBound), chargerCurrentLimitRange.upperBound)
+    }
+
+    /// Sets the charger's current limit through Home Assistant.
+    ///
+    /// This is the only charger write the app performs beyond charge/pause, and it exists because
+    /// it is the one that needs no vendor API: Home Assistant already models the limit as a
+    /// writable `number` entity. Returns the reason when it cannot send, and nil on success.
+    @discardableResult
+    func setChargerCurrentLimit(_ amps: Int) async -> String? {
+        guard let pairing else {
+            return L10n.text("Hisingen is not connected to a charger yet.")
+        }
+        guard let entity = pairing.entities.currentLimitNumber else {
+            return L10n.text("No writable current-limit entity is mapped for this charger.")
+        }
+        guard let client else {
+            return L10n.text("Hisingen is not connected to Home Assistant yet.")
+        }
+        let clamped = Self.clampedCurrentLimit(amps)
+        do {
+            _ = try await client.callService(
+                domain: "number",
+                service: "set_value",
+                data: .object([
+                    "entity_id": .string(entity),
+                    "value": .number(Double(clamped)),
+                ])
+            )
+            nudgePoll()
+            return nil
+        } catch let error as HomeAssistantError {
+            return Self.reasonText(error)
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     func resumePlan() async throws {

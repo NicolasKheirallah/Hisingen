@@ -140,6 +140,13 @@ final class CommandCoordinator {
         expectedVIN: String? = nil
     ) async -> RemoteCommandDispatchOutcome {
         guard let context else { return .refused(reason: RemoteCommandError.missingContext.localizedDescription) }
+        if preferences.isDemoMode {
+            let message = L10n.text("Demo mode: commands are not sent to a vehicle.")
+            context.presentResult(
+                title: L10n.text("Command not sent"), message: message, success: false,
+                target: nil, command: command, remedy: nil, followUp: nil)
+            return .deferred(reason: message)
+        }
         guard !isInProgress && !isAuthorizing else {
             context.presentResult(
                 title: L10n.text("Command not sent"),

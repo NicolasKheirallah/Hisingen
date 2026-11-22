@@ -38,6 +38,10 @@ extension VehicleDatabase {
             with: encoder.encode(cabinClimateAll()))
         payload["fuelEntries"] = try JSONSerialization.jsonObject(
             with: encoder.encode(fuelEntriesAll()))
+        payload["maintenanceEntries"] = try JSONSerialization.jsonObject(
+            with: encoder.encode(maintenanceEntriesAll()))
+        payload["ownership"] = try JSONSerialization.jsonObject(
+            with: encoder.encode(ownershipAll()))
         return try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
     }
 
@@ -75,6 +79,7 @@ extension VehicleDatabase {
         let wallboxCost: Double?
         let wallboxCostMethod: String?
         let wallboxPriceSource: String?
+        let place: String
     }
 
     private func backupChargingSessions(includeCoordinates: Bool) throws -> [BackupSession] {
@@ -86,7 +91,8 @@ extension VehicleDatabase {
                night_tariff_price_per_kwh, night_tariff_start_hour,
                night_tariff_end_hour, estimated_cost, currency_symbol, target_soc,
                summary_version, wallbox_charger_id, wallbox_energy_kwh, wallbox_energy_source,
-               wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source
+               wallbox_measured_at, wallbox_cost, wallbox_cost_method, wallbox_price_source,
+               charging_place
         FROM charging_sessions ORDER BY started_at DESC;
         """
         let df = Format.iso8601
@@ -126,7 +132,8 @@ extension VehicleDatabase {
                     wallboxMeasuredAt: stmt.columnDate(at: 27).map { df.string(from: $0) },
                     wallboxCost: stmt.columnDouble(at: 28),
                     wallboxCostMethod: stmt.columnText(at: 29),
-                    wallboxPriceSource: stmt.columnText(at: 30)
+                    wallboxPriceSource: stmt.columnText(at: 30),
+                    place: stmt.columnText(at: 31) ?? "home"
                 ))
             }
             return out
@@ -226,6 +233,61 @@ extension VehicleDatabase {
         return try db.query(sql: sql) { _ in } process: { stmt in
             try HistoryRowDecoder.rows(stmt, decode: HistoryRowDecoder.fuelEntry)
         }
+    }
+
+    private func maintenanceEntriesAll() throws -> [BackupMaintenanceEntry] {
+        let sql = """
+        SELECT vin, date, odometer_km, kind, title, notes, cost
+        FROM maintenance_entries ORDER BY date DESC;
+        """
+        return try db.query(sql: sql) { _ in } process: { stmt in
+            var rows: [BackupMaintenanceEntry] = []
+            while try stmt.stepOrThrow() {
+                rows.append(BackupMaintenanceEntry(
+                    vin: stmt.columnText(at: 0) ?? "",
+                    date: stmt.columnDate(at: 1).map { Format.iso8601.string(from: $0) } ?? "",
+                    odometerKm: stmt.columnInt64(at: 2).map(Int.init),
+                    kind: stmt.columnText(at: 3) ?? "",
+                    title: stmt.columnText(at: 4) ?? "",
+                    notes: stmt.columnText(at: 5),
+                    cost: stmt.columnDouble(at: 6)))
+            }
+            return rows
+        }
+    }
+
+    private func ownershipAll() throws -> [BackupOwnership] {
+        let sql = """
+        SELECT vin, purchase_price, purchase_date, annual_decline_percent FROM vehicle_ownership;
+        """
+        return try db.query(sql: sql) { _ in } process: { stmt in
+            var rows: [BackupOwnership] = []
+            while try stmt.stepOrThrow() {
+                rows.append(BackupOwnership(
+                    vin: stmt.columnText(at: 0) ?? "",
+                    purchasePrice: stmt.columnDouble(at: 1) ?? 0,
+                    purchaseDate: stmt.columnDate(at: 2).map { Format.iso8601.string(from: $0) } ?? "",
+                    annualDeclinePercent: stmt.columnDouble(at: 3) ?? 0))
+            }
+            return rows
+        }
+    }
+
+    private struct BackupMaintenanceEntry: Encodable {
+        let vin: String
+        let date: String
+        let odometerKm: Int?
+        let kind: String
+        let title: String
+        let notes: String?
+        let cost: Double?
+    }
+
+    private struct BackupOwnership: Encodable {
+        let vin: String
+        let purchasePrice: Double
+        let purchaseDate: String
+        let annualDeclinePercent: Double
     }
 
     private struct BackupBatteryHealth: Encodable {

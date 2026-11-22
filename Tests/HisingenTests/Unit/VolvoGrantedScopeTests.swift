@@ -69,6 +69,15 @@ struct VolvoGrantedScopeTests {
         #expect(dropped.contains("conve:honk_flash"))
     }
 
+    @Test func signInCascadeIsBoundedAndEndsAtCore() {
+        // Four attempts, each strictly narrower, ending at the tier every application is
+        // granted. A caller cannot loop: the sequence is a fixed list, not a while loop.
+        #expect(VolvoAPI.signInCascade.count == 4)
+        #expect(VolvoAPI.signInCascade.map(\.tier) == [.full, .full, .standard, .core])
+        #expect(VolvoAPI.signInCascade.map(\.dropsLocation) == [false, true, false, false])
+        #expect(VolvoAPI.signInCascade.last?.tier == .core)
+    }
+
     @Test func restrictedScopeListIsEmptyWhenNotWanted() {
         #expect(VolvoAPI.restrictedScopeList(wanted: false, dropsLocation: false).isEmpty)
         #expect(VolvoAPI.restrictedScopeList(wanted: false, dropsLocation: true).isEmpty)
@@ -220,5 +229,25 @@ struct VolvoGrantedScopeTests {
         #expect(withoutLocation.contains("conve:engine_start_stop"))
         // The retry narrows the request by exactly the location scope – nothing else.
         #expect(withLocation.subtracting(withoutLocation) == ["location:read"])
+    }
+
+    // MARK: - No scope without a consumer
+
+    /// Volvo rejects the *whole* authorization for one unapproved scope, so a scope nobody
+    /// reads is not harmless: it can push a valid sign-in down a tier. Every restricted scope
+    /// in the request must therefore gate a command or the location read, and the provider's
+    /// extra read list must stay empty unless a scope is actually consumed.
+    @Test func everyRequestedRestrictedScopeGatesSomething() {
+        let restricted = Set(VolvoAPI.restrictedScopes)
+        let commandScopes = Set([
+            RemoteCommand.lock, .lockReducedGuard, .unlock,
+            .honkAndFlash, .flashLights, .honkHorn,
+            .startEngine(runtimeMinutes: 5), .stopEngine
+        ].compactMap { VolvoAPI.requiredScope(for: $0) })
+        // `location:read` is consumed by the location read rather than a command.
+        #expect(restricted.subtracting(commandScopes) == ["location:read"])
+        // The read list is the OAuth floor plus consumed command scopes; nothing speculative.
+        #expect(VolvoAPI.readScopes.contains("openid"))
+        #expect(VolvoIdentityProvider(clientID: "vid-test").additionalReadScopes.isEmpty)
     }
 }

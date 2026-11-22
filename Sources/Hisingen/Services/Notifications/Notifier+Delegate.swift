@@ -43,12 +43,21 @@ extension Notifier {
         }
     }
 
-    nonisolated static func quickAction(forResponse response: UNNotificationResponse) -> QuickAction? {
-        switch response.actionIdentifier {
+    /// The banner's action identifier mapped to a command. Kept separate from the response so
+    /// the mapping is testable without constructing a `UNNotificationResponse`.
+    nonisolated static func quickAction(forActionIdentifier identifier: String) -> QuickAction? {
+        switch identifier {
         case "lock-vehicle": return .lockVehicle
+        case Notifier.unlockVehicleActionID: return .unlockVehicle
+        case Notifier.startClimateActionID: return .startClimate
         case "resume-charge": return .resumeChargeSchedule
+        case Notifier.viewDetailsActionID: return .viewDetails
         default: return nil
         }
+    }
+
+    nonisolated static func quickAction(forResponse response: UNNotificationResponse) -> QuickAction? {
+        quickAction(forActionIdentifier: response.actionIdentifier)
     }
 
     /// Same effect as the Settings toggle: the car's banners stop, its baselines keep advancing.

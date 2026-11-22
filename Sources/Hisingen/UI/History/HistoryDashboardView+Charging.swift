@@ -49,6 +49,7 @@ extension HistoryDashboardView {
                             HistorySectionHeading(symbol: "chart.dots.scatter", title: L10n.text("Charging Curve"),
                                        color: HisingenTheme.semanticGood)
                             Spacer()
+                            editSessionButton
                             closeSessionButton
                         }
                         Text(Format.dateTimeFormatter.string(from: selectedSession.startedAt))
@@ -67,6 +68,18 @@ extension HistoryDashboardView {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var editSessionButton: some View {
+        if let selectedSession, selectedSession.endedAt != nil {
+            Button { beginEditingChargingSession(selectedSession) } label: {
+                Image(systemName: "pencil").hisType(.label)
+            }
+            .buttonStyle(.pressable)
+            .help(L10n.text("Edit"))
+            .accessibilityLabel(L10n.text("Edit"))
         }
     }
 
@@ -147,12 +160,19 @@ extension HistoryDashboardView {
                             .foregroundStyle(badgeColor)
                     }
                     Spacer()
+                    editSessionButton
                     closeSessionButton
                 }
-                if let session, let name = session.locationName, !name.isEmpty {
-                    Label(name, systemImage: "mappin.and.ellipse")
-                        .hisType(.micro, weight: .medium)
-                        .foregroundStyle(.secondary)
+                if let session {
+                    HStack(spacing: 8) {
+                        Label(session.place.displayName,
+                              systemImage: session.place == .home ? "house" : "bolt.car")
+                        if let name = session.locationName, !name.isEmpty {
+                            Label(name, systemImage: "mappin.and.ellipse")
+                        }
+                    }
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(.secondary)
                 }
                 if isAnomalous {
                     footnote("exclamationmark.triangle.fill",
@@ -303,6 +323,20 @@ extension HistoryDashboardView {
         .historyYAxis(unit)
         .frame(height: chartHeight * 0.62)
         .accessibilityLabel("\(title): \(L10n.text("This session")), \(L10n.text("Previous"))")
+        .accessibilityValue(
+            L10n.format("%@: %@", L10n.text("This session"), chartAccessibilityValue(points: current.map(\.value)))
+            + " · "
+            + L10n.format("%@: %@", L10n.text("Previous"), chartAccessibilityValue(points: previous.map(\.value)))
+        )
+        .accessibilityChartDescriptor(NumericSeriesAXDescriptor(
+            title: title,
+            xLabel: L10n.text("Minutes"),
+            yLabel: unit,
+            series: [
+                .init(name: L10n.text("This session"), points: current.map { ($0.minutes, $0.value) }),
+                .init(name: L10n.text("Previous"), points: previous.map { ($0.minutes, $0.value) })
+            ]
+        ))
     }
 
     /// The cost a session card leads with, its label, and how it was reached.
@@ -416,6 +450,10 @@ extension HistoryDashboardView {
                     Spacer()
                     Text(L10n.format("%d shown", matches.count))
                         .hisType(.micro).foregroundStyle(.secondary)
+                    Button(L10n.text("Add Session")) { beginAddingChargingSession() }
+                        .buttonStyle(.hisSecondary)
+                        .controlSize(.small)
+                        .help(L10n.text("Log a public charge from a receipt, or add a missing session."))
                 }
                 if let sessionFilter {
                     HStack(spacing: 6) {
@@ -446,6 +484,11 @@ extension HistoryDashboardView {
                             chargingSessionRow(session, flagged: anomalies.contains(session.id))
                         }
                         .buttonStyle(.pressable)
+                        .contextMenu {
+                            if session.endedAt != nil {
+                                Button(L10n.text("Edit")) { beginEditingChargingSession(session) }
+                            }
+                        }
                         if session.id != rows.last?.id { Divider().opacity(HisingenTheme.dividerOpacity) }
                     }
                     footer
@@ -830,6 +873,15 @@ extension HistoryDashboardView {
                 } else {
                     KVRow(L10n.text("Estimated Cost"), L10n.text("Mixed currencies"), symbol: "creditcard",
                           info: L10n.text("Costs in different currencies are kept separate and are not added together."))
+                }
+                if let split = chargingCostSplit(), !chargingSessions.isEmpty {
+                    KVRow(L10n.text("Home Charging"),
+                          Format.currency(split.home.amount, symbol: split.currency),
+                          symbol: "house",
+                          info: L10n.text("Includes every session recorded automatically until its place is changed."))
+                    KVRow(L10n.text("Public Charging"),
+                          Format.currency(split.publicCharging.amount, symbol: split.currency),
+                          symbol: "bolt.car")
                 }
                 spotSavingsRow
                 if let houseLoad { HouseLoadRows(share: houseLoad) }

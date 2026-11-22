@@ -39,6 +39,7 @@ struct UnlockVehicleIntent: AppIntent {
 
 struct FlashLightsIntent: AppIntent {
     static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Flash Vehicle Lights")) }
+    static let description = IntentDescription("Flashes the headlights so the car is easier to find.")
     static let openAppWhenRun = false
 
     @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),
@@ -53,6 +54,7 @@ struct FlashLightsIntent: AppIntent {
 
 struct HonkAndFlashIntent: AppIntent {
     static var title: LocalizedStringResource { LocalizedStringResource(stringLiteral: L10n.text("Honk and Flash Vehicle")) }
+    static let description = IntentDescription("Sounds the horn and flashes the lights together.")
     static let openAppWhenRun = false
 
     @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Vehicle")),

@@ -153,4 +153,30 @@ struct VehicleCapabilityTests {
         #expect(!ex90Profile.hasSelectableSteeringWheelHeating)
         #expect(ex90Profile.permits(.climateStartStop))
     }
+
+    @Test
+    func polestarNeverAdvertisesProviderImpossibleControls() {
+        // The C3 invocation surface has no engine command and no reduced-guard lock;
+        // `ProviderCommandCatalog` refuses both and `PolestarGRPCRemote` throws. A car that
+        // advertises either (lock_type 3 sets reduced guard, module field 27 sets engine) used
+        // to outrank the model table and render a control that failed at dispatch.
+        let profile = VehicleCapabilityProfile(
+            modelName: "Polestar 2",
+            advertised: [.engineStart: true, .reducedGuardLock: true]
+        )
+        #expect(profile.support(for: .engineStart) == .unavailable)
+        #expect(profile.support(for: .reducedGuardLock) == .unavailable)
+    }
+
+    @Test
+    func volvoDoesNotOfferClimateTimersOrChargingSchedules() {
+        // Neither resource nor write exists in Volvo's public API. Leaving these at
+        // `.backendDependent` rendered a climate-timer button and a dimmed Charging Controls
+        // card whose every command the catalog refuses.
+        for modelName in ["XC40", "EX30", "EX90", "ES90", "V90"] {
+            let profile = VehicleCapabilityProfile(modelName: modelName)
+            #expect(profile.support(for: .climateTimers) == .unavailable, "\(modelName) climate timers")
+            #expect(profile.support(for: .chargingSchedule) == .unavailable, "\(modelName) charging schedule")
+        }
+    }
 }

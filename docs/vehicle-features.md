@@ -161,6 +161,14 @@ Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage 
 the business/private distance split per month with CSV export. Tags are stored locally per
 vehicle.
 
+Public charging can be logged by hand from the **Charging Sessions** card: **Add Session**
+records the charging place (home or public), a location, the start and end time, the energy, and
+the price as a total, a price per kWh, or both. A stored session can be edited from its context
+menu or the pencil in its detail card, so a public charge the car recorded without a price can be
+corrected. The **Charging Trends** card separates **Home Charging** and **Public Charging** cost;
+the two lines add up to the total. Sessions recorded automatically count as home until their
+place is changed. Everything is stored locally and no provider is asked for a price.
+
 A few more things that follow from the same history:
 
 * scheduled charging says whether it will finish, including "cannot complete" and "smart
@@ -174,6 +182,20 @@ A few more things that follow from the same history:
 ### Home charging and electricity
 
 Pair NexBlue, Easee or Zaptec directly, or connect through Home Assistant. You can also price charging from a fixed tariff, Swedish spot prices or a connected Tibber home. [Home charging and electricity guide](home-charging.md)
+
+Home Assistant discovery reads NexBlue's entity names without any special token; with an
+administrator token it also groups Easee and Zaptec entities by device and maps their status,
+power and energy readings. A charging switch is only mapped automatically when the status sensor
+can confirm a command, so discovery never offers a write it cannot check; a charger with
+unrecognised states is still listed for its readings and can be mapped by hand.
+
+When Open-Meteo answers, the **Charging Planner** draws a **solar forecast** line of global
+shortwave radiation for the next day at the car's location, with its peak time. It is radiation,
+not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
+kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+provider named beneath it. Without a token, or whenever the provider fails, the line stays absent
+rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
+the History emissions estimate.
 
 ### Doors, windows & locks
 

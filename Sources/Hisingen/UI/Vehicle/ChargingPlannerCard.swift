@@ -30,6 +30,8 @@ struct ChargingPlannerCard: View {
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
     @State private var resolved: PlannerPrices?
+    @State private var solarForecast: SolarForecast?
+    @State private var gridCarbon: GridCarbonReading?
 
     private let provider = PlannerPriceProvider.shared
 
@@ -69,14 +71,40 @@ struct ChargingPlannerCard: View {
             // the card's own insertion/removal, not snap it.
             .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
             .task(id: plannerTaskID) {
+                async let solar = Self.solarForecast(for: state)
+                async let carbon = Self.gridCarbon(preferences: preferences, zone: zone)
                 let answer = await provider.resolve(zone: zone)
+                let forecast = await solar
+                let reading = await carbon
                 guard !Task.isCancelled else { return }
                 points = answer.points
                 fetchedAt = answer.fetchedAt
                 resolved = answer
+                solarForecast = forecast
+                gridCarbon = reading
                 hasLoaded = true
             }
         }
+    }
+
+    /// Open-Meteo radiation at the car's coordinates, when the car has reported them. The
+    /// forecast adds a line only; a failure is nil and the card simply has no line.
+    private static func solarForecast(for state: VehicleState) async -> SolarForecast? {
+        guard let latitude = state.location?.latitude, let longitude = state.location?.longitude else { return nil }
+        return await SolarForecastClient().forecast(latitude: latitude, longitude: longitude)
+    }
+
+    /// The live carbon line needs a saved Electricity Maps key. The key is read off the main
+    /// thread; no key, a 401 and a malformed answer all return nil, so a guessed figure is not
+    /// possible here. The manual grid intensity in Settings remains the emissions estimate's
+    /// input and is never substituted for this line.
+    private static func gridCarbon(preferences: PreferencesStore, zone: ElspotZone) async -> GridCarbonReading? {
+        guard preferences.hasElectricityMapsKey else { return nil }
+        let keychain = preferences.keychain
+        return await Task.detached(priority: .utility) {
+            guard let key = try? keychain.readElectricityMapsKey(), !key.isEmpty else { return nil }
+            return await ElectricityMapsClient().carbonIntensity(zone: zone, apiKey: key)
+        }.value
     }
 
     /// The paired vehicle with a home charger: Home Assistant can run this car's plan.
@@ -177,6 +205,25 @@ struct ChargingPlannerCard: View {
                         .hisType(.label)
                         .foregroundStyle(HisingenTheme.inkMuted)
                         .transition(plannerTransition)
+                }
+
+                if onOpenPlanner == nil {
+                    if let solarForecast, !solarForecast.isEmpty {
+                        SolarForecastLine(forecast: solarForecast)
+                            .transition(plannerTransition)
+                    }
+                    if let gridCarbon {
+                        KVRow(
+                            L10n.text("Grid carbon now"),
+                            L10n.format("%@ g CO₂/kWh", Format.number(gridCarbon.gramsCO2PerKwh, decimals: 0)),
+                            symbol: "leaf",
+                            info: gridCarbon.observedAt.map { Format.shortTime(date: $0) }
+                        )
+                        Text(L10n.format("Source: %@", gridCarbon.source))
+                            .hisType(.micro)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                        .transition(plannerTransition)
+                    }
                 }
 
                 if let onOpenPlanner {

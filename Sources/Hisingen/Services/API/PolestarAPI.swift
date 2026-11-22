@@ -1099,7 +1099,13 @@ actor PolestarAPI {
         else { return }
         guard epoch == sessionEpoch, !Task.isCancelled else { return }
         let pool = images.pool
-        let pick = pool.first { $0.angle == requestedAngle }
+        // The car's render pool does not always carry the angle the reader asked for (a model
+        // can ship only a subset). `preferred` falls back to front three-quarter, then side,
+        // then anything — previously it was only exercised by tests while production required
+        // an exact match, so a partial pool rendered no image at all. The bytes are cached
+        // under the angle actually served, so a later request for that angle reads the right
+        // picture instead of inheriting this fallback.
+        let pick = CarImagesDTO.preferred(in: pool, angle: requestedAngle)
 
         if artwork.needsImage(vin: vin, angle: requestedAngle), let url = pick?.httpsURL {
             if let (bytes, imageResponse) = await optionalBody(

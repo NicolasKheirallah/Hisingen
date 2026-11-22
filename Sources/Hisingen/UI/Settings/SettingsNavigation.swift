@@ -127,7 +127,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .vehicleData: "data fetch readings telemetry VIN charging schedules air quality vehicle location maps weather software status diagnostics real time updates"
         case .remoteFeatures: "remote commands lock climate charge window software remote feature"
         case .vehicleCapabilities: "capability matrix supported available TPMS support export"
-        case .automation: "autostart auto start routines calendar preconditioning schedule event cheap window"
+        case .automation: "autostart auto start routines calendar preconditioning schedule event cheap window sleep awake keep mac awake sleep prevention"
         case .notifications: "alert warning sound quiet hours low battery unlock rain threshold delay private banners mute badge daily summary"
         case .plannerAlerts: "charging planner notifications notify cheap window lead time tomorrow prices"
         case .privacy: "privacy dashboard screenshot redaction blur VIN plate coordinates device owner command authentication touch id"

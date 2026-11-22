@@ -97,6 +97,7 @@ struct StartEngineIntent: AppIntent {
     static let openAppWhenRun = false
 
     @Parameter(title: LocalizedStringResource(stringLiteral: L10n.text("Runtime (minutes)")),
+               description: LocalizedStringResource(stringLiteral: L10n.text("How long the engine runs, between 5 and 15 minutes.")),
                default: 15, inclusiveRange: (5, 15))
     var minutes: Int
 

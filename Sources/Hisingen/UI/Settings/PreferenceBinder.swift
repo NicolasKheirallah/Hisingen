@@ -10,6 +10,8 @@ enum SignOutSelection {
 
 enum SettingsChange {
     case credentials
+    case accountAdded
+    case accountSwitched
     case features
     case notifications
     case presentation
@@ -20,6 +22,10 @@ enum SettingsChange {
     case updater
     case checkForUpdates
     case automation
+    /// One command sent to every configured vehicle, from the Automations card.
+    case broadcastCommand(RemoteCommand)
+    /// The recurring report cadence or on/off switch changed.
+    case reporting
     case volvoSignIn(clientID: String, clientSecret: String, vccApiKey: String, nickname: String)
     case polestarCommandAuthorization
     case polestarCommandAuthorizationForceLogin

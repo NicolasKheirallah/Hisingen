@@ -210,6 +210,7 @@ extension VehicleState {
             weather: weather ?? (features.contains(.vehicleWeather) ? previous.weather : nil),
             location: location ?? (features.contains(.vehicleLocation) ? previous.location : nil),
             probedCapabilities: mergedProbes,
+            providerReport: providerReport ?? previous.providerReport,
             powertrain: powertrain == .unknown ? previous.powertrain : powertrain,
             fuelSystem: fuelSystem.merging(previous: previous.fuelSystem, policy: policy),
             // Capability data is static for a VIN and is not re-read on every refresh. Without

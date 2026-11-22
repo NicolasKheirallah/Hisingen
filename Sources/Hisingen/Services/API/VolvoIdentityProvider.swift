@@ -53,11 +53,11 @@ enum VolvoIdentityProvider: String, Sendable {
     /// `conve:navigation` is deliberately not requested: nothing reads it, and it can expose
     /// destinations.
     var additionalReadScopes: [String] {
-        switch self {
-        case .legacy:
-            []
-        case .volvoID:
-            ["conve:connectivity_status", "conve:environment"]
-        }
+        // `conve:connectivity_status` and `conve:environment` used to be requested here. Nothing
+        // reads either endpoint (connectivity status is Enterprise-only, `/environment` is
+        // documented as 404), and Volvo rejects the *whole* authorization with `invalid_scope`
+        // when one requested scope is unapproved — so asking for them could push an otherwise
+        // valid sign-in down a tier. Request only scopes that gate something.
+        []
     }
 }

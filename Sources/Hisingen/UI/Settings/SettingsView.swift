@@ -62,6 +62,9 @@ struct SettingsView: View {
                         searchText: $settingsSearchText
                     )
                     .frame(width: HisingenTheme.layoutWidth < 600 ? 154 : 238)
+                    // The sidebar is one focus section read top to bottom, in the order the
+                    // sections are listed; the content column is the next one.
+                    .focusSection()
                     Divider()
                     settingsContent
                 }
@@ -71,6 +74,7 @@ struct SettingsView: View {
                     searchText: $settingsSearchText
                 )
                 .padding(.horizontal, HisingenTheme.sectionSpacing)
+                .focusSection()
                 settingsContent
             }
         }
@@ -99,7 +103,7 @@ struct SettingsView: View {
     private var availableDestinations: [SettingsDestination] {
         SettingsDestination.allCases.filter {
             switch $0 {
-            case .plannerSettings, .plannerAlerts: preferences.marketCountry.offersMarketPricing
+            case .plannerSettings, .plannerAlerts: preferences.hasPriceSource
             case .homeCharging, .electricitySupplier, .gridTariff, .houseMeter: homeCharging != nil
             default: true
             }
@@ -183,6 +187,8 @@ struct SettingsView: View {
                 proxy.scrollTo(first, anchor: .top)
             }
         }
+        // The destination cards are the last focus section, in `SettingsDestination` order.
+        .focusSection()
     }
 
     @ViewBuilder
@@ -262,13 +268,18 @@ struct SettingsView: View {
         case .vehicleCapabilities:
             SettingsCapabilityMatrixCard(state: state)
         case .automation:
-            if let onNavigateToPlan {
-                NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
-            } else {
-                CalendarPreconditioningSettingsCard(binder: binder)
-                if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
-                    Card { PlannerAutoStartControl(binder: binder) }
+            VStack(spacing: HisingenTheme.sectionSpacing) {
+                if let onNavigateToPlan {
+                    NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
+                } else {
+                    CalendarPreconditioningSettingsCard(binder: binder)
+                    if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
+                        Card { PlannerAutoStartControl(binder: binder) }
+                    }
                 }
+                // Scheduled actions, location triggers and the fleet broadcast have no Plan-tab
+                // home; they are configured here whichever surface the reader is in.
+                AutomationSettingsCards(binder: binder, state: state)
             }
         case .notifications, .plannerAlerts:
             VStack(alignment: .leading, spacing: 8) {
@@ -323,6 +334,8 @@ struct SettingsView: View {
         }
         .padding(.horizontal, HisingenTheme.sectionSpacing)
         .padding(.top, 2)
+        // Back and the title are the first focus section; the sidebar comes next.
+        .focusSection()
     }
 
     private var accountCard: some View {
@@ -333,6 +346,8 @@ struct SettingsView: View {
                     title: L10n.text("Account"),
                     color: HisingenTheme.accent
                 )
+                SettingsAccountList(onSettingsChanged: onSettingsChanged)
+                Divider().opacity(HisingenTheme.dividerOpacity)
                 AccountCredentialsForm(
                     style: .compact,
                     onSettingsChanged: onSettingsChanged,

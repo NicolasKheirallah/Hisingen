@@ -1,4 +1,6 @@
 import AppKit
+import CoreSpotlight
+import HisingenIntents
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -45,6 +47,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
     var commandCoordinator: CommandCoordinator!
     var calendarPreconditioning: CalendarPreconditioningController!
     var chargingPlannerController: ChargingPlannerController!
+    /// The single lane every unattended command crosses: queue, per-command cooldown, dispatch.
+    var automationDispatcher: AutomationCommandDispatcher!
+    /// Fires the reader's scheduled actions.
+    var scheduledCommands: ScheduledCommandController!
+    /// Fires the reader's arrival and departure actions from the car's own position.
+    var locationTriggers: ChargeLocationTriggerController!
+    /// Sends one command to every configured vehicle and reports which ones answered.
+    var fleetBroadcaster: FleetCommandBroadcaster!
+    /// Posts the weekly or monthly report once each completed window.
+    var recurringReports: RecurringReportController!
+    /// The history seam the report card and the recurring scheduler both read through.
+    lazy var reportingWorkspace = HistoryWorkspace(database: vehicleDatabase, preferences: preferences)
     /// Optional Home Assistant integration for a home charger. Inert until the reader pairs one.
     lazy var homeCharging = HomeChargingModel(preferences: preferences, database: vehicleDatabase)
     var settingsWindow: NSWindow?
@@ -105,6 +119,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             switch action {
             case .lockVehicle:
                 self.performNotificationCommand(.lock, targetVIN: vin)
+            case .unlockVehicle:
+                self.performNotificationCommand(.unlock, targetVIN: vin)
+            case .startClimate:
+                // The banner carries no temperature, so the saved comfort setpoint applies;
+                // the same default the deep link uses.
+                self.performNotificationCommand(
+                    .startClimate(temperatureCelsius: Float(self.preferences.remoteClimateTemperature),
+                                  frontLeftSeat: .off, frontRightSeat: .off,
+                                  rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+                    targetVIN: vin
+                )
+            case .viewDetails:
+                self.openVehicleFromNotification(vin: vin)
             case .resumeChargeSchedule:
                 if targetBrand == .polestar {
                     self.performNotificationCommand(.stopChargingOverride, targetVIN: vin)
@@ -126,6 +153,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         commandCoordinator = CommandCoordinator(
             context: self, preferences: preferences,
             database: vehicleDatabase, authorizer: remoteAuthorizer)
+        automationDispatcher = AutomationCommandDispatcher(
+            dispatch: { [weak self] command, vin in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.commandCoordinator.perform(
+                    command, origin: .automation, expectedVIN: vin)
+            }
+        )
+        scheduledCommands = ScheduledCommandController(
+            preferences: preferences,
+            send: { [weak self] command in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: nil)
+            }
+        )
+        locationTriggers = ChargeLocationTriggerController(
+            preferences: preferences,
+            send: { [weak self] command in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: nil)
+            }
+        )
+        fleetBroadcaster = FleetCommandBroadcaster(
+            vehicles: { [weak self] in self?.configuredFleetVehicles() ?? [] },
+            send: { [weak self] command, vin in
+                guard let self else {
+                    return .failed(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.sendAutomationCommand(command, to: vin)
+            }
+        )
         calendarPreconditioning = CalendarPreconditioningController(
             preferences: preferences,
             sendClimateStart: { [weak self] in
@@ -157,12 +220,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
                     return .deferred(reason: L10n.text("Hisingen is no longer running."))
                 }
                 return await self.startPlannerCharging(targetVIN: vin)
+            },
+            stopCharging: { [weak self] vin in
+                guard let self else {
+                    return .deferred(reason: L10n.text("Hisingen is no longer running."))
+                }
+                return await self.stopPlannerCharging(targetVIN: vin)
             }
         )
         vehicleSession = VehicleSessionController(
             context: self, preferences: preferences, stateStore: stateStore,
             imageCache: imageCache, sessionManager: sessionManager,
             providers: providerRegistry, fleetStore: fleetStore)
+        recurringReports = RecurringReportController(
+            preferences: preferences,
+            notifier: notifier,
+            activeVehicle: { [weak self] in
+                guard let self, let state = self.vehicleSession.latest,
+                      !state.identity.vin.isEmpty else { return nil }
+                return (state.identity.vin, self.preferences.formattedVehicleTitle(
+                    vin: state.identity.vin,
+                    modelName: state.identity.modelName,
+                    modelYear: state.identity.modelYear,
+                    registrationNo: state.identity.registrationNo,
+                    fallbackBrand: self.vehicleSession.currentProvider().brand))
+            },
+            loadReport: { [weak self] period, name in
+                guard let self else { return nil }
+                let vin = (self.vehicleSession.latest?.identity.vin ?? self.preferences.vin).normalizedVIN
+                guard !vin.isEmpty else { return nil }
+                return await self.reportingWorkspace.periodReport(
+                    vin: vin, vehicleName: name, period: period,
+                    redacted: self.preferences.privacyRedactionEnabled)
+            }
+        )
         signInCoordinator = SignInCoordinator(
             context: self, preferences: preferences,
             polestarAPI: polestarAPI, volvoAPI: volvoAPI)
@@ -182,23 +273,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         // through a URL open and polling the command audit table.
         AutomationHandoff.install(self)
         AutomationHandoff.installRefreshAction { [weak self] in self?.refreshNow() }
+        // The shared widget intents run in this process (openAppWhenRun), so they need the
+        // app's dispatcher registered before a button tap can perform one.
+        VehicleWidgetCommandRouter.install(WidgetIntentCommandHandler())
         updateController = UpdateController(context: self, preferences: preferences)
         vehicleSession.primeDisplayState()
         // Before any sign-in flow can run: installs upgrading from earlier versions carry
         // session material and must never be greeted by the first-run setup pass.
         preferences.seedSetupPassForExistingInstall()
         launchAtLoginController.reconcile(userInitiated: false)
-        // Restores the Dock tile before the session resumes, so a reader who turned the
-        // icon on sees it in the first second instead of after the first visit to Appearance.
+        // Restores the Dock tile before the session resumes, so a reader who turned the icon on
+        // sees it in the first second instead of after the first visit to Appearance.
         applyDockIconPolicy()
-        updateController.applyConfiguration()
+        if !preferences.isDemoMode { updateController.applyConfiguration() }
         vehicleSession.resume()
-        garageScanner.startLoop()
         urlRouter.startHandlingAppleEvents()
-        calendarPreconditioning.start()
-        chargingPlannerController.reload()
-        homeCharging.start()
-        homeCharging.houseMeter.start()
+        if !preferences.isDemoMode {
+            // Demo mode is a local sample: no provider session, no garage scan, no price or
+            // charger traffic. The session controller already served the seeded snapshot.
+            garageScanner.startLoop()
+            calendarPreconditioning.start()
+            chargingPlannerController.reload()
+            scheduledCommands.start()
+            recurringReports.start()
+            homeCharging.start()
+            homeCharging.houseMeter.start()
+        }
         if vehicleSession.signInRequired {
             statusController.openPopover()
         }
@@ -219,6 +319,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
 
     func applicationWillTerminate(_ notification: Notification) {
         calendarPreconditioning.stop()
+        scheduledCommands.stop()
+        recurringReports.stop()
         chargingPlannerController.stop()
         garageScanner.stop()
         vehicleSession.stop()
@@ -237,10 +339,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         _ = flushed.wait(timeout: .now() + 2)
     }
 
-    /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen.
+    /// Spotlight handoff: searching the car's name and pressing Return opens Hisingen on that
+    /// car. The index key is a digest, never the VIN, so the match is resolved against the
+    /// vehicles this Mac already knows — otherwise two indexed cars both landed on whichever
+    /// one happened to be active.
     func application(_ application: NSApplication, continue userActivity: NSUserActivity,
                      restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
         guard SpotlightIndexer.isHisingenActivity(userActivity) else { return false }
+        let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+        let known = VehicleBrand.allCases.flatMap { preferences.knownVINs(for: $0) }
+        if let identifier,
+           let vin = SpotlightIndexer.vin(forActivityIdentifier: identifier, among: known) {
+            NSApp.activate(ignoringOtherApps: true)
+            selectVehicle(vin: vin)
+        }
         statusController.togglePopover()
         return true
     }

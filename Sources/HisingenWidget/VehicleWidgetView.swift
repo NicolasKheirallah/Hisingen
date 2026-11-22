@@ -1,3 +1,5 @@
+import AppIntents
+import HisingenIntents
 import SwiftUI
 
 /// The widget reads DESIGN.md the same way the panel does: flat canvas, one typeface, a
@@ -29,6 +31,13 @@ private enum WidgetPalette {
         scheme == .dark
             ? Color(red: 0.91, green: 0.663, blue: 0.227)
             : Color(red: 0.71, green: 0.467, blue: 0.059)
+    }
+
+    /// The studio fill the panel gives control cards: #EFEFEF on white, #1A1A1A on black.
+    static func controlFill(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 0.102, green: 0.102, blue: 0.102)
+            : Color(red: 0.937, green: 0.937, blue: 0.937)
     }
 }
 
@@ -90,6 +99,51 @@ private struct Hairline: View {
     @Environment(\.colorScheme) private var colorScheme
 }
 
+/// The four commands a reader reaches for without opening the panel: lock, unlock, climate and
+/// refresh. Each button is the App Intent the app runs in its own process, so a tap takes the
+/// same capability gate, confirmation and audit path as the Controls tab, and a refusal comes
+/// back as a dialog rather than disappearing into the widget.
+///
+/// The row is square and flat, like the panel's control cards: no corner radius, no shadow, the
+/// studio fill behind one glyph, and the command's own name as the accessibility label. It draws
+/// only when a snapshot names a car, because a placeholder has no vehicle to command.
+private struct WidgetActionRow: View {
+    let snapshot: VehicleWidgetSnapshot
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 5) {
+            commandButton(WidgetLockVehicleIntent(vehicle: snapshot.vin),
+                          systemImage: "lock",
+                          label: WidgetL10n.text("Lock Vehicle", snapshot.languageCode))
+            commandButton(WidgetUnlockVehicleIntent(vehicle: snapshot.vin),
+                          systemImage: "lock.open",
+                          label: WidgetL10n.text("Unlock Vehicle", snapshot.languageCode))
+            commandButton(WidgetStartClimateIntent(vehicle: snapshot.vin),
+                          systemImage: "fan",
+                          label: WidgetL10n.text("Start Cabin Climate", snapshot.languageCode))
+            commandButton(WidgetRefreshVehicleIntent(),
+                          systemImage: "arrow.clockwise",
+                          label: WidgetL10n.text("Refresh Vehicle Data", snapshot.languageCode))
+        }
+    }
+
+    private func commandButton<I: AppIntent>(_ intent: I,
+                                             systemImage: String,
+                                             label: String) -> some View {
+        Button(intent: intent) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .regular))
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(WidgetPalette.ink(colorScheme))
+        .background(WidgetPalette.controlFill(colorScheme))
+        .accessibilityLabel(Text(label))
+    }
+}
+
 /// The widget body for both shipped families. Everything on screen was resolved by the
 /// app; this view only places the strings and re-derives the age line.
 struct VehicleWidgetEntryView: View {
@@ -103,7 +157,7 @@ struct VehicleWidgetEntryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .containerBackground(for: .widget) { WidgetPalette.canvas(colorScheme) }
             .widgetURL(entry.link)
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .contain)
             .accessibilityLabel(accessibilitySummary)
     }
 
@@ -111,6 +165,7 @@ struct VehicleWidgetEntryView: View {
     private var content: some View {
         switch family {
         case .systemMedium: medium
+        case .systemLarge: large
         default: small
         }
     }
@@ -152,6 +207,7 @@ struct VehicleWidgetEntryView: View {
             if let charging = chargingText {
                 ChargingLine(text: charging, isLive: isChargingLive)
             }
+            actionRow
         }
     }
 
@@ -184,10 +240,57 @@ struct VehicleWidgetEntryView: View {
             if let charging = chargingText {
                 ChargingLine(text: charging, isLive: isChargingLive)
             }
+            actionRow
+        }
+    }
+
+    // MARK: systemLarge
+
+    /// The large family exists for readers who keep the widget on the desktop and want the
+    /// charging line plus the departure without hovering. It is the medium layout with room to
+    /// breathe, not a second information model: every value still comes from the app's snapshot.
+    private var large: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                titleRow
+                Spacer(minLength: 8)
+                if let status = statusLine {
+                    Text(status)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .foregroundStyle(WidgetPalette.muted(colorScheme))
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(alignment: .bottom, spacing: 24) {
+                FigureOverLabel(figure: batteryFigure, label: batteryLabel, size: 44)
+                if let range = entry.snapshot?.rangeText {
+                    FigureOverLabel(figure: range, label: rangeLabel, size: 44)
+                }
+                Spacer(minLength: 0)
+                if let departure = entry.snapshot?.departureText {
+                    FigureOverLabel(figure: departure, label: departureLabel, size: 18, alignment: .trailing)
+                }
+            }
+            Spacer(minLength: 0)
+            Hairline()
+            if let charging = chargingText {
+                ChargingLine(text: charging, isLive: isChargingLive)
+            }
+            actionRow
         }
     }
 
     // MARK: shared pieces
+
+    /// The commands sit under the data they act on. No snapshot means no vehicle to command, so
+    /// the placeholder keeps its single tap target and the row does not offer a dead button.
+    @ViewBuilder
+    private var actionRow: some View {
+        if let snapshot = entry.snapshot {
+            WidgetActionRow(snapshot: snapshot)
+        }
+    }
 
     /// The vehicle title, or the app's own name when nothing is on file yet.
     private var titleRow: some View {

@@ -414,7 +414,7 @@ In summary:
 - charging-session summaries may remain after individual charging samples are pruned;
 - battery-health milestones are retained for long-term history;
 - remote-command audit information remains until local data is cleared; and
-- signing out currently clears Hisingen's local vehicle database and cached vehicle state in addition to ending the provider session.
+- signing out clears cached vehicle snapshots, charging-state baselines and remote-command receipts in addition to ending the provider session. The vehicle-history database is removed only when *Erase local history on sign out* is turned on, which is off by default.
 
 Retention behavior may change as Hisingen evolves. The technical retention document should be updated whenever persistence behavior changes.
 
@@ -428,8 +428,10 @@ In the current implementation, signing out clears:
 
 - locally cached vehicle snapshots;
 - charging-state baselines;
-- Hisingen's local vehicle-history database; and
+- remote-command receipts; and
 - provider authentication state handled by the applicable provider integration.
+
+The vehicle-history database is cleared on sign-out only when *Erase local history on sign out* is enabled. That switch is off by default, so a sign-out normally keeps charging sessions, trips, odometer readings and the rest of the local history on this Mac. Clear it separately from Settings → Privacy & Data, or turn the switch on before signing out.
 
 Application preferences that are not part of vehicle history may remain.
 

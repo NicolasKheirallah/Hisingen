@@ -199,10 +199,7 @@ final class SignInCoordinator {
             // remote climate) → core (telemetry only), so one unapproved scope never blocks
             // sign-in outright. Each step is one browser round trip; the drop-location
             // retry is the only extra prompt a partial grant can cost.
-            let cascade: [(tier: VolvoAPI.ScopeTier, dropsLocation: Bool)] = [
-                (.full, false), (.full, true), (.standard, false), (.core, false)
-            ]
-            for step in cascade {
+            for step in VolvoAPI.signInCascade {
                 do {
                     try await self.runVolvoInteractiveSignIn(
                         clientID: trimmedClientID, clientSecret: effectiveSecret,
@@ -220,6 +217,10 @@ final class SignInCoordinator {
                             subtitle: L10n.text("Volvo")
                         )
                     case (.standard, false):
+                        // A standard grant carries no restricted scope at all; the recorded
+                        // echo is authoritative when present, and the flag is the fallback for
+                        // sessions that predate it.
+                        preferences.volvoRestrictedScopesEnabled = false
                         context?.presentSignInNotice(
                             title: L10n.text("Volvo connected – data & climate"),
                             body: L10n.text("Your Volvo developer application isn't approved for lock, unlock, engine start, locate, or vehicle location. Reconnected with vehicle data and remote climate; request those permissions on developer.volvocars.com to enable the rest."),

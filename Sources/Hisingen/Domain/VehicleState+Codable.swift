@@ -12,7 +12,8 @@ extension VehicleState {
         case energy, identity, maintenance, freshness, commandState
         case tripComputer, fuelSystem
         case exteriorStatus, softwareInfo, climateStatus, climateTimers, connectivity
-        case airQuality, weather, location, probedCapabilities, powertrain, otaCapabilities
+        case airQuality, weather, location, probedCapabilities, providerReport
+        case powertrain, otaCapabilities
     }
 
     /// Payloads older than the clustered layout (2.0.1 and earlier) are not decoded: they are
@@ -35,6 +36,7 @@ extension VehicleState {
             weather: try values.decodeIfPresent(VehicleWeather.self, forKey: .weather),
             location: try values.decodeIfPresent(VehicleLocation.self, forKey: .location),
             probedCapabilities: try values.decodeIfPresent(VehicleProbedCapabilities.self, forKey: .probedCapabilities),
+            providerReport: try values.decodeIfPresent(ProviderCapabilityReport.self, forKey: .providerReport),
             powertrain: try values.decodeIfPresent(PowertrainType.self, forKey: .powertrain) ?? .bev,
             fuelSystem: try values.decode(FuelSystemSnapshot.self, forKey: .fuelSystem),
             otaCapabilities: try values.decodeIfPresent(VehicleOTACapabilities.self, forKey: .otaCapabilities)
@@ -58,6 +60,7 @@ extension VehicleState {
         try values.encodeIfPresent(weather, forKey: .weather)
         try values.encodeIfPresent(location, forKey: .location)
         try values.encodeIfPresent(probedCapabilities, forKey: .probedCapabilities)
+        try values.encodeIfPresent(providerReport, forKey: .providerReport)
         try values.encode(powertrain, forKey: .powertrain)
         try values.encode(fuelSystem, forKey: .fuelSystem)
         try values.encode(tripComputer, forKey: .tripComputer)

@@ -1,7 +1,20 @@
 import Foundation
 
 enum VehicleReadingSource: String, Codable, Sendable {
-    case polestarGraphQL, polestarGRPC, polestarPortal, liveStream, weather
+    case polestarGraphQL, polestarGRPC, polestarPortal, liveStream, weather, volvo
+
+    /// What the reader is shown when a reading's provenance is displayed. The names are the
+    /// services the app actually talks to, not internal module names.
+    var displayName: String {
+        switch self {
+        case .polestarGraphQL: return L10n.text("Polestar GraphQL")
+        case .polestarGRPC: return L10n.text("Polestar cloud")
+        case .polestarPortal: return L10n.text("Polestar portal")
+        case .liveStream: return L10n.text("Live stream")
+        case .weather: return L10n.text("Weather service")
+        case .volvo: return L10n.text("Volvo cloud")
+        }
+    }
 }
 
 extension VehicleReadingSource {
@@ -14,6 +27,7 @@ extension VehicleReadingSource {
         case .polestarPortal: return L10n.text("Portal")
         case .liveStream: return L10n.text("Live")
         case .weather: return L10n.text("Weather")
+        case .volvo: return L10n.text("Volvo")
         }
     }
 }
@@ -72,5 +86,32 @@ struct SnapshotFreshness: Codable, Equatable, Sendable {
         self.servedByFallback = servedByFallback
         self.readingObservations = readingObservations
         self.commandObservations = commandObservations
+    }
+
+    /// Records which service produced each reading in this snapshot. Call sites are the
+    /// assemblers, which know their own producer. A reading that already carries an observation
+    /// keeps it: a live-stream merge mid-refresh is more specific than the refresh around it.
+    mutating func recordSource(_ source: VehicleReadingSource) {
+        var observations = readingObservations ?? [:]
+        let fetched = fetchedAt
+        for (reading, reportedAt) in readingDates where observations[reading] == nil {
+            observations[reading] = VehicleReadingObservation(fetchedAt: fetched, source: source)
+            _ = reportedAt
+        }
+        readingObservations = observations
+    }
+
+    /// `recordSource` for a value position, so an assembler can stamp the snapshot it just built
+    /// without giving up `let`.
+    func recordedSource(_ source: VehicleReadingSource) -> SnapshotFreshness {
+        var copy = self
+        copy.recordSource(source)
+        return copy
+    }
+
+    /// The service behind one reading, when the app recorded it. nil means unknown, and the UI
+    /// says nothing rather than naming a guess.
+    func source(for reading: VehicleReading) -> VehicleReadingSource? {
+        readingObservations?[reading]?.source
     }
 }

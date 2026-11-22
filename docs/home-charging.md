@@ -123,12 +123,17 @@ editor says so when it is missing.
 ## Requirements
 
 - Home Assistant reachable from the Mac on the local network, over `http` or `https`.
-- A charger integration in Home Assistant. NexBlue is discovered first; any charger that exposes
-  a switch, a charging-state sensor, a power sensor and a session-energy sensor can be mapped by
-  hand.
+- A charger integration in Home Assistant. NexBlue is matched by its entity names even without
+  the device list; Easee and Zaptec are found through Home Assistant's device registry by their
+  status, power and energy entities. Any charger that exposes a switch, a charging-state sensor,
+  a power sensor and a session-energy sensor can be mapped by hand.
 - A Home Assistant long-lived access token. Create one in your Home Assistant profile under
   **Security**. A token from an administrator also reads the device registry, which finds the
-  charger's serial number; a non-administrator token falls back to matching entity names.
+  serial number and groups Easee and Zaptec entities by device; a non-administrator token falls
+  back to matching NexBlue entity names. Discovery maps a charging switch only when every option
+  of its status sensor is a state Hisingen can read, because that sensor is what confirms a
+  command. A charger whose states are not recognised is still listed for its readings, but its
+  switch is left for you to map by hand.
 - Optional: the Tibber integration, for price-aware windows.
 - Optional: a battery sensor in Home Assistant, for plans that target a percentage.
 
@@ -197,6 +202,22 @@ Open **Settings → Home Charging**:
 `HomeChargingPairing`, `HomeChargerEntityMap` and `HomeAssistantDiscovery` in
 `Sources/Hisingen/Domain/HomeCharging/` hold the pairing, and `HomeAssistantClient` and
 `HomeAssistantSocket` in `Sources/Hisingen/Services/HomeCharging/` do the talking.
+
+### A second charger
+
+An install can hold two chargers: pair the second one from **Settings → Home Charging → Add another
+charger**. Both stay listed with their own vehicle, charge location and last reading, and each has
+its own plan record.
+
+One charger holds the live connection at a time — the one whose row is marked **Live connection**.
+Selecting the other row switches the connection to it, and the charger left behind keeps its last
+reading labelled with the time it was read. The app reads the other charger every few minutes while
+a second one is paired, so both stay visible without two live connections.
+
+The charging card follows the car: it shows the charger paired to that vehicle at its saved charge
+location, and its commands go to that charger (switching the connection first when needed), so two
+chargers are never commanded through each other's reading. Unpairing one leaves the other paired
+and connected.
 
 ### A shared charger
 
@@ -284,6 +305,21 @@ keeps its settings for when Sweden is selected again. Spot prices come from
 [Elpriset just nu.se](https://www.elprisetjustnu.se/), are fetched once a day after 14:15 and
 exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
 each zone refreshes on its own schedule.
+
+**The window has a fixed end.** If you turn on **Auto-Start Charging in the Window**, Hisingen
+sends the charge-now override when the window opens and records that window's end. If the car is
+still charging when the end arrives — because it charged slower than the configured power — the
+planner ends its override there rather than letting it run on to the charge limit in the hours
+after the cheap window. The next plan is a new window, judged against the prices still ahead.
+This is the honest limit of a menu-bar app: Hisingen cannot wake a Mac that is already asleep, so
+the planner only acts while the Mac is awake.
+
+**Keeping the Mac awake** is a separate opt-in toggle under **Settings → Automations**. It holds a
+system sleep assertion from the moment a planned window is known until that window ends, so the
+minute tick can send both the start and the stop. It is off by default, works only together with
+**Auto-Start Charging in the Window**, and does not wake a sleeping Mac. Leaving it on can keep a
+MacBook awake for most of the day, because a window is always somewhere ahead while the car is
+below its target; that is the cost of not being able to schedule a wake.
 
 ## What the NexBlue integration provides
 

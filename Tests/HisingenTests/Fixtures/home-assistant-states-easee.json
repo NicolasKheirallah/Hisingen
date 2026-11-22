@@ -1,0 +1,79 @@
+[
+  {
+    "entity_id": "sensor.garage_charger_status",
+    "state": "charging",
+    "attributes": {
+      "options": ["disconnected", "connected", "charging", "completed", "error"],
+      "device_class": "enum",
+      "friendly_name": "Garage charger status"
+    },
+    "last_changed": "2026-11-16T01:14:07.482913+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:14:07.482913+00:00"
+  },
+  {
+    "entity_id": "sensor.garage_charger_power",
+    "state": "7.2",
+    "attributes": {"unit_of_measurement": "kW", "device_class": "power", "state_class": "measurement", "friendly_name": "Garage charger power"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.garage_charger_session_energy",
+    "state": "9.8",
+    "attributes": {"unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total", "friendly_name": "Garage charger session energy"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_reported": "2026-11-16T01:41:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.garage_charger_lifetime_energy",
+    "state": "820.1",
+    "attributes": {"unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing", "friendly_name": "Garage charger lifetime energy"},
+    "last_changed": "2026-11-16T01:40:08.100221+00:00",
+    "last_updated": "2026-11-16T01:40:08.100221+00:00"
+  },
+  {
+    "entity_id": "sensor.garage_charger_current_limit",
+    "state": "16",
+    "attributes": {"unit_of_measurement": "A", "device_class": "current", "state_class": "measurement", "friendly_name": "Garage charger current limit"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "switch.garage_charger_charging",
+    "state": "on",
+    "attributes": {"assumed_state": true, "friendly_name": "Garage charger charging"},
+    "last_changed": "2026-11-16T01:14:09.000000+00:00",
+    "last_updated": "2026-11-16T01:14:09.000000+00:00"
+  },
+  {
+    "entity_id": "binary_sensor.garage_charger_enabled",
+    "state": "on",
+    "attributes": {"friendly_name": "Garage charger enabled"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "binary_sensor.garage_charger_cable_locked",
+    "state": "on",
+    "attributes": {"device_class": "lock", "friendly_name": "Garage charger cable locked"},
+    "last_changed": "2026-11-15T20:02:00.000000+00:00",
+    "last_updated": "2026-11-15T20:02:00.000000+00:00"
+  },
+  {
+    "entity_id": "sensor.polestar_2_battery",
+    "state": "62",
+    "attributes": {"unit_of_measurement": "%", "device_class": "battery", "friendly_name": "Polestar 2 Battery"},
+    "last_changed": "2026-11-16T01:30:00.000000+00:00",
+    "last_updated": "2026-11-16T01:30:00.000000+00:00"
+  },
+  {
+    "entity_id": "sensor.living_room_temperature",
+    "state": "21.4",
+    "attributes": {"unit_of_measurement": "°C", "device_class": "temperature", "friendly_name": "Living room temperature"},
+    "last_changed": "2026-11-16T01:00:00.000000+00:00",
+    "last_updated": "2026-11-16T01:00:00.000000+00:00"
+  }
+]

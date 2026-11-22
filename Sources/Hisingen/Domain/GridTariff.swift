@@ -14,6 +14,8 @@ struct GridTariff: Codable, Equatable, Sendable {
         case flat
         case vattenfallSingle
         case vattenfallTime
+        /// Elvia's day/night tariff, the one Norwegian preset this model can express.
+        case elviaNorway
         case custom
     }
 
@@ -76,14 +78,24 @@ struct GridTariff: Codable, Equatable, Sendable {
         }
     }
 
+    static let elviaPriceYear = 2026
+    /// Elvia, private customers, 2026, VAT and elavgift and Enova included, as on the invoice.
+    /// Elvia's energy rate is the same in every capacity tier; only the fixed charge varies, and a
+    /// fixed charge is in no per-kWh figure, so it is not carried here.
+    static func elvia() -> GridTariff {
+        GridTariff(region: .norway, kind: .elviaNorway, peakOrePerKwh: 46.40, offPeakOrePerKwh: 31.40,
+                   peakMonths: [], peakStartHour: 6, peakEndHour: 22, peakWeekdaysOnly: true,
+                   priceYear: elviaPriceYear)
+    }
+
     /// A preset carries published rates for its market. The Vattenfall presets are Sweden's, so a
     /// tariff moved to another market is no longer a preset and is edited as a custom one.
     /// A Vattenfall preset belongs to Sweden. A tariff that carries one in a market without published
     /// rates — a restore or import from another build, say — is not a preset anywhere, and its figures
     /// are Swedish öre, so it is read as the reader's own numbers with the money cleared.
     var normalizedForMarket: GridTariff {
-        guard !region.hasPublishedRates,
-              kind == .vattenfallSingle || kind == .vattenfallTime else { return self }
+        guard !isPreset, kind == .vattenfallSingle || kind == .vattenfallTime || kind == .elviaNorway
+        else { return self }
         var next = self
         next.kind = .custom
         next.priceYear = nil
@@ -96,7 +108,12 @@ struct GridTariff: Codable, Equatable, Sendable {
     /// The grid operator whose published price list a preset is, or `nil` when the figures were
     /// entered by the reader.
     var presetOperatorName: String? {
-        isPreset ? "Vattenfall Eldistribution AB" : nil
+        guard isPreset else { return nil }
+        switch kind {
+        case .vattenfallSingle, .vattenfallTime: return "Vattenfall Eldistribution AB"
+        case .elviaNorway: return "Elvia AS"
+        default: return nil
+        }
     }
 
     /// Whether the home's grid company is the operator this preset belongs to. A company nobody
@@ -130,7 +147,11 @@ struct GridTariff: Codable, Equatable, Sendable {
     }
 
     var isPreset: Bool {
-        region.hasPublishedRates && (kind == .vattenfallSingle || kind == .vattenfallTime)
+        switch kind {
+        case .vattenfallSingle, .vattenfallTime: return region == .sweden
+        case .elviaNorway: return region == .norway
+        default: return false
+        }
     }
 
     /// A fee is set somewhere in the tariff.

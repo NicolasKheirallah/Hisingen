@@ -39,7 +39,8 @@ extension ChargingSessionLedger {
             pendingStopCount: Int(stmt.columnInt64(at: 26) ?? 0),
             estimatedCost: stmt.columnDouble(at: 27),
             spotEstimatedCost: stmt.columnDouble(at: 28),
-            wallbox: wallboxMeasurement(from: stmt)
+            wallbox: wallboxMeasurement(from: stmt),
+            place: stmt.columnText(at: 48).flatMap(ChargingSessionPlace.init(rawValue:)) ?? .home
         )
     }
 
@@ -91,6 +92,7 @@ extension ChargingSessionLedger {
         wallbox_energy_source, wallbox_measured_at, wallbox_started_at, wallbox_ended_at,
         wallbox_peak_kw, wallbox_cost, wallbox_partial_cost, wallbox_cost_method,
         wallbox_price_source, wallbox_cost_assumptions, wallbox_missing_kwh,
-        wallbox_currency, wallbox_attribution, wallbox_start_reason, wallbox_stop_reason
+        wallbox_currency, wallbox_attribution, wallbox_start_reason, wallbox_stop_reason,
+        charging_place
         """
 }

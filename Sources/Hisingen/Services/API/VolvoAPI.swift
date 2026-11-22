@@ -55,6 +55,13 @@ actor VolvoAPI {
         case core       // coreReadScopes only – telemetry, no remote controls at all
     }
 
+    /// The bounded sign-in attempt sequence: full, full without `location:read`, standard,
+    /// core. Each step is one browser round trip, and the list is fixed so a caller can
+    /// neither loop forever nor retry a tier that cannot narrow further. Tests pin both.
+    static let signInCascade: [(tier: ScopeTier, dropsLocation: Bool)] = [
+        (.full, false), (.full, true), (.standard, false), (.core, false)
+    ]
+
     /// The restricted scope list for one sign-in request. `dropsLocation` removes
     /// `location:read` for the cascade's middle step: it is the scope developer applications
     /// most often lack approval for, and Volvo rejects the whole authorization over that one
@@ -106,7 +113,11 @@ actor VolvoAPI {
     private func recordGrantedScopes(_ raw: String?) async {
         let granted = Self.parseGrantedScopes(raw)
         guard !granted.isEmpty else { return }
-        await MainActor.run { preferences.volvoGrantedScopes = granted.sorted() }
+        // The array is the per-scope gate's answer; the timestamp is the inspector's evidence
+        // of when the echo was last observed. One write keeps them from disagreeing.
+        await MainActor.run {
+            preferences.recordVolvoGrantedScopes(granted.sorted(), at: Date())
+        }
     }
 
 
@@ -229,26 +240,14 @@ actor VolvoAPI {
 
 
     func dispatchCommand(_ command: RemoteCommand, vin: String, accessToken: String) async throws -> RemoteCommandResult {
-        let commandName: String
-        var bodyData = "{}".data(using: .utf8)
-        switch command {
-        case .lock: commandName = "lock"
-        case .lockReducedGuard: commandName = "lock-reduced-guard"
-        case .unlock: commandName = "unlock"
-        case .startClimate: commandName = "climatization-start"
-        case .stopClimate: commandName = "climatization-stop"
-        case .startEngine(let runtimeMinutes):
-            commandName = "engine-start"
-            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
-        case .stopEngine:
-            commandName = "engine-stop"
-        // The command list reports this as `HONK_AND_FLASH` but its `href` – and therefore the
-        // real invocation path – is `honk-flash` (verified live against a production vehicle).
-        case .honkAndFlash: commandName = "honk-flash"
-        case .flashLights: commandName = "flash"
-        case .honkHorn: commandName = "honk"
-        default:
+        // The endpoint name and the names the car advertises come from one table, so the
+        // capability the UI shows and the path this posts to cannot drift apart.
+        guard let commandName = VolvoCommandCatalog.endpoint(for: command) else {
             throw RemoteCommandError.unsupported
+        }
+        var bodyData = "{}".data(using: .utf8)
+        if case .startEngine(let runtimeMinutes) = command {
+            bodyData = "{\"runtimeMinutes\": \(max(1, min(15, runtimeMinutes)))}".data(using: .utf8)
         }
         guard let vccApiKey else { throw VolvoError.appNotConfigured }
 

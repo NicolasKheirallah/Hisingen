@@ -47,6 +47,26 @@ struct CommandCoordinatorHardeningTests {
         #expect(rig.executor.executedCount == 1)
     }
 
+    // MARK: - Demo mode
+
+    /// Demo mode is local sample data. A command from a card or Control Center must not reach
+    /// the provider, and the refusal has to say why.
+    @Test("Demo mode sends no command to a vehicle")
+    func demoModeSendsNothing() async {
+        let rig = Rig(label: "hardening-demo-command", vin: vin)
+        rig.preferences.isDemoMode = true
+
+        let outcome = await rig.coordinator.perform(rig.command, origin: .userInitiated)
+
+        if case .deferred(let reason) = outcome {
+            #expect(reason == L10n.text("Demo mode: commands are not sent to a vehicle."))
+        } else {
+            Issue.record("expected a demo deferral, got \(outcome)")
+        }
+        #expect(rig.executor.executedCount == 0)
+        #expect(rig.context.presented.last?.success == false)
+    }
+
     // MARK: - Expected vehicle
 
     @Test("A command is held back when the loaded vehicle is not the one the caller named")
