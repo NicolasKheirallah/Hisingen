@@ -4149,3 +4149,12 @@
 "Recurring Report" = "Toistuva raportti";
 "Recurring report" = "Toistuva raportti";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Näyttää ilmoituksen viikon tai kuukauden päättyessä: matka, energia ja kustannus. Koko raportti on Historiassa, ja kaikki luvut tulevat tällä Macilla jo olevista tiedoista.";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "Lisää toinen laturi";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Liittää toisen laturin. Molemmat pysyvät listalla: yhdellä on reaaliaikainen yhteys ja toinen säilyttää viimeisimmän lukemansa.";
+"Chargers" = "Laturit";
+"Live connection" = "Reaaliaikainen yhteys";
+"This charger holds the live connection." = "Tällä laturilla on reaaliaikainen yhteys.";
+"Show this charger's readings and commands." = "Näytä tämän laturin lukemat ja komennot.";
+"Last read %@" = "Viimeksi luettu %@";

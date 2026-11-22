@@ -4159,3 +4159,12 @@
 "Recurring Report" = "Wiederkehrender Bericht";
 "Recurring report" = "Wiederkehrender Bericht";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Zeigt eine Mitteilung, wenn eine Woche oder ein Monat endet, mit Distanz, Energie und Kosten. Der vollständige Bericht liegt unter Verlauf, und alle Zahlen stammen aus Daten, die bereits auf diesem Mac sind.";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "Weiteres Ladegerät hinzufügen";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Koppelt ein zweites Ladegerät. Beide bleiben in der Liste; eines hält die Live-Verbindung und das andere behält seinen letzten Messwert.";
+"Chargers" = "Ladegeräte";
+"Live connection" = "Live-Verbindung";
+"This charger holds the live connection." = "Dieses Ladegerät hält die Live-Verbindung.";
+"Show this charger's readings and commands." = "Messwerte und Befehle dieses Ladegeräts anzeigen.";
+"Last read %@" = "Zuletzt gelesen %@";

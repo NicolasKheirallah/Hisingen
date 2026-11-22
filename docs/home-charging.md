@@ -198,6 +198,22 @@ Open **Settings → Home Charging**:
 `Sources/Hisingen/Domain/HomeCharging/` hold the pairing, and `HomeAssistantClient` and
 `HomeAssistantSocket` in `Sources/Hisingen/Services/HomeCharging/` do the talking.
 
+### A second charger
+
+An install can hold two chargers: pair the second one from **Settings → Home Charging → Add another
+charger**. Both stay listed with their own vehicle, charge location and last reading, and each has
+its own plan record.
+
+One charger holds the live connection at a time — the one whose row is marked **Live connection**.
+Selecting the other row switches the connection to it, and the charger left behind keeps its last
+reading labelled with the time it was read. The app reads the other charger every few minutes while
+a second one is paired, so both stay visible without two live connections.
+
+The charging card follows the car: it shows the charger paired to that vehicle at its saved charge
+location, and its commands go to that charger (switching the connection first when needed), so two
+chargers are never commanded through each other's reading. Unpairing one leaves the other paired
+and connected.
+
 ### A shared charger
 
 When **Other cars also use this charger** is on, a charger session is recorded for this vehicle

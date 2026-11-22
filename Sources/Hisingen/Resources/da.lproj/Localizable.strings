@@ -4156,3 +4156,12 @@
 "Recurring Report" = "Tilbagevendende rapport";
 "Recurring report" = "Tilbagevendende rapport";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Sender en meddelelse, når en uge eller måned slutter, med distance, energi og pris. Hele rapporten ligger under Historik, og alle tal kommer fra data, der allerede findes på denne Mac.";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "Tilføj endnu en lader";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Parer en anden lader. Begge bliver i listen; én har den live forbindelse og den anden beholder sin seneste aflæsning.";
+"Chargers" = "Ladere";
+"Live connection" = "Live-forbindelse";
+"This charger holds the live connection." = "Denne lader har den live forbindelse.";
+"Show this charger's readings and commands." = "Vis denne laders aflæsninger og kommandoer.";
+"Last read %@" = "Sidst læst %@";

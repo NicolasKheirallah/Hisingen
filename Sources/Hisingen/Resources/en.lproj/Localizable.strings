@@ -4166,3 +4166,12 @@
 "Recurring Report" = "Recurring Report";
 "Recurring report" = "Recurring report";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac.";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "Add another charger";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading.";
+"Chargers" = "Chargers";
+"Live connection" = "Live connection";
+"This charger holds the live connection." = "This charger holds the live connection.";
+"Show this charger's readings and commands." = "Show this charger's readings and commands.";
+"Last read %@" = "Last read %@";

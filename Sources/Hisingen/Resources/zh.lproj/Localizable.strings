@@ -4149,3 +4149,12 @@
 "Recurring Report" = "定期报告";
 "Recurring report" = "定期报告";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "在每周或每月结束时发布一条通知，汇总行驶距离、能量和费用。完整报告在历史记录中，所有数字都来自这台 Mac 上已有的数据。";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "添加另一台充电器";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "配对其他充电器。两台都会留在列表中，一台保持实时连接，另一台保留上次读数。";
+"Chargers" = "充电器";
+"Live connection" = "实时连接";
+"This charger holds the live connection." = "这台充电器保持实时连接。";
+"Show this charger's readings and commands." = "显示这台充电器的读数和命令。";
+"Last read %@" = "上次读取 %@";

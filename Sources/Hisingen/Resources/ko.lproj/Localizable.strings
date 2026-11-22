@@ -4149,3 +4149,12 @@
 "Recurring Report" = "정기 보고서";
 "Recurring report" = "정기 보고서";
 "Posts one banner when a week or month ends, summarising distance, energy and cost. The full report is on the History tab, and every figure comes from data already on this Mac." = "주나 월이 끝나면 거리·에너지·비용을 요약한 알림을 하나 표시합니다. 전체 보고서는 기록 탭에 있으며, 모든 수치는 이 Mac에 이미 있는 데이터에서 나옵니다.";
+
+// Home Charging: a second paired charger.
+"Add another charger" = "충전기 추가";
+"Pairs a second charger. Both stay listed, one holds the live connection and the other keeps its last reading." = "두 번째 충전기를 연결합니다. 둘 다 목록에 남으며, 하나는 실시간 연결을 유지하고 다른 하나는 마지막 판독값을 보관합니다.";
+"Chargers" = "충전기";
+"Live connection" = "실시간 연결";
+"This charger holds the live connection." = "이 충전기가 실시간 연결을 유지합니다.";
+"Show this charger's readings and commands." = "이 충전기의 판독값과 명령을 표시합니다.";
+"Last read %@" = "마지막 판독 %@";
