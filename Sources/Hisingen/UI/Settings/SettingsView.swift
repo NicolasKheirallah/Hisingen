@@ -301,6 +301,7 @@ struct SettingsView: View {
         case .localData:
             SettingsDatabaseCard(
                 state: state,
+                fleet: fleet,
                 database: database,
                 imageCache: imageCache,
                 onExportDiagnosticLogs: { onSettingsChanged(.exportDiagnosticLogs) },

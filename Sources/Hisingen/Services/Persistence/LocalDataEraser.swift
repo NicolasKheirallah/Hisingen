@@ -179,6 +179,7 @@ final class LocalDataEraser {
             memoryCaches.drop(vehicles)
             dropImageTier(vehicles)
             eraseHomeCharging(vehicles)
+            eraseDiagnosticLogs(vehicles)
         case .locations(let vehicles):
             // Turning the preference off is what keeps the cleared coordinates cleared. The
             // snapshot mirror goes with them: it still carries the coordinates that were just
@@ -256,6 +257,19 @@ final class LocalDataEraser {
             store.clearPairing()
         }
         NotificationCenter.default.post(name: .homeChargingDataErased, object: nil)
+    }
+
+    /// The redacted request log is the one tier that names a vehicle in no other way, so an
+    /// erased vehicle must not leave its partition behind for the next export to carry. A plain
+    /// sign-out keeps it: the log is diagnostic evidence for why the session ended, it is
+    /// redacted, and the 24-hour window retires it on its own.
+    private func eraseDiagnosticLogs(_ vehicles: VehicleScope) {
+        switch vehicles {
+        case .vehicle(let vin):
+            APIDiagnosticLogStore.shared.eraseVehicleLogsSynchronously(vin: vin)
+        case .all:
+            APIDiagnosticLogStore.shared.eraseAllLogsSynchronously()
+        }
     }
 
     private func dropImageTier(_ vehicles: VehicleScope) {

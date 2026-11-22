@@ -4383,3 +4383,7 @@
 "The GPX track could not be created." = "Het GPX-spoor kon niet worden gemaakt.";
 "Selected Session Samples" = "Sessiemonsters";
 "Selected session" = "Geselecteerde sessie";
+
+// English fallback values pending translation
+"Vehicle %@" = "Voertuig %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ items worden verwijderd. Nieuwe verzoeken worden opnieuw vastgelegd zodra ze plaatsvinden.";

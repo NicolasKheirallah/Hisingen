@@ -4375,3 +4375,7 @@
 "The GPX track could not be created." = "GPX-reittiä ei voitu luoda.";
 "Selected Session Samples" = "Valitun istunnon otokset";
 "Selected session" = "Valittu istunto";
+
+// English fallback values pending translation
+"Vehicle %@" = "Ajoneuvo %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ merkintää poistetaan. Uudet pyynnöt kirjataan taas, kun ne tapahtuvat.";

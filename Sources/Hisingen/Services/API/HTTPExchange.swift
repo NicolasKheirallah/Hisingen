@@ -3,13 +3,16 @@ import Foundation
 enum HTTPExchange {
     /// Performs one bounded HTTP exchange and records its redacted diagnostic outcome. The
     /// request is never replayed, which keeps this safe for Remote Command POSTs.
+    ///
+    /// `scope` is required: every exchange has to say which vehicle's log it belongs to, and
+    /// account-level traffic has to say `.account` out loud rather than inherit it by omission.
     static func data(
         for request: URLRequest,
         using session: URLSession,
         limit: Int,
         operation: String,
         provider: VehicleBrand,
-        scope: VehicleLogScope = .account,
+        scope: VehicleLogScope,
         diagnosticLog: APIDiagnosticLogStore = .shared,
         logicalOperationID: UUID? = nil,
         attempt: Int? = nil,
@@ -54,8 +57,7 @@ enum HTTPExchange {
             }
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
-                scope: scope,
-                statusCode: http.statusCode, responseBytes: data.count,
+                scope: scope, statusCode: http.statusCode, responseBytes: data.count,
                 responseData: data, startedAt: startedAt,
                 semanticErrorType: semanticError?(data, http.statusCode),
                 logicalOperationID: logicalOperationID?.uuidString, attempt: attempt)
@@ -64,8 +66,7 @@ enum HTTPExchange {
             let mapped = (error as? URLError).map { Self.network($0, provider: provider) } ?? error
             await diagnosticLog.record(
                 provider: diagnosticProvider, request: request, operation: operation,
-                scope: scope,
-                statusCode: receivedStatus, startedAt: startedAt, error: mapped,
+                scope: scope, statusCode: receivedStatus, startedAt: startedAt, error: mapped,
                 logicalOperationID: logicalOperationID?.uuidString, attempt: attempt)
             throw mapped
         }

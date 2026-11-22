@@ -1203,6 +1203,7 @@
 "VIN is invalid" = "VIN is invalid";
 "VIN:" = "VIN:";
 "Vehicle" = "Vehicle";
+"Vehicle %@" = "Vehicle %@";
 "Vehicle & Identity" = "Vehicle & Identity";
 "Vehicle Alarm Triggered" = "Vehicle Alarm Triggered";
 "Vehicle Availability" = "Vehicle Availability";
@@ -2791,6 +2792,7 @@
 "Choose what each tab shows, move cards into the order you want, or build a tab of your own from anything in Hisingen. Switching a card off also stops Hisingen requesting the data behind it." = "Choose what each tab shows, move cards into the order you want, or build a tab of your own from anything in Hisingen. Switching a card off also stops Hisingen requesting the data behind it.";
 "Clear Log" = "Clear Log";
 "Clear the redacted API request log?" = "Clear the redacted API request log?";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ entries will be discarded. New requests are recorded again as they happen.";
 "Clear trip classification" = "Clear trip classification";
 "Climate Energy" = "Climate Energy";
 "Close" = "Close";

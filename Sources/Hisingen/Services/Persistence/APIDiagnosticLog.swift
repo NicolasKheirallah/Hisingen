@@ -98,40 +98,70 @@ struct APILogEntry: Codable, Equatable, Sendable {
     }
 }
 
-/// Redacted request metadata intended for user-initiated support exports. Payloads,
-/// headers, credentials, and vehicle/account identifiers are never retained raw.
+/// Redacted request metadata intended for user-initiated support exports. Payloads, headers,
+/// credentials, and vehicle/account identifiers are never retained raw.
 ///
-/// Retention is bounded both by count and by age (24 h), and the `shared` instance
-/// persists its redacted entries to Application Support (debounced) so a crash or
-/// relaunch no longer wipes the evidence – direct initializations (tests) stay
+/// Entries are partitioned by `APILogPartitionKey`: one log per vehicle, one for account-level
+/// traffic, and one for rows written before the partition existed. Every partition keeps its
+/// own ring, age window and payload budget, so a busy car cannot evict another car's evidence;
+/// the store also enforces fleet-wide ceilings so the archive stays bounded.
+///
+/// The `shared` instance persists its redacted entries to Application Support (debounced) so a
+/// crash or relaunch no longer wipes the evidence. Direct initializations (tests) stay
 /// memory-only to remain hermetic.
 actor APIDiagnosticLogStore {
     static let shared = APIDiagnosticLogStore(persistsToDisk: true)
-    // Metadata for a fully enabled vehicle can exceed 2,000 rows in 24 hours. Keep enough
-    // rows for the advertised lookback; the independent payload budget still caps disk use.
-    static let maximumEntries = 10_000
+
+    /// Ceilings for the archive. The per-partition row count is the same figure the single-log
+    /// format used, because that figure was already sized for one fully enabled vehicle.
+    struct Limits: Sendable {
+        var maximumEntriesPerPartition = 10_000
+        var maximumEntriesTotal = 30_000
+        var maximumPayloadBytesPerPartition = 8 * 1024 * 1024
+        var maximumPayloadBytesTotal = 32 * 1024 * 1024
+        var maximumPartitions = 16
+        var retentionInterval: TimeInterval = 24 * 3_600
+
+        static let `default` = Limits()
+    }
+
     /// Matches the diagnostic bundle's unified-log lookback window.
-    static let retentionInterval: TimeInterval = 24 * 3_600
+    static let retentionInterval: TimeInterval = Limits.default.retentionInterval
+    /// Kept for callers and tests that reason about one vehicle's ceiling.
+    static let maximumEntries = Limits.default.maximumEntriesPerPartition
+
     private static let persistDebounce: Duration = .seconds(3)
-    /// Cumulative cap on retained payload bodies (metadata rows are tiny). Without it,
-    /// 2,000 entries x 256 KB each could produce a half-gigabyte archive in a worst case.
-    /// Rows past the budget keep their metadata and lose only their payload body,
-    /// oldest first – mirroring the export bundle's own budgeting.
-    static let maximumTotalPayloadBytes = 32 * 1024 * 1024
     private static let launchIdentifier = UUID().uuidString
     private static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     private static let appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
 
     private let persistsToDisk: Bool
-    private let totalPayloadBudgetOverride: Int?
-    private var entries: [APILogEntry] = []
+    private let limits: Limits
+    /// Tests point this at a temporary file so archive migration and round-trips are hermetic.
+    private let archiveURLOverride: URL?
+    private var entriesByPartition: [APILogPartitionKey: [APILogEntry]] = [:]
+    /// Running payload byte counts, kept alongside the entries so a record does not rescan
+    /// every retained body. A partition budget only re-derives the exact figure when it drains.
+    private var payloadBytesByPartition: [APILogPartitionKey: Int] = [:]
+    private var totalPayloadBytes = 0
     private var loadedFromDisk = false
     private var saveScheduled = false
 
-    init(persistsToDisk: Bool = false, totalPayloadBudget: Int? = nil) {
+    /// `totalPayloadBudget` predates the per-partition limits; it now caps the whole archive.
+    init(persistsToDisk: Bool = false, totalPayloadBudget: Int? = nil,
+         limits: Limits = .default, archiveURL: URL? = nil) {
         self.persistsToDisk = persistsToDisk
-        self.totalPayloadBudgetOverride = totalPayloadBudget
+        self.archiveURLOverride = archiveURL
+        var resolvedLimits = limits
+        if let totalPayloadBudget {
+            resolvedLimits.maximumPayloadBytesTotal = totalPayloadBudget
+            resolvedLimits.maximumPayloadBytesPerPartition = min(
+                resolvedLimits.maximumPayloadBytesPerPartition, totalPayloadBudget)
+        }
+        self.limits = resolvedLimits
     }
+
+    // MARK: - Recording
 
     func record(provider: APILogProvider, request: URLRequest?, operation: String,
                 scope: VehicleLogScope = .account,
@@ -186,21 +216,66 @@ actor APIDiagnosticLogStore {
             attempt: attempt,
             scopePartition: scope.logPartition
         )
-        entries.append(entry)
-        trimIfNeeded()
+        append(entry, to: scope.partitionKey)
+        trim(scope.partitionKey)
+        enforcePartitionLimit()
+        enforceTotalEntryLimit()
+        enforceTotalPayloadBudget()
         persistSoon()
     }
 
-    /// Complete redacted records (metadata plus sanitized payload) for the troubleshooting
-    /// bundle. Payloads were redacted at record time; nothing here is raw network data.
+    // MARK: - Reading
+
+    /// Every retained entry across partitions, oldest first. Equal timestamps keep a stable
+    /// partition-and-arrival order so a live view does not reshuffle rows between polls.
     func snapshot() -> [APILogEntry] {
         ensureLoaded()
-        return entries
+        let merged = entriesByPartition.keys.sorted { $0.rawValue < $1.rawValue }
+            .flatMap { entriesByPartition[$0] ?? [] }
+        return merged.enumerated().sorted { lhs, rhs in
+            if lhs.element.timestamp == rhs.element.timestamp { return lhs.offset < rhs.offset }
+            return lhs.element.timestamp < rhs.element.timestamp
+        }.map(\.element)
     }
 
-    func clear() {
-        entries.removeAll(keepingCapacity: true)
+    /// One partition, oldest first. Empty when nothing was recorded for it.
+    func snapshot(for key: APILogPartitionKey) -> [APILogEntry] {
+        ensureLoaded()
+        return entriesByPartition[key] ?? []
+    }
+
+    /// Non-empty partitions ordered by key. The store keeps this order deterministic; the
+    /// inspector re-orders by the reader's garage order.
+    func partitions() -> [APILogPartition] {
+        ensureLoaded()
+        return entriesByPartition
+            .map { APILogPartition(key: $0.key, entries: $0.value) }
+            .sorted { $0.key.rawValue < $1.key.rawValue }
+    }
+
+    /// Whether anything at all is retained, for the inspector's empty state.
+    func isEmpty() -> Bool {
+        ensureLoaded()
+        return entriesByPartition.isEmpty
+    }
+
+    // MARK: - Clearing
+
+    func clearAll() {
+        entriesByPartition.removeAll(keepingCapacity: true)
+        payloadBytesByPartition.removeAll(keepingCapacity: true)
+        totalPayloadBytes = 0
         if persistsToDisk { flushToDisk() }
+    }
+
+    /// Discards one partition. The fleet-wide form is `clearAll()` so it is never the meaning
+    /// of an omitted argument.
+    func clear(_ key: APILogPartitionKey) {
+        clear(keys: [key])
+    }
+
+    func clear(scope: VehicleLogScope) {
+        clear(scope.partitionKey)
     }
 
     /// Public wrapper for the termination path: the app shell bridges this onto a
@@ -211,40 +286,216 @@ actor APIDiagnosticLogStore {
         flushToDisk()
     }
 
-    // MARK: - Retention
-
-    private func trimIfNeeded() {
-        if entries.count > Self.maximumEntries {
-            entries.removeFirst(entries.count - Self.maximumEntries)
-        }
-        let cutoff = Date().addingTimeInterval(-Self.retentionInterval)
-        if let firstKeptIndex = entries.firstIndex(where: { $0.timestamp >= cutoff }) {
-            if firstKeptIndex > 0 { entries.removeFirst(firstKeptIndex) }
-        } else if entries.first.map({ $0.timestamp < cutoff }) == true {
-            entries.removeAll(keepingCapacity: true)
-            return
-        }
-        enforcePayloadBudget()
+    /// Synchronous erase for the sign-out and "erase local data" paths. They own a synchronous
+    /// SQLite transaction and must not return while this vehicle's rows could still be written
+    /// back afterwards. The wait is bounded so an unforeseen stall cannot hang sign-out; a
+    /// timeout is recorded rather than silently skipping the erase.
+    nonisolated func eraseVehicleLogsSynchronously(vin: String) {
+        applyEraseSynchronously(keys: [.vehicle(vin)])
     }
 
-    /// Newest payloads keep their bodies; older rows past the cumulative budget keep
-    /// only metadata. Idempotent, so it can run on every trim.
-    private func enforcePayloadBudget() {
-        var budget = totalPayloadBudgetOverride ?? Self.maximumTotalPayloadBytes
+    /// Fleet-wide counterpart of `eraseVehicleLogsSynchronously(vin:)`. Its own member so
+    /// "every vehicle" is never what an omitted argument means.
+    nonisolated func eraseAllLogsSynchronously() {
+        applyEraseSynchronously(keys: nil)
+    }
+
+    private nonisolated func applyEraseSynchronously(keys: [APILogPartitionKey]?) {
+        let erased = DispatchSemaphore(value: 0)
+        // Detached on purpose: a child task would inherit the caller's main-actor isolation,
+        // and the caller waits on this semaphore from that same actor.
+        Task.detached(priority: .utility) { [self] in
+            if let keys {
+                await self.clear(keys: keys)
+            } else {
+                await self.clearAll()
+            }
+            erased.signal()
+        }
+        if erased.wait(timeout: .now() + 5) == .timedOut {
+            AppLog.logger("api-diagnostics").fault(
+                "Diagnostic log erase did not finish within its bounded wait")
+        }
+    }
+
+    private func clear(keys: [APILogPartitionKey]) {
+        var changed = false
+        for key in keys {
+            guard let entries = entriesByPartition.removeValue(forKey: key) else { continue }
+            let payload = entries.reduce(0) { $0 + Self.payloadCost($1) }
+            totalPayloadBytes = max(0, totalPayloadBytes - payload)
+            payloadBytesByPartition[key] = nil
+            changed = true
+        }
+        if changed, persistsToDisk { flushToDisk() }
+    }
+
+    // MARK: - Retention
+
+    private static func payloadCost(_ entry: APILogEntry) -> Int {
+        entry.responsePayloadJSON?.utf8.count ?? 0
+    }
+
+    private func append(_ entry: APILogEntry, to key: APILogPartitionKey) {
+        entriesByPartition[key, default: []].append(entry)
+        let cost = Self.payloadCost(entry)
+        guard cost > 0 else { return }
+        payloadBytesByPartition[key, default: 0] += cost
+        totalPayloadBytes += cost
+    }
+
+    /// Count, age and per-vehicle payload bounds. One partition at a time, so another vehicle's
+    /// evidence is never a casualty of this one's volume.
+    private func trim(_ key: APILogPartitionKey) {
+        guard var entries = entriesByPartition[key], !entries.isEmpty else {
+            removePartition(key)
+            return
+        }
+        var removedPayload = 0
+        func dropFirst(_ count: Int) {
+            guard count > 0 else { return }
+            for entry in entries.prefix(count) {
+                removedPayload += Self.payloadCost(entry)
+            }
+            entries.removeFirst(count)
+        }
+
+        let cutoff = Date().addingTimeInterval(-limits.retentionInterval)
+        if let firstKeptIndex = entries.firstIndex(where: { $0.timestamp >= cutoff }) {
+            dropFirst(firstKeptIndex)
+        } else if entries.first.map({ $0.timestamp < cutoff }) == true {
+            dropFirst(entries.count)
+        }
+        if entries.count > limits.maximumEntriesPerPartition {
+            dropFirst(entries.count - limits.maximumEntriesPerPartition)
+        }
+
+        let payloadAfterDrops = max(0, (payloadBytesByPartition[key] ?? 0) - removedPayload)
+        let enforced = enforcePayloadBudget(entries: entries,
+                                            budget: limits.maximumPayloadBytesPerPartition,
+                                            knownBytes: payloadAfterDrops)
+        entries = enforced.entries
+        totalPayloadBytes = max(0, totalPayloadBytes - removedPayload - enforced.droppedBytes)
+
+        if entries.isEmpty {
+            removePartition(key)
+        } else {
+            entriesByPartition[key] = entries
+            payloadBytesByPartition[key] = enforced.remainingBytes
+        }
+    }
+
+    /// Drops the oldest bodies once a partition is over budget. Skipped while under budget,
+    /// which is the common case and the reason recording stays cheap.
+    private func enforcePayloadBudget(entries: [APILogEntry], budget: Int,
+                                      knownBytes: Int) -> (entries: [APILogEntry], droppedBytes: Int, remainingBytes: Int) {
+        guard knownBytes > budget else { return (entries, 0, knownBytes) }
+        var entries = entries
+        var dropped = 0
+        var remaining = 0
         for index in stride(from: entries.count - 1, through: 0, by: -1) {
             guard let payload = entries[index].responsePayloadJSON else { continue }
             let cost = payload.utf8.count
-            if cost <= budget {
-                budget -= cost
+            if remaining + cost <= budget {
+                remaining += cost
             } else if !entries[index].payloadOmitted {
                 entries[index] = entries[index].omittingPayload()
+                dropped += cost
             }
+        }
+        return (entries, dropped, remaining)
+    }
+
+    private func removePartition(_ key: APILogPartitionKey) {
+        entriesByPartition[key] = nil
+        payloadBytesByPartition[key] = nil
+    }
+
+    /// Caps the archive's row count across every partition, oldest first.
+    private func enforceTotalEntryLimit() {
+        let total = entriesByPartition.values.reduce(0) { $0 + $1.count }
+        let excess = total - limits.maximumEntriesTotal
+        guard excess > 0 else { return }
+        var candidates: [(timestamp: Date, key: APILogPartitionKey, index: Int)] = []
+        candidates.reserveCapacity(total)
+        for (key, entries) in entriesByPartition {
+            for (index, entry) in entries.enumerated() {
+                candidates.append((entry.timestamp, key, index))
+            }
+        }
+        candidates.sort { $0.timestamp < $1.timestamp }
+        var removals: [APILogPartitionKey: Set<Int>] = [:]
+        for candidate in candidates.prefix(excess) {
+            removals[candidate.key, default: []].insert(candidate.index)
+        }
+        for (key, indexes) in removals {
+            guard let entries = entriesByPartition[key] else { continue }
+            var removedPayload = 0
+            var kept: [APILogEntry] = []
+            kept.reserveCapacity(entries.count - indexes.count)
+            for (index, entry) in entries.enumerated() {
+                if indexes.contains(index) { removedPayload += Self.payloadCost(entry) }
+                else { kept.append(entry) }
+            }
+            totalPayloadBytes = max(0, totalPayloadBytes - removedPayload)
+            payloadBytesByPartition[key] = max(0, (payloadBytesByPartition[key] ?? 0) - removedPayload)
+            if kept.isEmpty { removePartition(key) } else { entriesByPartition[key] = kept }
+        }
+    }
+
+    private func enforcePartitionLimit() {
+        let vehicleKeys = entriesByPartition.keys.filter { !$0.isAccount }
+        let accountCount = entriesByPartition[.account] == nil ? 0 : 1
+        guard vehicleKeys.count + accountCount > limits.maximumPartitions else { return }
+        let byLeastRecent = vehicleKeys.sorted { lhs, rhs in
+            let left = entriesByPartition[lhs]?.last?.timestamp ?? .distantPast
+            let right = entriesByPartition[rhs]?.last?.timestamp ?? .distantPast
+            return left == right ? lhs.rawValue < rhs.rawValue : left < right
+        }
+        var excess = vehicleKeys.count + accountCount - limits.maximumPartitions
+        for key in byLeastRecent where excess > 0 {
+            removePartition(key)
+            excess -= 1
+        }
+    }
+
+    /// Caps payload bytes across every partition, newest bodies first, so one busy vehicle
+    /// cannot grow the archive past the ceiling on its own.
+    private func enforceTotalPayloadBudget() {
+        guard totalPayloadBytes > limits.maximumPayloadBytesTotal else { return }
+        var ordered: [(timestamp: Date, key: APILogPartitionKey, index: Int)] = []
+        for (key, entries) in entriesByPartition {
+            for (index, entry) in entries.enumerated() where entry.responsePayloadJSON != nil {
+                ordered.append((entry.timestamp, key, index))
+            }
+        }
+        ordered.sort { $0.timestamp > $1.timestamp }
+        var budget = limits.maximumPayloadBytesTotal
+        for item in ordered {
+            guard let current = entriesByPartition[item.key], item.index < current.count,
+                  let payload = current[item.index].responsePayloadJSON else { continue }
+            let cost = payload.utf8.count
+            if cost <= budget {
+                budget -= cost
+                continue
+            }
+            guard !current[item.index].payloadOmitted else { continue }
+            entriesByPartition[item.key]?[item.index] = current[item.index].omittingPayload()
+            totalPayloadBytes = max(0, totalPayloadBytes - cost)
+            payloadBytesByPartition[item.key] = max(0, (payloadBytesByPartition[item.key] ?? 0) - cost)
         }
     }
 
     // MARK: - Disk persistence (shared instance only)
 
-    private static var archiveURL: URL? {
+    private struct StoredArchive: Codable {
+        let version: Int
+        let partitions: [String: [APILogEntry]]
+    }
+
+    private var archiveURL: URL? { archiveURLOverride ?? Self.defaultArchiveURL }
+
+    private static var defaultArchiveURL: URL? {
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -255,11 +506,37 @@ actor APIDiagnosticLogStore {
     private func ensureLoaded() {
         guard persistsToDisk, !loadedFromDisk else { return }
         loadedFromDisk = true
-        guard let url = Self.archiveURL,
+        guard let url = archiveURL,
               let data = try? Data(contentsOf: url) else { return }
-        guard let stored = try? JSONDecoder.iso.decode([APILogEntry].self, from: data) else { return }
-        entries = stored
-        trimIfNeeded()
+        if let stored = try? JSONDecoder.iso.decode(StoredArchive.self, from: data),
+           stored.version == 2 {
+            for (rawKey, entries) in stored.partitions where !entries.isEmpty {
+                entriesByPartition[APILogPartitionKey(rawValue: rawKey)] = entries
+            }
+        } else if let legacy = try? JSONDecoder.iso.decode([APILogEntry].self, from: data),
+                  !legacy.isEmpty {
+            // The previous format had no vehicle scope. Guessing one would put one car's
+            // traffic in another car's log, so the rows keep their own partition until the
+            // 24-hour window retires them.
+            entriesByPartition[.legacy] = legacy
+        } else {
+            return
+        }
+        recomputePayloadTotals()
+        for key in Array(entriesByPartition.keys) { trim(key) }
+        enforcePartitionLimit()
+        enforceTotalEntryLimit()
+        enforceTotalPayloadBudget()
+    }
+
+    private func recomputePayloadTotals() {
+        payloadBytesByPartition.removeAll(keepingCapacity: true)
+        totalPayloadBytes = 0
+        for (key, entries) in entriesByPartition {
+            let bytes = entries.reduce(0) { $0 + Self.payloadCost($1) }
+            if bytes > 0 { payloadBytesByPartition[key] = bytes }
+            totalPayloadBytes += bytes
+        }
     }
 
     /// Coalesces bursts of records into one write; actor reentrancy makes the delayed
@@ -275,12 +552,17 @@ actor APIDiagnosticLogStore {
 
     private func flushToDisk() {
         saveScheduled = false
-        guard persistsToDisk, let url = Self.archiveURL else { return }
+        guard persistsToDisk, let url = archiveURL else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
+        let archive = StoredArchive(
+            version: 2,
+            partitions: entriesByPartition.reduce(into: [:]) { result, item in
+                result[item.key.rawValue] = item.value
+            })
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(entries) else { return }
+        guard let data = try? encoder.encode(archive) else { return }
         try? data.write(to: url, options: .atomic)
     }
 

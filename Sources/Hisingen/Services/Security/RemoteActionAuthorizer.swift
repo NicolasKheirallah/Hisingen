@@ -94,8 +94,9 @@ final class RemoteActionAuthorizer: RemoteActionAuthorizing {
         ) + consequence
         alert.addButton(withTitle: L10n.text("Send Command"))
         alert.addButton(withTitle: L10n.text("Cancel"))
+        // The timer is added to the main run loop below, so its block runs on the main thread.
         let expiry = Timer(timeInterval: confirmationTimeout, repeats: false) { _ in
-            NSApp.abortModal()
+            MainActor.assumeIsolated { NSApp.abortModal() }
         }
         RunLoop.main.add(expiry, forMode: .common)
         defer { expiry.invalidate() }

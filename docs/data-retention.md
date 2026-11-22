@@ -56,6 +56,7 @@ These files should all be treated as parts of the same local database.
 | Precise coordinates in historical telemetry/charging sessions | SQLite | Disabled by default; only written after explicit user opt-in, then follows the parent history retention |
 | Battery-health milestones | SQLite | Long-term; retained until local history is cleared |
 | Remote-command audit records | SQLite | Retained until local history is cleared |
+| API diagnostic log (redacted requests, one partition per vehicle) | `Application Support/Hisingen/api-diagnostics.json` | 24 hours; 10,000 rows and 8 MB of payloads per partition, 30,000 rows / 32 MB in total; erased with a vehicle's local data |
 | Reverse-geocode cache | Memory | Process lifetime |
 | Temporary provider capability/request caches | Memory | Short-lived, provider-specific |
 | Exported CSV files | User-selected filesystem location | Controlled by the user after export |

@@ -4375,3 +4375,7 @@
 "The GPX track could not be created." = "无法创建 GPX 轨迹。";
 "Selected Session Samples" = "所选场次样本";
 "Selected session" = "所选场次";
+
+// English fallback values pending translation
+"Vehicle %@" = "车辆 %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "将删除 %@ 条记录。之后的新请求会照常记录。";

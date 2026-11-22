@@ -31,3 +31,4 @@ Status: Accepted
 | [0010](0010-biometric-confirmation-default-off-for-routine-commands.md) | Biometric confirmation defaults off for routine remote commands |
 | [0011](0011-polestar-signin-constraints.md) | Polestar Sign-In Architecture Constraints |
 | [0012](0012-single-remote-command-dispatch-authority.md) | One Remote Command dispatch authority; brand policy lives in the gate |
+| [0013](0013-per-vehicle-diagnostic-log.md) | One diagnostic log per vehicle; the system log stays one stream |

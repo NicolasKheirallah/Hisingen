@@ -66,17 +66,35 @@ struct APIDiagnosticInspectorFilter: Equatable, Sendable {
     }
 }
 
-/// Live, read-only view over the already-redacted API ring buffer. It deliberately reads the
+/// Which partition of the log the inspector is showing. `.all` merges every vehicle so a
+/// cross-car timeline is still one glance away.
+enum VehicleLogSelection: Hashable, Sendable {
+    case all
+    case partition(APILogPartitionKey)
+}
+
+/// Live, read-only view over the already-redacted per-vehicle log. It deliberately reads the
 /// sanitized store rather than observing transport traffic, so opening the inspector cannot
 /// broaden what the application retains.
 @MainActor
 struct APIDiagnosticInspectorView: View {
     @AppStorage(AppTimeFormat.storageKey) private var timeFormat: AppTimeFormat = .twentyFourHour
-    let store: APIDiagnosticLogStore
-
+    @Environment(\.preferencesStore) private var preferences
     @Environment(\.dismiss) private var dismiss
-    @State private var entries: [APILogEntry] = []
-    /// The filtered entries, newest first. Built off the main thread whenever the log or a
+
+    let store: APIDiagnosticLogStore
+    /// The garage as the rest of Settings knows it. The picker lists every car here, not only
+    /// the cars that happen to have recorded something, so "this car made no requests" is a
+    /// readable answer rather than a missing option.
+    let fleet: FleetSnapshot
+    let activeVIN: String?
+
+    @State private var partitions: [APILogPartition] = []
+    @State private var choices: [Choice] = []
+    @State private var titles: [APILogPartitionKey: String] = [:]
+    @State private var selection: VehicleLogSelection = .all
+    @State private var didApplyDefaultSelection = false
+    /// The filtered rows, newest first. Built off the main thread whenever the log or a
     /// filter changes, so a render only reads it.
     @State private var rows: [Row] = []
     @State private var filterTask: Task<Void, Never>?
@@ -91,8 +109,12 @@ struct APIDiagnosticInspectorView: View {
     @State private var expandedRows = Set<RowID>()
     @State private var showClearConfirmation = false
 
-    init(store: APIDiagnosticLogStore = .shared) {
+    init(store: APIDiagnosticLogStore = .shared,
+         fleet: FleetSnapshot = FleetSnapshot(),
+         activeVIN: String? = nil) {
         self.store = store
+        self.fleet = fleet
+        self.activeVIN = activeVIN
     }
 
     /// A timestamp alone is not unique: the log is saved with one-second precision, so every
@@ -105,27 +127,81 @@ struct APIDiagnosticInspectorView: View {
 
     struct Row: Identifiable, Sendable {
         let id: RowID
+        let partition: APILogPartitionKey?
         let entry: APILogEntry
+    }
+
+    struct Choice: Identifiable, Hashable, Sendable {
+        let id: String
+        let selection: VehicleLogSelection
+        let title: String
     }
 
     nonisolated static func rows(from entries: [APILogEntry],
                                  matching filter: APIDiagnosticInspectorFilter) -> [Row] {
+        rows(from: entries.map { (partition: nil, entry: $0) }, matching: filter)
+    }
+
+    /// `tagged` is oldest-first for the selection. Row identity counts entries sharing a
+    /// timestamp in that order, so it survives filtering.
+    nonisolated static func rows(from tagged: [(partition: APILogPartitionKey?, entry: APILogEntry)],
+                                 matching filter: APIDiagnosticInspectorFilter) -> [Row] {
         let needle = filter.normalizedQuery
         var seen: [Date: Int] = [:]
         var result: [Row] = []
-        for entry in entries {
+        for item in tagged {
+            let entry = item.entry
             let ordinal = seen[entry.timestamp, default: 0]
             seen[entry.timestamp] = ordinal + 1
             if filter.matches(entry, needle: needle) {
-                result.append(Row(id: RowID(timestamp: entry.timestamp, ordinal: ordinal), entry: entry))
+                result.append(Row(id: RowID(timestamp: entry.timestamp, ordinal: ordinal),
+                                  partition: item.partition,
+                                  entry: entry))
             }
         }
         return result.reversed()
     }
 
+    /// The entries for one selection, oldest first. Merging keeps a stable order for rows that
+    /// share a timestamp, because the partition key breaks the tie.
+    nonisolated static func taggedEntries(
+        from partitions: [APILogPartition],
+        selection: VehicleLogSelection
+    ) -> [(partition: APILogPartitionKey?, entry: APILogEntry)] {
+        switch selection {
+        case .partition(let key):
+            let entries = partitions.first(where: { $0.key == key })?.entries ?? []
+            return entries.map { (partition: key, entry: $0) }
+        case .all:
+            var tagged: [(partition: APILogPartitionKey?, entry: APILogEntry)] = []
+            for partition in partitions {
+                for entry in partition.entries {
+                    tagged.append((partition.key, entry))
+                }
+            }
+            return tagged.enumerated().sorted { lhs, rhs in
+                if lhs.element.entry.timestamp == rhs.element.entry.timestamp {
+                    return lhs.offset < rhs.offset
+                }
+                return lhs.element.entry.timestamp < rhs.element.entry.timestamp
+            }.map(\.element)
+        }
+    }
+
+    private var selectedEntries: [(partition: APILogPartitionKey?, entry: APILogEntry)] {
+        Self.taggedEntries(from: partitions, selection: selection)
+    }
+
+    private var selectedTitle: String {
+        switch selection {
+        case .all: return L10n.text("All")
+        case .partition(let key): return titles[key] ?? L10n.text("Vehicle")
+        }
+    }
+
     private func refilter() {
         let filter = APIDiagnosticInspectorFilter(provider: provider, outcome: outcome, query: query)
-        let source = entries
+        let source = selectedEntries
         let debounce = !filter.normalizedQuery.isEmpty
         filterTask?.cancel()
         filterTask = Task {
@@ -139,9 +215,11 @@ struct APIDiagnosticInspectorView: View {
         }
     }
 
-    private nonisolated static func filteredRows(_ entries: [APILogEntry],
-                                                 _ filter: APIDiagnosticInspectorFilter) async -> [Row] {
-        rows(from: entries, matching: filter)
+    private nonisolated static func filteredRows(
+        _ source: [(partition: APILogPartitionKey?, entry: APILogEntry)],
+        _ filter: APIDiagnosticInspectorFilter
+    ) async -> [Row] {
+        rows(from: source, matching: filter)
     }
 
     var body: some View {
@@ -150,7 +228,8 @@ struct APIDiagnosticInspectorView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L10n.text("Live API Diagnostics"))
                         .hisType(.heading, weight: .semibold)
-                    Text(L10n.format("%d redacted requests retained for up to 24 hours", entries.count))
+                    Text(L10n.format("%d redacted requests retained for up to 24 hours",
+                                     selectedEntries.count))
                         .hisType(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -160,26 +239,35 @@ struct APIDiagnosticInspectorView: View {
             }
 
             HStack(spacing: 8) {
+                Picker(L10n.text("Vehicle"), selection: $selection) {
+                    ForEach(choices) { choice in
+                        Text(choice.title).tag(choice.selection)
+                    }
+                }
+                .frame(width: 190)
                 Picker(L10n.text("Provider"), selection: $provider) {
                     Text(L10n.text("All providers")).tag(APILogProvider?.none)
                     ForEach(APILogProvider.allCases, id: \.self) { value in
                         Text(value.rawValue.capitalized).tag(Optional(value))
                     }
                 }
-                .frame(width: 150)
+                .frame(width: 140)
                 Picker(L10n.text("Outcome"), selection: $outcome) {
                     ForEach(APIDiagnosticOutcomeFilter.allCases) { value in
                         Text(value.title).tag(value)
                     }
                 }
-                .frame(width: 150)
+                .frame(width: 140)
+            }
+
+            HStack(spacing: 8) {
                 HisTextField(L10n.text("Filter endpoint, operation, status, or error"), text: $query)
                 Button(role: .destructive) {
                     showClearConfirmation = true
                 } label: {
                     Label(L10n.text("Clear"), systemImage: "trash")
                 }
-                .disabled(entries.isEmpty)
+                .disabled(selectedEntries.isEmpty)
             }
 
             if !hasLoadedOnce {
@@ -191,7 +279,8 @@ struct APIDiagnosticInspectorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else if rows.isEmpty {
                 ContentUnavailableView(
-                    entries.isEmpty ? L10n.text("No API requests recorded") : L10n.text("No matching requests"),
+                    selectedEntries.isEmpty ? L10n.text("No API requests recorded")
+                                            : L10n.text("No matching requests"),
                     systemImage: "network.slash"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -211,6 +300,9 @@ struct APIDiagnosticInspectorView: View {
                         }
                     )) {
                         VStack(alignment: .leading, spacing: 6) {
+                            if let partition = row.partition, let title = titles[partition] {
+                                diagnosticDetail(L10n.text("Vehicle"), title)
+                            }
                             diagnosticDetail(L10n.text("Endpoint"), entry.endpoint)
                             diagnosticDetail(L10n.text("Operation"), entry.operation)
                             if let partition = entry.scopePartition {
@@ -243,6 +335,17 @@ struct APIDiagnosticInspectorView: View {
                         .padding(.vertical, 5)
                     } label: {
                         HStack(spacing: 8) {
+                            // The vehicle leads in the merged view: it is the first thing the
+                            // reader is scanning for when every car's requests share a list.
+                            if selection == .all, let partition = row.partition,
+                               let title = titles[partition] {
+                                Text(title)
+                                    .hisType(.micro, weight: .semibold)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: 130, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                            }
                             Text(entry.provider.rawValue.uppercased())
                                 .hisType(.micro, weight: .semibold)
                                 .foregroundStyle(.secondary)
@@ -272,40 +375,120 @@ struct APIDiagnosticInspectorView: View {
         .padding(14)
         // 760 was wider than the 430pt panel it opens from, overhanging its own parent by up to
         // 77 % at the narrow presets. It asks for what the measurement columns actually need.
-        .frame(minWidth: 560, minHeight: 480)
-        // refreshLoop() rewrites `entries` every second from outside any transaction;
-        // keying on the count is what animates per-second row inserts and the
+        .frame(minWidth: 620, minHeight: 480)
+        // refreshLoop() rewrites `partitions` every second from outside any transaction;
+        // keying on the row count is what animates per-second row inserts and the
         // list↔empty-state swap.
-        .hisAnimation(Motion.stateChange, value: entries.count)
+        .hisAnimation(Motion.stateChange, value: rows.count)
         .confirmationDialog(
             L10n.text("Clear the redacted API request log?"),
             isPresented: $showClearConfirmation,
             titleVisibility: .visible
         ) {
             Button(L10n.text("Clear Log"), role: .destructive) {
-                Task {
-                    await store.clear()
-                    withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
-                        entries = []
-                    }
-                    refilter()
-                }
+                clearSelection()
             }
             Button(L10n.text("Cancel"), role: .cancel) {}
         } message: {
-            Text(L10n.text("All retained request entries will be discarded. New requests are recorded again as they happen."))
+            Text(clearConfirmationMessage)
         }
         .task { await refreshLoop() }
         .onChange(of: provider) { _, _ in refilter() }
         .onChange(of: outcome) { _, _ in refilter() }
         .onChange(of: query) { _, _ in refilter() }
+        .onChange(of: selection) { _, _ in refilter() }
         .onDisappear { filterTask?.cancel() }
+    }
+
+    private var clearConfirmationMessage: String {
+        switch selection {
+        case .all:
+            return L10n.text("All retained request entries will be discarded. New requests are recorded again as they happen.")
+        case .partition:
+            return L10n.format(
+                "%@ entries will be discarded. New requests are recorded again as they happen.",
+                selectedTitle)
+        }
+    }
+
+    private func clearSelection() {
+        let selection = self.selection
+        Task {
+            switch selection {
+            case .all:
+                await store.clearAll()
+            case .partition(let key):
+                await store.clear(key)
+            }
+            let latest = await store.partitions()
+            withAnimation(Motion.resolveCrossfade(Motion.stateChange)) {
+                partitions = latest
+                rebuildChoices()
+                refilter()
+            }
+        }
+    }
+
+    /// The options are the garage (in its order) plus any partition the store knows about that
+    /// no current vehicle claims: account traffic, rows from before per-vehicle logs, and a
+    /// signed-out car whose log outlived the session.
+    private func rebuildChoices() {
+        var nextChoices: [Choice] = [Choice(id: "all", selection: .all,
+                                            title: L10n.text("All"))]
+        var nextTitles: [APILogPartitionKey: String] = [:]
+        var claimed = Set<APILogPartitionKey>()
+        for vin in fleet.vehicles(orderedBy: preferences.garageVehicleOrder) {
+            let key = APILogPartitionKey.vehicle(vin)
+            guard !claimed.contains(key) else { continue }
+            claimed.insert(key)
+            let state = fleet.snapshot(for: vin)
+            let brand: VehicleBrand = state?.model.brand
+                ?? (VehicleBrand.isVolvoVIN(vin) ? .volvo : preferences.activeBrand)
+            let title = preferences.formattedVehicleTitle(
+                vin: vin,
+                modelName: state?.identity.modelName,
+                modelYear: state?.identity.modelYear,
+                registrationNo: state?.identity.registrationNo,
+                fallbackBrand: brand)
+            nextTitles[key] = title
+            nextChoices.append(Choice(id: key.rawValue, selection: .partition(key), title: title))
+        }
+        for partition in partitions where !claimed.contains(partition.key) {
+            let title: String
+            switch partition.key {
+            case .account:
+                title = L10n.text("Account")
+            case .legacy:
+                title = L10n.text("Unknown")
+            default:
+                let suffix = partition.key.rawValue
+                    .replacingOccurrences(of: "vehicle-", with: "")
+                    .prefix(4).uppercased()
+                title = L10n.format("Vehicle %@", String(suffix))
+            }
+            nextTitles[partition.key] = title
+            nextChoices.append(Choice(id: partition.key.rawValue,
+                                      selection: .partition(partition.key), title: title))
+        }
+        choices = nextChoices
+        titles = nextTitles
+        if case .partition(let key) = selection,
+           !nextChoices.contains(where: { $0.selection == .partition(key) }) {
+            selection = .all
+        }
     }
 
     /// The log only appends and trims its oldest entries, so a changed count or edge entry is a
     /// changed log.
-    private static func logChanged(from old: [APILogEntry], to new: [APILogEntry]) -> Bool {
-        old.count != new.count || old.first != new.first || old.last != new.last
+    private static func logChanged(from old: [APILogPartition], to new: [APILogPartition]) -> Bool {
+        guard old.count == new.count else { return true }
+        for (left, right) in zip(old, new) where left.key != right.key
+            || left.entries.count != right.entries.count
+            || left.entries.first != right.entries.first
+            || left.entries.last != right.entries.last {
+            return true
+        }
+        return false
     }
 
     private func diagnosticDetail(_ label: String, _ value: String) -> some View {
@@ -317,11 +500,18 @@ struct APIDiagnosticInspectorView: View {
 
     private func refreshLoop() async {
         while !Task.isCancelled {
-            let latest = await store.snapshot()
+            let latest = await store.partitions()
             // Most seconds nothing was recorded. Publishing an equal array anyway re-rendered the
             // list and rebuilt every row once a second.
-            if !hasLoadedOnce || Self.logChanged(from: entries, to: latest) {
-                entries = latest
+            if !hasLoadedOnce || Self.logChanged(from: partitions, to: latest) {
+                partitions = latest
+                rebuildChoices()
+                if !didApplyDefaultSelection {
+                    didApplyDefaultSelection = true
+                    if let vin = activeVIN?.normalizedVIN, !vin.isEmpty {
+                        selection = .partition(.vehicle(vin))
+                    }
+                }
                 refilter()
             }
             do { try await Task.sleep(for: .seconds(1)) }

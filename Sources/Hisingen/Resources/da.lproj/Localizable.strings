@@ -4382,3 +4382,7 @@
 "The GPX track could not be created." = "GPX-sporet kunne ikke oprettes.";
 "Selected Session Samples" = "Prøver fra valgt session";
 "Selected session" = "Valgt session";
+
+// English fallback values pending translation
+"Vehicle %@" = "Køretøj %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ poster slettes. Nye anmodninger registreres igen, efterhånden som de sker.";

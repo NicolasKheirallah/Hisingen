@@ -4375,3 +4375,7 @@
 "The GPX track could not be created." = "GPX 트랙을 만들 수 없습니다.";
 "Selected Session Samples" = "선택한 세션 샘플";
 "Selected session" = "선택한 세션";
+
+// English fallback values pending translation
+"Vehicle %@" = "차량 %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@개의 기록이 삭제됩니다. 이후 요청은 발생하는 대로 다시 기록됩니다.";

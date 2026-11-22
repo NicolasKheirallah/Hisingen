@@ -147,6 +147,7 @@ enum DiagnosticLogExporter {
                 "commandAuditMaximumEntries": 25,
             ],
             "redactionNote": "Vehicle identification numbers, UUID-shaped identifiers, and credential-bearing substrings are replaced with placeholders before export.",
+            "apiRequestsNote": "apiRequests is keyed by log partition: account-level traffic, rows recorded before per-vehicle logs existed (legacy), and one entry per vehicle whose id is a truncated SHA-256 digest of its VIN. The digest is stable across exports and cannot be reversed to a VIN.",
         ]
     }
 
@@ -157,7 +158,7 @@ enum DiagnosticLogExporter {
     /// section's shape changes.
     static func makeReport(meta: [String: Any],
                            unifiedLog: [UnifiedLogEntry],
-                           apiEntries: [APILogEntry],
+                           apiPartitions: [APILogPartition],
                            apiPayloadBudgetBytes: Int = DiagnosticLogExporter.apiPayloadBudgetBytes,
                            refreshDiagnostics: DiagnosticsSnapshot? = nil,
                            garageScan: GarageScanDiagnostics? = nil,
@@ -166,12 +167,28 @@ enum DiagnosticLogExporter {
                            databaseStats: [String: Any]? = nil) throws -> Data {
         let formatter = Format.iso8601
 
-        var apiRows: [[String: Any]] = []
+        // Partitions are keyed in the bundle exactly as the app stores them: `account`, a
+        // vehicle digest, or `legacy`. Sorted by key so two exports of the same log are
+        // byte-comparable.
+        let orderedPartitions = apiPartitions.sorted { $0.key.rawValue < $1.key.rawValue }
+        var apiRowsByPartition: [String: [[String: Any]]] = [:]
         var payloadBudget = apiPayloadBudgetBytes
         var payloadsTruncated = false
+        // Budgeting is newest-first across every partition, so one chatty vehicle cannot
+        // spend the whole export budget before another vehicle's newest evidence is written.
+        var staged: [(timestamp: Date, partition: String, entry: APILogEntry)] = []
+        for partition in orderedPartitions {
+            for entry in partition.entries {
+                staged.append((entry.timestamp, partition.key.rawValue, entry))
+            }
+        }
+        staged.sort { lhs, rhs in
+            lhs.timestamp == rhs.timestamp ? lhs.partition > rhs.partition : lhs.timestamp > rhs.timestamp
+        }
         // Entries are redacted at record time, but scrubbing again here makes the
         // guarantee hold regardless of how an entry was constructed.
-        for entry in apiEntries.reversed() {
+        for item in staged {
+            let entry = item.entry
             var row: [String: Any] = [
                 "timestamp": formatter.string(from: entry.timestamp),
                 "provider": entry.provider.rawValue,
@@ -218,11 +235,30 @@ enum DiagnosticLogExporter {
                 row["payloadOmitted"] = true
                 row["payloadOmissionReason"] = entry.payloadOmissionReason ?? "unknown"
             }
-            apiRows.insert(row, at: 0)
+            // Staged newest-first for the budget; each partition is written oldest-first.
+            apiRowsByPartition[item.partition, default: []].append(row)
+        }
+
+        var apiRowsByPartitionOldestFirst: [String: [[String: Any]]] = [:]
+        for (partition, rows) in apiRowsByPartition {
+            apiRowsByPartitionOldestFirst[partition] = rows.reversed()
+        }
+
+        // A small index for support tooling: which partitions this bundle carries, how much,
+        // and over what window. The rows themselves live in `apiRequests`.
+        let partitionSummaries: [[String: Any]] = orderedPartitions.compactMap { partition in
+            guard let newest = partition.entries.last?.timestamp,
+                  let oldest = partition.entries.first?.timestamp else { return nil }
+            return [
+                "id": partition.key.rawValue,
+                "requests": partition.entries.count,
+                "firstRequestAt": formatter.string(from: oldest),
+                "lastRequestAt": formatter.string(from: newest),
+            ] as [String: Any]
         }
 
         var report: [String: Any] = [
-            "schemaVersion": 4,
+            "schemaVersion": 5,
             "meta": meta,
             "unifiedLog": unifiedLog.map { entry in
                 [
@@ -232,7 +268,8 @@ enum DiagnosticLogExporter {
                     "message": DiagnosticRedaction.redact(entry.message),
                 ] as [String: Any]
             },
-            "apiRequests": apiRows,
+            "apiRequests": apiRowsByPartitionOldestFirst,
+            "apiRequestPartitions": partitionSummaries,
         ]
         if payloadsTruncated {
             report["apiPayloadsTruncated"] = true
@@ -347,10 +384,10 @@ enum DiagnosticLogExporter {
 
     /// Convenience path used by the Settings export button.
     static func buildReport(now: Date = Date(), database: VehicleDatabase? = nil) async throws -> Data {
-        async let apiEntriesTask = APIDiagnosticLogStore.shared.snapshot()
+        async let apiPartitionsTask = APIDiagnosticLogStore.shared.partitions()
         async let diagnosticsTask = LatestDiagnosticsStore.shared.current()
         async let garageScanTask = GarageScanDiagnosticsStore.shared.current()
-        let apiEntries = await apiEntriesTask
+        let apiPartitions = await apiPartitionsTask
         let refreshDiagnostics = await diagnosticsTask
         let garageScan = await garageScanTask
         let vdmsDiscovery = PolestarAPI.vdmsDiscoveryDiagnostics(now: now)
@@ -383,7 +420,7 @@ enum DiagnosticLogExporter {
 
         return try makeReport(meta: collectMeta(now: now),
                               unifiedLog: collectUnifiedLogEntries(),
-                              apiEntries: apiEntries,
+                              apiPartitions: apiPartitions,
                               refreshDiagnostics: refreshDiagnostics,
                               garageScan: garageScan,
                               vdmsDiscovery: vdmsDiscovery,

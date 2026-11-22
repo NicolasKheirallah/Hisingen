@@ -75,4 +75,44 @@ struct APIDiagnosticInspectorRowsTests {
         // The partition is a digest, so searching the raw VIN must not match it.
         #expect(found(vin).isEmpty)
     }
+
+    @Test("The merged view keeps every vehicle in timestamp order and tags each row")
+    func mergedViewTagsRowsWithTheirVehicle() {
+        let keyA = APILogPartitionKey.vehicle("YV1XZEHR2R2371256")
+        let keyB = APILogPartitionKey.vehicle("LVSHCAMB0NE123456")
+        let partitions = [
+            APILogPartition(key: keyB, entries: [
+                entry("b1", at: second),
+                entry("b2", at: second.addingTimeInterval(2)),
+            ]),
+            APILogPartition(key: keyA, entries: [entry("a1", at: second.addingTimeInterval(1))]),
+        ]
+        let tagged = APIDiagnosticInspectorView.taggedEntries(from: partitions, selection: .all)
+        #expect(tagged.map(\.entry.operation) == ["b1", "a1", "b2"])
+        #expect(tagged.map(\.partition) == [keyB, keyA, keyB])
+
+        let rows = APIDiagnosticInspectorView.rows(from: tagged, matching: .init())
+        #expect(rows.map(\.entry.operation) == ["b2", "a1", "b1"])
+        #expect(rows.first?.partition == keyB)
+    }
+
+    @Test("A vehicle selection shows only that vehicle, in order")
+    func partitionSelectionShowsOnlyThatVehicle() {
+        let keyA = APILogPartitionKey.vehicle("YV1XZEHR2R2371256")
+        let keyB = APILogPartitionKey.vehicle("LVSHCAMB0NE123456")
+        let partitions = [
+            APILogPartition(key: keyA, entries: [entry("a1", at: second)]),
+            APILogPartition(key: keyB, entries: [entry("b1", at: second.addingTimeInterval(1))]),
+        ]
+        let tagged = APIDiagnosticInspectorView.taggedEntries(
+            from: partitions, selection: .partition(keyA))
+        #expect(tagged.map(\.entry.operation) == ["a1"])
+        #expect(tagged.allSatisfy { $0.partition == keyA })
+    }
+
+    @Test("A vehicle with no partition yet reads as empty rather than missing")
+    func partitionWithoutEntriesIsEmpty() {
+        let key = APILogPartitionKey.vehicle("YV1XZEHR2R2371256")
+        #expect(APIDiagnosticInspectorView.taggedEntries(from: [], selection: .partition(key)).isEmpty)
+    }
 }

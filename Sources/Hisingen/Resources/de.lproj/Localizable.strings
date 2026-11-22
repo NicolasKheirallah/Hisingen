@@ -4385,3 +4385,7 @@
 "The GPX track could not be created." = "Der GPX-Track konnte nicht erstellt werden.";
 "Selected Session Samples" = "Sitzungsproben";
 "Selected session" = "Ausgewählte Sitzung";
+
+// English fallback values pending translation
+"Vehicle %@" = "Fahrzeug %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ Einträge werden verworfen. Neue Anfragen werden wieder aufgezeichnet, sobald sie stattfinden.";

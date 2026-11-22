@@ -4375,3 +4375,7 @@
 "The GPX track could not be created." = "GPX-sporet kunne ikkje opprettast.";
 "Selected Session Samples" = "Prøvar frå vald økt";
 "Selected session" = "Vald økt";
+
+// English fallback values pending translation
+"Vehicle %@" = "Kjøretøy %@";
+"%@ entries will be discarded. New requests are recorded again as they happen." = "%@ oppføringar blir sletta. Nye førespurnader blir registrerte på nytt etter kvart som dei skjer.";
