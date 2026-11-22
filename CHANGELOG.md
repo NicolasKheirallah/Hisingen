@@ -7,6 +7,18 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Idle and overstay fees, and price threshold alerts.** A charging session that stays plugged in
+  after it finishes can now carry its own fee line in History. Rules are set per charger or per
+  location in Settings, Electricity, with a grace period and a per-hour or per-minute rate. The fee
+  is shown only where the paired charger recorded the session running past the charge's end, so a
+  session without that record keeps no fee rather than an assumed one. The fee is a separate line
+  and is never folded into the energy cost, which still comes from the rate policy.
+
+  A new price threshold alert posts once when the current or next hour's price rises above a level
+  the reader sets, then stays quiet for a configurable period so a volatile quarter-hour series
+  cannot fill the notification list. It compares the price after the reader's rate policy, and it
+  posts nothing at all when the series is missing or does not cover the hour in question.
+
 - **A command line for remote commands.** `hisingen cli vehicles` lists every vehicle this Mac
   knows, which one is selected, how old its reading is and what each command's capability gate
   answer is, with the gate's own sentence for anything blocked. `hisingen cli send` sends one

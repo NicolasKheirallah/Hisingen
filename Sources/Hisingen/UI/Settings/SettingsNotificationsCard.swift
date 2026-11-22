@@ -190,8 +190,77 @@ struct SettingsNotificationsCard: View {
                 detail: L10n.format("One daily banner after %@ with the cheapest hour", Format.clockTime(hour: 14, minute: 15)),
                 \.notifyPlannerPricesPublished
             )
+
+            // A threshold is only meaningful against a price that moves. Fixed-rate readers see
+            // the row once they switch to automatic pricing.
+            if prefs.electricityRateMode == .automatic {
+                notificationRow(
+                    symbol: "tag",
+                    title: "Price Threshold Alert",
+                    detail: "Alert when the current or next hour's price crosses a level you set",
+                    isOn: binder(\.notifyPriceThreshold, .notifications)
+                )
+                if prefs.notifyPriceThreshold {
+                    priceThresholdRows
+                        .transition(Self.dependentRowTransition)
+                }
+            }
         }
         .hisAnimation(Motion.layout, value: prefs.notifyPlannerWindowStart)
+        .hisAnimation(Motion.layout, value: prefs.notifyPriceThreshold)
+    }
+
+    @ViewBuilder
+    private var priceThresholdRows: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "slider.horizontal.3")
+                .hisType(.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            TextField("", value: binder(\.priceAlertThresholdSekPerKwh, .notifications),
+                      format: .number.precision(.fractionLength(2)))
+                .hisField()
+                .frame(width: 76)
+                .multilineTextAlignment(.trailing)
+                .accessibilityLabel(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 2)
+
+        HStack(spacing: 8) {
+            Image(systemName: "timer")
+                .hisType(.label)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Text(L10n.text("Quiet period"))
+                .hisType(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Picker("", selection: binder(\.priceAlertQuietMinutes, .notifications)) {
+                ForEach([15, 30, 60, 120, 180, 360, 720], id: \.self) { minutes in
+                    Text(L10n.format("%d min", minutes)).tag(minutes)
+                }
+            }
+            .labelsHidden()
+            .accessibilityLabel(L10n.text("Quiet period"))
+            .controlSize(.small)
+            .frame(maxWidth: 100)
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 2)
+
+        Text(prefs.priceAlertThresholdSekPerKwh > 0
+             ? L10n.text("Compared with the price you pay under Electricity settings. One alert per crossing, then quiet for the period above.")
+             : L10n.text("Enter a price level to start alerts."))
+            .hisType(.micro)
+            .foregroundStyle(HisingenTheme.inkMuted)
+            .hisCaptionLeading()
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, 28)
     }
 
     private func plannerLeadLabel(_ minutes: Int) -> String {

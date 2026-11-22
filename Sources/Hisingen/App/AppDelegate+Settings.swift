@@ -151,12 +151,17 @@ extension AppDelegate {
             vehicleSession.reloadVehicleMetadata()
             dockWarningBadge.refresh()
             chargingPlannerController.reload()
+            priceAlertController.reload()
         case .notifications:
             notifier.requestAuthorizationIfAnyAlertEnabled()
             dockWarningBadge.refresh()
+            priceAlertController.reload()
         case .presentation:
             preferences.applyAppearance()
             vehicleSession.reloadVehicleMetadata()
+            // The rate mode decides what the price alert compares against, so a switch between
+            // automatic and fixed pricing arms or disarms it here.
+            priceAlertController.reload()
         case .panelLayout, .timeFormat:
             break
         case .launchAtLogin:

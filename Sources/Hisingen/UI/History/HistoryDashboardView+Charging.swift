@@ -230,6 +230,11 @@ extension HistoryDashboardView {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let session { wallboxRows(session, cheapest: cheapest) }
+                if let session, let fee = overstayFee(for: session) {
+                    KVRow(L10n.text("Idle and Overstay Fee"),
+                          Format.currency(fee.amount, symbol: fee.rule.currencySymbol),
+                          symbol: "parkingsign", warning: true, info: overstayFeeInfo(fee))
+                }
                 if let tariffSplit, tariffSplit.nightEnergyKwh > 0 {
                     HStack(spacing: 12) {
                         curveStat(L10n.text("Day Energy"), Format.energyKwh(tariffSplit.dayEnergyKwh))
@@ -366,6 +371,21 @@ extension HistoryDashboardView {
         let rate = session.peakPowerKw > 0 ? session.peakPowerKw : preferences.electricityChargerPowerKw
         guard let best = series.cheapest(energyKwh: wallbox.energyKwh, rateKw: rate) else { return nil }
         return CheapestOption(cost: best.cost, saving: paid - best.cost, slots: best.slots, rateKw: rate)
+    }
+
+    /// A parking-style fee is its own line: the rate policy owns the energy figure, and adding a
+    /// per-minute charge into it would make both numbers wrong.
+    func overstayFee(for session: HistoricalChargingSession) -> ChargingOverstayFee? {
+        ChargingOverstayFee.resolve(session: session, rules: preferences.chargingOverstayRules)
+    }
+
+    func overstayFeeInfo(_ fee: ChargingOverstayFee) -> String {
+        let ended = Format.dateTimeFormatter.string(from: fee.pluggedUntil)
+        let duration = Format.shortDuration(minutes: max(1, Int((fee.overstay / 60).rounded())))
+        let recorded = L10n.format("Charger session ended %@, %@ after the charge finished. The grace period left %d minutes billed.",
+                                   ended, duration, fee.billableMinutes)
+        let rule = L10n.format("Rule: %@ after %d minutes of grace.", fee.rule.rateText, max(0, fee.rule.graceMinutes))
+        return recorded + " " + rule
     }
 
     /// The charger's own energy priced at Tibber's rate with the grid fee when the charger measured
@@ -573,6 +593,13 @@ extension HistoryDashboardView {
                 }
             }
             Spacer()
+            if let fee = overstayFee(for: session) {
+                Label(Format.currency(fee.amount, symbol: fee.rule.currencySymbol), systemImage: "parkingsign")
+                    .hisType(.micro, weight: .medium)
+                    .foregroundStyle(HisingenTheme.semanticWarning)
+                    .labelStyle(.titleAndIcon)
+                    .help(overstayFeeInfo(fee))
+            }
             if let cost {
                 Text(Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol))
                     .hisType(.caption, weight: .bold, design: .rounded)
@@ -599,6 +626,9 @@ extension HistoryDashboardView {
         parts.append(Format.energyKwh(session.energyDeliveredKwh))
         if session.peakPowerKw > 0 { parts.append(Format.powerKw(session.peakPowerKw)) }
         if let cost { parts.append(Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol)) }
+        if let fee = overstayFee(for: session) {
+            parts.append(L10n.format("%@ fee", Format.currency(fee.amount, symbol: fee.rule.currencySymbol)))
+        }
         if flagged { parts.append(L10n.text("Low peak power for this location")) }
         return parts.joined(separator: ", ")
     }
