@@ -13,7 +13,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   badge row now names what it needs, the tile stays blank while the Dock icon is off, and the
   count returns the moment the icon is back.
 
-## [3.0.2] - 2026-11-21
+### Changed
+
+- A release now opens a reviewable PR that syncs the checked-in `site/updates/appcast.xml`
+  seed with the feed the release just published. The seed had stayed behind since 2.0.10,
+  and the fallback Pages path could have served it after a rollback or a new checkout. The
+  live feed itself already deploys from the release artifact and needs no merge.
+
+2] - 2026-11-21
 
 ### Added
 
