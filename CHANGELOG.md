@@ -313,7 +313,7 @@ All notable changes to Hisingen are documented in this file. The project follows
 - **A scheduled or triggered climate start now uses the climate settings you saved.** The action
   a schedule or a location trigger stores carries no temperature and no seat or steering-wheel
   heating, so the car ran on its own defaults while calendar preconditioning used the saved
-  settings. Both now send the saved temperature and heating levels.
+  settings. Both now send the saved temperature and heating levels, read from one place.
 
 - **A history database written by a newer Hisingen is refused instead of read with the wrong
   schema.** Opening a store whose `PRAGMA user_version` is past this build's ceiling now closes

@@ -56,6 +56,15 @@ enum AutomationCommandPolicy {
         var rearLeftSeat: HeatingLevel
         var rearRightSeat: HeatingLevel
         var steeringWheel: HeatingLevel
+
+        /// The climate start these settings describe.
+        var startCommand: RemoteCommand {
+            .startClimate(
+                temperatureCelsius: temperatureCelsius,
+                frontLeftSeat: frontLeftSeat, frontRightSeat: frontRightSeat,
+                rearLeftSeat: rearLeftSeat, rearRightSeat: rearRightSeat,
+                steeringWheel: steeringWheel)
+        }
     }
 
     /// The climate start a schedule or a trigger stores is a neutral template: no temperature and
@@ -69,10 +78,6 @@ enum AutomationCommandPolicy {
               temperature == 0,
               [frontLeft, frontRight, rearLeft, rearRight, steeringWheel].allSatisfy({ $0 == .unspecified })
         else { return command }
-        return .startClimate(
-            temperatureCelsius: saved.temperatureCelsius,
-            frontLeftSeat: saved.frontLeftSeat, frontRightSeat: saved.frontRightSeat,
-            rearLeftSeat: saved.rearLeftSeat, rearRightSeat: saved.rearRightSeat,
-            steeringWheel: saved.steeringWheel)
+        return saved.startCommand
     }
 }

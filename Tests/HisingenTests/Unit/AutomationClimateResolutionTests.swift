@@ -4,6 +4,7 @@ import Testing
 
 /// A schedule or a trigger stores a neutral climate start. It must send the climate settings the
 /// reader saved, and leave a command that already names its own settings alone.
+@MainActor
 struct AutomationClimateResolutionTests {
     private let saved = AutomationCommandPolicy.SavedClimate(
         temperatureCelsius: 21.5,
@@ -46,5 +47,26 @@ struct AutomationClimateResolutionTests {
     func otherCommandsPassThrough() {
         #expect(AutomationCommandPolicy.resolved(.lock, saved: saved) == .lock)
         #expect(AutomationCommandPolicy.resolved(.stopClimate, saved: saved) == .stopClimate)
+    }
+    @Test
+    func theSavedSettingsAreReadFromThePreferencesTheCalendarAlsoUses() {
+        let scoped = ScopedPreferences(label: "saved-climate")
+        let preferences = scoped.store
+        preferences.remoteClimateTemperature = 19
+        preferences.remoteDriverSeatHeating = .level2
+        preferences.remoteFrontRightSeatHeating = .off
+        preferences.remoteRearLeftSeatHeating = .off
+        preferences.remoteRearRightSeatHeating = .off
+        preferences.remoteSteeringWheelHeating = .level1
+
+        let fromPreferences = AutomationCommandPolicy.SavedClimate(preferences: preferences)
+
+        #expect(fromPreferences.startCommand == .startClimate(
+            temperatureCelsius: 19,
+            frontLeftSeat: .level2, frontRightSeat: .off,
+            rearLeftSeat: .off, rearRightSeat: .off,
+            steeringWheel: .level1))
+        #expect(AutomationCommandPolicy.resolved(template, saved: fromPreferences)
+                == fromPreferences.startCommand)
     }
 }
