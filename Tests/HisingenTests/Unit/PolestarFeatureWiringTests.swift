@@ -134,11 +134,15 @@ struct PolestarFeatureWiringTests {
         let noLock = try #require(capabilities(lockType: 1))
         #expect(noLock.advertisedCapabilities?[.locks] == false)
 
-        // The Polestar 2 reference table hides reduced-guard locking; the car's own answer wins.
+        // The parse keeps what the car advertises, but the profile no longer surfaces it: Polestar's
+        // invocation surface has no reduced-guard command, so advertising it must not become a
+        // control that can only fail at dispatch (M4).
         let profile = VehicleCapabilityProfile(modelName: "Polestar 2", vin: "YSM00000000000228",
                                                advertised: reducedGuard.advertisedCapabilities ?? [:])
-        #expect(profile.support(for: .reducedGuardLock) == .supported)
-        #expect(profile.permits(.reducedGuardLock))
+        #expect(profile.support(for: .reducedGuardLock) == .unavailable)
+        // `permits` answers the same question as `support`, so it must agree: a control that reads
+        // unavailable cannot also be permitted.
+        #expect(!profile.permits(.reducedGuardLock))
     }
 
     @Test func myCarsChargeTimerTypeGatesSchedulesAndLocations() throws {
