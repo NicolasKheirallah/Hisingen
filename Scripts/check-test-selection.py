@@ -24,6 +24,43 @@ def select_tests(tests, filters=(), skips=()):
             and not any(pattern.search(test) for pattern in exclude)]
 
 
+VALUE_FLAGS = {"--filter", "--skip", "--num-workers", "--xunit-output", "--specifier", "-s"}
+BOOLEAN_FLAGS = {"--parallel", "--no-parallel"}
+# Flags that choose how `swift test` runs tests and that `swift build` does not accept.
+TEST_ONLY_FLAGS = {"--disable-xctest", "--enable-xctest", "--enable-swift-testing", "--disable-swift-testing"}
+
+
+def without_run_selectors(command):
+    """Drop the flags that choose which tests run or how, keeping everything that changes the build."""
+    kept = []
+    index = 0
+    while index < len(command):
+        value = command[index]
+        if value in VALUE_FLAGS:
+            index += 2
+            continue
+        if value in BOOLEAN_FLAGS or any(value.startswith(flag + "=") for flag in VALUE_FLAGS):
+            index += 1
+            continue
+        kept.append(value)
+        index += 1
+    return kept
+
+
+def build_command(command):
+    """`swift test <args>` becomes the `swift build --build-tests` that produces the same products.
+
+    SwiftPM compiles identically for both when they share the build flags, including coverage
+    instrumentation. `swift test list` is the odd one out: it ignores --enable-code-coverage, so
+    letting it build first leaves uninstrumented products and forces `swift test` to compile the
+    whole package a second time."""
+    command = without_run_selectors(command)
+    if command[:2] != ["swift", "test"]:
+        raise ValueError("Expected a `swift test` command")
+    rest = [value for value in command[2:] if value not in TEST_ONLY_FLAGS and value != "--skip-build"]
+    return ["swift", "build", "--build-tests", *rest]
+
+
 def integration_suites(root=ROOT):
     names = set()
     for path in (root / "Tests/HisingenTests/Integration").glob("*.swift"):
@@ -59,6 +96,9 @@ def validate_results(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
+    building = sub.add_parser("build")
+    building.add_argument("--output", type=pathlib.Path, required=True)
+    building.add_argument("command", nargs=argparse.REMAINDER)
     discovery = sub.add_parser("discover")
     discovery.add_argument("--output", type=pathlib.Path, required=True)
     discovery.add_argument("command", nargs=argparse.REMAINDER)
@@ -74,22 +114,18 @@ def main():
     run.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     try:
+        if args.mode == "build":
+            command = args.command[1:] if args.command[:1] == ["--"] else args.command
+            args.output.mkdir(parents=True, exist_ok=True)
+            with (args.output / "build.log").open("w") as log:
+                process = subprocess.Popen(build_command(command), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+                    log.write(line)
+                return process.wait()
         if args.mode == "discover":
             command = args.command[1:] if args.command[:1] == ["--"] else args.command
-            discovery = []
-            index = 0
-            value_flags = {"--filter", "--skip", "--num-workers", "--xunit-output", "--specifier", "-s"}
-            boolean_flags = {"--parallel", "--no-parallel"}
-            while index < len(command):
-                value = command[index]
-                if value in value_flags:
-                    index += 2
-                    continue
-                if value in boolean_flags or any(value.startswith(flag + "=") for flag in value_flags):
-                    index += 1
-                    continue
-                discovery.append(value)
-                index += 1
+            discovery = without_run_selectors(command)
             args.output.mkdir(parents=True, exist_ok=True)
             with (args.output / "discovered-tests.txt").open("w") as listing:
                 result = subprocess.run(discovery + ["list"], stdout=listing, stderr=subprocess.PIPE, text=True, check=False)
