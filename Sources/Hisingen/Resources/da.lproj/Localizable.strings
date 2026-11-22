@@ -928,7 +928,7 @@
 "Show vehicle parking GPS coordinates and 1-click Apple Maps integration." = "Vis GPS-parkeringskoordinater med et-klik Apple Kort-integration.";
 "Showing the last saved snapshot. Most live telemetry is unavailable until the next successful refresh." = "Visar senast sparade øjebliksbillede: det meste live-telemetri er utilgængeligt indtil næste vellykkede opdatering.";
 "Shown in footer switcher, menus, and vehicle headers" = "Vises i sidefodsvælger, menuer og køretøjsoverskrifter";
-"Side" = "Side";
+"Side" = "Fra siden";
 "Side Profile" = "Sideprofil";
 "Side marker light" = "Sidemarkeringslys";
 "Side marker lights" = "Sidemarkeringslys";
@@ -1088,12 +1088,12 @@
 "Timer enabled" = "Timer aktiveret";
 "Times use the vehicle's local time zone." = "Tidspunkter bruger køretøjets lokale tidszone.";
 "Tire Status (iTPMS)" = "Dækstatus (iTPMS)";
-"Top" = "Top";
+"Top" = "Fra oven";
 "Total Distance" = "Total distance";
 "Total Odometer" = "Total kilometertal";
 "Total Range" = "Total rækkevidde";
 "Tracking in progress" = "Sporing i gang";
-"Transmission" = "Transmission";
+"Transmission" = "Gearkasse";
 "Trip Computer & Distance" = "Kørecomputer og distance";
 "Trip Computer EV Range" = "Kørecomputer el-rækkevidde";
 "Trip Meters" = "Turtællere";
