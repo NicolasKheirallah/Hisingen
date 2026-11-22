@@ -2745,7 +2745,7 @@
 "Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt, because nobody is present to answer it when they fire." = "Poiché per i comandi remoti richiedi l'autenticazione del proprietario del dispositivo, le accensioni della climatizzazione attivate dal calendario vengono eseguite senza quella richiesta, perché quando scattano non c'è nessuno a rispondere.";
 "Belongs to %@" = "Appartiene a %@";
 "Bidirectional Charging" = "Ricarica bidirezionale";
-"Business" = "Business";
+"Business" = "Lavoro";
 "Cabin %@" = "Abitacolo %@";
 "Cabin %@ → target %@" = "Abitacolo %@ → obiettivo %@";
 "Cabin Thermal Overview" = "Panoramica termica dell'abitacolo";
