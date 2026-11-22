@@ -149,4 +149,10 @@ extension PreferencesStore {
     /// "emissions avoided vs petrol" figure. Defaults to a middle-of-the-road European blend;
     /// a Nordic grid is far cleaner, a coal-heavy one dirtier, hence it is user-adjustable.
     var gridCarbonIntensityGramsPerKwh: Double { get { let value = d.double(forKey: "grid_carbon_intensity_g_per_kwh"); return value > 0 ? value : 120 } set { d.set(min(max(newValue, 0), 1_200), forKey: "grid_carbon_intensity_g_per_kwh") } }
+
+    /// The optional Electricity Maps token behind the live grid-carbon line. The key itself is
+    /// in the Keychain; this asks only whether one is saved. No key means no live line at all.
+    var hasElectricityMapsKey: Bool { keychain.hasStoredElectricityMapsKey }
+    func saveElectricityMapsKey(_ key: String) throws { try keychain.saveElectricityMapsKey(key) }
+    func clearElectricityMapsKey() { try? keychain.deleteElectricityMapsKey() }
 }

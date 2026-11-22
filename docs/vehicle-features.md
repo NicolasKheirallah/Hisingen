@@ -183,6 +183,14 @@ A few more things that follow from the same history:
 
 Pair NexBlue, Easee or Zaptec directly, or connect through Home Assistant. You can also price charging from a fixed tariff, Swedish spot prices or a connected Tibber home. [Home charging and electricity guide](home-charging.md)
 
+When Open-Meteo answers, the **Charging Planner** draws a **solar forecast** line of global
+shortwave radiation for the next day at the car's location, with its peak time. It is radiation,
+not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
+kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+provider named beneath it. Without a token, or whenever the provider fails, the line stays absent
+rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
+the History emissions estimate.
+
 ### Doors, windows & locks
 
 Hisingen can show the state reported for things such as:

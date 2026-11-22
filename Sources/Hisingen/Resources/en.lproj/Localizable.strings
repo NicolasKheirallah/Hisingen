@@ -4110,3 +4110,20 @@
 "Log a public charge from a receipt, or add a missing session." = "Log a public charge from a receipt, or add a missing session.";
 "Stored cost: %@" = "Stored cost: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Entered from a receipt: the energy and price are your figures, not a measurement.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Solar forecast";
+"Solar forecast chart" = "Solar forecast chart";
+"Peak %@ at %@" = "Peak %@ at %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo radiation at the car's location; it is not panel output.";
+"Grid carbon now" = "Grid carbon now";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Live grid carbon";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Shows the carbon intensity now beside the charging plan. Without a key, no live line appears.";
+"Electricity Maps API key" = "Electricity Maps API key";
+"Key saved" = "Key saved";
+"Remove" = "Remove";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported.";
+"Source: %@" = "Source: %@";

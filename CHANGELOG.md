@@ -32,6 +32,16 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Solar forecast and live grid carbon.** When Open-Meteo answers, the Charging Planner draws a
+  solar-radiation line for the next day at the car's location and names the peak time; it is
+  radiation, not panel output, and never becomes a kWh figure. A token saved under Settings →
+  Electricity → Live grid carbon adds a live carbon-intensity line from Electricity Maps with the
+  provider named beneath it. Without a token, or when the provider fails or returns a malformed
+  body, the line is absent rather than replaced by the typed intensity; that setting still drives
+  the History emissions estimate. The token lives in the macOS Keychain.
+
+### Added
+
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging
   current set from the charger card: map the integration's writable `number` entity under
   Settings → Home Charging → Entities → Writable current limit, and the card shows a stepper with

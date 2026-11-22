@@ -4093,3 +4093,20 @@
 "Log a public charge from a receipt, or add a missing session." = "Kirjaa julkinen lataus kuitista tai lisää puuttuva istunto.";
 "Stored cost: %@" = "Tallennettu hinta: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Syötetty kuitista: energia ja hinta ovat omia lukujasi, eivät mittaus.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Aurinkoennuste";
+"Solar forecast chart" = "Aurinkoennustekaavio";
+"Peak %@ at %@" = "Huippu %@ klo %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-säteily auton sijainnissa; ei paneelien tuotto.";
+"Grid carbon now" = "Verkon CO₂ nyt";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Verkon CO₂ reaaliajassa";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Näyttää verkon hiili-intensiteetin nyt lataussuunnitelman vieressä. Ilman avainta reaaliaikariviä ei näytetä.";
+"Electricity Maps API key" = "Electricity Maps -API-avain";
+"Key saved" = "Avain tallennettu";
+"Remove" = "Poista";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Reaaliaikarivi näytetään vain, kun Electricity Maps vastaa. Yllä annettua arvoa käytetään edelleen päästöarvioon.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Luo ilmainen token osoitteessa electricitymaps.com. Se tallennetaan macOS:n avainnippuun eikä sitä koskaan viedä.";
+"Source: %@" = "Lähde: %@";

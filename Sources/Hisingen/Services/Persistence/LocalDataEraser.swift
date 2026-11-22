@@ -236,6 +236,9 @@ final class LocalDataEraser {
         switch vehicles {
         case .all:
             store.eraseAll()
+            // The live-carbon token is account-wide too, so it goes with the other provider
+            // secrets rather than with one vehicle's history.
+            preferences.clearElectricityMapsKey()
         case .vehicle:
             guard let pairing = store.pairing, vehicles.covers(pairing.vin) else { return }
             store.clearPairing()

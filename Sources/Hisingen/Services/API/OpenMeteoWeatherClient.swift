@@ -110,7 +110,7 @@ struct OpenMeteoWeatherClient: Sendable {
     }
 
     /// Reads `yyyy-MM-ddTHH:mm` as if it were UTC. The caller applies the real offset.
-    private static func wallClockDate(_ text: String, calendar: Calendar) -> Date? {
+    static func wallClockDate(_ text: String, calendar: Calendar) -> Date? {
         let parts = text.split(whereSeparator: { $0 == "T" || $0 == "-" || $0 == ":" }).compactMap { Int($0) }
         guard parts.count == 5 else { return nil }
         return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],

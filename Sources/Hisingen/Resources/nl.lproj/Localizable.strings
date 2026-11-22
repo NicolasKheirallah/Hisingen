@@ -4101,3 +4101,20 @@
 "Log a public charge from a receipt, or add a missing session." = "Leg een openbare laadsessie vast vanaf een bon, of voeg een ontbrekende sessie toe.";
 "Stored cost: %@" = "Opgeslagen kosten: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Ingevoerd vanaf een bon: de energie en prijs zijn jouw cijfers, geen meting.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Zonnevoorspelling";
+"Solar forecast chart" = "Grafiek van zonnevoorspelling";
+"Peak %@ at %@" = "Piek %@ om %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-straling op de locatie van de auto; dit is niet de opbrengst van de panelen.";
+"Grid carbon now" = "Net-CO₂ nu";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Live net-CO₂";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Toont de koolstofintensiteit van het net nu naast het laadplan. Zonder sleutel verschijnt er geen live-regel.";
+"Electricity Maps API key" = "Electricity Maps-API-sleutel";
+"Key saved" = "Sleutel opgeslagen";
+"Remove" = "Verwijderen";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "De live-regel verschijnt alleen als Electricity Maps antwoordt. De hierboven ingevoerde intensiteit wordt nog steeds gebruikt voor de emissieschatting.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Maak een gratis token aan op electricitymaps.com. Het wordt opgeslagen in de macOS-sleutelhanger en nooit geëxporteerd.";
+"Source: %@" = "Bron: %@";

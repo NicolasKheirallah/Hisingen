@@ -4093,3 +4093,20 @@
 "Log a public charge from a receipt, or add a missing session." = "Registra una ricarica pubblica da uno scontrino o aggiungi una sessione mancante.";
 "Stored cost: %@" = "Costo salvato: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Inserito da uno scontrino: energia e prezzo sono i tuoi dati, non una misura.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Previsione solare";
+"Solar forecast chart" = "Grafico della previsione solare";
+"Peak %@ at %@" = "Picco %@ alle %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Radiazione Open-Meteo nella posizione dell'auto; non è la produzione dei pannelli.";
+"Grid carbon now" = "CO₂ della rete ora";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "CO₂ della rete in tempo reale";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Mostra l'intensità di carbonio della rete ora accanto al piano di ricarica. Senza chiave non appare alcuna riga in tempo reale.";
+"Electricity Maps API key" = "Chiave API di Electricity Maps";
+"Key saved" = "Chiave salvata";
+"Remove" = "Rimuovi";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "La riga in tempo reale appare solo quando Electricity Maps risponde. L'intensità inserita sopra resta usata per la stima delle emissioni.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Crea un token gratuito su electricitymaps.com. Viene salvato nel portachiavi di macOS e non viene mai esportato.";
+"Source: %@" = "Fonte: %@";

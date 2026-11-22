@@ -4093,3 +4093,20 @@
 "Log a public charge from a receipt, or add a missing session." = "Registrer ei offentleg lading frå ein kvittering, eller legg til ei manglande økt.";
 "Stored cost: %@" = "Lagra pris: %@";
 "Entered from a receipt: the energy and price are your figures, not a measurement." = "Skriven inn frå ein kvittering: energien og prisen er tala dine, ikkje ei måling.";
+
+// Added 2026-11-22: solar forecast and live grid carbon.
+"Solar forecast" = "Solprognose";
+"Solar forecast chart" = "Solprognosediagram";
+"Peak %@ at %@" = "Høgaste %@ kl. %@";
+"%@ W/m²" = "%@ W/m²";
+"Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-stråling ved bilen sin posisjon; det er ikkje effekten frå panela.";
+"Grid carbon now" = "Nettet sitt CO₂ no";
+"%@ g CO₂/kWh" = "%@ g CO₂/kWh";
+"Live grid carbon" = "Sanntids-CO₂ frå nettet";
+"Shows the carbon intensity now beside the charging plan. Without a key, no live line appears." = "Visar CO₂-intensiteten til nettet no ved sida av ladeplanen. Utan ein nøkkel blir ingen sanntidslinje vist.";
+"Electricity Maps API key" = "Electricity Maps API-nøkkel";
+"Key saved" = "Nøkkel lagra";
+"Remove" = "Fjern";
+"The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Sanntidslinja blir berre vist når Electricity Maps svarar. Verdien du skreiv inn over, blir framleis brukt til utsleppsberekninga.";
+"Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Lag eit gratis token på electricitymaps.com. Det blir lagra i macOS Keychain og aldri eksportert.";
+"Source: %@" = "Kjelde: %@";
