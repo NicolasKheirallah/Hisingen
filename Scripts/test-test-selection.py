@@ -45,6 +45,25 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("1 tests", result.stdout)
 
+    def test_build_step_matches_the_run_and_drops_only_test_selectors(self):
+        run = ["swift", "test", "--disable-sandbox", "--disable-xctest", "--enable-swift-testing", "--force-resolved-versions",
+               "--enable-code-coverage", "-Xswiftc", "-warnings-as-errors", "--skip", "Live", "--no-parallel", "--filter", "Suite",
+               "--num-workers=2", "--xunit-output", "out.xml"]
+        self.assertEqual(selection.build_command(run), ["swift", "build", "--build-tests", "--disable-sandbox", "--force-resolved-versions",
+                                                        "--enable-code-coverage", "-Xswiftc", "-warnings-as-errors"])
+
+    def test_build_step_keeps_the_framework_search_path_pair(self):
+        run = ["swift", "test", "-Xswiftc", "-F", "-Xswiftc", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks", "--skip", "Live"]
+        self.assertEqual(selection.build_command(run)[3:], ["-Xswiftc", "-F", "-Xswiftc", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"])
+
+    def test_build_step_refuses_anything_but_swift_test(self):
+        with self.assertRaises(ValueError):
+            selection.build_command(["swift", "build"])
+
+    def test_discovery_arguments_still_strip_selectors(self):
+        self.assertEqual(selection.without_run_selectors(["swift", "test", "--skip-build", "--filter", "A", "--no-parallel", "--skip=Live"]),
+                         ["swift", "test", "--skip-build"])
+
     def test_all_skipped_result_is_not_a_successful_execution(self):
         with tempfile.TemporaryDirectory() as folder:
             path = pathlib.Path(folder) / "results.xml"

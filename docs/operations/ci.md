@@ -94,10 +94,13 @@ creating AppDelegate, opening persistence, or starting account/network activity.
 
 Build/test jobs upload results and diagnostic files even after failure, with
 bounded retention. Their summaries record commit, runner and selected toolchain.
-Build failures remain failures when output is piped into a log. Test discovery
-compiles the app and test targets once, with coverage and warnings-as-errors;
-execution reuses that build. Discovery compiler diagnostics are retained even
-when the build fails before tests start.
+Build failures remain failures when output is piped into a log. `Scripts/test.sh` compiles
+the app and test targets once with `swift build --build-tests`, using the run's coverage and
+warnings-as-errors flags. Discovery and execution then use `--skip-build`. Discovery must not
+build: `swift test list` ignores `--enable-code-coverage`, so letting it compile left
+uninstrumented products and forced a second full compile in the run. The compiler output is
+kept in `build.log` even when the build fails before tests start, and the log marks the build,
+discover and run stages with elapsed seconds.
 
 `security.yml` runs Swift CodeQL on main pushes, on its weekly schedule, by manual dispatch,
 and on pull requests that touch `Sources/`, `Resources/`, the package files or the CodeQL
