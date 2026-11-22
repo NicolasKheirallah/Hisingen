@@ -293,8 +293,9 @@ All notable changes to Hisingen are documented in this file. The project follows
   clears the brand's Keychain slots and then writes the other account's saved credentials. If
   Hisingen quit or a write failed in between, the account stayed active with empty slots, and
   switching to it again did nothing. Hisingen now restores the saved credentials at launch and when
-  the active account is selected again. An account the reader signed out of, and one with no saved
-  credentials, is left as it is. An account whose saved credentials cannot be read starts signed
+  the active account is selected again, but only when the switch was cut short. An account that
+  lost its session some other way, one the reader signed out of, and one with no saved
+  credentials are left as they are. An account whose saved credentials cannot be read starts signed
   out instead of keeping the previous account's session.
 
 - **A widget button or Shortcut no longer hangs when the app never finishes launching.** An intent

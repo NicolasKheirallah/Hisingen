@@ -80,6 +80,9 @@ struct AccountStoreTests {
 
         try scoped.keychain.deleteSessionToken()
         try scoped.keychain.deleteEmail()
+        // The marker a switch writes before it moves secrets, still there because the quit came
+        // before the switch finished.
+        scoped.defaults.set(first.id, forKey: AccountStore.switchMarkerKey)
         preferences.invalidateSessionCache()
         #expect(!preferences.hasResumableSession(for: .polestar))
         return (scoped, first)
@@ -103,6 +106,35 @@ struct AccountStoreTests {
         try store.switchTo(accountID: first.id)
 
         #expect(try scoped.keychain.readSessionToken() == "token-first")
+    }
+
+    @Test
+    func anAccountThatLostItsSessionWithoutAnInterruptedSwitchIsNotRestored() throws {
+        let (scoped, _) = try interruptedSwitch(label: "accounts-repair-nomarker")
+        scoped.defaults.removeObject(forKey: AccountStore.switchMarkerKey)
+
+        _ = AccountStore(preferences: scoped.store, keychain: scoped.keychain, defaults: scoped.defaults)
+
+        #expect(try scoped.keychain.readSessionToken() == nil)
+    }
+
+    @Test
+    func aFinishedSwitchLeavesNoMarkerBehind() throws {
+        let scoped = ScopedPreferences(label: "accounts-marker-cleared")
+        let preferences = scoped.store
+        preferences.email = "first@example.invalid"
+        try scoped.keychain.saveSessionToken("token-first")
+        let store = preferences.accountStore
+        let first = try #require(store.activeAccount(for: .polestar))
+        let second = try store.addAccount(brand: .polestar, label: "Second")
+        preferences.email = "second@example.invalid"
+        try scoped.keychain.saveSessionToken("token-second")
+        store.commitActiveAccount()
+
+        try store.switchTo(accountID: first.id)
+        #expect(scoped.defaults.string(forKey: AccountStore.switchMarkerKey) == nil)
+        try store.switchTo(accountID: second.id)
+        #expect(scoped.defaults.string(forKey: AccountStore.switchMarkerKey) == nil)
     }
 
     @Test

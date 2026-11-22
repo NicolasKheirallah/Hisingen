@@ -55,6 +55,10 @@ final class AccountStore {
     private(set) var accounts: [StoredAccount] = []
 
     static let accountsKey = "accounts_v1"
+    /// Written before a switch starts moving secrets and removed once the target's credentials
+    /// are in place. It holds the id of the account being switched to, so a launch can tell a
+    /// switch that was cut short from an account that is simply signed out.
+    static let switchMarkerKey = "account_switch_in_progress_v1"
 
     init(preferences: PreferencesStore, keychain: KeychainStore = .app,
          defaults: UserDefaults = .standard) {
@@ -145,10 +149,12 @@ final class AccountStore {
         }
         // `restoreCredentials` clears the brand's slots itself, right before it writes the
         // target's bundle. Clearing earlier would leave a longer stretch with empty slots.
+        defaults.set(target.id, forKey: Self.switchMarkerKey)
         defaults.set(target.id, forKey: activeKey(for: target.brand))
         preferences.activeBrand = target.brand
         apply(target)
         try restoreCredentials(for: target)
+        defaults.removeObject(forKey: Self.switchMarkerKey)
         preferences.invalidateSessionCache()
         save()
     }
@@ -188,6 +194,9 @@ final class AccountStore {
     func removeAccount(id: String) throws {
         guard let target = account(id: id) else { return }
         try? keychain.deleteAccountCredentialBundle(accountID: id)
+        if defaults.string(forKey: Self.switchMarkerKey) == id {
+            defaults.removeObject(forKey: Self.switchMarkerKey)
+        }
         let wasActive = activeAccountID(for: target.brand) == id
         accounts.removeAll { $0.id == id }
         defaults.removeObject(forKey: activeKey(for: target.brand))
@@ -227,6 +236,7 @@ final class AccountStore {
             defaults.removeObject(forKey: activeKey(for: brand))
         }
         defaults.removeObject(forKey: Self.accountsKey)
+        defaults.removeObject(forKey: Self.switchMarkerKey)
         for brand in VehicleBrand.allCases { try? clearCredentials(for: brand) }
         preferences.invalidateSessionCache()
     }
@@ -282,13 +292,16 @@ final class AccountStore {
     /// still holds the credentials. Called at launch and when switching to the account that is
     /// already active.
     ///
-    /// Nothing is restored for an account the reader signed out of, or when no bundle exists. An
-    /// account that has a resumable session already is left alone, so the common launch reads no
-    /// secret at all.
+    /// Only an account whose switch the marker shows as unfinished is restored. An account that
+    /// lost its session some other way (a refused refresh, a sign-out) has a bundle that holds the
+    /// same dead credentials, and putting them back would only repeat the failure. An account that
+    /// has a resumable session already is left alone, so the common launch reads no secret at all.
     private func restoreIfSlotsAreEmpty(for account: StoredAccount) throws {
-        guard !preferences.hasResumableSession(for: account.brand),
+        guard defaults.string(forKey: Self.switchMarkerKey) == account.id,
+              !preferences.hasResumableSession(for: account.brand),
               !preferences.hasExplicitSignOut(for: account.brand) else { return }
         try restoreCredentials(for: account)
+        defaults.removeObject(forKey: Self.switchMarkerKey)
         preferences.invalidateSessionCache()
     }
 
