@@ -106,6 +106,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             switch action {
             case .lockVehicle:
                 self.performNotificationCommand(.lock, targetVIN: vin)
+            case .unlockVehicle:
+                self.performNotificationCommand(.unlock, targetVIN: vin)
+            case .startClimate:
+                // The banner carries no temperature, so the saved comfort setpoint applies;
+                // the same default the deep link uses.
+                self.performNotificationCommand(
+                    .startClimate(temperatureCelsius: Float(self.preferences.remoteClimateTemperature),
+                                  frontLeftSeat: .off, frontRightSeat: .off,
+                                  rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off),
+                    targetVIN: vin
+                )
+            case .viewDetails:
+                self.openVehicleFromNotification(vin: vin)
             case .resumeChargeSchedule:
                 if targetBrand == .polestar {
                     self.performNotificationCommand(.stopChargingOverride, targetVIN: vin)

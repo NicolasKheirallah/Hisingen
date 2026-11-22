@@ -9,6 +9,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- Notification banners carry **Unlock**, **Start Climate** and **View Details** next to the
+  existing Lock and Mute. Unlock and climate require device authentication like every other
+  command button, and they take the same capability gates as the app. Climate uses the saved
+  comfort setpoint, because a banner has no room to ask for one. View Details opens the car and
+  never sends anything to it.
+### Added
+
 - `hisingen://` now reaches the **timers and saved charge locations**, the last commands that had
   no link: `charge-timer/set`, `climate-timer/set`, `climate-timer/delete`, `charge-location/add`,
   `charge-location/alias`, `charge-location/amps`, `charge-location/soc`,
