@@ -241,6 +241,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- A **Volvo sign-in callback** is checked against the registered scheme, host and path before its
+  code is exchanged. The browser presenter resumed on any HTTPS URL and matched the callback path
+  by prefix, so a crafted redirect could take the place of the genuine one; the exchange now
+  applies the same rule itself instead of trusting that gate. A refused callback is named in the
+  log by the component that did not match, never the query that carries the code.
+
 - Volvo's **capability probe and command dispatch** now read one table instead of two hand-written
   lists of endpoint names. A typo in either used to promise a control that failed at dispatch with
   nothing comparing them; the catalog is the single answer for which endpoint a command posts to and

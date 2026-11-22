@@ -15,7 +15,9 @@ actor VolvoAPI {
     private let apiBaseURL = URL(string: "https://api.volvocars.com")!
 
 
-    let redirectURI = URL(string: "https://nicolaskheirallah.github.io/Hisingen/oauth-callback.html")!
+    /// What the authorization request registers and the token request repeats. One definition,
+    /// shared with the callback gate that refuses every other redirect (`VolvoCallback`).
+    let redirectURI = VolvoCallback.hostedRedirectURL
 
 
     /// Pure telemetry reads plus what vehicle discovery needs. Every published Volvo
