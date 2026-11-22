@@ -3589,6 +3589,18 @@
 "This token has no Tibber home that Hisingen can read." = "This token has no Tibber home that Hisingen can read.";
 "Tibber access token" = "Tibber access token";
 "Use this home" = "Use this home";
+
+/* Electricity supplier: house energy */
+"By Day" = "按天";
+"By Month" = "按月";
+"House Energy" = "家庭能源";
+"Hours" = "小时";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "在今天和明天已公布的价格中，Tibber 各价格档位的小时数。";
+"Level" = "档位";
+"Price Levels" = "价格档位";
+"Production" = "发电";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Tibber 对这几天电量的收费，含税。不含输电费。";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "每个时期的家庭能源。电表未上报的时期不计入，仍在进行中的月份比相邻月份短。";
 "Tibber prices include taxes, not grid fees" = "Tibber prices include taxes, not grid fees";
 "Tibber prices include taxes and your network fee" = "Tibber prices include taxes and your network fee";
 "%@ · fetched %@" = "%@ · fetched %@";

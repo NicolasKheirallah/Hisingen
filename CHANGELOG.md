@@ -12,6 +12,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   permanently hidden by the bundle, so a reader could turn on a badge that never appeared. The
   badge row now names what it needs, the tile stays blank while the Dock icon is off, and the
   count returns the moment the icon is back.
+- The Electricity Supplier card now shows the house's energy next to the connection: the last 30
+  days of whole-home consumption and production by day, the twelve months up to now by month, and
+  the price levels of the prices published for today and tomorrow as hours at each of Tibber's five
+  levels. Days and months the meter has not reported stay out instead of reading as zero, a home
+  without a production metering point shows no production, and a read that fails keeps the last
+  good answer and names the reason.
 
 ### Changed
 
@@ -20,7 +26,7 @@ All notable changes to Hisingen are documented in this file. The project follows
   and the fallback Pages path could have served it after a rollback or a new checkout. The
   live feed itself already deploys from the release artifact and needs no merge.
 
-2] - 2026-11-21
+## [3.0.2] - 2026-11-21
 
 ### Added
 

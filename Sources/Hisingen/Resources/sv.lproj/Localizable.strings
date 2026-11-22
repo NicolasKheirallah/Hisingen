@@ -3623,6 +3623,18 @@
 "Tibber access token" = "Tibber-åtkomsttoken";
 "Use this home" = "Använd det här hemmet";
 
+/* Electricity supplier: house energy */
+"By Day" = "Per dag";
+"By Month" = "Per månad";
+"House Energy" = "Husets energi";
+"Hours" = "Timmar";
+"Hours at each of Tibber's price levels in the prices published for today and tomorrow." = "Timmar på var och en av Tibbers prisnivåer i de priser som publicerats för idag och imorgon.";
+"Level" = "Nivå";
+"Price Levels" = "Prisnivåer";
+"Production" = "Produktion";
+"What Tibber billed for these days of energy, taxes included. The grid fee is not in it." = "Vad Tibber fakturerat för dessa dagars energi, skatter inkluderade. Nätavgiften ingår inte.";
+"Whole-home energy per period. A period the meter has not reported is left out, and the month still running is shorter than its neighbours." = "Husets energi per period. En period mätaren inte rapporterat lämnas ut, och månaden som fortfarande pågår är kortare än sina grannar.";
+
 "At the charger" = "Vid laddboxen";
 "Remotely" = "På distans";
 "By an administrator" = "Av en administratör";
