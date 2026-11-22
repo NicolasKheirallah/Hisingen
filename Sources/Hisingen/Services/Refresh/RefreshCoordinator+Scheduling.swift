@@ -48,13 +48,24 @@ extension RefreshCoordinator {
         if confirmations.isConfirmationPending {
             return confirmations.pollInterval
         }
-        if streamEngine?.isConnected == true { return liveStreamPolicy.integrityPollInterval }
+        if streamEngine?.isConnected == true { return connectedStreamInterval(for: state) }
         return portalPacedInterval(RefreshPolicy.interval(
             isCharging: state.isCharging,
             isClimateActive: state.isClimateActive,
             isVehicleAvailable: state.identity.availability.isAvailable,
             availabilityAge: availabilityAge(of: state)
         ))
+    }
+
+    /// The refresh cadence while the live stream is open. The stream carries battery and charging
+    /// readings only, so the 30-minute integrity poll is enough for those. A car charging while
+    /// its climate runs keeps the stream open, and that poll alone left the climate card on its
+    /// first "Starting" frame for the rest of the session. A running climate session keeps the
+    /// regular climate cadence instead.
+    func connectedStreamInterval(for state: VehicleState?) -> TimeInterval {
+        let integrity = liveStreamPolicy.integrityPollInterval
+        guard state?.isClimateActive == true else { return integrity }
+        return min(integrity, portalPacedInterval(RefreshPolicy.regularInterval(isCharging: false, isClimateActive: true)))
     }
 
     /// How long ago the vehicle last reported its availability. `nil` when the frame carried no

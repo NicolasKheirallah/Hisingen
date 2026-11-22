@@ -29,7 +29,7 @@ extension RefreshCoordinator {
                     if confirmations.isConfirmationPending {
                         scheduleCommandConfirmationPoll()
                     } else {
-                        schedule(after: liveStreamPolicy.integrityPollInterval, retrySession: false)
+                        schedule(after: connectedStreamInterval(for: latest), retrySession: false)
                     }
                     publishDiagnostics()
                 },
