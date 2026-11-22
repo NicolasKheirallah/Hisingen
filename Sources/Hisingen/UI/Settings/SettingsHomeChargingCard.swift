@@ -133,9 +133,11 @@ struct SettingsHomeChargingCard: View {
         if !discovery.usedDeviceRegistry {
             Text(L10n.text("This token could not read the device list, so chargers were found by their entity names. An administrator token also finds the serial number."))
                 .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
+            Text(L10n.text("Easee and Zaptec chargers are found through the device list, so they need an administrator token."))
+                .hisType(.micro).foregroundStyle(HisingenTheme.inkMuted).fixedSize(horizontal: false, vertical: true)
         }
 
-        field(L10n.text("Charger"), detail: discovery.chargers.isEmpty ? L10n.text("No NexBlue charger was found. Map the entities by hand below.") : nil) {
+        field(L10n.text("Charger"), detail: discovery.chargers.isEmpty ? L10n.text("No charger was found. Map the entities by hand below.") : nil) {
             Picker("", selection: $selectedCharger) {
                 Text(L10n.text("Map by hand")).tag("")
                 ForEach(discovery.chargers) { Text($0.name).tag($0.id) }

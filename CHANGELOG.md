@@ -42,6 +42,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Added
 
+- **Home Assistant charger discovery beyond NexBlue.** With an administrator token, Hisingen now
+  reads Home Assistant's device registry for the NexBlue, Easee and Zaptec integrations, groups
+  each charger's entities by device, and maps its status, power, session and lifetime energy,
+  current limit, cable lock and switch. A charging switch is added only when every option of the
+  device's status sensor is a state Hisingen can confirm a command from; a charger with
+  unrecognised states is still listed for its readings, with the switch left for manual mapping.
+  Without the device list, NexBlue's entity names are still matched as before. The setup copy now
+  says which chargers need the administrator token. No new vendor endpoint or write is added.
+
+### Added
+
 - **Home charger current limit.** A charger mapped in Home Assistant can now have its charging
   current set from the charger card: map the integration's writable `number` entity under
   Settings → Home Charging → Entities → Writable current limit, and the card shows a stepper with

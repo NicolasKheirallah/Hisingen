@@ -3394,7 +3394,6 @@
 "No charging switch is mapped for this charger." = "Der er ikke tilknyttet nogen opladningskontakt til denne oplader.";
 "No charging window found before the deadline." = "No charging window found before the deadline.";
 "No new reading arrived from the charger." = "Der kom ikke en ny aflæsning fra opladeren.";
-"No NexBlue charger was found. Map the entities by hand below." = "Der blev ikke fundet nogen NexBlue-oplader. Kortlæg entiteterne manuelt nedenfor.";
 "No plan" = "No plan";
 "Not checked yet" = "Not checked yet";
 "Not imported yet" = "Endnu ikke importeret";
@@ -4117,3 +4116,5 @@
 "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Live-linjen vises kun, når Electricity Maps svarer. Den indtastede værdi ovenfor bruges stadig til emissionsberegningen.";
 "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Opret en gratis token på electricitymaps.com. Den gemmes i macOS-nøgleringen og eksporteres aldrig.";
 "Source: %@" = "Kilde: %@";
+"No charger was found. Map the entities by hand below." = "Der blev ikke fundet nogen oplader. Kortlæg entiteterne manuelt nedenfor.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee- og Zaptec-opladere findes via enhedslisten og kræver derfor et administratortoken.";

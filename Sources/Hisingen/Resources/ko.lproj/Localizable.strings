@@ -3387,7 +3387,6 @@
 "No charging switch is mapped for this charger." = "이 충전기에 매핑된 충전 스위치가 없습니다.";
 "No charging window found before the deadline." = "No charging window found before the deadline.";
 "No new reading arrived from the charger." = "충전기에서 새로운 읽음이 도착하지 않았습니다.";
-"No NexBlue charger was found. Map the entities by hand below." = "NexBlue 충전기를 찾을 수 없습니다. 아래에서 엔터티를 수동으로 연결하세요.";
 "No plan" = "No plan";
 "Not checked yet" = "Not checked yet";
 "Not imported yet" = "아직 가져오지 않음";
@@ -4110,3 +4109,5 @@
 "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "실시간 줄은 Electricity Maps가 응답할 때만 표시됩니다. 위에 입력한 값은 배출량 추정에 계속 사용됩니다.";
 "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "electricitymaps.com에서 무료 토큰을 만드세요. macOS 키체인에 저장되며 내보내지지 않습니다.";
 "Source: %@" = "출처: %@";
+"No charger was found. Map the entities by hand below." = "충전기를 찾을 수 없습니다. 아래에서 엔터티를 수동으로 연결하세요.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee 및 Zaptec 충전기는 기기 목록에서 찾으므로 관리자 토큰이 필요합니다.";

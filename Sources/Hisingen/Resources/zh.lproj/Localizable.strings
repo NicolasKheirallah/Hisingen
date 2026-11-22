@@ -3387,7 +3387,6 @@
 "No charging switch is mapped for this charger." = "此充电器未映射充电开关。";
 "No charging window found before the deadline." = "No charging window found before the deadline.";
 "No new reading arrived from the charger." = "充电器没有新的读数传来。";
-"No NexBlue charger was found. Map the entities by hand below." = "未找到 NexBlue 充电器。请在下方手动映射实体。";
 "No plan" = "No plan";
 "Not checked yet" = "Not checked yet";
 "Not imported yet" = "尚未导入";
@@ -4110,3 +4109,5 @@
 "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "只有 Electricity Maps 有响应时才会显示实时数据。上方输入的强度值仍用于排放估算。";
 "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "请在 electricitymaps.com 创建免费令牌。它会保存在 macOS 钥匙串中，且绝不会被导出。";
 "Source: %@" = "来源：%@";
+"No charger was found. Map the entities by hand below." = "未找到充电器。请在下方手动映射实体。";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee 和 Zaptec 充电器通过设备列表找到，因此需要管理员令牌。";

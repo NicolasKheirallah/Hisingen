@@ -3387,7 +3387,6 @@
 "No charging switch is mapped for this charger." = "Tälle laturille ei ole määritetty latauskytkintä.";
 "No charging window found before the deadline." = "No charging window found before the deadline.";
 "No new reading arrived from the charger." = "Laturista ei tullut uutta lukemaa.";
-"No NexBlue charger was found. Map the entities by hand below." = "NexBlue-laturia ei löytynyt. Yhdistä entiteetit alla käsin.";
 "No plan" = "No plan";
 "Not checked yet" = "Not checked yet";
 "Not imported yet" = "Ei vielä tuotu";
@@ -4110,3 +4109,5 @@
 "The live line appears only when Electricity Maps answers. The typed intensity above is still used for the emissions estimate." = "Reaaliaikarivi näytetään vain, kun Electricity Maps vastaa. Yllä annettua arvoa käytetään edelleen päästöarvioon.";
 "Create a free token at electricitymaps.com. It is stored in the macOS Keychain and never exported." = "Luo ilmainen token osoitteessa electricitymaps.com. Se tallennetaan macOS:n avainnippuun eikä sitä koskaan viedä.";
 "Source: %@" = "Lähde: %@";
+"No charger was found. Map the entities by hand below." = "Laturia ei löytynyt. Yhdistä entiteetit käsin alla.";
+"Easee and Zaptec chargers are found through the device list, so they need an administrator token." = "Easee- ja Zaptec-laturit löytyvät laiteluettelosta, joten ne vaativat pääkäyttäjän tokenin.";
