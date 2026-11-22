@@ -55,6 +55,13 @@ actor VolvoAPI {
         case core       // coreReadScopes only – telemetry, no remote controls at all
     }
 
+    /// The bounded sign-in attempt sequence: full, full without `location:read`, standard,
+    /// core. Each step is one browser round trip, and the list is fixed so a caller can
+    /// neither loop forever nor retry a tier that cannot narrow further. Tests pin both.
+    static let signInCascade: [(tier: ScopeTier, dropsLocation: Bool)] = [
+        (.full, false), (.full, true), (.standard, false), (.core, false)
+    ]
+
     /// The restricted scope list for one sign-in request. `dropsLocation` removes
     /// `location:read` for the cascade's middle step: it is the scope developer applications
     /// most often lack approval for, and Volvo rejects the whole authorization over that one
