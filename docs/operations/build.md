@@ -36,6 +36,22 @@ package settings. Debug CI additionally treats compiler warnings as errors.
 Package.swift and Package.resolved define the dependency versions; avoid resolving
 new versions as an incidental part of a validation run.
 
+## Sharing a machine
+
+Several worktrees and agent sessions can build on one Mac. They take turns with the build lane
+so compiles do not compete for CPU, disk and the SwiftPM cache:
+
+```sh
+sh Scripts/build-lane.sh run --wait 1800 -- sh Scripts/test.sh --skip Live --no-parallel
+sh Scripts/build-lane.sh status
+```
+
+The lane is a directory in the repository's shared Git directory, so every linked worktree sees
+the same one. It records the wrapper's and the command's process IDs. A claim whose processes
+have exited is reclaimed by the next caller, and the lane is released when the command ends or
+is interrupted. A busy lane makes `run` exit 75 once `--wait` runs out. A claim made by hand,
+without a process ID, is reported but never reclaimed.
+
 ## Configuration and signing
 
 Local secret injection reads environment variables or local environment files.

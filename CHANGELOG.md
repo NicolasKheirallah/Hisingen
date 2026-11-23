@@ -3,6 +3,15 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The shared build lane clears itself.** Parallel sessions took turns by creating a directory
+  by hand, and a session that crashed left it behind for hours. `Scripts/build-lane.sh run`
+  now claims the lane for one command, records the processes, releases it when the command
+  ends and reclaims a claim whose processes are gone. No change to the app.
+
 ## [3.0.3] - 2026-11-23
 
 ### Added
