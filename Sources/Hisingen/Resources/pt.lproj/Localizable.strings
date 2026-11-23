@@ -1311,6 +1311,11 @@
 "Added" = "Adicionado";
 "Address" = "Endereço";
 "Air Quality" = "Qualidade do ar";
+"Fair" = "Razoável";
+"Very poor" = "Muito má";
+"Extremely poor" = "Extremamente má";
+"Air Quality (EAQI)" = "Qualidade do ar (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Qualidade do ar das previsões europeias do CAMS, através do Open-Meteo.";
 "Air quality index history chart" = "Gráfico do histórico do índice de qualidade do ar";
 "Air quality index trend chart" = "Gráfico de tendência do índice de qualidade do ar";
 "Air Quality Trend" = "Tendência da qualidade do ar";

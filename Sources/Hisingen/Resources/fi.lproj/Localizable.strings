@@ -1311,6 +1311,11 @@
 "Added" = "Lisätty";
 "Address" = "Osoite";
 "Air Quality" = "Ilman laatu";
+"Fair" = "Kohtalainen";
+"Very poor" = "Erittäin huono";
+"Extremely poor" = "Äärimmäisen huono";
+"Air Quality (EAQI)" = "Ilmanlaatu (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Ilmanlaatu CAMSin eurooppalaisista ennusteista Open-Meteon kautta.";
 "Air quality index history chart" = "Ilmanlaatuindeksin historiakaavio";
 "Air quality index trend chart" = "Ilmanlaatuindeksin trendikaavio";
 "Air Quality Trend" = "Ilman laadun trendi";

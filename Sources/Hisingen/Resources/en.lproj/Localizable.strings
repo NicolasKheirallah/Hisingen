@@ -1493,6 +1493,11 @@
 "Added" = "Added";
 "Address" = "Address";
 "Air Quality" = "Air Quality";
+"Fair" = "Fair";
+"Very poor" = "Very poor";
+"Extremely poor" = "Extremely poor";
+"Air Quality (EAQI)" = "Air Quality (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Air quality from CAMS European forecasts, via Open-Meteo.";
 "Air Quality Trend" = "Air Quality Trend";
 "Air quality index history chart" = "Air quality index history chart";
 "Air quality index trend chart" = "Air quality index trend chart";

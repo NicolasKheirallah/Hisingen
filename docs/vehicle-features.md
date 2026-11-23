@@ -329,6 +329,12 @@ notification says rain is expected within the next 45 minutes, once per spell, w
 shows at least 0.1 mm in a quarter hour. Rain already falling is left to the existing alert, and a
 forecast that has run out by the time it is read raises nothing.
 
+The readout also shows the outdoor air quality as a European Air Quality Index figure and its
+band, asked of Open-Meteo's air-quality service for the same rounded position and kept in memory
+for 30 minutes. It is the CAMS model's value for the car's grid cell, not a measurement at the car,
+and the readout names CAMS and Open-Meteo under it. It stays separate from the cabin sensors and
+from the car's own outdoor particulate reading.
+
 Live check: the request shape was verified against Open-Meteo without a key, but the readout's
 calendar-based advice line has not been exercised against a real calendar and a live refresh.
 

@@ -1319,6 +1319,11 @@
 "Added" = "Toegevoegd";
 "Address" = "Adres";
 "Air Quality" = "Luchtkwaliteit";
+"Fair" = "Redelijk";
+"Very poor" = "Zeer slecht";
+"Extremely poor" = "Extreem slecht";
+"Air Quality (EAQI)" = "Luchtkwaliteit (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Luchtkwaliteit uit de Europese CAMS-voorspellingen, via Open-Meteo.";
 "Air quality index history chart" = "Grafiek luchtkwaliteitsindex-geschiedenis";
 "Air quality index trend chart" = "Trendgrafiek luchtkwaliteitsindex";
 "Air Quality Trend" = "Trend luchtkwaliteit";
