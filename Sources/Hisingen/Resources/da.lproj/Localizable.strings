@@ -1727,6 +1727,8 @@
 "•••••••• (Saved in Keychain)" = "•••••••• (gemt i nøglering)";
 "≈ %d days" = "≈ %d dage";
 "Tire Pressure" = "Dæktryk";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Dæk viser lavere tryk i kulde: ved %@ ligger de cirka %@ under deres værdi ved %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Dæk viser højere tryk i varme: ved %@ ligger de cirka %@ over deres værdi ved %@.";
 "Everything looks good" = "Alt ser godt ud";
 
 /* Text size & density options */

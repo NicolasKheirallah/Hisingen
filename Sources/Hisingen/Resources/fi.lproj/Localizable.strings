@@ -1719,6 +1719,8 @@
 "•••••••• (Saved in Keychain)" = "•••••••• (tallennettu avainnipuuhun)";
 "≈ %d days" = "≈ %d pv";
 "Tire Pressure" = "Rengaspaine";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Renkaiden paine näkyy pakkasella pienempänä: lämpötilassa %@ se on noin %@ pienempi kuin lämpötilassa %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Renkaiden paine näkyy helteellä suurempana: lämpötilassa %@ se on noin %@ suurempi kuin lämpötilassa %@.";
 "Everything looks good" = "Kaikki näyttää hyvältä";
 
 /* Text size & density options */

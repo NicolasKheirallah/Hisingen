@@ -1147,6 +1147,8 @@
 "Timer enabled" = "Timer enabled";
 "Times use the vehicle's local time zone." = "Times use the vehicle's local time zone.";
 "Tire Pressure" = "Tire Pressure";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Tyres read lower in the cold: at %@ they sit about %@ below their value at %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Tyres read higher in the heat: at %@ they sit about %@ above their value at %@.";
 "Tire Status (iTPMS)" = "Tire Status (iTPMS)";
 "Top" = "Top";
 "Total Distance" = "Total Distance";

@@ -1719,6 +1719,8 @@
 "•••••••• (Saved in Keychain)" = "•••••••• (salvato nel Keychain)";
 "≈ %d days" = "≈ %d giorni";
 "Tire Pressure" = "Pressione degli pneumatici";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Con il freddo gli pneumatici indicano meno pressione: a %@ si trovano circa %@ sotto il loro valore a %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Con il caldo gli pneumatici indicano più pressione: a %@ si trovano circa %@ sopra il loro valore a %@.";
 "Everything looks good" = "Tutto ok";
 
 /* Text size & density options */
