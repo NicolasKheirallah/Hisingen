@@ -272,6 +272,27 @@ struct LiveStreamEngineTests {
         #expect(engine.metrics.activeTransportStreams == 0)
         #expect(engine.metrics.connectedAt == nil)
     }
+
+    /// Stopping ends the stream, and a stream that ends looks like a dropped connection. The
+    /// stopped run must not report that drop: it would re-arm the coordinator's poll timer over
+    /// whatever the coordinator armed after stopping, and count a disconnect that never happened.
+    @Test
+    func aStoppedRunReportsNoDisconnect() async throws {
+        let streaming = FakeLiveStreaming()
+        let probe = Probe()
+        let engine = makeEngine(streaming: streaming, probe: probe)
+        engine.setPurpose(.charging, vin: vin)
+        _ = await settle { streaming.openCount == 1 }
+        streaming.send(.connected(activeTransportStreams: 1))
+        #expect(await settle { engine.isConnected })
+
+        engine.stop()
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(probe.disconnectCount == 0, "A deliberate stop is not a dropped connection")
+        #expect(engine.metrics.disconnects == 0)
+        #expect(engine.retryAt == nil)
+    }
 }
 
 // MARK: - Scripted transport

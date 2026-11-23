@@ -104,6 +104,9 @@ actor BearerSession {
     private var token: String?
     private var expiry: Date?
     private var authentication: Task<String, any Error>?
+    /// Names the sign-in `authentication` holds, so a sign-in that was cancelled by `signOut()` and
+    /// finishes late cannot clear the one a newer caller started.
+    private var authenticationID: UUID?
 
     /// A token is renewed this long before the vendor says it ends, so a request in flight does
     /// not carry one that dies on the way.
@@ -138,6 +141,8 @@ actor BearerSession {
 
     func signOut() {
         authentication?.cancel()
+        authentication = nil
+        authenticationID = nil
         token = nil
         expiry = nil
     }
@@ -148,8 +153,14 @@ actor BearerSession {
         if let authentication {
             return try await authentication.value
         }
+        let id = UUID()
         let task = Task {
-            defer { authentication = nil }
+            defer {
+                if authenticationID == id {
+                    authentication = nil
+                    authenticationID = nil
+                }
+            }
             let fresh: Token
             do {
                 fresh = try await authenticate(transport)
@@ -166,6 +177,7 @@ actor BearerSession {
             return fresh.value
         }
         authentication = task
+        authenticationID = id
         return try await task.value
     }
 

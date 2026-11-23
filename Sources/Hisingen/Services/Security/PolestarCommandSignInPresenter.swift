@@ -77,12 +77,7 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
                         cancel()
                     } else {
                         Self.recordSignInTrace("presenter:browser-fallback-waiting")
-                        Task { @MainActor [weak self] in
-                            try? await Task.sleep(for: .seconds(300))
-                            guard let self, self.flowID == id, self.pendingContinuation != nil else { return }
-                            Self.recordSignInTrace("presenter:browser-fallback-timeout")
-                            self.cancel(with: PolestarError.authenticationRequired(.callbackRejected))
-                        }
+                        armBrowserFallbackTimeout(flowID: id)
                     }
                 }
             }
@@ -107,7 +102,31 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
         }
     }
 
+    /// A browser hand-off has no callback of its own to end it, so a flow that never hears back is
+    /// ended here. Keyed by flow, so a timer armed for an earlier flow cannot end a newer one.
+    private func armBrowserFallbackTimeout(flowID id: UUID) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(300))
+            guard let self, self.flowID == id, self.pendingContinuation != nil else { return }
+            Self.recordSignInTrace("presenter:browser-fallback-timeout")
+            self.cancel(with: PolestarError.authenticationRequired(.callbackRejected))
+        }
+    }
+
+    /// Whether a system-session completion belongs to the flow that is running now.
+    ///
+    /// `cancel()` ends the previous session, and AuthenticationServices reports that end back as a
+    /// user cancellation a moment later. By then a new `signIn` may already have stored its own
+    /// session, so "a session exists" is not enough: the completion has to come from the flow it
+    /// was started for, or it cancels the sign-in that replaced it.
+    nonisolated static func completionBelongsToCurrentFlow(
+        startedFor runID: UUID?, currentFlow: UUID?, hasSession: Bool
+    ) -> Bool {
+        hasSession && runID != nil && runID == currentFlow
+    }
+
     private func startSystemSession(authorizeURL: URL, forceLogin: Bool) -> Bool {
+        let runID = flowID
         Self.recordSignInTrace("presenter:starting")
         // `@Sendable` is load-bearing: a closure formed in a `@MainActor` method inherits that
         // isolation, but AuthenticationServices delivers this completion from a background XPC
@@ -120,7 +139,9 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
             Task { @MainActor in
                 // A completed or cancelled session is released first, so this also guards against
                 // a second delivery resuming the continuation twice.
-                guard let self, self.session != nil else { return }
+                guard let self, Self.completionBelongsToCurrentFlow(
+                    startedFor: runID, currentFlow: self.flowID, hasSession: self.session != nil
+                ) else { return }
                 if let callbackURL {
                     self.handleCallbackURL(callbackURL)
                     return
@@ -149,6 +170,10 @@ final class PolestarCommandSignInPresenter: NSObject, ASWebAuthenticationPresent
                     self.session = nil
                     if let authorizeURL = self.flow?.authorizeURL, !NSWorkspace.shared.open(authorizeURL) {
                         self.cancel(with: PolestarError.authenticationRequired(.callbackRejected))
+                    } else if let runID {
+                        // Without this the continuation waited for a redirect that might never
+                        // arrive, and the sign-in lane stayed taken until relaunch.
+                        self.armBrowserFallbackTimeout(flowID: runID)
                     }
                 case .failure(let failure, let trace):
                     if let trace {
