@@ -4260,9 +4260,16 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Aurinkoennuste";
 "Solar forecast chart" = "Aurinkoennustekaavio";
-"Peak %@ at %@" = "Huippu %@ klo %@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-säteily auton sijainnissa; ei paneelien tuotto.";
+"Peak %@ · %@" = "Huippu %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Car's location" = "Auton sijainti";
+"Open-Meteo radiation at %@; it is not panel output." = "Open-Meteo-säteily kohteessa %@; ei paneelien tuotto.";
+"Solar forecast place" = "Aurinkoennusteen paikka";
+"Turn on Vehicle Weather to see the solar forecast" = "Ota Sää ajoneuvon luona käyttöön nähdäksesi aurinkoennusteen";
+"The solar forecast needs the car's location" = "Aurinkoennuste tarvitsee auton sijainnin";
+"The solar forecast is unavailable right now" = "Aurinkoennuste ei ole juuri nyt saatavilla";
 "Grid carbon now" = "Verkon CO₂ nyt";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "Verkon CO₂ reaaliajassa";

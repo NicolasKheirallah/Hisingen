@@ -4260,9 +4260,16 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "태양광 예보";
 "Solar forecast chart" = "태양광 예보 차트";
-"Peak %@ at %@" = "최고 %@, %@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "차량 위치의 Open-Meteo 복사량이며, 패널 발전량이 아닙니다.";
+"Peak %@ · %@" = "최고 %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Car's location" = "차량 위치";
+"Open-Meteo radiation at %@; it is not panel output." = "%@의 Open-Meteo 복사량이며, 패널 발전량이 아닙니다.";
+"Solar forecast place" = "태양광 예보 위치";
+"Turn on Vehicle Weather to see the solar forecast" = "태양광 예보를 보려면 차량 주변 날씨을(를) 켜세요";
+"The solar forecast needs the car's location" = "태양광 예보에는 차량 위치가 필요합니다";
+"The solar forecast is unavailable right now" = "태양광 예보를 지금은 사용할 수 없습니다";
 "Grid carbon now" = "현재 전력망 CO₂";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "실시간 전력망 CO₂";

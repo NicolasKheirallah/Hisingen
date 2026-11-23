@@ -4260,9 +4260,16 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Previsione solare";
 "Solar forecast chart" = "Grafico della previsione solare";
-"Peak %@ at %@" = "Picco %@ alle %@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "Radiazione Open-Meteo nella posizione dell'auto; non è la produzione dei pannelli.";
+"Peak %@ · %@" = "Picco %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Car's location" = "Posizione dell'auto";
+"Open-Meteo radiation at %@; it is not panel output." = "Radiazione Open-Meteo a %@; non è la produzione dei pannelli.";
+"Solar forecast place" = "Luogo della previsione solare";
+"Turn on Vehicle Weather to see the solar forecast" = "Attiva Meteo veicolo per vedere la previsione solare";
+"The solar forecast needs the car's location" = "La previsione solare richiede la posizione dell'auto";
+"The solar forecast is unavailable right now" = "La previsione solare non è disponibile al momento";
 "Grid carbon now" = "CO₂ della rete ora";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "CO₂ della rete in tempo reale";

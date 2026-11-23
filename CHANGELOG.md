@@ -3,10 +3,40 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.3] - 2026-11-23
+
+### Added
+
+- **Solar forecast chart you can point at.** The Charging Planner's solar line is now hourly
+  bars on the same clock as the price chart, with hour and weekday labels, a W/m² axis from zero,
+  the planned charging window shaded and Now marked. Hover or drag over it for the hour's range
+  and radiation, as on the price chart. Today's and tomorrow's total radiation sit under it in
+  kWh/m² (still radiation, not panel output), and a day with a missing hour shows no total.
+- **Pick where the forecast is drawn.** A menu on the solar line chooses between the car's
+  position and any saved charge location with coordinates, so a car parked at work still shows
+  the sun over the place it will charge. The choice is kept in Settings data on this Mac only.
+- **The line says why it is missing.** With Vehicle Weather off, no car position, or no answer
+  from Open-Meteo, the planner shows one line naming the reason instead of leaving a gap.
+
+### Changed
+
+- **The forecast outlook reaches the end of tomorrow.** It runs through tomorrow, the last day the
+  price chart ever shows (the price chart reaches it once tomorrow's prices are published, about
+  14:15), instead of 24 hours from now, and starts with the hour running now.
+- **A failed refresh keeps the last forecast.** If Open-Meteo fails after a good answer, the
+  previous forecast stays on screen for up to six hours (retried every five minutes) instead of
+  the line disappearing. It is held in memory only and never written to disk.
+- **The peak names its hour.** Open-Meteo reports the mean of the hour that ended at each
+  timestamp, so the peak now reads as a range such as 11:00–12:00, not the end of that hour.
+  Times are shown on the forecast place's clock, with the zone named when it differs from this
+  Mac's.
 
 ### Fixed
 
+- **Forecast hours could be an hour off across a daylight-saving change.** The answer used one
+  UTC offset for both days, so the hours after a clock change were shifted. Hours are now read as
+  exact epoch seconds. An answer that arrived as text, or without a zone, is no longer guessed
+  at.
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
   next refresh was the 30-minute drift check, and the stream carries battery and charging
   readings only. A climate started on a charging car therefore kept its first "Starting" frame,

@@ -190,11 +190,18 @@ can confirm a command, so discovery never offers a write it cannot check; a char
 unrecognised states is still listed for its readings and can be mapped by hand.
 
 When Vehicle Weather is on and Open-Meteo answers, the **Charging Planner** draws a **solar
-forecast** line of global shortwave radiation for the next day at the car's location, with its
-peak time. The request carries the position rounded to two decimals, and the answer is kept for 30
-minutes. It is radiation,
-not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
-kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+forecast**: hourly bars of global shortwave radiation for the rest of today and tomorrow, on the
+same clock as the price chart and through the end of tomorrow, with the planned charging window shaded and
+Now marked. Point at the chart (hover, or drag) to read an hour's range and W/m². Open-Meteo reports
+the mean of the hour that ended at each timestamp, so each bar is labelled with the hour it
+covers. Today's and tomorrow's total radiation sit under the chart in kWh/m²; a day with a missing
+hour shows no total. The forecast is for the car's position unless you pick one of the saved charge
+locations from the menu on the line, which suits a car parked away from the place it charges. The
+request carries the position rounded to two decimals, and the answer is kept in memory for 30
+minutes, or for up to six hours while Open-Meteo is failing. With Vehicle Weather off, no position
+reaches Open-Meteo and the line says which setting would bring it back. It is radiation, not panel
+output: Hisingen has no array or inverter figures, so it never turns the forecast into kWh of
+production. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
 provider named beneath it. The line and its setting exist for Swedish price zones only, because
 the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
 rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
