@@ -10,8 +10,24 @@
 | Polestar password | `polestar-password` | `io.kheirallah.hisingen` |
 | Polestar refresh token | `polestar-refresh-token` | `io.kheirallah.hisingen` |
 | Volvo client secret, VCC API key, refresh token | `volvo-credentials-bundle` (one JSON blob: `{clientSecret, apiKey, sessionToken}`) | `io.kheirallah.hisingen` |
+| Home Assistant long-lived access token | `home-assistant-long-lived-token` | `io.kheirallah.hisingen` |
+| Electricity Maps API key | `electricity-maps-api-key` | `io.kheirallah.hisingen` |
+| Easee account and password | `charger-credentials-easee` (JSON: `{username, password}`) | `io.kheirallah.hisingen` |
+| Zaptec account and password | `charger-credentials-zaptec` (JSON: `{username, password}`) | `io.kheirallah.hisingen` |
+| NexBlue refresh token | `charger-credentials-nexblue` (the token alone; the password is sent once to sign in and never stored) | `io.kheirallah.hisingen` |
+| Tibber access token | `charger-credentials-tibber` | `io.kheirallah.hisingen` |
+| Perific account and password | `charger-credentials-perific` (JSON: `{username, password}`) | `io.kheirallah.hisingen` |
 
 All items live under one `kSecAttrService` (`KeychainStore.app`). Isolation between Polestar and Volvo, and between the different Volvo secrets, is achieved by using distinct `kSecAttrAccount` values, not by using separate Keychain services. `Tests/HisingenTests/Unit/VolvoKeychainIsolationTests.swift` verifies this directly: deleting Polestar's session token leaves Volvo's untouched, and deleting Volvo's client secret leaves its API key untouched within the same bundle.
+
+The charger and price items share one account scheme, `charger-credentials-<vendor>`, with the
+vendor names `easee`, `zaptec`, `nexblue`, `tibber` and `perific`. Each write also sets a
+`has_charger_credentials_<vendor>` flag in `UserDefaults`, which holds a yes or no and no secret,
+so a settings screen can ask whether a login exists without reading the Keychain. The Electricity
+Maps key has its own flag, `has_electricity_maps_key`. None of these items is written to a settings
+archive, an export, a diagnostic log or a crash report. Signing out of a charger, disconnecting
+Tibber or the house meter, removing the Electricity Maps key, or **Remove Connection and Token** on
+the Home Charging settings card deletes the matching items.
 
 ## Legacy migration
 

@@ -30,10 +30,10 @@ Start with the [development setup](development/getting-started.md) and [reposito
 
 | Area | Reference |
 | --- | --- |
-| App boundaries | [System context](architecture/system-context.md), [Providers](architecture/providers.md), [Architecture decisions](adr/README.md) |
+| App boundaries | [System context](architecture/system-context.md), [Providers](architecture/providers.md), [Home charging](architecture/home-charging.md), [Architecture decisions](adr/README.md) |
 | Vehicle updates | [Capabilities](architecture/capabilities.md), [Refresh system](architecture/refresh-system.md), [Concurrency](architecture/concurrency.md) |
 | Local data | [Persistence](architecture/persistence.md), [Logging](architecture/logging.md), [Themes and caching](architecture/theme-and-caching-architecture.md) |
 | Interface | [Design](../DESIGN.md), [Motion system](architecture/motion-system.md), [Vehicle motion](architecture/vehicle-motion.md) |
-| Contributions | [Development workflow](development/development-workflow.md), [Adding a feature](development/adding-a-feature.md), [Adding a provider](development/adding-a-provider.md) |
+| Contributions | [Development workflow](development/development-workflow.md), [Adding a feature](development/adding-a-feature.md), [Adding a provider](development/adding-a-provider.md), [Adding a charger source](development/adding-a-charger-source.md) |
 
 [Project history and credits](project.md) · [Security reporting](../SECURITY.md)

@@ -9,6 +9,10 @@ A lightweight, practical pass, not a compliance exercise. Scope: the Hisingen ma
 | Polestar/Volvo refresh tokens | Keychain | Long-lived account access; theft gives ongoing read access to vehicle telemetry and (if scopes allow) commands |
 | Polestar password | Keychain | Direct account takeover if stolen |
 | Volvo client secret / VCC API key | Keychain | Account/app-level access to the user's Developer Portal application |
+| Easee, Zaptec and Perific account and password; NexBlue refresh token | Keychain | Account access at the vendor: reading charger and session history, and for a charger account, starting and pausing a charge |
+| Tibber token | Keychain | Reads prices, consumption and production for the home, and live house power with a Pulse |
+| Home Assistant long-lived token | Keychain | Access to the reader's Home Assistant, which can reach more than the charger |
+| Electricity Maps key | Keychain | Low impact: a free token for a public carbon figure |
 | Vehicle location | In-memory, `UserDefaults` cache (stripped in the cached copy; see below), opt-in third-party calls | Physical safety/privacy implication if disclosed |
 | Vehicle state (battery, locks, warnings) | `UserDefaults` cache | Privacy; also security-relevant (lock state) |
 | Remote-command receipts | Bounded per-VIN `UserDefaults` collection, separate from telemetry | Reveals recent command intent and outcome |
@@ -43,6 +47,12 @@ Not a meaningful category here; there's no multi-party transaction log to disput
   **Mitigation:** `ThisDeviceOnly` accessibility (no iCloud sync), scoped to the app's own Keychain access group by default macOS behavior. See [keychain.md](keychain.md) for the specific accessibility-level discrepancy between docs and code.
 - **Threat:** the on-disk telemetry cache leaks PII if the Mac (or a backup of it) is compromised.
   **Mitigation:** `VehicleState.cacheableCopy` strips registration number, owner name, odometer/service details, fluid warnings, weather, and image data before persistence; precise saved-location coordinates are discarded before they ever reach the domain model. What remains cached (VIN, battery%, charging state) is a deliberate, smaller trade-off, not an oversight; see [privacy.md](privacy.md).
+- **Threat:** a charger or price login leaks through a log, an export or an error message.
+  **Mitigation:** the credential type prints as redacted, and the logins live in the Keychain and
+  nowhere else, never in preferences, exports, logs or error text. See [keychain.md](keychain.md).
+- **Threat:** the Home Assistant token is read off the local network.
+  **Mitigation:** none in Hisingen when the address is `http`; the token is sent as a bearer header
+  and the connection is not upgraded. Use an `https` address. See [overview.md](overview.md#network-transport).
 - **Threat:** vehicle coordinates leak to a third party unexpectedly.
   **Mitigation:** reverse geocoding (Apple) and weather (Open-Meteo) are both opt-in per feature toggle, and Hisingen's own FAQ discloses this directly to the user rather than burying it.
 - **Threat:** logs capture a token or full vehicle payload.

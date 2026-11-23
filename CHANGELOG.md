@@ -24,6 +24,16 @@ All notable changes to Hisingen are documented in this file. The project follows
   every charger, price and carbon host with what it receives, and the export notes mention the
   XLSX workbook and GPX tracks.
 
+- **The architecture, security and developer docs describe home charging.** A new architecture
+  page covers the charger sources, the vendor-cloud provider seam, the polling intervals and the
+  command loop. Keychain lists every charger, Tibber, Perific, Home Assistant and Electricity Maps
+  item, the retention page covers imported sessions and the spot-price cache, and the persistence
+  page covers the price tables and the Home Charging keys. The threat model and security overview
+  say that a Home Assistant address entered as `http` sends its token unencrypted, which the
+  overview's "every request is HTTPS" line had left out. New pages cover the chargers and prices
+  API and how to add a charger source, and remote controls, troubleshooting, the glossary and the
+  product tour gain home-charging entries.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

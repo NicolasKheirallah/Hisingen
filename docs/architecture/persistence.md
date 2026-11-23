@@ -76,6 +76,10 @@ It does not mean the data cannot be copied by macOS backups, filesystem snapshot
 | Connectivity samples (wake/signal) | SQLite | VIN | Change-gated; pruned with samples | Moderate |
 | Cabin climate samples | SQLite | VIN | Hourly heartbeat; pruned with samples | Low |
 | Manual fuel fill-ups | SQLite | VIN | Until cleared (kept across sign-out unless opted in) | No |
+| Charger side of a charging session | SQLite, on the `charging_sessions` row | VIN/session | Same as the session header | Yes |
+| Spot-price cache (`electricity_prices`, `electricity_price_fetches`) | SQLite | Price zone | Replaced on each fetch, about two days per zone; ignored by wipes, pruning and backups | No |
+| Home Charging address, pairings, plan records, grid tariff, Tibber home and network fee, house meter choice | `UserDefaults` | Application/charger | Until unpaired, disconnected or Remove Connection and Token | Moderate |
+| Charger, Tibber, Perific, Home Assistant and Electricity Maps logins | Keychain | Service | Until signed out, disconnected or removed | Yes |
 | Full JSON backup export | User-chosen file | All vehicles | User-managed | Yes (coordinates only when opted in) |
 | Reverse-geocode cache | Memory | Process | Process lifetime | Yes |
 | Provider capability/request caches | Memory | Provider/VIN | Short-lived | Low/moderate |
@@ -148,6 +152,26 @@ A row can contain:
 - the usable-capacity and target references;
 - the saved flat/day/night tariff, currency, and estimated cost; and
 - creation timestamp.
+
+A paired home charger writes its side of the same charge onto this row, so one physical charge is
+one row (`ChargingSessionLedger+Wallbox.swift`). A charger's session is matched by its key first, so
+a repeated sync, a reconnect or a sleeping Mac changes nothing. It is then matched by overlap on the
+same charger, which joins the same charge seen through a different source, and only then added as a
+new row. A write reports one of `inserted`, `enriched`, `updated`, `unchanged` or `merged`.
+
+### `electricity_prices` and `electricity_price_fetches`
+
+The Charging Planner's Swedish spot-price series (`ElectricityPriceStore`).
+
+```
+electricity_prices(zone, start_at, end_at, sek_per_kwh)   PRIMARY KEY (zone, start_at)
+electricity_price_fetches(zone PRIMARY KEY, fetched_at)
+```
+
+One row per published interval per zone, and one `fetched_at` per zone. Each fetch deletes the
+zone's rows and writes the new series in one transaction, so the table never holds more than the
+cache itself, about two days per zone. It is market data and not user history. Wipes, pruning and
+backups ignore these tables, and a fresh fetch replaces everything.
 
 ### `charging_samples`
 
@@ -562,7 +586,12 @@ Examples include:
 - UI preferences;
 - electricity price;
 - cached vehicle snapshot fallback;
-- charging transition baselines; and
+- charging transition baselines;
+- Home Charging state: the Home Assistant address (`home_charging_address_v1`), pairings and plan
+  records (`home_charging_pairings_v1`, `home_charging_plan_records_v1`), the grid tariff
+  (`home_charging_grid_tariff_v1`), the chosen Tibber home and its network fee
+  (`home_charging_tibber_home_v1`, `home_charging_tibber_network_fee_v1`), the NexBlue import
+  receipt and the chosen house meter (`house_meter_v1`); and
 - non-secret identifiers.
 
 It is not an appropriate storage location for:

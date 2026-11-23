@@ -112,6 +112,19 @@ The charger card shows when NexBlue has accepted a start or pause request and is
 
 </details>
 
+<details>
+<summary>Grid tariff and house meter</summary>
+
+**Grid tariff.** Pick the country and the tariff your grid company charges per kWh on top of the electricity price. Sweden, Norway, Denmark, Germany and the Netherlands are offered, with presets for Vattenfall and Elvia. [Grid tariff](home-charging.md#grid-tariff)
+
+<img src="../assets/screenshots/live/settings/grid-tariff.png" width="560" loading="lazy" alt="Grid Tariff settings with the country set to Sweden and the tariff set to No grid fee">
+
+**House meter.** Read a Perific monitor to see the whole house next to the charger. Hisingen only reads it, and Perific keeps balancing the charger. [Perific house meter](home-charging.md#connect-a-perific-house-meter)
+
+<img src="../assets/screenshots/live/settings/house-meter.png" width="560" loading="lazy" alt="House Meter settings showing a Perific meter read every 30 seconds, with house power, voltage and current per phase, and energy imported today">
+
+</details>
+
 ## Log
 
 Pick a period to review charging, driving, climate and vehicle status. The charge-level chart shows where each session started and ended.

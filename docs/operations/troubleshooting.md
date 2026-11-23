@@ -52,6 +52,26 @@ Redaction runs before the file is written (`DiagnosticRedaction` in `Support/Dia
 
 **Not a bug.** `VehicleState.isStale(at:)` compares against `dataTimestamp` (the vehicle's own reported timestamp), not fetch time; Polestar vehicles in particular enter a low-power state while parked, and the backend serves the last sample it has, which can be hours old, without indicating an error. See [architecture/data-flow.md#freshness](../architecture/data-flow.md#freshness). If this is being reported as unexpected, first confirm whether it's *actually* stale (check `vehicleReportedAt` vs. wall-clock time) before treating it as a fetch problem.
 
+## A home charger, Tibber or the house meter stops updating
+
+**Symptoms:** the home charger card shows "Last known", "Sign in required" or an unreachable
+message, session import stops, prices are missing, or the house line is gone.
+
+**Likely causes:** a vendor token or login was refused or revoked (`DirectChargerError.unauthorized`),
+the vendor throttled the account (`rateLimited`, and Easee allows 10 session requests an hour), the
+Home Assistant address or its local-network permission changed, or the Tibber or Perific token
+expired. A charger the vendor reports offline is shown as unavailable and not as stale.
+
+**Investigate:** the Home Charging card in Settings, Electricity names the connection state. The
+reader-facing causes and checks are in the table under Troubleshooting in
+[home-charging.md](../home-charging.md#troubleshooting). For a vendor cloud, check the live checks for
+that vendor in the same page, because the mock tests do not touch a real account.
+
+**Fix:** sign in again from the card. Hisingen keeps the login in the Keychain, and the card says
+where to sign in when a service rejects it. If a service changed its API, the provider under
+`Services/HomeCharging/Direct/` is the place to fix, and
+[adding-a-charger-source.md](../development/adding-a-charger-source.md) lists what else to update.
+
 ## Charging details disappeared
 
 **Symptoms:** charging card vanished or shows partial data mid-session.
