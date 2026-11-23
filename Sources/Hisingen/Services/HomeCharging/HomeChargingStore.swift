@@ -273,8 +273,14 @@ struct HomeChargingStore {
         try keychain.saveChargerCredentials(token, vendor: ChargerSource.nexBlue.rawValue)
     }
 
+    /// Stores the refresh token a NexBlue grant rotated to, when the grant started from the token
+    /// that is still stored. No stored token means the reader signed out while the grant was in
+    /// flight, which must not be undone. A different stored token means another grant already
+    /// replaced it; that one is newer than this answer's, so it stays and this grant's bearer is
+    /// still good for its own request. Throwing there signed the charger out over a race.
     func updateNexBlueRefreshToken(_ rotatedToken: String?, previous: String) throws {
-        guard try nexBlueRefreshToken() == previous else { throw DirectChargerError.unauthorized }
+        guard let stored = try nexBlueRefreshToken(), !stored.isEmpty else { throw DirectChargerError.unauthorized }
+        guard stored == previous else { return }
         if let rotatedToken, rotatedToken != previous { try saveNexBlueRefreshToken(rotatedToken) }
     }
 
