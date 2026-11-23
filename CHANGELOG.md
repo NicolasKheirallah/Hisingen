@@ -152,6 +152,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **A command for a car that was already loading could wait 30 seconds and then be refused.**
+  A Shortcut, deep link or notification action that names a vehicle waits until that vehicle is
+  selected and its first reading applied. Only a vehicle switch woke that wait. A poll already
+  in flight, or a switch to the other brand's account (which starts a session rather than a
+  selection), never did, so the command sat out its 30-second timeout and answered "The target
+  vehicle could not be loaded" although the data had arrived in seconds. Every refresh, session
+  start and failure now settles the wait, and a car that nothing can load is reported at once.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.

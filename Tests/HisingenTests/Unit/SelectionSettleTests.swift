@@ -55,6 +55,51 @@ struct SelectionSettleTests {
         coordinator.stop()
     }
 
+    /// A brand switch is served by `beginSession`, never by the selection task. Its first state
+    /// must still answer the waiter instead of leaving it to the timeout.
+    @Test func wakesTrueWhenASessionStartAppliesTheTarget() async throws {
+        let provider = SettleMockProvider()
+        await provider.holdFetch()
+        let coordinator = makeCoordinator(provider: provider)
+        coordinator.start(preferredVIN: "YSMTEST")
+
+        let waiter = Task { await coordinator.selectionSettled(vin: "YSMTEST", timeout: 5) }
+        try await Task.sleep(for: .milliseconds(100))
+        await provider.releaseFetch()
+        #expect(await waiter.value)
+        coordinator.stop()
+    }
+
+    /// A command for the car that is already selected, arriving while a poll is in flight, waits
+    /// on that poll. The poll ending is what answers it.
+    @Test func wakesTrueWhenAnOrdinaryRefreshEndsOnTheSelectedCar() async throws {
+        let provider = SettleMockProvider()
+        let coordinator = makeCoordinator(provider: provider)
+        coordinator.start(preferredVIN: "YSMTEST")
+        #expect(await coordinator.selectionSettled(vin: "YSMTEST", timeout: 5))
+
+        await provider.holdFetch()
+        coordinator.refreshNow()
+        #expect(coordinator.isBusy)
+        let waiter = Task { await coordinator.selectionSettled(vin: "YSMTEST", timeout: 5) }
+        try await Task.sleep(for: .milliseconds(100))
+        await provider.releaseFetch()
+        #expect(await waiter.value)
+        coordinator.stop()
+    }
+
+    /// With nothing in flight and nothing pending, a car that is not loaded cannot become
+    /// loaded, so the waiter is told at once rather than after its timeout.
+    @Test func answersFalseAtOnceWhenNothingCouldSettleTheCar() async throws {
+        let provider = SettleMockProvider()
+        let coordinator = makeCoordinator(provider: provider)
+        let started = Date()
+        let settled = await coordinator.selectionSettled(vin: "YSMTEST", timeout: 30)
+        #expect(!settled)
+        #expect(Date().timeIntervalSince(started) < 5)
+        coordinator.stop()
+    }
+
     @MainActor
     private func makeCoordinator(provider: SettleMockProvider) -> RefreshCoordinator {
         let defaults = UserDefaults(suiteName: "SelectionSettleTests.\(UUID())")!
