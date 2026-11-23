@@ -1442,6 +1442,10 @@ struct HourlyTemperature: Codable, Equatable, Sendable {
     var windGustsKmh: Double? = nil
     /// Precipitation in the hour, in mm of water (rain, showers or snow).
     var precipitationMm: Double? = nil
+    /// Snow that falls in the hour, in cm of fresh snow.
+    var snowfallCm: Double? = nil
+    /// The WMO weather code for the hour. Freezing rain and drizzle are only knowable from it.
+    var weatherCode: Int? = nil
 }
 
 

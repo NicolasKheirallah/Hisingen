@@ -95,9 +95,11 @@ struct ServiceForecastAndDepartureWeatherTests {
     private var sundayEvening: Date { utcDate(2026, 11, 1, 20) }
 
     private func forecast(at date: Date, celsius: Double,
-                          windKmh: Double? = nil, gustsKmh: Double? = nil, precipitationMm: Double? = nil) -> [HourlyTemperature] {
+                          windKmh: Double? = nil, gustsKmh: Double? = nil, precipitationMm: Double? = nil,
+                          snowfallCm: Double? = nil, weatherCode: Int? = nil) -> [HourlyTemperature] {
         [HourlyTemperature(time: date, temperatureCelsius: celsius,
-                           windSpeedKmh: windKmh, windGustsKmh: gustsKmh, precipitationMm: precipitationMm)]
+                           windSpeedKmh: windKmh, windGustsKmh: gustsKmh, precipitationMm: precipitationMm,
+                           snowfallCm: snowfallCm, weatherCode: weatherCode)]
     }
 
     private func advice(schedules: [VehicleSchedule], climate: [VehicleSchedule] = [],
@@ -238,15 +240,80 @@ struct ServiceForecastAndDepartureWeatherTests {
     }
 
     @Test("A climate timer that covers the departure quiets the rain advice too")
-    func coveredTimerQuietsFrostAndRainTogether() {
+    func coveredTimerQuietsFrostAndRainTogether() throws {
         // The timer starts inside the coverage lead before the 7:30 departure, so it covers
         // the glass; advising another timer for the rain would contradict the advice's own
-        // wording ("a climate timer would warm the cabin") when one is already scheduled.
-        let result = advice(schedules: [departure()],
-                            climate: [climateTimer(hour: 6, minute: 0)],
-                            forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -2,
-                                               precipitationMm: 0.4))
-        #expect(result == nil)
+        // wording ("a climate timer would warm the cabin") when one is already scheduled. The
+        // wet road at -2 °C is a separate warning a timer cannot answer, so only that stays.
+        let result = try #require(advice(schedules: [departure()],
+                                         climate: [climateTimer(hour: 6, minute: 0)],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -2,
+                                                            precipitationMm: 0.4)))
+        #expect(!result.needsClimateTimer)
+        #expect(!result.wet)
+        #expect(result.icyRoad)
+    }
+
+    @Test("Wet roads at or below 1 °C are icy, and a climate timer does not quiet that")
+    func wetNearFreezingIsIcy() throws {
+        let atOne = try #require(advice(schedules: [departure()],
+                                        climate: [climateTimer(hour: 6, minute: 0)],
+                                        forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 1,
+                                                           precipitationMm: 0.2)))
+        #expect(atOne.icyRoad)
+
+        // 1.1 °C and wet is only rain, which the covering timer quiets.
+        #expect(advice(schedules: [departure()],
+                       climate: [climateTimer(hour: 6, minute: 0)],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 1.1,
+                                          precipitationMm: 0.2)) == nil)
+    }
+
+    @Test("Dry roads near freezing are not icy")
+    func dryNearFreezingIsNotIcy() throws {
+        let result = try #require(advice(schedules: [departure()],
+                                         forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -3,
+                                                            precipitationMm: 0)))
+        #expect(!result.icyRoad)
+        #expect(result.needsClimateTimer)
+    }
+
+    @Test("Freezing rain and drizzle codes make the roads icy even without a rain amount")
+    func freezingPrecipitationCodesAreIcy() throws {
+        for code in [56, 57, 66, 67] {
+            let result = try #require(advice(schedules: [departure()],
+                                             forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 0.5,
+                                                                weatherCode: code)))
+            #expect(result.icyRoad)
+        }
+        #expect(advice(schedules: [departure()],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 3, weatherCode: 66)) == nil)
+    }
+
+    @Test("Snowfall in the departure hour is reported, and only when it falls")
+    func snowfallIsReported() throws {
+        let snowing = try #require(advice(schedules: [departure()],
+                                          forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -4,
+                                                             precipitationMm: 0.6, snowfallCm: 0.8)))
+        #expect(snowing.snowfallCm == 0.8)
+        let dry = try #require(advice(schedules: [departure()],
+                                      forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: -4,
+                                                         precipitationMm: 0.6, snowfallCm: 0)))
+        #expect(dry.snowfallCm == nil)
+    }
+
+    @Test("Heat starts at exactly 28 °C and a covering climate timer quiets it")
+    func hotDepartureAdvisesCooling() throws {
+        let atLimit = try #require(advice(schedules: [departure()],
+                                          forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 28)))
+        #expect(atLimit.hot)
+        #expect(!atLimit.needsClimateTimer)
+
+        #expect(advice(schedules: [departure()],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 27.9)) == nil)
+        #expect(advice(schedules: [departure()],
+                       climate: [climateTimer(hour: 6, minute: 0)],
+                       forecast: forecast(at: utcDate(2026, 11, 2, 7), celsius: 31)) == nil)
     }
 
     @Test("Gusts at the strong-breeze line make the departure windy")
@@ -338,7 +405,7 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(components.path == "/v1/forecast")
         let query = try #require(components.queryItems)
         #expect(query.contains(URLQueryItem(name: "hourly",
-                                            value: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation")))
+                                            value: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,snowfall,weather_code")))
         #expect(query.contains(URLQueryItem(name: "forecast_days", value: "2")))
         #expect(query.contains(URLQueryItem(name: "timezone", value: "auto")))
         #expect(query.contains(URLQueryItem(name: "latitude", value: "57.71")))
@@ -370,6 +437,24 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(hours[1].precipitationMm == nil)
     }
 
+    @Test("Hourly response carries snowfall and the weather code per hour")
+    func hourlyResponseParsesSnowAndCode() throws {
+        let json: [String: Any] = [
+            "utc_offset_seconds": 0,
+            "hourly": [
+                "time": ["2026-11-02T07:00", "2026-11-02T08:00"],
+                "temperature_2m": [-2.0, -1.0],
+                "snowfall": [0.4, NSNull()],
+                "weather_code": [71, 66],
+            ],
+        ]
+        let hours = try #require(OpenMeteoWeatherClient.hourlyTemperatures(from: json))
+        #expect(hours[0].snowfallCm == 0.4)
+        #expect(hours[0].weatherCode == 71)
+        #expect(hours[1].snowfallCm == nil)
+        #expect(hours[1].weatherCode == 66)
+    }
+
     @Test("Hourly response without wind or precipitation arrays keeps the hours")
     func hourlyResponseWithoutWindArrays() throws {
         let json: [String: Any] = [
@@ -384,6 +469,8 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(hours[0].windSpeedKmh == nil)
         #expect(hours[0].windGustsKmh == nil)
         #expect(hours[0].precipitationMm == nil)
+        #expect(hours[0].snowfallCm == nil)
+        #expect(hours[0].weatherCode == nil)
     }
 
     @Test("Hourly response without an hourly block is rejected")

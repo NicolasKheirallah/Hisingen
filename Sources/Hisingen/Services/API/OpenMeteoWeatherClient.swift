@@ -86,6 +86,8 @@ struct OpenMeteoWeatherClient: Sendable {
         let windSpeeds = hourly["wind_speed_10m"] as? [Any]
         let windGusts = hourly["wind_gusts_10m"] as? [Any]
         let precipitation = hourly["precipitation"] as? [Any]
+        let snowfall = hourly["snowfall"] as? [Any]
+        let weatherCodes = hourly["weather_code"] as? [Any]
 
         var hours: [HourlyTemperature] = []
         for (index, time) in times.enumerated() {
@@ -97,7 +99,9 @@ struct OpenMeteoWeatherClient: Sendable {
                 temperatureCelsius: celsius,
                 windSpeedKmh: alignedHourlyValue(at: index, in: windSpeeds),
                 windGustsKmh: alignedHourlyValue(at: index, in: windGusts),
-                precipitationMm: alignedHourlyValue(at: index, in: precipitation)
+                precipitationMm: alignedHourlyValue(at: index, in: precipitation),
+                snowfallCm: alignedHourlyValue(at: index, in: snowfall),
+                weatherCode: alignedHourlyValue(at: index, in: weatherCodes).map { Int($0) }
             ))
         }
         return hours
@@ -118,10 +122,13 @@ struct OpenMeteoWeatherClient: Sendable {
     }
 
     /// Wind and precipitation ride the same requests as temperature: Open-Meteo's forecast
-    /// endpoint accepts them in both the `current` and the `hourly` block, in km/h and mm.
+    /// endpoint accepts them in both the `current` and the `hourly` block, in km/h and mm. The
+    /// hourly block also carries snowfall (cm) and the WMO code, which the departure advice reads
+    /// for road ice and snow.
     private static let currentFields =
         "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,precipitation"
-    private static let hourlyFields = "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation"
+    private static let hourlyFields =
+        "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,snowfall,weather_code"
 
     static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
         var components = URLComponents()

@@ -3138,6 +3138,10 @@
 "At %@ since %@" = "于 %@，自 %@ 起";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "%@ 有霜冻预报（%@）。空调定时器会清除车窗上的霜。";
 "Cold battery charges more slowly on DC." = "电池低温时，直流充电速度会变慢。";
+"Icy roads possible at %@ (%@)." = "%@ 道路可能结冰（%@）。";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "%@ 预计有降雪（%@ 厘米）。空调定时器可以为座舱预热。";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "%@ 预计天气炎热（%@）。空调定时器可以为座舱降温。";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "路面潮湿且气温在 1 °C 或以下时也会显示，这是定时器无法解决的；气温达到 28 °C 时同样会显示。";
 "Retry" = "重试";
 "Climate Warning" = "空调警告";
 "Factory spec (PNO34)" = "出厂规格（PNO34）";
