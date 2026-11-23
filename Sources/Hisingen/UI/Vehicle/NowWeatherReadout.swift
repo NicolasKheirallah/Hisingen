@@ -75,6 +75,9 @@ struct NowWeatherReadout: View {
     @State private var eventStore = EKEventStore()
     @State private var calendarDeparture: Date?
     @State private var calendarTask: Task<Void, Never>?
+    @Environment(\.historyWorkspace) private var history
+    @State private var rangeForecast: RangeForecast?
+    @State private var outdoorAir: OutdoorAirQuality?
 
     private struct Reading {
         let label: String
@@ -106,6 +109,12 @@ struct NowWeatherReadout: View {
                             stackedReadings(readings)
                         }
                     }
+                    if outdoorAir?.band != nil {
+                        Text(L10n.text("Air quality from CAMS European forecasts, via Open-Meteo."))
+                            .hisType(.micro)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let departureAdviceLine {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(departureAdviceLine)
@@ -113,13 +122,29 @@ struct NowWeatherReadout: View {
                                 .foregroundStyle(HisingenTheme.inkMuted)
                                 .fixedSize(horizontal: false, vertical: true)
                             InformationButton(
-                                message: L10n.text("The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet."),
+                                message: L10n.text("The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet.")
+                                    + " " + L10n.text("It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C."),
                                 subject: L10n.text("Departure"))
+                        }
+                    }
+                    if let rangeForecast {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(rangeForecastLine(rangeForecast))
+                                .hisType(.micro)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            InformationButton(
+                                message: L10n.format(
+                                    "Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference.",
+                                    rangeForecast.tripCount),
+                                subject: L10n.text("Range"))
                         }
                     }
                 }
             }
             .task { refreshCalendarDeparture() }
+            .task(id: rangeTaskKey) { await refreshRangeForecast() }
+            .task(id: airQualityPlace) { await refreshOutdoorAir() }
         }
     }
 
@@ -152,6 +177,10 @@ struct NowWeatherReadout: View {
         if let precipitation = weather.precipitationMm {
             readings.append(Reading(label: L10n.text("Precipitation"), value: Format.number(precipitation) + " mm"))
         }
+        if let index = outdoorAir?.europeanAQI, let band = outdoorAir?.band {
+            readings.append(Reading(label: L10n.text("Air Quality (EAQI)"),
+                                    value: "\(band.displayName) · \(index)"))
+        }
         return readings
     }
 
@@ -166,6 +195,21 @@ struct NowWeatherReadout: View {
             calendarDeparture: calendarDeparture,
             forecast: state.weather?.hourlyTemperatures ?? []
         ) else { return nil }
+        if advice.icyRoad, let snowfall = advice.snowfallCm {
+            // Snow at or below 1 °C is also an icy road. One line says both, and keeps the amount.
+            return L10n.format(
+                "Snow and icy roads possible at %@ (%@ cm).",
+                Format.shortTime(date: advice.departure),
+                Format.number(snowfall)
+            )
+        }
+        if advice.icyRoad {
+            return L10n.format(
+                "Icy roads possible at %@ (%@).",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
+            )
+        }
         if advice.needsClimateTimer {
             return L10n.format(
                 "Frost forecast at %@ (%@). A climate timer would clear the windows.",
@@ -173,11 +217,25 @@ struct NowWeatherReadout: View {
                 Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
             )
         }
+        if advice.wet, let snowfall = advice.snowfallCm {
+            return L10n.format(
+                "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.number(snowfall)
+            )
+        }
         if advice.wet {
             return L10n.format(
                 "Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin.",
                 Format.shortTime(date: advice.departure),
                 Format.number(advice.precipitationMm ?? 0)
+            )
+        }
+        if advice.hot {
+            return L10n.format(
+                "Hot forecast at %@ (%@). A climate timer would cool the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
             )
         }
         if advice.windy {
@@ -189,6 +247,76 @@ struct NowWeatherReadout: View {
             )
         }
         return nil
+    }
+
+    /// Everything the range forecast reads, so the line is worked out again when any of it changes.
+    private struct RangeTaskKey: Equatable {
+        let vin: String
+        let rangeKm: Int?
+        let weatherTime: Date?
+        let calendarDeparture: Date?
+    }
+
+    private var rangeTaskKey: RangeTaskKey {
+        RangeTaskKey(vin: state.identity.vin, rangeKm: state.energy.rangeKm,
+                     weatherTime: state.weather?.timestamp, calendarDeparture: calendarDeparture)
+    }
+
+    /// The range the departure's forecast temperature implies, from the car's own recorded trips.
+    /// Trips are read only once a departure, a forecast and a reported range exist, and never from
+    /// last-known weather, so an old reading cannot move the figure.
+    private func refreshRangeForecast() async {
+        guard let history, !state.hasLastKnownWeather, let weather = state.weather,
+              let hourly = weather.hourlyTemperatures, let reportedRange = state.energy.rangeKm,
+              let departure = DepartureWeatherAdvice.nextDeparture(
+                  schedules: state.energy.schedules, calendarDeparture: calendarDeparture)
+        else {
+            rangeForecast = nil
+            return
+        }
+        let trips = await history.tripHistory(vin: state.identity.vin)
+        guard !Task.isCancelled else { return }
+        rangeForecast = RangeForecast.forecast(
+            trips: trips, reportedRangeKm: reportedRange,
+            currentTemperatureCelsius: weather.temperatureCelsius,
+            departure: departure, hourly: hourly)
+    }
+
+    private func rangeForecastLine(_ forecast: RangeForecast) -> String {
+        let time = Format.shortTime(date: forecast.departure)
+        let temperature = Format.temperature(celsius: forecast.temperatureCelsius,
+                                             unit: preferences.temperatureUnit, decimals: 0)
+        let percent = Int(abs(forecast.consumptionChangePercent).rounded())
+        let range = Format.distance(km: forecast.rangeKm, unit: preferences.distanceUnit)
+        if forecast.consumptionChangePercent > 0 {
+            return L10n.format(
+                "At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@.",
+                time, temperature, percent, range)
+        }
+        return L10n.format(
+            "At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@.",
+            time, temperature, percent, range)
+    }
+
+    /// The place the air-quality forecast is asked for: the car's reported position. Nil when there
+    /// is none, and then nothing is requested.
+    private var airQualityPlace: [Double]? {
+        guard let latitude = state.location?.latitude, let longitude = state.location?.longitude,
+              latitude.isFinite, longitude.isFinite else { return nil }
+        return [latitude, longitude]
+    }
+
+    /// Only a state that already shows weather reaches here, so the request is covered by the same
+    /// Vehicle Weather switch and sends the same rounded coordinates.
+    private func refreshOutdoorAir() async {
+        guard preferences.features.contains(.vehicleWeather),
+              let place = airQualityPlace, !state.hasLastKnownWeather else {
+            outdoorAir = nil
+            return
+        }
+        let reading = await OutdoorAirQualityClient().current(latitude: place[0], longitude: place[1])
+        guard !Task.isCancelled else { return }
+        outdoorAir = reading
     }
 
     /// Snapshots the Sendable calendar inputs and mirrors the controller's next-trigger fetch
@@ -268,7 +396,9 @@ struct NowWeatherReadout: View {
     }
 }
 
-private extension VehicleState {
+extension VehicleState {
+    /// True when the weather on this state is an older reading kept through a failed refresh, so a
+    /// line that reasons from today's air should not use it.
     var hasLastKnownWeather: Bool {
         freshness.isCached || freshness.retainedDataCategories.contains(.vehicleWeather)
     }

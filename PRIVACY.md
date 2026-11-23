@@ -239,7 +239,7 @@ When suitable coordinates are available, Hisingen may send:
 - latitude; and
 - longitude
 
-to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
+to Open-Meteo to obtain current weather, a two-day hourly forecast and the next hour and a half of rain in 15-minute steps at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
 
 The Open-Meteo request does not need to contain:
 
@@ -252,7 +252,9 @@ The Open-Meteo request does not need to contain:
 
 If you do not want vehicle coordinates sent to Open-Meteo, leave Vehicle Weather disabled.
 
-The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends the same rounded latitude and longitude to Open-Meteo to read the next day's hourly solar radiation, and keeps the answer for 30 minutes. With Vehicle Weather disabled, the forecast is not requested.
+The weather readout's air-quality line is part of the same setting. With Vehicle Weather enabled, opening the readout sends the same rounded latitude and longitude to Open-Meteo's air-quality service (`air-quality-api.open-meteo.com`) and keeps the answer in memory for 30 minutes. With Vehicle Weather disabled, it is not requested.
+
+The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends rounded latitude and longitude to Open-Meteo to read the next day's hourly solar radiation: the car's position, or the position of a saved charge location if you choose one from the menu on the solar line. The coordinates are rounded to two decimals (about a kilometre) and the answer is kept in memory only, for 30 minutes, or up to six hours while Open-Meteo is failing. The choice of saved location is stored on this Mac and is not exported. If you enter solar panels in Settings, the request also carries the panels' tilt and direction; the array's size stays on this Mac and is not exported. With Vehicle Weather disabled, the forecast is not requested.
 
 Weather information returned to Hisingen may itself be stored as part of locally cached or historical vehicle information.
 
@@ -270,7 +272,7 @@ Apple operates independently from Hisingen and processes information according t
 
 ## 9. Open-Meteo
 
-Hisingen may use Open-Meteo for optional vehicle-weather and solar-forecast functionality.
+Hisingen may use Open-Meteo for optional vehicle-weather, air-quality and solar-forecast functionality.
 
 The request may contain the vehicle's coordinates because those coordinates are necessary to determine weather at the vehicle's location.
 

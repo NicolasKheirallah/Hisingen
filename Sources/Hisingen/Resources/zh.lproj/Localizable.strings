@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "下雨提醒（车窗开启）";
 "Rain Showers" = "阵雨";
 "Rain detected near your vehicle with windows left open!" = "检测到车辆附近下雨，车窗仍开着！";
+"Rain is expected within %d min near your vehicle, and a window is open." = "预计 %d 分钟内车辆附近会下雨，且有车窗未关。";
 "Range" = "续航里程";
 "Range Health Estimate" = "续航健康度估算";
 "Ready" = "就绪";
@@ -1310,6 +1311,11 @@
 "Added" = "已添加";
 "Address" = "地址";
 "Air Quality" = "空气质量";
+"Fair" = "尚可";
+"Very poor" = "很差";
+"Extremely poor" = "极差";
+"Air Quality (EAQI)" = "空气质量 (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "空气质量数据来自 CAMS 欧洲预报，由 Open-Meteo 提供。";
 "Air quality index history chart" = "空气质量指数历史图表";
 "Air quality index trend chart" = "空气质量指数趋势图表";
 "Air Quality Trend" = "空气质量趋势";
@@ -1719,6 +1725,8 @@
 "•••••••• (Saved in Keychain)" = "••••••••（保存在钥匙串）";
 "≈ %d days" = "约 %d 天";
 "Tire Pressure" = "胎压";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "低温下胎压读数偏低：在 %1$@ 时约比 %3$@ 时的值低 %2$@。";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "高温下胎压读数偏高：在 %1$@ 时约比 %3$@ 时的值高 %2$@。";
 "Everything looks good" = "一切正常";
 
 /* Text size & density options */
@@ -3138,6 +3146,14 @@
 "At %@ since %@" = "于 %@，自 %@ 起";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "%@ 有霜冻预报（%@）。空调定时器会清除车窗上的霜。";
 "Cold battery charges more slowly on DC." = "电池低温时，直流充电速度会变慢。";
+"Icy roads possible at %@ (%@)." = "%@ 道路可能结冰（%@）。";
+"Snow and icy roads possible at %@ (%@ cm)." = "%@ 可能有降雪和道路结冰（%@ 厘米）。";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "%@ 预计有降雪（%@ 厘米）。空调定时器可以为座舱预热。";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "%@ 预计天气炎热（%@）。空调定时器可以为座舱降温。";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "路面潮湿且气温在 1 °C 或以下时也会显示，这是定时器无法解决的；气温达到 28 °C 时同样会显示。";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "在 %@（%@），你的行程数据表明每公里耗电约比现在多 %d%%。续航约为 %@。";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "在 %@（%@），你的行程数据表明每公里耗电约比现在少 %d%%。续航约为 %@。";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "根据你已记录的 %d 次行程拟合：室外温度与每公里能耗的关系。至少需要 15 次行程且温度跨度达 8 °C 或以上，只在这些行程覆盖的温度范围内使用，差异低于 5 %% 时不显示。续航是车辆上报的续航按该差异缩放后的值。";
 "Retry" = "重试";
 "Climate Warning" = "空调警告";
 "Factory spec (PNO34)" = "出厂规格（PNO34）";
@@ -4260,9 +4276,29 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "太阳能预报";
 "Solar forecast chart" = "太阳能预报图表";
-"Peak %@ at %@" = "峰值 %@，%@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "车辆所在位置的 Open-Meteo 辐射量，并非光伏板实际发电量。";
+"Peak %@ · %@" = "峰值 %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Solar panels" = "太阳能板";
+"Optional. With your panel size and direction the solar forecast also estimates output from Open-Meteo's radiation on the panels. The size stays on this Mac; only the tilt and direction are sent." = "可选。输入太阳能板的容量和朝向后，太阳能预报还会根据 Open-Meteo 照射到板面的辐射量估算发电量。容量只保存在这台 Mac 上，只会发送倾角和朝向。";
+"Array size" = "装机容量";
+"Peak power in kWp. Leave empty to show radiation only." = "峰值功率（kWp）。留空则只显示辐射量。";
+"Enter a size between 0 and 100 kWp." = "请输入 0 到 100 kWp 之间的容量。";
+"Panel tilt" = "太阳能板倾角";
+"Panel direction" = "太阳能板朝向";
+"0° is south, -90° east, 90° west." = "0° 为正南，-90° 为正东，90° 为正西。";
+"≈ %@ kWh from your panels" = "≈ %@ kWh（来自你的太阳能板）";
+"Estimated output uses your panel settings and assumes 80% system efficiency." = "估算发电量使用你的太阳能板设置，并假设系统效率为 80%。";
+"Your panels could cover about %@ of this charge, before other loads." = "在计入其他用电之前，你的太阳能板大约可覆盖本次充电的 %@。";
+"%@°" = "%@°";
+"≈ %@ kW" = "≈ %@ kW";
+"Car's location" = "车辆位置";
+"Open-Meteo radiation at %@; it is not panel output." = "%@ 的 Open-Meteo 辐射量，并非光伏板实际发电量。";
+"Solar forecast place" = "太阳能预报位置";
+"Turn on Vehicle Weather to see the solar forecast" = "开启“车辆周边天气”即可查看太阳能预报";
+"The solar forecast needs the car's location" = "太阳能预报需要车辆位置";
+"The solar forecast is unavailable right now" = "太阳能预报暂时不可用";
 "Grid carbon now" = "当前电网 CO₂";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "实时电网 CO₂";

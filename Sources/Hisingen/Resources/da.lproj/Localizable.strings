@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Regnadvarsel (vinduer åbne)";
 "Rain Showers" = "Regnbyger";
 "Rain detected near your vehicle with windows left open!" = "Regn registreret nær dit køretøj med åbne vinduer!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Der ventes regn inden for %d min ved din bil, og et vindue er åbent.";
 "Range" = "Rækkevidde";
 "Range Health Estimate" = "Estimeret rækkeviddetilstand";
 "Ready" = "Klar";
@@ -1318,6 +1319,11 @@
 "Added" = "Tilføjet";
 "Address" = "Adresse";
 "Air Quality" = "Luftkvalitet";
+"Fair" = "Rimelig";
+"Very poor" = "Meget dårlig";
+"Extremely poor" = "Ekstremt dårlig";
+"Air Quality (EAQI)" = "Luftkvalitet (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Luftkvalitet fra CAMS' europæiske prognoser, via Open-Meteo.";
 "Air quality index history chart" = "Historikdiagram for luftkvalitetsindeks";
 "Air quality index trend chart" = "Trenddiagram for luftkvalitetsindeks";
 "Air Quality Trend" = "Trend for luftkvalitet";
@@ -1727,6 +1733,8 @@
 "•••••••• (Saved in Keychain)" = "•••••••• (gemt i nøglering)";
 "≈ %d days" = "≈ %d dage";
 "Tire Pressure" = "Dæktryk";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Dæk viser lavere tryk i kulde: ved %@ ligger de cirka %@ under deres værdi ved %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Dæk viser højere tryk i varme: ved %@ ligger de cirka %@ over deres værdi ved %@.";
 "Everything looks good" = "Alt ser godt ud";
 
 /* Text size & density options */
@@ -3145,6 +3153,14 @@
 "At %@ since %@" = "Ved %@ siden %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Frostprognose ved %@ (%@). En klimatimer ville afise ruderne.";
 "Cold battery charges more slowly on DC." = "Et koldt batteri lader langsommere på DC.";
+"Icy roads possible at %@ (%@)." = "Risiko for glatte veje kl. %@ (%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "Sne og glatte veje mulig kl. %@ (%@ cm).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snefald ventes kl. %@ (%@ cm). En klimatimer ville varme kabinen op.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Varme ventes kl. %@ (%@). En klimatimer ville køle kabinen ned.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Den vises også ved våde veje ved 1 °C eller derunder, som en timer ikke kan afhjælpe, og når luften når 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "Kl. %@ (%@) tyder dine ture på cirka %d%% mere energi pr. km end nu. Rækkevidde omkring %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "Kl. %@ (%@) tyder dine ture på cirka %d%% mindre energi pr. km end nu. Rækkevidde omkring %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Tilpasset efter %d af dine registrerede ture: udendørstemperatur mod energi pr. km. Den kræver mindst 15 ture kørt over 8 °C eller mere, holder sig inden for de temperaturer, de dækkede, og tier ved forskelle under 5 %%. Rækkevidden er bilens rapporterede rækkevidde skaleret med forskellen.";
 "Retry" = "Prøv igen";
 "Climate Warning" = "Klimaadvarsel";
 "Factory spec (PNO34)" = "Fabriksspecifikation (PNO34)";
@@ -4267,9 +4283,29 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Solprognose";
 "Solar forecast chart" = "Solprognosediagram";
-"Peak %@ at %@" = "Højeste %@ kl. %@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "Open-Meteo-stråling ved bilens placering; det er ikke panelernes effekt.";
+"Peak %@ · %@" = "Højeste %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Solar panels" = "Solpaneler";
+"Optional. With your panel size and direction the solar forecast also estimates output from Open-Meteo's radiation on the panels. The size stays on this Mac; only the tilt and direction are sent." = "Valgfrit. Med dine paneler størrelse og retning anslår solprognosen også ydelsen ud fra Open-Meteos stråling mod panelerne. Størrelsen bliver på denne Mac; kun hældning og retning sendes.";
+"Array size" = "Anlæggets størrelse";
+"Peak power in kWp. Leave empty to show radiation only." = "Spidseffekt i kWp. Lad feltet stå tomt for kun at vise stråling.";
+"Enter a size between 0 and 100 kWp." = "Angiv en størrelse mellem 0 og 100 kWp.";
+"Panel tilt" = "Panelernes hældning";
+"Panel direction" = "Panelernes retning";
+"0° is south, -90° east, 90° west." = "0° er syd, -90° øst, 90° vest.";
+"≈ %@ kWh from your panels" = "≈ %@ kWh fra dine paneler";
+"Estimated output uses your panel settings and assumes 80% system efficiency." = "Den anslåede ydelse bruger dine panelindstillinger og antager 80 % systemvirkningsgrad.";
+"Your panels could cover about %@ of this charge, before other loads." = "Dine paneler kunne dække omkring %@ af denne opladning, før andet forbrug.";
+"%@°" = "%@°";
+"≈ %@ kW" = "≈ %@ kW";
+"Car's location" = "Bilens placering";
+"Open-Meteo radiation at %@; it is not panel output." = "Open-Meteo-stråling ved %@; det er ikke panelernes effekt.";
+"Solar forecast place" = "Sted for solprognosen";
+"Turn on Vehicle Weather to see the solar forecast" = "Slå Køretøjsvejr til for at se solprognosen";
+"The solar forecast needs the car's location" = "Solprognosen har brug for bilens placering";
+"The solar forecast is unavailable right now" = "Solprognosen er ikke tilgængelig lige nu";
 "Grid carbon now" = "Nettets CO₂ nu";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "Live-net-CO₂";

@@ -27,7 +27,13 @@ External communication is limited to the vehicle provider and explicitly used th
 | Polestar-operated services | Authentication material, bearer tokens, VIN, requested vehicle data and commands | Polestar integration | Required for Polestar use |
 | Volvo Cars services | OAuth material, bearer tokens, VCC API configuration where applicable, VIN, requested vehicle data and commands | Volvo integration | Required for Volvo use |
 | Apple `CLGeocoder` | Latitude and longitude | Reverse-geocode vehicle location | Only when address resolution is used |
-| Open-Meteo | Latitude and longitude | Weather at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
+| Open-Meteo | Latitude and longitude | Weather and air quality at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
+| NexBlue, Easee or Zaptec cloud (`api.nexblue.com`, `api.easee.com`, `api.zaptec.com`) | Account and password to sign in (Easee and Zaptec sign in again whenever the one-hour token ends; NexBlue sends the password once and then a refresh token), bearer token, charger identifier, charger commands | Direct home-charger status, commands and session import | Only when that charger is paired directly |
+| Your Home Assistant | Long-lived access token, charger commands, plans | Home-charger status, commands and plans through the reader's own instance on the local network | Only when Home Assistant is connected |
+| Tibber (`api.tibber.com`) | Access token, home identifier, price, consumption and production requests, and the live stream when a Pulse is paired | Electricity prices, session costs and house load | Only when a Tibber home is connected |
+| Perific cloud (`api.enegic.com`) | Account sign-in, meter requests | House-meter readings | Only when a Perific meter is connected |
+| Elpriset just nu.se (`www.elprisetjustnu.se`) | A request for one price zone and day, no account | Swedish spot prices | Only when Swedish spot prices are used |
+| Electricity Maps (`api.electricitymap.org`) | Access token and the price-zone name | Live grid carbon line under the Charging Planner | Only when a token is saved |
 | Hisingen update feed / GitHub Releases | Application/version-related HTTP request metadata | Signed update checking and download | Only when update checking is enabled |
 | GitHub Pages OAuth callback | Volvo OAuth authorization response and state as part of browser redirect | Return Volvo OAuth result to the desktop app | Required for the normal Volvo OAuth flow |
 | Hisingen-operated server | Nothing | No Hisingen backend exists | N/A |
@@ -74,7 +80,7 @@ This includes provider session material and sensitive custom Volvo developer con
 
 - Fetched from the provider (Polestar's `DtlInternetService`/`GetLastKnownLocation`, Volvo's `/location/v1/vehicles/{vin}/location`) only when the "Vehicle Location" feature is enabled.
 - Sent to Apple's `CLGeocoder` (reverse geocoding) only when that same feature is on; this is an Apple system framework call, not a raw HTTP request Hisingen constructs, and Apple's own privacy handling for `CLGeocoder` applies.
-- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled; this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast`, no API key, coordinates as query parameters).
+- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled; this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast` and `air-quality-api.open-meteo.com/v1/air-quality`, no API key, coordinates as query parameters).
 - Never sent anywhere else. Precise coordinates for *saved charging locations* (as opposed to the vehicle's current position) are explicitly discarded before they ever reach the domain model; Hisingen keeps the schedule's time/weekday/active fields but drops the location and any alias/name attached to it.
 - Never written to the on-disk telemetry cache: `VehicleState.cacheableCopy` (`Domain/VehicleState.swift`) builds its persisted copy by calling `VehicleState`'s memberwise initializer with only a specific subset of fields passed explicitly; every field it *doesn't* pass (including `location` and `exteriorStatus`) falls back to that initializer's default value, which is `nil`/empty for all of them. So the current vehicle position never reaches disk, full stop, regardless of feature toggles.
 

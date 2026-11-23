@@ -112,6 +112,19 @@ The charger card shows when NexBlue has accepted a start or pause request and is
 
 </details>
 
+<details>
+<summary>Grid tariff and house meter</summary>
+
+**Grid tariff.** Pick the country and the tariff your grid company charges per kWh on top of the electricity price. Sweden, Norway, Denmark, Germany and the Netherlands are offered, with presets for Vattenfall and Elvia. [Grid tariff](home-charging.md#grid-tariff)
+
+<img src="../assets/screenshots/live/settings/grid-tariff.png" width="560" loading="lazy" alt="Grid Tariff settings with the country set to Sweden and the tariff set to No grid fee">
+
+**House meter.** Read a Perific monitor to see the whole house next to the charger. Hisingen only reads it, and Perific keeps balancing the charger. [Perific house meter](home-charging.md#connect-a-perific-house-meter)
+
+<img src="../assets/screenshots/live/settings/house-meter.png" width="560" loading="lazy" alt="House Meter settings showing a Perific meter read every 30 seconds, with house power, voltage and current per phase, and energy imported today">
+
+</details>
+
 ## Log
 
 Pick a period to review charging, driving, climate and vehicle status. The charge-level chart shows where each session started and ended.
@@ -160,7 +173,7 @@ Find the model year, odometer, battery capacity and charge port type. The other 
 <details>
 <summary>Diagnostics, parking, remote access, charge locations and vehicle capabilities</summary>
 
-**Openings and health.** Check doors, windows and tyre pressures against the car's reported reference.
+**Openings and health.** Check doors, windows and tyre pressures against the car's reported reference. When the weather readout is on and the air is 10 °C or more from 20 °C, a line under the tyre header says how far the readings sit from their value at 20 °C; every tyre moves together in the cold, which is what tells it from a leak. Cars that report only a warning level per tyre show no such line.
 
 <img src="../assets/screenshots/tour/car-openings-and-tyres.png" width="620" loading="lazy" alt="Doors and Openings diagram, a low rear-left tyre reading and fluids and lighting diagnostics">
 

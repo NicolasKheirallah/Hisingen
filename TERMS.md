@@ -153,7 +153,7 @@ When vehicle location functionality is enabled, Hisingen may use Apple's locatio
 
 ### Open-Meteo
 
-When vehicle weather functionality is enabled, Hisingen may send the vehicle's latitude and longitude directly to Open-Meteo to retrieve weather information for that location.
+When vehicle weather functionality is enabled, Hisingen may send the vehicle's latitude and longitude directly to Open-Meteo to retrieve weather and air-quality information for that location. Air-quality figures come from the CAMS European air-quality forecasts through Open-Meteo.
 
 Hisingen does not need to send your VIN or manufacturer account credentials with that weather request.
 

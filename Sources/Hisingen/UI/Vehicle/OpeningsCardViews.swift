@@ -242,7 +242,10 @@ struct TireStatusCardView: View {
     let tyres: [TyrePressure]
     /// Drives which silhouette and which wheel circles are drawn.
     var model: VehicleModel? = nil
+    /// The outside temperature at the car, when it is known and current. The pressure note reads it.
+    var ambientCelsius: Double? = nil
 
+    @Environment(\.preferencesStore) private var preferences
     @State private var hoveredPosition: TyrePosition? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -315,6 +318,14 @@ struct TireStatusCardView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if let temperatureNote {
+                    Text(temperatureNote)
+                        .hisType(.micro)
+                        .foregroundStyle(HisingenTheme.inkMuted)
+                        .hisCaptionLeading()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 VehicleSideProfileTiresView(tyres: tyres, model: model, hoveredPosition: hoveredPosition)
                     .padding(.horizontal, 4)
 
@@ -330,6 +341,26 @@ struct TireStatusCardView: View {
                 }
             }
         }
+    }
+
+    /// One line when the air is 10 °C or more from 20 °C: every tyre reads lower in the cold and
+    /// higher in the heat, so a cold morning explains four slightly low readings. Silent for a car
+    /// that reports warning levels only, since there is no pressure to move.
+    private var temperatureNote: String? {
+        guard let ambientCelsius,
+              let shift = TyrePressureTemperature.note(
+                  tyreKilopascals: tyres.compactMap(\.kilopascals), ambientCelsius: ambientCelsius)
+        else { return nil }
+        let unit = preferences.temperatureUnit
+        let air = Format.temperature(celsius: ambientCelsius, unit: unit, decimals: 0)
+        let reference = Format.temperature(celsius: TyrePressureTemperature.referenceCelsius, unit: unit, decimals: 0)
+        let amount = Format.pressure(kilopascals: abs(shift), unit: preferences.pressureUnit)
+        if shift < 0 {
+            return L10n.format("Tyres read lower in the cold: at %@ they sit about %@ below their value at %@.",
+                               air, amount, reference)
+        }
+        return L10n.format("Tyres read higher in the heat: at %@ they sit about %@ above their value at %@.",
+                           air, amount, reference)
     }
 
     @ViewBuilder

@@ -227,8 +227,12 @@ jobs:
         if: always()
         run: sh Scripts/release-build.sh signing-cleanup
 
+  # Every job after `build` states its own condition. The default `success()` also requires the
+  # whole chain behind a job to be green, and `test` is skipped whenever `ci-proof` finds CI
+  # green, so without these the 3.0.2 release built for 46 minutes and then skipped publication.
   notarize:
     needs: [validate, build]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.build.result == 'success' }}
     permissions:
       contents: read
       actions: read
@@ -311,6 +315,7 @@ jobs:
 
   publish:
     needs: [validate, notarize]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.notarize.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production-release
@@ -352,6 +357,7 @@ jobs:
 
   deploy-pages:
     needs: [validate, notarize, publish]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.notarize.result == 'success' && needs.publish.result == 'success' }}
     permissions:
       contents: read
       pages: write
@@ -367,6 +373,7 @@ jobs:
   # reviewable PR instead of pushing to main: the maintainer merges it with the release.
   seed-sync:
     needs: [validate, notarize, publish]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.notarize.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -420,6 +427,7 @@ jobs:
 
   homebrew-tap:
     needs: [validate, notarize, publish]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.notarize.result == 'success' && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production-release

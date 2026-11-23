@@ -80,6 +80,13 @@ began. Sparse power timing may weight a day/night split, but the weighting is no
 authoritative session-energy total so missing observations cannot underprice a charge. Changing
 preferences later does not rewrite historical costs, and different currencies are not summed.
 
+A session imported from a paired home charger (NexBlue, Easee, Zaptec or Home Assistant) carries
+the energy the charger measured. The grid tariff is added to its cost, and an idle or overstay fee
+is a separate line that is never part of the energy cost. The fee appears only where the charger
+recorded the session running past the end of the charge. See
+[Grid tariff](../home-charging.md#grid-tariff) and
+[Idle and overstay fees](../home-charging.md#idle-and-overstay-fees).
+
 Only completed/interrupted sessions with a measurable SoC/energy gain are shown as history. An active row
 stays internal to the recorder instead of appearing as a growing-duration `0 kWh` charge.
 Persisted header boundaries and chart samples are reconciled when read, so the list, duration,

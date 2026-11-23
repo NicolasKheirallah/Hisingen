@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Regression checks for localization safety, Git path parsing and packaging order."""
+"""Regression checks for localization safety, Git path parsing, packaging order and App Intents flag capture."""
 import contextlib
 import importlib.util
 import io
 import json
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -135,6 +136,75 @@ class PackagingOrderTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((root / "packaged").is_file())
+
+
+class AppIntentsFlagCaptureTests(unittest.TestCase):
+    """The compile-command capture must survive a concurrent build compiling the module first."""
+
+    COMPILE_LINE = "swift-frontend -c -module-name Fake -filelist /tmp/fake.filelist -o /tmp/fake.o"
+
+    def run_capture(self, silent_builds):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / "Scripts").mkdir()
+            for name in ("generate-appintents-metadata.sh", "appintents-capture-flags.py",
+                         "appintents-compile-consts.py"):
+                (root / "Scripts" / name).write_text((ROOT / "Scripts" / name).read_text())
+            sources = root / "Sources" / "Fake"
+            sources.mkdir(parents=True)
+            (sources / "Fake.swift").write_text("// stub\n")
+            developer = root / "Xcode.app" / "Contents" / "Developer"
+            developer.mkdir(parents=True)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            counter = root / "swift-calls"
+            (root / "scratch").mkdir()  # SwiftPM creates this on a real build
+            stubs = {
+                "xcrun": "echo /sdk\n",
+                "defaults": "echo 1\n",
+                # Prints the module compile command only once `silent_builds` builds have passed,
+                # the way SwiftPM stays quiet when another build already compiled the module.
+                "swift": (
+                    f'echo x >> "{counter}"\n'
+                    f'if [ "$(wc -l < "{counter}")" -gt {silent_builds} ]; then\n'
+                    f'    echo "{self.COMPILE_LINE}"\nfi\n'
+                ),
+            }
+            for name, body in stubs.items():
+                path = bin_dir / name
+                path.write_text("#!/bin/sh\n" + body)
+                path.chmod(0o755)
+            # On macOS /usr/bin/python3 is an xcrun shim that rejects the fake developer directory.
+            (bin_dir / "python3").symlink_to(sys.executable)
+            env = {
+                "PATH": f"{bin_dir}:/usr/bin:/bin",
+                "DEVELOPER_DIR": str(developer),
+                "TMPDIR": str(root),
+            }
+            result = subprocess.run(
+                ["sh", "Scripts/generate-appintents-metadata.sh", "--output", str(root / "out"),
+                 "--module", "Fake", "--source-directory", "Sources/Fake",
+                 "--scratch-path", str(root / "scratch")],
+                cwd=root, env=env, capture_output=True, text=True,
+            )
+            builds = len(counter.read_text().splitlines()) if counter.exists() else 0
+            cache = root / "scratch" / "hisingen-appintents-flags-Fake.txt"
+            cached = cache.read_text() if cache.exists() else ""
+            return result, builds, cached
+
+    def test_a_build_that_prints_no_command_is_retried_once(self):
+        result, builds, cached = self.run_capture(silent_builds=1)
+        self.assertEqual(builds, 2, result.stderr)
+        self.assertIn(self.COMPILE_LINE, cached)
+        self.assertNotIn("could not read", result.stderr)
+
+    def test_persistent_silence_fails_with_a_hint_and_caches_nothing(self):
+        result, builds, cached = self.run_capture(silent_builds=99)
+        self.assertEqual(builds, 2, result.stderr)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(cached, "")
+        self.assertIn("could not read the Fake module compile command", result.stderr)
+        self.assertIn("another build in this checkout", result.stderr)
 
 
 if __name__ == "__main__":

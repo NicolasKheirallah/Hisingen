@@ -1,5 +1,7 @@
 # Adding Another Provider
 
+This page covers vehicle brands. For a home-charger vendor, see [Adding a charger source](adding-a-charger-source.md).
+
 What implementing `VehicleProviding` for a third vehicle brand would actually require, based on how cleanly (and not-so-cleanly) that boundary holds up for the existing two. See [architecture/providers.md](../architecture/providers.md) for the current state of the seam before starting.
 
 ## What you get for free

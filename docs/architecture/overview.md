@@ -55,6 +55,7 @@ Fleet membership and snapshot lookup live in `FleetStore`. It retains per-brand 
 - [components.md](components.md): per-component responsibilities, state, isolation, failure modes
 - [runtime.md](runtime.md): what actually happens from process launch to first render
 - [providers.md](providers.md): the `VehicleProviding` seam in detail
+- [home-charging.md](home-charging.md): the home-charger, price and grid-tariff subsystem, which runs beside the vehicle providers
 - [capabilities.md](capabilities.md): how "does this vehicle support X" is decided
 - [refresh-system.md](refresh-system.md): polling cadence, coalescing, backoff
 - [motion-system.md](motion-system.md): the shared `Motion` tokens, the menu-bar charging animation, and how Reduce Motion is resolved in one place

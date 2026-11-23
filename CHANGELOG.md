@@ -3,15 +3,168 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.3] - 2026-11-23
+
+### Added
+
+- **Departure weather advice names ice, snow and heat.** The line under the weather readout used to
+  speak only of frost, rain and wind. It now warns about icy roads when the departure hour is wet
+  at or below 1 °C or a freezing rain or drizzle code is forecast, and it says so even when a
+  climate timer is already set, because a timer does nothing for the road. Snow is named with
+  the centimetres expected, together with ice when it falls at or below 1 °C, and a departure hour at 28 °C or more suggests cooling the cabin
+  where no timer covers it. The climate card gains the same heat hint. The hourly request now also
+  asks Open-Meteo for snowfall and the weather code; no further request is made and the coordinates
+  are still rounded to two decimals.
+
+- **Range at the next departure.** When the car has a departure time (its own timer or a calendar
+  event), a forecast for that hour, a reported range and enough trip history, the weather readout
+  adds a line such as "At 07:30 (-9 °C) your trips suggest about 14% more energy per km than now.
+  Range near 214 km." The difference comes from the line fitted through the car's own recorded
+  trips, outside temperature against energy per km, the same line History uses to normalise
+  consumption, and it scales the range the car reports. It needs 15 trips driven across at least
+  8 °C, stays within the temperatures those trips covered, and says nothing for a difference under
+  5%, for a line that does not rise as it gets colder, or when the weather is a last-known reading.
+  It runs on the Mac and sends nothing new anywhere.
+
+- **A heads-up before rain reaches an open window.** The rain alert only fired once rain was
+  already falling at the car. The weather request now also asks Open-Meteo for the next hour and a
+  half of precipitation in 15-minute steps, and the same "rain starts while windows or sunroof are
+  open" setting posts a notice when at least 0.1 mm is forecast in a quarter hour within the next
+  45 minutes while a window is reported open. It posts once when the forecast turns wet, stays
+  quiet when rain is already falling (the existing alert covers that) and expires with the
+  forecast, so an old reading never raises it. The request keeps the same two-decimal coordinates.
+
+- **Outdoor air quality in the weather readout.** With Vehicle Weather on, the readout shows the
+  European Air Quality Index and its band (good, fair, moderate, poor, very poor, extremely poor)
+  for the car's position, from Open-Meteo's air-quality service. It is a model value for the car's
+  grid cell, not a measurement, so it is kept apart from the cabin sensors and the car's own
+  outdoor particulate reading. The request sends the same two-decimal coordinates as the weather
+  request, is covered by the same setting, and is remembered in memory for 30 minutes. The readout
+  credits CAMS and Open-Meteo under the figure, as the data's licence requires.
+
+- **A cold-weather note on the tyre card.** With Vehicle Weather on and a current reading, a line
+  under the tyre header appears when the air is 10 °C or more from 20 °C and the car reports tyre
+  pressures. It says how far the readings sit below (cold) or above (heat) their value at 20 °C,
+  worked out from gas-law scaling of the absolute pressure, so a freezing morning explains four
+  slightly low readings. Every tyre moves together, which is what separates it from a leak. Cars
+  that report only a warning level per tyre show nothing, and last-known weather is never used.
+  Nothing new is requested or stored.
+
+- **Solar forecast chart you can point at.** The Charging Planner's solar line is now hourly
+  bars on the same clock as the price chart, with hour and weekday labels, a W/m² axis from zero,
+  the planned charging window shaded and Now marked. Hover or drag over it for the hour's range
+  and radiation, as on the price chart. Today's and tomorrow's total radiation sit under it in
+  kWh/m² (still radiation, not panel output), and a day with a missing hour shows no total.
+
+- **Pick where the forecast is drawn.** A menu on the solar line chooses between the car's
+  position and any saved charge location with coordinates, so a car parked at work still shows
+  the sun over the place it will charge. The choice is kept in Settings data on this Mac only.
+
+- **Optional output estimate from your own panels.** Settings, Charging Planner, Solar panels
+  takes an array size in kWp, a tilt and a direction. With a size entered, the solar forecast also
+  asks Open-Meteo for the radiation on a plane at that tilt and direction, shows an estimated kW
+  for each hour you point at, and adds an estimated kWh for today and tomorrow. The estimate is
+  size × tilted radiation × 80% system efficiency, and every figure is labelled as an estimate.
+  Only the tilt and direction are sent; the size stays on this Mac and is not part of a settings
+  archive. With no size, nothing changes and the forecast stays radiation only.
+
+- **How much of the planned charge your panels could cover.** With panels entered in Settings,
+  the solar line says what share of the planned charge their estimated output could supply during
+  the planned window, for example "about 40% of this charge, before other loads". Each hour counts
+  at most the charger's power and the rest of the house is not subtracted, so it is an upper bound
+  and says so. The line is left out when the forecast does not cover the whole window or an hour
+  lacks a figure. It never moves the window: the plan is still chosen on price alone, because what
+  you would earn for energy you do not use is not something Hisingen knows.
+
+- **The line says why it is missing.** With Vehicle Weather off, no car position, or no answer
+  from Open-Meteo, the planner shows one line naming the reason instead of leaving a gap.
+
+### Changed
+
+- **Inactive issues close after 30 days.** A daily workflow labels an issue `stale` and comments
+  after 23 days without activity, then closes it as not planned a week later. A reply removes the
+  label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
+  with an assignee or a milestone, are skipped, and pull requests are not touched.
+
+- **The forecast outlook reaches the end of tomorrow.** It runs through tomorrow, the last day the
+  price chart ever shows (the price chart reaches it once tomorrow's prices are published, about
+  14:15), instead of 24 hours from now, and starts with the hour running now.
+
+- **A failed refresh keeps the last forecast.** If Open-Meteo fails after a good answer, the
+  previous forecast stays on screen for up to six hours (retried every five minutes) instead of
+  the line disappearing. It is held in memory only and never written to disk.
+
+- **The peak names its hour.** Open-Meteo reports the mean of the hour that ended at each
+  timestamp, so the peak now reads as a range such as 11:00–12:00, not the end of that hour.
+  Times are shown on the forecast place's clock, with the zone named when it differs from this
+  Mac's.
+
+- **Documentation covers the grid tariff, supported countries and the services Hisingen
+  contacts.** Home charging gains a "What works where" table for chargers, prices, the planner,
+  grid tariff and live grid carbon by country, plus sections on the grid tariff (Sweden, Norway,
+  Denmark, Germany and the Netherlands, with the Vattenfall and Elvia presets), idle and overstay
+  fees, and the price threshold alert. The planner paragraph now says a connected Tibber home
+  works in any country, which the app already did and the page denied. The privacy pages list
+  every charger, price and carbon host with what it receives, and the export notes mention the
+  XLSX workbook and GPX tracks.
+
+- **The architecture, security and developer docs describe home charging.** A new architecture
+  page covers the charger sources, the vendor-cloud provider seam, the polling intervals and the
+  command loop. Keychain lists every charger, Tibber, Perific, Home Assistant and Electricity Maps
+  item, the retention page covers imported sessions and the spot-price cache, and the persistence
+  page covers the price tables and the Home Charging keys. The threat model and security overview
+  say that a Home Assistant address entered as `http` sends its token unencrypted, which the
+  overview's "every request is HTTPS" line had left out. New pages cover the chargers and prices
+  API and how to add a charger source, and remote controls, troubleshooting, the glossary and the
+  product tour gain home-charging entries.
 
 ### Fixed
+
+- **Forecast hours could be an hour off across a daylight-saving change.** The answer used one
+  UTC offset for both days, so the hours after a clock change were shifted. Hours are now read as
+  exact epoch seconds. An answer that arrived as text, or without a zone, is no longer guessed
+  at.
+
+- **A release whose CI was already proven built the app and then published nothing.** The
+  release workflow skips its own test job when CI is green for the tagged commit, and only the
+  build job allowed for that. Notarize, publish, the Homebrew cask, the Pages deploy and the
+  appcast seed sync used the default condition, which also needs every job behind them to have
+  succeeded, so v3.0.2 spent 46 minutes building and then skipped all five. Each of them now
+  states its own condition on the jobs it directly needs, and a release pipeline test fails when
+  a job behind a conditional job leaves the condition out.
+
+- **The Elvia day rate never applied.** The Norwegian preset listed no months for its day window, so
+  the app read the tariff as flat and charged the night rate of 31.4 øre/kWh around the clock. It
+  now lists every month: weekdays from 06:00 to 22:00 cost 46.4 øre/kWh and nights and weekends
+  31.4 øre/kWh, as on the invoice. An Elvia tariff saved by an earlier build is repaired when it is
+  read, so the setting does not need to be chosen again.
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
   next refresh was the 30-minute drift check, and the stream carries battery and charging
   readings only. A climate started on a charging car therefore kept its first "Starting" frame,
   with no countdown, until that check ran. A running climate session now keeps the two-minute
   refresh while the stream is open.
+
+- **`make app` no longer fails when another build compiles the widget first.** Reading the
+  App Intents compile command needs a build that actually compiles the module. When a second
+  build in the same checkout compiled it between the script's touch and its own build, SwiftPM
+  printed nothing and the step stopped with "no HisingenWidget module compile command found".
+  The script now touches and builds once more before giving up, and the final error says another
+  build may be compiling the module.
+
+### Screenshots
+
+Screenshots use sample vehicle data.
+
+![Ambient Conditions popover with the departure line reading Icy roads possible at 07:30 (-1 °C)](assets/screenshots/3.0.3/weather-icy-roads.png)
+
+![Ambient Conditions popover with the departure line reading Snow and icy roads possible at 07:30 (0.8 cm)](assets/screenshots/3.0.3/weather-snow.png)
+
+![Ambient Conditions popover with the departure line reading Hot forecast at 07:30 (31 °C), a climate timer would cool the cabin](assets/screenshots/3.0.3/weather-heat.png)
+
+![Ambient Conditions popover with an Air Quality row reading Fair, 32, the CAMS credit, a frost line, and the range line: your trips suggest about 29% more energy per km, range near 233 km](assets/screenshots/3.0.3/weather-range-and-air.png)
+
+![Tire Pressure card with a line saying tyres read lower in the cold, about 38 kPa below their value at 20 °C](assets/screenshots/3.0.3/tyres-cold.png)
 
 ## [3.0.2] - 2026-11-21
 

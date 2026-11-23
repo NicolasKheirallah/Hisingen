@@ -45,6 +45,8 @@ struct SettingsChargingPlannerCard: View {
                         .controlSize(.small)
                         .frame(maxWidth: 160)
                     }
+                    Divider().opacity(HisingenTheme.dividerOpacity)
+                    SettingsSolarArrayRows(binder: binder)
                     if let onOpenAutomation {
                         NavigationRow(title: L10n.text("Open Plan Automations"), action: onOpenAutomation)
                     }

@@ -8,6 +8,8 @@
 │   ├── Services/
 │   │   ├── API/          Both VehicleProviding implementations + shared protocol/errors
 │   │   ├── Refresh/      RefreshCoordinator
+│   │   ├── HomeCharging/ Home chargers (direct vendors, Home Assistant), Tibber, Perific house meter
+│   │   ├── Market/       Swedish spot-price service and the planner's price provider
 │   │   ├── Persistence/  Keychain, Preferences, VehicleStateStore
 │   │   ├── Notifications/ Notifier, ChargingTransitionDetector
 │   │   ├── Security/     RemoteActionAuthorizer, VolvoSignInPresenter
@@ -68,6 +70,8 @@
 | Changing what's cached to disk | `Domain/VehicleState.swift` (`cacheableCopy`), `Services/Persistence/VehicleStateStore.swift` |
 | Touching Polestar auth/telemetry | `Services/API/PolestarAPI.swift` + `PolestarGRPC*.swift` |
 | Touching Volvo auth/telemetry | `Services/API/VolvoAPI.swift` + `VolvoModels.swift` |
+| Touching a home charger, Tibber or the house meter | `Services/HomeCharging/HomeChargingModel.swift`, `Services/HomeCharging/Direct/`; see [adding-a-charger-source.md](adding-a-charger-source.md) |
+| Touching the grid tariff or electricity prices | `Domain/GridTariff.swift`, `Domain/GridTariffRegion.swift`, `Domain/ElectricityRate.swift`, `Services/Market/` |
 | Changing the popover/menu-bar UI | `UI/StatusItemController.swift` (AppKit shell), `UI/HisingenContentView.swift` (SwiftUI root) |
 | Changing Settings | `UI/SettingsView.swift`, `UI/AccountCredentialsForm.swift` |
 | Adding a build/release step | `Makefile`, `.github/workflows/` |

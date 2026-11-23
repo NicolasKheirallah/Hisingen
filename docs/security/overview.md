@@ -54,6 +54,12 @@ See [keychain.md](keychain.md) for exactly how and where these are stored.
 
 Every request in the codebase is HTTPS (`https://` hardcoded, no scheme-downgrade path) or, for Polestar's gRPC calls, gRPC-over-HTTP/2 (also TLS). There is no custom certificate pinning; Hisingen relies on the system's standard TLS trust store via `URLSession`. OIDC discovery responses are additionally host-validated (must be `polestar.com` or a `*.polestar.com` subdomain, `https` only) before any of their URLs are used, as a defense against a compromised discovery document redirecting the login flow off-domain.
 
+The Home Assistant connection is the exception to HTTPS-only. Hisingen connects to the address you
+enter, over `http` or `https`, and the live socket uses `ws` or `wss` to match. The long-lived
+token goes in an `Authorization: Bearer` header on every request, so over `http` it crosses your
+local network unencrypted. Use an `https` address when Home Assistant offers one. Every other
+charger and price service Hisingen contacts is HTTPS, and Tibber's live stream is `wss`.
+
 ## Redirects and callbacks
 
 - **Polestar's login redirect** is intercepted by a custom `URLSessionTaskDelegate` that only captures a redirect matching the exact expected scheme/host/path (`https://www.polestar.com/sign-in-callback`); anything else is followed normally, not treated as a callback.

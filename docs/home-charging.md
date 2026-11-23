@@ -1,6 +1,24 @@
 # Home charging
 
-[Charger setup](#connect-nexblue-directly) · [Tibber](#connect-tibber) · [Home Assistant](#connect-through-home-assistant) · [Electricity prices and the Charging Planner](#electricity-prices-and-the-charging-planner) · [Charger screenshots](product-tour.md#home-charging)
+[What works where](#what-works-where) · [Charger setup](#connect-nexblue-directly) · [Tibber](#connect-tibber) · [Home Assistant](#connect-through-home-assistant) · [Electricity prices and the Charging Planner](#electricity-prices-and-the-charging-planner) · [Grid tariff](#grid-tariff) · [Idle and overstay fees](#idle-and-overstay-fees) · [Price alerts](#price-alerts) · [Charger screenshots](product-tour.md#home-charging)
+
+## What works where
+
+Chargers connect through a vendor account or through Home Assistant, and Hisingen sets no country limit on either. Prices, the planner and the grid tariff depend on the market you pick.
+
+| Part | Where it works | What it reads from |
+|---|---|---|
+| NexBlue, Easee and Zaptec, paired directly | Any country the vendor serves your account in | The vendor's cloud |
+| Home Assistant | Any charger Home Assistant has an integration for. NexBlue, Easee and Zaptec are found automatically, others are mapped by hand | Your Home Assistant, on the local network |
+| Perific house meter | Any country the Perific app serves your account in | Perific's cloud |
+| Tibber prices | Any Tibber home | `api.tibber.com` |
+| Swedish spot prices | Sweden, price zones SE1 to SE4 | [Elpriset just nu.se](https://www.elprisetjustnu.se/) |
+| Charging Planner and Price Threshold Alert | Sweden with Swedish spot prices, or any country with a Tibber home connected and Tibber chosen as the supplier | The price source above |
+| Grid tariff | The country picker offers Sweden, Norway, Denmark, Germany and the Netherlands. Sweden and Norway carry published presets, the other three take your own figures | Presets in the app, or your invoice |
+| Live grid carbon | Sweden, price zones SE1 to SE4 | Electricity Maps, with your own free token |
+| Idle and overstay fees | Wherever the paired charger records a session running past the end of the charge | The charger's session record |
+
+Outside Sweden, and without a Tibber home, you type in the rate and the optional night tariff under **Settings, Electricity**. The grid fee is yours to type in as well, unless the country is Sweden or Norway and a preset fits.
 
 ## Connect NexBlue directly
 
@@ -292,16 +310,19 @@ price.
   Bixia, Greenely, Göteborg Energi, Skellefteå Kraft, Telge Energi, Jämtkraft, or other) only
   names the contract. It carries no prices, because markups differ per agreement. The price your
   settings produce is shown next to the controls.
-* **Every other country.** A typed-in rate and the optional night tariff.
+* **Every other country.** A typed-in rate and the optional night tariff. A connected Tibber home
+  supplies its own prices in any country, and the Charging Planner works from them.
 
 Hisingen uses the selected rate for charge-to-target estimates, session costs and totals in Log
 and CSV exports. A connected Tibber home supplies prices for sessions it covers. Changing the markup re-prices past sessions that have a stored market cost.
 Sessions the market prices do not cover keep their saved cost or your fixed rate.
 
-The **Charging Planner** needs Sweden and its feature switch. It shows an hourly price curve and
-the cheapest window to reach your target. Automatic charging commands are bound to the vehicle
-the plan was calculated for. Choosing another country stops the planner and
-keeps its settings for when Sweden is selected again. Spot prices come from
+The **Charging Planner** needs a price source and its feature switch. The price source is Swedish
+spot prices, with the country set to Sweden, or a connected Tibber home with Tibber chosen as the
+supplier, which works in any country. The planner shows an hourly price curve and the cheapest
+window to reach your target. Automatic charging commands are bound to the vehicle the plan was
+calculated for. With no price source the planner stops and keeps its settings for when one is
+available again. Spot prices come from
 [Elpriset just nu.se](https://www.elprisetjustnu.se/), are fetched once a day after 14:15 and
 exclude taxes and grid fees, so the markup you enter matters. Missing history is fetched, and
 each zone refreshes on its own schedule.
@@ -320,6 +341,86 @@ minute tick can send both the start and the stop. It is off by default, works on
 **Auto-Start Charging in the Window**, and does not wake a sleeping Mac. Leaving it on can keep a
 MacBook awake for most of the day, because a window is always somewhere ahead while the car is
 below its target; that is the cost of not being able to schedule a wake.
+
+## Grid tariff
+
+The grid tariff is the transfer fee your grid company charges per kWh on top of the electricity
+price. Tibber's price leaves it out, so Hisingen adds it to charger sessions, the Charging Planner
+and the house-load costs. It is optional, and the default is no grid fee.
+
+Open **Settings, Electricity, Grid Tariff**. Rates are written as they appear on your invoice,
+with VAT included, in hundredths of the currency per kWh: öre in Sweden, øre in Norway and
+Denmark, cent in Germany and the Netherlands.
+
+**Country.** The picker lists Sweden, Norway, Denmark, Germany and the Netherlands. With a Tibber
+home connected, the card names the country Tibber puts the home in and offers to use it. The
+country sets the currency, the unit and the clock the high-load window follows. That clock is the
+grid company's own time zone, not the Mac's, so a trip abroad does not move the window.
+
+**Tariff type.**
+
+| Type | What it is |
+|---|---|
+| No grid fee | Nothing is added. |
+| Flat fee | One rate per kWh at all hours. |
+| Custom time-of-use | Your own high-load rate, with the hours, the months and a weekdays-only switch. A second rate applies the rest of the time. |
+| Vattenfall single tariff (E4) | Sweden. 44.5 öre per kWh at all hours. |
+| Vattenfall time tariff (T4) | Sweden. 76.5 öre per kWh in high-load time and 30.5 öre the rest of the time. High-load time is weekdays from 06:00 to 22:00, November to March. The public holidays Swedish grid companies name, such as Christmas Eve and Good Friday, are not high-load. |
+| Elvia day and night tariff | Norway. Elvia's rates of 46.40 øre per kWh by day and 31.40 øre per kWh by night. |
+
+The Vattenfall figures are Vattenfall Eldistribution's private-customer prices from 1 January
+2026, and the Elvia figures are Elvia's 2026 prices for private customers with VAT, electricity
+tax and Enova included. For the Vattenfall presets, pick your **Main fuse**: 16, 20, 25, 35, 50
+or 63 A. It sets the yearly fixed fee (5,775, 8,085, 10,125, 13,890, 19,945 or 26,875 kr). The
+fixed fee is shown as a monthly amount for reference and is in no per-kWh figure. Enter your own
+fixed fee under a custom tariff in the same way.
+
+**Denmark, Germany and the Netherlands** have no published rates in the app. The card says so.
+Copy the fee from your invoice and enter it as a flat fee or a custom time-of-use tariff. Outside
+Sweden the high-load window follows the weekday rule alone, because only Sweden's public holidays
+are known.
+
+What the card checks for you:
+
+- **A preset belongs to its own country.** Moving a tariff to another country keeps the window,
+  the months and the weekday rule, and clears the rates and the fixed fee, because they are in the
+  old country's currency. A Vattenfall or Elvia preset moved elsewhere becomes your own figures.
+- **A preset from another company.** When Tibber names a grid company different from the preset's
+  operator, the card says whose prices these are and asks you to check your invoice or enter your
+  own as a custom tariff. A home with no recorded company raises no warning.
+- **Old prices.** A preset shows the year its prices are from. Grid companies change them each
+  January, and the card says to check your invoice once the year has passed.
+- **Right now.** The card shows the fee in force at this moment and when it next changes.
+
+With a Vattenfall preset and a Tibber home connected, the card also prices the single and the
+time tariff on your own hourly readings for the recent past, says what share of your energy fell
+in high-load time, and notes when the time tariff costs less. A change applies for at least a
+year, so look at a full year of readings first.
+
+## Idle and overstay fees
+
+Some chargers and charging locations bill a fee when a car stays plugged in after the charge has
+finished. **Settings, Electricity, Idle and Overstay Fees** holds your rules, each for one charger
+or one location. A rule has a grace period in minutes, a fee, a currency and a unit of per hour or
+per minute. Hisingen suggests no default fee, because the figure comes from your charger's or
+location's price list.
+
+Hisingen shows a fee on a session only where the paired charger recorded the session running past
+the end of the charge. The session reads **Idle and Overstay Fee**, names the rule, and says when
+the session ended, how long after the charge finished, and how many minutes the grace period left
+billed. The fee is a separate line and is never added to the energy cost, which still comes from
+your rate.
+
+## Price alerts
+
+**Settings, Notifications, Price Threshold Alert** notifies you when the electricity price rises
+above a level you set. The switch appears when the electricity rate is set to **Automatic** and a
+price source is available, as described under [What works where](#what-works-where). Enter the
+**Price level** per kWh and a **Quiet period**. The alert posts once when the current or next
+hour's price crosses the level, then stays quiet for the quiet period, so a price that moves
+around the level does not fill the notification list. The level is compared with the price you
+pay under Electricity settings, after your rate policy. Hisingen posts nothing when the price
+series is missing or does not cover the hour.
 
 ## What the NexBlue integration provides
 
@@ -432,6 +533,8 @@ real charger. These behaviours depend on your hardware and account and should be
 
 ## Privacy and data
 
+For the Home Assistant connection:
+
 - The long-lived token lives in a Keychain item of its own. It is not written to a settings
   archive, an export, a diagnostic log or a crash report.
 - The app talks only to the address you entered. There is no relay, no cloud account and no
@@ -441,6 +544,22 @@ real charger. These behaviours depend on your hardware and account and should be
   already recorded stays, because it is the reader's data.
 - macOS asks for local network access the first time the app connects. Denying it leaves the rest
   of Hisingen working; the pairing simply reports that it cannot reach Home Assistant.
+
+For the other services, Hisingen contacts one only after you set it up:
+
+| Service | Host | What is sent |
+|---|---|---|
+| NexBlue, direct | `api.nexblue.com` | Your NexBlue account and password once, to sign in. After that the refresh token, with charger reads and commands |
+| Easee, direct | `api.easee.com` | Your Easee account and password to sign in, then charger reads and commands |
+| Zaptec, direct | `api.zaptec.com` | Your Zaptec account and password to sign in, then charger reads and commands |
+| Tibber | `api.tibber.com`, and its websocket stream when a Pulse is paired | Your Tibber token, and price and consumption requests for your home |
+| Perific | `api.enegic.com`, the service the Perific app uses | Your Perific account to sign in, then meter reads |
+| Swedish spot prices | `www.elprisetjustnu.se` | A request for the price file of your zone and day, with no account |
+| Live grid carbon | `api.electricitymap.org` | Your Electricity Maps token and the zone name, such as `SE-SE3` |
+
+Every login and token is kept in the macOS Keychain and never reaches preferences, exports, logs or
+error text. Signing out, disconnecting or removing a service deletes its credentials, as does
+**Remove Connection and Token**. Nothing goes through a Hisingen server, because there is none.
 
 ## Troubleshooting
 

@@ -30,7 +30,9 @@ struct ChargingPlannerCard: View {
     @State private var hasLoaded = false
     @State private var fetchedAt: Date?
     @State private var resolved: PlannerPrices?
-    @State private var solarForecast: SolarForecast?
+    @State private var solarOutcome: SolarForecastOutcome?
+    /// Bumped when the reader picks another place, so the task below runs again for it.
+    @State private var solarPlaceChange = 0
     @State private var gridCarbon: GridCarbonReading?
 
     private let provider = PlannerPriceProvider.shared
@@ -60,8 +62,14 @@ struct ChargingPlannerCard: View {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
     }
 
+    /// Changes with the reader's panel settings, so the forecast is asked again for the new tilt.
+    private var solarArrayKey: String {
+        guard let array = preferences.solarArray else { return "" }
+        return "\(array.kwp)/\(array.tiltDegrees)/\(array.azimuthDegrees)"
+    }
+
     private var plannerTaskID: String {
-        "\(zone.rawValue)|\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)"
+        "\(zone.rawValue)|\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)|\(solarPlaceChange)|\(solarArrayKey)"
     }
 
     var body: some View {
@@ -71,29 +79,59 @@ struct ChargingPlannerCard: View {
             // the card's own insertion/removal, not snap it.
             .animation(cardChangeAnimation, value: neededEnergyKwh > 0.5)
             .task(id: plannerTaskID) {
-                async let solar = Self.solarForecast(for: state, preferences: preferences)
+                async let solar = Self.solarOutcome(for: state, preferences: preferences)
                 async let carbon = Self.gridCarbon(preferences: preferences, zone: zone)
                 let answer = await provider.resolve(zone: zone)
-                let forecast = await solar
+                let outcome = await solar
                 let reading = await carbon
                 guard !Task.isCancelled else { return }
                 points = answer.points
                 fetchedAt = answer.fetchedAt
                 resolved = answer
-                solarForecast = forecast
+                solarOutcome = outcome
                 gridCarbon = reading
                 hasLoaded = true
             }
         }
     }
 
-    /// Open-Meteo radiation at the car's coordinates, when the car has reported them. The
-    /// forecast adds a line only; a failure is nil and the card simply has no line. It sends
-    /// the car's position to Open-Meteo, so it follows the Vehicle Weather setting.
-    private static func solarForecast(for state: VehicleState, preferences: PreferencesStore) async -> SolarForecast? {
-        guard preferences.features.contains(.vehicleWeather),
-              let latitude = state.location?.latitude, let longitude = state.location?.longitude else { return nil }
-        return await SolarForecastClient().forecast(latitude: latitude, longitude: longitude)
+    /// Open-Meteo radiation at the chosen saved charge location, or at the car's coordinates. The
+    /// forecast adds a line only; every way it can be missing is an outcome that says why. It
+    /// sends a position to Open-Meteo, so it follows the Vehicle Weather setting.
+    private static func solarOutcome(for state: VehicleState, preferences: PreferencesStore) async -> SolarForecastOutcome {
+        let place = SolarForecastLoader.place(
+            vehicleLocation: state.location,
+            savedLocations: state.savedChargeLocations,
+            chosenID: preferences.solarForecastLocationID
+        )
+        return await SolarForecastLoader.load(
+            vehicleWeatherEnabled: preferences.features.contains(.vehicleWeather),
+            place: place,
+            array: preferences.solarArray,
+            provider: SolarForecastClient()
+        )
+    }
+
+    /// The saved charge locations the forecast can be drawn for: those with a name and a position.
+    private var solarPlaces: [SolarForecastPlaceChoice] {
+        state.savedChargeLocations.compactMap { spot in
+            guard spot.latitude != nil, spot.longitude != nil, !spot.alias.isEmpty else { return nil }
+            return SolarForecastPlaceChoice(id: spot.id, alias: spot.alias)
+        }
+    }
+
+    /// The end of tomorrow on the price calendar. The price chart reaches it once tomorrow's prices
+    /// are published, about 14:15; the forecast already covers it, so the solar chart always shows
+    /// tomorrow's sun and does not stop at tonight's midnight while prices are still pending.
+    private static func solarOutlookEnd(after now: Date) -> Date {
+        let calendar = ElectricityPriceService.stockholmCalendar
+        return calendar.date(byAdding: .day, value: 2, to: calendar.startOfDay(for: now))
+            ?? now.addingTimeInterval(2 * 86_400)
+    }
+
+    private func selectSolarPlace(_ id: String?) {
+        preferences.solarForecastLocationID = id
+        solarPlaceChange += 1
     }
 
     /// The live carbon line needs a saved Electricity Maps key. The key is read off the main
@@ -210,8 +248,15 @@ struct ChargingPlannerCard: View {
                 }
 
                 if onOpenPlanner == nil {
-                    if let solarForecast, !solarForecast.isEmpty {
-                        SolarForecastLine(forecast: solarForecast)
+                    if case .forecast(let forecast, let place) = solarOutcome {
+                        SolarForecastLine(
+                            forecast: forecast, place: place, plan: plan, array: preferences.solarArray, chargerKw: plannerPowerKw,
+                            outlookEnd: Self.solarOutlookEnd(after: Date()),
+                            places: solarPlaces, onSelectPlace: selectSolarPlace
+                        )
+                        .transition(plannerTransition)
+                    } else if let solarOutcome {
+                        SolarForecastStatusLine(outcome: solarOutcome)
                             .transition(plannerTransition)
                     }
                     if let gridCarbon {

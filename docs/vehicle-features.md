@@ -190,11 +190,27 @@ can confirm a command, so discovery never offers a write it cannot check; a char
 unrecognised states is still listed for its readings and can be mapped by hand.
 
 When Vehicle Weather is on and Open-Meteo answers, the **Charging Planner** draws a **solar
-forecast** line of global shortwave radiation for the next day at the car's location, with its
-peak time. The request carries the position rounded to two decimals, and the answer is kept for 30
-minutes. It is radiation,
-not panel output: Hisingen has no array or inverter figures, so it never turns the forecast into
-kWh. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+forecast**: hourly bars of global shortwave radiation for the rest of today and tomorrow, on the
+same clock as the price chart and through the end of tomorrow, with the planned charging window shaded and
+Now marked. Point at the chart (hover, or drag) to read an hour's range and W/m². Open-Meteo reports
+the mean of the hour that ended at each timestamp, so each bar is labelled with the hour it
+covers. Today's and tomorrow's total radiation sit under the chart in kWh/m²; a day with a missing
+hour shows no total. The forecast is for the car's position unless you pick one of the saved charge
+locations from the menu on the line, which suits a car parked away from the place it charges. The
+request carries the position rounded to two decimals, and the answer is kept in memory for 30
+minutes, or for up to six hours while Open-Meteo is failing. With Vehicle Weather off, no position
+reaches Open-Meteo and the line says which setting would bring it back. By default it is radiation,
+not panel output: Hisingen has no array or inverter figures, so it does not turn the forecast into
+kWh of production. If you type your own array under **Settings, Charging Planner, Solar panels**
+(size in kWp, tilt, and direction with 0° south), the request also asks for the radiation on a plane
+at that tilt and direction, and the chart reads an estimated kW for the hour you point at, with an
+estimated kWh for today and tomorrow under it. The estimate is size × tilted radiation × 80% system
+efficiency, an assumption and not a measurement of your system, so every figure is labelled as an
+estimate. With an array entered, the line also says what share of the planned charge the panels could
+cover during the planned window. Each hour counts at most the charger's power and the rest of the
+house is not subtracted, so it is an upper bound ("before other loads"); it does not change the
+window, which is still the cheapest by price, because the value of unused solar energy is not
+known. Only the tilt and direction are sent to Open-Meteo; the size stays on this Mac. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
 provider named beneath it. The line and its setting exist for Swedish price zones only, because
 the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
 rather than showing a guessed figure. The typed grid intensity in Settings remains the input for
@@ -284,9 +300,17 @@ weather.
 
 Before a scheduled departure, Hisingen can hint at frost or a cold battery using an hourly
 forecast on the climate card. The weather readout adds one line of climate advice when the
-forecast before the departure is cold, wet or windy. The next departure comes from the car's own
+forecast before the departure is cold, wet, windy or hot, and it warns separately when the roads
+may be icy: wet roads at or below 1 °C, or a freezing rain or drizzle forecast, which a climate
+timer cannot fix. Snow in the hour is named as snow, with the centimetres expected. Heat starts at
+28 °C. The next departure comes from the car's own
 departure timers, or from the calendar preconditioning schedule when it is enabled and its next
 event is sooner; with no departure time or no forecast hour at the departure, nothing is shown.
+With a reported range and at least 15 recorded trips driven across 8 °C or more, the readout also
+estimates the range at that departure: the line fitted through the trips' outside temperature and
+energy per km, applied to the forecast hour against the current temperature, scales the range the
+car reports. The estimate stays within the temperatures the trips covered, is hidden for a
+difference under 5% or a line that does not rise in the cold, and never uses last-known weather.
 A notice appears once per climate session when the run time is nearly used up or the battery is
 too low.
 
@@ -311,7 +335,21 @@ Because coordinates are needed to retrieve local weather, the vehicle's latitude
 The hourly forecast that drives the pre-departure hints is fetched in the same request as the
 current weather. Both carry wind speed, gusts and precipitation, which the weather readout shows
 beside the temperature; wind speeds follow the reader's distance unit, and precipitation is
-millimetres of water regardless of whether it falls as rain or snow.
+millimetres of water regardless of whether it falls as rain or snow. The hourly block also asks for
+snowfall in centimetres and the WMO weather code, which the departure hints read for snow and
+freezing rain; both stay out of the weather readout itself.
+
+The same request asks for the next hour and a half of precipitation in 15-minute steps. With
+"Alert if rain starts while windows or sunroof are open" on and a window reported open, a
+notification says rain is expected within the next 45 minutes, once per spell, when the forecast
+shows at least 0.1 mm in a quarter hour. Rain already falling is left to the existing alert, and a
+forecast that has run out by the time it is read raises nothing.
+
+The readout also shows the outdoor air quality as a European Air Quality Index figure and its
+band, asked of Open-Meteo's air-quality service for the same rounded position and kept in memory
+for 30 minutes. It is the CAMS model's value for the car's grid cell, not a measurement at the car,
+and the readout names CAMS and Open-Meteo under it. It stays separate from the cabin sensors and
+from the car's own outdoor particulate reading.
 
 Live check: the request shape was verified against Open-Meteo without a key, but the readout's
 calendar-based advice line has not been exercised against a real calendar and a live refresh.

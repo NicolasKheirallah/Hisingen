@@ -154,3 +154,12 @@ See [runtime.md](runtime.md#ui-bridging) for the exact bridging mechanism.
 - **`Domain/Statistics`**: additional aggregate helpers used by History cards.
 - **Persistence additions**: `connectivity_history`, `cabin_climate_history`,
   `fuel_entries`, `telemetry_logs.avg_consumption_unit`; full JSON backup export.
+
+## HomeChargingModel (`Services/HomeCharging/HomeChargingModel.swift`)
+
+The `@MainActor` model behind the home charger card, Settings, Electricity and the charger part of
+History. `AppDelegate.homeCharging` creates it lazily. It owns pairings, a 60-second poll (10
+seconds while a command waits), command confirmation, session import, Tibber and the house meter.
+It has no reference to `RefreshCoordinator` and runs its own loop. State lives in
+`HomeChargingStore`: `UserDefaults` for pairings, plans, the grid tariff and the Tibber choice, and
+the Keychain for logins. See [home-charging.md](home-charging.md).

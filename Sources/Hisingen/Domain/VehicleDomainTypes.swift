@@ -1403,6 +1403,8 @@ struct VehicleWeather: Codable, Equatable, Sendable {
     let timestamp: Date?
     /// Forecast hours by wall-clock time, nil when the hourly request was not made or failed.
     var hourlyTemperatures: [HourlyTemperature]?
+    /// The next hour or so of rain in 15-minute steps, nil when the request was not made or failed.
+    var upcomingPrecipitation: [PrecipitationInterval]?
 
     var hasCurrentConditions: Bool {
         temperatureCelsius != nil || apparentTemperatureCelsius != nil
@@ -1418,7 +1420,8 @@ struct VehicleWeather: Codable, Equatable, Sendable {
         windGustsKmh: Double? = nil,
         precipitationMm: Double? = nil,
         timestamp: Date? = nil,
-        hourlyTemperatures: [HourlyTemperature]? = nil
+        hourlyTemperatures: [HourlyTemperature]? = nil,
+        upcomingPrecipitation: [PrecipitationInterval]? = nil
     ) {
         self.temperatureCelsius = temperatureCelsius
         self.condition = condition
@@ -1429,7 +1432,19 @@ struct VehicleWeather: Codable, Equatable, Sendable {
         self.precipitationMm = precipitationMm
         self.timestamp = timestamp
         self.hourlyTemperatures = hourlyTemperatures
+        self.upcomingPrecipitation = upcomingPrecipitation
     }
+}
+
+/// Precipitation over one 15-minute stretch, in mm of water (rain, showers or snow).
+struct PrecipitationInterval: Codable, Equatable, Sendable {
+    static let length: TimeInterval = 15 * 60
+
+    /// The start of the stretch the amount covers.
+    let start: Date
+    let millimetres: Double
+
+    var end: Date { start.addingTimeInterval(Self.length) }
 }
 
 /// One forecast hour. Wind and precipitation are nil in hours the request did not ask for.
@@ -1442,6 +1457,10 @@ struct HourlyTemperature: Codable, Equatable, Sendable {
     var windGustsKmh: Double? = nil
     /// Precipitation in the hour, in mm of water (rain, showers or snow).
     var precipitationMm: Double? = nil
+    /// Snow that falls in the hour, in cm of fresh snow.
+    var snowfallCm: Double? = nil
+    /// The WMO weather code for the hour. Freezing rain and drizzle are only knowable from it.
+    var weatherCode: Int? = nil
 }
 
 

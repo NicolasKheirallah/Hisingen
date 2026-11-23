@@ -157,5 +157,26 @@ charging settings (amp limit, minimum SoC, optimised-charging mode).
 
 **Optimised charging mode**: per-location strategy: *intelligent timer* or *price-optimised*.
 
+**Charger source**: how a home charger is reached: `homeAssistant`, `easee`, `zaptec` or `nexBlue`
+(`ChargerSource`). The three vendor sources are direct and read the vendor's cloud. Only Home
+Assistant runs plans. See `Domain/HomeCharging/ChargerSource.swift`.
+
+**Direct charger provider**: one vendor cloud behind the `DirectChargerProvider` protocol: list
+chargers, read telemetry, send Charge Now or Pause, and list finished sessions. It decides nothing
+for the reader. See `Services/HomeCharging/Direct/`.
+
+**Grid tariff**: the transfer fee a grid company charges per kWh on top of the electricity price,
+added to charger sessions, the Charging Planner and the house-load costs. `GridTariffRegion` names
+the country, and presets exist for Vattenfall in Sweden and Elvia in Norway. See
+`Domain/GridTariff.swift`.
+
+**High-load time**: the hours and months in which a time-of-use grid tariff charges its higher rate,
+read on the grid company's own clock. Outside Sweden the weekday rule applies alone, because only
+Sweden's public holidays are known.
+
+**Price source**: whatever lets Hisingen read a price series: a connected Tibber home with Tibber
+chosen as the supplier, or the country set to Sweden. The Charging Planner and the price threshold
+alert need one (`PreferencesStore.hasPriceSource`).
+
 **SoH (State of Health)**: remaining usable battery capacity vs reference. Hisingen always
 labels it a **calculated estimate**; neither provider exposes a BMS measurement.

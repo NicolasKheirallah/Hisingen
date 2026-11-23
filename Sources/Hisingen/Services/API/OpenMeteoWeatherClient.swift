@@ -25,6 +25,7 @@ struct OpenMeteoWeatherClient: Sendable {
               let json = await fetch(url, operation: "Open-Meteo vehicle weather", scope: scope),
               var current = Self.currentWeather(from: json) else { return nil }
         current.hourlyTemperatures = Self.hourlyTemperatures(from: json)
+        current.upcomingPrecipitation = Self.minutelyPrecipitation(from: json)
         return current
     }
 
@@ -64,6 +65,9 @@ struct OpenMeteoWeatherClient: Sendable {
             URLQueryItem(name: "longitude", value: OpenMeteoCoordinate.rounded(longitude)),
             URLQueryItem(name: "current", value: currentFields),
             URLQueryItem(name: "hourly", value: hourlyFields),
+            // The next hour and a half of rain in quarter-hour steps, for the rain-ahead alert.
+            URLQueryItem(name: "minutely_15", value: "precipitation"),
+            URLQueryItem(name: "forecast_minutely_15", value: "6"),
             URLQueryItem(name: "forecast_days", value: "2"),
             // Local wall-clock times, so a 07:30 departure lines up with the forecast hour.
             URLQueryItem(name: "timezone", value: "auto")
@@ -86,6 +90,8 @@ struct OpenMeteoWeatherClient: Sendable {
         let windSpeeds = hourly["wind_speed_10m"] as? [Any]
         let windGusts = hourly["wind_gusts_10m"] as? [Any]
         let precipitation = hourly["precipitation"] as? [Any]
+        let snowfall = hourly["snowfall"] as? [Any]
+        let weatherCodes = hourly["weather_code"] as? [Any]
 
         var hours: [HourlyTemperature] = []
         for (index, time) in times.enumerated() {
@@ -97,10 +103,35 @@ struct OpenMeteoWeatherClient: Sendable {
                 temperatureCelsius: celsius,
                 windSpeedKmh: alignedHourlyValue(at: index, in: windSpeeds),
                 windGustsKmh: alignedHourlyValue(at: index, in: windGusts),
-                precipitationMm: alignedHourlyValue(at: index, in: precipitation)
+                precipitationMm: alignedHourlyValue(at: index, in: precipitation),
+                snowfallCm: alignedHourlyValue(at: index, in: snowfall),
+                weatherCode: alignedHourlyValue(at: index, in: weatherCodes).map { Int($0) }
             ))
         }
         return hours
+    }
+
+    /// Parses the `minutely_15` block. Each amount is the sum of the 15 minutes before its
+    /// timestamp, so the stretch it covers starts a quarter hour earlier. A null reading is skipped
+    /// rather than read as dry, and a block with no usable step is nil.
+    static func minutelyPrecipitation(from json: [String: Any]) -> [PrecipitationInterval]? {
+        guard let block = json["minutely_15"] as? [String: Any],
+              let times = block["time"] as? [String],
+              let values = block["precipitation"] as? [Any] else { return nil }
+        let offsetSeconds = (json["utc_offset_seconds"] as? NSNumber)?.doubleValue ?? 0
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        var intervals: [PrecipitationInterval] = []
+        for (index, time) in times.enumerated() {
+            guard index < values.count,
+                  let millimetres = (values[index] as? NSNumber)?.doubleValue,
+                  millimetres.isFinite, millimetres >= 0,
+                  let wallClock = wallClockDate(time, calendar: calendar) else { continue }
+            intervals.append(PrecipitationInterval(
+                start: wallClock.addingTimeInterval(-offsetSeconds - PrecipitationInterval.length),
+                millimetres: millimetres))
+        }
+        return intervals.isEmpty ? nil : intervals
     }
 
     /// An aligned hourly reading, nil when the response left the array or the entry out.
@@ -118,10 +149,13 @@ struct OpenMeteoWeatherClient: Sendable {
     }
 
     /// Wind and precipitation ride the same requests as temperature: Open-Meteo's forecast
-    /// endpoint accepts them in both the `current` and the `hourly` block, in km/h and mm.
+    /// endpoint accepts them in both the `current` and the `hourly` block, in km/h and mm. The
+    /// hourly block also carries snowfall (cm) and the WMO code, which the departure advice reads
+    /// for road ice and snow.
     private static let currentFields =
         "temperature_2m,weather_code,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,precipitation"
-    private static let hourlyFields = "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation"
+    private static let hourlyFields =
+        "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,snowfall,weather_code"
 
     static func openMeteoURL(latitude: Double, longitude: Double) -> URL? {
         var components = URLComponents()

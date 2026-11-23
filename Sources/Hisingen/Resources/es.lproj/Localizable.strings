@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Aviso de lluvia (ventanillas abiertas)";
 "Rain Showers" = "Chubascos";
 "Rain detected near your vehicle with windows left open!" = "¡Lluvia detectada cerca de tu vehículo con las ventanillas abiertas!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Se espera lluvia en %d min cerca de tu vehículo y hay una ventanilla abierta.";
 "Range" = "Autonomía";
 "Range Health Estimate" = "Estimación del estado de la autonomía";
 "Ready" = "Listo";
@@ -1310,6 +1311,11 @@
 "Added" = "Añadido";
 "Address" = "Dirección";
 "Air Quality" = "Calidad del aire";
+"Fair" = "Aceptable";
+"Very poor" = "Muy mala";
+"Extremely poor" = "Extremadamente mala";
+"Air Quality (EAQI)" = "Calidad del aire (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Calidad del aire de las previsiones europeas de CAMS, a través de Open-Meteo.";
 "Air quality index history chart" = "Gráfico de historial del índice de calidad del aire";
 "Air quality index trend chart" = "Gráfico de tendencia del índice de calidad del aire";
 "Air Quality Trend" = "Tendencia de calidad del aire";
@@ -1719,6 +1725,8 @@
 "•••••••• (Saved in Keychain)" = "•••••••• (guardado en el Keychain)";
 "≈ %d days" = "≈ %d días";
 "Tire Pressure" = "Presión de los neumáticos";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Los neumáticos marcan menos presión con frío: a %@ quedan unos %@ por debajo de su valor a %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Los neumáticos marcan más presión con calor: a %@ quedan unos %@ por encima de su valor a %@.";
 "Everything looks good" = "Todo está bien";
 
 /* Text size & density options */
@@ -3138,6 +3146,14 @@
 "At %@ since %@" = "En %@ desde %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Previsión de helada a %@ (%@). Un temporizador de climatización despejaría los cristales.";
 "Cold battery charges more slowly on DC." = "Una batería fría carga más despacio en DC.";
+"Icy roads possible at %@ (%@)." = "Posible hielo en la carretera a las %@ (%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "Posible nieve y hielo en la carretera a las %@ (%@ cm).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Se espera nieve a las %@ (%@ cm). Un temporizador de clima calentaría el habitáculo.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Se espera calor a las %@ (%@). Un temporizador de clima enfriaría el habitáculo.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "También aparece con la carretera mojada a 1 °C o menos, algo que un temporizador no puede resolver, y cuando el aire llega a 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "A las %@ (%@) tus trayectos sugieren un %d%% más de energía por km que ahora. Autonomía cercana a %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "A las %@ (%@) tus trayectos sugieren un %d%% menos de energía por km que ahora. Autonomía cercana a %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Ajustado con %d de tus trayectos registrados: temperatura exterior frente a energía por km. Necesita al menos 15 trayectos con un rango de 8 °C o más, se mantiene dentro de las temperaturas que cubrieron y calla ante diferencias inferiores al 5 %%. La autonomía es la que informa el coche, escalada por esa diferencia.";
 "Retry" = "Reintentar";
 "Climate Warning" = "Aviso de climatización";
 "Factory spec (PNO34)" = "Especificación de fábrica (PNO34)";
@@ -4260,9 +4276,29 @@
 // Added 2026-11-22: solar forecast and live grid carbon.
 "Solar forecast" = "Previsión solar";
 "Solar forecast chart" = "Gráfico de previsión solar";
-"Peak %@ at %@" = "Máximo %@ a las %@";
 "%@ W/m²" = "%@ W/m²";
 "Open-Meteo radiation at the car's location; it is not panel output." = "Radiación de Open-Meteo en la ubicación del coche; no es la producción de los paneles.";
+"Peak %@ · %@" = "Máximo %@ · %@";
+"%@ kWh/m²" = "%@ kWh/m²";
+"Solar panels" = "Paneles solares";
+"Optional. With your panel size and direction the solar forecast also estimates output from Open-Meteo's radiation on the panels. The size stays on this Mac; only the tilt and direction are sent." = "Opcional. Con el tamaño y la orientación de tus paneles, la previsión solar también estima la producción a partir de la radiación de Open-Meteo sobre los paneles. El tamaño se queda en este Mac; solo se envían la inclinación y la orientación.";
+"Array size" = "Tamaño de la instalación";
+"Peak power in kWp. Leave empty to show radiation only." = "Potencia pico en kWp. Déjalo vacío para mostrar solo la radiación.";
+"Enter a size between 0 and 100 kWp." = "Introduce un tamaño entre 0 y 100 kWp.";
+"Panel tilt" = "Inclinación de los paneles";
+"Panel direction" = "Orientación de los paneles";
+"0° is south, -90° east, 90° west." = "0° es sur, -90° este, 90° oeste.";
+"≈ %@ kWh from your panels" = "≈ %@ kWh de tus paneles";
+"Estimated output uses your panel settings and assumes 80% system efficiency." = "La producción estimada usa los ajustes de tus paneles y supone un rendimiento del sistema del 80 %.";
+"Your panels could cover about %@ of this charge, before other loads." = "Tus paneles podrían cubrir aproximadamente un %@ de esta carga, antes de otros consumos.";
+"%@°" = "%@°";
+"≈ %@ kW" = "≈ %@ kW";
+"Car's location" = "Ubicación del coche";
+"Open-Meteo radiation at %@; it is not panel output." = "Radiación de Open-Meteo en %@; no es la producción de los paneles.";
+"Solar forecast place" = "Lugar de la previsión solar";
+"Turn on Vehicle Weather to see the solar forecast" = "Activa Tiempo en el vehículo para ver la previsión solar";
+"The solar forecast needs the car's location" = "La previsión solar necesita la ubicación del coche";
+"The solar forecast is unavailable right now" = "La previsión solar no está disponible ahora mismo";
 "Grid carbon now" = "CO₂ de la red ahora";
 "%@ g CO₂/kWh" = "%@ g CO₂/kWh";
 "Live grid carbon" = "CO₂ de la red en directo";
