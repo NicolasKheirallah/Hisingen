@@ -3149,6 +3149,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snefald ventes kl. %@ (%@ cm). En klimatimer ville varme kabinen op.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Varme ventes kl. %@ (%@). En klimatimer ville køle kabinen ned.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Den vises også ved våde veje ved 1 °C eller derunder, som en timer ikke kan afhjælpe, og når luften når 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "Kl. %@ (%@) tyder dine ture på cirka %d%% mere energi pr. km end nu. Rækkevidde omkring %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "Kl. %@ (%@) tyder dine ture på cirka %d%% mindre energi pr. km end nu. Rækkevidde omkring %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Tilpasset efter %d af dine registrerede ture: udendørstemperatur mod energi pr. km. Den kræver mindst 15 ture kørt over 8 °C eller mere, holder sig inden for de temperaturer, de dækkede, og tier ved forskelle under 5 %%. Rækkevidden er bilens rapporterede rækkevidde skaleret med forskellen.";
 "Retry" = "Prøv igen";
 "Climate Warning" = "Klimaadvarsel";
 "Factory spec (PNO34)" = "Fabriksspecifikation (PNO34)";

@@ -75,6 +75,8 @@ struct NowWeatherReadout: View {
     @State private var eventStore = EKEventStore()
     @State private var calendarDeparture: Date?
     @State private var calendarTask: Task<Void, Never>?
+    @Environment(\.historyWorkspace) private var history
+    @State private var rangeForecast: RangeForecast?
 
     private struct Reading {
         let label: String
@@ -118,9 +120,23 @@ struct NowWeatherReadout: View {
                                 subject: L10n.text("Departure"))
                         }
                     }
+                    if let rangeForecast {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(rangeForecastLine(rangeForecast))
+                                .hisType(.micro)
+                                .foregroundStyle(HisingenTheme.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            InformationButton(
+                                message: L10n.format(
+                                    "Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference.",
+                                    rangeForecast.tripCount),
+                                subject: L10n.text("Range"))
+                        }
+                    }
                 }
             }
             .task { refreshCalendarDeparture() }
+            .task(id: rangeTaskKey) { await refreshRangeForecast() }
         }
     }
 
@@ -211,6 +227,55 @@ struct NowWeatherReadout: View {
             )
         }
         return nil
+    }
+
+    /// Everything the range forecast reads, so the line is worked out again when any of it changes.
+    private struct RangeTaskKey: Equatable {
+        let vin: String
+        let rangeKm: Int?
+        let weatherTime: Date?
+        let calendarDeparture: Date?
+    }
+
+    private var rangeTaskKey: RangeTaskKey {
+        RangeTaskKey(vin: state.identity.vin, rangeKm: state.energy.rangeKm,
+                     weatherTime: state.weather?.timestamp, calendarDeparture: calendarDeparture)
+    }
+
+    /// The range the departure's forecast temperature implies, from the car's own recorded trips.
+    /// Trips are read only once a departure, a forecast and a reported range exist, and never from
+    /// last-known weather, so an old reading cannot move the figure.
+    private func refreshRangeForecast() async {
+        guard let history, !state.hasLastKnownWeather, let weather = state.weather,
+              let hourly = weather.hourlyTemperatures, let reportedRange = state.energy.rangeKm,
+              let departure = DepartureWeatherAdvice.nextDeparture(
+                  schedules: state.energy.schedules, calendarDeparture: calendarDeparture)
+        else {
+            rangeForecast = nil
+            return
+        }
+        let trips = await history.tripHistory(vin: state.identity.vin)
+        guard !Task.isCancelled else { return }
+        rangeForecast = RangeForecast.forecast(
+            trips: trips, reportedRangeKm: reportedRange,
+            currentTemperatureCelsius: weather.temperatureCelsius,
+            departure: departure, hourly: hourly)
+    }
+
+    private func rangeForecastLine(_ forecast: RangeForecast) -> String {
+        let time = Format.shortTime(date: forecast.departure)
+        let temperature = Format.temperature(celsius: forecast.temperatureCelsius,
+                                             unit: preferences.temperatureUnit, decimals: 0)
+        let percent = Int(abs(forecast.consumptionChangePercent).rounded())
+        let range = Format.distance(km: forecast.rangeKm, unit: preferences.distanceUnit)
+        if forecast.consumptionChangePercent > 0 {
+            return L10n.format(
+                "At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@.",
+                time, temperature, percent, range)
+        }
+        return L10n.format(
+            "At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@.",
+            time, temperature, percent, range)
     }
 
     /// Snapshots the Sendable calendar inputs and mirrors the controller's next-trigger fetch

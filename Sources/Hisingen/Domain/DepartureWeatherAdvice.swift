@@ -45,17 +45,28 @@ struct DepartureWeatherAdvice: Equatable, Sendable {
     let windGustsKmh: Double?
     let precipitationMm: Double?
 
+    /// The earliest upcoming departure: the car's own active departure timers or the calendar
+    /// preconditioning event, whichever comes first. Shared with the range forecast so both read
+    /// the same departure.
+    static func nextDeparture(schedules: [VehicleSchedule],
+                              calendarDeparture: Date? = nil,
+                              now: Date = Date(),
+                              calendar: Calendar = .current) -> Date? {
+        ([calendarDeparture].compactMap { $0 }
+            + schedules
+                .filter { $0.kind == .departure && $0.isActive }
+                .compactMap { ScheduleOccurrence.next(of: $0, after: now, calendar: calendar) })
+            .min()
+    }
+
     static func advice(schedules: [VehicleSchedule],
                        climateTimers: [VehicleSchedule],
                        calendarDeparture: Date? = nil,
                        forecast: [HourlyTemperature],
                        now: Date = Date(),
                        calendar: Calendar = .current) -> DepartureWeatherAdvice? {
-        let next = ([calendarDeparture].compactMap { $0 }
-                    + schedules
-                        .filter { $0.kind == .departure && $0.isActive }
-                        .compactMap { ScheduleOccurrence.next(of: $0, after: now, calendar: calendar) })
-            .min()
+        let next = nextDeparture(schedules: schedules, calendarDeparture: calendarDeparture,
+                                 now: now, calendar: calendar)
         guard let departure = next,
               let reading = forecast.min(by: { abs($0.time.timeIntervalSince(departure)) < abs($1.time.timeIntervalSince(departure)) }),
               abs(reading.time.timeIntervalSince(departure)) <= forecastTolerance else { return nil }

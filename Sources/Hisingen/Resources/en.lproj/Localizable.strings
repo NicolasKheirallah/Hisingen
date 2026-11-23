@@ -3189,6 +3189,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Hot forecast at %@ (%@). A climate timer would cool the cabin.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference.";
 "Retry" = "Retry";
 "Climate Warning" = "Climate Warning";
 "Factory spec (PNO34)" = "Factory spec (PNO34)";

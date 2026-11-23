@@ -3142,6 +3142,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "%@ 预计有降雪（%@ 厘米）。空调定时器可以为座舱预热。";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "%@ 预计天气炎热（%@）。空调定时器可以为座舱降温。";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "路面潮湿且气温在 1 °C 或以下时也会显示，这是定时器无法解决的；气温达到 28 °C 时同样会显示。";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "在 %@（%@），你的行程数据表明每公里耗电约比现在多 %d%%。续航约为 %@。";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "在 %@（%@），你的行程数据表明每公里耗电约比现在少 %d%%。续航约为 %@。";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "根据你已记录的 %d 次行程拟合：室外温度与每公里能耗的关系。至少需要 15 次行程且温度跨度达 8 °C 或以上，只在这些行程覆盖的温度范围内使用，差异低于 5 %% 时不显示。续航是车辆上报的续航按该差异缩放后的值。";
 "Retry" = "重试";
 "Climate Warning" = "空调警告";
 "Factory spec (PNO34)" = "出厂规格（PNO34）";
