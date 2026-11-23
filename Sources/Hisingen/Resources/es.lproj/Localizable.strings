@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Aviso de lluvia (ventanillas abiertas)";
 "Rain Showers" = "Chubascos";
 "Rain detected near your vehicle with windows left open!" = "¡Lluvia detectada cerca de tu vehículo con las ventanillas abiertas!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Se espera lluvia en %d min cerca de tu vehículo y hay una ventanilla abierta.";
 "Range" = "Autonomía";
 "Range Health Estimate" = "Estimación del estado de la autonomía";
 "Ready" = "Listo";

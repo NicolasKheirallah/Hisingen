@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "下雨提醒（车窗开启）";
 "Rain Showers" = "阵雨";
 "Rain detected near your vehicle with windows left open!" = "检测到车辆附近下雨，车窗仍开着！";
+"Rain is expected within %d min near your vehicle, and a window is open." = "预计 %d 分钟内车辆附近会下雨，且有车窗未关。";
 "Range" = "续航里程";
 "Range Health Estimate" = "续航健康度估算";
 "Ready" = "就绪";

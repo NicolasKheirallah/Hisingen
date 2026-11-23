@@ -309,6 +309,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         checkClimateChanges(previous: previousState, current: state)
         checkClimateWarnings(previous: previousState, current: state)
         checkRainWithWindows(previous: previousState, current: state)
+        checkRainAheadWithWindows(previous: previousState, current: state)
         checkEveningUnlocked(previous: previousState, current: state)
         checkUsageMode(current: state)
         checkLowBatteryPlugIn(previous: previousState, current: state)

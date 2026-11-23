@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Regnvarsel (vinduer åpne)";
 "Rain Showers" = "Regnbyger";
 "Rain detected near your vehicle with windows left open!" = "Regn oppdaget nær kjøretøyet med vinduer åpne!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Regn ventes innen %d min ved bilen, og et vindu er åpent.";
 "Range" = "Rekkevidde";
 "Range Health Estimate" = "Estimert rekkeviddehelse";
 "Ready" = "Klar";

@@ -318,6 +318,12 @@ millimetres of water regardless of whether it falls as rain or snow. The hourly 
 snowfall in centimetres and the WMO weather code, which the departure hints read for snow and
 freezing rain; both stay out of the weather readout itself.
 
+The same request asks for the next hour and a half of precipitation in 15-minute steps. With
+"Alert if rain starts while windows or sunroof are open" on and a window reported open, a
+notification says rain is expected within the next 45 minutes, once per spell, when the forecast
+shows at least 0.1 mm in a quarter hour. Rain already falling is left to the existing alert, and a
+forecast that has run out by the time it is read raises nothing.
+
 Live check: the request shape was verified against Open-Meteo without a key, but the readout's
 calendar-based advice line has not been exercised against a real calendar and a live refresh.
 

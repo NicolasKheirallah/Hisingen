@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Regenmelding (ramen open)";
 "Rain Showers" = "Regenbuien";
 "Rain detected near your vehicle with windows left open!" = "Regen gedetecteerd bij uw voertuig terwijl ramen open staan!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Er wordt binnen %d min regen verwacht bij je voertuig en een raam staat open.";
 "Range" = "Actieradius";
 "Range Health Estimate" = "Schatting actieradiusgezondheid";
 "Ready" = "Klaar";

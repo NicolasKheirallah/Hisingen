@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Sadehälytys (ikkunat auki)";
 "Rain Showers" = "Sadekuuroja";
 "Rain detected near your vehicle with windows left open!" = "Ajoneuvosi lähellä on sadetta, ja ikkunat ovat auki!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Sadetta odotetaan %d minuutin sisällä auton luona, ja ikkuna on auki.";
 "Range" = "Toimintamatka";
 "Range Health Estimate" = "Toimintamatkan kunnon arvio";
 "Ready" = "Valmis";

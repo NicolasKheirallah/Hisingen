@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Regenwarnung (Fenster offen)";
 "Rain Showers" = "Regenschauer";
 "Rain detected near your vehicle with windows left open!" = "Regen in der Nähe Ihres Fahrzeugs erkannt, Fenster sind geöffnet!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "In %d Min. wird Regen am Fahrzeug erwartet, und ein Fenster ist offen.";
 "Range" = "Reichweite";
 "Range Health Estimate" = "Reichweiten-Zustandsschätzung";
 "Ready" = "Fertig";
