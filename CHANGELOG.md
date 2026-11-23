@@ -187,6 +187,11 @@ All notable changes to Hisingen are documented in this file. The project follows
   main connection with "sign in again" although the account was fine. Refreshes now run one after
   another, each from the token the last one stored, and a refresh that finds a newer token stored
   keeps it instead of failing.
+- **Stopping the live stream could still reset the refresh timer.** Stopping the stream ends it,
+  and a stream that ends looks like a dropped connection. The stopped run went on to report that
+  drop: it counted a disconnect that never happened and told the refresh coordinator, which
+  re-armed its poll timer over whatever the coordinator had armed after stopping, for example a
+  retry after an error or a command-confirmation poll. A stopped run now reports nothing.
 
 ### Screenshots
 
