@@ -204,6 +204,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   moved on in the meantime, and a vehicle switch or a network change is enough to move it. The
   email then stayed empty for the whole session and the old account's data was kept. The read is
   now dropped only when a sign-out or new credentials have set the email themselves.
+- **A refresh that waited on another refresh could report a cancellation for a grant that
+  worked.** Callers that arrive while a token grant is in flight share it. One that resumed after
+  a newer grant had also landed no longer found its own grant in the record of applied ones and
+  was told it had been cancelled, which showed as a failed refresh on a healthy session. The
+  lifecycle now remembers the last eight applied grants. In the same area, a charger sign-in
+  cancelled by a sign-out could clear the sign-in a newer request had started, letting a third
+  request start a second one; each sign-in now clears only itself.
 
 ### Screenshots
 
