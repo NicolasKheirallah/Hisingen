@@ -73,7 +73,7 @@ struct SelectionSettleTests {
     }
 }
 
-private actor SettleMockProvider: VehicleProviding {
+actor SettleMockProvider: VehicleProviding {
     nonisolated let brand: VehicleBrand = .polestar
     let cars = [CarSummary(vin: "YSMTEST", title: "Test vehicle"),
                 CarSummary(vin: "YSMTEST2", title: "Second test vehicle")]
