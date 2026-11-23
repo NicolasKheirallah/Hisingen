@@ -41,13 +41,13 @@ extension RefreshCoordinator {
             return
         }
         let keychain = preferences.keychain
-        let startedGeneration = generation
+        let startedEpoch = accountEmailEpoch
         Task.detached(priority: .utility) { [weak self] in
             let resolved = (try? keychain.readEmail()) ?? ""
             guard !resolved.isEmpty else { return }
             await MainActor.run { [weak self] in
                 guard let self, self.accountEmail.isEmpty,
-                      startedGeneration == self.generation else { return }
+                      startedEpoch == self.accountEmailEpoch else { return }
                 self.accountEmail = resolved
             }
         }
@@ -73,6 +73,7 @@ extension RefreshCoordinator {
         // was refused, and only a sign-in produces a token the stream will accept.
         streamNeedsAuthorization = false
         accountEmail = preferences.email
+        accountEmailEpoch &+= 1
         sessionIntent = .credentialsChanged
         // Explicit save means the user is actively configuring: lift any prior
         // suppression so the following beginSession is not blocked. The saver
@@ -135,6 +136,7 @@ extension RefreshCoordinator {
         cars = []
         lastError = nil
         accountEmail = ""
+        accountEmailEpoch &+= 1
         sessionIntent = .resume
         requestedSelectionVIN = nil
         selectionRetryCount = 0

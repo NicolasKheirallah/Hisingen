@@ -277,6 +277,12 @@ final class RefreshCoordinator {
     /// Guards the detached email resolution fired by `start`, so a second start cannot
     /// double-read the Keychain.
     var accountEmailResolutionStarted = false
+    /// Bumped whenever the account email is set or cleared deliberately (sign-out, new
+    /// credentials). The detached email read compares it on return, so a read that was overtaken by
+    /// one of those cannot write the old account's address back. It is not `generation`: that
+    /// moves with every vehicle switch and network change, none of which says anything about
+    /// whose email this is.
+    var accountEmailEpoch: UInt64 = 0
     var sessionIntent: SessionManager.Intent = .resume
     /// The selection this coordinator last started and has not yet resolved. Set when a
     /// switch begins, cleared only when it completes (or the session re-resolves the VIN).

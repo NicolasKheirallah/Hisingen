@@ -102,7 +102,8 @@ private final class ModelHarness {
     private(set) var model: HomeChargingModel
     let vin = "YSMTEST"
 
-    init(paired: Bool = true, shared: Bool = false, token: String? = "tok") throws {
+    init(paired: Bool = true, shared: Bool = false, token: String? = "tok",
+         socketConnector: (any HomeAssistantSocketConnecting)? = nil) throws {
         scoped = ScopedPreferences(label: "home-model")
         let store = HomeChargingStore(defaults: scoped.defaults, keychain: scoped.keychain)
         if let token { try store.saveToken(token) }
@@ -111,16 +112,18 @@ private final class ModelHarness {
         scoped.store.features = FeatureSelection(enabled: [.smartChargingPlanner, .remoteCharging])
         // Local charging history is opt-in in the app; the sync only writes when the reader turned it on.
         scoped.store.storeChargingHistory = true
-        model = ModelHarness.makeModel(scoped: scoped, database: database, server: server, clock: clock)
+        model = ModelHarness.makeModel(scoped: scoped, database: database, server: server, clock: clock,
+                                      socketConnector: socketConnector)
         server.setStates(NexBlueFixture.table(status: "connected", powerKw: "0", energyKwh: "0", reportedAt: t0))
     }
 
-    private static func makeModel(scoped: ScopedPreferences, database: VehicleDatabase, server: MockHomeAssistant, clock: ClockBox) -> HomeChargingModel {
+    private static func makeModel(scoped: ScopedPreferences, database: VehicleDatabase, server: MockHomeAssistant, clock: ClockBox,
+                                  socketConnector: (any HomeAssistantSocketConnecting)? = nil) -> HomeChargingModel {
         let clock = clock
         return HomeChargingModel(
             preferences: scoped.store, database: database,
             dependencies: HomeChargingModel.Dependencies(
-                transport: server.transport, socketConnector: nil, now: { clock.now },
+                transport: server.transport, socketConnector: socketConnector, now: { clock.now },
                 wait: { _ in try await Task.sleep(for: .seconds(3_600)) },
                 spotPrices: { _ in [] }, observesWake: false))
     }
@@ -166,6 +169,68 @@ private func planReply(phase: String = "scheduled", planID: String = "plan-1") -
     """)
 }
 
+/// A WebSocket whose handshake is held until the test lets it through, so a run can be retired
+/// while its connection is still being opened. Subscriptions are answered as Home Assistant would.
+private final class GatedSocketConnection: HomeAssistantSocketConnection, @unchecked Sendable {
+    private let inner = ScriptedSocketConnection()
+    private let lock = NSLock()
+    private var gate: CheckedContinuation<Void, Never>?
+    private var released = false
+    private var closes = 0
+    private var arrivedAtGate = false
+
+    init() {
+        inner.push(#"{"type":"auth_required"}"#)
+        inner.push(#"{"type":"auth_ok"}"#)
+    }
+
+    var closeCount: Int { lock.withLock { closes } }
+    var isWaitingAtGate: Bool { lock.withLock { arrivedAtGate && !released } }
+
+    func release() {
+        lock.lock()
+        released = true
+        let pending = gate
+        gate = nil
+        lock.unlock()
+        pending?.resume()
+    }
+
+    func send(_ text: String) async throws {
+        try await inner.send(text)
+        if text.contains("subscribe_events"),
+           let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+           let id = object["id"] as? Int {
+            inner.push(#"{"type":"result","id":\#(id),"success":true,"result":null}"#)
+        }
+    }
+
+    func receive() async throws -> String {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            arrivedAtGate = true
+            if released {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                gate = continuation
+                lock.unlock()
+            }
+        }
+        return try await inner.receive()
+    }
+
+    func close() {
+        lock.withLock { closes += 1 }
+        inner.close()
+    }
+}
+
+private struct GatedSocketConnector: HomeAssistantSocketConnecting {
+    let connection: GatedSocketConnection
+    func connect(to url: URL) -> any HomeAssistantSocketConnection { connection }
+}
+
 // MARK: - Tests
 
 @Suite("Home charging model", .serialized)
@@ -189,6 +254,20 @@ struct HomeChargingModelTests {
         #expect(harness.model.telemetry.powerKw?.value == 7.3)
         #expect(harness.model.telemetry.sessionEnergyKwh?.value == 4.2)
         harness.model.stop()
+    }
+
+    @Test("A socket that finishes opening after the connection was stopped is closed, not installed")
+    func aSocketOpenedAfterStopIsClosed() async throws {
+        let connection = GatedSocketConnection()
+        let harness = try ModelHarness(socketConnector: GatedSocketConnector(connection: connection))
+        harness.model.start()
+        await eventually { connection.isWaitingAtGate }
+        #expect(connection.isWaitingAtGate)
+
+        harness.model.stop()
+        connection.release()
+        await eventually { connection.closeCount > 0 }
+        #expect(connection.closeCount > 0, "A socket opened for a retired run must not stay open")
     }
 
     // MARK: Command acknowledgment

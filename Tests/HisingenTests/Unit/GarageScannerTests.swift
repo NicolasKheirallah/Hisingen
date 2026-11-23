@@ -176,6 +176,71 @@ struct GarageScannerTests {
         #expect(context.capturedStates.count == 2)
     }
 
+    /// A command that starts while a sibling's request is already on the wire cancels that request
+    /// and ends the pass, instead of letting it run alongside the command.
+    @Test
+    func aCommandStartingMidRequestCancelsTheRequestAndEndsThePass() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.activeBrand = .polestar
+        preferences.setVin("PSELECTED", for: .polestar)
+
+        let context = RecordingScanContext()
+        let provider = HangingProvider(brand: .polestar, vins: ["P1", "P2"])
+        let scanner = GarageScanner(
+            context: context, preferences: preferences,
+            provider: { _ in provider },
+            hasResumableSession: { $0 == .polestar },
+            restoreDormantSession: { _ in },
+            interruptionCheckInterval: 0.02)
+
+        let pass = Task { await scanner.scanNow() }
+        for _ in 0..<500 where await provider.startedFetches == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await provider.startedFetches == 1)
+        context.commandPipelineIsBusy = true
+
+        let started = Date()
+        await pass.value
+        #expect(Date().timeIntervalSince(started) < 5, "The request in flight must yield to the command")
+        #expect(await provider.cancelledFetches == 1)
+        #expect(await provider.startedFetches == 1, "The pass must not go on to the next car")
+        #expect(context.capturedStates.isEmpty)
+        #expect(context.completePassCount == 0)
+    }
+
+    /// A request that fails on its own is the provider's failure, reported as before. The pass
+    /// must come back rather than wait on the interruption watcher.
+    @Test
+    func aRequestThatFailsOnItsOwnEndsThePassWithoutHanging() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        preferences.activeBrand = .polestar
+        preferences.setVin("PSELECTED", for: .polestar)
+        let context = RecordingScanContext()
+        let diagnostics = GarageScanDiagnosticsStore()
+        let provider = HangingProvider(brand: .polestar, vins: ["P1"], failsImmediately: true)
+        let scanner = GarageScanner(
+            context: context, preferences: preferences,
+            provider: { _ in provider },
+            hasResumableSession: { $0 == .polestar },
+            restoreDormantSession: { _ in },
+            diagnosticsStore: diagnostics,
+            interruptionCheckInterval: 0.02)
+
+        let pass = Task { await scanner.scanNow() }
+        let finished = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await pass.value; return true }
+            group.addTask { try? await Task.sleep(for: .seconds(3)); return false }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(finished, "A failing request must not leave the pass waiting")
+        #expect(context.capturedStates.isEmpty)
+    }
+
     /// A scan started while a command is already in progress never begins.
     @Test
     func scanIsSuppressedWhileACommandIsInProgress() async throws {
@@ -251,6 +316,46 @@ private actor StubProvider: VehicleProviding {
     func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
     func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
         fetchSelections.append(features)
+        return vehicle(vin: vin, brand: brand)
+    }
+    func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {
+        RemoteCommandResult(outcome: .completed, message: nil)
+    }
+}
+
+/// A provider whose request never answers on its own: it waits until it is cancelled.
+private actor HangingProvider: VehicleProviding {
+    let brand: VehicleBrand
+    private let vins: [String]
+    private(set) var startedFetches = 0
+    private(set) var cancelledFetches = 0
+    private let failsImmediately: Bool
+
+    struct Failure: Error {}
+
+    init(brand: VehicleBrand, vins: [String], failsImmediately: Bool = false) {
+        self.brand = brand
+        self.vins = vins
+        self.failsImmediately = failsImmediately
+    }
+
+    var cars: [CarSummary] { vins.map { CarSummary(vin: $0, title: $0) } }
+    var hasWarmSession: Bool { true }
+    func authenticate(email: String, password: String, preferredVIN: String?, features: FeatureSelection) async throws {}
+    func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {}
+    func resetSession() async {}
+    func signOut() async throws {}
+    func resolvedVIN(preferred: String?) -> String? { vins.first }
+    func reloadVehicleMetadata(vin: String, features: FeatureSelection) async throws {}
+    func fetchVehicleState(vin: String, features: FeatureSelection) async throws -> VehicleState {
+        startedFetches += 1
+        if failsImmediately { throw Failure() }
+        do {
+            try await Task.sleep(for: .seconds(60))
+        } catch {
+            cancelledFetches += 1
+            throw error
+        }
         return vehicle(vin: vin, brand: brand)
     }
     func executeRemoteCommand(_ command: RemoteCommand, vin: String) async throws -> RemoteCommandResult {

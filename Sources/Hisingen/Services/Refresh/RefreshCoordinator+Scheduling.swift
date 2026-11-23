@@ -7,6 +7,7 @@ extension RefreshCoordinator {
         logger.debug("Provider superseded refresh; retrying in five seconds")
         schedule(after: 5, retrySession: !sessionReady, addsJitter: false)
         publishDiagnostics()
+        resolveSelectionWaiters()
     }
 
     func schedule(after interval: TimeInterval, retrySession: Bool, addsJitter: Bool = true) {
