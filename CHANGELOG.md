@@ -192,6 +192,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   drop: it counted a disconnect that never happened and told the refresh coordinator, which
   re-armed its poll timer over whatever the coordinator had armed after stopping, for example a
   retry after an error or a command-confirmation poll. A stopped run now reports nothing.
+- **A signed-out car's pictures could come back after the erase.** Car renders are written to the
+  database on a background queue. A picture saved just before a sign-out or "Erase local vehicle
+  data" could land after the erase had deleted that car's rows, and a read that was already
+  fetching a row could put the deleted picture back into memory. The erase now waits behind every
+  write already queued, and a write or read that began before an erase is dropped instead of
+  restoring what the erase removed.
 
 ### Screenshots
 

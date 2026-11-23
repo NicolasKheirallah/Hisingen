@@ -18,6 +18,17 @@ final class CarImageCache: @unchecked Sendable {
     private var memoryCacheRecency: [String] = []
     private var memoryCacheBytes = 0
 
+    /// Counts the erases that reached each vehicle (and the whole fleet), under `lock`. A read or a
+    /// queued write notes the count before it starts and compares afterwards: if an erase landed
+    /// in between, what it holds belongs to data the reader deleted and must not be put back.
+    private var fleetEraseEpoch: UInt64 = 0
+    private var vehicleEraseEpochs: [String: UInt64] = [:]
+
+    private struct EraseEpoch: Equatable {
+        let fleet: UInt64
+        let vehicle: UInt64
+    }
+
     /// Sentinel SQLite angle for the bare primary image (no `_angle` suffix). Angle 0 is a
     /// real `CarRenderAngle.sideProfile` row; aliasing it made SQLite fallback reads return
     /// the wrong-angle render as the side profile. -1 is already the interior sentinel.
@@ -130,18 +141,29 @@ final class CarImageCache: @unchecked Sendable {
         return cleanVIN
     }
 
+    // Callers hold `lock`.
+    private func eraseEpoch(for vin: String) -> EraseEpoch {
+        EraseEpoch(fleet: fleetEraseEpoch, vehicle: vehicleEraseEpochs[vin, default: 0])
+    }
+
     private func read(key: String) -> Data? {
         lock.lock()
         if let mem = cachedBytes(forKey: key) {
             lock.unlock()
             return mem
         }
+        let parts = parseKey(key)
+        let epoch = parts.map { eraseEpoch(for: $0.vin) }
         lock.unlock()
 
-        if let parts = parseKey(key) {
+        if let parts, let epoch {
             if let dbImage = database.images.loadVehicleImage(for: parts.vin, angle: parts.angle) {
                 lock.lock()
-                store(dbImage.data, forKey: key)
+                // The row was read before an erase that has since run: hand the bytes to this
+                // caller, but do not put a deleted vehicle's picture back into memory.
+                if eraseEpoch(for: parts.vin) == epoch {
+                    store(dbImage.data, forKey: key)
+                }
                 lock.unlock()
                 return dbImage.data
             }
@@ -155,15 +177,22 @@ final class CarImageCache: @unchecked Sendable {
 
         lock.lock()
         store(data, forKey: key)
+        let epoch = parseKey(key).map { eraseEpoch(for: $0.vin) }
         lock.unlock()
 
-        persist(data, key: key)
+        if let epoch { persist(data, key: key, epoch: epoch) }
     }
 
-    private func persist(_ data: Data, key: String) {
+    private func persist(_ data: Data, key: String, epoch: EraseEpoch) {
         guard let parts = parseKey(key) else { return }
         let database = self.database
-        ioQueue.async {
+        ioQueue.async { [self] in
+            // A write queued before an erase would otherwise land after it and bring the
+            // deleted picture back into the database.
+            lock.lock()
+            let stale = eraseEpoch(for: parts.vin) != epoch
+            lock.unlock()
+            guard !stale else { return }
             _ = database.images.saveVehicleImage(vin: parts.vin, angle: parts.angle, data: data)
         }
     }
@@ -209,14 +238,21 @@ final class CarImageCache: @unchecked Sendable {
     /// readable in the database.
     func forget(vin: String) {
         guard let cleanVIN = sanitizedVIN(vin) else { return }
+        lock.lock()
+        vehicleEraseEpochs[cleanVIN, default: 0] &+= 1
+        lock.unlock()
         dropMemoryCache(for: cleanVIN)
-        _ = database.images.deleteVehicleImages(for: cleanVIN)
+        // Behind every write already queued, so none of them runs after the delete.
+        ioQueue.sync { _ = database.images.deleteVehicleImages(for: cleanVIN) }
     }
 
     /// Fleet-wide erase. `dropAllMemoryCaches` is the cheap memory-only form.
     func forgetAll() {
+        lock.lock()
+        fleetEraseEpoch &+= 1
+        lock.unlock()
         dropAllMemoryCaches()
-        _ = database.images.deleteAllVehicleImages()
+        ioQueue.sync { _ = database.images.deleteAllVehicleImages() }
     }
 
     // Callers hold `lock`.

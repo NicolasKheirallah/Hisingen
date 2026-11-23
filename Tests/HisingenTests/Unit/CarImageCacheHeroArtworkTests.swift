@@ -84,3 +84,50 @@ struct CarImageCacheHeroArtworkTests {
         #expect(a != b)
     }
 }
+
+/// An erase has to be final. Writes are queued behind the caller, so a picture saved just before
+/// a sign-out used to land in the database after the sign-out deleted that vehicle's rows.
+struct CarImageCacheEraseTests {
+    private let vin = "ERASE_RACE_VIN"
+    private func bytes(_ seed: UInt8) -> Data { Data(repeating: seed, count: 64) }
+
+    @Test
+    func aWriteQueuedBeforeForgetDoesNotSurviveIt() async {
+        let database = VehicleDatabase.inMemory()
+        let cache = CarImageCache(database: database)
+        // Enough queued writes that most are still waiting when the erase arrives.
+        for angle in 0..<300 { cache.save(bytes(UInt8(angle % 200)), for: vin, angle: angle) }
+
+        cache.forget(vin: vin)
+        await cache.waitUntilIdle()
+
+        #expect(database.images.vehicleImageAngles(for: vin).isEmpty,
+                "A signed-out vehicle's pictures must not reappear in the database")
+        #expect(cache.image(for: vin, angle: 7) == nil)
+    }
+
+    @Test
+    func aWriteQueuedBeforeForgetAllDoesNotSurviveIt() async {
+        let database = VehicleDatabase.inMemory()
+        let cache = CarImageCache(database: database)
+        for angle in 0..<300 { cache.save(bytes(UInt8(angle % 200)), for: vin, angle: angle) }
+
+        cache.forgetAll()
+        await cache.waitUntilIdle()
+
+        #expect(database.images.vehicleImageAngles(for: vin).isEmpty)
+    }
+
+    @Test
+    func aPictureSavedAfterForgetIsKept() async {
+        let database = VehicleDatabase.inMemory()
+        let cache = CarImageCache(database: database)
+        cache.save(bytes(1), for: vin, angle: 0)
+        cache.forget(vin: vin)
+
+        cache.save(bytes(2), for: vin, angle: 0)
+        await cache.waitUntilIdle()
+
+        #expect(database.images.loadVehicleImage(for: vin, angle: 0)?.data == bytes(2))
+    }
+}
