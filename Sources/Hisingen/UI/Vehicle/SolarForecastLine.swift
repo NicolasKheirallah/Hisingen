@@ -39,6 +39,9 @@ struct SolarForecastLine: View {
     let forecast: SolarForecast
     let place: SolarForecastPlace
     var plan: ChargingPlan?
+    /// The reader's own panels. With them each hour also reads an estimated output, a figure that
+    /// comes from their typed size, so it is labelled as an estimate wherever it appears.
+    var array: SolarArray?
     /// Where the chart ends: the end of tomorrow, the last day the price chart ever shows.
     var outlookEnd: Date?
     var places: [SolarForecastPlaceChoice] = []
@@ -78,7 +81,7 @@ struct SolarForecastLine: View {
                 // bar is picked and the readout never clips against the card above the plot.
                 Group {
                     if let selected {
-                        let text = L10n.format("%@ · %@", rangeText(selected), wattsText(selected.wattsPerSquareMeter))
+                        let text = readout(for: selected)
                         Text(text)
                             .hisTelemetryValue(text, reduceMotion: reduceMotion)
                             .historyScrubCallout()
@@ -255,29 +258,41 @@ struct SolarForecastLine: View {
         }
     }
 
-    /// The day's total radiation, today and tomorrow. Each is left out when the forecast has gaps
-    /// in that day, rather than shown as a smaller number.
+    /// The day's total radiation, today and tomorrow, and with panels typed in the output they
+    /// would estimate. Each is left out when the forecast has gaps in that day, rather than shown
+    /// as a smaller number.
     @ViewBuilder
     private var dayFigures: some View {
         let totals = forecast.dayTotals(at: now)
+        let estimates = array.map { forecast.dayEstimates(at: now, array: $0) }
         if totals.today != nil || totals.tomorrow != nil {
             let layout = typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
                 : AnyLayout(HStackLayout(alignment: .top, spacing: 28))
             layout {
-                if let today = totals.today { dayFigure(today, label: L10n.text("Today")) }
-                if let tomorrow = totals.tomorrow { dayFigure(tomorrow, label: L10n.text("Tomorrow")) }
+                if let today = totals.today {
+                    dayFigure(today, estimate: estimates?.today, label: L10n.text("Today"))
+                }
+                if let tomorrow = totals.tomorrow {
+                    dayFigure(tomorrow, estimate: estimates?.tomorrow, label: L10n.text("Tomorrow"))
+                }
             }
             .accessibilityElement(children: .combine)
         }
     }
 
-    private func dayFigure(_ kwh: Double, label: String) -> some View {
+    private func dayFigure(_ kwh: Double, estimate: Double?, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(L10n.format("%@ kWh/m²", Format.number(kwh, decimals: 1)))
                 .hisType(size: 17, relativeTo: .title3)
                 .foregroundStyle(HisingenTheme.ink)
                 .monospacedDigit()
+            if let estimate {
+                Text(L10n.format("≈ %@ kWh from your panels", Format.number(estimate, decimals: 0)))
+                    .hisType(.label)
+                    .foregroundStyle(HisingenTheme.ink)
+                    .monospacedDigit()
+            }
             Text(label)
                 .hisType(.label)
                 .foregroundStyle(HisingenTheme.inkMuted)
@@ -285,12 +300,27 @@ struct SolarForecastLine: View {
     }
 
     private var footnote: String {
+        let base: String
         switch place {
         case .vehicle:
-            return L10n.text("Open-Meteo radiation at the car's location; it is not panel output.")
+            base = L10n.text("Open-Meteo radiation at the car's location; it is not panel output.")
         case .saved(_, let alias, _, _):
-            return L10n.format("Open-Meteo radiation at %@; it is not panel output.", alias)
+            base = L10n.format("Open-Meteo radiation at %@; it is not panel output.", alias)
         }
+        guard array != nil else { return base }
+        return base + " " + L10n.text("Estimated output uses your panel settings and assumes 80% system efficiency.")
+    }
+
+    /// The hour and its radiation, with the estimated output when the reader has typed in panels.
+    private func readout(for point: SolarForecastPoint) -> String {
+        let base = L10n.format("%@ · %@", rangeText(point), wattsText(point.wattsPerSquareMeter))
+        guard let kw = estimatedKw(point) else { return base }
+        return L10n.format("%@ · %@", base, L10n.format("≈ %@ kW", Format.number(kw, decimals: 1)))
+    }
+
+    private func estimatedKw(_ point: SolarForecastPoint) -> Double? {
+        guard let array, let tilted = point.tiltedWattsPerSquareMeter else { return nil }
+        return array.estimatedKw(tiltedWattsPerSquareMeter: tilted)
     }
 
     private func wattsText(_ watts: Double) -> String {

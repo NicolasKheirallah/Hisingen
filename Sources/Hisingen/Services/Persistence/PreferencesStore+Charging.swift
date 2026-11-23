@@ -126,6 +126,31 @@ extension PreferencesStore {
         }
     }
 
+    /// The reader's own panel array, typed into Settings and kept on this Mac. The size stays
+    /// local; only the tilt and direction go to Open-Meteo, to ask for the radiation on the panels.
+    /// Zero means no array, and the forecast stays radiation only.
+    var solarArrayKwp: Double {
+        get { let value = d.double(forKey: "solar_array_kwp"); return value.isFinite ? max(0, value) : 0 }
+        set { d.set(max(0, min(newValue, SolarArray.maximumKwp)), forKey: "solar_array_kwp") }
+    }
+
+    /// Panel tilt in degrees, 0 flat to 90 upright. 35 is a common roof pitch.
+    var solarArrayTiltDegrees: Double {
+        get { d.object(forKey: "solar_array_tilt_degrees") == nil ? 35 : d.double(forKey: "solar_array_tilt_degrees") }
+        set { d.set(max(0, min(newValue, 90)), forKey: "solar_array_tilt_degrees") }
+    }
+
+    /// Panel direction in Open-Meteo's convention: 0 is south, -90 east, 90 west, ±180 north.
+    var solarArrayAzimuthDegrees: Double {
+        get { d.double(forKey: "solar_array_azimuth_degrees") }
+        set { d.set(max(-180, min(newValue, 180)), forKey: "solar_array_azimuth_degrees") }
+    }
+
+    /// The array the forecast estimates output for, or nil while the size is zero.
+    var solarArray: SolarArray? {
+        SolarArray(kwp: solarArrayKwp, tiltDegrees: solarArrayTiltDegrees, azimuthDegrees: solarArrayAzimuthDegrees)
+    }
+
     /// The consent that lets the planner send `startChargingOverride` on its own when the
     /// planned window opens and the vehicle is plugged in. Deliberately not transferable
     /// through settings archives and not part of any bulk-enable action.

@@ -199,9 +199,14 @@ hour shows no total. The forecast is for the car's position unless you pick one 
 locations from the menu on the line, which suits a car parked away from the place it charges. The
 request carries the position rounded to two decimals, and the answer is kept in memory for 30
 minutes, or for up to six hours while Open-Meteo is failing. With Vehicle Weather off, no position
-reaches Open-Meteo and the line says which setting would bring it back. It is radiation, not panel
-output: Hisingen has no array or inverter figures, so it never turns the forecast into kWh of
-production. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+reaches Open-Meteo and the line says which setting would bring it back. By default it is radiation,
+not panel output: Hisingen has no array or inverter figures, so it does not turn the forecast into
+kWh of production. If you type your own array under **Settings, Charging Planner, Solar panels**
+(size in kWp, tilt, and direction with 0° south), the request also asks for the radiation on a plane
+at that tilt and direction, and the chart reads an estimated kW for the hour you point at, with an
+estimated kWh for today and tomorrow under it. The estimate is size × tilted radiation × 80% system
+efficiency, an assumption and not a measurement of your system, so every figure is labelled as an
+estimate. Only the tilt and direction are sent to Open-Meteo; the size stays on this Mac. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
 provider named beneath it. The line and its setting exist for Swedish price zones only, because
 the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
 rather than showing a guessed figure. The typed grid intensity in Settings remains the input for

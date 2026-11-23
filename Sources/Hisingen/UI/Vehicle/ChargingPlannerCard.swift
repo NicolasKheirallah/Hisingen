@@ -62,8 +62,14 @@ struct ChargingPlannerCard: View {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95))
     }
 
+    /// Changes with the reader's panel settings, so the forecast is asked again for the new tilt.
+    private var solarArrayKey: String {
+        guard let array = preferences.solarArray else { return "" }
+        return "\(array.kwp)/\(array.tiltDegrees)/\(array.azimuthDegrees)"
+    }
+
     private var plannerTaskID: String {
-        "\(zone.rawValue)|\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)|\(solarPlaceChange)"
+        "\(zone.rawValue)|\(state.identity.vin)|\(state.freshness.fetchedAt.timeIntervalSince1970)|\(solarPlaceChange)|\(solarArrayKey)"
     }
 
     var body: some View {
@@ -101,6 +107,7 @@ struct ChargingPlannerCard: View {
         return await SolarForecastLoader.load(
             vehicleWeatherEnabled: preferences.features.contains(.vehicleWeather),
             place: place,
+            array: preferences.solarArray,
             provider: SolarForecastClient()
         )
     }
@@ -243,7 +250,7 @@ struct ChargingPlannerCard: View {
                 if onOpenPlanner == nil {
                     if case .forecast(let forecast, let place) = solarOutcome {
                         SolarForecastLine(
-                            forecast: forecast, place: place, plan: plan,
+                            forecast: forecast, place: place, plan: plan, array: preferences.solarArray,
                             outlookEnd: Self.solarOutlookEnd(after: Date()),
                             places: solarPlaces, onSelectPlace: selectSolarPlace
                         )

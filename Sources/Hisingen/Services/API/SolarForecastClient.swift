@@ -2,7 +2,15 @@ import Foundation
 
 /// What the solar line needs from a forecast source, so the loader can be tested without a network.
 protocol SolarForecastProviding: Sendable {
-    func forecast(latitude: Double, longitude: Double) async -> SolarForecast?
+    /// `array` adds the radiation on the reader's own panel plane to every hour; nil asks for flat
+    /// radiation only.
+    func forecast(latitude: Double, longitude: Double, array: SolarArray?) async -> SolarForecast?
+}
+
+extension SolarForecastProviding {
+    func forecast(latitude: Double, longitude: Double) async -> SolarForecast? {
+        await forecast(latitude: latitude, longitude: longitude, array: nil)
+    }
 }
 
 /// Open-Meteo's hourly global shortwave radiation, used only as a visible forecast line beside
@@ -19,10 +27,10 @@ struct SolarForecastClient: SolarForecastProviding {
         self.cache = cache
     }
 
-    func forecast(latitude: Double, longitude: Double) async -> SolarForecast? {
+    func forecast(latitude: Double, longitude: Double, array: SolarArray?) async -> SolarForecast? {
         guard latitude.isFinite, longitude.isFinite,
               (-90...90).contains(latitude), (-180...180).contains(longitude),
-              let url = Self.url(latitude: latitude, longitude: longitude)
+              let url = Self.url(latitude: latitude, longitude: longitude, array: array)
         else { return nil }
         let http = self.http
         return await cache.forecast(for: url.absoluteString, now: Date()) {
@@ -36,22 +44,33 @@ struct SolarForecastClient: SolarForecastProviding {
         OpenMeteoCoordinate.rounded(value)
     }
 
-    static func url(latitude: Double, longitude: Double) -> URL? {
+    /// With an array the request also asks for the radiation on a plane at the panels' tilt and
+    /// direction. Only those two angles leave the Mac: the array's size never does.
+    static func url(latitude: Double, longitude: Double, array: SolarArray? = nil) -> URL? {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.open-meteo.com"
         components.path = "/v1/forecast"
+        var hourly = "shortwave_radiation"
+        var orientation: [URLQueryItem] = []
+        if let array {
+            hourly += ",global_tilted_irradiance"
+            orientation = [
+                URLQueryItem(name: "tilt", value: String(Int(array.tiltDegrees.rounded()))),
+                URLQueryItem(name: "azimuth", value: String(Int(array.azimuthDegrees.rounded())))
+            ]
+        }
         components.queryItems = [
             URLQueryItem(name: "latitude", value: roundedCoordinate(latitude)),
             URLQueryItem(name: "longitude", value: roundedCoordinate(longitude)),
-            URLQueryItem(name: "hourly", value: "shortwave_radiation"),
+            URLQueryItem(name: "hourly", value: hourly),
             URLQueryItem(name: "forecast_days", value: "2"),
             // Epoch seconds, so an hour is an exact instant even when the outlook crosses a
             // daylight-saving change; one UTC offset would be wrong for the hours after it.
             URLQueryItem(name: "timeformat", value: "unixtime"),
             // Only names the place's zone, so the hours can be read on that place's clock.
             URLQueryItem(name: "timezone", value: "auto")
-        ]
+        ] + orientation
         return components.url
     }
 
@@ -65,6 +84,7 @@ struct SolarForecastClient: SolarForecastProviding {
               let times = hourly["time"] as? [Any],
               let values = hourly["shortwave_radiation"] as? [Any] else { return nil }
         let zone = (json["timezone"] as? String).flatMap { TimeZone(identifier: $0) } ?? .current
+        let tilted = hourly["global_tilted_irradiance"] as? [Any]
 
         var points: [SolarForecastPoint] = []
         for (index, time) in times.enumerated() {
@@ -73,9 +93,13 @@ struct SolarForecastClient: SolarForecastProviding {
                   let watts = (values[index] as? NSNumber)?.doubleValue,
                   watts.isFinite, watts >= 0
             else { continue }
+            // A tilted-plane hour that is missing or null stays nil; it is never taken from the flat figure.
+            let tiltedWatts = tilted.flatMap { index < $0.count ? ($0[index] as? NSNumber)?.doubleValue : nil }
+                .flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
             points.append(SolarForecastPoint(
                 start: Date(timeIntervalSince1970: stamp - SolarForecastPoint.interval),
-                wattsPerSquareMeter: watts
+                wattsPerSquareMeter: watts,
+                tiltedWattsPerSquareMeter: tiltedWatts
             ))
         }
         return points.isEmpty ? nil : SolarForecast(points: points, timeZone: zone)
@@ -221,10 +245,11 @@ enum SolarForecastLoader {
     /// With it off nothing is asked and the outcome says which setting would bring the line back.
     static func load(vehicleWeatherEnabled: Bool,
                      place: SolarForecastPlace?,
+                     array: SolarArray? = nil,
                      provider: some SolarForecastProviding) async -> SolarForecastOutcome {
         guard vehicleWeatherEnabled else { return .needsVehicleWeather }
         guard let place else { return .needsLocation }
-        guard let forecast = await provider.forecast(latitude: place.latitude, longitude: place.longitude),
+        guard let forecast = await provider.forecast(latitude: place.latitude, longitude: place.longitude, array: array),
               !forecast.isEmpty else { return .unavailable }
         return .forecast(forecast, place)
     }

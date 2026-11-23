@@ -395,6 +395,136 @@ struct SolarForecastTests {
         #expect(answer == nil)
     }
 
+    // MARK: - Panel array
+
+    private func array(kwp: Double = 5, tilt: Double = 35, azimuth: Double = 0) -> SolarArray {
+        SolarArray(kwp: kwp, tiltDegrees: tilt, azimuthDegrees: azimuth)!
+    }
+
+    @Test
+    func anArrayNeedsAPositiveFiniteSizeAndIsClampedToTheProvidersRanges() {
+        #expect(SolarArray(kwp: 0, tiltDegrees: 35, azimuthDegrees: 0) == nil)
+        #expect(SolarArray(kwp: -3, tiltDegrees: 35, azimuthDegrees: 0) == nil)
+        #expect(SolarArray(kwp: .nan, tiltDegrees: 35, azimuthDegrees: 0) == nil)
+        #expect(SolarArray(kwp: 5, tiltDegrees: .infinity, azimuthDegrees: 0) == nil)
+
+        let clamped = SolarArray(kwp: 500, tiltDegrees: 120, azimuthDegrees: -300)
+        #expect(clamped?.kwp == 100)
+        #expect(clamped?.tiltDegrees == 90)
+        #expect(clamped?.azimuthDegrees == -180)
+    }
+
+    @Test
+    func estimatedOutputIsSizeTimesTiltedRadiationTimesTheDisclosedEfficiency() {
+        // 5 kWp at 400 W/m² on the panel plane, 80% system efficiency: 5 x 0.4 x 0.8.
+        #expect(array(kwp: 5).estimatedKw(tiltedWattsPerSquareMeter: 400) == 1.6)
+        #expect(array(kwp: 5).estimatedKw(tiltedWattsPerSquareMeter: 0) == 0)
+        #expect(SolarArray.systemEfficiency == 0.8)
+    }
+
+    @Test
+    func theRequestAsksForTiltedRadiationOnlyWhenThereIsAnArray() throws {
+        let flat = try #require(SolarForecastClient.url(latitude: 57.7, longitude: 11.9))
+        let flatItems = try #require(URLComponents(url: flat, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(flatItems.first { $0.name == "hourly" }?.value == "shortwave_radiation")
+        #expect(!flatItems.contains { $0.name == "tilt" || $0.name == "azimuth" })
+
+        let tilted = try #require(SolarForecastClient.url(
+            latitude: 57.7, longitude: 11.9, array: array(kwp: 7.5, tilt: 40, azimuth: -15)))
+        let items = try #require(URLComponents(url: tilted, resolvingAgainstBaseURL: false)?.queryItems)
+        #expect(items.first { $0.name == "hourly" }?.value == "shortwave_radiation,global_tilted_irradiance")
+        #expect(items.first { $0.name == "tilt" }?.value == "40")
+        #expect(items.first { $0.name == "azimuth" }?.value == "-15")
+        // Only the two angles leave the Mac: the size of the array stays in Settings.
+        #expect(!tilted.absoluteString.contains("7.5"))
+        #expect(!tilted.absoluteString.lowercased().contains("kwp"))
+    }
+
+    @Test
+    func tiltedHoursAreReadPerHourAndNeverTakenFromTheFlatFigure() throws {
+        let first = Self.epoch("2026-11-22T10:00:00Z")
+        let answer = try Self.json("""
+        {"timezone": "UTC", "hourly": {
+          "time": [\(first), \(first + 3600), \(first + 7200)],
+          "shortwave_radiation": [100.0, 200.0, 300.0],
+          "global_tilted_irradiance": [150.0, null, -4.0]
+        }}
+        """)
+        let forecast = try #require(SolarForecastClient.forecast(from: answer))
+
+        #expect(forecast.points.map(\.tiltedWattsPerSquareMeter) == [150, nil, nil])
+        #expect(forecast.points.map(\.wattsPerSquareMeter) == [100, 200, 300])
+    }
+
+    @Test
+    func anAnswerWithoutATiltedSeriesLeavesEveryTiltedHourNil() throws {
+        let forecast = try #require(SolarForecastClient.forecast(from: try winterAnswer))
+
+        #expect(forecast.points.allSatisfy { $0.tiltedWattsPerSquareMeter == nil })
+    }
+
+    @Test
+    func aDayEstimateSumsTheTiltedHoursAndNeedsEveryOne() throws {
+        let utc = TimeZone(identifier: "UTC")!
+        let start = Self.instant("2026-11-22T00:00:00Z")
+        func day(missing: Int?) -> SolarForecast {
+            SolarForecast(points: (0..<24).map { hour in
+                SolarForecastPoint(start: start.addingTimeInterval(TimeInterval(hour) * 3_600),
+                                   wattsPerSquareMeter: 300,
+                                   tiltedWattsPerSquareMeter: hour == missing ? nil : 500)
+            }, timeZone: utc)
+        }
+        let panels = array(kwp: 4)
+        let now = Self.instant("2026-11-22T12:00:00Z")
+
+        // 4 kWp x 0.5 x 0.8 = 1.6 kW for 24 hours.
+        let total = try #require(day(missing: nil).dayEstimates(at: now, array: panels).today)
+        #expect(abs(total - 38.4) < 1e-9)
+        #expect(day(missing: 11).dayEstimates(at: now, array: panels).today == nil)
+        #expect(day(missing: nil).dayEstimates(at: now, array: panels).tomorrow == nil)
+    }
+
+    @Test
+    func theLoaderPassesTheArrayToTheProvider() async {
+        let provider = StubSolarProvider(answer: oneHourForecast(watts: 5, at: Date(timeIntervalSince1970: 1_800_000_000)))
+        let panels = array(kwp: 6, tilt: 30, azimuth: 20)
+
+        _ = await SolarForecastLoader.load(
+            vehicleWeatherEnabled: true, place: .vehicle(latitude: 57.7, longitude: 11.9),
+            array: panels, provider: provider)
+
+        #expect(provider.lastArray == panels)
+    }
+
+    @Test @MainActor
+    func theArrayIsOffByDefaultKeepsItsSettingsInRangeAndStaysOutOfArchives() throws {
+        let scoped = ScopedPreferences(label: "SolarArray")
+        #expect(scoped.store.solarArray == nil)
+        #expect(scoped.store.solarArrayTiltDegrees == 35)
+        #expect(scoped.store.solarArrayAzimuthDegrees == 0)
+
+        scoped.store.solarArrayKwp = 6.4
+        scoped.store.solarArrayTiltDegrees = 27
+        scoped.store.solarArrayAzimuthDegrees = -45
+        #expect(scoped.store.solarArray == SolarArray(kwp: 6.4, tiltDegrees: 27, azimuthDegrees: -45))
+
+        scoped.store.solarArrayKwp = 900
+        scoped.store.solarArrayTiltDegrees = 200
+        scoped.store.solarArrayAzimuthDegrees = 999
+        #expect(scoped.store.solarArrayKwp == 100)
+        #expect(scoped.store.solarArrayTiltDegrees == 90)
+        #expect(scoped.store.solarArrayAzimuthDegrees == 180)
+
+        scoped.store.solarArrayKwp = 0
+        #expect(scoped.store.solarArray == nil)
+
+        // The array describes one roof, so it is not part of a settings archive.
+        scoped.store.solarArrayKwp = 6.4
+        let archive = try scoped.store.exportSettingsPropertyList()
+        let values = try #require(PropertyListSerialization.propertyList(from: archive, format: nil) as? [String: Any])
+        #expect(!values.keys.contains { $0.hasPrefix("solar_array") })
+    }
+
     // MARK: - Axis and wording
 
     @Test
@@ -529,21 +659,25 @@ private final class StubSolarProvider: SolarForecastProviding, @unchecked Sendab
     private let answer: SolarForecast?
     private var callCount = 0
     private var coordinates: (latitude: Double, longitude: Double)?
+    private var askedArray: SolarArray?
 
     init(answer: SolarForecast?) { self.answer = answer }
 
     var calls: Int { lock.lock(); defer { lock.unlock() }; return callCount }
     var lastCoordinates: (latitude: Double, longitude: Double)? { lock.lock(); defer { lock.unlock() }; return coordinates }
 
-    func forecast(latitude: Double, longitude: Double) async -> SolarForecast? {
-        record(latitude: latitude, longitude: longitude)
+    var lastArray: SolarArray? { lock.lock(); defer { lock.unlock() }; return askedArray }
+
+    func forecast(latitude: Double, longitude: Double, array: SolarArray?) async -> SolarForecast? {
+        record(latitude: latitude, longitude: longitude, array: array)
     }
 
     /// Synchronous, because a lock cannot be held across an async function's suspension points.
-    private func record(latitude: Double, longitude: Double) -> SolarForecast? {
+    private func record(latitude: Double, longitude: Double, array: SolarArray?) -> SolarForecast? {
         lock.lock(); defer { lock.unlock() }
         callCount += 1
         coordinates = (latitude, longitude)
+        askedArray = array
         return answer
     }
 }

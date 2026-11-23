@@ -4264,6 +4264,18 @@
 "Open-Meteo radiation at the car's location; it is not panel output." = "Rayonnement Open-Meteo à l'emplacement de la voiture ; ce n'est pas la production des panneaux.";
 "Peak %@ · %@" = "Pic %@ · %@";
 "%@ kWh/m²" = "%@ kWh/m²";
+"Solar panels" = "Panneaux solaires";
+"Optional. With your panel size and direction the solar forecast also estimates output from Open-Meteo's radiation on the panels. The size stays on this Mac; only the tilt and direction are sent." = "Facultatif. Avec la taille et l'orientation de vos panneaux, les prévisions solaires estiment aussi la production d'après le rayonnement Open-Meteo sur les panneaux. La taille reste sur ce Mac ; seules l'inclinaison et l'orientation sont envoyées.";
+"Array size" = "Taille de l'installation";
+"Peak power in kWp. Leave empty to show radiation only." = "Puissance crête en kWp. Laissez vide pour n'afficher que le rayonnement.";
+"Enter a size between 0 and 100 kWp." = "Saisissez une taille entre 0 et 100 kWp.";
+"Panel tilt" = "Inclinaison des panneaux";
+"Panel direction" = "Orientation des panneaux";
+"0° is south, -90° east, 90° west." = "0° = sud, -90° = est, 90° = ouest.";
+"≈ %@ kWh from your panels" = "≈ %@ kWh de vos panneaux";
+"Estimated output uses your panel settings and assumes 80% system efficiency." = "La production estimée utilise les réglages de vos panneaux et suppose un rendement système de 80 %.";
+"%@°" = "%@°";
+"≈ %@ kW" = "≈ %@ kW";
 "Car's location" = "Position de la voiture";
 "Open-Meteo radiation at %@; it is not panel output." = "Rayonnement Open-Meteo à %@ ; ce n'est pas la production des panneaux.";
 "Solar forecast place" = "Lieu des prévisions solaires";

@@ -15,6 +15,13 @@ All notable changes to Hisingen are documented in this file. The project follows
 - **Pick where the forecast is drawn.** A menu on the solar line chooses between the car's
   position and any saved charge location with coordinates, so a car parked at work still shows
   the sun over the place it will charge. The choice is kept in Settings data on this Mac only.
+- **Optional output estimate from your own panels.** Settings, Charging Planner, Solar panels
+  takes an array size in kWp, a tilt and a direction. With a size entered, the solar forecast also
+  asks Open-Meteo for the radiation on a plane at that tilt and direction, shows an estimated kW
+  for each hour you point at, and adds an estimated kWh for today and tomorrow. The estimate is
+  size × tilted radiation × 80% system efficiency, and every figure is labelled as an estimate.
+  Only the tilt and direction are sent; the size stays on this Mac and is not part of a settings
+  archive. With no size, nothing changes and the forecast stays radiation only.
 - **The line says why it is missing.** With Vehicle Weather off, no car position, or no answer
   from Open-Meteo, the planner shows one line naming the reason instead of leaving a gap.
 
