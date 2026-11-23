@@ -16,13 +16,6 @@ All notable changes to Hisingen are documented in this file. The project follows
   asks Open-Meteo for snowfall and the weather code; no further request is made and the coordinates
   are still rounded to two decimals.
 
-### Changed
-
-- **Inactive issues close after 30 days.** A daily workflow labels an issue `stale` and comments
-  after 23 days without activity, then closes it as not planned a week later. A reply removes the
-  label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
-  with an assignee or a milestone, are skipped, and pull requests are not touched.
-
 - **Range at the next departure.** When the car has a departure time (its own timer or a calendar
   event), a forecast for that hour, a reported range and enough trip history, the weather readout
   adds a line such as "At 07:30 (-9 °C) your trips suggest about 14% more energy per km than now.
@@ -56,6 +49,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   slightly low readings. Every tyre moves together, which is what separates it from a leak. Cars
   that report only a warning level per tyre show nothing, and last-known weather is never used.
   Nothing new is requested or stored.
+
+### Changed
+
+- **Inactive issues close after 30 days.** A daily workflow labels an issue `stale` and comments
+  after 23 days without activity, then closes it as not planned a week later. A reply removes the
+  label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
+  with an assignee or a milestone, are skipped, and pull requests are not touched.
 
 ### Fixed
 
