@@ -838,6 +838,7 @@
 "Rain Alert (Windows Open)" = "Rain Alert (Windows Open)";
 "Rain Showers" = "Rain Showers";
 "Rain detected near your vehicle with windows left open!" = "Rain detected near your vehicle with windows left open!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "Rain is expected within %d min near your vehicle, and a window is open.";
 "Range" = "Range";
 "Range Health Estimate" = "Range Health Estimate";
 "Ready" = "Ready";

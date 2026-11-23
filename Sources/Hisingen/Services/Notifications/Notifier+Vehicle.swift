@@ -146,10 +146,44 @@ extension Notifier {
         guard let state, let weather = state.weather,
               let condition = weather.condition?.lowercased(),
               (condition.contains("rain") || condition.contains("drizzle") || condition.contains("shower") || condition.contains("snow")),
-              let ext = state.exteriorStatus,
-              ext.itemsNeedingAttention.contains(where: { $0.displayName.lowercased().contains("window") })
+              hasOpenWindow(state)
         else { return false }
         return true
+    }
+
+    nonisolated static func hasOpenWindow(_ state: VehicleState) -> Bool {
+        state.exteriorStatus?.itemsNeedingAttention
+            .contains(where: { $0.displayName.lowercased().contains("window") }) ?? false
+    }
+
+    /// Rain is about to start and a window is open, while the current reading is not already rain
+    /// (that case has its own alert). Judged on the state's own forecast and time, so the previous
+    /// refresh and this one can be compared without a clock.
+    nonisolated static func rainAheadWithWindowsOpenCondition(_ state: VehicleState?, now: Date) -> Bool {
+        guard let state, let weather = state.weather,
+              hasOpenWindow(state),
+              !rainWithWindowsOpenCondition(state),
+              let upcoming = weather.upcomingPrecipitation,
+              RainAhead.next(in: upcoming, after: now) != nil else { return false }
+        return true
+    }
+
+    func checkRainAheadWithWindows(previous: VehicleState?, current: VehicleState, now: Date = Date()) {
+        guard preferences.notifyRainWithWindowsOpen,
+              current.hasFreshReading(.openings),
+              Self.rainAheadWithWindowsOpenCondition(current, now: now),
+              !Self.rainAheadWithWindowsOpenCondition(previous, now: now),
+              let upcoming = current.weather?.upcomingPrecipitation,
+              let rain = RainAhead.next(in: upcoming, after: now) else { return }
+
+        postNotice(identifier: "hisingen.\(current.identity.vin).rain-ahead-windows",
+                   thread: "hisingen.weather.\(current.identity.vin)",
+                   title: L10n.text("Rain Alert"),
+                   body: privateBody(L10n.format(
+                       "Rain is expected within %d min near your vehicle, and a window is open.",
+                       rain.minutes(from: now))),
+                   subtitle: displayName(for: current), vin: current.identity.vin,
+                   urgency: .urgent, category: Self.vehicleAlertCategoryID)
     }
 
     func checkRainWithWindows(previous: VehicleState?, current: VehicleState) {

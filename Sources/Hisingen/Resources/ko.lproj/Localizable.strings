@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "비 알림 (창문 열림)";
 "Rain Showers" = "소나기";
 "Rain detected near your vehicle with windows left open!" = "차량 주변에 비가 오는데 창문이 열려 있습니다!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "%d분 안에 차량 근처에 비가 올 예정이며, 창문이 열려 있습니다.";
 "Range" = "주행 가능 거리";
 "Range Health Estimate" = "주행거리 상태 추정";
 "Ready" = "준비됨";

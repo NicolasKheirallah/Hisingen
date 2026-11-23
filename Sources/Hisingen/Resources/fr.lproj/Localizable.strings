@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Alerte pluie (vitres ouvertes)";
 "Rain Showers" = "Averses de pluie";
 "Rain detected near your vehicle with windows left open!" = "Pluie détectée près de votre véhicule, vitres restées ouvertes !";
+"Rain is expected within %d min near your vehicle, and a window is open." = "De la pluie est attendue dans %d min près de votre véhicule, et une vitre est ouverte.";
 "Range" = "Autonomie";
 "Range Health Estimate" = "Estimation de l'état d'autonomie";
 "Ready" = "Prêt";

@@ -33,6 +33,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   5%, for a line that does not rise as it gets colder, or when the weather is a last-known reading.
   It runs on the Mac and sends nothing new anywhere.
 
+- **A heads-up before rain reaches an open window.** The rain alert only fired once rain was
+  already falling at the car. The weather request now also asks Open-Meteo for the next hour and a
+  half of precipitation in 15-minute steps, and the same "rain starts while windows or sunroof are
+  open" setting posts a notice when at least 0.1 mm is forecast in a quarter hour within the next
+  45 minutes while a window is reported open. It posts once when the forecast turns wet, stays
+  quiet when rain is already falling (the existing alert covers that) and expires with the
+  forecast, so an old reading never raises it. The request keeps the same two-decimal coordinates.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the

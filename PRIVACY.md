@@ -239,7 +239,7 @@ When suitable coordinates are available, Hisingen may send:
 - latitude; and
 - longitude
 
-to Open-Meteo to obtain current weather and a two-day hourly temperature forecast at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
+to Open-Meteo to obtain current weather, a two-day hourly forecast and the next hour and a half of rain in 15-minute steps at the vehicle's location. Both are rounded to two decimals (about a kilometre) before they are sent.
 
 The Open-Meteo request does not need to contain:
 

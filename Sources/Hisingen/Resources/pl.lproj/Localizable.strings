@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Alert o deszczu (szyby otwarte)";
 "Rain Showers" = "Przelotne opady deszczu";
 "Rain detected near your vehicle with windows left open!" = "Wykryto deszcz przy pojeździe, a szyby są otwarte!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "W ciągu %d min przy pojeździe spodziewany jest deszcz, a okno jest otwarte.";
 "Range" = "Zasięg";
 "Range Health Estimate" = "Szacunek kondycji zasięgu";
 "Ready" = "Gotowe";

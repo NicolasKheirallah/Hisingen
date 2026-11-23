@@ -779,6 +779,7 @@
 "Rain Alert (Windows Open)" = "Avviso pioggia (finestrini aperti)";
 "Rain Showers" = "Rovesci di pioggia";
 "Rain detected near your vehicle with windows left open!" = "Pioggia rilevata vicino al veicolo con i finestrini aperti!";
+"Rain is expected within %d min near your vehicle, and a window is open." = "È prevista pioggia entro %d min vicino al tuo veicolo e un finestrino è aperto.";
 "Range" = "Autonomia";
 "Range Health Estimate" = "Stima dello stato dell'autonomia";
 "Ready" = "Pronta";
