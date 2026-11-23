@@ -51,6 +51,9 @@ protocol VehicleProviding: RemoteCommandExecuting {
 
 The default transport uses gRPC Swift 2 over NIO HTTP/2, with a client scoped to each call. Hand-written codecs still encode and decode Polestar's undocumented messages. Unary-style reads wait for final status; selected long-lived streams intentionally return their first validated snapshot. Commands are not automatically replayed. An explicit reply followed by deadline status 4 reaches the command parser, while other failing final statuses override it; telemetry, not that reply, confirms the vehicle state. See [the transport record](polestar-trailers-2026-10-31.md).
 
+`VehicleProviding` covers cars only. Home chargers use a separate seam, `DirectChargerProvider`,
+with its own model and polling loop. See [home-charging.md](home-charging.md).
+
 ## What remains provider-specific
 
 - Authentication mechanics (OIDC scraping vs. OAuth2 PKCE), token storage shape (single refresh token vs. a 3-field bundle), request construction, DTOs, wire-format decoding (GraphQL/protobuf vs. JSON), capability-probing heuristics, and error-type definitions (`PolestarError` vs. `VolvoError`), each fully separate, living in `PolestarAPI.swift`/`PolestarGRPC*.swift` vs. `VolvoAPI.swift`/`VolvoModels.swift`.

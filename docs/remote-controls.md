@@ -28,6 +28,18 @@ These commands are available on compatible vehicles after you enable the remote 
 
 For sensitive commands such as unlocking the car, Hisingen can require device-owner authentication through Touch ID, Apple Watch, or the Mac password, depending on what macOS makes available.
 
+## Home charger commands
+
+A paired home charger has two commands of its own, **Charge Now** and **Pause**. They go to the
+charger through its vendor's cloud or through Home Assistant, not through the vehicle, so they are
+not part of the table above and do not depend on what the car supports. A command stays pending in
+words until the charger's own reading, stamped after the command was accepted, confirms it. A
+window that closes without one is reported as unconfirmed and not as success. The vendors differ:
+Zaptec has no start, so Charge Now resumes a pause or a schedule, and Easee's pause sets the dynamic
+current to 0. [Home charging](home-charging.md#charger-commands-and-what-done-means) has the
+details for each charger, and the
+[architecture page](architecture/home-charging.md#polling-and-the-command-loop) describes the loop.
+
 ## What the car reports decides what you see
 
 On Polestar, Hisingen uses the car's capability record (`GetMyCars`) to decide which controls to offer.

@@ -549,17 +549,17 @@ For the other services, Hisingen contacts one only after you set it up:
 
 | Service | Host | What is sent |
 |---|---|---|
-| NexBlue, direct | `api.nexblue.com` | Your NexBlue account and password to sign in, then charger reads and commands |
+| NexBlue, direct | `api.nexblue.com` | Your NexBlue account and password once, to sign in. After that the refresh token, with charger reads and commands |
 | Easee, direct | `api.easee.com` | Your Easee account and password to sign in, then charger reads and commands |
 | Zaptec, direct | `api.zaptec.com` | Your Zaptec account and password to sign in, then charger reads and commands |
 | Tibber | `api.tibber.com`, and its websocket stream when a Pulse is paired | Your Tibber token, and price and consumption requests for your home |
-| Perific | Perific's cloud, the service the Perific app uses | Your Perific account to sign in, then meter reads |
+| Perific | `api.enegic.com`, the service the Perific app uses | Your Perific account to sign in, then meter reads |
 | Swedish spot prices | `www.elprisetjustnu.se` | A request for the price file of your zone and day, with no account |
 | Live grid carbon | `api.electricitymap.org` | Your Electricity Maps token and the zone name, such as `SE-SE3` |
 
 Every login and token is kept in the macOS Keychain and never reaches preferences, exports, logs or
 error text. Signing out, disconnecting or removing a service deletes its credentials, as does
-erasing all data. Nothing goes through a Hisingen server, because there is none.
+**Remove Connection and Token**. Nothing goes through a Hisingen server, because there is none.
 
 ## Troubleshooting
 

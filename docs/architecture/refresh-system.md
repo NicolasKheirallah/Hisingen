@@ -200,3 +200,10 @@ durations, disconnect reasons, circuit-open deadlines) is published through
 (`HISINGEN_SOAK_SECONDS`) asserts the invariants above against the real backend over
 sustained time; simulated-failure behavior is covered by `StreamPolicyTests` and
 `RefreshCoordinatorStreamTests`.
+
+## Home chargers have their own loop
+
+Everything above is the vehicle loop. A paired home charger is polled by `HomeChargingModel`, not by
+`RefreshCoordinator`: every 60 seconds, every 10 seconds while a charger command waits, and every
+5 minutes for chargers that are not the live connection. Imported sessions sync at most every 30
+minutes. See [home-charging.md](home-charging.md#polling-and-the-command-loop).

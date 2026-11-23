@@ -24,6 +24,10 @@ Both providers are translated into the same Hisingen vehicle domain so the rest 
 
 See [Provider Architecture](../architecture/providers.md).
 
+Home chargers, Tibber, the Perific house meter and the price and carbon services are separate from
+both providers. [Chargers and prices](chargers-and-prices.md) lists their hosts, sign-in and
+endpoints.
+
 ---
 
 # Polestar

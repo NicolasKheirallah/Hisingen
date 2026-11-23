@@ -138,6 +138,36 @@ Pruning individual charging samples does not remove the charging-session header 
 
 ---
 
+## Home Charging and Electricity Services
+
+Pairing a home charger, connecting Tibber or a Perific meter, or choosing Swedish spot prices adds
+the data below. [Home charging](home-charging.md) describes the features.
+
+- **Charger-side session measurements** are stored on the same `charging_sessions` row as the
+  vehicle's own record, so one physical charge is one row. A charger's sessions are imported from
+  the vendor's cloud (NexBlue, Easee, Zaptec) or from Home Assistant. They are retained exactly
+  like the session header and follow its rules for clearing and sign-out.
+- **Pairings, plan records, the grid tariff, the chosen Tibber home and its network fee, and the
+  chosen house meter** are stored in `UserDefaults`. They stay until the charger is unpaired, the
+  service is disconnected, or **Remove Connection and Token** erases everything Home Charging holds.
+- **Logins and tokens** are stored in the macOS Keychain and listed in [Keychain](security/keychain.md):
+  the Home Assistant token, the Easee, Zaptec and Perific account and password, the NexBlue refresh
+  token, the Tibber token and the Electricity Maps key. They stay until the service is signed out,
+  disconnected or removed.
+- **The spot-price cache** is two SQLite tables, `electricity_prices` and
+  `electricity_price_fetches`. Each fetch replaces a zone's rows, so the cache holds about two days
+  per zone and needs no retention setting. It is market data and not user history: wipes, pruning
+  and backups ignore it.
+- **Removing a connection keeps recorded history.** Unpairing a charger or disconnecting a service
+  does not delete sessions already imported, because they are the reader's own records. Erasing
+  local history does.
+- **Remove Connection and Token**, under Settings, Electricity, Home Charging, erases everything
+  Home Charging holds: the pairings and plans, the Home Assistant address and token, every direct
+  charger login, the Tibber connection, the grid tariff and the house meter with its login. The
+  Electricity Maps key is removed from its own setting.
+
+---
+
 ## Charging Samples
 
 Charging samples are stored separately from charging-session headers.
