@@ -152,6 +152,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **The background garage scan could keep a request running next to a command.** The scan checks
+  whether a command, a refresh or a vehicle switch is under way before it asks about each car, but
+  one of those could start while that request was on the wire, so the two ran together and the
+  scan's answer was thrown away afterwards. The request now yields: it is cancelled as soon as
+  interactive work starts, and the pass ends there.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.
