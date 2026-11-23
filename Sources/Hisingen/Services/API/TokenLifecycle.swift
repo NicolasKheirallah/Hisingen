@@ -110,6 +110,11 @@ final class TokenLifecycle: @unchecked Sendable {
     private var appliedFlights: [UUID] = []
     private static let appliedFlightMemory = 8
     private var inFlight: (id: UUID, task: Task<Grant, Error>)?
+    /// Grants in flight when a reset kept the refresh token. They run on to completion and are
+    /// applied even by a caller whose epoch has since moved on: the identity provider rotates the
+    /// token the moment it answers, so cancelling the request after it was sent can leave the
+    /// only valid token in a response nobody reads.
+    private var carriedFlights: Set<UUID> = []
     private let logger: Logger
 
     init(
@@ -185,7 +190,8 @@ final class TokenLifecycle: @unchecked Sendable {
         case .start(let entry):
             defer {
                 locked {
-                    if inFlight?.id == entry.id { inFlight = nil }
+                    // A carried grant outlives the call that started it: a later caller adopts it.
+                    if inFlight?.id == entry.id, !carriedFlights.contains(entry.id) { inFlight = nil }
                 }
             }
             return try await apply(entry, now: now, epochIsCurrent: epochIsCurrent)
@@ -220,14 +226,24 @@ final class TokenLifecycle: @unchecked Sendable {
         now: Date,
         epochIsCurrent: @Sendable () async -> Bool
     ) async throws -> Outcome {
-        do {
-            let grant = try await entry.task.value
-            guard await epochIsCurrent() else { throw CancellationError() }
+        let result = await entry.task.result
+        // The epoch check comes first even for a failure: a rejected grant from a session the
+        // app has already left must not clear the credential of the one that replaced it. A
+        // carried grant belongs to the credential the reset kept, so the epoch does not apply.
+        func stillWanted() async -> Bool {
+            if locked({ carriedFlights.contains(entry.id) }) { return true }
+            return await epochIsCurrent()
+        }
+        switch result {
+        case .success(let grant):
+            guard await stillWanted() else { throw CancellationError() }
             guard try adoptIfCurrent(grant, entryID: entry.id, now: now) else { throw CancellationError() }
             return .refreshed
-        } catch {
-            // The epoch check comes first even for a failure: a rejected grant from a session the
-            // app has already left must not clear the credential of the one that replaced it.
+        case .failure(let error):
+            locked {
+                carriedFlights.remove(entry.id)
+                if inFlight?.id == entry.id { inFlight = nil }
+            }
             guard await epochIsCurrent() else { throw CancellationError() }
             if isDeadGrant(error) { return .deadGrant }
             throw error
@@ -238,6 +254,8 @@ final class TokenLifecycle: @unchecked Sendable {
         locked {
             if appliedFlights.contains(entryID) { return true }
             guard inFlight?.id == entryID else { return false }
+            inFlight = nil
+            carriedFlights.remove(entryID)
             appliedFlights.append(entryID)
             if appliedFlights.count > Self.appliedFlightMemory { appliedFlights.removeFirst() }
             let previous = storedRefreshToken
@@ -282,24 +300,34 @@ final class TokenLifecycle: @unchecked Sendable {
     // MARK: - Reset
 
     /// Clears the in-memory session and cancels any in-flight grant. `keepingRefreshToken` is for
-    /// the re-sign-in path, which discards the access token but is about to reuse the credential.
+    /// the re-sign-in path, which discards the access token but is about to reuse the credential;
+    /// a grant in flight then is not cancelled but carried, and applied when it lands.
     /// `keepingAccessToken` keeps the live access token, expiry and lifetime as well, for a
     /// restore that re-establishes a session this process already holds: the credential has not
     /// changed, and a redundant `.serverRefused(nil)` grant rotates the refresh token for nothing.
     /// Persisted tokens are deliberately untouched: only `signOut` and a dead grant delete those.
     func reset(keepingRefreshToken: Bool = false, keepingAccessToken: Bool = false) {
         let task = locked { () -> Task<Grant, Error>? in
-            let task = inFlight?.task
-            inFlight = nil
+            var cancelled: Task<Grant, Error>?
+            if keepingRefreshToken, let flight = inFlight {
+                // The credential survives this reset, so a grant already on the wire is still
+                // about it. Cancelling it could discard the rotated token the identity provider
+                // has already issued; it is carried instead and applied when it lands.
+                carriedFlights.insert(flight.id)
+            } else {
+                cancelled = inFlight?.task
+                inFlight = nil
+                carriedFlights = []
+                appliedFlights = []
+            }
             lastGrantAt = nil
-            appliedFlights = []
             if !keepingAccessToken {
                 storedAccessToken = nil
                 storedTokenExpiry = nil
                 storedTokenLifetime = 0
             }
             if !keepingRefreshToken { storedRefreshToken = nil }
-            return task
+            return cancelled
         }
         task?.cancel()
     }
@@ -310,6 +338,7 @@ final class TokenLifecycle: @unchecked Sendable {
         let task = locked { () -> Task<Grant, Error>? in
             let task = inFlight?.task
             inFlight = nil
+            carriedFlights = []
             appliedFlights = []
             return task
         }

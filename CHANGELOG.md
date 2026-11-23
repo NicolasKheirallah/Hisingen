@@ -217,6 +217,15 @@ All notable changes to Hisingen are documented in this file. The project follows
   scan's answer was thrown away afterwards. The request now yields: it is cancelled as soon as
   interactive work starts, and the pass ends there.
 
+- **A retried Polestar restore could throw away the session it was restoring.** Polestar replaces
+  the refresh token the moment it answers a grant. When a restore was retried while a grant was
+  still on the wire, for example after the network dropped and came back, the retry cancelled the
+  grant. If Polestar had already answered, the new token was lost, the stored one was dead, and
+  the next refresh asked for a sign-in. A grant in flight is now carried across such a retry: it
+  finishes, its token is applied and saved, and the retry shares it instead of starting a second
+  grant from the same token. A reset that drops the credential, a sign-out or a new sign-in, still
+  cancels the grant, because its token belongs to a session that is gone.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.
