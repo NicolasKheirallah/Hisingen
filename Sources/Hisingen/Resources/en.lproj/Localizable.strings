@@ -3185,6 +3185,10 @@
 "At %@ since %@" = "At %@ since %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Frost forecast at %@ (%@). A climate timer would clear the windows.";
 "Cold battery charges more slowly on DC." = "Cold battery charges more slowly on DC.";
+"Icy roads possible at %@ (%@)." = "Icy roads possible at %@ (%@).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Hot forecast at %@ (%@). A climate timer would cool the cabin.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C.";
 "Retry" = "Retry";
 "Climate Warning" = "Climate Warning";
 "Factory spec (PNO34)" = "Factory spec (PNO34)";

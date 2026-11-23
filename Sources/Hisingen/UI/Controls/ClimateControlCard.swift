@@ -382,6 +382,13 @@ struct ClimateControlCard: View {
                 Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
             ))
         }
+        if advice.hot && canSetClimateTimer {
+            sentences.append(L10n.format(
+                "Hot forecast at %@ (%@). A climate timer would cool the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
+            ))
+        }
         if advice.coldBattery {
             sentences.append(L10n.text("Cold battery charges more slowly on DC."))
         }

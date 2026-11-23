@@ -113,7 +113,8 @@ struct NowWeatherReadout: View {
                                 .foregroundStyle(HisingenTheme.inkMuted)
                                 .fixedSize(horizontal: false, vertical: true)
                             InformationButton(
-                                message: L10n.text("The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet."),
+                                message: L10n.text("The line appears when the departure hour is at or below 0 °C, has any rain or snow, or the wind or gusts reach 40 km/h. A climate timer that starts within two hours before the departure counts as covering it, and then the line stays quiet.")
+                                    + " " + L10n.text("It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C."),
                                 subject: L10n.text("Departure"))
                         }
                     }
@@ -166,6 +167,13 @@ struct NowWeatherReadout: View {
             calendarDeparture: calendarDeparture,
             forecast: state.weather?.hourlyTemperatures ?? []
         ) else { return nil }
+        if advice.icyRoad {
+            return L10n.format(
+                "Icy roads possible at %@ (%@).",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
+            )
+        }
         if advice.needsClimateTimer {
             return L10n.format(
                 "Frost forecast at %@ (%@). A climate timer would clear the windows.",
@@ -173,11 +181,25 @@ struct NowWeatherReadout: View {
                 Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
             )
         }
+        if advice.wet, let snowfall = advice.snowfallCm {
+            return L10n.format(
+                "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.number(snowfall)
+            )
+        }
         if advice.wet {
             return L10n.format(
                 "Precipitation forecast at %@ (%@ mm). A climate timer would warm the cabin.",
                 Format.shortTime(date: advice.departure),
                 Format.number(advice.precipitationMm ?? 0)
+            )
+        }
+        if advice.hot {
+            return L10n.format(
+                "Hot forecast at %@ (%@). A climate timer would cool the cabin.",
+                Format.shortTime(date: advice.departure),
+                Format.temperature(celsius: advice.temperatureCelsius, unit: preferences.temperatureUnit, decimals: 0)
             )
         }
         if advice.windy {

@@ -3138,6 +3138,10 @@
 "At %@ since %@" = "Kl. %@ sidan %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Frost ventast kl. %@ (%@). Eit klimatidsur kan tine vindauga.";
 "Cold battery charges more slowly on DC." = "Eit kaldt batteri lader saktare på DC.";
+"Icy roads possible at %@ (%@)." = "Fare for glatte vegar kl. %@ (%@).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snøfall ventast kl. %@ (%@ cm). Ein klimatimer ville varma opp kupea.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Varme ventast kl. %@ (%@). Ein klimatimer ville kjølt ned kupea.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Han visast òg ved våt veg på 1 °C eller kaldare, som ein timer ikkje kan gjere noko med, og når lufta når 28 °C.";
 "Retry" = "Prøv igjen";
 "Climate Warning" = "Klimavarsel";
 "Factory spec (PNO34)" = "Fabrikkspes (PNO34)";

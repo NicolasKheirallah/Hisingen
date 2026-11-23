@@ -3146,6 +3146,10 @@
 "At %@ since %@" = "Om %@ sinds %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Vorstverwachting om %@ (%@). Een klimaattimer zou de ruiten ontijsen.";
 "Cold battery charges more slowly on DC." = "Een koude accu laadt langzamer op DC.";
+"Icy roads possible at %@ (%@)." = "Kans op gladde wegen om %@ (%@).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Sneeuw verwacht om %@ (%@ cm). Een klimaattimer zou het interieur voorverwarmen.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Hitte verwacht om %@ (%@). Een klimaattimer zou het interieur koelen.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Hij verschijnt ook bij natte wegen bij 1 °C of lager, wat een timer niet kan oplossen, en wanneer de lucht 28 °C bereikt.";
 "Retry" = "Opnieuw proberen";
 "Climate Warning" = "Klimaatwaarschuwing";
 "Factory spec (PNO34)" = "Fabrieksspecificatie (PNO34)";

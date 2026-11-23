@@ -3148,6 +3148,10 @@
 "At %@ since %@" = "Bei %@ seit %@";
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Frostprognose für %@ (%@). Ein Klima-Timer würde die Scheiben freimachen.";
 "Cold battery charges more slowly on DC." = "Ein kalter Akku lädt an DC langsamer.";
+"Icy roads possible at %@ (%@)." = "Um %@ droht Glätte auf den Straßen (%@).";
+"Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Um %@ wird Schneefall erwartet (%@ cm). Ein Klimatimer würde die Kabine vorwärmen.";
+"Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Um %@ wird Hitze erwartet (%@). Ein Klimatimer würde die Kabine kühlen.";
+"It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Sie erscheint auch bei nassen Straßen ab 1 °C abwärts, was ein Timer nicht beheben kann, und wenn die Luft 28 °C erreicht.";
 "Retry" = "Erneut versuchen";
 "Climate Warning" = "Klimawarnung";
 "Factory spec (PNO34)" = "Werksspezifikation (PNO34)";

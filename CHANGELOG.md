@@ -5,6 +5,17 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- **Departure weather advice names ice, snow and heat.** The line under the weather readout used to
+  speak only of frost, rain and wind. It now warns about icy roads when the departure hour is wet
+  at or below 1 °C or a freezing rain or drizzle code is forecast, and it says so even when a
+  climate timer is already set, because a timer does nothing for the road. Snow is named as snow
+  with the centimetres expected, and a departure hour at 28 °C or more suggests cooling the cabin
+  where no timer covers it. The climate card gains the same heat hint. The hourly request now also
+  asks Open-Meteo for snowfall and the weather code; no further request is made and the coordinates
+  are still rounded to two decimals.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
