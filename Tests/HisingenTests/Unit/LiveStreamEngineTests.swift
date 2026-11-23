@@ -28,9 +28,10 @@ struct LiveStreamEngineTests {
     }
 
     private func makeEngine(
-        streaming: FakeLiveStreaming,
+        streaming: any VehicleLiveStreaming,
         probe: Probe,
-        policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [30])
+        policy: LiveStreamPolicy = LiveStreamPolicy(retrySteps: [30]),
+        replacing predecessor: LiveStreamEngine? = nil
     ) -> LiveStreamEngine {
         let instant = epoch
         return LiveStreamEngine(
@@ -39,6 +40,7 @@ struct LiveStreamEngineTests {
             policy: policy,
             jitter: { 0 },
             now: { instant },
+            replacing: predecessor,
             context: .init(
                 isDesired: { _, _ in probe.desired },
                 onConnected: { probe.connectedCount += 1 },
@@ -271,6 +273,92 @@ struct LiveStreamEngineTests {
         #expect(engine.purpose == nil)
         #expect(engine.metrics.activeTransportStreams == 0)
         #expect(engine.metrics.connectedAt == nil)
+    }
+
+    // MARK: - Replacement
+
+    /// Stopping only cancels the run: its transport stream closes when the cancelled task next
+    /// gets to run. A replacement engine that connected straight away could hold two streams at
+    /// once, so it waits for the stopped run to unwind. The first connect is parked mid-handshake
+    /// here, which is the moment a cancelled run cannot close anything yet.
+    @Test
+    func aReplacementEngineOpensOnlyAfterTheStoppedRunHasClosedItsStream() async throws {
+        let streaming = HandshakeGatedStreaming()
+        let probe = Probe()
+        let first = makeEngine(streaming: streaming, probe: probe)
+        first.setPurpose(.charging, vin: vin)
+        #expect(await settle { streaming.openCount == 1 }, "The first engine never started connecting")
+
+        first.stop()
+        let second = makeEngine(streaming: streaming, probe: probe, replacing: first)
+        second.setPurpose(.exteriorConfirmation, vin: vin)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(streaming.openCount == 1, "The replacement connected while the stopped run was still open")
+
+        streaming.releaseHandshake()
+        #expect(await settle { streaming.openCount == 2 }, "The replacement never connected")
+        #expect(streaming.maxConcurrent == 1, "Two live streams were open at once")
+
+        second.stop()
+    }
+}
+
+/// Parks the first connect until the test releases it, after counting the open. Streams count as
+/// closed when they terminate, which is how a real transport tears its connection down.
+private final class HandshakeGatedStreaming: VehicleLiveStreaming, @unchecked Sendable {
+    private let lock = NSLock()
+    private var opens = 0
+    private var active = 0
+    private var peak = 0
+    private var gate: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    var openCount: Int { lock.withLock { opens } }
+    var maxConcurrent: Int { lock.withLock { peak } }
+
+    func liveVehicleUpdates(
+        vin: String, purpose: VehicleLiveStreamPurpose
+    ) async throws -> AsyncThrowingStream<VehicleLiveUpdate, Error> {
+        let isFirst = noteOpen()
+        if isFirst {
+            await withCheckedContinuation { continuation in park(continuation) }
+        }
+        return AsyncThrowingStream(bufferingPolicy: .unbounded) { continuation in
+            continuation.onTermination = { _ in self.noteClose() }
+        }
+    }
+
+    func refreshLiveStreamAuthorization() async throws {}
+
+    func releaseHandshake() {
+        let waiting: CheckedContinuation<Void, Never>? = lock.withLock {
+            released = true
+            defer { gate = nil }
+            return gate
+        }
+        waiting?.resume()
+    }
+
+    private func noteOpen() -> Bool {
+        lock.withLock {
+            opens += 1
+            active += 1
+            peak = max(peak, active)
+            return opens == 1
+        }
+    }
+
+    private func noteClose() {
+        lock.withLock { active = max(0, active - 1) }
+    }
+
+    private func park(_ continuation: CheckedContinuation<Void, Never>) {
+        let resumeNow = lock.withLock {
+            if released { return true }
+            gate = continuation
+            return false
+        }
+        if resumeNow { continuation.resume() }
     }
 }
 

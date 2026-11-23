@@ -120,6 +120,12 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A stopped live stream could still be open when its replacement connected.** Stopping the
+  stream only cancels its task, and the connection closes when that task next runs. A new stream
+  started in the same moment, such as the battery stream returning when a command's confirmation
+  ended, could connect first and briefly leave two open. The replacement now waits for the stopped
+  run to finish before it connects.
+
 - **Forecast hours could be an hour off across a daylight-saving change.** The answer used one
   UTC offset for both days, so the hours after a clock change were shifted. Hours are now read as
   exact epoch seconds. An answer that arrived as text, or without a zone, is no longer guessed
