@@ -388,7 +388,9 @@ struct NowWeatherReadout: View {
     }
 }
 
-private extension VehicleState {
+extension VehicleState {
+    /// True when the weather on this state is an older reading kept through a failed refresh, so a
+    /// line that reasons from today's air should not use it.
     var hasLastKnownWeather: Bool {
         freshness.isCached || freshness.retainedDataCategories.contains(.vehicleWeather)
     }

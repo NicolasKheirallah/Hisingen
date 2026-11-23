@@ -160,7 +160,7 @@ Find the model year, odometer, battery capacity and charge port type. The other 
 <details>
 <summary>Diagnostics, parking, remote access, charge locations and vehicle capabilities</summary>
 
-**Openings and health.** Check doors, windows and tyre pressures against the car's reported reference.
+**Openings and health.** Check doors, windows and tyre pressures against the car's reported reference. When the weather readout is on and the air is 10 °C or more from 20 °C, a line under the tyre header says how far the readings sit from their value at 20 °C; every tyre moves together in the cold, which is what tells it from a leak. Cars that report only a warning level per tyre show no such line.
 
 <img src="../assets/screenshots/tour/car-openings-and-tyres.png" width="620" loading="lazy" alt="Doors and Openings diagram, a low rear-left tyre reading and fluids and lighting diagnostics">
 

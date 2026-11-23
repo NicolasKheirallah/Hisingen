@@ -49,6 +49,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   request, is covered by the same setting, and is remembered in memory for 30 minutes. The readout
   credits CAMS and Open-Meteo under the figure, as the data's licence requires.
 
+- **A cold-weather note on the tyre card.** With Vehicle Weather on and a current reading, a line
+  under the tyre header appears when the air is 10 °C or more from 20 °C and the car reports tyre
+  pressures. It says how far the readings sit below (cold) or above (heat) their value at 20 °C,
+  worked out from gas-law scaling of the absolute pressure, so a freezing morning explains four
+  slightly low readings. Every tyre moves together, which is what separates it from a leak. Cars
+  that report only a warning level per tyre show nothing, and last-known weather is never used.
+  Nothing new is requested or stored.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the

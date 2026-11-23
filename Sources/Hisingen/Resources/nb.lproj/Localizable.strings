@@ -1733,6 +1733,8 @@
 "Command sent: waiting for the vehicle" = "Kommando sendt: venter på kjøretøyet";
 "Values below may update once the car reports in." = "Verdiene nedenfor kan oppdateres når bilen rapporterer inn.";
 "Tire Pressure" = "Dekktrykk";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Dekkene viser lavere trykk i kulde: ved %@ ligger de omtrent %@ under verdien sin ved %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Dekkene viser høyere trykk i varme: ved %@ ligger de omtrent %@ over verdien sin ved %@.";
 "Everything looks good" = "Alt ser bra ut";
 
 /* Text size & density options */

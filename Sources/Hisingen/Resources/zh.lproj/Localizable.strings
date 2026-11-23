@@ -1725,6 +1725,8 @@
 "•••••••• (Saved in Keychain)" = "••••••••（保存在钥匙串）";
 "≈ %d days" = "约 %d 天";
 "Tire Pressure" = "胎压";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "低温下胎压读数偏低：在 %1$@ 时约比 %3$@ 时的值低 %2$@。";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "高温下胎压读数偏高：在 %1$@ 时约比 %3$@ 时的值高 %2$@。";
 "Everything looks good" = "一切正常";
 
 /* Text size & density options */

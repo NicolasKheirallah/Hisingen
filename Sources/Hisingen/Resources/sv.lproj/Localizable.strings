@@ -1091,6 +1091,8 @@
 "Timer enabled" = "Timer aktiverad";
 "Times use the vehicle's local time zone." = "Tiderna använder fordonets lokala tidszon.";
 "Tire Pressure" = "Däcktryck";
+"Tyres read lower in the cold: at %@ they sit about %@ below their value at %@." = "Däcken visar lägre tryck i kyla: vid %@ ligger de ungefär %@ under sitt värde vid %@.";
+"Tyres read higher in the heat: at %@ they sit about %@ above their value at %@." = "Däcken visar högre tryck i värme: vid %@ ligger de ungefär %@ över sitt värde vid %@.";
 "Tire Status (iTPMS)" = "Däckstatus (iTPMS)";
 "Top" = "Tak / Ovanifrån";
 "Total Distance" = "Total distans";

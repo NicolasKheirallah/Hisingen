@@ -546,7 +546,9 @@ struct VehicleTyresCard: View {
 
     var body: some View {
         if let tyres = state.maintenance.details?.tyres, !tyres.isEmpty {
-            TireStatusCardView(tyres: tyres, model: state.model)
+            TireStatusCardView(
+                tyres: tyres, model: state.model,
+                ambientCelsius: state.hasLastKnownWeather ? nil : state.weather?.temperatureCelsius)
         } else {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
