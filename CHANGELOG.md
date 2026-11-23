@@ -152,6 +152,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **A signed-out car's pictures could come back after the erase.** Car renders are written to the
+  database on a background queue. A picture saved just before a sign-out or "Erase local vehicle
+  data" could land after the erase had deleted that car's rows, and a read that was already
+  fetching a row could put the deleted picture back into memory. The erase now waits behind every
+  write already queued, and a write or read that began before an erase is dropped instead of
+  restoring what the erase removed.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.
