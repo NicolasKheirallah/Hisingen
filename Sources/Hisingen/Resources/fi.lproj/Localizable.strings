@@ -3147,6 +3147,7 @@
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Pakkasennuste kohteessa %@ (%@). Ilmastointiajastin sulattaisi ikkunat.";
 "Cold battery charges more slowly on DC." = "Kylmä akku latautuu DC-latauksessa hitaammin.";
 "Icy roads possible at %@ (%@)." = "Klo %@ tiet voivat olla jäisiä (%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "Klo %@ lunta ja jäisiä teitä mahdollisesti (%@ cm).";
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Klo %@ odotetaan lumisadetta (%@ cm). Ilmastoinnin ajastin lämmittäisi ohjaamon.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Klo %@ odotetaan kuumaa (%@). Ilmastoinnin ajastin viilentäisi ohjaamon.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Rivi näkyy myös, kun tiet ovat märät ja lämpötila on enintään 1 °C, mitä ajastin ei voi korjata, sekä kun ilma on 28 °C.";

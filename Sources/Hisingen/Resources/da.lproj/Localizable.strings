@@ -3154,6 +3154,7 @@
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Frostprognose ved %@ (%@). En klimatimer ville afise ruderne.";
 "Cold battery charges more slowly on DC." = "Et koldt batteri lader langsommere på DC.";
 "Icy roads possible at %@ (%@)." = "Risiko for glatte veje kl. %@ (%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "Sne og glatte veje mulig kl. %@ (%@ cm).";
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Snefald ventes kl. %@ (%@ cm). En klimatimer ville varme kabinen op.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Varme ventes kl. %@ (%@). En klimatimer ville køle kabinen ned.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Den vises også ved våde veje ved 1 °C eller derunder, som en timer ikke kan afhjælpe, og når luften når 28 °C.";
