@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import subprocess
 import tempfile
 import unittest
@@ -418,6 +419,87 @@ class EntrypointTests(unittest.TestCase):
             env = dict(os.environ, PATH=temp + os.pathsep + os.environ["PATH"], RELEASE_TEST_LOG=str(log))
             subprocess.run(["sh", str(ROOT / "Scripts/release.sh"), "minor"], env=env, check=True)
             self.assertEqual(log.read_text().strip(), "workflow run tag-release.yml --ref main -f bump=minor")
+
+
+class WorkflowGatingTests(unittest.TestCase):
+    """A skipped job must not silently skip everything downstream of it.
+
+    A job without its own `if` runs only when every job behind it, directly or not, succeeded.
+    `test` is skipped whenever CI already proved the commit, so the 3.0.2 release built for 46
+    minutes and then skipped notarize, publish and the distribution channels. Any job with a
+    conditional ancestor has to state its own condition, with `!cancelled()` or `always()`.
+    """
+
+    @staticmethod
+    def parse_jobs(text):
+        jobs, current, in_jobs, listing = {}, None, False, False
+        for line in text.splitlines():
+            if line.startswith("jobs:"):
+                in_jobs = True
+                continue
+            if not in_jobs:
+                continue
+            if re.match(r"^\S", line) and not line.startswith("#"):
+                break
+            name = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+            if name:
+                current = name.group(1)
+                jobs[current] = {"needs": [], "if": None}
+                continue
+            if current is None:
+                continue
+            needs = re.match(r"^    needs:\s*(.*)$", line)
+            if needs:
+                jobs[current]["needs"] += [n.strip() for n in needs.group(1).strip("[]").split(",") if n.strip()]
+                listing = not needs.group(1).strip()
+                continue
+            item = re.match(r"^      - ([A-Za-z0-9_-]+)\s*$", line)
+            if listing and item:
+                jobs[current]["needs"].append(item.group(1))
+                continue
+            if re.match(r"^    \S", line):
+                listing = False
+            condition = re.match(r"^    if:\s*(.+)$", line)
+            if condition:
+                jobs[current]["if"] = condition.group(1)
+        return jobs
+
+    @classmethod
+    def ungated_jobs(cls, text):
+        jobs = cls.parse_jobs(text)
+
+        def ancestors(name, seen=None):
+            seen = set() if seen is None else seen
+            for parent in jobs[name]["needs"]:
+                if parent in jobs and parent not in seen:
+                    seen.add(parent)
+                    ancestors(parent, seen)
+            return seen
+
+        problems = []
+        for name, job in jobs.items():
+            if not any(jobs[parent]["if"] for parent in ancestors(name)):
+                continue
+            condition = job["if"] or ""
+            if "!cancelled()" not in condition and "always()" not in condition:
+                problems.append(name)
+        return problems
+
+    def test_release_jobs_behind_a_conditional_job_state_their_own_condition(self):
+        text = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("notarize", self.parse_jobs(text), "release.yml jobs were not parsed")
+        self.assertEqual(self.ungated_jobs(text), [])
+
+    def test_the_check_catches_the_shape_that_skipped_the_3_0_2_release(self):
+        workflow = (
+            "jobs:\n"
+            "  validate:\n    runs-on: ubuntu\n"
+            "  test:\n    needs: validate\n    if: needs.validate.outputs.proven != 'true'\n"
+            "  build:\n    needs: [validate, test]\n    if: ${{ !cancelled() }}\n"
+            "  notarize:\n    needs: [validate, build]\n"
+            "  publish:\n    needs: notarize\n    if: ${{ !cancelled() && needs.notarize.result == 'success' }}\n"
+        )
+        self.assertEqual(self.ungated_jobs(workflow), ["notarize"])
 
 
 if __name__ == "__main__":

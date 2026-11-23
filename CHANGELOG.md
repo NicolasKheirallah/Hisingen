@@ -7,6 +7,14 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ### Fixed
 
+- **A release whose CI was already proven built the app and then published nothing.** The
+  release workflow skips its own test job when CI is green for the tagged commit, and only the
+  build job allowed for that. Notarize, publish, the Homebrew cask, the Pages deploy and the
+  appcast seed sync used the default condition, which also needs every job behind them to have
+  succeeded, so v3.0.2 spent 46 minutes building and then skipped all five. Each of them now
+  states its own condition on the jobs it directly needs, and a release pipeline test fails when
+  a job behind a conditional job leaves the condition out.
+
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
   next refresh was the 30-minute drift check, and the stream carries battery and charging
   readings only. A climate started on a charging car therefore kept its first "Starting" frame,
