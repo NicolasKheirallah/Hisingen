@@ -206,7 +206,11 @@ kWh of production. If you type your own array under **Settings, Charging Planner
 at that tilt and direction, and the chart reads an estimated kW for the hour you point at, with an
 estimated kWh for today and tomorrow under it. The estimate is size × tilted radiation × 80% system
 efficiency, an assumption and not a measurement of your system, so every figure is labelled as an
-estimate. Only the tilt and direction are sent to Open-Meteo; the size stays on this Mac. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
+estimate. With an array entered, the line also says what share of the planned charge the panels could
+cover during the planned window. Each hour counts at most the charger's power and the rest of the
+house is not subtracted, so it is an upper bound ("before other loads"); it does not change the
+window, which is still the cheapest by price, because the value of unused solar energy is not
+known. Only the tilt and direction are sent to Open-Meteo; the size stays on this Mac. A saved **Electricity Maps** token adds a **live grid carbon** line under the plan, with the
 provider named beneath it. The line and its setting exist for Swedish price zones only, because
 the provider's zone names are mapped for Sweden. Without a token, or whenever the provider fails, the line stays absent
 rather than showing a guessed figure. The typed grid intensity in Settings remains the input for

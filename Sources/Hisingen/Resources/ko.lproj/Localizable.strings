@@ -4274,6 +4274,7 @@
 "0° is south, -90° east, 90° west." = "0°는 남쪽, -90°는 동쪽, 90°는 서쪽입니다.";
 "≈ %@ kWh from your panels" = "≈ %@ kWh (내 패널)";
 "Estimated output uses your panel settings and assumes 80% system efficiency." = "추정 발전량은 패널 설정을 사용하며 시스템 효율 80%를 가정합니다.";
+"Your panels could cover about %@ of this charge, before other loads." = "내 패널이 다른 부하를 제외하고 이번 충전의 약 %@를 충당할 수 있습니다.";
 "%@°" = "%@°";
 "≈ %@ kW" = "≈ %@ kW";
 "Car's location" = "차량 위치";

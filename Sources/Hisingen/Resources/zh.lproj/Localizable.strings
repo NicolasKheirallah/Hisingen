@@ -4274,6 +4274,7 @@
 "0° is south, -90° east, 90° west." = "0° 为正南，-90° 为正东，90° 为正西。";
 "≈ %@ kWh from your panels" = "≈ %@ kWh（来自你的太阳能板）";
 "Estimated output uses your panel settings and assumes 80% system efficiency." = "估算发电量使用你的太阳能板设置，并假设系统效率为 80%。";
+"Your panels could cover about %@ of this charge, before other loads." = "在计入其他用电之前，你的太阳能板大约可覆盖本次充电的 %@。";
 "%@°" = "%@°";
 "≈ %@ kW" = "≈ %@ kW";
 "Car's location" = "车辆位置";

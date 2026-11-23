@@ -250,7 +250,7 @@ struct ChargingPlannerCard: View {
                 if onOpenPlanner == nil {
                     if case .forecast(let forecast, let place) = solarOutcome {
                         SolarForecastLine(
-                            forecast: forecast, place: place, plan: plan, array: preferences.solarArray,
+                            forecast: forecast, place: place, plan: plan, array: preferences.solarArray, chargerKw: plannerPowerKw,
                             outlookEnd: Self.solarOutlookEnd(after: Date()),
                             places: solarPlaces, onSelectPlace: selectSolarPlace
                         )

@@ -4274,6 +4274,7 @@
 "0° is south, -90° east, 90° west." = "0° er sør, -90° aust, 90° vest.";
 "≈ %@ kWh from your panels" = "≈ %@ kWh frå panela dine";
 "Estimated output uses your panel settings and assumes 80% system efficiency." = "Den anslåtte effekten bruker panelinnstillingane dine og føreset 80 % systemverknadsgrad.";
+"Your panels could cover about %@ of this charge, before other loads." = "Panela dine kan dekke omtrent %@ av denne ladinga, før anna forbruk.";
 "%@°" = "%@°";
 "≈ %@ kW" = "≈ %@ kW";
 "Car's location" = "Bilen sin posisjon";

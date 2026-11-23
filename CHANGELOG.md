@@ -22,6 +22,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   size × tilted radiation × 80% system efficiency, and every figure is labelled as an estimate.
   Only the tilt and direction are sent; the size stays on this Mac and is not part of a settings
   archive. With no size, nothing changes and the forecast stays radiation only.
+- **How much of the planned charge your panels could cover.** With panels entered in Settings,
+  the solar line says what share of the planned charge their estimated output could supply during
+  the planned window, for example "about 40% of this charge, before other loads". Each hour counts
+  at most the charger's power and the rest of the house is not subtracted, so it is an upper bound
+  and says so. The line is left out when the forecast does not cover the whole window or an hour
+  lacks a figure. It never moves the window: the plan is still chosen on price alone, because what
+  you would earn for energy you do not use is not something Hisingen knows.
 - **The line says why it is missing.** With Vehicle Weather off, no car position, or no answer
   from Open-Meteo, the planner shows one line naming the reason instead of leaving a gap.
 

@@ -4274,6 +4274,7 @@
 "0° is south, -90° east, 90° west." = "0° to południe, -90° wschód, 90° zachód.";
 "≈ %@ kWh from your panels" = "≈ %@ kWh z Twoich paneli";
 "Estimated output uses your panel settings and assumes 80% system efficiency." = "Szacowany uzysk korzysta z ustawień paneli i zakłada 80% sprawności systemu.";
+"Your panels could cover about %@ of this charge, before other loads." = "Twoje panele mogłyby pokryć około %@ tego ładowania, przed innymi odbiornikami.";
 "%@°" = "%@°";
 "≈ %@ kW" = "≈ %@ kW";
 "Car's location" = "Lokalizacja samochodu";

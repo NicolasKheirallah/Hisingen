@@ -42,6 +42,9 @@ struct SolarForecastLine: View {
     /// The reader's own panels. With them each hour also reads an estimated output, a figure that
     /// comes from their typed size, so it is labelled as an estimate wherever it appears.
     var array: SolarArray?
+    /// The charger power the plan assumes, so the line can say how much of the planned charge the
+    /// panels could cover.
+    var chargerKw: Double?
     /// Where the chart ends: the end of tomorrow, the last day the price chart ever shows.
     var outlookEnd: Date?
     var places: [SolarForecastPlaceChoice] = []
@@ -96,6 +99,7 @@ struct SolarForecastLine: View {
 
                 chart(first: first, last: last, selected: selected, axis: axis, summary: summary)
                 legend
+                coverageLine
                 dayFigures
                 Text(footnote)
                     .hisType(.micro)
@@ -255,6 +259,25 @@ struct SolarForecastLine: View {
             Text(title)
                 .hisType(.label)
                 .foregroundStyle(HisingenTheme.inkMuted)
+        }
+    }
+
+    /// What share of the planned charge the panels could supply during the planned window. Shown
+    /// only with panels typed in, a plan, and a forecast that covers the whole window, and only
+    /// when it rounds to at least 1%. It never moves the window: the plan is chosen on price.
+    @ViewBuilder
+    private var coverageLine: some View {
+        if let array, let plan, let chargerKw,
+           let fraction = SolarCoverage.fraction(
+               forecast: forecast, array: array,
+               window: DateInterval(start: plan.start, end: max(plan.end, plan.start.addingTimeInterval(1))),
+               chargerKw: chargerKw, energyKwh: plan.energyKwh),
+           fraction >= 0.01 {
+            Text(L10n.format("Your panels could cover about %@ of this charge, before other loads.",
+                             Format.percent(fraction * 100)))
+                .hisType(.label)
+                .foregroundStyle(HisingenTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
