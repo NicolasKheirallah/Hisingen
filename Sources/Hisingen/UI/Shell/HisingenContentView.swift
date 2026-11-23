@@ -402,6 +402,7 @@ struct HisingenContentView: View {
         // another window for hours, and the charging particle flow, the gauge breath and the fan
         // all ran whether or not anyone could see them.
         .environment(\.ambientMotionAllowed, isAppActive)
+        .environment(\.historyWorkspace, history)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isAppActive = true
         }

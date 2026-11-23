@@ -3142,6 +3142,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "%@에 눈이 예상됩니다(%@ cm). 공조 타이머가 실내를 데워 줄 것입니다.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "%@에 더위가 예상됩니다(%@). 공조 타이머가 실내를 식혀 줄 것입니다.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "젖은 도로에서 기온이 1 °C 이하일 때도 표시되며, 이는 타이머로 해결할 수 없습니다. 기온이 28 °C에 이를 때도 표시됩니다.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "%@(%@)에는 지금보다 km당 에너지를 약 %d%% 더 쓸 것으로 주행 기록이 시사합니다. 주행 가능 거리는 약 %@입니다.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "%@(%@)에는 지금보다 km당 에너지를 약 %d%% 덜 쓸 것으로 주행 기록이 시사합니다. 주행 가능 거리는 약 %@입니다.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "기록된 주행 %d건으로 맞춘 값입니다: 외기 온도와 km당 에너지의 관계. 8 °C 이상의 온도 범위에 걸친 주행이 최소 15건 필요하며, 그 주행이 다룬 온도 안에서만 쓰이고 5 %% 미만의 차이는 표시하지 않습니다. 주행 가능 거리는 차량이 보고한 거리에 그 차이를 반영한 값입니다.";
 "Retry" = "다시 시도";
 "Climate Warning" = "공조 경고";
 "Factory spec (PNO34)" = "공장 사양 (PNO34)";

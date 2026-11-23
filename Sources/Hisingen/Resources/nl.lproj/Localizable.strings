@@ -3150,6 +3150,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Sneeuw verwacht om %@ (%@ cm). Een klimaattimer zou het interieur voorverwarmen.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Hitte verwacht om %@ (%@). Een klimaattimer zou het interieur koelen.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Hij verschijnt ook bij natte wegen bij 1 °C of lager, wat een timer niet kan oplossen, en wanneer de lucht 28 °C bereikt.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "Om %@ (%@) wijzen je ritten op ongeveer %d%% meer energie per km dan nu. Bereik rond %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "Om %@ (%@) wijzen je ritten op ongeveer %d%% minder energie per km dan nu. Bereik rond %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Berekend uit %d van je opgeslagen ritten: buitentemperatuur tegen energie per km. Er zijn minstens 15 ritten nodig over een bereik van 8 °C of meer, het blijft binnen de temperaturen die ze dekten en zwijgt bij verschillen onder 5 %%. Het bereik is het gemelde bereik van de auto, geschaald met dat verschil.";
 "Retry" = "Opnieuw proberen";
 "Climate Warning" = "Klimaatwaarschuwing";
 "Factory spec (PNO34)" = "Fabrieksspecificatie (PNO34)";

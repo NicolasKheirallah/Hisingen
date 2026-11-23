@@ -23,6 +23,16 @@ All notable changes to Hisingen are documented in this file. The project follows
   label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
   with an assignee or a milestone, are skipped, and pull requests are not touched.
 
+- **Range at the next departure.** When the car has a departure time (its own timer or a calendar
+  event), a forecast for that hour, a reported range and enough trip history, the weather readout
+  adds a line such as "At 07:30 (-9 °C) your trips suggest about 14% more energy per km than now.
+  Range near 214 km." The difference comes from the line fitted through the car's own recorded
+  trips, outside temperature against energy per km, the same line History uses to normalise
+  consumption, and it scales the range the car reports. It needs 15 trips driven across at least
+  8 °C, stays within the temperatures those trips covered, and says nothing for a difference under
+  5%, for a line that does not rise as it gets colder, or when the weather is a last-known reading.
+  It runs on the Mac and sends nothing new anywhere.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the

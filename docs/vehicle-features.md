@@ -290,6 +290,11 @@ timer cannot fix. Snow in the hour is named as snow, with the centimetres expect
 28 °C. The next departure comes from the car's own
 departure timers, or from the calendar preconditioning schedule when it is enabled and its next
 event is sooner; with no departure time or no forecast hour at the departure, nothing is shown.
+With a reported range and at least 15 recorded trips driven across 8 °C or more, the readout also
+estimates the range at that departure: the line fitted through the trips' outside temperature and
+energy per km, applied to the forecast hour against the current temperature, scales the range the
+car reports. The estimate stays within the temperatures the trips covered, is hidden for a
+difference under 5% or a line that does not rise in the cold, and never uses last-known weather.
 A notice appears once per climate session when the run time is nearly used up or the battery is
 too low.
 

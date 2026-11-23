@@ -3142,6 +3142,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Prevista neve alle %@ (%@ cm). Un timer climatico riscalderebbe l'abitacolo.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Previsto caldo alle %@ (%@). Un timer climatico raffredderebbe l'abitacolo.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Compare anche con strada bagnata a 1 °C o meno, cosa che un timer non può risolvere, e quando l'aria raggiunge 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "Alle %@ (%@) i tuoi viaggi suggeriscono circa il %d%% di energia in più per km rispetto a ora. Autonomia vicina a %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "Alle %@ (%@) i tuoi viaggi suggeriscono circa il %d%% di energia in meno per km rispetto a ora. Autonomia vicina a %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Calcolato su %d dei tuoi viaggi registrati: temperatura esterna contro energia per km. Servono almeno 15 viaggi su un intervallo di 8 °C o più, resta entro le temperature coperte e tace per differenze inferiori al 5 %%. L'autonomia è quella dichiarata dall'auto, scalata di questa differenza.";
 "Retry" = "Riprova";
 "Climate Warning" = "Avviso climatizzazione";
 "Factory spec (PNO34)" = "Specifiche di fabbrica (PNO34)";

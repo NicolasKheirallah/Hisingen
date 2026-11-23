@@ -3142,6 +3142,9 @@
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Klo %@ odotetaan lumisadetta (%@ cm). Ilmastoinnin ajastin lämmittäisi ohjaamon.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Klo %@ odotetaan kuumaa (%@). Ilmastoinnin ajastin viilentäisi ohjaamon.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Rivi näkyy myös, kun tiet ovat märät ja lämpötila on enintään 1 °C, mitä ajastin ei voi korjata, sekä kun ilma on 28 °C.";
+"At %@ (%@) your trips suggest about %d%% more energy per km than now. Range near %@." = "Klo %@ (%@) matkasi viittaavat noin %d%% suurempaan energiankulutukseen kilometriä kohti kuin nyt. Toimintamatka noin %@.";
+"At %@ (%@) your trips suggest about %d%% less energy per km than now. Range near %@." = "Klo %@ (%@) matkasi viittaavat noin %d%% pienempään energiankulutukseen kilometriä kohti kuin nyt. Toimintamatka noin %@.";
+"Fitted from %d of your recorded trips: outside temperature against energy per km. It needs at least 15 trips driven across 8 °C or more, stays within the temperatures they covered, and is quiet for differences under 5 %%. The range is the car's reported range scaled by that difference." = "Sovitettu %d tallennetun matkasi mukaan: ulkolämpötila suhteessa energiaan kilometriä kohti. Se vaatii vähintään 15 matkaa, jotka on ajettu vähintään 8 °C:n lämpötilavälillä, pysyy niiden kattamissa lämpötiloissa ja vaikenee alle 5 %%:n eroista. Toimintamatka on auton ilmoittama toimintamatka tällä erolla skaalattuna.";
 "Retry" = "Yritä uudelleen";
 "Climate Warning" = "Ilmastointivaroitus";
 "Factory spec (PNO34)" = "Tehdasspesifikaatio (PNO34)";
