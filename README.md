@@ -50,16 +50,17 @@ Readings and controls vary by vehicle, region and account. [Supported models](do
 ### Home charging and electricity
 
 - Pair NexBlue, Easee or Zaptec directly, or connect through Home Assistant. See wall power and delivered energy, use Charge Now or Pause, and import completed sessions.
-- Find a cheaper charging window using Swedish spot prices. Save a one-time overnight timer to a compatible NexBlue charger or run a plan through the Home Assistant component while the Mac sleeps.
-- Price sessions with a fixed or night tariff, Swedish spot prices, or a connected Tibber home.
+- Find a cheaper charging window using Swedish spot prices, or the prices of a connected Tibber home in any country. Save a one-time overnight timer to a compatible NexBlue charger or run a plan through the Home Assistant component while the Mac sleeps.
+- Price sessions with a fixed or night tariff, Swedish spot prices, or a connected Tibber home. Add your grid company's transfer fee for Sweden, Norway, Denmark, Germany or the Netherlands, with Vattenfall (Sweden) and Elvia (Norway) presets.
+- Record idle and overstay fees for a charger or location, and get an alert when the electricity price crosses a level you set.
 
-[Charger setup and electricity pricing](docs/home-charging.md)
+[Charger setup, supported countries and electricity pricing](docs/home-charging.md#what-works-where)
 
 ### History and exports
 
 - Review charging curves, energy and costs by month or location. Record fuel fill-ups and compare fuel economy over time.
 - See detected trips, split business and private mileage, and track odometer, estimated battery health, tyre pressures, cabin conditions, warnings and commands.
-- Export CSVs, a monthly mileage report or a JSON backup. Create a handover pack when you sell the car.
+- Export CSVs or XLSX workbooks, a GPX track file for trips, a monthly mileage report or a JSON backup. Create a handover pack when you sell the car.
 
 ### macOS and customisation
 
@@ -234,11 +235,11 @@ Open the gear button to sign in, set up charging or adjust what Hisingen shows. 
 | [Tabs & Cards](assets/screenshots/live/settings/tabs-and-cards.png) | Add, hide and reorder content by tab. The picker indicates when a capability is unavailable. |
 | [Display, Units & Energy](assets/screenshots/live/settings/display-units-and-energy.png) | Adjust vehicle labels, charging history, menu bar and launch behaviour, measurement units, emissions assumptions and device-owner authentication. |
 | [Charging Stat Order](assets/screenshots/live/settings/charging-stat-order.png) | Reorder the rows under Now's Charging Details. |
-| [Electricity](assets/screenshots/live/settings/electricity.png) | Choose the country, rate and price area. Set a fixed or night rate, or the applicable Swedish spot-price contract, markup, tax and fees. |
+| [Electricity](assets/screenshots/live/settings/electricity.png) | Choose the country, rate and price area. Set a fixed or night rate, or the applicable Swedish spot-price contract, markup, tax and fees. Add idle and overstay fee rules for a charger or location. |
 | [Charging Planner](assets/screenshots/live/settings/charging-planner.png) | Set the power estimate and price area. Choose lead time, price alerts and available automatic start behaviour. |
 | [Home Charging](assets/screenshots/live/settings/home-charging.png) | Pair NexBlue, Easee or Zaptec directly or connect through Home Assistant. Choose the car and charger, inspect connection status and import available sessions. |
 | [Electricity Supplier](assets/screenshots/live/settings/electricity-supplier.png) | Connect Tibber and pick the home whose prices Hisingen should use for planning and session costs. |
-| [Grid Tariff](assets/screenshots/live/settings/grid-tariff.png) | Account for the grid provider's energy fee in charging and house-load calculations when a tariff is configured. |
+| [Grid Tariff](assets/screenshots/live/settings/grid-tariff.png) | Account for the grid provider's energy fee in charging and house-load calculations when a tariff is configured. Pick Sweden, Norway, Denmark, Germany or the Netherlands; Vattenfall (Sweden) and Elvia (Norway) have presets, and the other countries take your own figures. |
 | [House Meter](assets/screenshots/live/settings/house-meter.png) | Read a Perific meter to show grid draw, voltage, per-phase current and imported energy. Perific manages its own load balancing. |
 | [Feature presets](assets/screenshots/live/settings/feature-presets.png) | Apply the recommended selections, enable all available data features or clear the selections before choosing individually. |
 | [Calendar Preconditioning](assets/screenshots/live/settings/calendar-preconditioning.png) | Start cabin preconditioning before eligible events on calendars you select. |

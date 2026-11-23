@@ -392,8 +392,11 @@ Everything Hisingen keeps lives on your Mac, in a local SQLite database plus the
 for credentials.
 
 * **Exports.** Charging sessions, detected trips and the Monthly Mileage Report export to CSV.
-  The export menu on the Log tab also offers a **Full Backup (JSON)**, and Settings can export
-  your settings (see [Make it yours](#make-it-yours)).
+  The Log tab's export menu also offers an **XLSX Workbook** beside the CSV entries, with real
+  numeric cells and a summary sheet, and **GPX Tracks** for trips. A trip with no recorded
+  position produces no track, and a trip with one recorded end keeps that single point. The menu
+  also offers a **Full Backup (JSON)**, and Settings can export your settings (see
+  [Make it yours](#make-it-yours)).
 * **Vehicle report.** The report menu on the Car tab offers **Copy Vehicle Report**, which
   puts the whole report on the clipboard, and **Share Vehicle Report…**, which shares it as a
   PDF through the share sheet. Both follow Screenshot Privacy: with privacy on, the VIN is
@@ -445,6 +448,7 @@ In practical terms:
 | **Vehicle cache**                | Stored locally                                            |
 | **Current vehicle coordinates**  | Not stored in the normal persistent vehicle-state cache   |
 | **Vehicle weather**              | Coordinates are sent to Open-Meteo when enabled           |
+| **Charger and price services**   | Your charger's vendor, Tibber, Perific, Elpriset just nu.se and Electricity Maps are contacted only after you set each one up. [The hosts and what each receives](home-charging.md#privacy-and-data) |
 | **Calendar events**              | Read locally from calendars you select; events you ask for are written back; never sent anywhere |
 | **Reminders**                    | Written locally through macOS Reminders when you ask Hisingen to; never sent anywhere |
 | **Map integration**              | Uses Apple services where applicable                      |

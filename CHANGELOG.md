@@ -13,6 +13,17 @@ All notable changes to Hisingen are documented in this file. The project follows
   with no countdown, until that check ran. A running climate session now keeps the two-minute
   refresh while the stream is open.
 
+### Changed
+
+- **Documentation covers the grid tariff, supported countries and the services Hisingen
+  contacts.** Home charging gains a "What works where" table for chargers, prices, the planner,
+  grid tariff and live grid carbon by country, plus sections on the grid tariff (Sweden, Norway,
+  Denmark, Germany and the Netherlands, with the Vattenfall and Elvia presets), idle and overstay
+  fees, and the price threshold alert. The planner paragraph now says a connected Tibber home
+  works in any country, which the app already did and the page denied. The privacy pages list
+  every charger, price and carbon host with what it receives, and the export notes mention the
+  XLSX workbook and GPX tracks.
+
 ## [3.0.2] - 2026-11-21
 
 ### Added

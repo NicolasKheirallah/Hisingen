@@ -28,6 +28,12 @@ External communication is limited to the vehicle provider and explicitly used th
 | Volvo Cars services | OAuth material, bearer tokens, VCC API configuration where applicable, VIN, requested vehicle data and commands | Volvo integration | Required for Volvo use |
 | Apple `CLGeocoder` | Latitude and longitude | Reverse-geocode vehicle location | Only when address resolution is used |
 | Open-Meteo | Latitude and longitude | Weather at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
+| NexBlue, Easee or Zaptec cloud (`api.nexblue.com`, `api.easee.com`, `api.zaptec.com`) | Account and password to sign in, bearer token, charger identifier, charger commands | Direct home-charger status, commands and session import | Only when that charger is paired directly |
+| Your Home Assistant | Long-lived access token, charger commands, plans | Home-charger status, commands and plans through the reader's own instance on the local network | Only when Home Assistant is connected |
+| Tibber (`api.tibber.com`) | Access token, home identifier, price, consumption and production requests, and the live stream when a Pulse is paired | Electricity prices, session costs and house load | Only when a Tibber home is connected |
+| Perific cloud | Account sign-in, meter requests | House-meter readings | Only when a Perific meter is connected |
+| Elpriset just nu.se (`www.elprisetjustnu.se`) | A request for one price zone and day, no account | Swedish spot prices | Only when Swedish spot prices are used |
+| Electricity Maps (`api.electricitymap.org`) | Access token and the price-zone name | Live grid carbon line under the Charging Planner | Only when a token is saved |
 | Hisingen update feed / GitHub Releases | Application/version-related HTTP request metadata | Signed update checking and download | Only when update checking is enabled |
 | GitHub Pages OAuth callback | Volvo OAuth authorization response and state as part of browser redirect | Return Volvo OAuth result to the desktop app | Required for the normal Volvo OAuth flow |
 | Hisingen-operated server | Nothing | No Hisingen backend exists | N/A |
