@@ -27,7 +27,7 @@ External communication is limited to the vehicle provider and explicitly used th
 | Polestar-operated services | Authentication material, bearer tokens, VIN, requested vehicle data and commands | Polestar integration | Required for Polestar use |
 | Volvo Cars services | OAuth material, bearer tokens, VCC API configuration where applicable, VIN, requested vehicle data and commands | Volvo integration | Required for Volvo use |
 | Apple `CLGeocoder` | Latitude and longitude | Reverse-geocode vehicle location | Only when address resolution is used |
-| Open-Meteo | Latitude and longitude | Weather at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
+| Open-Meteo | Latitude and longitude | Weather and air quality at the vehicle's location | Only when Vehicle Weather is enabled and Open-Meteo is used |
 | Hisingen update feed / GitHub Releases | Application/version-related HTTP request metadata | Signed update checking and download | Only when update checking is enabled |
 | GitHub Pages OAuth callback | Volvo OAuth authorization response and state as part of browser redirect | Return Volvo OAuth result to the desktop app | Required for the normal Volvo OAuth flow |
 | Hisingen-operated server | Nothing | No Hisingen backend exists | N/A |
@@ -74,7 +74,7 @@ This includes provider session material and sensitive custom Volvo developer con
 
 - Fetched from the provider (Polestar's `DtlInternetService`/`GetLastKnownLocation`, Volvo's `/location/v1/vehicles/{vin}/location`) only when the "Vehicle Location" feature is enabled.
 - Sent to Apple's `CLGeocoder` (reverse geocoding) only when that same feature is on; this is an Apple system framework call, not a raw HTTP request Hisingen constructs, and Apple's own privacy handling for `CLGeocoder` applies.
-- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled; this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast`, no API key, coordinates as query parameters).
+- Sent to Open-Meteo, unauthenticated, only when "Vehicle Weather" is separately enabled; this is an explicit **HTTPS** request Hisingen constructs (`api.open-meteo.com/v1/forecast` and `air-quality-api.open-meteo.com/v1/air-quality`, no API key, coordinates as query parameters).
 - Never sent anywhere else. Precise coordinates for *saved charging locations* (as opposed to the vehicle's current position) are explicitly discarded before they ever reach the domain model; Hisingen keeps the schedule's time/weekday/active fields but drops the location and any alias/name attached to it.
 - Never written to the on-disk telemetry cache: `VehicleState.cacheableCopy` (`Domain/VehicleState.swift`) builds its persisted copy by calling `VehicleState`'s memberwise initializer with only a specific subset of fields passed explicitly; every field it *doesn't* pass (including `location` and `exteriorStatus`) falls back to that initializer's default value, which is `nil`/empty for all of them. So the current vehicle position never reaches disk, full stop, regardless of feature toggles.
 

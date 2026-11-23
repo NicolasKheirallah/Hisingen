@@ -318,6 +318,12 @@ millimetres of water regardless of whether it falls as rain or snow. The hourly 
 snowfall in centimetres and the WMO weather code, which the departure hints read for snow and
 freezing rain; both stay out of the weather readout itself.
 
+The readout also shows the outdoor air quality as a European Air Quality Index figure and its
+band, asked of Open-Meteo's air-quality service for the same rounded position and kept in memory
+for 30 minutes. It is the CAMS model's value for the car's grid cell, not a measurement at the car,
+and the readout names CAMS and Open-Meteo under it. It stays separate from the cabin sensors and
+from the car's own outdoor particulate reading.
+
 Live check: the request shape was verified against Open-Meteo without a key, but the readout's
 calendar-based advice line has not been exercised against a real calendar and a live refresh.
 

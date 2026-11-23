@@ -1310,6 +1310,11 @@
 "Added" = "추가됨";
 "Address" = "주소";
 "Air Quality" = "대기 질";
+"Fair" = "보통 이하";
+"Very poor" = "매우 나쁨";
+"Extremely poor" = "극도로 나쁨";
+"Air Quality (EAQI)" = "대기 질(EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "대기 질은 CAMS 유럽 예보에서 가져오며 Open-Meteo를 통해 제공됩니다.";
 "Air quality index history chart" = "대기질 지수 기록 차트";
 "Air quality index trend chart" = "대기질 지수 추세 차트";
 "Air Quality Trend" = "대기 질 추세";

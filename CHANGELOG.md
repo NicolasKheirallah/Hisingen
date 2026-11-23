@@ -16,6 +16,14 @@ All notable changes to Hisingen are documented in this file. The project follows
   asks Open-Meteo for snowfall and the weather code; no further request is made and the coordinates
   are still rounded to two decimals.
 
+- **Outdoor air quality in the weather readout.** With Vehicle Weather on, the readout shows the
+  European Air Quality Index and its band (good, fair, moderate, poor, very poor, extremely poor)
+  for the car's position, from Open-Meteo's air-quality service. It is a model value for the car's
+  grid cell, not a measurement, so it is kept apart from the cabin sensors and the car's own
+  outdoor particulate reading. The request sends the same two-decimal coordinates as the weather
+  request, is covered by the same setting, and is remembered in memory for 30 minutes. The readout
+  credits CAMS and Open-Meteo under the figure, as the data's licence requires.
+
 ### Fixed
 
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the

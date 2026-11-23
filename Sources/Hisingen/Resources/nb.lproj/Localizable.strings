@@ -1316,6 +1316,11 @@
 "Added" = "Lagt til";
 "Address" = "Adresse";
 "Air Quality" = "Luftkvalitet";
+"Fair" = "Nokså god";
+"Very poor" = "Svært dårlig";
+"Extremely poor" = "Ekstremt dårlig";
+"Air Quality (EAQI)" = "Luftkvalitet (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "Luftkvalitet fra CAMS europeiske prognoser, via Open-Meteo.";
 "Air quality index history chart" = "Historikkgrafikk for luftkvalitetsindeks";
 "Air quality index trend chart" = "Trendgrafikk for luftkvalitetsindeks";
 "Air Quality Trend" = "Luftkvalitetstrend";

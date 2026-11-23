@@ -1310,6 +1310,11 @@
 "Added" = "已添加";
 "Address" = "地址";
 "Air Quality" = "空气质量";
+"Fair" = "尚可";
+"Very poor" = "很差";
+"Extremely poor" = "极差";
+"Air Quality (EAQI)" = "空气质量 (EAQI)";
+"Air quality from CAMS European forecasts, via Open-Meteo." = "空气质量数据来自 CAMS 欧洲预报，由 Open-Meteo 提供。";
 "Air quality index history chart" = "空气质量指数历史图表";
 "Air quality index trend chart" = "空气质量指数趋势图表";
 "Air Quality Trend" = "空气质量趋势";

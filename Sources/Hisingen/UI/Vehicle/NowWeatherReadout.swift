@@ -75,6 +75,7 @@ struct NowWeatherReadout: View {
     @State private var eventStore = EKEventStore()
     @State private var calendarDeparture: Date?
     @State private var calendarTask: Task<Void, Never>?
+    @State private var outdoorAir: OutdoorAirQuality?
 
     private struct Reading {
         let label: String
@@ -106,6 +107,12 @@ struct NowWeatherReadout: View {
                             stackedReadings(readings)
                         }
                     }
+                    if outdoorAir?.band != nil {
+                        Text(L10n.text("Air quality from CAMS European forecasts, via Open-Meteo."))
+                            .hisType(.micro)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let departureAdviceLine {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(departureAdviceLine)
@@ -121,6 +128,7 @@ struct NowWeatherReadout: View {
                 }
             }
             .task { refreshCalendarDeparture() }
+            .task(id: airQualityPlace) { await refreshOutdoorAir() }
         }
     }
 
@@ -152,6 +160,10 @@ struct NowWeatherReadout: View {
         }
         if let precipitation = weather.precipitationMm {
             readings.append(Reading(label: L10n.text("Precipitation"), value: Format.number(precipitation) + " mm"))
+        }
+        if let index = outdoorAir?.europeanAQI, let band = outdoorAir?.band {
+            readings.append(Reading(label: L10n.text("Air Quality (EAQI)"),
+                                    value: "\(band.displayName) · \(index)"))
         }
         return readings
     }
@@ -211,6 +223,27 @@ struct NowWeatherReadout: View {
             )
         }
         return nil
+    }
+
+    /// The place the air-quality forecast is asked for: the car's reported position. Nil when there
+    /// is none, and then nothing is requested.
+    private var airQualityPlace: [Double]? {
+        guard let latitude = state.location?.latitude, let longitude = state.location?.longitude,
+              latitude.isFinite, longitude.isFinite else { return nil }
+        return [latitude, longitude]
+    }
+
+    /// Only a state that already shows weather reaches here, so the request is covered by the same
+    /// Vehicle Weather switch and sends the same rounded coordinates.
+    private func refreshOutdoorAir() async {
+        guard preferences.features.contains(.vehicleWeather),
+              let place = airQualityPlace, !state.hasLastKnownWeather else {
+            outdoorAir = nil
+            return
+        }
+        let reading = await OutdoorAirQualityClient().current(latitude: place[0], longitude: place[1])
+        guard !Task.isCancelled else { return }
+        outdoorAir = reading
     }
 
     /// Snapshots the Sendable calendar inputs and mirrors the controller's next-trigger fetch

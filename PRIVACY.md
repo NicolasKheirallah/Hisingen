@@ -252,6 +252,8 @@ The Open-Meteo request does not need to contain:
 
 If you do not want vehicle coordinates sent to Open-Meteo, leave Vehicle Weather disabled.
 
+The weather readout's air-quality line is part of the same setting. With Vehicle Weather enabled, opening the readout sends the same rounded latitude and longitude to Open-Meteo's air-quality service (`air-quality-api.open-meteo.com`) and keeps the answer in memory for 30 minutes. With Vehicle Weather disabled, it is not requested.
+
 The Charging Planner's solar forecast is part of the same setting. With Vehicle Weather enabled, Hisingen sends the same rounded latitude and longitude to Open-Meteo to read the next day's hourly solar radiation, and keeps the answer for 30 minutes. With Vehicle Weather disabled, the forecast is not requested.
 
 Weather information returned to Hisingen may itself be stored as part of locally cached or historical vehicle information.
@@ -270,7 +272,7 @@ Apple operates independently from Hisingen and processes information according t
 
 ## 9. Open-Meteo
 
-Hisingen may use Open-Meteo for optional vehicle-weather and solar-forecast functionality.
+Hisingen may use Open-Meteo for optional vehicle-weather, air-quality and solar-forecast functionality.
 
 The request may contain the vehicle's coordinates because those coordinates are necessary to determine weather at the vehicle's location.
 

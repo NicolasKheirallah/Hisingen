@@ -16,6 +16,7 @@ app. This file lists what that covers, where each part came from, and under whic
 | Sparkle | Bundled library | MIT, plus bundled components | Signed in-app updates |
 | 20 gRPC Swift, SwiftNIO and Swift packages | Linked libraries | Apache 2.0; BoringSSL inside swift-nio-ssl and swift-crypto is ISC and OpenSSL | Polestar gRPC connections |
 | Open-Meteo | Weather data at runtime | CC BY 4.0 | Vehicle Weather |
+| CAMS European air quality forecasts, via Open-Meteo | Outdoor air-quality index at runtime | Copernicus; attribution required | Air quality line in the weather readout |
 | Elpriset just nu.se | Spot prices at runtime | Credit requested | Charging planner |
 | Electricity Maps | Grid carbon intensity at runtime, only with the reader's own key | Electricity Maps terms | Optional live carbon in the Charging Planner |
 | Tibber | Home name and 15-minute import prices at runtime | Tibber developer terms | Optional Tibber prices in Home Charging |
@@ -2234,6 +2235,11 @@ Called at runtime. No code from them ships in Hisingen.
   Vehicle Weather row in Settings names it. The free API is for non-commercial use, so check
   Open-Meteo's terms before charging for Hisingen or any part of it. Vehicle coordinates are
   sent while the feature is on; see [PRIVACY.md](PRIVACY.md).
+* **CAMS European air quality forecasts, via Open-Meteo:** the outdoor air-quality line in the weather
+  readout, from `air-quality-api.open-meteo.com`. Generated using Copernicus Atmosphere Monitoring
+  Service information: CAMS European air quality forecasts, ENSEMBLE data, CAMS Atmosphere Data
+  Store. Open-Meteo requires a clear attribution to the CAMS ENSEMBLE data provider and a reference
+  to Open-Meteo, and the readout shows one under the air-quality figure.
 * **[Elpriset just nu.se](https://www.elprisetjustnu.se/):** Swedish spot prices in the charging
   planner, from `www.elprisetjustnu.se`. Prices are provided by Elpriset just nu.se, which asks
   for a credit when its data is shown publicly. The charging planner names it next to the
