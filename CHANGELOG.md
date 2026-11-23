@@ -50,15 +50,54 @@ All notable changes to Hisingen are documented in this file. The project follows
   that report only a warning level per tyre show nothing, and last-known weather is never used.
   Nothing new is requested or stored.
 
+- **Solar forecast chart you can point at.** The Charging Planner's solar line is now hourly
+  bars on the same clock as the price chart, with hour and weekday labels, a W/m² axis from zero,
+  the planned charging window shaded and Now marked. Hover or drag over it for the hour's range
+  and radiation, as on the price chart. Today's and tomorrow's total radiation sit under it in
+  kWh/m² (still radiation, not panel output), and a day with a missing hour shows no total.
+- **Pick where the forecast is drawn.** A menu on the solar line chooses between the car's
+  position and any saved charge location with coordinates, so a car parked at work still shows
+  the sun over the place it will charge. The choice is kept in Settings data on this Mac only.
+- **Optional output estimate from your own panels.** Settings, Charging Planner, Solar panels
+  takes an array size in kWp, a tilt and a direction. With a size entered, the solar forecast also
+  asks Open-Meteo for the radiation on a plane at that tilt and direction, shows an estimated kW
+  for each hour you point at, and adds an estimated kWh for today and tomorrow. The estimate is
+  size × tilted radiation × 80% system efficiency, and every figure is labelled as an estimate.
+  Only the tilt and direction are sent; the size stays on this Mac and is not part of a settings
+  archive. With no size, nothing changes and the forecast stays radiation only.
+- **How much of the planned charge your panels could cover.** With panels entered in Settings,
+  the solar line says what share of the planned charge their estimated output could supply during
+  the planned window, for example "about 40% of this charge, before other loads". Each hour counts
+  at most the charger's power and the rest of the house is not subtracted, so it is an upper bound
+  and says so. The line is left out when the forecast does not cover the whole window or an hour
+  lacks a figure. It never moves the window: the plan is still chosen on price alone, because what
+  you would earn for energy you do not use is not something Hisingen knows.
+- **The line says why it is missing.** With Vehicle Weather off, no car position, or no answer
+  from Open-Meteo, the planner shows one line naming the reason instead of leaving a gap.
+
 ### Changed
 
 - **Inactive issues close after 30 days.** A daily workflow labels an issue `stale` and comments
   after 23 days without activity, then closes it as not planned a week later. A reply removes the
   label and restarts the count. Issues labelled `help wanted` or `good first issue`, and issues
   with an assignee or a milestone, are skipped, and pull requests are not touched.
+- **The forecast outlook reaches the end of tomorrow.** It runs through tomorrow, the last day the
+  price chart ever shows (the price chart reaches it once tomorrow's prices are published, about
+  14:15), instead of 24 hours from now, and starts with the hour running now.
+- **A failed refresh keeps the last forecast.** If Open-Meteo fails after a good answer, the
+  previous forecast stays on screen for up to six hours (retried every five minutes) instead of
+  the line disappearing. It is held in memory only and never written to disk.
+- **The peak names its hour.** Open-Meteo reports the mean of the hour that ended at each
+  timestamp, so the peak now reads as a range such as 11:00–12:00, not the end of that hour.
+  Times are shown on the forecast place's clock, with the zone named when it differs from this
+  Mac's.
 
 ### Fixed
 
+- **Forecast hours could be an hour off across a daylight-saving change.** The answer used one
+  UTC offset for both days, so the hours after a clock change were shifted. Hours are now read as
+  exact epoch seconds. An answer that arrived as text, or without a zone, is no longer guessed
+  at.
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
   next refresh was the 30-minute drift check, and the stream carries battery and charging
   readings only. A climate started on a charging car therefore kept its first "Starting" frame,
