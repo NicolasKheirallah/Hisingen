@@ -49,6 +49,8 @@ final class GarageScanner {
     /// Cadence knobs, injectable so tests do not wait real minutes.
     private let initialDelay: TimeInterval
     private let loopInterval: TimeInterval
+    /// How often a fetch in flight is checked for an interactive operation that started under it.
+    private let interruptionCheckInterval: TimeInterval
 
     private var loopTask: Task<Void, Never>?
     /// Pending one-shot passes, keyed so each can drop its own handle on completion. Cancelled
@@ -69,7 +71,8 @@ final class GarageScanner {
          isVehicleDetached: @escaping (String) -> Bool = { _ in false },
          diagnosticsStore: GarageScanDiagnosticsStore = .shared,
          initialDelay: TimeInterval = 45,
-         loopInterval: TimeInterval = 5 * 60) {
+         loopInterval: TimeInterval = 5 * 60,
+         interruptionCheckInterval: TimeInterval = 0.25) {
         self.context = context
         self.preferences = preferences
         self.provider = provider
@@ -79,6 +82,7 @@ final class GarageScanner {
         self.diagnosticsStore = diagnosticsStore
         self.initialDelay = initialDelay
         self.loopInterval = loopInterval
+        self.interruptionCheckInterval = interruptionCheckInterval
     }
 
     /// Starts the periodic loop, cancelling any previous one first.
@@ -192,7 +196,12 @@ final class GarageScanner {
             if preferences.vin(for: brand) != selectedVIN { return .abort }
             if isVehicleDetached(car.vin) { continue }
             if brand == originalBrand && car.vin == selectedVIN { continue }
-            let state = try await provider.fetchVehicleState(vin: car.vin, features: .garageScan)
+            // The checks above run before the request leaves. A command, a refresh or a vehicle
+            // switch can start while it is in flight, so the request itself yields to them.
+            guard let state = try await fetchYieldingToInteractiveWork(
+                provider: provider, vin: car.vin, brand: brand, originalBrand: originalBrand,
+                selectedVIN: selectedVIN, context: context
+            ) else { return .abort }
             guard preferences.activeBrand == originalBrand,
                   preferences.vin(for: brand) == selectedVIN,
                   !context.commandPipelineIsBusy else { return .abort }
@@ -200,5 +209,46 @@ final class GarageScanner {
             context.garageScanDidCaptureState(state)
         }
         return .completed
+    }
+
+    /// Fetches one sibling's state, cancelling the request as soon as interactive work needs the
+    /// provider: a remote command, a refresh or vehicle switch, or a change of the active brand or
+    /// selection. Returns `nil` when the request was given up for that reason, which ends the pass.
+    private func fetchYieldingToInteractiveWork(
+        provider: any VehicleProviding, vin: String, brand: VehicleBrand,
+        originalBrand: VehicleBrand, selectedVIN: String, context: any GarageScanContext
+    ) async throws -> VehicleState? {
+        let fetch = Task { try await provider.fetchVehicleState(vin: vin, features: .garageScan) }
+        let interval = interruptionCheckInterval
+        let watcher = Task { @MainActor [weak self, weak context] () -> Bool in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval))
+                guard let self, let context, !Task.isCancelled else { return false }
+                if context.commandPipelineIsBusy || context.refreshPipelineIsBusy
+                    || self.preferences.activeBrand != originalBrand
+                    || self.preferences.vin(for: brand) != selectedVIN {
+                    fetch.cancel()
+                    return true
+                }
+            }
+            return false
+        }
+        defer { watcher.cancel() }
+        do {
+            let state = try await withTaskCancellationHandler {
+                try await fetch.value
+            } onCancel: {
+                fetch.cancel()
+            }
+            return state
+        } catch {
+            // Only a request the watcher cancelled is an interruption; any other failure is the
+            // provider's own and is reported as before.
+            watcher.cancel()
+            if await watcher.value || (error is CancellationError && Task.isCancelled) {
+                return nil
+            }
+            throw error
+        }
     }
 }
