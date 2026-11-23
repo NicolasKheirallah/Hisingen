@@ -17,6 +17,7 @@ extension RefreshCoordinator {
             policy: liveStreamPolicy,
             jitter: liveStreamJitter,
             now: now,
+            replacing: streamEngine,
             context: .init(
                 isDesired: { [weak self] desiredPurpose, desiredVIN in
                     guard let self, requestGeneration == self.generation,
