@@ -45,6 +45,7 @@ struct GridTariff: Codable, Equatable, Sendable {
     }
 
     static let winterMonths: Set<Int> = [1, 2, 3, 11, 12]
+    static let allMonths: Set<Int> = Set(1...12)
     static let vattenfallPriceYear = 2026
     /// The fuse sizes Vattenfall publishes a fixed fee for, read off the fee table below so the
     /// picker and the prices can never disagree.
@@ -82,9 +83,12 @@ struct GridTariff: Codable, Equatable, Sendable {
     /// Elvia, private customers, 2026, VAT and elavgift and Enova included, as on the invoice.
     /// Elvia's energy rate is the same in every capacity tier; only the fixed charge varies, and a
     /// fixed charge is in no per-kWh figure, so it is not carried here.
+    ///
+    /// The day rate runs all year, so the window lists every month. An empty month list reads as no
+    /// window at all (`isTimeVarying`), which would leave the night rate on at noon.
     static func elvia() -> GridTariff {
         GridTariff(region: .norway, kind: .elviaNorway, peakOrePerKwh: 46.40, offPeakOrePerKwh: 31.40,
-                   peakMonths: [], peakStartHour: 6, peakEndHour: 22, peakWeekdaysOnly: true,
+                   peakMonths: allMonths, peakStartHour: 6, peakEndHour: 22, peakWeekdaysOnly: true,
                    priceYear: elviaPriceYear)
     }
 
@@ -305,7 +309,10 @@ extension GridTariff {
         kind = try container.decode(Kind.self, forKey: .kind)
         peakOrePerKwh = try container.decode(Double.self, forKey: .peakOrePerKwh)
         offPeakOrePerKwh = try container.decode(Double.self, forKey: .offPeakOrePerKwh)
-        peakMonths = try container.decode(Set<Int>.self, forKey: .peakMonths)
+        let storedMonths = try container.decode(Set<Int>.self, forKey: .peakMonths)
+        // Earlier builds saved the Elvia preset with no months, which switched its day rate off.
+        // The preset has no month picker, so an empty list there is that bug, not a choice.
+        peakMonths = kind == .elviaNorway && storedMonths.isEmpty ? Self.allMonths : storedMonths
         peakStartHour = try container.decode(Int.self, forKey: .peakStartHour)
         peakEndHour = try container.decode(Int.self, forKey: .peakEndHour)
         peakWeekdaysOnly = try container.decode(Bool.self, forKey: .peakWeekdaysOnly)

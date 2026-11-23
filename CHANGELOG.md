@@ -105,6 +105,11 @@ All notable changes to Hisingen are documented in this file. The project follows
   succeeded, so v3.0.2 spent 46 minutes building and then skipped all five. Each of them now
   states its own condition on the jobs it directly needs, and a release pipeline test fails when
   a job behind a conditional job leaves the condition out.
+- **The Elvia day rate never applied.** The Norwegian preset listed no months for its day window, so
+  the app read the tariff as flat and charged the night rate of 31.4 øre/kWh around the clock. It
+  now lists every month: weekdays from 06:00 to 22:00 cost 46.4 øre/kWh and nights and weekends
+  31.4 øre/kWh, as on the invoice. An Elvia tariff saved by an earlier build is repaired when it is
+  read, so the setting does not need to be chosen again.
 - **Climate stayed on "Starting" while the car charged.** With the live stream connected, the
   next refresh was the 30-minute drift check, and the stream carries battery and charging
   readings only. A climate started on a charging car therefore kept its first "Starting" frame,
