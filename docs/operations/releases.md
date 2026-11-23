@@ -19,6 +19,15 @@ that tested commit and dispatches Release on that tag. Otherwise it prepares the
 version/changelog pull request. After that PR passes checks and merges, the next
 successful main run tags the tested version.
 
+If the release branch already exists and main has moved past it, preparation merges
+`origin/main` into the branch, pushes it and dispatches CI again, because `main` requires an
+up-to-date branch and the release pull request could not merge otherwise. Every successful
+main CI run re-enters preparation, so the pull request follows main without anyone updating
+it. The merge only fails when main changed the same changelog or plist lines; preparation then
+stops with an error, and the fix is to close the release pull request and let the next run
+prepare it again. The repair still costs a full CI run, so merge everything that belongs in the
+release first (see "Release window").
+
 Preparation never directly updates main. Bot-created branches/PRs explicitly
 dispatch CI and Security because GitHub suppresses ordinary recursive events from
 GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit

@@ -322,6 +322,63 @@ class AutoRecoveryTests(unittest.TestCase):
             self.assertEqual(original_run("git", "tag").stdout.strip(), "v1.1.0")
             self.assertIn(("gh", "workflow", "run", "ci.yml", "--ref", "release/v1.1.1"), calls)
 
+    def prepared_release(self, folder):
+        """A repository whose release branch is prepared and pushed, with the checkout back on main."""
+        remote = folder / "remote.git"
+        subprocess.run(["git", "init", "--bare", "-q", str(remote)], check=True)
+        subprocess.run(["git", "remote", "add", "origin", str(remote)], check=True)
+        subprocess.run(["git", "config", "core.excludesFile", "/dev/null"], check=True)
+        Path(".git/info/exclude").write_text("remote.git/\n")
+        main = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, check=True).stdout.strip()
+        original_run = release.run
+
+        def fake(*args, **kwargs):
+            if args[0] == "gh":
+                return result("[]" if args[1:3] == ("pr", "list") else "")
+            return original_run(*args, **kwargs)
+
+        with patch.object(release, "run", side_effect=fake):
+            release.prepare("patch")
+        subprocess.run(["git", "checkout", "-q", main], check=True)
+        return main, fake, original_run
+
+    def advance_main(self, name, text):
+        Path(name).write_text(text)
+        subprocess.run(["git", "add", name], check=True)
+        subprocess.run(["git", "commit", "-qm", f"change {name}"], check=True)
+        subprocess.run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], check=True)
+
+    def test_a_release_branch_that_main_has_moved_past_is_brought_up_to_date(self):
+        with repository() as folder:
+            main, fake, original_run = self.prepared_release(folder)
+            self.advance_main("Sources/App.swift", "struct App { var later = true }\n")
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+            remote = folder / "remote.git"
+            contained = subprocess.run(["git", "--git-dir", str(remote), "merge-base", "--is-ancestor", original_run("git", "rev-parse", "origin/main").stdout.strip(), "refs/heads/release/v1.1.1"])
+            self.assertEqual(contained.returncode, 0, "the release branch still lacks the newest main commit")
+            plist = subprocess.run(["git", "--git-dir", str(remote), "show", "refs/heads/release/v1.1.1:Resources/Info.plist"], capture_output=True, check=True).stdout
+            self.assertEqual(plistlib.loads(plist)["CFBundleShortVersionString"], "1.1.1")
+
+    def test_a_current_release_branch_is_left_alone(self):
+        with repository() as folder:
+            main, fake, original_run = self.prepared_release(folder)
+            before = original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+            self.assertEqual(original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout, before)
+
+    def test_a_release_branch_that_conflicts_with_main_is_reported_and_not_pushed(self):
+        with repository() as folder:
+            main, fake, original_run = self.prepared_release(folder)
+            before = original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout
+            self.advance_main("CHANGELOG.md", "# Changelog\n\n## [1.1.1] - 2026-11-01\n\n- Written on main\n")
+            with patch.object(release, "run", side_effect=fake):
+                with self.assertRaises(ValueError):
+                    release.prepare("patch")
+            self.assertEqual(original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout, before)
+            self.assertEqual(original_run("git", "status", "--porcelain").stdout, "", "the failed merge was not aborted")
+
     def test_tagged_commit_with_failed_dispatch_resumes(self):
         calls = []
 

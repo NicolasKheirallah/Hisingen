@@ -3,6 +3,15 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The release pull request follows main.** `main` requires an up-to-date branch, so a release
+  pull request prepared before another merge could not merge until someone updated it by hand.
+  Each successful main CI run now merges main into the open release branch and re-runs CI, or
+  stops with a clear error if main changed the same lines. No change to the app.
+
 ## [3.0.3] - 2026-11-23
 
 ### Added

@@ -108,6 +108,29 @@ def validate(tag):
     return head
 
 
+def bring_release_branch_up_to_date(branch):
+    """Merges origin/main into an open release branch that main has moved past.
+
+    `main` requires an up-to-date branch, so a release pull request that falls behind cannot
+    merge until someone updates it by hand. Every later CI success on main re-enters
+    preparation, which is the moment to do that. The branch only carries the version bump and
+    the changelog, so the merge is clean unless main changed the same lines; in that case it
+    stops with a clear error rather than guess. Returns True when the branch was updated.
+    """
+    run("git", "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+    if run("git", "merge-base", "--is-ancestor", "origin/main", f"origin/{branch}", check=False).returncode == 0:
+        return False
+    run("git", "checkout", "-q", "-B", branch, f"origin/{branch}")
+    run("git", "config", "user.name", "github-actions[bot]")
+    run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
+    merged = run("git", "merge", "--no-edit", "-m", f"merge: origin/main into {branch}", "origin/main", check=False)
+    if merged.returncode:
+        run("git", "merge", "--abort", check=False)
+        raise ValueError(f"{branch} conflicts with main; close the release pull request and let Auto Release prepare it again")
+    run("git", "push", "origin", f"HEAD:refs/heads/{branch}")
+    return True
+
+
 def prepare(bump):
     if run("git", "status", "--porcelain=v1").stdout:
         raise ValueError("Release preparation requires a clean checkout")
@@ -141,6 +164,8 @@ def prepare(bump):
         run("git", "add", "Resources/Info.plist", "CHANGELOG.md")
         run("git", "commit", "-m", f"chore(release): prepare v{version}")
         run("git", "push", "--set-upstream", "origin", f"HEAD:refs/heads/{branch}")
+    else:
+        bring_release_branch_up_to_date(branch)
     prs = json.loads(run("gh", "pr", "list", "--head", branch, "--base", "main", "--state", "open", "--json", "url").stdout)
     if not prs:
         run("gh", "pr", "create", "--base", "main", "--head", branch, "--title", f"chore(release): prepare v{version}", "--body", f"Prepare v{version}. After this pull request passes CI and merges, Auto Release tags the tested main commit and dispatches production release.")
