@@ -198,6 +198,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   fetching a row could put the deleted picture back into memory. The erase now waits behind every
   write already queued, and a write or read that began before an erase is dropped instead of
   restoring what the erase removed.
+- **A vehicle switch at launch could switch off account-change detection.** At launch the app reads
+  the signed-in account's email in the background, so a later sign-in with a different account can
+  clear the old account's data. That read was discarded whenever the refresh coordinator had
+  moved on in the meantime, and a vehicle switch or a network change is enough to move it. The
+  email then stayed empty for the whole session and the old account's data was kept. The read is
+  now dropped only when a sign-out or new credentials have set the email themselves.
 
 ### Screenshots
 
