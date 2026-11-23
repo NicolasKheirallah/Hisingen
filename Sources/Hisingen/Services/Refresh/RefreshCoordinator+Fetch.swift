@@ -167,6 +167,7 @@ extension RefreshCoordinator {
         let interval = pollingInterval(for: displayed)
         schedule(after: interval, retrySession: false, addsJitter: !confirmations.isConfirmationPending)
         publishDiagnostics()
+        resolveSelectionWaiters()
     }
 
     func commandPresentation(
@@ -232,6 +233,7 @@ extension RefreshCoordinator {
             scheduler.cancel()
             nextRefresh = nil
             publishDiagnostics()
+            resolveSelectionWaiters()
             return
         }
         let retryAfter: TimeInterval?
@@ -244,5 +246,6 @@ extension RefreshCoordinator {
         }
         schedule(after: delay, retrySession: needsSession)
         publishDiagnostics()
+        resolveSelectionWaiters()
     }
 }
