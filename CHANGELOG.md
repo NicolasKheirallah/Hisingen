@@ -152,6 +152,21 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **A charger connection could stay open after Home Charging was stopped or reconnected.** The
+  live Home Assistant socket takes a network round trip to open. If the connection was stopped,
+  or reconnected after a wake, while that was in progress, the finished socket was installed
+  anyway: after a stop it stayed connected with nobody reading it, and after a reconnect it
+  replaced the newer socket and left that one open. A socket now belongs to the run that asked
+  for it and is closed when that run has been retired.
+
+- **Two NexBlue chargers could sign each other out.** Every NexBlue login in the app shares one
+  refresh token, and each use of it replaces it. The background read of a second charger and the
+  main connection each refreshed on their own schedule, and when two refreshes overlapped the
+  second one found the token already replaced and treated it as a rejected login. That stopped the
+  main connection with "sign in again" although the account was fine. Refreshes now run one after
+  another, each from the token the last one stored, and a refresh that finds a newer token stored
+  keeps it instead of failing.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.

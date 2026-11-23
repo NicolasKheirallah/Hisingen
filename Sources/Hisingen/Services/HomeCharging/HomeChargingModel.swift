@@ -157,6 +157,7 @@ final class HomeChargingModel: ObservableObject {
     private var sessionPeakKw: Double?
     private var lastSyncAt: Date?
     private var syncInFlight = false
+    private let nexBlueRefreshQueue = SerialAsyncQueue()
     private var timerWriteInFlight = false
     private var pairingRevision = 0
     private var wakeObserver: (any NSObjectProtocol)?
@@ -320,7 +321,7 @@ final class HomeChargingModel: ObservableObject {
                 try await refreshStates(client: client, pairing: pairing)
                 link = .live
                 backoff = 2
-                await openSocket(pairing: pairing)
+                await openSocket(pairing: pairing, generation: current)
                 await loadComponentInfo()
                 try await poll(generation: current) {
                     try await refreshStates(client: client, pairing: pairing)
@@ -432,11 +433,17 @@ final class HomeChargingModel: ObservableObject {
     /// A NexBlue provider that signs in from the saved refresh token, so no password is held.
     private func nexBlueProvider() -> NexBlueProvider {
         let store = store
+        let queue = nexBlueRefreshQueue
         return NexBlueProvider(transport: dependencies.transport, now: dependencies.now) { transport in
-            guard let previous = try await store.nexBlueRefreshToken() else { throw DirectChargerError.unauthorized }
-            let result = try await NexBlueProvider.refresh(previous, transport: transport)
-            try await store.updateNexBlueRefreshToken(result.rotatedRefreshToken, previous: previous)
-            return result.bearer
+            // Every provider this model builds shares one stored refresh token, and each grant
+            // rotates it. Grants run one after another, each starting from whatever token the
+            // previous one stored, so two providers never present the same token.
+            try await queue.run {
+                guard let previous = try await store.nexBlueRefreshToken() else { throw DirectChargerError.unauthorized }
+                let result = try await NexBlueProvider.refresh(previous, transport: transport)
+                try await store.updateNexBlueRefreshToken(result.rotatedRefreshToken, previous: previous)
+                return result.bearer
+            }
         }
     }
 
@@ -476,24 +483,32 @@ final class HomeChargingModel: ObservableObject {
         return latest
     }
 
-    private func openSocket(pairing: HomeChargingPairing) async {
+    /// Opens the live socket for the run that asked for it. The handshake and the subscription are
+    /// network round trips, and `stop()` or `refreshNow()` can retire the run during either. Each
+    /// await is followed by the run's own check, and a socket that outlived its run is closed here:
+    /// installing it would replace the newer run's socket, leaking that one, or leave a connection
+    /// open after the reader disconnected.
+    private func openSocket(pairing: HomeChargingPairing, generation current: Int) async {
         guard let connector = dependencies.socketConnector, client != nil else { return }
         if let previous = socket { socket = nil; await previous.close() }
+        guard !Task.isCancelled, current == generation else { return }
         let address = store.address ?? pairing.baseURL
         guard case .success(let url) = HomeAssistantAddress.normalise(address), let token = (try? store.token()) ?? nil else { return }
         guard let opened = try? await HomeAssistantSocket.open(baseURL: url, token: token, connector: connector) else {
             // Polling carries on alone; the socket only makes updates arrive sooner.
             return
         }
+        guard !Task.isCancelled, current == generation else { await opened.close(); return }
         let tracked = Set(trackedEntityIDs(pairing))
         guard let stream = try? await opened.stateChanges(entityIDs: tracked) else { await opened.close(); return }
+        guard !Task.isCancelled, current == generation else { await opened.close(); return }
         socket = opened
         eventTask?.cancel()
         eventTask = Task { [weak self] in
             for await change in stream {
                 guard tracked.contains(change.entityID) else { continue }
                 await MainActor.run {
-                    guard let self else { return }
+                    guard let self, self.generation == current else { return }
                     if let new = change.newState { self.apply(new) }
                     self.lastContact = self.dependencies.now()
                     self.recompute()
@@ -501,8 +516,10 @@ final class HomeChargingModel: ObservableObject {
             }
             await MainActor.run { [weak self] in
                 // The socket ended; the poll loop keeps the readings alive and the next
-                // reconnect opens a new one.
-                self?.socket = nil
+                // reconnect opens a new one. Only this run's own socket is forgotten: a newer run
+                // may already have installed its own.
+                guard let self, self.socket === opened else { return }
+                self.socket = nil
             }
         }
     }
