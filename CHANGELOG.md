@@ -152,6 +152,12 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **Stopping the live stream could still reset the refresh timer.** Stopping the stream ends it,
+  and a stream that ends looks like a dropped connection. The stopped run went on to report that
+  drop: it counted a disconnect that never happened and told the refresh coordinator, which
+  re-armed its poll timer over whatever the coordinator had armed after stopping, for example a
+  retry after an error or a command-confirmation poll. A stopped run now reports nothing.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.
