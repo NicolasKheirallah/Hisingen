@@ -118,4 +118,19 @@ struct PolestarCommandSignInPresenterTests {
         }
         #expect(genericTrace == nil)
     }
+
+    @Test
+    func aCompletionFromAnEarlierFlowDoesNotCancelTheCurrentOne() {
+        let earlier = UUID()
+        let current = UUID()
+        #expect(!PolestarCommandSignInPresenter.completionBelongsToCurrentFlow(
+            startedFor: earlier, currentFlow: current, hasSession: true))
+        #expect(PolestarCommandSignInPresenter.completionBelongsToCurrentFlow(
+            startedFor: current, currentFlow: current, hasSession: true))
+        // A flow that already finished has no session and no flow ID left to match.
+        #expect(!PolestarCommandSignInPresenter.completionBelongsToCurrentFlow(
+            startedFor: current, currentFlow: nil, hasSession: false))
+        #expect(!PolestarCommandSignInPresenter.completionBelongsToCurrentFlow(
+            startedFor: nil, currentFlow: nil, hasSession: true))
+    }
 }

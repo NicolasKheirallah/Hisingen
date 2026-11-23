@@ -159,6 +159,20 @@ All notable changes to Hisingen are documented in this file. The project follows
   selection), never did, so the command sat out its 30-second timeout and answered "The target
   vehicle could not be loaded" although the data had arrived in seconds. Every refresh, session
   start and failure now settles the wait, and a car that nothing can load is reported at once.
+- **A second Volvo sign-in could crash the app minutes after the first one finished.** Each
+  browser hand-off arms a five-minute timeout. That timer checked only that some sign-in was
+  waiting, not that it was the one it had been armed for, so a sign-in started after the first
+  had finished could be found waiting when the old timer fired. The old timer then resumed its
+  finished sign-in a second time, which stops the app, and left the new one waiting for good.
+  The timeout now ends only the round trip that armed it.
+
+- **Starting a Polestar command sign-in again could close the new one at once.** Starting over
+  cancels the earlier sign-in sheet, and macOS reports that cancellation back a moment later. By
+  then the new sheet was open, and the app took the report for the new sheet being dismissed and
+  cancelled it, which looked like a browser that opens and shuts down. A report now counts only
+  for the sign-in it was started for. When the sheet cannot be shown and the sign-in falls back
+  to the default browser, that hand-off also gets the five-minute timeout, where before it could
+  wait for a redirect that never came.
 
 ### Screenshots
 
