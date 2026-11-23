@@ -1,9 +1,11 @@
 rules:
   # Auto Release reacts to a finished CI run on main. It checks out the tested commit by SHA,
   # runs no code from a pull request and only acts when the triggering run succeeded on main.
+  # Retry Main CI checks out nothing: it re-runs the failed jobs of a main push run, once.
   dangerous-triggers:
     ignore:
       - auto-release.yml
+      - retry-main-ci.yml
   # The composite actions append fixed, tool-derived directories to PATH and DEVELOPER_DIR
   # (the Go bin directory, an extracted ShellCheck folder, the Xcode path), never user input.
   github-env:
