@@ -10,8 +10,8 @@ All notable changes to Hisingen are documented in this file. The project follows
 - **Departure weather advice names ice, snow and heat.** The line under the weather readout used to
   speak only of frost, rain and wind. It now warns about icy roads when the departure hour is wet
   at or below 1 °C or a freezing rain or drizzle code is forecast, and it says so even when a
-  climate timer is already set, because a timer does nothing for the road. Snow is named as snow
-  with the centimetres expected, and a departure hour at 28 °C or more suggests cooling the cabin
+  climate timer is already set, because a timer does nothing for the road. Snow is named with
+  the centimetres expected, together with ice when it falls at or below 1 °C, and a departure hour at 28 °C or more suggests cooling the cabin
   where no timer covers it. The climate card gains the same heat hint. The hourly request now also
   asks Open-Meteo for snowfall and the weather code; no further request is made and the coordinates
   are still rounded to two decimals.
@@ -151,6 +151,20 @@ All notable changes to Hisingen are documented in this file. The project follows
   printed nothing and the step stopped with "no HisingenWidget module compile command found".
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
+
+### Screenshots
+
+Screenshots use sample vehicle data.
+
+![Ambient Conditions popover with the departure line reading Icy roads possible at 07:30 (-1 °C)](assets/screenshots/3.0.3/weather-icy-roads.png)
+
+![Ambient Conditions popover with the departure line reading Snow and icy roads possible at 07:30 (0.8 cm)](assets/screenshots/3.0.3/weather-snow.png)
+
+![Ambient Conditions popover with the departure line reading Hot forecast at 07:30 (31 °C), a climate timer would cool the cabin](assets/screenshots/3.0.3/weather-heat.png)
+
+![Ambient Conditions popover with an Air Quality row reading Fair, 32, the CAMS credit, a frost line, and the range line: your trips suggest about 29% more energy per km, range near 233 km](assets/screenshots/3.0.3/weather-range-and-air.png)
+
+![Tire Pressure card with a line saying tyres read lower in the cold, about 38 kPa below their value at 20 °C](assets/screenshots/3.0.3/tyres-cold.png)
 
 ## [3.0.2] - 2026-11-21
 

@@ -3147,6 +3147,7 @@
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "Previsão de geada às %@ (%@). Um temporizador de climatização limparia os vidros.";
 "Cold battery charges more slowly on DC." = "Uma bateria fria carrega mais devagar em DC.";
 "Icy roads possible at %@ (%@)." = "Possível gelo na estrada às %@ (%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "Possível neve e gelo na estrada às %@ (%@ cm).";
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "Neve prevista às %@ (%@ cm). Um temporizador de clima aqueceria o habitáculo.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "Calor previsto às %@ (%@). Um temporizador de clima arrefeceria o habitáculo.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "Também aparece com a estrada molhada a 1 °C ou menos, o que um temporizador não resolve, e quando o ar chega a 28 °C.";

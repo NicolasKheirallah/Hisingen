@@ -3147,6 +3147,7 @@
 "Frost forecast at %@ (%@). A climate timer would clear the windows." = "%@에 서리 예보 (%@). 공조 타이머를 설정하면 창문의 서리를 제거할 수 있습니다.";
 "Cold battery charges more slowly on DC." = "배터리가 차가우면 DC 충전 속도가 느려집니다.";
 "Icy roads possible at %@ (%@)." = "%@에 도로가 얼 수 있습니다(%@).";
+"Snow and icy roads possible at %@ (%@ cm)." = "%@에 눈과 도로 결빙 가능성이 있습니다(%@ cm).";
 "Snow forecast at %@ (%@ cm). A climate timer would warm the cabin." = "%@에 눈이 예상됩니다(%@ cm). 공조 타이머가 실내를 데워 줄 것입니다.";
 "Hot forecast at %@ (%@). A climate timer would cool the cabin." = "%@에 더위가 예상됩니다(%@). 공조 타이머가 실내를 식혀 줄 것입니다.";
 "It also appears for wet roads at or below 1 °C, which a timer cannot fix, and when the air reaches 28 °C." = "젖은 도로에서 기온이 1 °C 이하일 때도 표시되며, 이는 타이머로 해결할 수 없습니다. 기온이 28 °C에 이를 때도 표시됩니다.";

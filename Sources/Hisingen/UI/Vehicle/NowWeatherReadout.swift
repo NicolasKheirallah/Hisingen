@@ -195,6 +195,14 @@ struct NowWeatherReadout: View {
             calendarDeparture: calendarDeparture,
             forecast: state.weather?.hourlyTemperatures ?? []
         ) else { return nil }
+        if advice.icyRoad, let snowfall = advice.snowfallCm {
+            // Snow at or below 1 °C is also an icy road. One line says both, and keeps the amount.
+            return L10n.format(
+                "Snow and icy roads possible at %@ (%@ cm).",
+                Format.shortTime(date: advice.departure),
+                Format.number(snowfall)
+            )
+        }
         if advice.icyRoad {
             return L10n.format(
                 "Icy roads possible at %@ (%@).",
