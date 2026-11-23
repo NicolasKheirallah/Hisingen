@@ -255,6 +255,50 @@ struct TokenLifecycleTests {
         #expect(await grants.value == 1)
     }
 
+    /// A caller that joined a grant and is slow to resume still gets the grant's outcome after
+    /// newer grants have landed. The grant was applied; reporting a cancellation for it surfaced as
+    /// a refresh failure for a session that was healthy.
+    @Test func aSlowJoinerStillSeesItsGrantAfterANewerOneLanded() async throws {
+        let lifecycle = makeLifecycle()
+        lifecycle.accessToken = "expired"
+        lifecycle.refreshToken = "stored"
+        lifecycle.tokenLifetime = 300
+        lifecycle.tokenExpiry = now
+        let firstGrantGate = GrantGate()
+        let joinerGate = GrantGate()
+        let at = now
+
+        let starter = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: "expired"), now: at, epochIsCurrent: { true },
+                grant: {
+                    await firstGrantGate.arriveAndWait()
+                    return TokenLifecycle.Grant(accessToken: "a-access", refreshToken: "r1", expiresIn: 300)
+                })
+        }
+        await firstGrantGate.waitForArrival()
+        let joiner = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: "expired"), now: at,
+                epochIsCurrent: { await joinerGate.arriveAndWait(); return true },
+                grant: { TokenLifecycle.Grant(accessToken: "never", refreshToken: nil, expiresIn: 300) })
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        await firstGrantGate.release()
+        _ = try await starter.value
+        await joinerGate.waitForArrival()
+
+        // A newer grant lands while the joiner is still waiting to check its epoch.
+        let newer = try await lifecycle.refresh(
+            .serverRefused(rejectedToken: "a-access"), now: at, epochIsCurrent: { true },
+            grant: { TokenLifecycle.Grant(accessToken: "b-access", refreshToken: "r2", expiresIn: 300) })
+        #expect(newer == .refreshed)
+        await joinerGate.release()
+
+        #expect(try await joiner.value == .refreshed)
+        #expect(lifecycle.accessToken == "b-access", "The late joiner must not re-apply the older grant")
+    }
+
     // MARK: - Reset
 
     @Test func resettingClearsTheSession() async throws {

@@ -103,6 +103,7 @@ final class LiveStreamEngine {
                     lastAppliedFrame = nil
                     for try await update in stream {
                         try Task.checkCancellation()
+                        guard taskID == runningTaskID else { return }
                         if case .connected(let activeTransportStreams) = update {
                             connectedAt = now()
                             isConnected = true
@@ -127,6 +128,10 @@ final class LiveStreamEngine {
                 } catch is CancellationError {
                     return
                 } catch {
+                    // A stopped run ends its stream, and a stream that ends reads as a failure.
+                    // The engine has already reset and may belong to a new run by now, so a retired
+                    // run reports nothing: no disconnect, no metrics, no reconnect decision.
+                    guard !Task.isCancelled, taskID == runningTaskID else { return }
                     let failedAt = now()
                     isConnected = false
                     metrics.activeTransportStreams = 0
@@ -158,8 +163,10 @@ final class LiveStreamEngine {
                         authorizationRecoveryUsed = true
                         do {
                             try await streaming.refreshLiveStreamAuthorization()
+                            guard taskID == runningTaskID else { return }
                             metrics.authorizationRefreshes += 1
                         } catch {
+                            guard !Task.isCancelled, taskID == runningTaskID else { return }
                             let refreshError = VehicleServiceError.map(error, provider: providerBrand)
                             logger.warning("Live stream token recovery failed: \(String(describing: refreshError), privacy: .public)")
                             // The exchange itself was refused. Retrying reconnects with the same

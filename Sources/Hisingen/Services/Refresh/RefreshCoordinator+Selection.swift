@@ -58,17 +58,33 @@ extension RefreshCoordinator {
         }
     }
 
-    /// Registers one waiter. Runs on the actor, so registration cannot interleave with a
-    /// wake: between the settled check in `selectionSettled` and this append, the main
-    /// actor has not suspended.
+    /// Registers one waiter, then immediately asks whether its answer is already decided. The
+    /// registration runs in a child task, so the selection can finish (and wake nobody) between
+    /// the caller's settled check and this append; re-resolving here closes that gap.
     private func awaitSelectionWaiter(vin: String) async -> Bool {
         await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             selectionWaiters[vin, default: []].append(continuation)
+            resolveSelectionWaiters()
         }
     }
 
     private func selectionIsSettled(for vin: String) -> Bool {
         vin == latest?.identity.vin && requestedSelectionVIN == nil && task == nil
+    }
+
+    /// Answers every waiter whose outcome is now decided. Called wherever work ends – a refresh, a
+    /// session start or a failure, not only a selection – because a waiter can be waiting on any
+    /// of them: a command for the already-selected car arrives while a poll is in flight, or a
+    /// brand switch is served by `beginSession`, which never runs the selection task.
+    ///
+    /// With work still in flight, or a selection retry pending (`requestedSelectionVIN`), nothing
+    /// is decided yet. Otherwise a waiter is settled when its car is the loaded one, and failed
+    /// when nothing remains that could load it.
+    func resolveSelectionWaiters() {
+        guard task == nil, requestedSelectionVIN == nil, !selectionWaiters.isEmpty else { return }
+        for key in Array(selectionWaiters.keys) {
+            wakeSelectionWaiters(vin: key, settled: selectionIsSettled(for: key))
+        }
     }
 
     func wakeSelectionWaiters(vin: String? = nil, settled: Bool) {

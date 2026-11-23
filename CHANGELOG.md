@@ -158,6 +158,71 @@ All notable changes to Hisingen are documented in this file. The project follows
   The script now touches and builds once more before giving up, and the final error says another
   build may be compiling the module.
 
+- **A command for a car that was already loading could wait 30 seconds and then be refused.**
+  A Shortcut, deep link or notification action that names a vehicle waits until that vehicle is
+  selected and its first reading applied. Only a vehicle switch woke that wait. A poll already
+  in flight, or a switch to the other brand's account (which starts a session rather than a
+  selection), never did, so the command sat out its 30-second timeout and answered "The target
+  vehicle could not be loaded" although the data had arrived in seconds. Every refresh, session
+  start and failure now settles the wait, and a car that nothing can load is reported at once.
+- **A second Volvo sign-in could crash the app minutes after the first one finished.** Each
+  browser hand-off arms a five-minute timeout. That timer checked only that some sign-in was
+  waiting, not that it was the one it had been armed for, so a sign-in started after the first
+  had finished could be found waiting when the old timer fired. The old timer then resumed its
+  finished sign-in a second time, which stops the app, and left the new one waiting for good.
+  The timeout now ends only the round trip that armed it.
+
+- **Starting a Polestar command sign-in again could close the new one at once.** Starting over
+  cancels the earlier sign-in sheet, and macOS reports that cancellation back a moment later. By
+  then the new sheet was open, and the app took the report for the new sheet being dismissed and
+  cancelled it, which looked like a browser that opens and shuts down. A report now counts only
+  for the sign-in it was started for. When the sheet cannot be shown and the sign-in falls back
+  to the default browser, that hand-off also gets the five-minute timeout, where before it could
+  wait for a redirect that never came.
+- **A charger connection could stay open after Home Charging was stopped or reconnected.** The
+  live Home Assistant socket takes a network round trip to open. If the connection was stopped,
+  or reconnected after a wake, while that was in progress, the finished socket was installed
+  anyway: after a stop it stayed connected with nobody reading it, and after a reconnect it
+  replaced the newer socket and left that one open. A socket now belongs to the run that asked
+  for it and is closed when that run has been retired.
+
+- **Two NexBlue chargers could sign each other out.** Every NexBlue login in the app shares one
+  refresh token, and each use of it replaces it. The background read of a second charger and the
+  main connection each refreshed on their own schedule, and when two refreshes overlapped the
+  second one found the token already replaced and treated it as a rejected login. That stopped the
+  main connection with "sign in again" although the account was fine. Refreshes now run one after
+  another, each from the token the last one stored, and a refresh that finds a newer token stored
+  keeps it instead of failing.
+- **Stopping the live stream could still reset the refresh timer.** Stopping the stream ends it,
+  and a stream that ends looks like a dropped connection. The stopped run went on to report that
+  drop: it counted a disconnect that never happened and told the refresh coordinator, which
+  re-armed its poll timer over whatever the coordinator had armed after stopping, for example a
+  retry after an error or a command-confirmation poll. A stopped run now reports nothing.
+- **A signed-out car's pictures could come back after the erase.** Car renders are written to the
+  database on a background queue. A picture saved just before a sign-out or "Erase local vehicle
+  data" could land after the erase had deleted that car's rows, and a read that was already
+  fetching a row could put the deleted picture back into memory. The erase now waits behind every
+  write already queued, and a write or read that began before an erase is dropped instead of
+  restoring what the erase removed.
+- **A vehicle switch at launch could switch off account-change detection.** At launch the app reads
+  the signed-in account's email in the background, so a later sign-in with a different account can
+  clear the old account's data. That read was discarded whenever the refresh coordinator had
+  moved on in the meantime, and a vehicle switch or a network change is enough to move it. The
+  email then stayed empty for the whole session and the old account's data was kept. The read is
+  now dropped only when a sign-out or new credentials have set the email themselves.
+- **A refresh that waited on another refresh could report a cancellation for a grant that
+  worked.** Callers that arrive while a token grant is in flight share it. One that resumed after
+  a newer grant had also landed no longer found its own grant in the record of applied ones and
+  was told it had been cancelled, which showed as a failed refresh on a healthy session. The
+  lifecycle now remembers the last eight applied grants. In the same area, a charger sign-in
+  cancelled by a sign-out could clear the sign-in a newer request had started, letting a third
+  request start a second one; each sign-in now clears only itself.
+- **The background garage scan could keep a request running next to a command.** The scan checks
+  whether a command, a refresh or a vehicle switch is under way before it asks about each car, but
+  one of those could start while that request was on the wire, so the two ran together and the
+  scan's answer was thrown away afterwards. The request now yields: it is cancelled as soon as
+  interactive work starts, and the pass ends there.
+
 ### Screenshots
 
 Screenshots use sample vehicle data.

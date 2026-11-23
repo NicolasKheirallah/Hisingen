@@ -4,51 +4,60 @@ import Foundation
 @MainActor
 final class VolvoSignInPresenter: NSObject {
     private let logger = AppLog.logger("volvo-sign-in")
-    private var pendingContinuation: CheckedContinuation<URL, Error>?
+    /// The round trip awaiting its callback. The id names this call, so a timeout armed by an
+    /// earlier call can tell that the continuation now pending is not the one it was armed for.
+    private var pending: (id: UUID, continuation: CheckedContinuation<URL, Error>)?
     private let openInBrowser: @MainActor (URL) -> Bool
+    private let callbackTimeout: TimeInterval
 
     /// `openInBrowser` is a seam for tests: the callback gate can be exercised without launching
     /// the user's browser.
-    init(openInBrowser: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+    init(callbackTimeout: TimeInterval = 300,
+         openInBrowser: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
         self.openInBrowser = openInBrowser
+        self.callbackTimeout = callbackTimeout
         super.init()
     }
 
     /// Whether a browser round trip is still waiting for its callback.
-    var isWaitingForCallback: Bool { pendingContinuation != nil }
+    var isWaitingForCallback: Bool { pending != nil }
 
     func signIn(authorizeURL: URL, callbackScheme _: String) async throws -> URL {
         // Production always has an application; a unit test does not.
         _ = NSApp?.activate(ignoringOtherApps: true)
 
         return try await withCheckedThrowingContinuation { continuation in
-            if let existing = self.pendingContinuation {
-                self.pendingContinuation = nil
-                existing.resume(throwing: CancellationError())
+            if let existing = self.pending {
+                self.pending = nil
+                existing.continuation.resume(throwing: CancellationError())
             }
-            self.pendingContinuation = continuation
+            let id = UUID()
+            self.pending = (id, continuation)
 
             let opened = self.openInBrowser(authorizeURL)
             if !opened {
-                self.pendingContinuation = nil
+                self.pending = nil
                 continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
             } else {
                 // Browser handoff waits indefinitely otherwise: a closed tab or lost
-                // routing wedges every future press behind the re-entrancy guard.
+                // routing wedges every future press behind the re-entrancy guard. The timeout
+                // belongs to this call alone: once this round trip has ended, a later sign-in's
+                // continuation must not be what it finds pending.
+                let timeout = self.callbackTimeout
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .seconds(300))
-                    guard let self, self.pendingContinuation != nil else { return }
-                    self.pendingContinuation = nil
-                    continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
+                    try? await Task.sleep(for: .seconds(timeout))
+                    guard let self, let pending = self.pending, pending.id == id else { return }
+                    self.pending = nil
+                    pending.continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
                 }
             }
         }
     }
 
     func cancel() {
-        guard let continuation = pendingContinuation else { return }
-        pendingContinuation = nil
-        continuation.resume(throwing: CancellationError())
+        guard let pending else { return }
+        self.pending = nil
+        pending.continuation.resume(throwing: CancellationError())
     }
 
     /// Only the registered Volvo callback is resumed to the token exchange. A stray or crafted
@@ -59,14 +68,14 @@ final class VolvoSignInPresenter: NSObject {
             logger.notice("\(refusal.logMessage, privacy: .public)")
             return
         }
-        guard let continuation = pendingContinuation else {
+        guard let pending else {
             // A registered callback with nothing waiting means the round trip was already
             // finished, cancelled, or timed out. Saying so beats a silent drop.
             logger.notice("Volvo sign-in callback arrived with no sign-in waiting for it")
             return
         }
-        pendingContinuation = nil
-        continuation.resume(returning: url)
+        self.pending = nil
+        pending.continuation.resume(returning: url)
     }
 
 }
