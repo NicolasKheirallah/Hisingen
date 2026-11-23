@@ -104,7 +104,11 @@ final class TokenLifecycle: @unchecked Sendable {
     private var storedTokenExpiry: Date?
     private var storedTokenLifetime: TimeInterval = 0
     private var lastGrantAt: Date?
-    private var lastAppliedFlight: UUID?
+    /// The most recent grants that were applied, newest last. A caller that joined a grant and
+    /// resumes late must still find it applied even when newer grants landed in between; one slot
+    /// answered "not current" for it and turned a good grant into a cancellation.
+    private var appliedFlights: [UUID] = []
+    private static let appliedFlightMemory = 8
     private var inFlight: (id: UUID, task: Task<Grant, Error>)?
     private let logger: Logger
 
@@ -232,9 +236,10 @@ final class TokenLifecycle: @unchecked Sendable {
 
     private func adoptIfCurrent(_ grant: Grant, entryID: UUID, now: Date) throws -> Bool {
         locked {
-            if lastAppliedFlight == entryID { return true }
+            if appliedFlights.contains(entryID) { return true }
             guard inFlight?.id == entryID else { return false }
-            lastAppliedFlight = entryID
+            appliedFlights.append(entryID)
+            if appliedFlights.count > Self.appliedFlightMemory { appliedFlights.removeFirst() }
             let previous = storedRefreshToken
             let renewable = grant.refreshToken ?? previous
             storedAccessToken = grant.accessToken
@@ -287,7 +292,7 @@ final class TokenLifecycle: @unchecked Sendable {
             let task = inFlight?.task
             inFlight = nil
             lastGrantAt = nil
-            lastAppliedFlight = nil
+            appliedFlights = []
             if !keepingAccessToken {
                 storedAccessToken = nil
                 storedTokenExpiry = nil
@@ -305,7 +310,7 @@ final class TokenLifecycle: @unchecked Sendable {
         let task = locked { () -> Task<Grant, Error>? in
             let task = inFlight?.task
             inFlight = nil
-            lastAppliedFlight = nil
+            appliedFlights = []
             return task
         }
         task?.cancel()
