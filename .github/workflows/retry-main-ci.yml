@@ -1,0 +1,47 @@
+name: Retry Main CI
+
+# A failed CI run on main blocks Auto Release, which needs a green run on the exact commit.
+# One automatic re-run of the failed jobs separates a flaky job from a broken commit. The
+# first failure stays on record in the run's summary, so a test that needed a retry is
+# reported instead of vanishing behind the green re-run.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  retry:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-run the failed jobs once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          failed=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- " + .name + ": " + .html_url')
+          {
+            echo "### Main CI failed once and was re-run"
+            echo
+            echo "Commit \`$HEAD_SHA\`, run $RUN_ID. Failed jobs on the first attempt:"
+            echo
+            echo "$failed"
+            echo
+            echo "A green second attempt means a job is flaky: find the cause, do not just move on."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Main CI retried::Run $RUN_ID failed on $HEAD_SHA and was re-run once."
+          gh run rerun "$RUN_ID" --failed
