@@ -15,6 +15,8 @@ import time
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "Scripts"))
+import changelog  # noqa: E402  (Scripts/ is not a package; the path is set just above)
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 
 # Everything a person downloads from a release: the installer, the app archive and the
@@ -108,27 +110,27 @@ def validate(tag):
     return head
 
 
-def bring_release_branch_up_to_date(branch):
-    """Merges origin/main into an open release branch that main has moved past.
-
-    `main` requires an up-to-date branch, so a release pull request that falls behind cannot
-    merge until someone updates it by hand. Every later CI success on main re-enters
-    preparation, which is the moment to do that. The branch only carries the version bump and
-    the changelog, so the merge is clean unless main changed the same lines; in that case it
-    stops with a clear error rather than guess. Returns True when the branch was updated.
-    """
+def bring_release_branch_up_to_date(branch, version):
     run("git", "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
     if run("git", "merge-base", "--is-ancestor", "origin/main", f"origin/{branch}", check=False).returncode == 0:
-        return False
+        return
     run("git", "checkout", "-q", "-B", branch, f"origin/{branch}")
     run("git", "config", "user.name", "github-actions[bot]")
     run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-    merged = run("git", "merge", "--no-edit", "-m", f"merge: origin/main into {branch}", "origin/main", check=False)
-    if merged.returncode:
+    try:
+        merged = run("git", "merge", "--no-commit", "--no-ff", "origin/main", check=False)
+        if merged.returncode:
+            raise ValueError(
+                f"{branch} could not be merged with main. Resolve conflicts on the release branch, "
+                "or close the release pull request and delete its remote branch before preparing again."
+            )
+        if changelog.assemble(version, Path("CHANGELOG.md"), Path("changelog.d")):
+            run("git", "add", "-u", "--", "CHANGELOG.md", "changelog.d")
+        run("git", "commit", "-m", f"merge: origin/main into {branch}")
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
         run("git", "merge", "--abort", check=False)
-        raise ValueError(f"{branch} conflicts with main; close the release pull request and let Auto Release prepare it again")
+        raise
     run("git", "push", "origin", f"HEAD:refs/heads/{branch}")
-    return True
 
 
 def prepare(bump):
@@ -149,6 +151,11 @@ def prepare(bump):
         if not re.search(rf"^## \[{re.escape(version)}\](?:\s|$)", text, re.M):
             if "## [Unreleased]" in text:
                 text = text.replace("## [Unreleased]", heading, 1)
+            elif changelog.fragment_paths(Path("changelog.d")):
+                # The fragments are the notes; commit subjects would only repeat them.
+                match = re.search(r"^## \[", text, re.M)
+                pos = match.start() if match else len(text)
+                text = text[:pos] + f"{heading}\n\n" + text[pos:]
             else:
                 commits = run("git", "log", "--format=%s", f"{latest}..HEAD" if latest else "HEAD").stdout.splitlines()
                 notes = "\n".join(f"- {line}" for line in commits if not line.startswith("chore(release):"))
@@ -159,13 +166,17 @@ def prepare(bump):
         run("git", "checkout", "-b", branch)
         Path("Resources/Info.plist").write_bytes(plistlib.dumps(current, sort_keys=False))
         Path("CHANGELOG.md").write_text(text)
+        changelog.assemble(version, Path("CHANGELOG.md"), Path("changelog.d"))
         run("git", "config", "user.name", "github-actions[bot]")
         run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-        run("git", "add", "Resources/Info.plist", "CHANGELOG.md")
+        staged = ["Resources/Info.plist", "CHANGELOG.md"]
+        if run("git", "ls-files", "changelog.d").stdout.strip():
+            staged.append("changelog.d")  # records the removed fragments
+        run("git", "add", "-A", *staged)
         run("git", "commit", "-m", f"chore(release): prepare v{version}")
         run("git", "push", "--set-upstream", "origin", f"HEAD:refs/heads/{branch}")
     else:
-        bring_release_branch_up_to_date(branch)
+        bring_release_branch_up_to_date(branch, version)
     prs = json.loads(run("gh", "pr", "list", "--head", branch, "--base", "main", "--state", "open", "--json", "url").stdout)
     if not prs:
         run("gh", "pr", "create", "--base", "main", "--head", branch, "--title", f"chore(release): prepare v{version}", "--body", f"Prepare v{version}. After this pull request passes CI and merges, Auto Release tags the tested main commit and dispatches production release.")

@@ -77,6 +77,8 @@ case "$phase" in
         node Scripts/verify-l10n-usage.mjs
         node Scripts/audit-l10n-literals.mjs
         python3 Scripts/test-repository-checks.py
+        python3 Scripts/changelog.py check
+        python3 Scripts/test-changelog.py
         python3 Scripts/test-release-pipeline.py
         python3 Scripts/test-release-validation.py
         python3 Scripts/test-test-selection.py

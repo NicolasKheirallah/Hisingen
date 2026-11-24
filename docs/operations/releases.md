@@ -19,20 +19,50 @@ that tested commit and dispatches Release on that tag. Otherwise it prepares the
 version/changelog pull request. After that PR passes checks and merges, the next
 successful main run tags the tested version.
 
-If the release branch already exists and main has moved past it, preparation merges
-`origin/main` into the branch, pushes it and dispatches CI again, because `main` requires an
-up-to-date branch and the release pull request could not merge otherwise. Every successful
-main CI run re-enters preparation, so the pull request follows main without anyone updating
-it. The merge only fails when main changed the same changelog or plist lines; preparation then
-stops with an error, and the fix is to close the release pull request and let the next run
-prepare it again. The repair still costs a full CI run, so merge everything that belongs in the
-release first (see "Release window").
+Release notes come from changelog fragments. Each change adds a small file under
+`changelog.d/` (see its README), and preparation moves them into the new version's section of
+`CHANGELOG.md`, in filename order, then removes them in the same release pull request. If the
+changelog already has an `## [Unreleased]` section, preparation renames it and appends the
+fragments to it; with neither, it falls back to the commit subjects since the last tag.
+`Scripts/changelog.py check` validates the fragments in the portable checks.
+
+If main advances after preparation, Auto Release merges the tested main commit into the open
+release branch and adds the newly merged changelog fragments to the release notes before pushing
+the update. The updated branch runs CI and Security again. If the merge conflicts, resolve the
+conflicts on the release branch, or close the release pull request and delete its remote branch
+before preparing again.
 
 Preparation never directly updates main. Bot-created branches/PRs explicitly
 dispatch CI and Security because GitHub suppresses ordinary recursive events from
 GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit
 with no completed release can resume dispatch rather than disappearing as a no-op.
 Only the intended release tag is pushed; unrelated local tags are not published.
+
+## Release window
+
+The release pull request starts from the main commit that passed CI. Since `main` requires
+an up-to-date branch, each subsequent merge to main can cost another full CI run for the
+release branch. Follow this order to avoid those reruns.
+
+1. Merge every change that belongs in the release, and wait for CI to pass on the last main
+   commit. Auto Release then opens the release pull request.
+2. Merge nothing else to main until the release pull request has merged and Auto Release has
+   tagged. Keep changes for a later release on their own branches with a fragment under
+   `changelog.d/`.
+
+A first CI failure on a main push is re-run once automatically (Retry Main CI). Look at the
+run summary before treating a green re-run as clean.
+
+### Merge queue
+
+CI already runs on `merge_group`, so the repository can use GitHub's merge queue. Pull requests
+are then tested against the latest main plus the pull requests ahead of them and merged in order,
+which replaces "update the branch and wait again". Enabling it is a repository setting: add a
+`merge_queue` rule to the `protect-main` ruleset (squash or merge, grouping of one to five
+entries, `ci-required` as the required check) and keep `ci-required` as the required status
+check. `Scripts/configure-ci-protection.py` does not manage that rule, and it keeps the
+rule when it re-applies the others. Auto Release is unaffected, because queue merges still
+push to main and trigger the same CI run.
 
 ## Production stages
 

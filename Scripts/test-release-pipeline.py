@@ -379,6 +379,74 @@ class AutoRecoveryTests(unittest.TestCase):
             self.assertEqual(original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout, before)
             self.assertEqual(original_run("git", "status", "--porcelain").stdout, "", "the failed merge was not aborted")
 
+    def test_an_updated_release_consumes_new_fragments_once(self):
+        with repository() as folder:
+            Path("changelog.d").mkdir()
+            first = "- **First fix.** Prepared with the release.\n"
+            later = "- **Second fix.** Merged after preparation.\n"
+            self.advance_main("changelog.d/first.fixed.md", first)
+            main, fake, original_run = self.prepared_release(folder)
+            self.advance_main("changelog.d/second.fixed.md", later)
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+            original_run("git", "checkout", "-q", main)
+            self.advance_main("Sources/App.swift", "struct App { var later = true }\n")
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+
+            remote = folder / "remote.git"
+            branch = "refs/heads/release/v1.1.1"
+            notes = original_run("git", "--git-dir", str(remote), "show", f"{branch}:CHANGELOG.md").stdout
+            section = notes.split("## [1.1.1]", 1)[1].split("## [1.1.0]", 1)[0]
+            self.assertEqual(section.count(first), 1)
+            self.assertEqual(section.count(later), 1)
+            files = original_run("git", "--git-dir", str(remote), "ls-tree", "-r", branch, "--", "changelog.d").stdout
+            self.assertEqual(files, "")
+            self.assertEqual(original_run("git", "status", "--porcelain").stdout, "")
+
+    def test_an_invalid_new_fragment_leaves_the_release_branch_intact(self):
+        with repository() as folder:
+            _, fake, original_run = self.prepared_release(folder)
+            before = original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout
+            Path("changelog.d").mkdir()
+            self.advance_main("changelog.d/broken.fixed.md", "missing the bullet\n")
+            with patch.object(release, "run", side_effect=fake):
+                with self.assertRaisesRegex(ValueError, "broken.fixed.md"):
+                    release.prepare("patch")
+            self.assertEqual(original_run("git", "ls-remote", "origin", "refs/heads/release/v1.1.1").stdout, before)
+            self.assertEqual(original_run("git", "status", "--porcelain").stdout, "")
+
+    def test_preparation_turns_changelog_fragments_into_the_new_sections_and_removes_them(self):
+        with repository() as folder:
+            remote = folder / "remote.git"
+            subprocess.run(["git", "init", "--bare", "-q", str(remote)], check=True)
+            subprocess.run(["git", "remote", "add", "origin", str(remote)], check=True)
+            Path("changelog.d").mkdir()
+            Path("changelog.d/README.md").write_text("Fragments live here.\n")
+            Path("changelog.d/a-fix.fixed.md").write_text("- **A thing was fixed.** It no longer breaks.\n")
+            Path("changelog.d/new-thing.added.md").write_text("- **A thing was added.** It does something.\n")
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-qm", "add fragments"], check=True)
+            subprocess.run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], check=True)
+            original_run = release.run
+
+            def fake(*args, **kwargs):
+                if args[0] == "gh":
+                    return result("[]" if args[1:3] == ("pr", "list") else "")
+                return original_run(*args, **kwargs)
+
+            subprocess.run(["git", "config", "core.excludesFile", "/dev/null"], check=True)
+            Path(".git/info/exclude").write_text("remote.git/\n")
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+            text = original_run("git", "show", "HEAD:CHANGELOG.md").stdout
+            self.assertLess(text.index("## [1.1.1]"), text.index("## [1.1.0]"))
+            self.assertLess(text.index("### Added"), text.index("### Fixed"))
+            self.assertIn("- **A thing was added.** It does something.", text)
+            self.assertNotIn("add fragments", text, "fragments replace the commit-subject fallback")
+            tracked = original_run("git", "ls-files", "changelog.d").stdout.split()
+            self.assertEqual(tracked, ["changelog.d/README.md"])
+
     def test_tagged_commit_with_failed_dispatch_resumes(self):
         calls = []
 
@@ -406,6 +474,17 @@ class AutoRecoveryTests(unittest.TestCase):
         with patch.dict(os.environ, {"CI_HEAD_SHA": "old"}), patch.object(release, "run", side_effect=fake):
             release.auto()
         self.assertFalse(any("push" in c or "tag" in c or "workflow" in c for c in calls))
+
+    def test_skip_release_commit_does_not_tag_or_prepare(self):
+        replies = [result("abc\n"), result("abc\trefs/heads/main\n"), result(), result("maintenance [skip release]\n")]
+        with (
+            patch.dict(os.environ, {"CI_HEAD_SHA": "abc"}),
+            patch.object(release, "run", side_effect=replies) as commands,
+            patch.object(release, "prepare") as prepare,
+        ):
+            release.auto()
+        prepare.assert_not_called()
+        self.assertEqual(commands.call_count, len(replies))
 
 
 class NotaryRecoveryTests(unittest.TestCase):
