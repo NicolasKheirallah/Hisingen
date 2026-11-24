@@ -1,7 +1,7 @@
 # Continuous integration
 
-Eight workflows live in `.github/workflows/`: CI, Security, Dependency Review,
-Deploy site, Live Account Integration, Auto Release, Prepare Release, and Release.
+Nine workflows live in `.github/workflows/`: CI, Security, Dependency Review,
+Deploy site, Live Account Integration, Auto Release, Retry Main CI, Prepare Release, and Release.
 
 ## Required validation
 
@@ -23,6 +23,12 @@ groups are never cancelled, so every merged commit gets a complete run. Its jobs
 renamed or added without touching repository settings. Inspect or re-apply the ruleset with
 `python3 Scripts/configure-ci-protection.py --aggregate` (add `--apply` to change it). See
 [releases.md](releases.md) for production restrictions.
+
+A failed CI run on a main push is re-run once by Retry Main CI (`retry-main-ci.yml`), failed
+jobs only. Auto Release needs a green run on the exact main commit, so a flaky job would
+otherwise hold a release until someone re-ran it by hand, usually after main had moved on. The
+first attempt's failed jobs are written to the run summary and raised as a warning, so a job that
+only passed on retry is visible. Treat that as a bug to fix. A second failure is final.
 
 Release reads the same results: when CI's `ci-required`, both `build-and-test` jobs and
 `package` all succeeded for the tagged commit, Release skips its own repeat of the test
@@ -109,7 +115,10 @@ to publication unless its result is explicitly added to the repository policy;
 compilation success alone is not a claim that no security alerts exist.
 
 Dependency Review runs for pull requests and rejects high/critical dependency
-findings. Dependabot tracks pinned Actions and Swift dependencies and waits seven days after a release
+findings. Its result and CodeQL's do not gate merging; only `ci-required` does. On a release
+pull request that the bot created, Dependency Review shows `action_required` until a maintainer
+approves the run, and a queued CodeQL run can take hours to get a macOS runner. Neither holds
+the release. Dependabot tracks pinned Actions and Swift dependencies and waits seven days after a release
 before proposing it; security updates skip that wait. A bump that moves a pinned version breaks
 `check-third-party-notices.py` by design: run it with `--fix` on the branch, then confirm the
 package's license and notice texts did not change. The package

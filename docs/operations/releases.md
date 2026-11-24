@@ -32,6 +32,32 @@ GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commi
 with no completed release can resume dispatch rather than disappearing as a no-op.
 Only the intended release tag is pushed; unrelated local tags are not published.
 
+## Release window
+
+The release pull request is branched from main when Auto Release prepares it, and `main`
+requires an up-to-date branch. Any merge to main after that makes the release pull request
+stale and costs another full CI run. Keep one order:
+
+1. Merge every change that belongs in the release, and wait for CI to pass on the last main
+   commit. Auto Release then opens the release pull request.
+2. Merge nothing else to main until the release pull request has merged and Auto Release has
+   tagged. Keep changes for a later release on their own branches with a fragment under
+   `changelog.d/`.
+
+A first CI failure on a main push is re-run once automatically (Retry Main CI). Look at the
+run summary before treating a green re-run as clean.
+
+### Merge queue
+
+CI already runs on `merge_group`, so the repository can use GitHub's merge queue. Pull requests
+are then tested against the latest main plus the pull requests ahead of them and merged in order,
+which replaces "update the branch and wait again". Enabling it is a repository setting: add a
+`merge_queue` rule to the `protect-main` ruleset (squash or merge, grouping of one to five
+entries, `ci-required` as the required check) and keep `ci-required` as the required status
+check. `Scripts/configure-ci-protection.py` does not manage that rule, and it keeps the
+rule when it re-applies the others. Auto Release is unaffected, because queue merges still
+push to main and trigger the same CI run.
+
 ## Production stages
 
 Release jobs run under the shared `release-stable` concurrency group. A numerical
