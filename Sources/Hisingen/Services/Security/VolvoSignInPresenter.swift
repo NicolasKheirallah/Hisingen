@@ -9,13 +9,17 @@ final class VolvoSignInPresenter: NSObject {
     private var pending: (id: UUID, continuation: CheckedContinuation<URL, Error>)?
     private let openInBrowser: @MainActor (URL) -> Bool
     private let callbackTimeout: TimeInterval
+    private let sleep: @MainActor (TimeInterval) async throws -> Void
 
-    /// `openInBrowser` is a seam for tests: the callback gate can be exercised without launching
-    /// the user's browser.
+    /// `openInBrowser` and `sleep` are seams for tests: the callback gate can be exercised
+    /// without launching the user's browser, and a timeout can be fired on demand instead of
+    /// waiting out the wall clock.
     init(callbackTimeout: TimeInterval = 300,
-         openInBrowser: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+         openInBrowser: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
+         sleep: @escaping @MainActor (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
         self.openInBrowser = openInBrowser
         self.callbackTimeout = callbackTimeout
+        self.sleep = sleep
         super.init()
     }
 
@@ -44,8 +48,9 @@ final class VolvoSignInPresenter: NSObject {
                 // belongs to this call alone: once this round trip has ended, a later sign-in's
                 // continuation must not be what it finds pending.
                 let timeout = self.callbackTimeout
+                let sleep = self.sleep
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .seconds(timeout))
+                    try? await sleep(timeout)
                     guard let self, let pending = self.pending, pending.id == id else { return }
                     self.pending = nil
                     pending.continuation.resume(throwing: VolvoError.authenticationRequired(.callbackRejected))
