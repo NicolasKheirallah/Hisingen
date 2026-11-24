@@ -5,12 +5,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
-### Changed
-
-- **The shared build lane clears itself.** Parallel sessions took turns by creating a directory
-  by hand, and a session that crashed left it behind for hours. `Scripts/build-lane.sh run`
-  now claims the lane for one command, records the processes, releases it when the command
-  ends and reclaims a claim whose processes are gone. No change to the app.
 ### Fixed
 
 - **A stopped live stream could still be open when its replacement connected.** Stopping the

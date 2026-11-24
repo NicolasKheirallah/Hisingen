@@ -15,6 +15,8 @@ import time
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "Scripts"))
+import changelog  # noqa: E402  (Scripts/ is not a package; the path is set just above)
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 
 # Everything a person downloads from a release: the installer, the app archive and the
@@ -126,6 +128,11 @@ def prepare(bump):
         if not re.search(rf"^## \[{re.escape(version)}\](?:\s|$)", text, re.M):
             if "## [Unreleased]" in text:
                 text = text.replace("## [Unreleased]", heading, 1)
+            elif changelog.fragment_paths(Path("changelog.d")):
+                # The fragments are the notes; commit subjects would only repeat them.
+                match = re.search(r"^## \[", text, re.M)
+                pos = match.start() if match else len(text)
+                text = text[:pos] + f"{heading}\n\n" + text[pos:]
             else:
                 commits = run("git", "log", "--format=%s", f"{latest}..HEAD" if latest else "HEAD").stdout.splitlines()
                 notes = "\n".join(f"- {line}" for line in commits if not line.startswith("chore(release):"))
@@ -136,9 +143,13 @@ def prepare(bump):
         run("git", "checkout", "-b", branch)
         Path("Resources/Info.plist").write_bytes(plistlib.dumps(current, sort_keys=False))
         Path("CHANGELOG.md").write_text(text)
+        changelog.assemble(version, Path("CHANGELOG.md"), Path("changelog.d"))
         run("git", "config", "user.name", "github-actions[bot]")
         run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-        run("git", "add", "Resources/Info.plist", "CHANGELOG.md")
+        staged = ["Resources/Info.plist", "CHANGELOG.md"]
+        if run("git", "ls-files", "changelog.d").stdout.strip():
+            staged.append("changelog.d")  # records the removed fragments
+        run("git", "add", "-A", *staged)
         run("git", "commit", "-m", f"chore(release): prepare v{version}")
         run("git", "push", "--set-upstream", "origin", f"HEAD:refs/heads/{branch}")
     prs = json.loads(run("gh", "pr", "list", "--head", branch, "--base", "main", "--state", "open", "--json", "url").stdout)

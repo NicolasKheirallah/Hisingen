@@ -322,6 +322,37 @@ class AutoRecoveryTests(unittest.TestCase):
             self.assertEqual(original_run("git", "tag").stdout.strip(), "v1.1.0")
             self.assertIn(("gh", "workflow", "run", "ci.yml", "--ref", "release/v1.1.1"), calls)
 
+    def test_preparation_turns_changelog_fragments_into_the_new_sections_and_removes_them(self):
+        with repository() as folder:
+            remote = folder / "remote.git"
+            subprocess.run(["git", "init", "--bare", "-q", str(remote)], check=True)
+            subprocess.run(["git", "remote", "add", "origin", str(remote)], check=True)
+            Path("changelog.d").mkdir()
+            Path("changelog.d/README.md").write_text("Fragments live here.\n")
+            Path("changelog.d/a-fix.fixed.md").write_text("- **A thing was fixed.** It no longer breaks.\n")
+            Path("changelog.d/new-thing.added.md").write_text("- **A thing was added.** It does something.\n")
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-qm", "add fragments"], check=True)
+            subprocess.run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], check=True)
+            original_run = release.run
+
+            def fake(*args, **kwargs):
+                if args[0] == "gh":
+                    return result("[]" if args[1:3] == ("pr", "list") else "")
+                return original_run(*args, **kwargs)
+
+            subprocess.run(["git", "config", "core.excludesFile", "/dev/null"], check=True)
+            Path(".git/info/exclude").write_text("remote.git/\n")
+            with patch.object(release, "run", side_effect=fake):
+                release.prepare("patch")
+            text = original_run("git", "show", "HEAD:CHANGELOG.md").stdout
+            self.assertLess(text.index("## [1.1.1]"), text.index("## [1.1.0]"))
+            self.assertLess(text.index("### Added"), text.index("### Fixed"))
+            self.assertIn("- **A thing was added.** It does something.", text)
+            self.assertNotIn("add fragments", text, "fragments replace the commit-subject fallback")
+            tracked = original_run("git", "ls-files", "changelog.d").stdout.split()
+            self.assertEqual(tracked, ["changelog.d/README.md"])
+
     def test_tagged_commit_with_failed_dispatch_resumes(self):
         calls = []
 
