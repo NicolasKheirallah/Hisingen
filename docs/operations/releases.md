@@ -26,6 +26,12 @@ changelog already has an `## [Unreleased]` section, preparation renames it and a
 fragments to it; with neither, it falls back to the commit subjects since the last tag.
 `Scripts/changelog.py check` validates the fragments in the portable checks.
 
+If main advances after preparation, Auto Release merges the tested main commit into the open
+release branch and adds the newly merged changelog fragments to the release notes before pushing
+the update. The updated branch runs CI and Security again. If the merge conflicts, resolve the
+conflicts on the release branch, or close the release pull request and delete its remote branch
+before preparing again.
+
 Preparation never directly updates main. Bot-created branches/PRs explicitly
 dispatch CI and Security because GitHub suppresses ordinary recursive events from
 GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit
@@ -34,9 +40,9 @@ Only the intended release tag is pushed; unrelated local tags are not published.
 
 ## Release window
 
-The release pull request is branched from main when Auto Release prepares it, and `main`
-requires an up-to-date branch. Any merge to main after that makes the release pull request
-stale and costs another full CI run. Keep one order:
+The release pull request starts from the main commit that passed CI. Since `main` requires
+an up-to-date branch, each subsequent merge to main can cost another full CI run for the
+release branch. Follow this order to avoid those reruns.
 
 1. Merge every change that belongs in the release, and wait for CI to pass on the last main
    commit. Auto Release then opens the release pull request.

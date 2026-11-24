@@ -110,6 +110,29 @@ def validate(tag):
     return head
 
 
+def bring_release_branch_up_to_date(branch, version):
+    run("git", "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
+    if run("git", "merge-base", "--is-ancestor", "origin/main", f"origin/{branch}", check=False).returncode == 0:
+        return
+    run("git", "checkout", "-q", "-B", branch, f"origin/{branch}")
+    run("git", "config", "user.name", "github-actions[bot]")
+    run("git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
+    try:
+        merged = run("git", "merge", "--no-commit", "--no-ff", "origin/main", check=False)
+        if merged.returncode:
+            raise ValueError(
+                f"{branch} could not be merged with main. Resolve conflicts on the release branch, "
+                "or close the release pull request and delete its remote branch before preparing again."
+            )
+        if changelog.assemble(version, Path("CHANGELOG.md"), Path("changelog.d")):
+            run("git", "add", "-u", "--", "CHANGELOG.md", "changelog.d")
+        run("git", "commit", "-m", f"merge: origin/main into {branch}")
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+        run("git", "merge", "--abort", check=False)
+        raise
+    run("git", "push", "origin", f"HEAD:refs/heads/{branch}")
+
+
 def prepare(bump):
     if run("git", "status", "--porcelain=v1").stdout:
         raise ValueError("Release preparation requires a clean checkout")
@@ -152,6 +175,8 @@ def prepare(bump):
         run("git", "add", "-A", *staged)
         run("git", "commit", "-m", f"chore(release): prepare v{version}")
         run("git", "push", "--set-upstream", "origin", f"HEAD:refs/heads/{branch}")
+    else:
+        bring_release_branch_up_to_date(branch, version)
     prs = json.loads(run("gh", "pr", "list", "--head", branch, "--base", "main", "--state", "open", "--json", "url").stdout)
     if not prs:
         run("gh", "pr", "create", "--base", "main", "--head", branch, "--title", f"chore(release): prepare v{version}", "--body", f"Prepare v{version}. After this pull request passes CI and merges, Auto Release tags the tested main commit and dispatches production release.")

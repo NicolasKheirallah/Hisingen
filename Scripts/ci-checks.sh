@@ -81,6 +81,7 @@ case "$phase" in
         python3 Scripts/test-changelog.py
         python3 Scripts/test-release-pipeline.py
         python3 Scripts/test-release-validation.py
+        python3 Scripts/test-build-lane.py
         python3 Scripts/test-test-selection.py
         sh Scripts/test-home-assistant-component.sh
         node Scripts/verify-sparkle-keypair.mjs --self-test
