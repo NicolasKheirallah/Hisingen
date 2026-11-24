@@ -19,6 +19,13 @@ that tested commit and dispatches Release on that tag. Otherwise it prepares the
 version/changelog pull request. After that PR passes checks and merges, the next
 successful main run tags the tested version.
 
+Release notes come from changelog fragments. Each change adds a small file under
+`changelog.d/` (see its README), and preparation moves them into the new version's section of
+`CHANGELOG.md`, in filename order, then removes them in the same release pull request. If the
+changelog already has an `## [Unreleased]` section, preparation renames it and appends the
+fragments to it; with neither, it falls back to the commit subjects since the last tag.
+`Scripts/changelog.py check` validates the fragments in the portable checks.
+
 Preparation never directly updates main. Bot-created branches/PRs explicitly
 dispatch CI and Security because GitHub suppresses ordinary recursive events from
 GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit
@@ -34,8 +41,8 @@ stale and costs another full CI run. Keep one order:
 1. Merge every change that belongs in the release, and wait for CI to pass on the last main
    commit. Auto Release then opens the release pull request.
 2. Merge nothing else to main until the release pull request has merged and Auto Release has
-   tagged. Changes that are not ready wait, with their changelog entry under a new
-   `## [Unreleased]` section instead of the version being released.
+   tagged. Keep changes for a later release on their own branches with a fragment under
+   `changelog.d/`.
 
 A first CI failure on a main push is re-run once automatically (Retry Main CI). Look at the
 run summary before treating a green re-run as clean.
