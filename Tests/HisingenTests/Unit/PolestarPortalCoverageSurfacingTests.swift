@@ -352,6 +352,67 @@ struct PolestarPortalCoverageSurfacingTests {
         #expect(mainName("MAIN_CLIMATE_RUNNING_STATUS_FUTURE") == "Future")
     }
 
+    // MARK: - Climate state on the portal path
+
+    @Test
+    func pendingClimateReadsAsStarting() async throws {
+        var payloads = endpointPayloads()
+        payloads["/telemetry/parking-climatization"] = (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_300_100)),
+         "runningStatus": "RUNNING_STATUS_PENDING",
+         "metaReceivedAt": "2024-05-21T14:41:40Z"}
+        """))
+        let state = try await fetchState(payloads: payloads)
+        let climate = try #require(state.climateStatus)
+        // The car accepted a start and the HVAC has not ramped. The Polestar ID path reports
+        // the same moment as starting, and every surface treats it as a running session.
+        #expect(climate.activity == .starting)
+        #expect(climate.activity.isActiveSession)
+    }
+
+    @Test
+    func batteryPreconditioningIsNotACabinClimateReading() async throws {
+        var payloads = endpointPayloads()
+        // This vehicle answers the climate read with a miss and reports a battery that is
+        // preconditioning for a fast charge.
+        payloads["/telemetry/parking-climatization"] = nil
+        payloads["/telemetry/battery"] = preconditioningBattery
+        let state = try await fetchState(payloads: payloads)
+        // The battery keeps its own status and end time for the charging card.
+        #expect(state.energy.diagnostics?.batteryPreconditioningStatus == "MANUAL_PRECONDITIONING_STATUS_ON")
+        #expect(state.energy.diagnostics?.batteryPreconditioningEndsAt?.timeIntervalSince1970 == 1_716_330_600)
+        // The cabin was not read, so no climate state is claimed for it.
+        #expect(state.climateStatus == nil)
+    }
+
+    @Test
+    func preconditioningWindowStaysOffTheCabinCycleRows() async throws {
+        var payloads = endpointPayloads()
+        payloads["/telemetry/parking-climatization"] = (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_300_100)),
+         "runningStatus": "RUNNING_STATUS_OFF",
+         "metaReceivedAt": "2024-05-21T14:41:40Z"}
+        """))
+        payloads["/telemetry/battery"] = preconditioningBattery
+        let state = try await fetchState(payloads: payloads)
+        let climate = try #require(state.climateStatus)
+        #expect(climate.activity == .idle)
+        // An idle cabin has no cycle, and the battery's window is not shown as the cabin's.
+        #expect(climate.sessionStartedAt == nil)
+        #expect(climate.sessionEndsAt == nil)
+    }
+
+    private var preconditioningBattery: (Int, Data) {
+        (200, json("""
+        {"vin": "\(vin)", "timestamp": \(timestamp(1_716_300_100)),
+         "batteryChargeLevelPercentage": 78.5,
+         "manualPreconditioning": {"preconditioningStatus": "MANUAL_PRECONDITIONING_STATUS_ON",
+                                   "startedAt": \(timestamp(1_716_300_000)),
+                                   "endingAt": \(timestamp(1_716_330_600))},
+         "metaReceivedAt": "2024-05-21T14:01:40Z"}
+        """))
+    }
+
     // MARK: - G3 climate start reason
 
     @Test

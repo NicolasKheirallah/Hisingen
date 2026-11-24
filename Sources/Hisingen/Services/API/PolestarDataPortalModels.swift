@@ -1094,8 +1094,16 @@ extension PolestarParkingClimatizationDTO {
         }
     }
 
-    func toVehicleClimateStatus(batteryPreconditioning: PolestarPreconditioningDTO? = nil, now: Date = Date()) -> VehicleClimateStatus {
-        let running = runningStatus == "RUNNING_STATUS_ON"
+    func toVehicleClimateStatus(now: Date = Date()) -> VehicleClimateStatus {
+        // PENDING is the car's own word for a start it accepted before the HVAC ramps. The
+        // Polestar ID path reports that moment as `starting`; reading it as idle made the
+        // climate card drop back to Idle between the press and the first warm air.
+        let activity: ClimateActivity
+        switch runningStatus {
+        case "RUNNING_STATUS_ON": activity = .active
+        case "RUNNING_STATUS_PENDING": activity = .starting
+        default: activity = .idle
+        }
         // runtimeLeftMinutes is deprecated upstream; when absent, derive the remainder
         // from the session window instead.
         let remaining: Int? = {
@@ -1111,7 +1119,7 @@ extension PolestarParkingClimatizationDTO {
             climateErrors.append(token)
         }
         return VehicleClimateStatus(
-            activity: running ? .active : .idle,
+            activity: activity,
             timeRemainingMinutes: remaining,
             timerTriggered: startReason == "START_REASON_TIMER",
             interiorTemperatureCelsius: portalValue(currentCompartmentTemperatureCelsius, range: -80...100),
@@ -1123,8 +1131,10 @@ extension PolestarParkingClimatizationDTO {
             rearRightSeatHeatingLevel: seatHeatLevel(requestedRearRightSeat),
             ventilation: ventilation,
             mainClimateRunningStatus: mainClimateRunningStatus,
-            sessionStartedAt: startedAt?.date ?? batteryPreconditioning?.startedAt?.date,
-            sessionEndsAt: endingAt?.date ?? batteryPreconditioning?.endingAt?.date,
+            // Only the car's own climate window. Battery preconditioning has a window of its
+            // own and reaches the charging card through the battery diagnostics instead.
+            sessionStartedAt: startedAt?.date,
+            sessionEndsAt: endingAt?.date,
             errors: climateErrors.isEmpty ? nil : climateErrors,
             startReason: VehicleStartReason(wireToken: startReason)
         )

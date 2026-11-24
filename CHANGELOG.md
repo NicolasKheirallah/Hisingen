@@ -13,6 +13,11 @@ All notable changes to Hisingen are documented in this file. The project follows
   ended, could connect first and briefly leave two open. The replacement now waits for the stopped
   run to finish before it connects.
 
+- **Polestar Developer Portal climate shows Starting** while the car's cabin climate start
+  is pending.
+- **Battery preconditioning stays on the charging card.** The Polestar Developer Portal
+  path now uses cabin climate telemetry for the climate card's activity and cycle times.
+
 ## [3.0.3] - 2026-11-23
 
 ### Added
