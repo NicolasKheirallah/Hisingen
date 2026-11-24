@@ -5,12 +5,6 @@ All notable changes to Hisingen are documented in this file. The project follows
 
 ## [Unreleased]
 
-### Changed
-
-- **The release pull request follows main.** `main` requires an up-to-date branch, so a release
-  pull request prepared before another merge could not merge until someone updated it by hand.
-  Each successful main CI run now merges main into the open release branch and re-runs CI, or
-  stops with a clear error if main changed the same lines. No change to the app.
 ### Fixed
 
 - **A stopped live stream could still be open when its replacement connected.** Stopping the
