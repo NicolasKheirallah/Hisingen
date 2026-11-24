@@ -242,7 +242,7 @@ enum PolestarPortalSnapshotAssembler {
 
         let climateStatus: VehicleClimateStatus? = {
             if let clim = bundle.parkingClimatization {
-                var status = clim.toVehicleClimateStatus(batteryPreconditioning: bundle.battery?.manualPreconditioning, now: now)
+                var status = clim.toVehicleClimateStatus(now: now)
                 if status.requestedTemperatureCelsius == nil, let t = portalValue(timerSettings?.requestedCompartmentTemperatureCelsius, range: -40...60) {
                     status = VehicleClimateStatus(
                         activity: status.activity,
@@ -265,30 +265,9 @@ enum PolestarPortalSnapshotAssembler {
                 }
                 return status
             }
-            if let precond = bundle.battery?.manualPreconditioning {
-                let status = precond.preconditioningStatus?.uppercased()
-                let isActive = status == "MANUAL_PRECONDITIONING_STATUS_ON" || status == "ACTIVE"
-                let started = precond.startedAt?.date
-                let ends = precond.endingAt?.date
-                let remaining: Int? = {
-                    guard let ends else { return nil }
-                    let diff = ends.timeIntervalSince(now)
-                    return diff > 0 ? max(1, portalRoundedInt(diff / 60, range: 0...525_600) ?? 1) : 0
-                }()
-                return VehicleClimateStatus(
-                    activity: isActive ? .active : .idle,
-                    timeRemainingMinutes: isActive ? remaining : nil,
-                    timerTriggered: false,
-                    requestedTemperatureCelsius: portalValue(timerSettings?.requestedCompartmentTemperatureCelsius, range: -40...60),
-                    driverSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowLeftSeat),
-                    passengerSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.frontRowRightSeat),
-                    steeringWheelHeatingLevel: timerSeatLevel(timerSettings?.steeringWheelHeatingIntensity),
-                    rearLeftSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowLeftSeat),
-                    rearRightSeatHeatingLevel: timerSeatLevel(timerSettings?.seatHeatingIntensity?.rearRowRightSeat),
-                    sessionStartedAt: started,
-                    sessionEndsAt: ends
-                )
-            }
+            // No climate reading leaves the cabin state to the snapshot merge, which keeps the
+            // previous one. Battery preconditioning is not a cabin reading: the assembler
+            // already carries its status and end time in the battery diagnostics.
             if let timerSettings, let reqTemp = portalValue(timerSettings.requestedCompartmentTemperatureCelsius, range: -40...60) {
                 return VehicleClimateStatus(
                     activity: .idle,
