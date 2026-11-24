@@ -19,6 +19,13 @@ that tested commit and dispatches Release on that tag. Otherwise it prepares the
 version/changelog pull request. After that PR passes checks and merges, the next
 successful main run tags the tested version.
 
+Release notes come from changelog fragments. Each change adds a small file under
+`changelog.d/` (see its README), and preparation moves them into the new version's section of
+`CHANGELOG.md`, in filename order, then removes them in the same release pull request. If the
+changelog already has an `## [Unreleased]` section, preparation renames it and appends the
+fragments to it; with neither, it falls back to the commit subjects since the last tag.
+`Scripts/changelog.py check` validates the fragments in the portable checks.
+
 Preparation never directly updates main. Bot-created branches/PRs explicitly
 dispatch CI and Security because GitHub suppresses ordinary recursive events from
 GITHUB_TOKEN. An interrupted preparation can reuse its branch/PR. A tagged commit

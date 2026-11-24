@@ -12,7 +12,7 @@ Hisingen is a native macOS menu bar app built with SwiftUI and AppKit. These rul
 
 - Evaluate the request before implementation. Identify the intended outcome, acceptance criteria, current behavior, affected components, unknowns, and dependencies. Resolve uncertainties that affect the implementation through source review, existing tests, or focused investigation.
 - Break the work into subtasks with one verifiable result each. Identify prerequisites and shared files so you can start independent work in parallel and order dependent work. Keep separate checklists for features on separate branches. For a small change, keep the checklist short.
-- Include implementation steps, tests or manual checks, the changelog update, and the final feature review where applicable. Track CI and merge as separate items when they are part of the task.
+- Include implementation steps, tests or manual checks, the changelog fragment, and the final feature review where applicable. Track CI and merge as separate items when they are part of the task.
 - Keep one current checklist in the task plan, issue, PR, or shared scratch note. For collaborative work, record an owner and any prerequisite for each subtask where they are known. Mark work **Ready** when its prerequisites are satisfied, **In progress** when claimed, or **Blocked** with the reason and next action. Check off each item when its result is verified and record the evidence.
 - Update the checklist when scope changes or review finds follow-up work. Reopen an item if later changes invalidate its result. Share the current checklist or a link to it at progress checkpoints and handoff so the user can see what is done and what is next.
 
@@ -21,7 +21,7 @@ Use the steps that fit the task, with a separate item for each independently ver
 - [ ] Confirm acceptance criteria and current behavior.
 - [ ] Implement each scoped change and check it through its normal entry point.
 - [ ] Run the relevant tests and manual checks.
-- [ ] Update `CHANGELOG.md` and any affected documentation.
+- [ ] Add a `changelog.d/` fragment and update any affected documentation.
 - [ ] Complete the final feature review and resolve its findings.
 - [ ] Verify required CI on the version being merged.
 - [ ] Merge the feature PR when authorized.
@@ -74,7 +74,7 @@ Use the steps that fit the task, with a separate item for each independently ver
 - Keep dependency, platform target, permission, entitlement, signing, and distribution changes tied to an explicit task requirement. Use the existing scripts for generated files and change their inputs when needed.
 - Keep provider-specific payloads and decoding in the provider layer. Preserve the capability and authorization checks for remote actions across entry points. Represent missing vehicle readings as unknown and keep tests deterministic with sanitized fixtures or mocks.
 - Keep generated credential sources (`GeneratedVolvoSecrets.swift` and `GeneratedPolestarSecrets.swift`), local `.env` files, diagnostics exports, `.build*/`, and `releases/` out of commits. Use fixture configuration for credential-free validation and the documented generator when updating build configuration.
-- Update `CHANGELOG.md` for every change. Follow the existing style and add the entry to the section for the next release. If there is no pending section, use an Unreleased section above the published versions. Preserve other entries. If a concurrent edit blocks the update, record the proposed entry and identify the remaining change.
+- Record every change that a user or developer would notice as a fragment in `changelog.d/` (see its README): one file per change, `<slug>.<added|changed|fixed|removed|security>.md`, holding one bullet in the existing style. Release preparation moves fragments into the new version's section of `CHANGELOG.md`. A release that is already prepared keeps taking entries directly in its `CHANGELOG.md` section. Preserve other entries, and run `python3 Scripts/changelog.py check`.
 
 <!-- antislop:start -->
 ## Antislop
