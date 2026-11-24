@@ -36,6 +36,25 @@ package settings. Debug CI additionally treats compiler warnings as errors.
 Package.swift and Package.resolved define the dependency versions; avoid resolving
 new versions as an incidental part of a validation run.
 
+## Sharing a machine
+
+Several worktrees and agent sessions can build on one Mac. They take turns with the build lane
+so compiles do not compete for CPU, disk and the SwiftPM cache:
+
+```sh
+sh Scripts/build-lane.sh run --wait 1800 -- sh Scripts/test.sh --skip Live --no-parallel
+sh Scripts/build-lane.sh status
+```
+
+The lane uses `python3` and stores its owner record in the shared Git directory. A lock on the
+adjacent `hisingen-build-lane.lock` file keeps callers from replacing a claim another caller
+just acquired. Leave the lock file in place between runs.
+
+The owner record lists the wrapper and command process IDs. The next caller can reclaim a
+claim once those processes have exited. The wrapper releases the lane when the command exits,
+including after interruption. A busy lane makes `run` exit 75 once `--wait` runs out. A
+handwritten owner record without a process ID stays in place for its owner to clear.
+
 ## Configuration and signing
 
 Local secret injection reads environment variables or local environment files.

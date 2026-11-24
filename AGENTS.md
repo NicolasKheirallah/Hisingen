@@ -99,9 +99,10 @@ For applicable work, run the core file’s Delivery Gate and report PASS or FAIL
 
 ### Shared build lane
 
-- Run one compiler-driven build or test at a time across sessions sharing a checkout or cache. Use the owner's existing coordination point if there is one. Otherwise, use a `hisingen-build-lane` directory inside the shared Git directory returned by `git rev-parse --path-format=absolute --git-common-dir`. Linked worktrees in the same local repo see the same directory.
-- Check for active builds and claim the lane with `mkdir` on that directory before running a compiler-driven command. Record the session, worktree, command, and start time inside it, plus the process ID once available. If the directory exists, coordinate with its owner and queue the run. Confirm the recorded process and its child processes have stopped before treating a claim as stale.
-- Release your claim when the command and its child processes finish. Use source review or `xcrun swiftc -parse <files>` on a Mac while the lane is occupied. Leave active processes and their build state alone.
+- Run one compiler-driven build or test at a time across sessions sharing a checkout or cache. Wrap the command in the lane script from any worktree of this repository: `sh Scripts/build-lane.sh run --wait 1800 -- <command>`. It claims `hisingen-build-lane` in the shared Git directory (`git rev-parse --path-format=absolute --git-common-dir`), runs the command, and releases the claim when the command ends, however it ends. `sh Scripts/build-lane.sh status` shows who holds it.
+- The claim records the wrapper's and the command's process IDs. A claim whose processes are gone is reclaimed by the next caller, so a crashed session does not hold the lane. Queue with `--wait SECONDS`; without it a busy lane fails at once with exit 75.
+- A claim with no process ID was written by hand or by another tool, and the script never reclaims it. Confirm with its owner, or that its recorded process and children have stopped, before you remove the directory yourself. Leave active processes and their build state alone.
+- While the lane is occupied, use source review or `xcrun swiftc -parse <files>` on a Mac.
 
 ### Toolchain and commands
 

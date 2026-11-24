@@ -245,13 +245,7 @@ extension PolestarAPI {
             try requireSession(epoch)
             return
         }
-        // A restore that finds the grant this process is already using is the refresh-retry path,
-        // not a launch: the stored credential has not changed and the access token it produced is
-        // still the right one. Proving the grant again would rotate the refresh credential on
-        // every retry, so the token material survives the reset here and only a cold restore (or
-        // a session whose access token is already gone) pays for a grant.
-        let isLiveGrant = accessToken != nil && refreshToken == token
-        clearAccountState(keepRefreshToken: true, keepAccessToken: isLiveGrant)
+        clearAccountState(restoringRefreshToken: token)
         let epoch = sessionEpoch
         await grpc.invalidateDiscoveredHost()
         try requireSession(epoch)
@@ -266,13 +260,8 @@ extension PolestarAPI {
         }
         try await discoverOIDCConfiguration()
         try requireSession(epoch)
-        refreshToken = token
         do {
-            if isLiveGrant {
-                try await refreshTokenIfNeeded()
-            } else {
-                try await refreshAccessToken(force: true)
-            }
+            try await refreshTokenIfNeeded()
         } catch let error as PolestarError where error.requiresAuthentication {
             try requireSession(epoch)
             refreshToken = nil

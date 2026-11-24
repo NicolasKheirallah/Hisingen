@@ -299,6 +299,115 @@ struct TokenLifecycleTests {
         #expect(lifecycle.accessToken == "b-access", "The late joiner must not re-apply the older grant")
     }
 
+    // MARK: - Carrying a grant across a reset
+
+    /// A restore retry resets the session while keeping the credential. If a grant is already on
+    /// the wire, the identity provider has rotated the token by the time it answers, so cancelling
+    /// it can discard the only valid token. It must land and be persisted, even for the caller
+    /// whose epoch the reset moved past.
+    @Test func aGrantInFlightDuringACredentialKeepingResetIsStillAppliedAndPersisted() async throws {
+        let persisted = PersistRecorder()
+        let lifecycle = makeLifecycle(persist: { persisted.record($0) })
+        lifecycle.accessToken = "expired"
+        lifecycle.refreshToken = "stored"
+        lifecycle.tokenLifetime = 300
+        lifecycle.tokenExpiry = now
+        let gate = GrantGate()
+        let epoch = EpochFlag()
+        let at = now
+
+        let starter = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: "expired"), now: at, epochIsCurrent: { epoch.isCurrent },
+                grant: {
+                    await gate.arriveAndWait()
+                    try Task.checkCancellation()
+                    return TokenLifecycle.Grant(accessToken: "new-access", refreshToken: "rotated", expiresIn: 300)
+                })
+        }
+        await gate.waitForArrival()
+        lifecycle.reset(keepingRefreshToken: true)
+        epoch.moveOn()
+        await gate.release()
+
+        #expect(try await starter.value == .refreshed)
+        #expect(lifecycle.accessToken == "new-access")
+        #expect(lifecycle.refreshToken == "rotated")
+        #expect(persisted.values == ["rotated"])
+    }
+
+    /// The restore that follows such a reset asks for a grant of its own. It must share the one in
+    /// flight: a second grant would present the token the first is about to replace.
+    @Test func aRestoreAfterACredentialKeepingResetJoinsTheGrantInFlight() async throws {
+        let lifecycle = makeLifecycle()
+        lifecycle.accessToken = "expired"
+        lifecycle.refreshToken = "stored"
+        lifecycle.tokenLifetime = 300
+        lifecycle.tokenExpiry = now
+        let grants = GrantCounter()
+        let gate = GrantGate()
+        let at = now
+
+        let first = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: "expired"), now: at, epochIsCurrent: { false },
+                grant: {
+                    await grants.record()
+                    await gate.arriveAndWait()
+                    return TokenLifecycle.Grant(accessToken: "new-access", refreshToken: "rotated", expiresIn: 300)
+                })
+        }
+        await gate.waitForArrival()
+        lifecycle.reset(keepingRefreshToken: true)
+        let restore = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: nil), now: at, epochIsCurrent: { true },
+                grant: {
+                    await grants.record()
+                    return TokenLifecycle.Grant(accessToken: "second", refreshToken: "second-rotated", expiresIn: 300)
+                })
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        await gate.release()
+
+        #expect(try await restore.value == .refreshed)
+        _ = try? await first.value
+        #expect(await grants.value == 1, "The restore must not start a second grant from the same token")
+        #expect(lifecycle.refreshToken == "rotated")
+    }
+
+    /// A reset that drops the credential still cancels the grant: its token belongs to a session
+    /// that is gone and must not land in the one that replaced it.
+    @Test func aCredentialDroppingResetStillCancelsTheGrantInFlight() async throws {
+        let persisted = PersistRecorder()
+        let lifecycle = makeLifecycle(persist: { persisted.record($0) })
+        lifecycle.accessToken = "expired"
+        lifecycle.refreshToken = "stored"
+        lifecycle.tokenLifetime = 300
+        lifecycle.tokenExpiry = now
+        let gate = GrantGate()
+        let epoch = EpochFlag()
+        let at = now
+
+        let starter = Task {
+            try await lifecycle.refresh(
+                .serverRefused(rejectedToken: "expired"), now: at, epochIsCurrent: { epoch.isCurrent },
+                grant: {
+                    await gate.arriveAndWait()
+                    try Task.checkCancellation()
+                    return TokenLifecycle.Grant(accessToken: "stale", refreshToken: "stale-rotated", expiresIn: 300)
+                })
+        }
+        await gate.waitForArrival()
+        lifecycle.reset()
+        epoch.moveOn()
+        await gate.release()
+
+        await #expect(throws: CancellationError.self) { try await starter.value }
+        #expect(persisted.values.isEmpty)
+        #expect(lifecycle.refreshToken == nil)
+    }
+
     // MARK: - Reset
 
     @Test func resettingClearsTheSession() async throws {
@@ -382,6 +491,13 @@ struct TokenLifecycleTests {
 
 private struct PersistFailure: Error {}
 private struct GrantRejected: Error {}
+
+private final class EpochFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = true
+    var isCurrent: Bool { lock.withLock { current } }
+    func moveOn() { lock.withLock { current = false } }
+}
 
 private actor GrantCounter {
     private(set) var value = 0

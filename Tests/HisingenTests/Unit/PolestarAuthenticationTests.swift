@@ -214,6 +214,56 @@ struct PolestarAuthenticationTests {
         #expect(await api.cars.isEmpty)
     }
 
+    @Test(arguments: [true, false])
+    func restoringDuringARefreshKeepsOnlyTheRequestedCredential(sameCredential: Bool) async throws {
+        let (api, keychain) = await makeAPI()
+        defer { try? keychain.deleteSessionToken() }
+        try keychain.saveSessionToken("base-refresh")
+        await api.installAccessTokenForTesting("expired-access", lifetime: 3600, remaining: -1)
+
+        let grant = AuthenticationGate()
+        let discovery = AuthenticationGate()
+        let subsequentGrants = RequestCounter()
+        AuthenticationTransport.handler.set { request in
+            switch request.url?.path {
+            case "/token" where request.url?.host == "auth.example":
+                await grant.arriveAndWait()
+                return Data(#"{"access_token":"rotated-access","refresh_token":"rotated-refresh","expires_in":3600}"#.utf8)
+            case "/.well-known/openid-configuration":
+                await discovery.arriveAndWait()
+                return Data(#"""
+                {"issuer":"https://polestarid.eu.polestar.com",
+                 "token_endpoint":"https://polestarid.eu.polestar.com/token",
+                 "authorization_endpoint":"https://polestarid.eu.polestar.com/authorize"}
+                """#.utf8)
+            case "/token":
+                await subsequentGrants.increment()
+                return Data(#"{"access_token":"replacement-access","refresh_token":"replacement-rotated","expires_in":3600}"#.utf8)
+            default:
+                return Data(#"{"data":{"getConsumerCarsV2":[{"vin":"YS2E1111111111111","modelName":"Polestar 2"}]}}"#.utf8)
+            }
+        }
+
+        let refresh = Task { try await api.refreshTokenIfNeeded() }
+        await grant.waitForArrival()
+        let restore = Task {
+            let credential = sameCredential ? "base-refresh" : "different-refresh"
+            try await api.restoreSession(token: credential, preferredVIN: nil, features: FeatureSelection(enabled: []))
+        }
+        await discovery.waitForArrival()
+        await grant.release()
+        await #expect(throws: CancellationError.self) { try await refresh.value }
+        #expect(try keychain.readSessionToken() == (sameCredential ? "rotated-refresh" : "base-refresh"))
+        #expect(await api.refreshToken == (sameCredential ? "rotated-refresh" : "different-refresh"))
+        await discovery.release()
+
+        try await restore.value
+        let expectedToken = sameCredential ? "rotated-refresh" : "replacement-rotated"
+        #expect(await api.refreshToken == expectedToken)
+        #expect(try keychain.readSessionToken() == expectedToken)
+        #expect(await subsequentGrants.value == (sameCredential ? 0 : 1))
+    }
+
     @Test func signOutClearsLocallyBeforeRevocationAndCannotClearANewerSession() async throws {
         let (api, keychain) = await makeAPI()
         try keychain.saveSessionToken("base-refresh")
