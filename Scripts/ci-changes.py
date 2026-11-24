@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 
-DOC_ONLY_DIRECTORIES = ("docs/", "site/", "home-assistant/", ".github/ISSUE_TEMPLATE/")
+DOC_ONLY_DIRECTORIES = ("docs/", "site/", "home-assistant/", ".github/ISSUE_TEMPLATE/", "changelog.d/")
 DOC_ONLY_FILES = {".github/pull_request_template.md", "LICENSE"}
 NULL_SHA = "0" * 40
 

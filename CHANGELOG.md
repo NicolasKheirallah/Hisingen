@@ -3,6 +3,16 @@
 All notable changes to Hisingen are documented in this file. The project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A stopped live stream could still be open when its replacement connected.** Stopping the
+  stream only cancels its task, and the connection closes when that task next runs. A new stream
+  started in the same moment, such as the battery stream returning when a command's confirmation
+  ended, could connect first and briefly leave two open. The replacement now waits for the stopped
+  run to finish before it connects.
+
 ## [3.0.3] - 2026-11-23
 
 ### Added
@@ -216,15 +226,6 @@ All notable changes to Hisingen are documented in this file. The project follows
   one of those could start while that request was on the wire, so the two ran together and the
   scan's answer was thrown away afterwards. The request now yields: it is cancelled as soon as
   interactive work starts, and the pass ends there.
-
-- **A retried Polestar restore could throw away the session it was restoring.** Polestar replaces
-  the refresh token the moment it answers a grant. When a restore was retried while a grant was
-  still on the wire, for example after the network dropped and came back, the retry cancelled the
-  grant. If Polestar had already answered, the new token was lost, the stored one was dead, and
-  the next refresh asked for a sign-in. A grant in flight is now carried across such a retry: it
-  finishes, its token is applied and saved, and the retry shares it instead of starting a second
-  grant from the same token. A reset that drops the credential, a sign-out or a new sign-in, still
-  cancels the grant, because its token belongs to a session that is gone.
 
 ### Screenshots
 
