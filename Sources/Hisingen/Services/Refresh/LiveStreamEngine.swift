@@ -38,6 +38,11 @@ final class LiveStreamEngine {
 
     private var task: Task<Void, Never>?
     private var taskID: UUID?
+    /// The run `stop()` cancelled. Cancelling only asks the run to end: its stream closes when the
+    /// task next gets to run, so a replacement engine waits on this before opening its own.
+    private var retiredTask: Task<Void, Never>?
+    /// The retired run of the engine this one replaces, awaited once before the first connect.
+    private var predecessorShutdown: Task<Void, Never>?
     private(set) var purpose: VehicleLiveStreamPurpose?
     private(set) var isConnected = false
     private(set) var retryAt: Date?
@@ -49,7 +54,9 @@ final class LiveStreamEngine {
          policy: LiveStreamPolicy,
          jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          now: @escaping () -> Date = Date.init,
+         replacing predecessor: LiveStreamEngine? = nil,
          context: Context) {
+        self.predecessorShutdown = predecessor?.retiredTask
         self.streaming = streaming
         self.providerBrand = providerBrand
         self.policy = policy
@@ -71,7 +78,12 @@ final class LiveStreamEngine {
         purpose = newPurpose
         let runningTaskID = UUID()
         taskID = runningTaskID
+        let predecessorShutdown = predecessorShutdown
+        self.predecessorShutdown = nil
         task = Task { [weak self] in
+            // The engine this one replaces was stopped, not finished: its transport stream is still
+            // open until its task unwinds. Opening the new stream first would hold two at once.
+            await predecessorShutdown?.value
             defer {
                 if let self, self.taskID == runningTaskID {
                     self.resetAfterTaskEnd()
@@ -201,6 +213,7 @@ final class LiveStreamEngine {
 
     func stop() {
         task?.cancel()
+        if let task { retiredTask = task }
         task = nil
         taskID = nil
         purpose = nil

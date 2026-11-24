@@ -11,6 +11,13 @@ All notable changes to Hisingen are documented in this file. The project follows
   pull request prepared before another merge could not merge until someone updated it by hand.
   Each successful main CI run now merges main into the open release branch and re-runs CI, or
   stops with a clear error if main changed the same lines. No change to the app.
+### Fixed
+
+- **A stopped live stream could still be open when its replacement connected.** Stopping the
+  stream only cancels its task, and the connection closes when that task next runs. A new stream
+  started in the same moment, such as the battery stream returning when a command's confirmation
+  ended, could connect first and briefly leave two open. The replacement now waits for the stopped
+  run to finish before it connects.
 
 ## [3.0.3] - 2026-11-23
 
