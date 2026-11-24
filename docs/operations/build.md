@@ -46,11 +46,14 @@ sh Scripts/build-lane.sh run --wait 1800 -- sh Scripts/test.sh --skip Live --no-
 sh Scripts/build-lane.sh status
 ```
 
-The lane is a directory in the repository's shared Git directory, so every linked worktree sees
-the same one. It records the wrapper's and the command's process IDs. A claim whose processes
-have exited is reclaimed by the next caller, and the lane is released when the command ends or
-is interrupted. A busy lane makes `run` exit 75 once `--wait` runs out. A claim made by hand,
-without a process ID, is reported but never reclaimed.
+The lane uses `python3` and stores its owner record in the shared Git directory. A lock on the
+adjacent `hisingen-build-lane.lock` file keeps callers from replacing a claim another caller
+just acquired. Leave the lock file in place between runs.
+
+The owner record lists the wrapper and command process IDs. The next caller can reclaim a
+claim once those processes have exited. The wrapper releases the lane when the command exits,
+including after interruption. A busy lane makes `run` exit 75 once `--wait` runs out. A
+handwritten owner record without a process ID stays in place for its owner to clear.
 
 ## Configuration and signing
 

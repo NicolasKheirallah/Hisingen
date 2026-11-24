@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Behavior of Scripts/build-lane.sh against a throwaway lane directory."""
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -77,6 +78,21 @@ class BuildLaneTests(unittest.TestCase):
         result = self.lane_script("run", "--", "true")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("reclaiming", result.stderr)
+        self.assertFalse(self.lane.exists())
+
+    def test_stale_claim_cannot_be_reaped_while_another_caller_holds_the_lock(self):
+        dead = subprocess.Popen(["true"])
+        dead.wait()
+        claim = f"pid={dead.pid}\nchild=\ntoken=old\n"
+        self.write_claim(claim)
+        with self.lane.with_suffix(".lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            result = self.lane_script("run", "--", "true")
+            self.assertEqual(result.returncode, 75, result.stderr)
+            self.assertEqual((self.lane / "owner").read_text(), claim)
+            self.assertIn("live claim", self.lane_script("status").stdout)
+        result = self.lane_script("run", "--", "true")
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(self.lane.exists())
 
     def test_a_claim_with_a_live_child_is_not_reclaimed_even_if_the_wrapper_died(self):
