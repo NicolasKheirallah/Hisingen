@@ -144,23 +144,27 @@ struct VehicleFeatureCompletionTests {
         state.exteriorStatus?.isLocked = true
         #expect(StatusItemController.lockCommand(for: state) == .unlock)
 
-        if case .startClimate(let temperature, _, _, _, _, _) = StatusItemController.climateCommand(
-            for: state, temperatureCelsius: 21.5
-        ) {
-            #expect(temperature == 21.5)
-        } else {
-            Issue.record("Expected start-climate command")
-        }
+        let scoped = ScopedPreferences(label: "StatusItemClimate")
+        let preferences = scoped.store
+        preferences.remoteClimateTemperature = 21.5
+        preferences.remoteDriverSeatHeating = .high
+        preferences.remoteFrontRightSeatHeating = .low
+        preferences.remoteRearLeftSeatHeating = .off
+        preferences.remoteSteeringWheelHeating = .medium
+        #expect(StatusItemController.climateCommand(for: state, preferences: preferences) == .startClimate(
+            temperatureCelsius: 21.5, frontLeftSeat: .high, frontRightSeat: .low,
+            rearLeftSeat: .off, rearRightSeat: .unspecified, steeringWheel: .medium
+        ))
         state.climateStatus = VehicleClimateStatus(
             activity: .heating, timeRemainingMinutes: 20, timerTriggered: false
         )
-        #expect(StatusItemController.climateCommand(for: state, temperatureCelsius: 21.5) == .stopClimate)
+        #expect(StatusItemController.climateCommand(for: state, preferences: preferences) == .stopClimate)
         // The backend holds a session in STARTING after the command is accepted; the
         // menu must offer Stop there too, not a second Start that the car rejects.
         state.climateStatus = VehicleClimateStatus(
             activity: .starting, timeRemainingMinutes: 30, timerTriggered: false
         )
-        #expect(StatusItemController.climateCommand(for: state, temperatureCelsius: 21.5) == .stopClimate)
+        #expect(StatusItemController.climateCommand(for: state, preferences: preferences) == .stopClimate)
     }
 
     @Test
