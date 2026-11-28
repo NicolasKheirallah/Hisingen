@@ -191,6 +191,7 @@ actor PolestarAPI {
             providerName: "Polestar",
             logger: AppLog.logger("polestar-api"),
             persist: sessionPersistence,
+            sharedStore: persistSessionToken == nil ? keychain.sharedOAuthSessionStore(for: .polestarSession) : nil,
             isDeadGrant: { error in
                 if case PolestarError.authenticationRequired(.noStoredSession) = error { return true }
                 return false
@@ -205,6 +206,7 @@ actor PolestarAPI {
             providerName: "Polestar command client",
             logger: AppLog.logger("polestar-api"),
             persist: { try persistCommandToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarCommand),
             // Only the command grant itself being refused may clear a command authorization:
             // `refreshCommandGrant` stamps that with `.callbackRejected` (the token endpoint
             // answering `invalid_grant`, or a verified account mismatch). Every other auth error
@@ -582,9 +584,9 @@ actor PolestarAPI {
         // Persist before verification: a transient userinfo failure must not discard
         // a freshly-minted grant and force a second browser trip.
         try saveCommandToken(durableRefresh)
-        commandAccessToken = token.accessToken
-        commandRefreshToken = durableRefresh
-        commandTokenExpiry = now().addingTimeInterval(TimeInterval(token.expiresIn))
+        try commandTokens.adopt(.init(accessToken: token.accessToken,
+                                      refreshToken: durableRefresh,
+                                      expiresIn: TimeInterval(token.expiresIn)), now: now())
         let verifiedAccount: AccountIdentity
         do {
             verifiedAccount = try await verifyCommandAccount(accessToken: token.accessToken)
@@ -641,6 +643,10 @@ actor PolestarAPI {
             expiresIn: TimeInterval(token.expiresIn)), now: now())
     }
 
+    func hydrateStoredSessionIfValid(expectedRefreshToken: String) -> Bool {
+        tokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: expectedRefreshToken, now: now())
+    }
+
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
     }
@@ -649,24 +655,33 @@ actor PolestarAPI {
     /// no longer holds that token, another caller's grant already replaced it, which closes the
     /// late-arrival race where a fan-out of 401 responses could each force a separate refresh
     /// after the original single-flight grant completed.
-    func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil) async throws {
+    func explicitRestoreBaseline(for refreshToken: String) throws -> TokenLifecycle.ExplicitRestore? {
+        let durable = try keychain.readFreshSessionToken()
+        return durable == refreshToken ? nil : .init(previousDurableToken: durable)
+    }
+
+    func markStoredRefreshCredential() {
+        tokens.markRefreshCredentialDurable()
+    }
+
+    func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil,
+                            explicitRestore: TokenLifecycle.ExplicitRestore? = nil) async throws {
         let requestEpoch = sessionEpoch
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedAccessToken)
             : .renewalWindow
-        // Captured before the closure runs so the grant does not read state the lifecycle owns;
-        // the missing-endpoint guard lives inside it, where a grant already in flight is awaited
-        // rather than failed. The lifecycle decides whether a grant is needed at all.
+        // Captured before the closure runs so the grant reads the freshest refresh token
+        // after `tokens.refresh` reloads Keychain under the cross-process lock.
         let endpoint = tokenEndpoint
-        let refresh = refreshToken
+        let lifecycle = tokens
         let clientID = oidcClientID
         let currentSession = session
         let diagnosticLog = diagnosticLog
         let outcome = try await tokens.refresh(
-            reason, now: now(),
+            reason, now: now(), explicitRestore: explicitRestore,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
-                guard let endpoint, let refresh else {
+                guard let endpoint, let refresh = lifecycle.refreshToken else {
                     throw PolestarError.authenticationRequired(.expiredSession)
                 }
                 var request = URLRequest(url: endpoint)
@@ -706,9 +721,13 @@ actor PolestarAPI {
     /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
     /// still resolves its own outcome from current storage.
     func discardDeadRefreshToken() async {
+        let rejected = tokens.refreshToken
         tokens.reset()
-        // A failed delete leaves the dead token readable, so it is logged loudly rather than dropped.
-        do { try keychain.deleteSessionToken() } catch {
+        do {
+            if let rejected, try keychain.readFreshSessionToken() == rejected {
+                try keychain.deleteSessionToken()
+            }
+        } catch {
             logger.error("Polestar dead session token could not be deleted from Keychain: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
         // `PreferencesStore.hasResumableSession` memoises a per-brand answer. Without this the
@@ -787,10 +806,8 @@ actor PolestarAPI {
 
     func preserveConsumerRotation(_ rotated: String, replacing previous: String, epoch: Int) throws {
         try requireSession(epoch)
-        guard refreshToken == previous else { throw CancellationError() }
-        refreshToken = rotated
-        do { try saveSessionToken(rotated) }
-        catch { logger.error("Polestar rotated refresh token could not be persisted") }
+        do { try tokens.persistEarlyRotation(rotated, replacing: previous, persist: saveSessionToken) }
+        catch is KeychainError { logger.error("Polestar rotated refresh token could not be persisted") }
     }
 
     /// The diagnostic-log form of the OAuth `error` code; see `OAuthErrorBody`.

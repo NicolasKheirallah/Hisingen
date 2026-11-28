@@ -584,3 +584,178 @@ private actor LifecycleHost {
         return try await lifecycle.refresh(reason, now: now, epochIsCurrent: { true }, grant: grant)
     }
 }
+
+extension TokenLifecycleTests {
+    @Test func sharedStoreHydratesColdInstanceWithoutRotatingRefreshToken() throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let appStore = KeychainStore(service: service)
+        let cliStore = KeychainStore(service: service)
+        defer { try? appStore.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try appStore.saveSessionToken("r1")
+        let appLifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "test-app",
+            persist: { try appStore.saveSessionToken($0) },
+            sharedStore: appStore.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try appLifecycle.adopt(TokenLifecycle.Grant(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+
+        let cliLifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "test-cli",
+            persist: { try cliStore.saveSessionToken($0) },
+            sharedStore: cliStore.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        let hydrated = cliLifecycle.hydrateFromSharedStoreIfValid(expectedRefreshToken: "r1", now: now.addingTimeInterval(60))
+        #expect(hydrated)
+        #expect(cliLifecycle.accessToken == "a1")
+        #expect(cliLifecycle.refreshToken == "r1")
+    }
+
+    @Test func sharedStoreCoalescesCrossInstanceRefreshAndPropagatesRotatedToken() async throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let appStore = KeychainStore(service: service)
+        let cliStore = KeychainStore(service: service)
+        defer { try? appStore.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try appStore.saveSessionToken("r1")
+
+        let appLifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "test-app",
+            persist: { try appStore.saveSessionToken($0) },
+            sharedStore: appStore.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        appLifecycle.accessToken = "old-access"
+        appLifecycle.refreshToken = "r1"
+
+        let cliLifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "test-cli",
+            persist: { try cliStore.saveSessionToken($0) },
+            sharedStore: cliStore.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        cliLifecycle.accessToken = "old-access"
+        cliLifecycle.refreshToken = "r1"
+
+        let networkGrants = Counter()
+        let gate = GrantGate()
+
+        async let first = appLifecycle.refresh(.serverRefused(rejectedToken: "old-access"), now: now, epochIsCurrent: { true }) {
+            await networkGrants.increment()
+            await gate.arriveAndWait()
+            return TokenLifecycle.Grant(accessToken: "a2", refreshToken: "r2", expiresIn: 1800)
+        }
+        await gate.waitForArrival()
+        async let second = cliLifecycle.refresh(.serverRefused(rejectedToken: "old-access"), now: now, epochIsCurrent: { true }) {
+            await networkGrants.increment()
+            return TokenLifecycle.Grant(accessToken: "should-not-mint", refreshToken: "stale", expiresIn: 1800)
+        }
+
+        await gate.release()
+        let firstOutcome = try await first
+        let secondOutcome = try await second
+
+        #expect(firstOutcome == .refreshed)
+        #expect(secondOutcome == .refreshed)
+        #expect(await networkGrants.count == 1)
+        #expect(appLifecycle.accessToken == "a2")
+        #expect(appLifecycle.refreshToken == "r2")
+        #expect(cliLifecycle.accessToken == "a2")
+        #expect(cliLifecycle.refreshToken == "r2")
+        #expect(try cliStore.readFreshSessionToken() == "r2")
+    }
+
+    @Test func sharedRefreshRejectsAnUnrelatedReplacementCredential() async throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        defer { try? keychain.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let previous = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "previous-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try previous.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+        let replacement = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "replacement-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try replacement.adopt(.init(accessToken: "other-access", refreshToken: "other-refresh", expiresIn: 1800), now: now)
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await previous.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                Issue.record("The previous account started a grant after the Keychain credential changed.")
+                return .init(accessToken: "unexpected-access", refreshToken: "unexpected-refresh", expiresIn: 1800)
+            }
+        }
+        #expect(previous.accessToken == "a1")
+        #expect(previous.refreshToken == "r1")
+        #expect(try keychain.readFreshSessionToken() == "other-refresh")
+    }
+
+    @Test func sharedRefreshDoesNotRestoreADeletedCredential() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        let lifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "signed-out-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try lifecycle.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+        try keychain.deleteSessionToken()
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await lifecycle.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                Issue.record("A grant was attempted after sign-out.")
+                return .init(accessToken: "unexpected-access", refreshToken: "unexpected-refresh", expiresIn: 1800)
+            }
+        }
+        #expect(try keychain.readFreshSessionToken() == nil)
+    }
+
+    @Test func sharedRefreshDoesNotOverwriteCredentialChangedDuringGrant() async throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        defer { try? keychain.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let lifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "previous-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try lifecycle.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await lifecycle.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                try keychain.saveSessionToken("other-refresh")
+                return .init(accessToken: "a2", refreshToken: "r2", expiresIn: 1800)
+            }
+        }
+        #expect(lifecycle.refreshToken == "r1")
+        #expect(try keychain.readFreshSessionToken() == "other-refresh")
+    }
+}
+
+private actor Counter {
+    private(set) var count = 0
+    func increment() { count += 1 }
+}

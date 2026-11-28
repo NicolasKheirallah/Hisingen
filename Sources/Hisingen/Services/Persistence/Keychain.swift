@@ -1,5 +1,6 @@
 
 
+import Darwin
 import Foundation
 import OSLog
 import Security
@@ -54,6 +55,123 @@ private final class InMemorySecretCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         cache[key] = .value(value)
+    }
+
+    func remove(_ key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        cache.removeValue(forKey: key)
+    }
+
+    func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        cache.removeAll()
+    }
+}
+
+struct StoredOAuthSession: Codable, Equatable, Sendable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+    let lifetime: TimeInterval
+    let generation: UInt64
+    var previousRefreshTokenHashes: [Data]? = nil
+}
+
+enum OAuthSessionSlot: String, CaseIterable, Sendable {
+    case polestarSession = "polestar-oauth-session"
+    case polestarCommand = "polestar-command-oauth-session"
+    case volvoSession = "volvo-oauth-session"
+}
+
+/// Serializes refresh grants per `(service, slot)` inside the current process and, for the
+/// production Keychain service, across `Hisingen.app` and `Hisingen cli` using non-blocking
+/// advisory file locks so single-use refresh tokens are not rotated out from under another
+/// live process.
+actor OAuthRefreshLockCoordinator {
+    static let shared = OAuthRefreshLockCoordinator()
+
+    private var lockedKeys: Set<String> = []
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+
+    func withLock<T: Sendable>(
+        key: String,
+        fileLockURL: URL?,
+        timeout: TimeInterval,
+        body: @Sendable () async throws -> T
+    ) async throws -> T {
+        await acquireInProcess(key: key)
+        defer { releaseInProcess(key: key) }
+
+        try Task.checkCancellation()
+        let lockFD = try await acquireFileLock(url: fileLockURL, timeout: timeout)
+        defer {
+            if let lockFD {
+                var unlock = Darwin.flock()
+                unlock.l_type = Int16(F_UNLCK)
+                unlock.l_whence = Int16(SEEK_SET)
+                _ = Darwin.fcntl(lockFD, F_SETLK, &unlock)
+                _ = Darwin.close(lockFD)
+            }
+        }
+        return try await body()
+    }
+
+    private func acquireInProcess(key: String) async {
+        if !lockedKeys.contains(key) {
+            lockedKeys.insert(key)
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters[key, default: []].append(continuation)
+        }
+    }
+
+    private func releaseInProcess(key: String) {
+        if var queue = waiters[key], !queue.isEmpty {
+            let next = queue.removeFirst()
+            waiters[key] = queue.isEmpty ? nil : queue
+            next.resume()
+        } else {
+            lockedKeys.remove(key)
+        }
+    }
+
+    private func acquireFileLock(url: URL?, timeout: TimeInterval) async throws -> Int32? {
+        guard let url else { return nil }
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let fd = Darwin.open(url.path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+
+        var lock = Darwin.flock()
+        lock.l_type = Int16(F_WRLCK)
+        lock.l_whence = Int16(SEEK_SET)
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Darwin.fcntl(fd, F_SETLK, &lock) != 0 {
+            let failure = errno
+            if failure != EAGAIN && failure != EACCES {
+                _ = Darwin.close(fd)
+                throw POSIXError(POSIXErrorCode(rawValue: failure) ?? .EIO)
+            }
+            if Date() >= deadline {
+                _ = Darwin.close(fd)
+                throw POSIXError(.ETIMEDOUT)
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(25))
+            } catch {
+                _ = Darwin.close(fd)
+                throw error
+            }
+        }
+        return fd
     }
 }
 
@@ -190,6 +308,7 @@ struct KeychainStore: Sendable {
 
     func saveSessionToken(_ token: String) throws {
         try save(token, account: Self.sessionAccount)
+        clearMismatchedOAuthSession(slot: .polestarSession, expectedRefreshToken: token)
         UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_session")
     }
     func readSessionToken() throws -> String? {
@@ -197,8 +316,14 @@ struct KeychainStore: Sendable {
         UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_session")
         return value
     }
+    func readFreshSessionToken() throws -> String? {
+        let value = try readFresh(account: Self.sessionAccount)
+        UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_session")
+        return value
+    }
     func deleteSessionToken() throws {
         try delete(account: Self.sessionAccount)
+        try? deleteOAuthSession(slot: .polestarSession)
         UserDefaults.standard.set(false, forKey: "has_polestar_session")
     }
 
@@ -208,6 +333,7 @@ struct KeychainStore: Sendable {
     /// keychain; `hasStoredCommandSession` reads their store instead.
     func saveCommandSessionToken(_ token: String) throws {
         try save(token, account: Self.commandSessionAccount)
+        clearMismatchedOAuthSession(slot: .polestarCommand, expectedRefreshToken: token)
         guard !isTestService else { return }
         UserDefaults.standard.set(!token.isEmpty, forKey: "has_polestar_cmd_session")
     }
@@ -218,8 +344,16 @@ struct KeychainStore: Sendable {
         }
         return value
     }
+    func readFreshCommandSessionToken() throws -> String? {
+        let value = try readFresh(account: Self.commandSessionAccount)
+        if !isTestService {
+            UserDefaults.standard.set(value?.isEmpty == false, forKey: "has_polestar_cmd_session")
+        }
+        return value
+    }
     func deleteCommandSessionToken() throws {
         try delete(account: Self.commandSessionAccount)
+        try? deleteOAuthSession(slot: .polestarCommand)
         guard !isTestService else { return }
         UserDefaults.standard.set(false, forKey: "has_polestar_cmd_session")
     }
@@ -244,14 +378,86 @@ struct KeychainStore: Sendable {
 
     func saveVolvoSessionToken(_ token: String) throws {
         try mutateVolvoBundle { $0.sessionToken = token }
+        clearMismatchedOAuthSession(slot: .volvoSession, expectedRefreshToken: token)
     }
 
     func readVolvoSessionToken() throws -> String? {
         try readVolvoBundle().sessionToken
     }
 
+    func readFreshVolvoSessionToken() throws -> String? {
+        try readVolvoBundle(fresh: true).sessionToken
+    }
+
     func deleteVolvoSessionToken() throws {
         try mutateVolvoBundle { $0.sessionToken = nil }
+        try? deleteOAuthSession(slot: .volvoSession)
+    }
+
+    func readOAuthSession(slot: OAuthSessionSlot) throws -> StoredOAuthSession? {
+        guard let raw = try readFresh(account: slot.rawValue, migrateLegacy: false),
+              let data = raw.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(StoredOAuthSession.self, from: data)
+    }
+
+    func saveOAuthSession(_ session: StoredOAuthSession, slot: OAuthSessionSlot) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(session)
+        guard let raw = String(data: data, encoding: .utf8) else { return }
+        try save(raw, account: slot.rawValue)
+    }
+
+    func deleteOAuthSession(slot: OAuthSessionSlot) throws {
+        try delete(account: slot.rawValue)
+    }
+
+    func withCrossProcessRefreshLock<T: Sendable>(
+        slot: OAuthSessionSlot,
+        timeout: TimeInterval = 15,
+        body: @Sendable () async throws -> T
+    ) async throws -> T {
+        let fileLockURL: URL?
+        if isTestService {
+            fileLockURL = nil
+        } else if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            fileLockURL = appSupport
+                .appendingPathComponent("Hisingen", isDirectory: true)
+                .appendingPathComponent("Locks", isDirectory: true)
+                .appendingPathComponent("\(slot.rawValue).lock", isDirectory: false)
+        } else {
+            throw POSIXError(.ENOENT)
+        }
+        return try await OAuthRefreshLockCoordinator.shared.withLock(
+            key: cacheKey(account: slot.rawValue),
+            fileLockURL: fileLockURL,
+            timeout: timeout,
+            body: body
+        )
+    }
+
+    func sharedOAuthSessionStore(for slot: OAuthSessionSlot) -> TokenLifecycle.SharedSessionStore {
+        let readRefresh: @Sendable () throws -> String? = switch slot {
+        case .polestarSession: { try readFreshSessionToken() }
+        case .polestarCommand: { try readFreshCommandSessionToken() }
+        case .volvoSession: { try readFreshVolvoSessionToken() }
+        }
+        return TokenLifecycle.SharedSessionStore(
+            readSession: { try readOAuthSession(slot: slot) },
+            readRefreshToken: readRefresh,
+            writeSession: { try saveOAuthSession($0, slot: slot) },
+            withLock: { body in
+                try await withCrossProcessRefreshLock(slot: slot, body: body)
+            }
+        )
+    }
+
+    private func clearMismatchedOAuthSession(slot: OAuthSessionSlot, expectedRefreshToken: String) {
+        if let existing = try? readOAuthSession(slot: slot), existing.refreshToken != expectedRefreshToken {
+            try? deleteOAuthSession(slot: slot)
+        }
     }
 
     func saveVolvoClientSecret(_ value: String) throws {
@@ -406,7 +612,7 @@ struct KeychainStore: Sendable {
     private func mutateVolvoBundle(_ mutate: (inout VolvoSecretBundle) -> Void) throws {
         volvoBundleLock.lock()
         defer { volvoBundleLock.unlock() }
-        var bundle = try readVolvoBundle()
+        var bundle = try readVolvoBundle(fresh: true)
         let before = bundle
         mutate(&bundle)
         // Re-signing in with the credentials already on file writes the same values back. Skipping
@@ -419,11 +625,12 @@ struct KeychainStore: Sendable {
         try saveVolvoBundle(bundle)
     }
 
-    private func readVolvoBundle() throws -> VolvoSecretBundle {
+    private func readVolvoBundle(fresh: Bool = false) throws -> VolvoSecretBundle {
         // Do not collapse a denied/corrupt bundle read into "no credentials": callers that
         // mutate this read-modify-write item must never overwrite an inaccessible bundle with
         // a partial value. Throwing also avoids three follow-on legacy queries/prompts.
-        if let raw = try read(account: Self.volvoBundleAccount) {
+        let bundleRaw = fresh ? try readFresh(account: Self.volvoBundleAccount) : try read(account: Self.volvoBundleAccount)
+        if let raw = bundleRaw {
             do {
                 let bundle = try JSONDecoder().decode(VolvoSecretBundle.self, from: Data(raw.utf8))
                 Self.updateVolvoPresenceFlags(bundle)
@@ -437,9 +644,9 @@ struct KeychainStore: Sendable {
                 throw KeychainError.status(errSecDecode)
             }
         }
-        let legacySecret = try read(account: "volvo-client-secret")
-        let legacyApiKey = try read(account: "volvo-vcc-api-key")
-        let legacySession = try read(account: "volvo-refresh-token")
+        let legacySecret = fresh ? try readFresh(account: "volvo-client-secret") : try read(account: "volvo-client-secret")
+        let legacyApiKey = fresh ? try readFresh(account: "volvo-vcc-api-key") : try read(account: "volvo-vcc-api-key")
+        let legacySession = fresh ? try readFresh(account: "volvo-refresh-token") : try read(account: "volvo-refresh-token")
         let bundle = VolvoSecretBundle(clientSecret: legacySecret, apiKey: legacyApiKey,
                                        sessionToken: legacySession)
         if legacySecret != nil || legacyApiKey != nil || legacySession != nil {
@@ -607,8 +814,21 @@ struct KeychainStore: Sendable {
         if case .value(let cached) = memoryCache.get(cacheKey(account: account)) {
             return cached
         }
+        return try readBacking(account: account)
+    }
+
+    private func readFresh(account: String, migrateLegacy: Bool = true) throws -> String? {
+        operationLock.lock()
+        defer { operationLock.unlock() }
+        memoryCache.remove(cacheKey(account: account))
+        return try readBacking(account: account, migrateLegacy: migrateLegacy)
+    }
+
+    private func readBacking(account: String, migrateLegacy: Bool = true) throws -> String? {
         if isTestService {
-            return Self.testStore.get(cacheKey(account: account))
+            let value = Self.testStore.get(cacheKey(account: account))
+            memoryCache.set(cacheKey(account: account), value: value)
+            return value
         }
 
         func query(_ dataProtection: Bool) -> [String: Any] {
@@ -647,7 +867,8 @@ struct KeychainStore: Sendable {
         let value = try decode(legacyData)
         // Never use the fallback writer for migration: its success might only mean
         // that the legacy item was updated, leaving it as the sole durable copy.
-        if dpStatus == errSecItemNotFound,
+        if migrateLegacy,
+           dpStatus == errSecItemNotFound,
            write(value, account: account, useDataProtection: true) == errSecSuccess {
             _ = security.delete(baseQuery(account: account, useDataProtection: false))
         }
@@ -674,15 +895,10 @@ struct KeychainStore: Sendable {
         memoryCache.set(cacheKey(account: account), value: nil)
     }
 
-    /// Drops in-memory secrets so a sign-out cannot be resurrected from cache.
-    /// Call after any lifecycle transition that deletes credentials.
+    /// Drops all in-memory cached entries so every subsequent read fetches cleanly from Keychain.
+    /// Call after any lifecycle transition that deletes or swaps credentials.
     func invalidateMemoryCache() {
-        for account in [Self.passwordAccount, Self.emailAccount, Self.sessionAccount,
-                        Self.commandSessionAccount, Self.volvoBundleAccount,
-                        Self.polestarDataPortalBundleAccount, Self.polestarDataPortalTokenAccount,
-                        "volvo-client-secret", "volvo-vcc-api-key", "volvo-refresh-token"] {
-            memoryCache.set(cacheKey(account: account), value: nil)
-        }
+        memoryCache.removeAll()
     }
 }
 

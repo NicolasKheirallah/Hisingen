@@ -217,6 +217,7 @@ actor VolvoAPI {
             providerName: "Volvo",
             logger: AppLog.logger("volvo-api"),
             persist: { try keychain.saveVolvoSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .volvoSession),
             isDeadGrant: { error in
                 if case TokenRequestFailure.deadRefreshToken = error { return true }
                 return false
@@ -513,27 +514,41 @@ actor VolvoAPI {
     /// only `signOut` and a dead grant delete that.
     func resetTokenLifecycle() { tokens.reset() }
 
+    func hydrateStoredSessionIfValid(expectedRefreshToken: String) -> Bool {
+        tokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: expectedRefreshToken)
+    }
+
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
     }
 
-    func refreshAccessToken(force: Bool, replacing rejectedToken: String? = nil) async throws {
+    func explicitRestoreBaseline(for refreshToken: String) throws -> TokenLifecycle.ExplicitRestore? {
+        let durable = try keychain.readFreshVolvoSessionToken()
+        return durable == refreshToken ? nil : .init(previousDurableToken: durable)
+    }
+
+    func markStoredRefreshCredential() {
+        tokens.markRefreshCredentialDurable()
+    }
+
+    func refreshAccessToken(force: Bool, replacing rejectedToken: String? = nil,
+                            explicitRestore: TokenLifecycle.ExplicitRestore? = nil) async throws {
         let requestEpoch = sessionEpoch
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedToken)
             : .renewalWindow
-        // Captured before the closure runs so the grant does not read state the lifecycle owns;
-        // the configuration guard lives inside it, where a grant already in flight is awaited
-        // rather than failed. The lifecycle decides whether a grant is needed at all.
-        let configuration = (clientID: clientID, secret: clientSecret, refresh: refreshToken)
+        // Captured before the closure runs so the grant does not read actor state after
+        // `tokens.refresh` reloads Keychain credentials under the cross-process lock.
+        let configuration = (clientID: clientID, secret: clientSecret)
+        let lifecycle = tokens
         let tokenURL = identityProvider.tokenURL
         let outcome = try await tokens.refresh(
-            reason,
+            reason, explicitRestore: explicitRestore,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
                 guard let clientID = configuration.clientID,
                       let clientSecret = configuration.secret,
-                      let refreshToken = configuration.refresh, !refreshToken.isEmpty else {
+                      let refreshToken = lifecycle.refreshToken, !refreshToken.isEmpty else {
                     throw VolvoError.authenticationRequired(.noStoredSession)
                 }
                 var request = URLRequest(url: tokenURL)
@@ -550,7 +565,7 @@ actor VolvoAPI {
             }
         )
         if outcome == .deadGrant {
-            await discardDeadRefreshToken()
+            await discardDeadRefreshToken(rejected: tokens.refreshToken)
             throw VolvoError.authenticationRequired(.invalidCredentials)
         }
     }
@@ -562,9 +577,11 @@ actor VolvoAPI {
     /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
     /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
-    func discardDeadRefreshToken() async {
+    func discardDeadRefreshToken(rejected: String?) async {
         tokens.reset()
-        try? keychain.deleteVolvoSessionToken()
+        if let rejected, (try? keychain.readFreshVolvoSessionToken()) == rejected {
+            try? keychain.deleteVolvoSessionToken()
+        }
         // The grant died with the session, so its recorded scopes stop answering gates.
         await MainActor.run { preferences.volvoGrantedScopes = [] }
         await MainActor.run { preferences.invalidateSessionCache() }
