@@ -117,6 +117,7 @@ struct SettingsHomeChargingCard: View {
                     .autocorrectionDisabled()
                     .accessibilityLabel(L10n.text("Home Assistant address"))
             }
+            publicHTTPWarning(address)
             field(L10n.text("Long-lived access token"),
                   detail: L10n.text("Create it in your Home Assistant profile under Security. It is stored in the macOS Keychain and never exported.")) {
                 SecureField("", text: $token)
@@ -255,6 +256,18 @@ struct SettingsHomeChargingCard: View {
         }
     }
 
+    @ViewBuilder
+    private func publicHTTPWarning(_ address: String) -> some View {
+        if HomeAssistantAddress.usesPublicHTTP(address) {
+            Label(L10n.text("Use HTTPS to protect your Home Assistant token."),
+                  systemImage: "exclamationmark.triangle")
+                .hisType(.micro)
+                .foregroundStyle(HisingenTheme.semanticWarning)
+                .hisCaptionLeading()
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func chargerDetail(_ candidate: HomeChargingPairing, isLive: Bool) -> String {
         let vehicle = vehicleTitle(candidate.vin)
         let place = candidate.locationAlias.isEmpty ? L10n.text("None") : candidate.locationAlias
@@ -276,6 +289,7 @@ struct SettingsHomeChargingCard: View {
                 KVRow(L10n.text("Connected through"), pairing.source.providerName)
             } else {
                 KVRow(L10n.text("Home Assistant"), HomeAssistantAddressText.host(pairing.baseURL))
+                publicHTTPWarning(pairing.baseURL)
             }
             KVRow(L10n.text("Connection"), linkText, valueWarning: linkIsProblem)
             if let contact = model.lastContact {

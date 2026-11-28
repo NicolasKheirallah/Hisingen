@@ -111,6 +111,31 @@ struct HomeAssistantClientTests {
         #expect(transport.requests.allSatisfy { !($0.url?.absoluteString ?? "").contains(token) })
     }
 
+    @Test
+    func reverseProxyPreservesTheMountPathForBothAPIs() async throws {
+        let mounted = try #require(URL(string: "https://ha.example.org/hass/"))
+        let transport = MockHomeAssistantTransport()
+        transport.route("GET", "/hass/api/", .json(#"{"message":"API running."}"#))
+        try await HomeAssistantClient(baseURL: mounted, token: token, transport: transport).ping()
+        #expect(transport.requests.first?.url?.absoluteString == "https://ha.example.org/hass/api/")
+        let socket = HomeAssistantAddress.endpoint(mounted, path: "/api/websocket")
+        #expect(socket?.percentEncodedPath == "/hass/api/websocket")
+    }
+
+    @Test
+    func sparseHistoryUsesEntityIdentifiersInsteadOfGroupPositions() async throws {
+        let transport = MockHomeAssistantTransport()
+        transport.route("GET", "/api/history/period/", .json("""
+        [[], [{"state":"7","last_changed":"2026-05-31T00:00:00Z"}],
+         [{"entity_id":"sensor.power","state":"3","last_changed":"2026-05-31T00:00:00Z"}]]
+        """))
+        let end = Date(timeIntervalSince1970: 1_780_000_000)
+        let series = try await client(transport).history(
+            entityIDs: ["sensor.power", "sensor.energy"], from: end.addingTimeInterval(-3600), to: end)
+        #expect(series["sensor.power"]?.map(\.state) == ["3"])
+        #expect(series["sensor.energy"] == nil)
+    }
+
     @Test("History is requested with every change, minimal responses, and decodes per entity")
     func history() async throws {
         let transport = MockHomeAssistantTransport()
@@ -296,7 +321,13 @@ struct HomeChargerDiscoveryTests {
     @Test("The address normaliser accepts plain hosts and rejects other schemes")
     func addressNormalisation() {
         #expect(HomeAssistantAddress.normalise("homeassistant.local:8123") == .success(URL(string: "http://homeassistant.local:8123")!))
-        #expect(HomeAssistantAddress.normalise("https://ha.example.org/lovelace/0?x=1") == .success(URL(string: "https://ha.example.org")!))
+        #expect(HomeAssistantAddress.normalise("https://ha.example.org/hass?x=1") == .success(URL(string: "https://ha.example.org/hass")!))
+        #expect(HomeAssistantAddress.normalise("ha.example.org/hass") == .success(URL(string: "https://ha.example.org/hass")!))
+        #expect(HomeAssistantAddress.normalise("192.168.1.2:8123") == .success(URL(string: "http://192.168.1.2:8123")!))
+        #expect(HomeAssistantAddress.normalise("[fd00::2]:8123") == .success(URL(string: "http://[fd00::2]:8123")!))
+        #expect(HomeAssistantAddress.usesPublicHTTP("http://ha.example.org/hass"))
+        #expect(!HomeAssistantAddress.usesPublicHTTP("http://homeassistant.local:8123"))
+        #expect(!HomeAssistantAddress.usesPublicHTTP("https://ha.example.org"))
         #expect(HomeAssistantAddress.normalise("ftp://ha.local") == .failure(.unsupportedScheme))
         #expect(HomeAssistantAddress.normalise("   ") == .failure(.empty))
     }

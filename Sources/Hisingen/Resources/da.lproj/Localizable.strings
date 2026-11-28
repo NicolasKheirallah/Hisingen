@@ -4422,3 +4422,5 @@
 // English fallback values pending translation
 "Vehicle %@" = "Køretøj %@";
 "%@ entries will be discarded. New requests are recorded again as they happen." = "%@ poster slettes. Nye anmodninger registreres igen, efterhånden som de sker.";
+
+"Use HTTPS to protect your Home Assistant token." = "Brug HTTPS til at beskytte din Home Assistant-token.";

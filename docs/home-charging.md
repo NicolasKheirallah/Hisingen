@@ -204,6 +204,8 @@ the same name from the same rule, so neither side needs a handshake. Its state i
 Open **Settings → Home Charging**:
 
 1. Enter the Home Assistant address, for example `http://homeassistant.local:8123`.
+   Include any reverse-proxy path, such as `https://ha.example.org/hass`. Remote addresses
+   without a scheme use HTTPS. Use HTTPS for remote access to protect your token.
 2. Paste the long-lived access token. It is stored in the macOS Keychain, in its own item, and is
    never part of a settings export or a log.
 3. Choose **Connect and find chargers**. The app reads Home Assistant's version, entities and,

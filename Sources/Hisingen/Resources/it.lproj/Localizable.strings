@@ -4415,3 +4415,5 @@
 // English fallback values pending translation
 "Vehicle %@" = "Veicolo %@";
 "%@ entries will be discarded. New requests are recorded again as they happen." = "%@ voci verranno eliminate. Le nuove richieste verranno registrate di nuovo man mano che avvengono.";
+
+"Use HTTPS to protect your Home Assistant token." = "Usa HTTPS per proteggere il tuo token di Home Assistant.";
