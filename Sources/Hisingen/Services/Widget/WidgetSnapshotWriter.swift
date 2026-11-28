@@ -1,12 +1,18 @@
 import Foundation
 import HisingenIntents
 import OSLog
+import os
 import WidgetKit
 
 /// Writes the desktop widget's snapshot into the App Group container after each completed
 /// vehicle refresh, and asks WidgetKit to reload the timelines.
 enum WidgetSnapshotWriter {
     private static let logger = AppLog.logger("widget")
+    private static let ioQueue = DispatchQueue(label: "io.kheirallah.hisingen.widget", qos: .utility)
+    private static let publicationRevision = OSAllocatedUnfairLock(initialState: UInt64(0))
+    private static let reloadGate = OSAllocatedUnfairLock(initialState: ReloadGate())
+    @MainActor private static var publication: Task<Void, Never>?
+
 
     /// True only inside the real app bundle. The refresh coordinator keeps the publication
     /// hook below on by default, so it disables itself in test runs and `swift run` builds;
@@ -21,13 +27,49 @@ enum WidgetSnapshotWriter {
     @MainActor static var publisher: @MainActor (VehicleState?) -> Void {
         { state in
             guard isActive else { return }
+            let revision = nextRevision()
+            publication?.cancel()
             guard let state else {
-                remove()
+                publication = nil
+                ioQueue.async {
+                    guard isCurrent(revision) else { return }
+                    removeFiles(directory: nil)
+                    reloadGate.withLock { $0 = ReloadGate() }
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
                 return
             }
             let preferences = PreferencesStore()
-            publish(state, preferences: preferences, now: Date())
-            publishGarage(activeState: state, preferences: preferences)
+            let now = Date()
+            let activeVIN = state.identity.vin.normalizedVIN
+            let others = Array(Set(VehicleBrand.allCases.flatMap { preferences.knownVINs(for: $0) })
+                .subtracting([activeVIN])).sorted()
+            publication = Task {
+                let cachedStates: [VehicleState] = await withCheckedContinuation { continuation in
+                    ioQueue.async {
+                        guard isCurrent(revision) else {
+                            continuation.resume(returning: [])
+                            return
+                        }
+                        let ledger = VehicleDatabase.shared.snapshots
+                        continuation.resume(returning: others.compactMap { ledger.loadSnapshot(for: $0) })
+                    }
+                }
+                guard !Task.isCancelled, isCurrent(revision) else { return }
+                let active = snapshot(from: state, preferences: preferences, now: now)
+                let cars = [active] + cachedStates.map { snapshot(from: $0, preferences: preferences, now: now) }
+                ioQueue.async {
+                    guard isCurrent(revision) else { return }
+                    let garage = VehicleWidgetGarageSnapshot(
+                        schemaVersion: VehicleWidgetGarageSnapshot.currentSchemaVersion, cars: cars)
+                    guard let destination = fileURL(directory: nil),
+                          encodeAndWrite(active, to: destination),
+                          write(garage) else { return }
+                    if reloadGate.withLock({ $0.shouldReload(cars: cars, now: now) }) {
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
+                }
+            }
         }
     }
 
@@ -100,6 +142,30 @@ enum WidgetSnapshotWriter {
     }
 
     static func remove(directory: URL? = nil) {
+        if directory == nil {
+            _ = nextRevision()
+            ioQueue.sync {
+                removeFiles(directory: nil)
+                reloadGate.withLock { $0 = ReloadGate() }
+                if isActive { WidgetCenter.shared.reloadAllTimelines() }
+            }
+        } else {
+            removeFiles(directory: directory)
+        }
+    }
+
+    private static func nextRevision() -> UInt64 {
+        publicationRevision.withLock { revision in
+            revision &+= 1
+            return revision
+        }
+    }
+
+    private static func isCurrent(_ expected: UInt64) -> Bool {
+        publicationRevision.withLock { $0 == expected }
+    }
+
+    private static func removeFiles(directory: URL?) {
         for url in [fileURL(directory: directory), garageFileURL(directory: directory)] {
             guard let url else { continue }
             try? FileManager.default.removeItem(at: url)
@@ -203,6 +269,23 @@ enum WidgetSnapshotWriter {
             return false
         }
         return true
+    }
+
+    struct ReloadGate: Sendable {
+        private var previousDisplay: [[String?]] = []
+        private var lastReload: Date?
+
+        mutating func shouldReload(cars: [VehicleWidgetSnapshot], now: Date) -> Bool {
+            let display = cars.map { car in
+                [car.vin, car.name, car.batteryText, car.rangeText, car.chargingKind,
+                 car.chargingText, car.departureText, car.languageCode]
+            }
+            if let lastReload, display == previousDisplay,
+               now.timeIntervalSince(lastReload) < 300 { return false }
+            previousDisplay = display
+            lastReload = now
+            return true
+        }
     }
 
     private static func fileURL(directory: URL?) -> URL? {
