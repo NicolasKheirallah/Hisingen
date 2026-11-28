@@ -114,8 +114,13 @@ enum TripSegmentation {
                 finishSegment()
                 distanceSource = nil
             }
-            guard let movement = continued ?? deltas.first(where: { $0.distance >= minimumDistanceKm }),
-                  movement.distance >= minimumDistanceKm else {
+            let movement = continued ?? deltas.first { $0.distance >= minimumDistanceKm }
+            let counterAdvanced = (movement?.distance ?? 0) >= minimumDistanceKm
+            // A finer trip meter can show movement before the integer odometer ticks.
+            let movingBetweenOdometerTicks = movement?.source == .odometer && deltas.contains {
+                $0.source != .odometer && $0.distance >= minimumDistanceKm
+            }
+            guard let movement, counterAdvanced || movingBetweenOdometerTicks else {
                 // A parked reading ends the trip. Keep the same counter so the next odometer
                 // tick cannot count distance already measured by a finer counter.
                 finishSegment()
@@ -126,7 +131,7 @@ enum TripSegmentation {
             // trip: absorb the distance into the open segment instead of splitting.
             if segmentStart == nil { segmentStart = start }
             segmentEnd = end
-            segmentDistance += movement.distance
+            if counterAdvanced { segmentDistance += movement.distance }
             if gap == 0 { continue }
             if let value = end.ambientTemperatureCelsius ?? start.ambientTemperatureCelsius {
                 temperatureTotal += value

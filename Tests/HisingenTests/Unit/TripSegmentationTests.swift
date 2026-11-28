@@ -102,6 +102,18 @@ struct TripSegmentationTests {
         #expect(abs(trips.reduce(0) { $0 + $1.distanceKm } - 1) < 0.001)
     }
 
+    @Test func aFinerTripMeterKeepsMovementTogetherBetweenOdometerTicks() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 100, automatic: 0),
+            reading(id: 2, minute: 5, odometer: 101, automatic: 0.4),
+            reading(id: 3, minute: 10, odometer: 101, automatic: 0.8),
+            reading(id: 4, minute: 15, odometer: 102, automatic: 1.2)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.map(\.id) == ["1-4"])
+        #expect(trips.first?.distanceKm == 2)
+    }
+
     @Test func aResetTripMeterLetsTheOdometerMeasureTheNextInterval() {
         let trips = TripSegmentation.trips(from: [
             reading(id: 1, minute: 0, odometer: nil, automatic: 20),
