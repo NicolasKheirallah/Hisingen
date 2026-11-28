@@ -72,11 +72,10 @@ actor HomeAssistantSocket {
     /// Connects and authenticates. Throws `.unauthorized` when Home Assistant refuses the token.
     static func open(baseURL: URL, token: String,
                      connector: any HomeAssistantSocketConnecting = URLSessionSocketConnector()) async throws -> HomeAssistantSocket {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+        guard var components = HomeAssistantAddress.endpoint(baseURL, path: "/api/websocket") else {
             throw HomeAssistantError.invalidAddress
         }
         components.scheme = components.scheme == "https" ? "wss" : "ws"
-        components.path = "/api/websocket"
         guard let url = components.url else { throw HomeAssistantError.invalidAddress }
         let connection = connector.connect(to: url)
         do {

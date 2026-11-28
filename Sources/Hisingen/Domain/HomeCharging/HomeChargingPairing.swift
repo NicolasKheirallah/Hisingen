@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// The explicit link between one Home Assistant charger and one Hisingen vehicle.
 ///
@@ -92,8 +93,7 @@ struct HomeChargingPairing: Codable, Equatable, Sendable {
     }
 }
 
-/// A stored Home Assistant address, validated. Local installs are plain `http`, so both schemes
-/// are accepted; the path is dropped because the API lives at the root.
+/// A validated server address, including the mount path used by a reverse proxy.
 enum HomeAssistantAddress {
     enum Failure: Error, Equatable {
         case empty
@@ -104,7 +104,12 @@ enum HomeAssistantAddress {
     static func normalise(_ text: String) -> Result<URL, Failure> {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .failure(.empty) }
-        if !trimmed.contains("://") { trimmed = "http://" + trimmed }
+        if !trimmed.contains("://") {
+            guard let host = URLComponents(string: "https://" + trimmed)?.host else {
+                return .failure(.malformed)
+            }
+            trimmed = (isLocalHost(host) ? "http://" : "https://") + trimmed
+        }
         guard var components = URLComponents(string: trimmed), let host = components.host, !host.isEmpty else {
             return .failure(.malformed)
         }
@@ -112,12 +117,44 @@ enum HomeAssistantAddress {
             return .failure(.unsupportedScheme)
         }
         components.scheme = scheme
-        components.path = ""
         components.query = nil
         components.fragment = nil
         components.user = nil
         components.password = nil
         guard let url = components.url else { return .failure(.malformed) }
         return .success(url)
+    }
+
+    static func endpoint(_ baseURL: URL, path: String) -> URLComponents? {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
+        var prefix = components.percentEncodedPath
+        while prefix.last == "/" { prefix.removeLast() }
+        components.percentEncodedPath = prefix + path
+        components.query = nil
+        components.fragment = nil
+        return components
+    }
+
+    static func usesPublicHTTP(_ text: String) -> Bool {
+        guard case .success(let url) = normalise(text), let host = url.host else { return false }
+        return url.scheme == "http" && !isLocalHost(host)
+    }
+
+    private static func isLocalHost(_ host: String) -> Bool {
+        let name = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]."))
+        if name == "localhost" || name.hasSuffix(".local") { return true }
+        if let ipv4 = IPv4Address(name) {
+            let bytes = Array(ipv4.rawValue)
+            return bytes[0] == 10 || bytes[0] == 127
+                || (bytes[0] == 172 && (16...31).contains(bytes[1]))
+                || (bytes[0] == 192 && bytes[1] == 168)
+                || (bytes[0] == 169 && bytes[1] == 254)
+        }
+        if let ipv6 = IPv6Address(name) {
+            let bytes = Array(ipv6.rawValue)
+            return name == "::1" || bytes[0] & 0xFE == 0xFC
+                || (bytes[0] == 0xFE && bytes[1] & 0xC0 == 0x80)
+        }
+        return false
     }
 }

@@ -177,10 +177,11 @@ struct HomeAssistantClient: Sendable, CustomStringConvertible {
             throw HomeAssistantError.malformedResponse
         }
         var result: [String: [HAHistoryPoint]] = [:]
-        for (index, group) in groups.enumerated() {
-            let id = group.first?.entityID ?? (index < entityIDs.count ? entityIDs[index] : nil)
-            guard let id else { continue }
-            result[id] = group
+        let requested = Set(entityIDs)
+        for group in groups where !group.isEmpty {
+            let id = group.first?.entityID ?? (requested.count == 1 ? requested.first : nil)
+            guard let id, requested.contains(id) else { continue }
+            result[id, default: []].append(contentsOf: group)
         }
         return result
     }
@@ -188,10 +189,9 @@ struct HomeAssistantClient: Sendable, CustomStringConvertible {
     // MARK: - Transport
 
     private func request(_ method: String, path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> Data {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+        guard var components = HomeAssistantAddress.endpoint(baseURL, path: path) else {
             throw HomeAssistantError.invalidAddress
         }
-        components.percentEncodedPath = path
         components.percentEncodedQueryItems = query.isEmpty ? nil : query.map {
             let name = $0.name.addingPercentEncoding(withAllowedCharacters: Self.queryAllowed) ?? $0.name
             let value = $0.value.map { $0.addingPercentEncoding(withAllowedCharacters: Self.queryAllowed) ?? $0 }

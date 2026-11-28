@@ -4431,3 +4431,5 @@
 "The GPX track could not be created." = "The GPX track could not be created.";
 "Selected Session Samples" = "Selected Session Samples";
 "Selected session" = "Selected session";
+
+"Use HTTPS to protect your Home Assistant token." = "Use HTTPS to protect your Home Assistant token.";

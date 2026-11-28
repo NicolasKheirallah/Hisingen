@@ -4415,3 +4415,5 @@
 // English fallback values pending translation
 "Vehicle %@" = "车辆 %@";
 "%@ entries will be discarded. New requests are recorded again as they happen." = "将删除 %@ 条记录。之后的新请求会照常记录。";
+
+"Use HTTPS to protect your Home Assistant token." = "请使用 HTTPS 保护你的 Home Assistant 令牌。";

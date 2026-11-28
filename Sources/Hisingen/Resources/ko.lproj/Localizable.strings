@@ -4415,3 +4415,5 @@
 // English fallback values pending translation
 "Vehicle %@" = "차량 %@";
 "%@ entries will be discarded. New requests are recorded again as they happen." = "%@개의 기록이 삭제됩니다. 이후 요청은 발생하는 대로 다시 기록됩니다.";
+
+"Use HTTPS to protect your Home Assistant token." = "Home Assistant 토큰을 보호하려면 HTTPS를 사용하세요.";
