@@ -212,6 +212,7 @@ final class VehicleHistoryRecorder {
             persistLocationHistory: request.inputs.persistLocationHistory,
             into: request.database
         )
+        recordReportedVehicleHistory(request.state, into: request.database)
         recordBatteryHistory(request.state, inputs: request.inputs, into: request.database)
     }
 
@@ -285,24 +286,30 @@ final class VehicleHistoryRecorder {
         )
     }
 
+    private nonisolated static func recordReportedVehicleHistory(
+        _ state: VehicleState, into database: VehicleDatabase
+    ) {
+        let vin = state.identity.vin
+        let timestamp = state.freshness.fetchedAt
+        if let connectivity = state.connectivity {
+            database.history.recordConnectivity(
+                vin: vin, networkType: connectivity.networkType, signalBars: connectivity.signalBars,
+                wakeReason: connectivity.wakeReason, timestamp: timestamp
+            )
+        }
+        database.history.recordCabinClimate(
+            vin: vin, interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
+            requestedCelsius: state.climateStatus?.requestedTemperatureCelsius, timestamp: timestamp
+        )
+        if let version = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version {
+            database.history.recordSoftwareVersion(vin: vin, version: version, timestamp: timestamp)
+        }
+    }
+
     private nonisolated static func recordBatteryHistory(
         _ state: VehicleState, inputs: RecordingInputs, into database: VehicleDatabase
     ) {
         guard let batteryPercentage = state.energy.batteryPercentage else { return }
-
-        database.history.recordConnectivity(
-            vin: state.identity.vin,
-            networkType: state.connectivity?.networkType,
-            signalBars: state.connectivity?.signalBars,
-            wakeReason: state.connectivity?.wakeReason,
-            timestamp: state.freshness.fetchedAt
-        )
-        database.history.recordCabinClimate(
-            vin: state.identity.vin,
-            interiorCelsius: state.climateStatus?.interiorTemperatureCelsius,
-            requestedCelsius: state.climateStatus?.requestedTemperatureCelsius
-        )
-
         let capacity = state.configuredCapacityReference(specification: inputs.specification).kwh
         database.charging.ingest(
             ChargingSessionObservation(
@@ -333,18 +340,11 @@ final class VehicleHistoryRecorder {
         recordMetrics(state, storeChargingHistory: inputs.storeChargingHistory, into: database)
     }
 
-    /// The readings that arrive on every refresh and are kept only when they change: charge level
-    /// (so a parked car shows its drain), the software version, and the energy split since the last
-    /// charge. Level and energy follow the charging-history switch; the version does not, since it
-    /// says nothing about when or where the car was used.
     private nonisolated static func recordMetrics(
         _ state: VehicleState, storeChargingHistory: Bool, into database: VehicleDatabase
     ) {
         let vin = state.identity.vin
         let at = state.freshness.fetchedAt
-        if let version = state.softwareInfo?.installedVersion ?? state.softwareInfo?.version {
-            database.history.recordSoftwareVersion(vin: vin, version: version, timestamp: at)
-        }
         guard storeChargingHistory else { return }
         if let percentage = state.energy.batteryPercentage {
             database.history.recordBatteryLevel(

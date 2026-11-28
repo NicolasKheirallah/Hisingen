@@ -27,6 +27,27 @@ struct VehicleHistoryRecorderTests {
     }
 
     @Test
+    func historyRecordsReportedVehicleReadingsWithoutBatteryPercentage() async {
+        let database = VehicleDatabase.inMemory()
+        let preferences = ScopedPreferences(label: "ICEHistory")
+        let recorder = VehicleHistoryRecorder(database: database, preferences: preferences.store)
+        let vin = "YV1-ICE-HISTORY"
+        var state = vehicle(vin: vin, battery: nil, brand: .volvo,
+                            climateStatus: .init(activity: .idle, timeRemainingMinutes: nil,
+                                                 timerTriggered: false, interiorTemperatureCelsius: 19))
+        state.connectivity = .init(state: .connected, networkType: "LTE", signalBars: 3)
+        state.softwareInfo = .init(version: "3.1", state: .downloaded)
+
+        recorder.record(state)
+        await recorder.drain()
+
+        #expect(database.history.recentConnectivity(for: vin).first?.signalBars == 3)
+        #expect(database.history.recentCabinClimate(for: vin).first?.interiorCelsius == 19)
+        #expect(database.history.metrics(for: vin, metric: .softwareVersion).first?.text == "3.1")
+        #expect(database.history.metrics(for: vin, metric: .batteryLevel).isEmpty)
+    }
+
+    @Test
     func stateOfHealthUpdatesOnlyFromAFullChargeSnapshot() async throws {
         let suite = "HisingenTests.VehicleHistoryRecorder.SoH.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
