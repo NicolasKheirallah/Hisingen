@@ -89,4 +89,18 @@ struct KeychainCredentialStorageTests {
         #expect(try appStore.readFreshSessionToken() == "r2")
         #expect(try appStore.readFreshVolvoSessionToken() == "vr2")
     }
+
+    @Test
+    func unavailableFileLockDoesNotRunRefreshBody() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let coordinator = OAuthRefreshLockCoordinator()
+        await #expect(throws: POSIXError.self) {
+            try await coordinator.withLock(key: "test", fileLockURL: directory, timeout: 0) {
+                Issue.record("The refresh ran without a file lock.")
+            }
+        }
+    }
 }

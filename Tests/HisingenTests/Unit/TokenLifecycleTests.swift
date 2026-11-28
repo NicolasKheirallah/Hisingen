@@ -672,6 +672,65 @@ extension TokenLifecycleTests {
         #expect(cliLifecycle.refreshToken == "r2")
         #expect(try cliStore.readFreshSessionToken() == "r2")
     }
+
+    @Test func sharedRefreshRejectsAnUnrelatedReplacementCredential() async throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        defer { try? keychain.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let previous = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "previous-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try previous.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+        let replacement = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "replacement-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try replacement.adopt(.init(accessToken: "other-access", refreshToken: "other-refresh", expiresIn: 1800), now: now)
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await previous.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                Issue.record("The previous account started a grant after the Keychain credential changed.")
+                return .init(accessToken: "unexpected-access", refreshToken: "unexpected-refresh", expiresIn: 1800)
+            }
+        }
+        #expect(previous.accessToken == "a1")
+        #expect(previous.refreshToken == "r1")
+        #expect(try keychain.readFreshSessionToken() == "other-refresh")
+    }
+
+    @Test func sharedRefreshDoesNotOverwriteCredentialChangedDuringGrant() async throws {
+        let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
+        let keychain = KeychainStore(service: service)
+        defer { try? keychain.deleteSessionToken() }
+
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let lifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "previous-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        try lifecycle.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await lifecycle.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                try keychain.saveSessionToken("other-refresh")
+                return .init(accessToken: "a2", refreshToken: "r2", expiresIn: 1800)
+            }
+        }
+        #expect(lifecycle.refreshToken == "r1")
+        #expect(try keychain.readFreshSessionToken() == "other-refresh")
+    }
 }
 
 private actor Counter {

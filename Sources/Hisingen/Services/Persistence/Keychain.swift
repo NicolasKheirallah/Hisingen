@@ -76,6 +76,7 @@ struct StoredOAuthSession: Codable, Equatable, Sendable {
     let expiresAt: Date
     let lifetime: TimeInterval
     let generation: UInt64
+    var previousRefreshTokenHashes: [Data]? = nil
 }
 
 enum OAuthSessionSlot: String, CaseIterable, Sendable {
@@ -86,9 +87,9 @@ enum OAuthSessionSlot: String, CaseIterable, Sendable {
 
 /// Serializes refresh grants per `(service, slot)` inside the current process and, for the
 /// production Keychain service, across `Hisingen.app` and `Hisingen cli` using non-blocking
-/// advisory `flock` lockfiles so single-use refresh tokens are not rotated out from under another
+/// advisory file locks so single-use refresh tokens are not rotated out from under another
 /// live process.
-private actor OAuthRefreshLockCoordinator {
+actor OAuthRefreshLockCoordinator {
     static let shared = OAuthRefreshLockCoordinator()
 
     private var lockedKeys: Set<String> = []
@@ -103,6 +104,7 @@ private actor OAuthRefreshLockCoordinator {
         await acquireInProcess(key: key)
         defer { releaseInProcess(key: key) }
 
+        try Task.checkCancellation()
         let lockFD = try await acquireFileLock(url: fileLockURL, timeout: timeout)
         defer {
             if let lockFD {
@@ -145,7 +147,7 @@ private actor OAuthRefreshLockCoordinator {
             attributes: [.posixPermissions: 0o700]
         )
         let fd = Darwin.open(url.path, O_CREAT | O_RDWR, 0o600)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
 
         var lock = Darwin.flock()
         lock.l_type = Int16(F_WRLCK)
@@ -153,13 +155,14 @@ private actor OAuthRefreshLockCoordinator {
 
         let deadline = Date().addingTimeInterval(timeout)
         while Darwin.fcntl(fd, F_SETLK, &lock) != 0 {
-            if errno != EAGAIN && errno != EACCES {
+            let failure = errno
+            if failure != EAGAIN && failure != EACCES {
                 _ = Darwin.close(fd)
-                return nil
+                throw POSIXError(POSIXErrorCode(rawValue: failure) ?? .EIO)
             }
             if Date() >= deadline {
                 _ = Darwin.close(fd)
-                return nil
+                throw POSIXError(.ETIMEDOUT)
             }
             do {
                 try await Task.sleep(for: .milliseconds(25))
@@ -425,7 +428,7 @@ struct KeychainStore: Sendable {
                 .appendingPathComponent("Locks", isDirectory: true)
                 .appendingPathComponent("\(slot.rawValue).lock", isDirectory: false)
         } else {
-            fileLockURL = nil
+            throw POSIXError(.ENOENT)
         }
         return try await OAuthRefreshLockCoordinator.shared.withLock(
             key: cacheKey(account: slot.rawValue),
@@ -445,7 +448,6 @@ struct KeychainStore: Sendable {
             readSession: { try readOAuthSession(slot: slot) },
             readRefreshToken: readRefresh,
             writeSession: { try saveOAuthSession($0, slot: slot) },
-            clearSession: { try? deleteOAuthSession(slot: slot) },
             withLock: { body in
                 try await withCrossProcessRefreshLock(slot: slot, body: body)
             }
