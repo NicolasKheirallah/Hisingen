@@ -171,6 +171,25 @@ struct WidgetSnapshotWriterTests {
         #expect(decoded == snapshot)
     }
 
+    @Test
+    func timelineReloadCoalescesUnchangedReadings() {
+        let scoped = ScopedDefaults()
+        let preferences = scoped.preferences()
+        var gate = WidgetSnapshotWriter.ReloadGate()
+        let first = WidgetSnapshotWriter.snapshot(
+            from: fixtureState(fetchedAt: fixedNow), preferences: preferences, now: fixedNow)
+        let later = fixedNow.addingTimeInterval(30)
+        let unchanged = WidgetSnapshotWriter.snapshot(
+            from: fixtureState(fetchedAt: later), preferences: preferences, now: later)
+        let changed = WidgetSnapshotWriter.snapshot(
+            from: fixtureState(battery: 75, fetchedAt: later), preferences: preferences, now: later)
+        #expect(gate.shouldReload(cars: [first], now: fixedNow))
+        #expect(!gate.shouldReload(cars: [unchanged], now: later))
+        #expect(gate.shouldReload(cars: [changed], now: later))
+        #expect(!gate.shouldReload(cars: [changed], now: later.addingTimeInterval(299)))
+        #expect(gate.shouldReload(cars: [changed], now: later.addingTimeInterval(300)))
+    }
+
     @Test("the writer disables itself outside the real app bundle")
     func bundleGateHoldsInTestRuns() {
         // The test runner's bundle id is not the app's, which is exactly the gate the
