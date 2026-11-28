@@ -13,6 +13,25 @@ struct VolvoCommandListFreshnessTests {
     private let features = FeatureSelection(enabled: [.remoteLocks])
 
     @Test
+    func weatherOptInUsesRoundedCoordinatesWithoutStoringTheLocation() async throws {
+        let api = try await makeAPI()
+        let withoutWeather = try await api.fetchVehicleState(
+            vin: commandListVIN, features: FeatureSelection(enabled: []))
+        #expect(withoutWeather.weather == nil)
+
+        let withWeather = try await api.fetchVehicleState(
+            vin: commandListVIN, features: FeatureSelection(enabled: [.vehicleWeather]))
+        #expect(withWeather.weather?.temperatureCelsius == 7)
+        #expect(withWeather.weather?.hourlyTemperatures?.first?.snowfallCm == 0.4)
+        #expect(withWeather.weather?.upcomingPrecipitation?.first?.millimetres == 0.2)
+        #expect(withWeather.location == nil)
+        #expect(CommandListTransport.script.weatherFetchCount == 1)
+
+        _ = try await api.fetchVehicleState(vin: commandListVIN, features: FeatureSelection(enabled: [.vehicleWeather]))
+        #expect(CommandListTransport.script.weatherFetchCount == 1)
+    }
+
+    @Test
     func aFreshListIsReusedWithoutAskingTheProviderAgain() async throws {
         let api = try await makeAPI()
         CommandListTransport.script.serve(["lock", "unlock"])
@@ -145,6 +164,13 @@ private final class CommandListTransport: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        if url.host == "api.open-meteo.com" {
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            #expect(request.value(forHTTPHeaderField: "vcc-api-key") == nil)
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            #expect(items?.contains(.init(name: "latitude", value: "57.71")) == true)
+            #expect(items?.contains(.init(name: "longitude", value: "11.97")) == true)
+        }
         let reply = Self.script.reply(for: url.path)
         guard let response = HTTPURLResponse(url: url, statusCode: reply.status,
                                              httpVersion: nil, headerFields: nil) else {
@@ -162,6 +188,13 @@ private final class CommandListScript: @unchecked Sendable {
     private var names: [String] = []
     private var failureStatus: Int?
     private var fetches = 0
+    private var weatherFetches = 0
+
+    var weatherFetchCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return weatherFetches
+    }
 
     var commandFetchCount: Int {
         lock.lock()
@@ -175,6 +208,7 @@ private final class CommandListScript: @unchecked Sendable {
         names = []
         failureStatus = nil
         fetches = 0
+        weatherFetches = 0
     }
 
     func serve(_ names: [String]) {
@@ -197,6 +231,16 @@ private final class CommandListScript: @unchecked Sendable {
         defer { lock.unlock() }
         if path.hasSuffix("token.oauth2") {
             return (200, #"{"access_token":"fake-access-token","refresh_token":"fake-refresh-token","expires_in":3600,"token_type":"Bearer"}"#)
+        }
+        if path == "/v1/forecast" {
+            weatherFetches += 1
+            return (200, """
+            {"current":{"temperature_2m":7},"hourly":{"time":[1795417200],"temperature_2m":[7],"snowfall":[0.4]},
+             "minutely_15":{"time":[1795418100],"precipitation":[0.2]}}
+            """)
+        }
+        if path == "/location/v1/vehicles/\(commandListVIN)/location" {
+            return (200, #"{"geometry":{"coordinates":[11.9746,57.7089]}}"#)
         }
         if path == Self.commandsPath {
             fetches += 1

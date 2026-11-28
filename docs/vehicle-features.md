@@ -324,13 +324,14 @@ A parked or sleeping vehicle may report an older position.
 
 ### Weather at the car
 
-Vehicle weather is optional.
-
-When enabled, Hisingen can use the vehicle's reported location to show local weather around the car.
+Vehicle Weather is available for Polestar and Volvo when the car reports its location. Volvo
+also requires the connected account to grant location access. With Vehicle Location off, Hisingen
+can still display the forecast without showing or saving the car's coordinates in history.
 
 Weather data comes from [Open-Meteo](https://open-meteo.com/).
 
-Because coordinates are needed to retrieve local weather, the vehicle's latitude and longitude are sent to Open-Meteo while this feature is enabled.
+Hisingen sends the vehicle's latitude and longitude rounded to two decimal places while
+Vehicle Weather is enabled.
 
 The hourly forecast that drives the pre-departure hints is fetched in the same request as the
 current weather. Both carry wind speed, gusts and precipitation, which the weather readout shows

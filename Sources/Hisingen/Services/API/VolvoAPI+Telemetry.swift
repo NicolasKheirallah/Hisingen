@@ -33,6 +33,8 @@ extension VolvoAPI {
         // Skipping the read entirely leaves the map card to its existing "no location"
         // handling and keeps the request off the wire. Nil (nothing recorded) still reads.
         let locationScopeGranted = await hasGranted("location:read")
+        let needsWeather = features.contains(.vehicleWeather)
+        let needsLocation = features.contains(.vehicleLocation) || needsWeather
         async let fuelTask: VolvoFuelDTO? = optional(enabled: needsFuel, key: "fuel", vin: vin) {
             try await self.get("/connected-vehicle/v2/vehicles/\(vin)/fuel", scope: .vehicle(vin))
         }
@@ -62,7 +64,7 @@ extension VolvoAPI {
             enabled: needsStatistics, key: "statistics", vin: vin
         ) { try await self.get("/connected-vehicle/v2/vehicles/\(vin)/statistics", scope: .vehicle(vin)) }
         async let locationTask: VolvoLocationDTO? = optional(
-            enabled: features.contains(.vehicleLocation) && locationScopeGranted != false, key: "location", vin: vin
+            enabled: needsLocation && locationScopeGranted != false, key: "location", vin: vin
         ) { try await self.get("/location/v1/vehicles/\(vin)/location", scope: .vehicle(vin)) }
         async let brakesTask: VolvoBrakesDTO? = optional(
             enabled: features.contains(.vehicleHealth) || features.contains(.tyreAndWarnings), key: "brakes", vin: vin
@@ -143,6 +145,9 @@ extension VolvoAPI {
             )
         }
 
+        let weather = needsWeather ? await weather(at: vehicleLocation, vin: vin) : nil
+        try Task.checkCancellation()
+
         let reportedAt: Date? = [
             energy?.batteryChargeLevel?.updatedAt,
             energy?.electricRange?.updatedAt,
@@ -185,10 +190,7 @@ extension VolvoAPI {
                          when: features.contains(.vehicleHealth) && diagnostics == nil && engineDiagnostics == nil && odometer == nil)
         unavailable.mark(.tripMeters, when: features.contains(.tripMeters) && statistics == nil)
         unavailable.mark(.vehicleLocation, when: features.contains(.vehicleLocation) && vehicleLocation == nil)
-        // Volvo has no weather or exterior-temperature resource in Connected Vehicle API v2
-        // (`/environment`, `/climatization-status` and every sibling spelling 404 – verified
-        // live), so `.vehicleWeather` is always unavailable for this provider.
-        unavailable.mark(.vehicleWeather, when: features.contains(.vehicleWeather))
+        unavailable.mark(.vehicleWeather, when: needsWeather && weather == nil)
         unavailable.mark(.chargingSchedule, when: features.contains(.chargingSchedule))
         let energyAnsweredNothing = energy != nil
             && energy?.batteryChargeLevel?.value == nil
@@ -247,7 +249,9 @@ extension VolvoAPI {
             readingDates[.health] = date
         }
         if let date = (fuel?.fuelLevelPercent ?? fuel?.fuelAmount)?.updatedAt { readingDates[.fuel] = date }
-        if let date = location?.properties?.timestamp { readingDates[.location] = date }
+        if features.contains(.vehicleLocation), let date = location?.properties?.timestamp {
+            readingDates[.location] = date
+        }
         if let date = commandAccessibility?.availabilityStatus?.updatedAt {
             readingDates[.availability] = date
         }
@@ -453,7 +457,8 @@ extension VolvoAPI {
                 manualTripKm: tripManual,
                 automaticTripKm: tripAuto
             ),
-            location: vehicleLocation,
+            weather: weather,
+            location: features.contains(.vehicleLocation) ? vehicleLocation : nil,
             probedCapabilities: probesResult,
             powertrain: powertrain,
             fuelSystem: FuelSystemSnapshot(levelPercent: fuelPct, rangeKm: fuelRange)
@@ -537,6 +542,24 @@ extension VolvoAPI {
         case "DISENGAGED", "RELEASED", "OFF": return false
         default: return nil
         }
+    }
+
+    private func weather(at location: VehicleLocation?, vin: String) async -> VehicleWeather? {
+        guard let latitude = location?.latitude, let longitude = location?.longitude,
+              (-90...90).contains(latitude), (-180...180).contains(longitude) else { return nil }
+        let roundedLatitude = OpenMeteoCoordinate.rounded(latitude)
+        let roundedLongitude = OpenMeteoCoordinate.rounded(longitude)
+        let epoch = sessionEpoch
+        if let cached = weatherCache[vin], cached.epoch == epoch,
+           cached.latitude == roundedLatitude, cached.longitude == roundedLongitude,
+           let timestamp = cached.weather.timestamp, Date().timeIntervalSince(timestamp) < 300 {
+            return cached.weather
+        }
+        let client = OpenMeteoWeatherClient(session: session, diagnosticLog: .shared, provider: .volvo)
+        let weather = await client.weatherWithForecast(latitude: latitude, longitude: longitude, scope: .vehicle(vin))
+        guard !Task.isCancelled, sessionEpoch == epoch, let weather else { return nil }
+        weatherCache[vin] = (roundedLatitude, roundedLongitude, epoch, weather)
+        return weather
     }
 
     private func fetchCarImage(vin: String, imageUrlString: String?) async {

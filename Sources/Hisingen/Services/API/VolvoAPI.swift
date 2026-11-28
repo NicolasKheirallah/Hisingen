@@ -163,6 +163,7 @@ actor VolvoAPI {
     var vehicleDetailsCache: [String: VolvoVehicleDetailsDTO] = [:]
     var capabilityCache: [String: (value: VolvoEnergyCapabilitiesDTO, expiresAt: Date)] = [:]
     var optionalTelemetryCache: [String: CapabilityCacheEntry] = [:]
+    var weatherCache: [String: (latitude: String, longitude: String, epoch: Int, weather: VehicleWeather)] = [:]
     /// The car's `/commands` list per VIN. Kept apart from `optionalTelemetryCache` because this
     /// list decides whether lock, climate, engine and honk/flash are offered at all: it has its
     /// own age rule and it survives a failed refresh instead of answering "no list".
