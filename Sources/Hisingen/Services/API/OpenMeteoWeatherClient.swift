@@ -7,6 +7,7 @@ import Foundation
 struct OpenMeteoWeatherClient: Sendable {
     let session: URLSession
     let diagnosticLog: APIDiagnosticLogStore
+    var provider: VehicleBrand = .polestar
 
     func weather(latitude: Double, longitude: Double,
                  scope: VehicleLogScope) async -> VehicleWeather? {
@@ -35,7 +36,7 @@ struct OpenMeteoWeatherClient: Sendable {
         request.timeoutInterval = 8
         guard let (data, response) = try? await HTTPExchange.data(
             for: request, using: session, limit: 256_000,
-            operation: operation, provider: .polestar,
+            operation: operation, provider: provider,
             scope: scope, diagnosticLog: diagnosticLog
         ), response.statusCode == 200 else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
