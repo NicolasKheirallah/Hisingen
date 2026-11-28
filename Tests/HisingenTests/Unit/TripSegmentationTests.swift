@@ -78,6 +78,90 @@ struct TripSegmentationTests {
         #expect(trips.last?.startedAt == start.addingTimeInterval(56 * 60))
     }
 
+    @Test func lockingSegmentSourcePreventsOdometerAndTripMeterDoubleCounting() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 1_000, automatic: 1.0),
+            reading(id: 2, minute: 5, odometer: 1_000, automatic: 1.4),
+            reading(id: 3, minute: 10, odometer: 1_001, automatic: 2.0)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.count == 1)
+        #expect(abs((trips.first?.distanceKm ?? 0) - 1.0) < 0.001)
+    }
+
+    @Test func aParkedReadingSeparatesTripsWithoutDoubleCountingTheNextOdometerTick() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 100, automatic: 0),
+            reading(id: 2, minute: 5, odometer: 100, automatic: 0.4),
+            reading(id: 3, minute: 10, odometer: 100, automatic: 0.4),
+            reading(id: 4, minute: 15, odometer: 101, automatic: 1)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.count == 2)
+        #expect(trips.map(\.id) == ["3-4", "1-2"])
+        #expect(abs(trips.reduce(0) { $0 + $1.distanceKm } - 1) < 0.001)
+    }
+
+    @Test func aFinerTripMeterKeepsMovementTogetherBetweenOdometerTicks() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 100, automatic: 0),
+            reading(id: 2, minute: 5, odometer: 101, automatic: 0.4),
+            reading(id: 3, minute: 10, odometer: 101, automatic: 0.8),
+            reading(id: 4, minute: 15, odometer: 102, automatic: 1.2)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.map(\.id) == ["1-4"])
+        #expect(trips.first?.distanceKm == 2)
+    }
+
+    @Test func aResetTripMeterLetsTheOdometerMeasureTheNextInterval() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: nil, automatic: 20),
+            reading(id: 2, minute: 5, odometer: 105, automatic: 25),
+            reading(id: 3, minute: 10, odometer: 108, automatic: 3)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.map(\.distanceKm) == [3, 5])
+    }
+
+    @Test func cumulativeAutomaticTripMeterSuppressesRollingAverageConsumption() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 5_000, automatic: 420.0, consumption: 18.2),
+            reading(id: 2, minute: 10, odometer: 5_005, automatic: 425.0, consumption: 18.4)
+        ], vin: vin, limit: 10)
+
+        let single = trips.first
+        #expect(single?.distanceKm == 5)
+        #expect(single?.averageConsumption == nil)
+    }
+
+    @Test(arguments: [nil, 0] as [Double?])
+    func aMissingOrResetTripCounterDoesNotQualifyTheStoredConsumption(automaticStart: Double?) {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 100, automatic: automaticStart, consumption: 19),
+            reading(id: 2, minute: 5, odometer: 105, automatic: automaticStart.map { _ in 5 }, consumption: 19)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.first?.distanceKm == 5)
+        #expect(trips.first?.averageConsumption == nil)
+    }
+
+    @Test func reconciledGapsPreserveOdometerDistanceAcrossSleepIntervals() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 1_000),
+            reading(id: 2, minute: 10, odometer: 1_010),
+            reading(id: 3, minute: 190, odometer: 1_045),
+            reading(id: 4, minute: 205, odometer: 1_055)
+        ], vin: vin, limit: 10, includeReconciledGaps: true)
+
+        #expect(trips.count == 3)
+        let totalDistance = trips.reduce(0.0) { $0 + $1.distanceKm }
+        #expect(totalDistance == 55)
+        let gapTrip = trips.first { $0.isReconciledGap }
+        #expect(gapTrip?.distanceKm == 35)
+        #expect(gapTrip?.averageConsumption == nil)
+    }
+
     private func reading(
         id: Int64, minute: Int, odometer: Double?,
         automatic: Double? = nil, consumption: Double? = 16, temperature: Double? = 20

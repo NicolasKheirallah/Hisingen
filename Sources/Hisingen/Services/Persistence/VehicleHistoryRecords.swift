@@ -289,6 +289,53 @@ struct TripHistoryEntry: Codable, Equatable, Identifiable, Sendable {
     let startLongitude: Double?
     let endLatitude: Double?
     let endLongitude: Double?
+    var isReconciledGap: Bool = false
+
+    init(
+        id: String,
+        vin: String,
+        startedAt: Date,
+        endedAt: Date,
+        distanceKm: Double,
+        averageConsumption: Double?,
+        ambientTemperatureCelsius: Double?,
+        startLatitude: Double?,
+        startLongitude: Double?,
+        endLatitude: Double?,
+        endLongitude: Double?,
+        isReconciledGap: Bool = false
+    ) {
+        self.id = id
+        self.vin = vin
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.distanceKm = distanceKm
+        self.averageConsumption = averageConsumption
+        self.ambientTemperatureCelsius = ambientTemperatureCelsius
+        self.startLatitude = startLatitude
+        self.startLongitude = startLongitude
+        self.endLatitude = endLatitude
+        self.endLongitude = endLongitude
+        self.isReconciledGap = isReconciledGap
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            vin: try c.decode(String.self, forKey: .vin),
+            startedAt: try c.decode(Date.self, forKey: .startedAt),
+            endedAt: try c.decode(Date.self, forKey: .endedAt),
+            distanceKm: try c.decode(Double.self, forKey: .distanceKm),
+            averageConsumption: try c.decodeIfPresent(Double.self, forKey: .averageConsumption),
+            ambientTemperatureCelsius: try c.decodeIfPresent(Double.self, forKey: .ambientTemperatureCelsius),
+            startLatitude: try c.decodeIfPresent(Double.self, forKey: .startLatitude),
+            startLongitude: try c.decodeIfPresent(Double.self, forKey: .startLongitude),
+            endLatitude: try c.decodeIfPresent(Double.self, forKey: .endLatitude),
+            endLongitude: try c.decodeIfPresent(Double.self, forKey: .endLongitude),
+            isReconciledGap: try c.decodeIfPresent(Bool.self, forKey: .isReconciledGap) ?? false
+        )
+    }
 
     var duration: TimeInterval { endedAt.timeIntervalSince(startedAt) }
 }

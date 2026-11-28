@@ -253,7 +253,7 @@ final class VehicleHistoryLedger: Sendable {
         // the unbounded "All" view from turning 3,000 trips into a 60,000-row decode.
         let telemetryLimit = Self.telemetryRowLimit(forTripLimit: limit)
         let records = Array(recentTelemetry(for: vin, limit: telemetryLimit, since: since).reversed())
-        return TripSegmentation.trips(from: records, vin: vin, limit: limit)
+        return TripSegmentation.trips(from: records, vin: vin, limit: limit, includeReconciledGaps: true)
     }
 
     nonisolated static func telemetryRowLimit(forTripLimit limit: Int) -> Int {
