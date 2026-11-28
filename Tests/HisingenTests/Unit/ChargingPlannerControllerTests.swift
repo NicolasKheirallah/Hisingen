@@ -486,7 +486,7 @@ struct ChargingPlannerControllerTests {
     }
 
     @Test
-    func committedWindowStopsEvenAfterUISwitchesToAnotherVehicle() async {
+    func committedWindowSurvivesMissingTelemetryAndPricesAfterUISwitch() async {
         let scoped = ScopedPreferences(label: "MultiVINPlanner")
         let store = scoped.store
         store.marketCountry = .sweden
@@ -502,15 +502,17 @@ struct ChargingPlannerControllerTests {
         let carA = vehicle(vin: "VIN-CAR-A", battery: 65, state: .charging, connection: .connected, target: 80)
         let carB = vehicle(vin: "VIN-CAR-B", battery: 80, target: 80)
 
+        let clock = ClockBox(now: plannerDate(2026, 2, 10, 4, 0))
+        var stateForA: VehicleState? = carA
         var stoppedVINs: [String] = []
         let sleeper = FakeSleeper()
         let controller = ChargingPlannerController(
             preferences: store,
             notifier: FakeNotifier(),
-            priceSource: FakePriceSource(series: plannerHourlySeries()),
+            priceSource: FakePriceSource(series: []),
             database: VehicleDatabase.inMemory(),
             latestState: { carB },
-            stateForVIN: { vin in vin.normalizedVIN == "VIN-CAR-A" ? carA : carB },
+            stateForVIN: { vin in vin.normalizedVIN == "VIN-CAR-A" ? stateForA : carB },
             activeVINs: { ["VIN-CAR-A", "VIN-CAR-B"] },
             startCharging: { _ in .refused(reason: "unused") },
             stopCharging: { vin in
@@ -518,9 +520,19 @@ struct ChargingPlannerControllerTests {
                 return .sent(.accepted)
             },
             sleepPrevention: sleeper,
-            now: { plannerDate(2026, 2, 10, 4, 30) }
+            now: { clock.value }
         )
 
+        await controller.evaluate()
+        #expect(sleeper.isHolding)
+
+        clock.value = plannerDate(2026, 2, 10, 4, 30)
+        stateForA = nil
+        await controller.evaluate()
+        #expect(store.plannerWindow(for: "VIN-CAR-A") != nil)
+        #expect(stoppedVINs.isEmpty)
+
+        stateForA = carA
         await controller.evaluate()
         await settle()
 
