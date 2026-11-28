@@ -48,7 +48,8 @@ extension ChargingSessionLedger {
             sampleCoverage: record.sampleCoverage, tariffPricePerKwh: record.tariffPricePerKwh,
             currencySymbol: record.currencySymbol, completionReason: record.completionReason,
             summaryVersion: record.summaryVersion, spotCost: record.spotEstimatedCost,
-            wallbox: record.wallbox
+            wallbox: record.wallbox, place: record.place,
+            costManuallyEdited: record.costManuallyEdited
         )
     }
 
@@ -127,7 +128,9 @@ extension ChargingSessionLedger {
             nightTariffEndHour: record.nightTariffEndHour,
             currencySymbol: record.currencySymbol, targetSoc: record.targetSoc,
             lastObservedAt: record.lastObservedAt, summaryVersion: record.summaryVersion,
-            pendingStopCount: record.pendingStopCount, estimatedCost: record.estimatedCost
+            pendingStopCount: record.pendingStopCount, estimatedCost: record.estimatedCost,
+            spotEstimatedCost: record.spotEstimatedCost, wallbox: record.wallbox,
+            place: record.place, costManuallyEdited: record.costManuallyEdited
         )
     }
 

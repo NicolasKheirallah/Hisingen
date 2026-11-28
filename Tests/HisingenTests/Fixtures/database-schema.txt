@@ -1,4 +1,4 @@
-user-version 10
+user-version 11
 table air_quality_history
   column air_quality_index real notnull=0 default=- pk=0
   column filter_remaining_percent real notnull=0 default=- pk=0
@@ -42,6 +42,7 @@ table charging_sessions
   column charging_place text notnull=1 default='home' pk=0
   column completion_reason text notnull=0 default=- pk=0
   column confidence text notnull=1 default='low' pk=0
+  column cost_manually_edited integer notnull=1 default=0 pk=0
   column created_at real notnull=1 default=- pk=0
   column currency_symbol text notnull=0 default=- pk=0
   column end_soc real notnull=0 default=- pk=0

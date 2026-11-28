@@ -66,6 +66,13 @@ extension ChargingSessionLedger {
         FROM charging_sessions
         WHERE vin = ? AND ended_at IS NOT NULL
           AND spot_estimated_cost IS NULL AND energy_delivered_kwh > 0
+          AND charging_place = 'home'
+          AND cost_manually_edited = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM charging_samples s
+              WHERE s.session_id = charging_sessions.id
+                AND LOWER(s.charging_type) = 'dc'
+          )
         ORDER BY started_at DESC LIMIT ?;
         """
         return (try? sql.query(sql: query) { stmt in

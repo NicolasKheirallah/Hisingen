@@ -325,7 +325,8 @@ final class VehicleHistoryRecorder {
                 nightTariffStartHour: inputs.nightTariffStartHour,
                 nightTariffEndHour: inputs.nightTariffEndHour,
                 currencySymbol: inputs.currencySymbol,
-                locationName: chargingLocationName(for: state, persistLocationHistory: inputs.persistLocationHistory)
+                locationName: chargingLocationName(for: state, persistLocationHistory: inputs.persistLocationHistory),
+                place: chargingPlace(for: state)
             ),
             recordingEnabled: inputs.storeChargingHistory
         )
@@ -365,6 +366,14 @@ final class VehicleHistoryRecorder {
               let latitude = location.latitude,
               let longitude = location.longitude else { return nil }
         return String(format: "%.4f°, %.4f°", latitude, longitude)
+    }
+
+    private nonisolated static func chargingPlace(for state: VehicleState) -> ChargingSessionPlace {
+        if state.energy.type == .dc { return .publicCharging }
+        if state.energy.locations.contains(where: \.isSavedLocation), state.chargeLocationPresence == nil {
+            return .publicCharging
+        }
+        return .home
     }
 
     private nonisolated static func recordBatteryHealth(

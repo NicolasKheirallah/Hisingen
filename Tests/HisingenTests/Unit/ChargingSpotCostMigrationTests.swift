@@ -77,4 +77,37 @@ struct ChargingSpotCostMigrationTests {
         database.charging.updateSpotEstimatedCost(id: "legacy-1", cost: 21.5)
         #expect(abs((database.charging.recentChargingSessions(for: "OLD-VIN").first?.spotEstimatedCost ?? 0) - 21.5) < 0.001)
     }
+
+    @Test func v10DatabaseMigratesDCAutoSessionToPublicAndFlagsManualEntries() throws {
+        let raw = try SQLiteDatabase.inMemory()
+        let latest = VehicleDatabase(database: raw)
+        let start = Date(timeIntervalSince1970: 1_789_100_000)
+
+        let dcID = latest.charging.startChargingSession(vin: "MIG-V11", startSoc: 20, place: .home, startedAt: start)
+        latest.charging.recordChargingSample(sessionId: dcID, vin: "MIG-V11", soc: 20, powerKw: 120,
+                                             voltage: nil, current: nil, chargingType: ChargingType.dc.rawValue, timestamp: start)
+        latest.charging.completeChargingSession(id: dcID, endSoc: 60, energyDeliveredKwh: 30, peakPowerKw: 120,
+                                                averagePowerKw: 100, endedAt: start.addingTimeInterval(1_800))
+
+        let manualID = latest.charging.addManualChargingSession(
+            vin: "MIG-V11", startedAt: start.addingTimeInterval(3_600), endedAt: start.addingTimeInterval(5_400),
+            locationName: "Home", place: .home, energyKwh: 12, totalCost: 24, pricePerKwh: 2, currencySymbol: "kr"
+        )
+
+        // Simulate a v10 database right before v11 landed.
+        try raw.execute(sql: """
+            ALTER TABLE charging_sessions DROP COLUMN cost_manually_edited;
+            PRAGMA user_version = 10;
+            """)
+
+        let upgraded = VehicleDatabase(database: raw)
+        let sessions = upgraded.charging.recentChargingSessions(for: "MIG-V11")
+        let upgradedDC = try #require(sessions.first { $0.id == dcID })
+        let upgradedManual = try #require(sessions.first { $0.id == manualID })
+
+        #expect(upgraded.schemaVersion() == VehicleDatabase.latestSchemaVersion)
+        #expect(upgradedDC.place == .publicCharging)
+        #expect(!upgradedDC.costManuallyEdited)
+        #expect(upgradedManual.costManuallyEdited)
+    }
 }

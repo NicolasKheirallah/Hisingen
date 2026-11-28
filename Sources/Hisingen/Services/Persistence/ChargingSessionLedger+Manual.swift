@@ -23,15 +23,16 @@ extension ChargingSessionLedger {
         let id = UUID().uuidString
         let perKwh = pricePerKwh ?? (energyKwh > 0 ? totalCost.map { $0 / energyKwh } : nil)
         let total = totalCost ?? perKwh.map { $0 * energyKwh }
+        let manuallyEdited: Int64 = (totalCost != nil || pricePerKwh != nil) ? 1 : 0
         let statement = """
         INSERT INTO charging_sessions (
             id, vin, started_at, ended_at, start_soc, end_soc, energy_delivered_kwh,
             peak_power_kw, average_power_kw, location_name, charging_place, created_at,
             lifecycle_state, completion_reason, energy_source, confidence,
-            tariff_price_per_kwh, currency_symbol, estimated_cost,
+            tariff_price_per_kwh, currency_symbol, estimated_cost, cost_manually_edited,
             last_observed_at, summary_version, pending_stop_count
         ) VALUES (?, ?, ?, ?, -1, NULL, ?, 0, 0, ?, ?, ?, 'completed', 'manual_entry',
-                  'manual_entry', 'high', ?, ?, ?, ?, 2, 0);
+                  'manual_entry', 'high', ?, ?, ?, ?, ?, 2, 0);
         """
         logOnFailure("manual session insert") {
             try sql.query(sql: statement) { stmt in
@@ -46,7 +47,8 @@ extension ChargingSessionLedger {
                 try stmt.bindDouble(perKwh, at: 9)
                 try stmt.bindText(currencySymbol, at: 10)
                 try stmt.bindDouble(total, at: 11)
-                try stmt.bindDate(endedAt, at: 12)
+                try stmt.bindInt64(manuallyEdited, at: 12)
+                try stmt.bindDate(endedAt, at: 13)
                 try stmt.executeUpdate()
             } process: { _ in }
         }
@@ -70,12 +72,14 @@ extension ChargingSessionLedger {
     ) {
         let perKwh = pricePerKwh ?? (energyKwh > 0 ? totalCost.map { $0 / energyKwh } : nil)
         let total = totalCost ?? perKwh.map { $0 * energyKwh }
+        let manuallyEdited: Int64 = (totalCost != nil || pricePerKwh != nil) ? 1 : 0
         logOnFailure("session details update") {
             try sql.query(sql: """
                 UPDATE charging_sessions SET
                     started_at = ?, ended_at = ?, location_name = ?, charging_place = ?,
                     energy_delivered_kwh = ?, tariff_price_per_kwh = ?,
-                    estimated_cost = ?, last_observed_at = ?
+                    estimated_cost = ?, spot_estimated_cost = NULL,
+                    cost_manually_edited = ?, last_observed_at = ?
                 WHERE id = ? AND vin = ? AND ended_at IS NOT NULL;
                 """) { stmt in
                 try stmt.bindDate(startedAt, at: 1)
@@ -85,9 +89,10 @@ extension ChargingSessionLedger {
                 try stmt.bindDouble(energyKwh, at: 5)
                 try stmt.bindDouble(perKwh, at: 6)
                 try stmt.bindDouble(total, at: 7)
-                try stmt.bindDate(endedAt, at: 8)
-                try stmt.bindText(id, at: 9)
-                try stmt.bindText(vin, at: 10)
+                try stmt.bindInt64(manuallyEdited, at: 8)
+                try stmt.bindDate(endedAt, at: 9)
+                try stmt.bindText(id, at: 10)
+                try stmt.bindText(vin, at: 11)
                 try stmt.executeUpdate()
             } process: { _ in }
         }

@@ -377,5 +377,38 @@ extension VehicleDatabase {
                 logger.error("Charging-place schema migration remains incomplete; it will retry next launch")
             }
         }
+
+        // v11: distinguish manual receipt edits from auto-estimated session costs so spot backfill
+        // and automatic spot pricing never overwrite user-entered costs, and reclassify historic
+        // DC auto-recorded rows that defaulted to 'home' when no wallbox matched.
+        if version == 10 {
+            addColumnIfMissing(table: "charging_sessions", column: "cost_manually_edited",
+                               declaration: "INTEGER NOT NULL DEFAULT 0")
+            if columnExists(table: "charging_sessions", column: "cost_manually_edited") {
+                do {
+                    try db.execute(sql: """
+                        UPDATE charging_sessions
+                        SET charging_place = 'public'
+                        WHERE charging_place = 'home'
+                          AND wallbox_session_key IS NULL
+                          AND EXISTS (
+                              SELECT 1 FROM charging_samples s
+                              WHERE s.session_id = charging_sessions.id
+                                AND LOWER(s.charging_type) = 'dc'
+                          );
+                        UPDATE charging_sessions
+                        SET cost_manually_edited = 1
+                        WHERE energy_source = 'manual_entry'
+                          AND (estimated_cost IS NOT NULL OR tariff_price_per_kwh IS NOT NULL);
+                        PRAGMA user_version = 11;
+                        """)
+                    version = 11
+                } catch {
+                    logger.error("Manual-cost and public-DC migration failed; it will retry next launch: \(error, privacy: .public)")
+                }
+            } else {
+                logger.error("Manual-cost schema migration remains incomplete; it will retry next launch")
+            }
+        }
     }
 }
