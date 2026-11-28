@@ -36,4 +36,17 @@ enum TabRouting {
     static func settingsDrawsAsTab(authenticated: Bool, hasSnapshot: Bool, setupMode: Bool) -> Bool {
         authenticated && hasSnapshot && !setupMode
     }
+
+    enum SurfaceRoute: Equatable, Sendable {
+        case welcomeSignIn
+        case dashboard(showsSignInNotice: Bool)
+    }
+
+    /// Chooses between the onboarding sign-in screen and the dashboard when credentials expire.
+    /// Once a snapshot exists, keep showing the last-known telemetry alongside the sign-in notice
+    /// banner instead of hiding the dashboard behind `WelcomeSignInView`.
+    static func surfaceRoute(signInRequired: Bool, hasSnapshot: Bool) -> SurfaceRoute {
+        if signInRequired && !hasSnapshot { return .welcomeSignIn }
+        return .dashboard(showsSignInNotice: signInRequired)
+    }
 }

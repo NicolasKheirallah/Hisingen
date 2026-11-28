@@ -263,7 +263,7 @@ struct HisingenContentView: View {
                 settingsScreen
                     .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                     .transition(modeTransition)
-            } else if signInRequired {
+            } else if TabRouting.surfaceRoute(signInRequired: signInRequired, hasSnapshot: state != nil) == .welcomeSignIn {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged,
                                   accountConnection: accountConnection, onTestConnection: onTestConnection)
                     .transition(modeTransition)
@@ -844,6 +844,7 @@ struct HisingenContentView: View {
             footnote: nil,
             tint: HisingenTheme.semanticWarning,
             containerHelp: L10n.text("Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading."),
+            action: (L10n.text("Sign In"), { navigateToSettings(.account) }),
             onDismiss: { dismissedSignInNotice = message }
         )
     }

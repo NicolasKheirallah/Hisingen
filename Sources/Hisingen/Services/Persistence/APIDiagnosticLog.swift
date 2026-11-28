@@ -177,9 +177,10 @@ actor APIDiagnosticLogStore {
         ensureLoaded()
         let completedAt = Date()
         let sensitiveResponse = Self.isSensitiveResponse(request: request, operation: operation)
-        let redactedPayload = sensitiveResponse ? nil : Self.redactJSON(responseData)
-        let omissionReason = Self.payloadOmissionReason(
-            data: responseData, redactedPayload: redactedPayload, sensitive: sensitiveResponse)
+        let (redactedPayload, omissionReason) = Self.sanitizeResponsePayload(
+            data: responseData,
+            sensitive: sensitiveResponse
+        )
         let normalizedGRPCStatus = grpcStatus.flatMap { $0.isEmpty ? nil : $0 }
         let normalizedGRPCMessage = grpcMessage
             .flatMap { $0.isEmpty ? nil : ($0.removingPercentEncoding ?? $0) }
@@ -612,14 +613,21 @@ actor APIDiagnosticLogStore {
         return haystack.contains("token") || haystack.contains("oauth2")
     }
 
-    private static func payloadOmissionReason(data: Data?, redactedPayload: String?,
-                                              sensitive: Bool) -> String? {
-        if sensitive, data?.isEmpty == false { return "sensitive" }
-        guard let data else { return nil }
-        if data.isEmpty { return "empty" }
-        if data.count > 2_000_000 { return "tooLarge" }
-        if redactedPayload == nil { return "nonJSON" }
-        return nil
+    private static let maximumRetainedPayloadBytes = 256_000
+
+    private static func sanitizeResponsePayload(data: Data?, sensitive: Bool) -> (payload: String?, omissionReason: String?) {
+        if sensitive, data?.isEmpty == false { return (nil, "sensitive") }
+        guard let data else { return (nil, nil) }
+        if data.isEmpty { return (nil, "empty") }
+        if data.count > 2_000_000 { return (nil, "tooLarge") }
+        switch redactJSONOutcome(data) {
+        case .valid(let string):
+            return (string, nil)
+        case .tooLarge:
+            return (nil, "tooLarge")
+        case .nonJSON:
+            return (nil, "nonJSON")
+        }
     }
 
     /// Classifies provider errors that are encoded inside an HTTP 2xx JSON body. Keep the
@@ -717,16 +725,25 @@ actor APIDiagnosticLogStore {
         return DiagnosticRedaction.redact(components?.string ?? "<unavailable>")
     }
 
-    private static func redactJSON(_ data: Data?) -> String? {
-        guard let data, data.count <= 2_000_000,
-              let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+    private enum RedactedJSONOutcome {
+        case valid(String)
+        case tooLarge
+        case nonJSON
+    }
+
+    private static func redactJSONOutcome(_ data: Data) -> RedactedJSONOutcome {
+        guard data.count <= 2_000_000,
+              let object = try? JSONSerialization.jsonObject(with: data) else { return .nonJSON }
         let sanitized = redactJSONValue(object, key: nil)
         guard JSONSerialization.isValidJSONObject(sanitized),
               let output = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]) else {
-            return nil
+            return .nonJSON
         }
-        let bounded = output.prefix(256_000)
-        return String(decoding: bounded, as: UTF8.self)
+        guard output.count <= maximumRetainedPayloadBytes,
+              let text = String(data: output, encoding: .utf8) else {
+            return .tooLarge
+        }
+        return .valid(text)
     }
 
     private static func redactJSONValue(_ value: Any, key: String?) -> Any {
