@@ -24,14 +24,11 @@ final class StatusItemController: NSObject {
         state?.exteriorStatus?.isLocked == true ? .unlock : .lock
     }
 
-    static func climateCommand(for state: VehicleState?, temperatureCelsius: Double) -> RemoteCommand {
+    static func climateCommand(for state: VehicleState?, preferences: PreferencesStore) -> RemoteCommand {
         if state?.isClimateActive == true { return .stopClimate }
-        return .startClimate(
-            temperatureCelsius: Float(temperatureCelsius),
-            frontLeftSeat: .off, frontRightSeat: .off,
-            rearLeftSeat: .off, rearRightSeat: .off, steeringWheel: .off
-        )
+        return AutomationCommandPolicy.SavedClimate(preferences: preferences).startCommand
     }
+
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var latestState: VehicleState?
@@ -870,10 +867,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func contextToggleClimate() {
-        onRemoteCommand(Self.climateCommand(
-            for: latestState,
-            temperatureCelsius: preferences.remoteClimateTemperature
-        ))
+        onRemoteCommand(Self.climateCommand(for: latestState, preferences: preferences))
     }
 
     @objc private func contextToggleWindows() {
