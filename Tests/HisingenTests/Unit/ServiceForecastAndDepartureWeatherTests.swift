@@ -396,7 +396,7 @@ struct ServiceForecastAndDepartureWeatherTests {
         #expect(!query.contains { $0.name == "hourly" })
     }
 
-    @Test("Forecast URL requests current conditions and two days of hourly readings in local time")
+    @Test("Forecast URL requests current conditions and two days of hourly Unix timestamps")
     func hourlyURLShape() throws {
         let url = try #require(OpenMeteoWeatherClient.hourlyForecastURL(latitude: 57.7089, longitude: 11.9746))
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
@@ -408,17 +408,22 @@ struct ServiceForecastAndDepartureWeatherTests {
                                             value: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation,snowfall,weather_code")))
         #expect(query.contains(URLQueryItem(name: "forecast_days", value: "2")))
         #expect(query.contains(URLQueryItem(name: "timezone", value: "auto")))
+        #expect(query.contains(URLQueryItem(name: "timeformat", value: "unixtime")))
         #expect(query.contains(URLQueryItem(name: "latitude", value: "57.71")))
         #expect(query.contains { $0.name == "current" })
     }
 
-    @Test("Hourly response is read in the vehicle's zone and skips null readings")
-    func hourlyResponseParsesWithOffset() throws {
+    @Test("Hourly timestamps stay aligned across the autumn clock change and null values")
+    func hourlyResponseParsesAcrossAutumnClockChange() throws {
         let json: [String: Any] = [
-            "utc_offset_seconds": 3_600,
+            "utc_offset_seconds": 7_200,
             "hourly": [
-                "time": ["2026-11-02T07:00", "2026-11-02T08:00", "2026-11-02T09:00"],
-                "temperature_2m": [-1.5, NSNull(), 2.0],
+                "time": [
+                    utcDate(2026, 10, 25, 0, 0).timeIntervalSince1970,
+                    utcDate(2026, 10, 25, 1, 0).timeIntervalSince1970,
+                    utcDate(2026, 10, 25, 2, 0).timeIntervalSince1970,
+                ],
+                "temperature_2m": [-1.5, 2.0, NSNull()],
                 "wind_speed_10m": [12.4, 8.1, 6.0],
                 "wind_gusts_10m": [27.1, NSNull(), 9.4],
                 "precipitation": [0.4, 0.0, NSNull()],
@@ -426,15 +431,15 @@ struct ServiceForecastAndDepartureWeatherTests {
         ]
         let hours = try #require(OpenMeteoWeatherClient.hourlyTemperatures(from: json))
         #expect(hours.count == 2)
-        #expect(hours[0].time == utcDate(2026, 11, 2, 6, 0))
+        #expect(hours[0].time == utcDate(2026, 10, 25, 0, 0))
         #expect(hours[0].temperatureCelsius == -1.5)
         #expect(hours[0].windSpeedKmh == 12.4)
         #expect(hours[0].windGustsKmh == 27.1)
         #expect(hours[0].precipitationMm == 0.4)
-        #expect(hours[1].time == utcDate(2026, 11, 2, 8, 0))
-        #expect(hours[1].windSpeedKmh == 6.0)
-        #expect(hours[1].windGustsKmh == 9.4)
-        #expect(hours[1].precipitationMm == nil)
+        #expect(hours[1].time == utcDate(2026, 10, 25, 1, 0))
+        #expect(hours[1].windSpeedKmh == 8.1)
+        #expect(hours[1].windGustsKmh == nil)
+        #expect(hours[1].precipitationMm == 0)
     }
 
     @Test("Hourly response carries snowfall and the weather code per hour")
@@ -442,7 +447,7 @@ struct ServiceForecastAndDepartureWeatherTests {
         let json: [String: Any] = [
             "utc_offset_seconds": 0,
             "hourly": [
-                "time": ["2026-11-02T07:00", "2026-11-02T08:00"],
+                "time": [utcDate(2026, 11, 2, 7, 0).timeIntervalSince1970, utcDate(2026, 11, 2, 8, 0).timeIntervalSince1970],
                 "temperature_2m": [-2.0, -1.0],
                 "snowfall": [0.4, NSNull()],
                 "weather_code": [71, 66],
@@ -460,7 +465,7 @@ struct ServiceForecastAndDepartureWeatherTests {
         let json: [String: Any] = [
             "utc_offset_seconds": 0,
             "hourly": [
-                "time": ["2026-11-02T07:00"],
+                "time": [utcDate(2026, 11, 2, 7, 0).timeIntervalSince1970],
                 "temperature_2m": [3.0],
             ],
         ]
