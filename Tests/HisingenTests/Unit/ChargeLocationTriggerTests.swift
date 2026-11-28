@@ -221,8 +221,8 @@ extension ChargeLocationTriggerTests {
     }
 
     fileprivate func trigger(_ event: LocationTrigger.Event, _ command: RemoteCommand,
-                             locationID: String? = nil) -> LocationTrigger {
-        LocationTrigger(event: event, locationID: locationID, command: command)
+                             locationID: String? = nil, targetVIN: String? = nil) -> LocationTrigger {
+        LocationTrigger(event: event, locationID: locationID, command: command, targetVIN: targetVIN)
     }
 
     /// A snapshot as the merge produces it: the position and the saved locations are what the
@@ -236,6 +236,41 @@ extension ChargeLocationTriggerTests {
             fetchedAt: presenceTimestamp)
         state.energy.locations = locations
         return state.mergingLastKnown(from: nil, features: .default)
+    }
+
+    @Test
+    func triggerTargetVINFiltersByVehicleAndForwardsDestinationVIN() async throws {
+        let scoped = ScopedPreferences(label: "TriggerTargetVIN")
+        scoped.store.locationTriggers = [
+            LocationTrigger(event: .arrival, locationID: "home", command: .lock, targetVIN: "VIN-TARGET"),
+            LocationTrigger(event: .arrival, locationID: "home", command: .startChargingOverride)
+        ]
+        let captured = LockedVINCommands()
+        let controller = ChargeLocationTriggerController(preferences: scoped.store) { command, vin in
+            captured.append(command: command, vin: vin)
+            return .sent
+        }
+
+        // Legacy JSON without targetVIN still decodes with nil targetVIN.
+        let legacyJSON = Data(#"{"id":"00000000-0000-0000-0000-000000000001","event":"arrival","command":{"lock":{}},"isEnabled":true}"#.utf8)
+        let decodedLegacy = try JSONDecoder().decode(LocationTrigger.self, from: legacyJSON)
+        #expect(decodedLegacy.targetVIN == nil)
+
+        var awayA = vehicle(vin: "VIN-TARGET", battery: 60)
+        awayA.chargeLocationPresence = nil
+        var awayB = vehicle(vin: "VIN-OTHER", battery: 60)
+        awayB.chargeLocationPresence = nil
+        await controller.vehicleStateDidUpdate(awayA)
+        await controller.vehicleStateDidUpdate(awayB)
+
+        var homeB = awayB
+        homeB.chargeLocationPresence = ChargeLocationPresence(locationID: "home", alias: "Home", since: Date(), source: .proximity)
+        await controller.vehicleStateDidUpdate(homeB)
+
+        // Only the unpinned trigger fires for VIN-OTHER, forwarding VIN-OTHER cleanly.
+        let items = captured.items
+        #expect(items.count == 1)
+        #expect(items.first?.vin == "VIN-OTHER")
     }
 }
 
@@ -263,4 +298,10 @@ private final class TriggerHarness {
 @MainActor
 private final class TriggerSentBox {
     var commands: [RemoteCommand] = []
+}
+
+@MainActor
+private final class LockedVINCommands {
+    var items: [(command: RemoteCommand, vin: String?)] = []
+    func append(command: RemoteCommand, vin: String?) { items.append((command, vin)) }
 }

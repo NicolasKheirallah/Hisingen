@@ -46,6 +46,7 @@ final class ChargingPlannerController {
     private let priceSource: any ChargingPlannerPriceSource
     private let chargingLedger: ChargingSessionLedger
     private let latestState: () -> VehicleState?
+    private let stateForVIN: (String) -> VehicleState?
     private let activeVINs: () -> [String]
     private let startCharging: (String) async -> RemoteCommandDispatchOutcome
     private let stopCharging: (String) async -> RemoteCommandDispatchOutcome
@@ -90,6 +91,7 @@ final class ChargingPlannerController {
         priceSource: (any ChargingPlannerPriceSource)? = nil,
         database: VehicleDatabase,
         latestState: @escaping () -> VehicleState?,
+        stateForVIN: @escaping (String) -> VehicleState? = { _ in nil },
         plannerOwnedByHomeAssistant: @escaping (String) -> Bool = { _ in false },
         activeVINs: @escaping () -> [String],
         startCharging: @escaping (String) async -> RemoteCommandDispatchOutcome,
@@ -103,6 +105,7 @@ final class ChargingPlannerController {
         self.priceSource = priceSource ?? priceService
         self.chargingLedger = database.charging
         self.latestState = latestState
+        self.stateForVIN = stateForVIN
         self.activeVINs = activeVINs
         self.startCharging = startCharging
         self.stopCharging = stopCharging
@@ -163,7 +166,7 @@ final class ChargingPlannerController {
 
         let zone = preferences.electricityPriceZone
         let evaluationGeneration = generation
-        let initialVIN = latestState()?.identity.vin
+        let initialVIN = targetVehicleState()?.identity.vin ?? preferences.plannerTargetVIN
         // This call performs the once-a-day fetch when the cache is stale, and returns
         // from the persisted series otherwise.
         let prices = await priceSource.prices(for: zone)
@@ -187,18 +190,23 @@ final class ChargingPlannerController {
             return
         }
 
-        guard let state = latestState() else {
-            sleepPrevention.release()
+        let currentDate = now()
+        reconcileCommittedWindows(now: currentDate, generation: evaluationGeneration, zone: zone,
+                                extraVIN: initialVIN)
+
+        guard let state = targetVehicleState() else {
+            let activeCommitted = firstActiveCommittedWindow(now: currentDate, extraVIN: initialVIN)
+            updateSleepPrevention(window: activeCommitted)
             return
         }
         // Home Assistant owns this car's charging: no window banner, no auto-start and no
         // assertion from this Mac.
         guard !plannerOwnedByHomeAssistant(state.identity.vin) else {
-            sleepPrevention.release()
+            let activeCommitted = firstActiveCommittedWindow(now: currentDate, extraVIN: state.identity.vin)
+            updateSleepPrevention(window: activeCommitted)
             return
         }
         let vin = state.identity.vin
-        let currentDate = now()
         var committedWindow = preferences.plannerWindow(for: vin)
 
         // The end of the window the planner started is fixed, so a car that charges slower than
@@ -237,7 +245,8 @@ final class ChargingPlannerController {
             refusedStarts[vin] = nil
             refusedStops[vin] = nil
             gaveUpStartsUntil[vin] = nil
-            sleepPrevention.release()
+            let activeCommitted = firstActiveCommittedWindow(now: currentDate, extraVIN: vin)
+            updateSleepPrevention(window: activeCommitted)
             return
         }
 
@@ -249,7 +258,8 @@ final class ChargingPlannerController {
         guard let plan = ChargingPlanner.cheapestWindow(
             prices: prices, now: currentDate, energyKwh: energyKwh, chargerPowerKw: powerKw
         ) else {
-            sleepPrevention.release()
+            let activeCommitted = firstActiveCommittedWindow(now: currentDate, extraVIN: vin)
+            updateSleepPrevention(window: activeCommitted)
             return
         }
 
@@ -404,7 +414,7 @@ final class ChargingPlannerController {
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.stopInFlight[vin] = nil }
-            guard self.isCurrent(generation, zone: zone, vin: vin),
+            guard self.isCurrentForWindowEnd(generation, zone: zone),
                   !self.plannerOwnedByHomeAssistant(vin) else { return }
             let outcome = await self.stopCharging(vin)
             AppLog.logger("elpriser").notice("Planner window-end stop outcome: \(String(describing: outcome), privacy: .public)")
@@ -444,9 +454,77 @@ final class ChargingPlannerController {
         sleepPrevention.hold(reason: SleepPrevention.assertionReason)
     }
 
+    private func targetVehicleState() -> VehicleState? {
+        if let target = preferences.plannerTargetVIN, !target.isEmpty {
+            if let direct = stateForVIN(target) { return direct }
+            if let latest = latestState(), latest.identity.vin.normalizedVIN == target {
+                return latest
+            }
+            return nil
+        }
+        return latestState()
+    }
+
+    private func windowState(for vin: String) -> VehicleState? {
+        let normalized = vin.normalizedVIN
+        if let latest = latestState(), latest.identity.vin.normalizedVIN == normalized {
+            return latest
+        }
+        return stateForVIN(normalized)
+    }
+
+    private func reconcileCommittedWindows(
+        now currentDate: Date, generation: Int, zone: ElspotZone, extraVIN: String?
+    ) {
+        let candidates = Set(activeVINs().map(\.normalizedVIN) + [extraVIN?.normalizedVIN].compactMap { $0 })
+            .filter { !$0.isEmpty }
+        for candidateVIN in candidates {
+            guard let window = preferences.plannerWindow(for: candidateVIN) else { continue }
+            if let candidateState = windowState(for: candidateVIN),
+               ChargingPlannerDecisions.shouldStopChargingAtWindowEnd(
+                   window: window,
+                   now: currentDate,
+                   connection: candidateState.energy.connection,
+                   chargingState: candidateState.energy.chargingState
+               ) {
+                stopChargingAtWindowEnd(vin: candidateState.identity.vin, generation: generation, zone: zone)
+            } else if currentDate >= window.end {
+                let isChargingLatest = windowState(for: candidateVIN)?.isCharging == true
+                if !isChargingLatest {
+                    preferences.setPlannerWindow(nil, for: candidateVIN)
+                    autoStartedWindowStarts[candidateVIN] = nil
+                    refusedStops[candidateVIN] = nil
+                }
+            }
+        }
+    }
+
+    private func firstActiveCommittedWindow(now currentDate: Date, extraVIN: String?) -> DateInterval? {
+        let candidates = Set(activeVINs().map(\.normalizedVIN) + [extraVIN?.normalizedVIN].compactMap { $0 })
+            .filter { !$0.isEmpty }
+        for candidateVIN in candidates {
+            if let window = preferences.plannerWindow(for: candidateVIN), window.end > currentDate {
+                return window
+            }
+        }
+        return nil
+    }
+
+    private func isCurrentForWindowEnd(_ generation: Int, zone: ElspotZone) -> Bool {
+        !Task.isCancelled && self.generation == generation
+            && preferences.smartChargingPlannerAvailable
+            && preferences.electricityPriceZone == zone
+    }
+
     private func isCurrent(_ generation: Int, zone: ElspotZone, vin: String?) -> Bool {
-        !Task.isCancelled && self.generation == generation && preferences.smartChargingPlannerAvailable
-            && preferences.electricityPriceZone == zone && latestState()?.identity.vin == vin
+        guard !Task.isCancelled && self.generation == generation && preferences.smartChargingPlannerAvailable
+            && preferences.electricityPriceZone == zone else {
+            return false
+        }
+        if let configured = preferences.plannerTargetVIN, !configured.isEmpty {
+            return configured == vin?.normalizedVIN
+        }
+        return latestState()?.identity.vin == vin
     }
 
     // MARK: - Market-price backfill

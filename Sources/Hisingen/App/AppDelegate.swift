@@ -166,20 +166,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         )
         scheduledCommands = ScheduledCommandController(
             preferences: preferences,
-            send: { [weak self] command in
+            send: { [weak self] command, targetVIN in
                 guard let self else {
                     return .failed(reason: L10n.text("Hisingen is no longer running."))
                 }
-                return await self.sendAutomationCommand(command, to: nil)
+                return await self.sendAutomationCommand(command, to: targetVIN)
             }
         )
         locationTriggers = ChargeLocationTriggerController(
             preferences: preferences,
-            send: { [weak self] command in
+            send: { [weak self] command, targetVIN in
                 guard let self else {
                     return .failed(reason: L10n.text("Hisingen is no longer running."))
                 }
-                return await self.sendAutomationCommand(command, to: nil)
+                return await self.sendAutomationCommand(command, to: targetVIN)
             }
         )
         fleetBroadcaster = FleetCommandBroadcaster(
@@ -193,11 +193,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         )
         calendarPreconditioning = CalendarPreconditioningController(
             preferences: preferences,
-            sendClimateStart: { [weak self] in
+            sendClimateStart: { [weak self] targetVIN in
                 guard let self else {
                     return .deferred(reason: L10n.text("Hisingen is no longer running."))
                 }
-                return await self.startCalendarClimate()
+                return await self.startCalendarClimate(targetVIN: targetVIN)
             }
         )
         // Tibber first when connected, Elpriser when it is not or cannot answer.
@@ -211,6 +211,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             priceSource: PlannerPriceProvider.shared,
             database: vehicleDatabase,
             latestState: { [weak self] in self?.vehicleSession.latest },
+            stateForVIN: { [weak self] vin in
+                guard let self else { return nil }
+                let normalized = vin.normalizedVIN
+                if let latest = self.vehicleSession.latest,
+                   latest.identity.vin.normalizedVIN == normalized {
+                    return latest
+                }
+                return self.fleetStore.snapshot(for: normalized)
+            },
             // While Home Assistant runs a plan for the car, the vehicle-side scheduler waits.
             plannerOwnedByHomeAssistant: { [weak self] vin in self?.homeCharging.ownsPlan(for: vin) ?? false },
             activeVINs: { [preferences] in

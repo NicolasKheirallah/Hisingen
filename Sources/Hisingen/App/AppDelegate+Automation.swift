@@ -1,16 +1,23 @@
 import Foundation
 
 extension AppDelegate {
-    func startCalendarClimate() async -> RemoteCommandDispatchOutcome {
+    func startCalendarClimate(targetVIN: String? = nil) async -> RemoteCommandDispatchOutcome {
         // Don't attempt (and don't spend a "Command not sent" banner) when the user has
         // turned the remote-climate feature off. Capability/session gating still happens
         // inside `CommandCoordinator`.
         guard preferences.features.contains(.remoteClimate) else {
             return .refused(reason: RemoteCommandError.disabled.localizedDescription)
         }
+        let expectedVIN = targetVIN?.normalizedVIN
+        if let expectedVIN, !expectedVIN.isEmpty {
+            guard await vehicleSession.prepareVehicle(vin: expectedVIN) else {
+                return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
+            }
+        }
         return await commandCoordinator.perform(
             AutomationCommandPolicy.SavedClimate(preferences: preferences).startCommand,
-            origin: .automation)
+            origin: .automation,
+            expectedVIN: (expectedVIN?.isEmpty == false) ? expectedVIN : nil)
     }
 
     /// The planner's unattended start-charging path. Guarded on the remote-charging
@@ -21,11 +28,14 @@ extension AppDelegate {
         guard preferences.features.contains(.remoteCharging) else {
             return .refused(reason: RemoteCommandError.disabled.localizedDescription)
         }
-        guard !targetVIN.isEmpty, let currentVIN = vehicleSession.latest?.identity.vin,
-              currentVIN.caseInsensitiveCompare(targetVIN) == .orderedSame else {
+        let vin = targetVIN.normalizedVIN
+        guard !vin.isEmpty, await vehicleSession.prepareVehicle(vin: vin) else {
             return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
         }
-        return await commandCoordinator.perform(.startChargingOverride, origin: .automation)
+        return await commandCoordinator.perform(
+            .startChargingOverride,
+            origin: .automation,
+            expectedVIN: vin)
     }
 
     /// The planner's unattended stop at the end of the window it started. Same consent and same
@@ -35,11 +45,14 @@ extension AppDelegate {
         guard preferences.features.contains(.remoteCharging) else {
             return .refused(reason: RemoteCommandError.disabled.localizedDescription)
         }
-        guard !targetVIN.isEmpty, let currentVIN = vehicleSession.latest?.identity.vin,
-              currentVIN.caseInsensitiveCompare(targetVIN) == .orderedSame else {
+        let vin = targetVIN.normalizedVIN
+        guard !vin.isEmpty, await vehicleSession.prepareVehicle(vin: vin) else {
             return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
         }
-        return await commandCoordinator.perform(.stopChargingOverride, origin: .automation)
+        return await commandCoordinator.perform(
+            .stopChargingOverride,
+            origin: .automation,
+            expectedVIN: vin)
     }
 }
 

@@ -2,10 +2,8 @@ import Foundation
 
 /// One action the reader scheduled for a wall-clock time on chosen weekdays.
 ///
-/// A schedule belongs to the install rather than to a VIN: it names the action, not the car, and
-/// fires against whichever vehicle is active – the same rule the calendar preconditioning card
-/// follows. That keeps a schedule from pinning a car the reader later sells, and from silently
-/// stopping when they switch vehicles for an evening.
+/// `targetVIN` scopes the schedule to one vehicle; `nil` keeps legacy behavior of targeting the
+/// active vehicle when no specific VIN was chosen.
 struct ScheduledCommand: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     /// Wall-clock hour and minute in the Mac's current time zone.
@@ -15,15 +13,35 @@ struct ScheduledCommand: Codable, Equatable, Identifiable, Sendable {
     var weekdays: Set<Int>
     var command: RemoteCommand
     var isEnabled: Bool
+    var targetVIN: String? = nil
 
     init(id: UUID = UUID(), hour: Int, minute: Int, weekdays: Set<Int> = [],
-         command: RemoteCommand, isEnabled: Bool = true) {
+         command: RemoteCommand, isEnabled: Bool = true, targetVIN: String? = nil) {
         self.id = id
         self.hour = min(max(hour, 0), 23)
         self.minute = min(max(minute, 0), 59)
         self.weekdays = Self.sanitized(weekdays)
         self.command = command
         self.isEnabled = isEnabled
+        let normalized = targetVIN?.normalizedVIN
+        self.targetVIN = (normalized?.isEmpty == false) ? normalized : nil
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, hour, minute, weekdays, command, isEnabled, targetVIN
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(UUID.self, forKey: .id),
+            hour: try c.decode(Int.self, forKey: .hour),
+            minute: try c.decode(Int.self, forKey: .minute),
+            weekdays: try c.decode(Set<Int>.self, forKey: .weekdays),
+            command: try c.decode(RemoteCommand.self, forKey: .command),
+            isEnabled: try c.decode(Bool.self, forKey: .isEnabled),
+            targetVIN: try c.decodeIfPresent(String.self, forKey: .targetVIN)
+        )
     }
 
     /// A stored entry can carry anything a hand-edited defaults file or an older build wrote;
@@ -33,6 +51,8 @@ struct ScheduledCommand: Codable, Equatable, Identifiable, Sendable {
         copy.hour = min(max(hour, 0), 23)
         copy.minute = min(max(minute, 0), 59)
         copy.weekdays = Self.sanitized(weekdays)
+        let normalized = targetVIN?.normalizedVIN
+        copy.targetVIN = (normalized?.isEmpty == false) ? normalized : nil
         return copy
     }
 

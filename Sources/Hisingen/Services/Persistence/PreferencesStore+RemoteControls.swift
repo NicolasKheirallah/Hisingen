@@ -16,4 +16,19 @@ extension PreferencesStore {
     var calendarPreconditioningLeadTimeMinutes: Int { get { let value = d.integer(forKey: "calendar_preconditioning_lead_minutes_v1"); return [5, 10, 15, 20, 30, 45, 60].contains(value) ? value : 20 } set { d.set(min(max(newValue, 1), 120), forKey: "calendar_preconditioning_lead_minutes_v1") } }
     var calendarPreconditioningCalendarIDs: Set<String> { get { Set(d.stringArray(forKey: "calendar_preconditioning_calendar_ids_v1") ?? []) } set { d.set(Array(newValue).sorted(), forKey: "calendar_preconditioning_calendar_ids_v1") } }
     var calendarPreconditioningFiredOccurrences: [String: Double] { get { d.dictionary(forKey: "calendar_preconditioning_fired_v1") as? [String: Double] ?? [:] } set { d.set(newValue, forKey: "calendar_preconditioning_fired_v1") } }
+    var calendarPreconditioningTargetVIN: String? {
+        get {
+            guard let raw = d.string(forKey: "calendar_preconditioning_target_vin_v1")?.normalizedVIN,
+                  !raw.isEmpty else { return nil }
+            return raw
+        }
+        set {
+            let normalized = newValue?.normalizedVIN
+            if let normalized, !normalized.isEmpty {
+                d.set(normalized, forKey: "calendar_preconditioning_target_vin_v1")
+            } else {
+                d.removeObject(forKey: "calendar_preconditioning_target_vin_v1")
+            }
+        }
+    }
 }
