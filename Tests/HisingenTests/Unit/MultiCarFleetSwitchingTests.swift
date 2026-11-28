@@ -211,6 +211,16 @@ struct MultiCarFleetSwitchingTests {
 
         let resolvedNickname = AutomationHandoff.resolveVIN(from: "Swedish Wagon", preferences: preferences)
         #expect(resolvedNickname == Self.volvoVin1)
+
+        preferences.rememberKnownVINs([Self.volvoVin1, Self.volvoVin2], for: .volvo)
+        preferences.setVehicleNickname("My Swedish Saloon", for: Self.volvoVin2)
+        let stateStore = VehicleStateStore(database: .inMemory())
+        #expect(AutomationHandoff.resolveVIN(from: Self.volvoVin2, preferences: preferences,
+                                             stateStore: stateStore) == Self.volvoVin2)
+        #expect(AutomationHandoff.resolveVIN(from: "Saloon", preferences: preferences,
+                                             stateStore: stateStore) == Self.volvoVin2)
+        #expect(AutomationHandoff.resolveVIN(from: "Swedish", preferences: preferences,
+                                             stateStore: stateStore) == nil)
     }
 
     @Test
