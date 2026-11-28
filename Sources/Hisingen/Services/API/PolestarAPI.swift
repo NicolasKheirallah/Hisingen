@@ -655,7 +655,17 @@ actor PolestarAPI {
     /// no longer holds that token, another caller's grant already replaced it, which closes the
     /// late-arrival race where a fan-out of 401 responses could each force a separate refresh
     /// after the original single-flight grant completed.
-    func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil) async throws {
+    func explicitRestoreBaseline(for refreshToken: String) throws -> TokenLifecycle.ExplicitRestore? {
+        let durable = try keychain.readFreshSessionToken()
+        return durable == refreshToken ? nil : .init(previousDurableToken: durable)
+    }
+
+    func markStoredRefreshCredential() {
+        tokens.markRefreshCredentialDurable()
+    }
+
+    func refreshAccessToken(force: Bool, replacing rejectedAccessToken: String? = nil,
+                            explicitRestore: TokenLifecycle.ExplicitRestore? = nil) async throws {
         let requestEpoch = sessionEpoch
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedAccessToken)
@@ -668,7 +678,7 @@ actor PolestarAPI {
         let currentSession = session
         let diagnosticLog = diagnosticLog
         let outcome = try await tokens.refresh(
-            reason, now: now(),
+            reason, now: now(), explicitRestore: explicitRestore,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
                 guard let endpoint, let refresh = lifecycle.refreshToken else {
@@ -711,9 +721,13 @@ actor PolestarAPI {
     /// In-flight authorization work is deliberately not cancelled: `commandClientAuthorization`
     /// still resolves its own outcome from current storage.
     func discardDeadRefreshToken() async {
+        let rejected = tokens.refreshToken
         tokens.reset()
-        // A failed delete leaves the dead token readable, so it is logged loudly rather than dropped.
-        do { try keychain.deleteSessionToken() } catch {
+        do {
+            if let rejected, try keychain.readFreshSessionToken() == rejected {
+                try keychain.deleteSessionToken()
+            }
+        } catch {
             logger.error("Polestar dead session token could not be deleted from Keychain: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)")
         }
         // `PreferencesStore.hasResumableSession` memoises a per-brand answer. Without this the
@@ -792,10 +806,8 @@ actor PolestarAPI {
 
     func preserveConsumerRotation(_ rotated: String, replacing previous: String, epoch: Int) throws {
         try requireSession(epoch)
-        guard refreshToken == previous else { throw CancellationError() }
-        refreshToken = rotated
-        do { try saveSessionToken(rotated) }
-        catch { logger.error("Polestar rotated refresh token could not be persisted") }
+        do { try tokens.persistEarlyRotation(rotated, replacing: previous, persist: saveSessionToken) }
+        catch is KeychainError { logger.error("Polestar rotated refresh token could not be persisted") }
     }
 
     /// The diagnostic-log form of the OAuth `error` code; see `OAuthErrorBody`.

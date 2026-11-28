@@ -707,6 +707,28 @@ extension TokenLifecycleTests {
         #expect(try keychain.readFreshSessionToken() == "other-refresh")
     }
 
+    @Test func sharedRefreshDoesNotRestoreADeletedCredential() async throws {
+        let keychain = KeychainStore(service: "io.kheirallah.hisingen.tests.\(UUID().uuidString)")
+        let lifecycle = TokenLifecycle(
+            policy: .init(renewalMargin: { _ in 60 }),
+            providerName: "signed-out-account",
+            persist: { try keychain.saveSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarSession),
+            isDeadGrant: { _ in false }
+        )
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try lifecycle.adopt(.init(accessToken: "a1", refreshToken: "r1", expiresIn: 1800), now: now)
+        try keychain.deleteSessionToken()
+
+        await #expect(throws: TokenLifecycle.SharedCredentialError.replaced) {
+            try await lifecycle.refresh(.serverRefused(rejectedToken: "a1"), now: now, epochIsCurrent: { true }) {
+                Issue.record("A grant was attempted after sign-out.")
+                return .init(accessToken: "unexpected-access", refreshToken: "unexpected-refresh", expiresIn: 1800)
+            }
+        }
+        #expect(try keychain.readFreshSessionToken() == nil)
+    }
+
     @Test func sharedRefreshDoesNotOverwriteCredentialChangedDuringGrant() async throws {
         let service = "io.kheirallah.hisingen.tests.\(UUID().uuidString)"
         let keychain = KeychainStore(service: service)

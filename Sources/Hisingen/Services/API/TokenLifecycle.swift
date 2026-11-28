@@ -104,6 +104,10 @@ final class TokenLifecycle: @unchecked Sendable {
         case replaced
     }
 
+    struct ExplicitRestore: Sendable {
+        let previousDurableToken: String?
+    }
+
     enum RefreshStepResult: Sendable {
         case minted(Grant, baseGeneration: UInt64)
         case alreadyAdopted
@@ -127,6 +131,8 @@ final class TokenLifecycle: @unchecked Sendable {
     private var storedTokenLifetime: TimeInterval = 0
     private var storedGeneration: UInt64 = 0
     private var storedPreviousRefreshTokenHashes: [Data] = []
+    private var requiresDurableRefresh = false
+    private var grantStorage: (id: UUID, expectedToken: String?)?
     private static let refreshTokenHistoryLimit = 8
     private var lastGrantAt: Date?
     /// The most recent grants that were applied, newest last. A caller that joined a grant and
@@ -203,6 +209,7 @@ final class TokenLifecycle: @unchecked Sendable {
             storedTokenExpiry = session.expiresAt
             storedGeneration = max(storedGeneration, session.generation)
             storedPreviousRefreshTokenHashes = session.previousRefreshTokenHashes ?? []
+            requiresDurableRefresh = true
             return true
         }
     }
@@ -211,6 +218,7 @@ final class TokenLifecycle: @unchecked Sendable {
     func refresh(
         _ reason: Reason,
         now: Date = Date(),
+        explicitRestore: ExplicitRestore? = nil,
         epochIsCurrent: @escaping @Sendable () async -> Bool,
         grant: @escaping @Sendable () async throws -> Grant
     ) async throws -> Outcome {
@@ -229,6 +237,7 @@ final class TokenLifecycle: @unchecked Sendable {
             let knownGeneration = storedGeneration
             let knownRefresh = storedRefreshToken
             let knownRefreshHistory = storedPreviousRefreshTokenHashes
+            let needsDurableRefresh = requiresDurableRefresh
             let entry = (id: id, task: Task {
                 try await self.executeGrant(
                     entryID: id,
@@ -237,6 +246,8 @@ final class TokenLifecycle: @unchecked Sendable {
                     knownGeneration: knownGeneration,
                     knownRefresh: knownRefresh,
                     knownRefreshHistory: knownRefreshHistory,
+                    needsDurableRefresh: needsDurableRefresh,
+                    explicitRestore: explicitRestore,
                     epochIsCurrent: epochIsCurrent,
                     grant: grant
                 )
@@ -268,6 +279,8 @@ final class TokenLifecycle: @unchecked Sendable {
         knownGeneration: UInt64,
         knownRefresh: String?,
         knownRefreshHistory: [Data],
+        needsDurableRefresh: Bool,
+        explicitRestore: ExplicitRestore?,
         epochIsCurrent: @escaping @Sendable () async -> Bool,
         grant: @escaping @Sendable () async throws -> Grant
     ) async throws -> RefreshStepResult {
@@ -278,8 +291,13 @@ final class TokenLifecycle: @unchecked Sendable {
             let freshRefresh = try sharedStore.readRefreshToken()
             let freshSession = try? sharedStore.readSession()
             let matchingSession = freshSession.flatMap { $0.refreshToken == freshRefresh ? $0 : nil }
+            let explicitBaselineUnchanged = explicitRestore.map { $0.previousDurableToken == freshRefresh } == true
+            if freshRefresh == nil, !explicitBaselineUnchanged,
+               needsDurableRefresh || explicitRestore != nil {
+                throw SharedCredentialError.replaced
+            }
             let replacementRefresh: String?
-            if let freshRefresh, freshRefresh != knownRefresh {
+            if let freshRefresh, freshRefresh != knownRefresh, !explicitBaselineUnchanged {
                 if let knownRefresh, let matchingSession, Self.continuesCredential(matchingSession, from: knownRefresh) {
                     replacementRefresh = freshRefresh
                 } else if knownRefreshHistory.contains(Self.refreshTokenHash(freshRefresh)) {
@@ -314,25 +332,28 @@ final class TokenLifecycle: @unchecked Sendable {
                 if let matchingSession, matchingSession.refreshToken == self.storedRefreshToken {
                     self.storedPreviousRefreshTokenHashes = matchingSession.previousRefreshTokenHashes ?? []
                 }
+                if freshRefresh != nil, !explicitBaselineUnchanged { self.requiresDurableRefresh = true }
+                self.grantStorage = (entryID, freshRefresh)
                 return true
             }
             guard ready else { throw CancellationError() }
+            defer {
+                self.locked {
+                    if self.grantStorage?.id == entryID { self.grantStorage = nil }
+                }
+            }
             let baseGeneration = max(knownGeneration, matchingSession?.generation ?? 0)
             let obtained: Grant
             do {
                 obtained = try await grant()
             } catch {
-                if self.isDeadGrant(error), try sharedStore.readRefreshToken() != freshRefresh {
-                    throw SharedCredentialError.replaced
-                }
+                if self.isDeadGrant(error) { try self.checkGrantStorage(entryID: entryID, sharedStore: sharedStore) }
                 throw error
             }
             // Persist the rotated refresh token and SharedOAuthSession before releasing the
             // cross-process lock so another process waking on the lock sees the updated grant.
             let current = await epochIsCurrent()
-            guard try sharedStore.readRefreshToken() == freshRefresh else {
-                throw SharedCredentialError.replaced
-            }
+            try self.checkGrantStorage(entryID: entryID, sharedStore: sharedStore)
             guard self.adoptIfCurrent(
                 obtained,
                 entryID: entryID,
@@ -343,6 +364,47 @@ final class TokenLifecycle: @unchecked Sendable {
                 throw CancellationError()
             }
             return .alreadyAdopted
+        }
+    }
+
+    private func checkGrantStorage(entryID: UUID, sharedStore: SharedSessionStore) throws {
+        guard let storage = locked({ grantStorage }), storage.id == entryID else { throw CancellationError() }
+        guard try sharedStore.readRefreshToken() == storage.expectedToken else {
+            throw SharedCredentialError.replaced
+        }
+    }
+
+    func markRefreshCredentialDurable() {
+        locked { requiresDurableRefresh = true }
+    }
+
+    /// Retains a rotated credential before secondary verification, which may fail independently.
+    func persistEarlyRotation(_ rotated: String, replacing previous: String,
+                              persist save: (String) throws -> Void) throws {
+        try locked {
+            guard storedRefreshToken == previous else { throw CancellationError() }
+            if let sharedStore {
+                guard let grantStorage, grantStorage.id == inFlight?.id else { throw CancellationError() }
+                guard try sharedStore.readRefreshToken() == grantStorage.expectedToken else {
+                    throw SharedCredentialError.replaced
+                }
+                if rotated != previous { rememberRefreshToken(previous) }
+            }
+            storedRefreshToken = rotated
+            try save(rotated)
+            if sharedStore != nil {
+                grantStorage?.expectedToken = rotated
+                requiresDurableRefresh = true
+            }
+        }
+    }
+
+    private func rememberRefreshToken(_ token: String) {
+        let hash = Self.refreshTokenHash(token)
+        storedPreviousRefreshTokenHashes.removeAll { $0 == hash }
+        storedPreviousRefreshTokenHashes.insert(hash, at: 0)
+        if storedPreviousRefreshTokenHashes.count > Self.refreshTokenHistoryLimit {
+            storedPreviousRefreshTokenHashes.removeLast()
         }
     }
 
@@ -448,6 +510,7 @@ final class TokenLifecycle: @unchecked Sendable {
             storedTokenExpiry = session.expiresAt
             storedGeneration = max(storedGeneration, session.generation)
             storedPreviousRefreshTokenHashes = session.previousRefreshTokenHashes ?? []
+            requiresDurableRefresh = true
             lastGrantAt = now
             return true
         }
@@ -474,14 +537,13 @@ final class TokenLifecycle: @unchecked Sendable {
             storedGeneration = nextGeneration
             lastGrantAt = now
             if let renewable, renewable != previous {
-                if sharedStore != nil, let previous {
-                    let hash = Self.refreshTokenHash(previous)
-                    storedPreviousRefreshTokenHashes.removeAll { $0 == hash }
-                    storedPreviousRefreshTokenHashes.insert(hash, at: 0)
-                    storedPreviousRefreshTokenHashes = Array(storedPreviousRefreshTokenHashes.prefix(Self.refreshTokenHistoryLimit))
+                if sharedStore != nil, let previous { rememberRefreshToken(previous) }
+                do {
+                    try persist(renewable)
+                    if sharedStore != nil { requiresDurableRefresh = true }
+                } catch {
+                    logger.error("\(self.providerName, privacy: .public) refresh token persistence failed")
                 }
-                do { try persist(renewable) }
-                catch { logger.error("\(self.providerName, privacy: .public) refresh token persistence failed") }
             }
             if let sharedStore, !grant.accessToken.isEmpty {
                 let shared = StoredOAuthSession(
@@ -515,6 +577,7 @@ final class TokenLifecycle: @unchecked Sendable {
             let generation = max(storedGeneration, externalGeneration) &+ 1
             storedGeneration = generation
             storedPreviousRefreshTokenHashes = []
+            requiresDurableRefresh = false
             lastGrantAt = now
             return (renewable, previous, generation)
         }
@@ -528,6 +591,11 @@ final class TokenLifecycle: @unchecked Sendable {
             }
         }
         if let sharedStore, !grant.accessToken.isEmpty {
+            if let renewableToken, (try? sharedStore.readRefreshToken()) == renewableToken {
+                locked {
+                    if storedRefreshToken == renewableToken { requiresDurableRefresh = true }
+                }
+            }
             let shared = StoredOAuthSession(
                 accessToken: grant.accessToken,
                 refreshToken: renewableToken ?? "",
@@ -593,6 +661,7 @@ final class TokenLifecycle: @unchecked Sendable {
             storedRefreshToken = nil
             storedGeneration = 0
             storedPreviousRefreshTokenHashes = []
+            requiresDurableRefresh = false
         }
         return cancelled
     }
@@ -610,9 +679,9 @@ final class TokenLifecycle: @unchecked Sendable {
         task?.cancel()
     }
 
-    private func locked<T>(_ body: () -> T) -> T {
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
         lock.lock()
         defer { lock.unlock() }
-        return body()
+        return try body()
     }
 }

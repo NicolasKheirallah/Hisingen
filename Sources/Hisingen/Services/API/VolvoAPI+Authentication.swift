@@ -88,10 +88,11 @@ extension VolvoAPI {
         guard let token = try keychain.readFreshVolvoSessionToken(), !token.isEmpty else {
             throw VolvoError.authenticationRequired(.noStoredSession)
         }
-        try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)
+        try await restoreSession(token: token, preferredVIN: preferredVIN, features: features, fromKeychain: true)
     }
 
-    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection) async throws {
+    func restoreSession(token: String, preferredVIN: String?, features: FeatureSelection,
+                        fromKeychain: Bool = false) async throws {
         guard !token.isEmpty else { throw VolvoError.authenticationRequired(.noStoredSession) }
         guard isConfigured else { throw VolvoError.appNotConfigured }
         // A refresh token belongs to the sign-in system and client that issued it. One from the
@@ -100,19 +101,21 @@ extension VolvoAPI {
         // saved before this was recorded came from the original system.
         let issuer = await MainActor.run { preferences.volvoSessionIdentity }
         if issuer != identityProvider {
-            await discardDeadRefreshToken()
+            await discardDeadRefreshToken(rejected: token)
             throw VolvoError.authenticationRequired(.signInSystemChanged)
         }
         // Hydrate any valid shared access session persisted by another Hisingen process before
         // forcing a refresh grant on cold start (coordinates CLI <-> menu-bar app custody).
+        let explicitRestore = fromKeychain ? nil : try explicitRestoreBaseline(for: token)
         let hydrated = hydrateStoredSessionIfValid(expectedRefreshToken: token)
         let isLiveGrant = hydrated || (accessToken != nil && refreshToken == token)
         if !hydrated {
             refreshToken = token
         }
+        if fromKeychain { markStoredRefreshCredential() }
         if !isLiveGrant {
             do {
-                try await refreshAccessToken(force: true)
+                try await refreshAccessToken(force: true, explicitRestore: explicitRestore)
             } catch let error as VolvoError where error.requiresAuthentication {
                 refreshToken = nil
                 throw error

@@ -522,7 +522,17 @@ actor VolvoAPI {
         try await refreshAccessToken(force: false)
     }
 
-    func refreshAccessToken(force: Bool, replacing rejectedToken: String? = nil) async throws {
+    func explicitRestoreBaseline(for refreshToken: String) throws -> TokenLifecycle.ExplicitRestore? {
+        let durable = try keychain.readFreshVolvoSessionToken()
+        return durable == refreshToken ? nil : .init(previousDurableToken: durable)
+    }
+
+    func markStoredRefreshCredential() {
+        tokens.markRefreshCredentialDurable()
+    }
+
+    func refreshAccessToken(force: Bool, replacing rejectedToken: String? = nil,
+                            explicitRestore: TokenLifecycle.ExplicitRestore? = nil) async throws {
         let requestEpoch = sessionEpoch
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedToken)
@@ -533,7 +543,7 @@ actor VolvoAPI {
         let lifecycle = tokens
         let tokenURL = identityProvider.tokenURL
         let outcome = try await tokens.refresh(
-            reason,
+            reason, explicitRestore: explicitRestore,
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
                 guard let clientID = configuration.clientID,
@@ -555,7 +565,7 @@ actor VolvoAPI {
             }
         )
         if outcome == .deadGrant {
-            await discardDeadRefreshToken()
+            await discardDeadRefreshToken(rejected: tokens.refreshToken)
             throw VolvoError.authenticationRequired(.invalidCredentials)
         }
     }
@@ -567,9 +577,11 @@ actor VolvoAPI {
     /// per-client lockout. Deliberately *not* triggered by a bare 401, `invalid_client`, or a
     /// network error – those can be transient or misconfiguration, and destroying a still-valid
     /// credential there is the failure mode `MultiCarFleetSwitchingTests` guards against.
-    func discardDeadRefreshToken() async {
+    func discardDeadRefreshToken(rejected: String?) async {
         tokens.reset()
-        try? keychain.deleteVolvoSessionToken()
+        if let rejected, (try? keychain.readFreshVolvoSessionToken()) == rejected {
+            try? keychain.deleteVolvoSessionToken()
+        }
         // The grant died with the session, so its recorded scopes stop answering gates.
         await MainActor.run { preferences.volvoGrantedScopes = [] }
         await MainActor.run { preferences.invalidateSessionCache() }
