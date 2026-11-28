@@ -31,40 +31,26 @@ enum TripSegmentation {
         var segmentStart: HistoricalTelemetryRecord?
         var segmentEnd: HistoricalTelemetryRecord?
         var segmentDistance = 0.0
-        var segmentSource: DistanceSource?
-        var consumptionTotal = 0.0
-        var consumptionCount = 0
+        var distanceSource: DistanceSource?
         var temperatureTotal = 0.0
         var temperatureCount = 0
 
-        func appendSegment() {
-            guard let start = segmentStart, let end = segmentEnd,
-                  segmentDistance >= minimumDistanceKm else { return }
-            let suppressCumulativeConsumption: Bool = {
-                guard let autoKm = end.tripAutomaticKm else { return false }
-                return autoKm > segmentDistance * 1.5 + 1.0
-            }()
-            let averageConsumption: Double? = (!suppressCumulativeConsumption && consumptionCount > 0)
-                ? (consumptionTotal / Double(consumptionCount))
-                : nil
-            trips.append(TripHistoryEntry(
-                id: "\(start.id)-\(end.id)", vin: vin,
-                startedAt: start.timestamp, endedAt: end.timestamp,
-                distanceKm: segmentDistance,
-                averageConsumption: averageConsumption,
-                ambientTemperatureCelsius: temperatureCount > 0 ? temperatureTotal / Double(temperatureCount) : nil,
-                startLatitude: start.latitude, startLongitude: start.longitude,
-                endLatitude: end.latitude, endLongitude: end.longitude
-            ))
-        }
-
-        func clearSegment() {
+        func finishSegment() {
+            if let start = segmentStart, let end = segmentEnd, segmentDistance >= minimumDistanceKm {
+                trips.append(TripHistoryEntry(
+                    id: "\(start.id)-\(end.id)", vin: vin,
+                    startedAt: start.timestamp, endedAt: end.timestamp,
+                    distanceKm: segmentDistance,
+                    // The ledger's consumption column carries the vehicle's long-term average.
+                    averageConsumption: nil,
+                    ambientTemperatureCelsius: temperatureCount > 0 ? temperatureTotal / Double(temperatureCount) : nil,
+                    startLatitude: start.latitude, startLongitude: start.longitude,
+                    endLatitude: end.latitude, endLongitude: end.longitude
+                ))
+            }
             segmentStart = nil
             segmentEnd = nil
             segmentDistance = 0
-            segmentSource = nil
-            consumptionTotal = 0
-            consumptionCount = 0
             temperatureTotal = 0
             temperatureCount = 0
         }
@@ -87,36 +73,10 @@ enum TripSegmentation {
                 return next >= current ? next - current : nil
             }()
 
-            func plausible(_ delta: Double?) -> Double? {
-                guard let delta, delta >= minimumDistanceKm && delta < maximumDistanceKm else { return nil }
-                return delta
-            }
-
-            let resolved: (source: DistanceSource, distance: Double)? = {
-                if let activeSource = segmentSource {
-                    let candidate: Double? = switch activeSource {
-                    case .odometer: odometerDelta
-                    case .automatic: automaticDelta
-                    case .manual: manualDelta
-                    }
-                    return plausible(candidate).map { (activeSource, $0) }
-                }
-                for (source, raw) in [
-                    (DistanceSource.odometer, odometerDelta),
-                    (.automatic, automaticDelta),
-                    (.manual, manualDelta)
-                ] {
-                    if let valid = plausible(raw) {
-                        return (source, valid)
-                    }
-                }
-                return nil
-            }()
-
             let gap = end.timestamp.timeIntervalSince(start.timestamp)
-            guard let (chosenSource, distance) = resolved, gap >= 0, gap <= maximumGap else {
-                appendSegment()
-                clearSegment()
+            guard gap >= 0, gap <= maximumGap else {
+                finishSegment()
+                distanceSource = nil
                 if includeReconciledGaps, gap > maximumGap,
                    let odoGap = odometerDelta, odoGap >= 1.0, odoGap < maximumDistanceKm {
                     let avgTemp: Double? = switch (start.ambientTemperatureCelsius, end.ambientTemperatureCelsius) {
@@ -142,28 +102,38 @@ enum TripSegmentation {
                 }
                 continue
             }
-            if segmentSource == nil { segmentSource = chosenSource }
-            // Zero-duration duplicates with real movement are quantization noise, not a new
-            // trip: absorb the distance into the open segment instead of splitting.
-            if gap == 0 {
-                if segmentStart == nil { segmentStart = start }
-                segmentEnd = end
-                segmentDistance += distance
+
+            let deltas: [(source: DistanceSource, distance: Double)] = [
+                (DistanceSource.odometer, odometerDelta), (.automatic, automaticDelta), (.manual, manualDelta)
+            ].compactMap { source, value in
+                guard let value, value < maximumDistanceKm else { return nil }
+                return (source, value)
+            }
+            let continued = deltas.first { $0.source == distanceSource }
+            if distanceSource != nil, continued == nil {
+                finishSegment()
+                distanceSource = nil
+            }
+            guard let movement = continued ?? deltas.first(where: { $0.distance >= minimumDistanceKm }),
+                  movement.distance >= minimumDistanceKm else {
+                // A parked reading ends the trip. Keep the same counter so the next odometer
+                // tick cannot count distance already measured by a finer counter.
+                finishSegment()
                 continue
             }
+            distanceSource = movement.source
+            // Zero-duration duplicates with real movement are quantization noise, not a new
+            // trip: absorb the distance into the open segment instead of splitting.
             if segmentStart == nil { segmentStart = start }
             segmentEnd = end
-            segmentDistance += distance
-            if let value = end.averageConsumption ?? start.averageConsumption {
-                consumptionTotal += value
-                consumptionCount += 1
-            }
+            segmentDistance += movement.distance
+            if gap == 0 { continue }
             if let value = end.ambientTemperatureCelsius ?? start.ambientTemperatureCelsius {
                 temperatureTotal += value
                 temperatureCount += 1
             }
         }
-        appendSegment()
+        finishSegment()
         return Array(trips.suffix(limit).reversed())
     }
 }

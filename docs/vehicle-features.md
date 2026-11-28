@@ -159,7 +159,9 @@ based on vehicle telemetry rather than utility-grade metering.
 
 Detected trips can be tagged **Business** or **Private**, and a Monthly Mileage Report totals
 the business/private distance split per month with CSV export. Tags are stored locally per
-vehicle.
+vehicle. When readings are more than 45 minutes apart, Hisingen can recover distance from the
+odometer and use the two reading times as the trip bounds. The car's long-term consumption
+average is excluded from individual trips.
 
 Public charging can be logged by hand from the **Charging Sessions** card: **Add Session**
 records the charging place (home or public), a location, the start and end time, the energy, and
