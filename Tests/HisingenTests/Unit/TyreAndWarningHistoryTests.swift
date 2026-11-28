@@ -299,7 +299,7 @@ struct TyreAndWarningHistoryTests {
         }
         #expect(version == VehicleDatabase.latestSchemaVersion)
         // A canary, so a schema change is reviewed rather than silently absorbed by the equality
-        // above. 10 added the charging place for public sessions.
-        #expect(VehicleDatabase.latestSchemaVersion == 10)
+        // above. 11 records whether a charging price came from a manual override.
+        #expect(VehicleDatabase.latestSchemaVersion == 11)
     }
 }
