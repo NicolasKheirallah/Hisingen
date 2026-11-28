@@ -2985,7 +2985,7 @@
 "Since Last Charge" = "Since Last Charge";
 "Specs" = "Specs";
 "Spot-Price Optimised" = "Spot-Price Optimised";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Start climate before timed events in calendars you choose. The command targets the currently active vehicle.";
+"Start climate before timed events in calendars you choose." = "Start climate before timed events in calendars you choose.";
 "Starts the engine." = "Starts the engine.";
 "Success" = "Success";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Successfully connected to your Polestar account! Fetching telemetry…";
@@ -4170,7 +4170,8 @@
 "Weekdays" = "Weekdays";
 "Scheduled Actions" = "Scheduled Actions";
 "Add scheduled action" = "Add scheduled action";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled.";
+"Choose a vehicle to run this automation." = "Choose a vehicle to run this automation.";
 "No scheduled actions yet." = "No scheduled actions yet.";
 "Enable %@" = "Enable %@";
 "Arrival & Departure" = "Arrival & Departure";

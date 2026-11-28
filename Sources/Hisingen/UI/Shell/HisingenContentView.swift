@@ -681,7 +681,8 @@ struct HisingenContentView: View {
                                 onNavigateToHistory: tabComposition.isVisible(.history) ? {
                                     navigateToHistory("automations")
                                 } : nil,
-                                onSettingsChanged: onSettingsChanged)
+                                onSettingsChanged: onSettingsChanged,
+                                fleet: fleet)
                     .id(navigationRevision)
                 placedExtras(for: tab, state: state)
             }

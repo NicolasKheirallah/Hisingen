@@ -161,6 +161,22 @@ extension PreferencesStore {
     /// with settings archives, like the auto-start consent it belongs to.
     var plannerKeepAwakeEnabled: Bool { get { d.bool(forKey: "planner_keep_awake_enabled") } set { d.set(newValue, forKey: "planner_keep_awake_enabled") } }
 
+    /// Explicit target vehicle for the charging planner; `nil` follows the active vehicle.
+    var plannerTargetVIN: String? {
+        get {
+            guard let raw = d.string(forKey: "planner_target_vin")?.normalizedVIN, !raw.isEmpty else { return nil }
+            return raw
+        }
+        set {
+            let normalized = newValue?.normalizedVIN
+            if let normalized, !normalized.isEmpty {
+                d.set(normalized, forKey: "planner_target_vin")
+            } else {
+                d.removeObject(forKey: "planner_target_vin")
+            }
+        }
+    }
+
     /// The window the planner's auto-start is running for a vehicle. Its end is fixed when the
     /// start command is acknowledged, so slower-than-planned charging stops there instead of
     /// extending the plan. Persisted so a relaunch inside the window still ends it.

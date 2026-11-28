@@ -15,7 +15,7 @@ import OSLog
 final class ScheduledCommandController {
     private let logger = AppLog.logger("automation")
     private let preferences: PreferencesStore
-    private let send: @MainActor (RemoteCommand) async -> AutomationSendResult
+    private let send: @MainActor (RemoteCommand, String?) async -> AutomationSendResult
     private let now: @Sendable () -> Date
     private let calendar: Calendar
     private let scheduler: AsyncTimerLoop
@@ -39,7 +39,7 @@ final class ScheduledCommandController {
     static let maxIdleInterval: TimeInterval = 6 * 3_600
 
     init(preferences: PreferencesStore,
-         send: @escaping @MainActor (RemoteCommand) async -> AutomationSendResult,
+         send: @escaping @MainActor (RemoteCommand, String?) async -> AutomationSendResult,
          now: @escaping @Sendable () -> Date = { Date() },
          calendar: Calendar = .current,
          wait: @escaping AsyncTimerLoop.Wait = AsyncTimerLoop.realWait) {
@@ -48,6 +48,20 @@ final class ScheduledCommandController {
         self.now = now
         self.calendar = calendar
         self.scheduler = AsyncTimerLoop(wait: wait)
+    }
+
+    convenience init(preferences: PreferencesStore,
+                     send: @escaping @MainActor (RemoteCommand) async -> AutomationSendResult,
+                     now: @escaping @Sendable () -> Date = { Date() },
+                     calendar: Calendar = .current,
+                     wait: @escaping AsyncTimerLoop.Wait = AsyncTimerLoop.realWait) {
+        self.init(
+            preferences: preferences,
+            send: { command, _ in await send(command) },
+            now: now,
+            calendar: calendar,
+            wait: wait
+        )
     }
 
     var isArmed: Bool { scheduler.isArmed }
@@ -103,7 +117,7 @@ final class ScheduledCommandController {
             // the next tick send the same occurrence again.
             preferences.setScheduledCommandFiredOccurrence(key, for: schedule.id)
             logger.info("Scheduled command \(schedule.command.identifier, privacy: .public) firing")
-            switch await send(schedule.command) {
+            switch await send(schedule.command, schedule.targetVIN) {
             case .deferred:
                 // Nothing reached the car, so the occurrence goes back in the ledger and a short
                 // timer tries it again for as long as the catch-up window lasts.

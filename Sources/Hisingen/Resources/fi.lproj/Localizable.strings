@@ -2954,7 +2954,7 @@
 "Since Last Charge" = "Viimeisestä latauksesta";
 "Specs" = "Tekniset tiedot";
 "Spot-Price Optimised" = "Pörssihintaoptimoitu";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Käynnistä ilmastointi ennen ajastettuja tapahtumia valitsemissasi kalentereissa. Komento kohdistuu tällä hetkellä aktiiviseen ajoneuvoon.";
+"Start climate before timed events in calendars you choose." = "Käynnistä ilmastointi ennen valitsemiesi kalenterien kellonaikaan sidottuja tapahtumia.";
 "Starts the engine." = "Käynnistää moottorin.";
 "Success" = "Onnistui";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Yhdistetty Polestar-tiliisi! Haetaan telemetriaa…";
@@ -4150,7 +4150,8 @@
 "Weekdays" = "Arkipäivät";
 "Scheduled Actions" = "Ajoitetut toiminnot";
 "Add scheduled action" = "Lisää ajoitettu toiminto";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Suorittaa yhden toiminnon valitsemanasi aikana ja päivinä sille autolle, joka on silloin aktiivinen. Vain toiminnot, jotka eivät vaadi vahvistusta, voidaan ajoittaa.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Suorittaa toiminnon valitsemaasi aikaan valitseminasi päivinä. Vain vahvistusta vaatimattomia toimintoja voi ajastaa.";
+"Choose a vehicle to run this automation." = "Valitse ajoneuvo, jossa automaatio suoritetaan.";
 "No scheduled actions yet." = "Ei vielä ajoitettuja toimintoja.";
 "Enable %@" = "Ota käyttöön %@";
 "Arrival & Departure" = "Saapuminen ja lähtö";

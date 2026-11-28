@@ -52,7 +52,7 @@ enum CalendarPreconditioningDispatchDecision {
 final class CalendarPreconditioningController {
     private let preferences: PreferencesStore
     private let eventStore: EKEventStore
-    private let sendClimateStart: () async -> RemoteCommandDispatchOutcome
+    private let sendClimateStart: (String?) async -> RemoteCommandDispatchOutcome
     private let scheduler = AsyncTimerLoop()
     private var observers: [NSObjectProtocol] = []
     private var evaluationInProgress = false
@@ -64,10 +64,15 @@ final class CalendarPreconditioningController {
     private static let lookaheadInterval: TimeInterval = 48 * 3_600
 
     init(preferences: PreferencesStore, eventStore: EKEventStore = EKEventStore(),
-         sendClimateStart: @escaping () async -> RemoteCommandDispatchOutcome) {
+         sendClimateStart: @escaping (String?) async -> RemoteCommandDispatchOutcome) {
         self.preferences = preferences
         self.eventStore = eventStore
         self.sendClimateStart = sendClimateStart
+    }
+
+    convenience init(preferences: PreferencesStore, eventStore: EKEventStore = EKEventStore(),
+                     sendClimateStart: @escaping () async -> RemoteCommandDispatchOutcome) {
+        self.init(preferences: preferences, eventStore: eventStore) { _ in await sendClimateStart() }
     }
 
     func start() {
@@ -145,7 +150,7 @@ final class CalendarPreconditioningController {
             return
         }
 
-        let outcome = await sendClimateStart()
+        let outcome = await sendClimateStart(preferences.calendarPreconditioningTargetVIN)
         if CalendarPreconditioningDispatchDecision.consumesOccurrence(outcome) {
             // A provider acknowledgement or a terminal refusal consumes the occurrence.
             // Only failures proven to be pre-send are safe to retry automatically.

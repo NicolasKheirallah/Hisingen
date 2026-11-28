@@ -2962,7 +2962,7 @@
 "Since Last Charge" = "Sinds het laatste laden";
 "Specs" = "Specificaties";
 "Spot-Price Optimised" = "Geoptimaliseerd op spotprijs";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Start de klimaatregeling voor geplande gebeurtenissen in de agenda's die je kiest. De opdracht geldt voor het huidige actieve voertuig.";
+"Start climate before timed events in calendars you choose." = "Start de klimaatregeling vóór afspraken met een tijdstip in de agenda’s die je kiest.";
 "Starts the engine." = "Start de motor.";
 "Success" = "Gelukt";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Verbonden met je Polestar-account. Telemetrie wordt opgehaald…";
@@ -4158,7 +4158,8 @@
 "Weekdays" = "Werkdagen";
 "Scheduled Actions" = "Geplande acties";
 "Add scheduled action" = "Geplande actie toevoegen";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Voert één actie uit op de tijd en dagen die je kiest, op het voertuig dat dan actief is. Alleen acties zonder bevestiging kunnen worden gepland.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Voert één actie uit op het tijdstip en de dagen die je kiest. Alleen acties zonder bevestiging kunnen worden gepland.";
+"Choose a vehicle to run this automation." = "Kies een voertuig voor deze automatisering.";
 "No scheduled actions yet." = "Nog geen geplande acties.";
 "Enable %@" = "%@ inschakelen";
 "Arrival & Departure" = "Aankomst en vertrek";

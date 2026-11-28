@@ -71,14 +71,14 @@ offered climate setpoints, windows, trunk or charging controls that the public A
 **Settings → Automations** can run actions without you present. Three kinds exist, and all of them
 are empty until you add something:
 
-* **Scheduled actions** run one command at a wall-clock time on the days you choose. An action that
-  fires more than fifteen minutes late is skipped rather than replayed, so a Mac that wakes at
-  breakfast does not lock the car six hours late.
-* **Arrival and departure** triggers run a command when the car reaches or leaves a saved charge
-  location. The comparison happens inside Hisingen, using the position the car already reports and
-  the coordinates of the locations you saved — no Location Services permission is requested, and
-  triggers only fire while Hisingen is running. The first snapshot after launch records where the
-  car is; it does not count as an arrival.
+* **Scheduled actions** run one command at a wall-clock time on the days you choose. In a garage
+  with multiple vehicles, choose a vehicle for each action. Hisingen pauses an unassigned action
+  while more than one vehicle is available. A Mac that wakes more than fifteen minutes after an
+  action was due skips that occurrence.
+* **Arrival and departure** triggers send the command to the car that reaches or leaves a saved
+  charge location. Hisingen compares the car's reported position with the coordinates you saved.
+  This requires no Location Services permission and runs only while Hisingen is open. Hisingen
+  uses the first snapshot after launch to record the car's initial location.
 * **Send to every vehicle** sends one command to each car on the connected account, one at a time,
   and names the ones that did not answer.
 

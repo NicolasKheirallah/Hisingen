@@ -14,7 +14,7 @@ import OSLog
 final class ChargeLocationTriggerController {
     private let logger = AppLog.logger("automation")
     private let preferences: PreferencesStore
-    private let send: @MainActor (RemoteCommand) async -> AutomationSendResult
+    private let send: @MainActor (RemoteCommand, String?) async -> AutomationSendResult
 
     /// Where each vehicle was the last time this process looked. Optional-of-optional because
     /// "never looked" and "looked, not at a saved location" are different answers: the first must
@@ -25,9 +25,14 @@ final class ChargeLocationTriggerController {
     private var observations: [String: Observation] = [:]
 
     init(preferences: PreferencesStore,
-         send: @escaping @MainActor (RemoteCommand) async -> AutomationSendResult) {
+         send: @escaping @MainActor (RemoteCommand, String?) async -> AutomationSendResult) {
         self.preferences = preferences
         self.send = send
+    }
+
+    convenience init(preferences: PreferencesStore,
+                     send: @escaping @MainActor (RemoteCommand) async -> AutomationSendResult) {
+        self.init(preferences: preferences) { command, _ in await send(command) }
     }
 
     /// Called for every fresh snapshot. `state.chargeLocationPresence` was resolved from the
@@ -45,16 +50,17 @@ final class ChargeLocationTriggerController {
         let transition = ChargeLocationTransition.between(previous: previous.presence, current: current)
         guard transition != .none else { return }
 
-        for trigger in triggers {
+        for trigger in triggers where trigger.applies(to: vin) {
+            let destinationVIN = trigger.targetVIN ?? vin
             switch trigger.event {
             case .arrival:
                 guard let arrival = transition.arrival, trigger.watches(locationID: arrival.locationID) else { continue }
                 logger.info("Arrival trigger at \(arrival.locationID, privacy: .private) firing")
-                _ = await send(trigger.command)
+                _ = await send(trigger.command, destinationVIN)
             case .departure:
                 guard let departure = transition.departure, trigger.watches(locationID: departure.locationID) else { continue }
                 logger.info("Departure trigger from \(departure.locationID, privacy: .private) firing")
-                _ = await send(trigger.command)
+                _ = await send(trigger.command, destinationVIN)
             }
         }
     }

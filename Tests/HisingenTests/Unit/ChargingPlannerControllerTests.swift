@@ -486,6 +486,61 @@ struct ChargingPlannerControllerTests {
     }
 
     @Test
+    func committedWindowSurvivesMissingTelemetryAndPricesAfterUISwitch() async {
+        let scoped = ScopedPreferences(label: "MultiVINPlanner")
+        let store = scoped.store
+        store.marketCountry = .sweden
+        store.features = FeatureSelection(enabled: [.smartChargingPlanner, .notifications])
+        store.electricityChargerPowerKw = 250
+        store.plannerAutoStartEnabled = true
+        store.plannerKeepAwakeEnabled = true
+        store.setPlannerWindow(
+            DateInterval(start: plannerDate(2026, 2, 10, 3, 0), end: plannerDate(2026, 2, 10, 4, 30)),
+            for: "VIN-CAR-A"
+        )
+
+        let carA = vehicle(vin: "VIN-CAR-A", battery: 65, state: .charging, connection: .connected, target: 80)
+        let carB = vehicle(vin: "VIN-CAR-B", battery: 80, target: 80)
+
+        let clock = ClockBox(now: plannerDate(2026, 2, 10, 4, 0))
+        var stateForA: VehicleState? = carA
+        var stoppedVINs: [String] = []
+        let sleeper = FakeSleeper()
+        let controller = ChargingPlannerController(
+            preferences: store,
+            notifier: FakeNotifier(),
+            priceSource: FakePriceSource(series: []),
+            database: VehicleDatabase.inMemory(),
+            latestState: { carB },
+            stateForVIN: { vin in vin.normalizedVIN == "VIN-CAR-A" ? stateForA : carB },
+            activeVINs: { ["VIN-CAR-A", "VIN-CAR-B"] },
+            startCharging: { _ in .refused(reason: "unused") },
+            stopCharging: { vin in
+                stoppedVINs.append(vin)
+                return .sent(.accepted)
+            },
+            sleepPrevention: sleeper,
+            now: { clock.value }
+        )
+
+        await controller.evaluate()
+        #expect(sleeper.isHolding)
+
+        clock.value = plannerDate(2026, 2, 10, 4, 30)
+        stateForA = nil
+        await controller.evaluate()
+        #expect(store.plannerWindow(for: "VIN-CAR-A") != nil)
+        #expect(stoppedVINs.isEmpty)
+
+        stateForA = carA
+        await controller.evaluate()
+        await settle()
+
+        #expect(stoppedVINs == ["VIN-CAR-A"])
+        #expect(store.plannerWindow(for: "VIN-CAR-A") == nil)
+    }
+
+    @Test
     func noStopIsSentWithoutAPlannerWindow() async {
         let harness = PlannerHarness(
             now: plannerDate(2026, 2, 10, 4, 30),

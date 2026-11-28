@@ -2961,7 +2961,7 @@
 "Since Last Charge" = "Siden sidste opladning";
 "Specs" = "Specifikationer";
 "Spot-Price Optimised" = "Spotpris-optimeret";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Start klima før tidsbestemte begivenheder i de kalendere, du vælger. Kommandoen gælder for det køretøj, der er aktivt lige nu.";
+"Start climate before timed events in calendars you choose." = "Start klimaanlægget før tidsbestemte begivenheder i de kalendere, du vælger.";
 "Starts the engine." = "Starter motoren.";
 "Success" = "Lykkedes";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Forbindelsen til din Polestar-konto lykkedes! Henter telemetri…";
@@ -4157,7 +4157,8 @@
 "Weekdays" = "Hverdage";
 "Scheduled Actions" = "Planlagte handlinger";
 "Add scheduled action" = "Tilføj planlagt handling";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Kører én handling på det tidspunkt og de dage, du vælger, mod den bil der er aktiv da. Kun handlinger, der ikke kræver bekræftelse, kan planlægges.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Kører en handling på det tidspunkt og de dage, du vælger. Kun handlinger, der ikke kræver bekræftelse, kan planlægges.";
+"Choose a vehicle to run this automation." = "Vælg et køretøj for at køre denne automatisering.";
 "No scheduled actions yet." = "Ingen planlagte handlinger endnu.";
 "Enable %@" = "Aktivér %@";
 "Arrival & Departure" = "Ankomst og afgang";

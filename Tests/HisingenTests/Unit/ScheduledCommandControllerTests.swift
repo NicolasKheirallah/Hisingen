@@ -284,6 +284,47 @@ struct ScheduledCommandControllerTests {
         #expect(first == sameRun)
         #expect(first != nextWeek)
     }
+
+    @Test
+    func legacyScheduleWithoutTargetVINDecodesAsNil() throws {
+        let legacyJSON = Data(#"{"id":"00000000-0000-0000-0000-000000000002","hour":7,"minute":30,"weekdays":[],"command":{"lock":{}},"isEnabled":true}"#.utf8)
+        let decoded = try JSONDecoder().decode(ScheduledCommand.self, from: legacyJSON)
+        #expect(decoded.targetVIN == nil)
+    }
+
+    @Test
+    func unassignedAutomationUsesOnlyAnUnambiguousVehicle() {
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: []) == nil)
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: ["VIN-A", " vin-a "]) == "VIN-A")
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: ["VIN-A", "VIN-B"]) == nil)
+    }
+
+    @Test
+    func anAssignedAutomationKeepsItsTargetAcrossSelectionChanges() {
+        #expect(AutomationCommandPolicy.targetVIN("vin-a", knownVINs: ["VIN-B", "VIN-A"]) == "VIN-A")
+        #expect(AutomationCommandPolicy.targetVIN("VIN-A", knownVINs: ["VIN-B"]) == nil)
+    }
+
+    @Test
+    func scheduleRoutesExplicitTargetVINToSender() async {
+        let scoped = ScopedPreferences(label: "ScheduleTargetVIN")
+        scoped.store.scheduledCommands = [
+            ScheduledCommand(hour: 7, minute: 30, command: .lock, targetVIN: "vin-second")
+        ]
+        var dispatched: [(RemoteCommand, String?)] = []
+        let controller = ScheduledCommandController(
+            preferences: scoped.store,
+            send: { command, vin in
+                dispatched.append((command, vin))
+                return .sent
+            },
+            now: { moment(2026, 11, 18, 7, 30) },
+            calendar: stockholmCalendar
+        )
+        await controller.evaluate()
+        #expect(dispatched.count == 1)
+        #expect(dispatched.first?.1 == "VIN-SECOND")
+    }
 }
 
 // MARK: - Harness
