@@ -43,8 +43,8 @@ enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
     }
 }
 
-/// Where a charging session happened. Recorded sessions count as home until the reader
-/// changes them; a session entered by hand carries the place the reader picked.
+/// Where a charging session happened. DC and charges away from a known home location
+/// count as public. The reader can correct the place or pick it when entering a session.
 enum ChargingSessionPlace: String, Codable, Equatable, Hashable, CaseIterable, Sendable, Identifiable {
     case home
     case publicCharging = "public"
@@ -144,6 +144,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
     /// Home or public. Recorded sessions count as home until the reader changes them; a
     /// session entered by hand carries the place picked in the sheet.
     var place: ChargingSessionPlace = .home
+    /// True when the reader entered or edited the session's cost/tariff by hand.
+    var costManuallyEdited: Bool = false
 
     init(
         id: String, vin: String, startedAt: Date, endedAt: Date?, startSoc: Double,
@@ -162,7 +164,8 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         pendingStopCount: Int = 0, estimatedCost: Double? = nil,
         spotEstimatedCost: Double? = nil,
         wallbox: WallboxMeasurement? = nil,
-        place: ChargingSessionPlace = .home
+        place: ChargingSessionPlace = .home,
+        costManuallyEdited: Bool = false
     ) {
         self.id = id
         self.vin = vin
@@ -195,6 +198,7 @@ struct HistoricalChargingSession: Codable, Equatable, Identifiable, Sendable {
         self.spotEstimatedCost = spotEstimatedCost
         self.wallbox = wallbox
         self.place = place
+        self.costManuallyEdited = costManuallyEdited
     }
 }
 

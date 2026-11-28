@@ -207,12 +207,14 @@ struct ElectricityRatePolicy: Equatable, Sendable {
 /// tariff. `nil` means the session has no price of its own.
 private func ownSessionCost(
     policy: ElectricityRatePolicy,
+    place: ChargingSessionPlace,
+    isManuallyEdited: Bool,
     spotCost: Double?,
     energyKwh: Double,
     storedCost: Double?,
     tariffPricePerKwh: Double?
 ) -> Double? {
-    if policy.isAutomatic, let spotCost {
+    if place == .home, !isManuallyEdited, policy.isAutomatic, let spotCost {
         return policy.retailCost(spotCost: spotCost, energyKwh: energyKwh)
     }
     if let storedCost { return storedCost }
@@ -220,15 +222,25 @@ private func ownSessionCost(
 }
 
 extension HistoricalChargingSession {
+    var manualCost: Double? {
+        guard costManuallyEdited else { return nil }
+        return estimatedCost ?? tariffPricePerKwh.map { $0 * energyDeliveredKwh }
+    }
+
     /// The session's cost under the active policy. Automatic mode prices from the stored
-    /// market cost; a session the spot series never covered keeps the fixed-rate figure,
-    /// which `usedFallback` reports so totals can say how many sessions were not market-priced.
+    /// market cost for home sessions unless manually overridden; a session the spot series never
+    /// covered keeps the fixed-rate figure, which `usedFallback` reports so totals can say how
+    /// many sessions were not market-priced.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double) -> (amount: Double, usedFallback: Bool) {
+        if let manual = manualCost {
+            return (manual, false)
+        }
         // The charger's metered cost is the wall-side figure the bill sees, so it outranks every
-        // battery-side estimate.
+        // battery-side estimate unless the user explicitly overrode the session cost.
         if let measured = wallbox?.cost { return (measured, false) }
         if wallbox != nil, energyDeliveredKwh <= 0 { return (0, true) }
-        if let own = ownSessionCost(policy: policy, spotCost: spotEstimatedCost, energyKwh: energyDeliveredKwh,
+        if let own = ownSessionCost(policy: policy, place: place, isManuallyEdited: costManuallyEdited,
+                                    spotCost: spotEstimatedCost, energyKwh: energyDeliveredKwh,
                                     storedCost: estimatedCost, tariffPricePerKwh: tariffPricePerKwh) {
             return (own, false)
         }
@@ -237,13 +249,20 @@ extension HistoricalChargingSession {
 }
 
 extension ChargingSession {
+    var manualCost: Double? {
+        guard costManuallyEdited else { return nil }
+        return cost ?? tariffPricePerKwh.map { $0 * kwhDelivered }
+    }
+
     /// Same contract as `HistoricalChargingSession.resolvedCost`, for the in-memory session
     /// the charging card and CSV export read. Returns nil only when no price is known at all.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double?) -> Double? {
+        if let manual = manualCost { return manual }
         if let measured = wallbox?.cost { return measured }
         // Charger-only session whose cost could not be completed: no price rather than a zero.
         if wallbox != nil, !hasBatteryReading { return nil }
-        if let own = ownSessionCost(policy: policy, spotCost: spotCost, energyKwh: kwhDelivered,
+        if let own = ownSessionCost(policy: policy, place: place, isManuallyEdited: costManuallyEdited,
+                                    spotCost: spotCost, energyKwh: kwhDelivered,
                                     storedCost: cost, tariffPricePerKwh: tariffPricePerKwh) {
             return own
         }

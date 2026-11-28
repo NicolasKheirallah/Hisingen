@@ -83,4 +83,91 @@ struct ChargingSpotCostLedgerTests {
         let spot = try #require(ledger.recentChargingSessions(for: vin).first?.spotEstimatedCost)
         #expect(abs(spot - 15.8 * 2.0) < 1.0)
     }
+
+    @Test func dcAndManuallyEditedSessionsAreExcludedFromHomeSpotBackfill() throws {
+        let database = VehicleDatabase.inMemory()
+        let ledger = database.charging
+        let base = Date(timeIntervalSince1970: 1_789_000_000)
+        let config = ChargingSessionLedgerConfiguration(usableCapacityKwh: 79, tariffPricePerKwh: 2.0,
+                                                        currencySymbol: "kr", locationName: "Ionity")
+
+        // 1. Auto-recorded DC session starts as public and receives zero spot backfill.
+        for (offset, soc, kw, state) in [
+            (0, 20.0, 140.0, ChargingState.charging),
+            (60, 50.0, 120.0, ChargingState.charging),
+            (65, 50.0, 0.0, ChargingState.idle),
+            (70, 50.0, 0.0, ChargingState.idle)
+        ] {
+            ledger.ingest(
+                ChargingSessionObservation(
+                    vin: vin, timestamp: base.addingTimeInterval(Double(offset) * 60), soc: soc,
+                    chargingState: state, chargerConnection: .connected,
+                    powerKw: kw > 0 ? kw : nil, voltageVolts: nil, currentAmps: nil,
+                    chargingType: .dc, targetSoc: 80
+                ),
+                configuration: config,
+                recordingEnabled: true
+            )
+        }
+        let dcSession = try #require(ledger.recentChargingSessions(for: vin).first)
+        #expect(dcSession.place == .publicCharging)
+
+        // 2. Home AC session recorded and then manually edited with a receipt stays excluded.
+        let homeID = ledger.startChargingSession(vin: vin, startSoc: 20, place: .home,
+                                                 startedAt: base.addingTimeInterval(7_200))
+        ledger.completeChargingSession(id: homeID, endSoc: 50, energyDeliveredKwh: 20,
+                                       peakPowerKw: 11, averagePowerKw: 11,
+                                       endedAt: base.addingTimeInterval(10_800))
+        let originalHome = try #require(ledger.sessionsMissingSpotCost(vin: vin).first)
+        #expect(ledger.updateSpotEstimatedCost(for: originalHome, cost: 18))
+        ledger.updateChargingSessionDetails(
+            id: homeID, vin: vin, startedAt: base.addingTimeInterval(7_200),
+            endedAt: base.addingTimeInterval(10_800), locationName: "Home", place: .home,
+            energyKwh: 20, totalCost: 44, pricePerKwh: 2.2
+        )
+
+        let prices = [price(startHour: 0, hours: 5, sek: 1.0)]
+        #expect(ledger.sessionsMissingSpotCost(vin: vin).isEmpty)
+        #expect(ledger.backfillSpotEstimatedCosts(vin: vin, prices: prices) == 0)
+
+        let editedHome = try #require(ledger.recentChargingSessions(for: vin).first { $0.id == homeID })
+        #expect(editedHome.costManuallyEdited)
+        #expect(editedHome.spotEstimatedCost == nil)
+        #expect(editedHome.estimatedCost == 44)
+        #expect(!ledger.updateSpotEstimatedCost(for: originalHome, cost: 18))
+    }
+
+    @Test func renamingARecordedSessionKeepsAutomaticPricing() throws {
+        let database = VehicleDatabase.inMemory()
+        let ledger = database.charging
+        let end = start.addingTimeInterval(3_600)
+        let id = ledger.startChargingSession(vin: vin, startSoc: 20, startedAt: start)
+        ledger.completeChargingSession(
+            id: id, endSoc: 50, energyDeliveredKwh: 20, peakPowerKw: 11, averagePowerKw: 11,
+            endedAt: end, tariffPricePerKwh: 2, estimatedCost: 40
+        )
+        let original = try #require(ledger.sessionsMissingSpotCost(vin: vin).first)
+        #expect(ledger.updateSpotEstimatedCost(for: original, cost: 18))
+
+        ledger.updateChargingSessionDetails(
+            id: id, vin: vin, startedAt: start, endedAt: end, locationName: "Home charger",
+            place: .home, energyKwh: 20, totalCost: 40, pricePerKwh: 2, priceChanged: false
+        )
+        let renamed = try #require(ledger.recentChargingSessions(for: vin).first)
+        #expect(renamed.locationName == "Home charger")
+        #expect(!renamed.costManuallyEdited)
+        #expect(renamed.estimatedCost == 40)
+        #expect(renamed.spotEstimatedCost == 18)
+
+        ledger.updateChargingSessionDetails(
+            id: id, vin: vin, startedAt: start, endedAt: end, locationName: renamed.locationName,
+            place: .home, energyKwh: 25, totalCost: 40, pricePerKwh: 2, priceChanged: false
+        )
+        let corrected = try #require(ledger.recentChargingSessions(for: vin).first)
+        #expect(!corrected.costManuallyEdited)
+        #expect(corrected.estimatedCost == 50)
+        #expect(corrected.spotEstimatedCost == nil)
+        #expect(ledger.sessionsMissingSpotCost(vin: vin).map(\.id) == [id])
+        #expect(!ledger.updateSpotEstimatedCost(for: original, cost: 18))
+    }
 }

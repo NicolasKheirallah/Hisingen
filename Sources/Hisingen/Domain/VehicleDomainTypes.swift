@@ -1489,6 +1489,8 @@ struct ChargingSession: Codable, Equatable, Sendable {
     /// What the home charger metered, when a paired charger recorded this session. Kept apart
     /// from `kwhDelivered`, which is the battery-side estimate.
     var wallbox: WallboxMeasurement? = nil
+    var place: ChargingSessionPlace = .home
+    var costManuallyEdited: Bool = false
 
     init(
         id: UUID, vin: String, startDate: Date, endDate: Date,
@@ -1501,7 +1503,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
         currencySymbol: String? = nil,
         completionReason: ChargingSessionCompletionReason? = nil,
         summaryVersion: Int = 1, spotCost: Double? = nil,
-        wallbox: WallboxMeasurement? = nil
+        wallbox: WallboxMeasurement? = nil,
+        place: ChargingSessionPlace = .home,
+        costManuallyEdited: Bool = false
     ) {
         self.id = id
         self.vin = vin
@@ -1523,13 +1527,15 @@ struct ChargingSession: Codable, Equatable, Sendable {
         self.summaryVersion = summaryVersion
         self.spotCost = spotCost
         self.wallbox = wallbox
+        self.place = place
+        self.costManuallyEdited = costManuallyEdited
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, vin, startDate, endDate, startBatteryPercentage, endBatteryPercentage
         case kwhDelivered, peakPowerWatts, cost, targetPercentage, samples
         case energySource, confidence, sampleCoverage, tariffPricePerKwh, currencySymbol
-        case completionReason, summaryVersion, spotCost, wallbox
+        case completionReason, summaryVersion, spotCost, wallbox, place, costManuallyEdited
     }
 
 
@@ -1555,7 +1561,9 @@ struct ChargingSession: Codable, Equatable, Sendable {
             completionReason: try c.decodeIfPresent(ChargingSessionCompletionReason.self, forKey: .completionReason),
             summaryVersion: try c.decodeIfPresent(Int.self, forKey: .summaryVersion) ?? 1,
             spotCost: try c.decodeIfPresent(Double.self, forKey: .spotCost),
-            wallbox: try c.decodeIfPresent(WallboxMeasurement.self, forKey: .wallbox)
+            wallbox: try c.decodeIfPresent(WallboxMeasurement.self, forKey: .wallbox),
+            place: try c.decodeIfPresent(ChargingSessionPlace.self, forKey: .place) ?? .home,
+            costManuallyEdited: try c.decodeIfPresent(Bool.self, forKey: .costManuallyEdited) ?? false
         )
     }
 

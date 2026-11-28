@@ -83,6 +83,20 @@ struct PublicChargingTests {
     }
 
     @Test
+    func manualCostOverrideBeatsSpotEstimateAndPublicSessionIgnoresSpot() {
+        var manualHome = session(id: "manual-home", place: .home, energyKwh: 10, cost: 55, spotCost: 12)
+        manualHome.costManuallyEdited = true
+        let publicWithSpot = session(id: "public-spot", place: .publicCharging, energyKwh: 10, cost: 65, spotCost: 8)
+        let policy = ElectricityRatePolicy(
+            mode: .automatic, provider: .other, contract: .quarterHour,
+            markupOrePerKwh: 0, otherChargesOrePerKwh: 0, includesVAT: true
+        )
+
+        #expect(manualHome.resolvedCost(policy: policy, fallbackPricePerKwh: 2).amount == 55)
+        #expect(publicWithSpot.resolvedCost(policy: policy, fallbackPricePerKwh: 2).amount == 65)
+    }
+
+    @Test
     func mixedCurrenciesHaveNoCombinedSplit() {
         let sessions = [
             session(id: "home", place: .home, energyKwh: 10, cost: 20, currency: "kr"),

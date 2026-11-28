@@ -5,7 +5,8 @@ extension ChargingSessionLedger {
 
     @discardableResult
     func startChargingSession(id: String = UUID().uuidString, vin: String, startSoc: Double,
-                              location: String? = nil, startedAt: Date = Date(),
+                              location: String? = nil, place: ChargingSessionPlace = .home,
+                              startedAt: Date = Date(),
                               usableCapacityKwh: Double? = nil,
                               tariffPricePerKwh: Double? = nil,
                               nightTariffEnabled: Bool = false,
@@ -18,12 +19,12 @@ extension ChargingSessionLedger {
         let statement = """
         INSERT INTO charging_sessions (
             id, vin, started_at, start_soc, energy_delivered_kwh, peak_power_kw,
-            average_power_kw, location_name, created_at, lifecycle_state, energy_source,
-            confidence, usable_capacity_kwh, tariff_price_per_kwh, currency_symbol,
-            night_tariff_enabled, night_tariff_price_per_kwh,
+            average_power_kw, location_name, charging_place, created_at, lifecycle_state,
+            energy_source, confidence, usable_capacity_kwh, tariff_price_per_kwh,
+            currency_symbol, night_tariff_enabled, night_tariff_price_per_kwh,
             night_tariff_start_hour, night_tariff_end_hour, target_soc,
             last_observed_at, summary_version, pending_stop_count
-        ) VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?, ?, 'soc_capacity_estimate',
+        ) VALUES (?, ?, ?, ?, 0.0, 0.0, 0.0, ?, ?, ?, ?, 'soc_capacity_estimate',
                   'low', ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 0);
         """
         logOnFailure("session start") {
@@ -33,21 +34,34 @@ extension ChargingSessionLedger {
                 try stmt.bindDate(startedAt, at: 3)
                 try stmt.bindDouble(startSoc, at: 4)
                 try stmt.bindText(location, at: 5)
-                try stmt.bindDate(startedAt, at: 6)
-                try stmt.bindText(lifecycleState.rawValue, at: 7)
-                try stmt.bindDouble(usableCapacityKwh, at: 8)
-                try stmt.bindDouble(tariffPricePerKwh, at: 9)
-                try stmt.bindText(currencySymbol, at: 10)
-                try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 11)
-                try stmt.bindDouble(nightTariffPricePerKwh, at: 12)
-                try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 13)
-                try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 14)
-                try stmt.bindDouble(targetSoc, at: 15)
-                try stmt.bindDate(startedAt, at: 16)
+                try stmt.bindText(place.rawValue, at: 6)
+                try stmt.bindDate(startedAt, at: 7)
+                try stmt.bindText(lifecycleState.rawValue, at: 8)
+                try stmt.bindDouble(usableCapacityKwh, at: 9)
+                try stmt.bindDouble(tariffPricePerKwh, at: 10)
+                try stmt.bindText(currencySymbol, at: 11)
+                try stmt.bindInt64(nightTariffEnabled ? 1 : 0, at: 12)
+                try stmt.bindDouble(nightTariffPricePerKwh, at: 13)
+                try stmt.bindInt64(nightTariffStartHour.map(Int64.init), at: 14)
+                try stmt.bindInt64(nightTariffEndHour.map(Int64.init), at: 15)
+                try stmt.bindDouble(targetSoc, at: 16)
+                try stmt.bindDate(startedAt, at: 17)
                 try stmt.executeUpdate()
             } process: { _ in }
         }
         return id
+    }
+
+    func markChargingSessionPublic(id: String) {
+        logOnFailure("mark session public") {
+            try sql.query(sql: """
+                UPDATE charging_sessions SET charging_place = 'public'
+                WHERE id = ? AND ended_at IS NULL AND charging_place != 'public';
+                """) { stmt in
+                try stmt.bindText(id, at: 1)
+                try stmt.executeUpdate()
+            } process: { _ in }
+        }
     }
 
     func recordChargingSample(sessionId: String, vin: String, soc: Double,

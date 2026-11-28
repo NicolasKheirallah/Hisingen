@@ -200,8 +200,8 @@ let raw = try SQLiteDatabase.inMemory()
         #expect(abandonedAt == start)
     }
 
-    @Test("A stored integration over part of a session is repaired to the charge-level energy, with its cost")
-    func repairsUndercountedIntegration() throws {
+    @Test("Repairing undercounted energy scales automatic prices only", arguments: [false, true])
+    func repairsUndercountedIntegration(hasReceipt: Bool) throws {
         let database = VehicleDatabase.inMemory()
         let ledger = database.charging
         // 20 to 90% over five hours, watched only for the first and last stretch.
@@ -219,6 +219,13 @@ let raw = try SQLiteDatabase.inMemory()
             try stmt.bindText(stored.id, at: 1)
             try stmt.executeUpdate()
         } process: { _ in }
+        if hasReceipt {
+            ledger.updateChargingSessionDetails(
+                id: stored.id, vin: vin, startedAt: stored.startedAt,
+                endedAt: try #require(stored.endedAt), locationName: "Home", place: .home,
+                energyKwh: 38.5, totalCost: 14.245, pricePerKwh: nil
+            )
+        }
         #expect(ledger.legacySummaryVINs() == [vin])
 
         ledger.repairUndercountedIntegrations(for: vin, usableCapacityKwh: nil)
@@ -228,10 +235,11 @@ let raw = try SQLiteDatabase.inMemory()
         // Split into typed steps: one expression mixing `??` with several literal operations
         // exceeds the type checker's time limit on Swift 6.2.
         let expectedEnergy: Double = 0.70 * 79
-        let expectedCost: Double = 14.245 * expectedEnergy / 38.5
+        let expectedCost: Double = hasReceipt ? 14.245 : 14.245 * expectedEnergy / 38.5
         let actualCost: Double = repaired.estimatedCost ?? 0
         #expect(abs(repaired.energyDeliveredKwh - expectedEnergy) < 0.01)
         #expect(abs(actualCost - expectedCost) < 0.01)
+        #expect(repaired.costManuallyEdited == hasReceipt)
         #expect(repaired.spotEstimatedCost == nil)
         #expect(ledger.legacySummaryVINs().isEmpty)
     }

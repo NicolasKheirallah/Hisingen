@@ -38,12 +38,14 @@ struct ChargingSessionLedgerConfiguration: Equatable, Sendable {
     let nightTariffEndHour: Int
     let currencySymbol: String?
     let locationName: String?
+    let place: ChargingSessionPlace
 
     init(
         usableCapacityKwh: Double, tariffPricePerKwh: Double?,
         nightTariffEnabled: Bool = false, nightTariffPricePerKwh: Double? = nil,
         nightTariffStartHour: Int = 22, nightTariffEndHour: Int = 6,
-        currencySymbol: String?, locationName: String?
+        currencySymbol: String?, locationName: String?,
+        place: ChargingSessionPlace = .home
     ) {
         self.usableCapacityKwh = usableCapacityKwh
         self.tariffPricePerKwh = tariffPricePerKwh
@@ -53,6 +55,7 @@ struct ChargingSessionLedgerConfiguration: Equatable, Sendable {
         self.nightTariffEndHour = nightTariffEndHour
         self.currencySymbol = currencySymbol
         self.locationName = locationName
+        self.place = place
     }
 }
 

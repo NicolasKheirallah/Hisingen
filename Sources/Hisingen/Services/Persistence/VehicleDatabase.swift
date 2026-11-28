@@ -96,7 +96,7 @@ final class VehicleDatabase: @unchecked Sendable {
 
     /// The highest `PRAGMA user_version` this build knows how to migrate to. Bump it in
     /// lockstep with a new block in `runMigrations(from:)`.
-    static let latestSchemaVersion = 10
+    static let latestSchemaVersion = 11
 
     /// A store on disk whose `PRAGMA user_version` is past this build's ceiling. It was written
     /// by a newer Hisingen, so its tables and columns are not what this build's SQL assumes.
@@ -373,7 +373,8 @@ final class VehicleDatabase: @unchecked Sendable {
             last_observed_at REAL,
             summary_version INTEGER NOT NULL DEFAULT 2,
             pending_stop_count INTEGER NOT NULL DEFAULT 0,
-            estimated_cost REAL
+            estimated_cost REAL,
+            cost_manually_edited INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_charging_sessions_vin ON charging_sessions(vin, started_at DESC);
 

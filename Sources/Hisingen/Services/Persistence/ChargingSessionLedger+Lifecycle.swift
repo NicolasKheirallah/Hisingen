@@ -92,10 +92,16 @@ extension ChargingSessionLedger {
         let sessionId: String
         if let active {
             sessionId = active.id
+            if observation.chargingType == .dc, active.place != .publicCharging {
+                markChargingSessionPublic(id: active.id)
+            }
         } else {
+            let inferredPlace: ChargingSessionPlace = observation.chargingType == .dc
+                ? .publicCharging : configuration.place
             sessionId = startChargingSession(
                 vin: observation.vin, startSoc: observation.soc,
-                location: configuration.locationName, startedAt: observation.timestamp,
+                location: configuration.locationName, place: inferredPlace,
+                startedAt: observation.timestamp,
                 usableCapacityKwh: configuration.usableCapacityKwh,
                 tariffPricePerKwh: configuration.tariffPricePerKwh,
                 nightTariffEnabled: configuration.nightTariffEnabled,
