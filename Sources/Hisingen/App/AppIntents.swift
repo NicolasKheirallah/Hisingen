@@ -82,7 +82,7 @@ enum AutomationHandoff {
 
     /// Maps a Shortcuts vehicle argument to a configured VIN. No argument means the default
     /// vehicle, as before. A named argument resolves to a configured VIN or a nickname or model
-    /// match, and returns nil when nothing matches. A typed VIN must have the valid VIN shape and
+    /// match, and returns nil when the name is ambiguous or unknown. A typed VIN must have the valid VIN shape and
     /// belong to a configured or known vehicle, so an unknown VIN never reaches the provider.
     ///
     /// `stateStore` is where the nickname and model matches are read from. The command-line
@@ -94,22 +94,28 @@ enum AutomationHandoff {
             let defaultVIN = preferences.vin
             return defaultVIN.isEmpty ? nil : defaultVIN
         }
-        let upper = input.uppercased()
-        let brandVINs = [preferences.vin(for: .polestar), preferences.vin(for: .volvo)].filter { !$0.isEmpty }
-        if SettingsValidation.isValidVIN(upper),
-           brandVINs.contains(upper) || stateStore.snapshot(for: upper) != nil {
+        let upper = input.normalizedVIN
+        let knownVINs = Set(VehicleBrand.allCases.flatMap { brand in
+            [preferences.vin(for: brand)] + preferences.knownVINs(for: brand)
+        }.map(\.normalizedVIN)).filter { !$0.isEmpty && !preferences.isVehicleDetached($0) }
+
+        if knownVINs.contains(upper) { return upper }
+        if SettingsValidation.isValidVIN(upper), !preferences.isVehicleDetached(upper),
+           stateStore.snapshot(for: upper) != nil {
             return upper
         }
-        for vin in brandVINs {
-            let nick = preferences.vehicleNickname(for: vin)
-            if nick.localizedCaseInsensitiveContains(input) || vin.localizedCaseInsensitiveContains(input) {
-                return vin
-            }
-            if let snap = stateStore.snapshot(for: vin), snap.identity.modelName?.localizedCaseInsensitiveContains(input) == true {
-                return vin
-            }
+
+        let exactNicknames = knownVINs.filter {
+            preferences.vehicleNickname(for: $0).localizedCaseInsensitiveCompare(input) == .orderedSame
         }
-        return nil
+        if !exactNicknames.isEmpty { return exactNicknames.count == 1 ? exactNicknames.first : nil }
+
+        let matches = knownVINs.filter { vin in
+            preferences.vehicleNickname(for: vin).localizedCaseInsensitiveContains(input)
+                || vin.localizedCaseInsensitiveContains(input)
+                || stateStore.snapshot(for: vin)?.identity.modelName?.localizedCaseInsensitiveContains(input) == true
+        }
+        return matches.count == 1 ? matches.first : nil
     }
 
     static func snapshot(for input: String? = nil) -> (VehicleState, PreferencesStore)? {
