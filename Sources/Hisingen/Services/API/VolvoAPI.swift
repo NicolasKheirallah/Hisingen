@@ -217,6 +217,7 @@ actor VolvoAPI {
             providerName: "Volvo",
             logger: AppLog.logger("volvo-api"),
             persist: { try keychain.saveVolvoSessionToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .volvoSession),
             isDeadGrant: { error in
                 if case TokenRequestFailure.deadRefreshToken = error { return true }
                 return false
@@ -513,6 +514,10 @@ actor VolvoAPI {
     /// only `signOut` and a dead grant delete that.
     func resetTokenLifecycle() { tokens.reset() }
 
+    func hydrateStoredSessionIfValid(expectedRefreshToken: String) -> Bool {
+        tokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: expectedRefreshToken)
+    }
+
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
     }
@@ -522,10 +527,10 @@ actor VolvoAPI {
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedToken)
             : .renewalWindow
-        // Captured before the closure runs so the grant does not read state the lifecycle owns;
-        // the configuration guard lives inside it, where a grant already in flight is awaited
-        // rather than failed. The lifecycle decides whether a grant is needed at all.
-        let configuration = (clientID: clientID, secret: clientSecret, refresh: refreshToken)
+        // Captured before the closure runs so the grant does not read actor state after
+        // `tokens.refresh` reloads Keychain credentials under the cross-process lock.
+        let configuration = (clientID: clientID, secret: clientSecret)
+        let lifecycle = tokens
         let tokenURL = identityProvider.tokenURL
         let outcome = try await tokens.refresh(
             reason,
@@ -533,7 +538,7 @@ actor VolvoAPI {
             grant: {
                 guard let clientID = configuration.clientID,
                       let clientSecret = configuration.secret,
-                      let refreshToken = configuration.refresh, !refreshToken.isEmpty else {
+                      let refreshToken = lifecycle.refreshToken, !refreshToken.isEmpty else {
                     throw VolvoError.authenticationRequired(.noStoredSession)
                 }
                 var request = URLRequest(url: tokenURL)

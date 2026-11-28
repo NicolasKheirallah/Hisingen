@@ -68,7 +68,7 @@ extension PolestarAPI {
         let commandEpoch = commandAuthorization.generation
         let stored: String?
         do {
-            stored = try commandRefreshToken ?? keychain.readCommandSessionToken()
+            stored = try commandRefreshToken ?? keychain.readFreshCommandSessionToken()
         } catch {
             // A locked or unreadable Keychain does not mean "never authorized": the token may be
             // there, so report storage trouble instead of sending the user back to Settings.
@@ -92,6 +92,7 @@ extension PolestarAPI {
         if commandTokens.refreshToken == nil {
             commandTokens.refreshToken = refresh
         }
+        _ = commandTokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: refresh, now: now())
         do {
             switch try await commandTokens.refresh(
                 .renewalWindow, now: now(),
@@ -218,7 +219,7 @@ extension PolestarAPI {
     /// callers: which keychain item means "session" in which connection mode is this
     /// adapter's knowledge, not the security module's.
     func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
-        guard let token = try keychain.readSessionToken(), !token.isEmpty else {
+        guard let token = try keychain.readFreshSessionToken(), !token.isEmpty else {
             throw PolestarError.authenticationRequired(.noStoredSession)
         }
         try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)
@@ -250,8 +251,9 @@ extension PolestarAPI {
         await grpc.invalidateDiscoveredHost()
         try requireSession(epoch)
         do {
-            if let commandRefresh = try keychain.readCommandSessionToken(), !commandRefresh.isEmpty {
+            if let commandRefresh = try keychain.readFreshCommandSessionToken(), !commandRefresh.isEmpty {
                 commandRefreshToken = commandRefresh
+                _ = commandTokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: commandRefresh, now: now())
             }
         } catch {
             // Not fatal to the web session: `commandClientAuthorization` reads the Keychain again when a
@@ -260,6 +262,7 @@ extension PolestarAPI {
         }
         try await discoverOIDCConfiguration()
         try requireSession(epoch)
+        _ = hydrateStoredSessionIfValid(expectedRefreshToken: token)
         do {
             try await refreshTokenIfNeeded()
         } catch let error as PolestarError where error.requiresAuthentication {

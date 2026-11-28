@@ -85,7 +85,7 @@ extension VolvoAPI {
     /// which keychain item means "session" is this adapter's knowledge, not the security
     /// module's.
     func restoreSession(preferredVIN: String?, features: FeatureSelection) async throws {
-        guard let token = try keychain.readVolvoSessionToken(), !token.isEmpty else {
+        guard let token = try keychain.readFreshVolvoSessionToken(), !token.isEmpty else {
             throw VolvoError.authenticationRequired(.noStoredSession)
         }
         try await restoreSession(token: token, preferredVIN: preferredVIN, features: features)
@@ -103,11 +103,13 @@ extension VolvoAPI {
             await discardDeadRefreshToken()
             throw VolvoError.authenticationRequired(.signInSystemChanged)
         }
-        // Live-grant shortcut (mirrors Polestar): re-restoring the active session
-        // must not rotate the refresh token on every retry. Only a cold restore
-        // or a session whose access token is gone pays for a grant.
-        let isLiveGrant = accessToken != nil && refreshToken == token
-        refreshToken = token
+        // Hydrate any valid shared access session persisted by another Hisingen process before
+        // forcing a refresh grant on cold start (coordinates CLI <-> menu-bar app custody).
+        let hydrated = hydrateStoredSessionIfValid(expectedRefreshToken: token)
+        let isLiveGrant = hydrated || (accessToken != nil && refreshToken == token)
+        if !hydrated {
+            refreshToken = token
+        }
         if !isLiveGrant {
             do {
                 try await refreshAccessToken(force: true)

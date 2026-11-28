@@ -191,6 +191,7 @@ actor PolestarAPI {
             providerName: "Polestar",
             logger: AppLog.logger("polestar-api"),
             persist: sessionPersistence,
+            sharedStore: persistSessionToken == nil ? keychain.sharedOAuthSessionStore(for: .polestarSession) : nil,
             isDeadGrant: { error in
                 if case PolestarError.authenticationRequired(.noStoredSession) = error { return true }
                 return false
@@ -205,6 +206,7 @@ actor PolestarAPI {
             providerName: "Polestar command client",
             logger: AppLog.logger("polestar-api"),
             persist: { try persistCommandToken($0) },
+            sharedStore: keychain.sharedOAuthSessionStore(for: .polestarCommand),
             // Only the command grant itself being refused may clear a command authorization:
             // `refreshCommandGrant` stamps that with `.callbackRejected` (the token endpoint
             // answering `invalid_grant`, or a verified account mismatch). Every other auth error
@@ -582,9 +584,9 @@ actor PolestarAPI {
         // Persist before verification: a transient userinfo failure must not discard
         // a freshly-minted grant and force a second browser trip.
         try saveCommandToken(durableRefresh)
-        commandAccessToken = token.accessToken
-        commandRefreshToken = durableRefresh
-        commandTokenExpiry = now().addingTimeInterval(TimeInterval(token.expiresIn))
+        try commandTokens.adopt(.init(accessToken: token.accessToken,
+                                      refreshToken: durableRefresh,
+                                      expiresIn: TimeInterval(token.expiresIn)), now: now())
         let verifiedAccount: AccountIdentity
         do {
             verifiedAccount = try await verifyCommandAccount(accessToken: token.accessToken)
@@ -641,6 +643,10 @@ actor PolestarAPI {
             expiresIn: TimeInterval(token.expiresIn)), now: now())
     }
 
+    func hydrateStoredSessionIfValid(expectedRefreshToken: String) -> Bool {
+        tokens.hydrateFromSharedStoreIfValid(expectedRefreshToken: expectedRefreshToken, now: now())
+    }
+
     func refreshTokenIfNeeded() async throws {
         try await refreshAccessToken(force: false)
     }
@@ -654,11 +660,10 @@ actor PolestarAPI {
         let reason: TokenLifecycle.Reason = force
             ? .serverRefused(rejectedToken: rejectedAccessToken)
             : .renewalWindow
-        // Captured before the closure runs so the grant does not read state the lifecycle owns;
-        // the missing-endpoint guard lives inside it, where a grant already in flight is awaited
-        // rather than failed. The lifecycle decides whether a grant is needed at all.
+        // Captured before the closure runs so the grant reads the freshest refresh token
+        // after `tokens.refresh` reloads Keychain under the cross-process lock.
         let endpoint = tokenEndpoint
-        let refresh = refreshToken
+        let lifecycle = tokens
         let clientID = oidcClientID
         let currentSession = session
         let diagnosticLog = diagnosticLog
@@ -666,7 +671,7 @@ actor PolestarAPI {
             reason, now: now(),
             epochIsCurrent: { await self.isSessionCurrent(requestEpoch) },
             grant: {
-                guard let endpoint, let refresh else {
+                guard let endpoint, let refresh = lifecycle.refreshToken else {
                     throw PolestarError.authenticationRequired(.expiredSession)
                 }
                 var request = URLRequest(url: endpoint)

@@ -89,11 +89,30 @@ final class TokenLifecycle: @unchecked Sendable {
         }
     }
 
+    /// Coordinates access tokens and cross-process refresh locking through a shared persistent store
+    /// (typically `KeychainStore`) so `Hisingen.app` and `Hisingen cli` never race on a single-use
+    /// refresh token.
+    struct SharedSessionStore: Sendable {
+        let readSession: @Sendable () throws -> StoredOAuthSession?
+        let readRefreshToken: @Sendable () throws -> String?
+        let writeSession: @Sendable (StoredOAuthSession) throws -> Void
+        let clearSession: @Sendable () -> Void
+        let withLock: @Sendable (@Sendable () async throws -> RefreshStepResult) async throws -> RefreshStepResult
+    }
+
+    enum RefreshStepResult: Sendable {
+        case minted(Grant, baseGeneration: UInt64)
+        case adoptedShared(StoredOAuthSession)
+        case alreadyAdopted
+    }
+
     let policy: Policy
     /// Used in log messages so an export can tell the two stacks apart without guessing.
     let providerName: String
     /// Persists a rotated refresh token. A throw is logged, never fatal.
     let persist: @Sendable (String) throws -> Void
+    /// Optional cross-process session store. Nil keeps lifecycle purely in-memory + `persist`.
+    private let sharedStore: SharedSessionStore?
     /// Recognises the identity provider's permanently-dead-grant answer in the provider's own
     /// error vocabulary.
     let isDeadGrant: @Sendable (Error) -> Bool
@@ -103,13 +122,14 @@ final class TokenLifecycle: @unchecked Sendable {
     private var storedRefreshToken: String?
     private var storedTokenExpiry: Date?
     private var storedTokenLifetime: TimeInterval = 0
+    private var storedGeneration: UInt64 = 0
     private var lastGrantAt: Date?
     /// The most recent grants that were applied, newest last. A caller that joined a grant and
     /// resumes late must still find it applied even when newer grants landed in between; one slot
     /// answered "not current" for it and turned a good grant into a cancellation.
     private var appliedFlights: [UUID] = []
     private static let appliedFlightMemory = 8
-    private var inFlight: (id: UUID, task: Task<Grant, Error>)?
+    private var inFlight: (id: UUID, task: Task<RefreshStepResult, Error>)?
     /// Grants in flight when a reset kept the refresh token. They run on to completion and are
     /// applied even by a caller whose epoch has since moved on: the identity provider rotates the
     /// token the moment it answers, so cancelling the request after it was sent can leave the
@@ -122,12 +142,14 @@ final class TokenLifecycle: @unchecked Sendable {
         providerName: String,
         logger: Logger = AppLog.logger("token-lifecycle"),
         persist: @escaping @Sendable (String) throws -> Void,
+        sharedStore: SharedSessionStore? = nil,
         isDeadGrant: @escaping @Sendable (Error) -> Bool
     ) {
         self.policy = policy
         self.providerName = providerName
         self.logger = logger
         self.persist = persist
+        self.sharedStore = sharedStore
         self.isDeadGrant = isDeadGrant
     }
 
@@ -159,6 +181,35 @@ final class TokenLifecycle: @unchecked Sendable {
     ///
     /// `epochIsCurrent` is the caller's generation guard, consulted after every suspension so a
     /// grant that lands after the session was reset cannot be applied to the new one.
+    /// Hydrates in-memory access credentials from the shared store when another process already
+    /// holds an unexpired access token for the same refresh token.
+    @discardableResult
+    func hydrateFromSharedStoreIfValid(expectedRefreshToken: String? = nil, now: Date = Date()) -> Bool {
+        guard let sharedStore,
+              let session = try? sharedStore.readSession(),
+              !session.accessToken.isEmpty,
+              session.expiresAt.timeIntervalSince(now) >= policy.renewalMargin(session.lifetime) else {
+            return false
+        }
+        if let expectedRefreshToken, !expectedRefreshToken.isEmpty, session.refreshToken != expectedRefreshToken {
+            return false
+        }
+        if let currentRefresh = try? sharedStore.readRefreshToken(), !currentRefresh.isEmpty,
+           session.refreshToken != currentRefresh {
+            return false
+        }
+        return locked {
+            storedAccessToken = session.accessToken
+            if !session.refreshToken.isEmpty {
+                storedRefreshToken = session.refreshToken
+            }
+            storedTokenLifetime = session.lifetime
+            storedTokenExpiry = session.expiresAt
+            storedGeneration = max(storedGeneration, session.generation)
+            return true
+        }
+    }
+
     func refresh(
         _ reason: Reason,
         now: Date = Date(),
@@ -167,8 +218,8 @@ final class TokenLifecycle: @unchecked Sendable {
     ) async throws -> Outcome {
         enum Decision {
             case skip
-            case join((id: UUID, task: Task<Grant, Error>))
-            case start((id: UUID, task: Task<Grant, Error>))
+            case join((id: UUID, task: Task<RefreshStepResult, Error>))
+            case start((id: UUID, task: Task<RefreshStepResult, Error>))
         }
 
         // The decision and the registration are one atomic step: two callers that both looked
@@ -177,7 +228,17 @@ final class TokenLifecycle: @unchecked Sendable {
             if !needsGrant(reason, now: now) { return .skip }
             if let inFlight { return .join(inFlight) }
             let id = UUID()
-            let entry = (id: id, task: Task { try await grant() })
+            let knownGeneration = storedGeneration
+            let entry = (id: id, task: Task {
+                try await self.executeGrant(
+                    entryID: id,
+                    reason: reason,
+                    now: now,
+                    knownGeneration: knownGeneration,
+                    epochIsCurrent: epochIsCurrent,
+                    grant: grant
+                )
+            })
             inFlight = entry
             return .start(entry)
         }
@@ -195,6 +256,83 @@ final class TokenLifecycle: @unchecked Sendable {
                 }
             }
             return try await apply(entry, now: now, epochIsCurrent: epochIsCurrent)
+        }
+    }
+
+    private func executeGrant(
+        entryID: UUID,
+        reason: Reason,
+        now: Date,
+        knownGeneration: UInt64,
+        epochIsCurrent: @escaping @Sendable () async -> Bool,
+        grant: @escaping @Sendable () async throws -> Grant
+    ) async throws -> RefreshStepResult {
+        guard let sharedStore else {
+            return .minted(try await grant(), baseGeneration: knownGeneration)
+        }
+        return try await sharedStore.withLock {
+            let freshSession = try? sharedStore.readSession()
+            let freshRefresh = try? sharedStore.readRefreshToken()
+            if let freshSession,
+               Self.isSharedSessionValid(
+                   freshSession,
+                   currentRefreshToken: freshRefresh,
+                   reason: reason,
+                   knownGeneration: knownGeneration,
+                   now: now,
+                   policy: self.policy
+               ) {
+                return .adoptedShared(freshSession)
+            }
+            if let freshRefresh, !freshRefresh.isEmpty {
+                self.locked {
+                    if self.storedRefreshToken != freshRefresh {
+                        self.storedRefreshToken = freshRefresh
+                    }
+                }
+            }
+            let baseGeneration = max(knownGeneration, freshSession?.generation ?? 0)
+            let obtained = try await grant()
+            // Persist the rotated refresh token and SharedOAuthSession before releasing the
+            // cross-process lock so another process waking on the lock sees the updated grant.
+            let current = await epochIsCurrent()
+            guard self.adoptIfCurrent(
+                obtained,
+                entryID: entryID,
+                now: now,
+                baseGeneration: baseGeneration,
+                epochIsCurrent: current
+            ) else {
+                throw CancellationError()
+            }
+            return .alreadyAdopted
+        }
+    }
+
+    private static func isSharedSessionValid(
+        _ session: StoredOAuthSession,
+        currentRefreshToken: String?,
+        reason: Reason,
+        knownGeneration: UInt64,
+        now: Date,
+        policy: Policy
+    ) -> Bool {
+        guard !session.accessToken.isEmpty else { return false }
+        if let currentRefreshToken, !currentRefreshToken.isEmpty,
+           session.refreshToken != currentRefreshToken {
+            return false
+        }
+        guard session.expiresAt.timeIntervalSince(now) >= policy.renewalMargin(session.lifetime) else {
+            return false
+        }
+        switch reason {
+        case .renewalWindow:
+            return true
+        case .serverRefused(let rejectedToken):
+            if let rejectedToken {
+                return session.accessToken != rejectedToken
+            }
+            return session.generation > knownGeneration
         }
     }
 
@@ -222,17 +360,28 @@ final class TokenLifecycle: @unchecked Sendable {
     }
 
     private func apply(
-        _ entry: (id: UUID, task: Task<Grant, Error>),
+        _ entry: (id: UUID, task: Task<RefreshStepResult, Error>),
         now: Date,
         epochIsCurrent: @Sendable () async -> Bool
     ) async throws -> Outcome {
         let result = await entry.task.result
         switch result {
-        case .success(let grant):
+        case .success(.minted(let grant, let baseGeneration)):
             let current = await epochIsCurrent()
-            guard adoptIfCurrent(grant, entryID: entry.id, now: now, epochIsCurrent: current) else {
+            guard adoptIfCurrent(grant, entryID: entry.id, now: now, baseGeneration: baseGeneration, epochIsCurrent: current) else {
                 throw CancellationError()
             }
+            return .refreshed
+        case .success(.adoptedShared(let shared)):
+            let current = await epochIsCurrent()
+            guard adoptSharedIfCurrent(shared, entryID: entry.id, now: now, epochIsCurrent: current) else {
+                throw CancellationError()
+            }
+            return .refreshed
+        case .success(.alreadyAdopted):
+            let current = await epochIsCurrent()
+            let accepted = locked { current || appliedFlights.contains(entry.id) }
+            guard accepted else { throw CancellationError() }
             return .refreshed
         case .failure(let error):
             locked {
@@ -241,12 +390,36 @@ final class TokenLifecycle: @unchecked Sendable {
             }
             // A rejection from an older epoch must never clear its replacement credential.
             guard await epochIsCurrent() else { throw CancellationError() }
-            if isDeadGrant(error) { return .deadGrant }
+            if isDeadGrant(error) {
+                sharedStore?.clearSession()
+                return .deadGrant
+            }
             throw error
         }
     }
 
-    private func adoptIfCurrent(_ grant: Grant, entryID: UUID, now: Date, epochIsCurrent: Bool) -> Bool {
+    private func adoptSharedIfCurrent(_ session: StoredOAuthSession, entryID: UUID, now: Date, epochIsCurrent: Bool) -> Bool {
+        locked {
+            guard epochIsCurrent || carriedFlights.contains(entryID) else { return false }
+            if appliedFlights.contains(entryID) { return true }
+            guard inFlight?.id == entryID else { return false }
+            inFlight = nil
+            carriedFlights.remove(entryID)
+            appliedFlights.append(entryID)
+            if appliedFlights.count > Self.appliedFlightMemory { appliedFlights.removeFirst() }
+            storedAccessToken = session.accessToken
+            if !session.refreshToken.isEmpty {
+                storedRefreshToken = session.refreshToken
+            }
+            storedTokenLifetime = session.lifetime
+            storedTokenExpiry = session.expiresAt
+            storedGeneration = max(storedGeneration, session.generation)
+            lastGrantAt = now
+            return true
+        }
+    }
+
+    private func adoptIfCurrent(_ grant: Grant, entryID: UUID, now: Date, baseGeneration: UInt64, epochIsCurrent: Bool) -> Bool {
         locked {
             // The restore may have carried this grant while the caller checked its epoch.
             guard epochIsCurrent || carriedFlights.contains(entryID) else { return false }
@@ -261,11 +434,25 @@ final class TokenLifecycle: @unchecked Sendable {
             storedAccessToken = grant.accessToken
             storedRefreshToken = renewable
             storedTokenLifetime = grant.expiresIn
-            storedTokenExpiry = now.addingTimeInterval(grant.expiresIn)
+            let expiry = now.addingTimeInterval(grant.expiresIn)
+            storedTokenExpiry = expiry
+            let nextGeneration = max(storedGeneration, baseGeneration) &+ 1
+            storedGeneration = nextGeneration
             lastGrantAt = now
             if let renewable, renewable != previous {
                 do { try persist(renewable) }
                 catch { logger.error("\(self.providerName, privacy: .public) refresh token persistence failed") }
+            }
+            if let sharedStore, !grant.accessToken.isEmpty {
+                let shared = StoredOAuthSession(
+                    accessToken: grant.accessToken,
+                    refreshToken: renewable ?? "",
+                    expiresAt: expiry,
+                    lifetime: grant.expiresIn,
+                    generation: nextGeneration
+                )
+                do { try sharedStore.writeSession(shared) }
+                catch { logger.error("\(self.providerName, privacy: .public) shared OAuth session persistence failed") }
             }
             return true
         }
@@ -275,23 +462,43 @@ final class TokenLifecycle: @unchecked Sendable {
     /// identity provider has just issued a brand-new session instead of rotating an existing one.
     /// The same in-memory-first, best-effort-persist rules apply.
     func adopt(_ grant: Grant, now: Date = Date()) throws {
-        let (renewableToken, previousRefreshToken) = locked { () -> (String?, String?) in
+        let externalGeneration = (try? sharedStore?.readSession()?.generation) ?? 0
+        let expiry = now.addingTimeInterval(grant.expiresIn)
+        let (renewableToken, previousRefreshToken, nextGeneration) = locked { () -> (String?, String?, UInt64) in
             let previous = storedRefreshToken
             let renewable = grant.refreshToken ?? storedRefreshToken
             storedAccessToken = grant.accessToken
             storedRefreshToken = renewable
             storedTokenLifetime = grant.expiresIn
-            storedTokenExpiry = now.addingTimeInterval(grant.expiresIn)
+            storedTokenExpiry = expiry
+            let generation = max(storedGeneration, externalGeneration) &+ 1
+            storedGeneration = generation
             lastGrantAt = now
-            return (renewable, previous)
+            return (renewable, previous, generation)
         }
-        guard let renewableToken, renewableToken != previousRefreshToken else { return }
-        do {
-            try persist(renewableToken)
-        } catch {
-            logger.error(
-                "\(self.providerName, privacy: .public) rotated refresh token could not be persisted; the session will not survive a restart: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)"
+        if let renewableToken, renewableToken != previousRefreshToken {
+            do {
+                try persist(renewableToken)
+            } catch {
+                logger.error(
+                    "\(self.providerName, privacy: .public) rotated refresh token could not be persisted; the session will not survive a restart: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)"
+                )
+            }
+        }
+        if let sharedStore, !grant.accessToken.isEmpty {
+            let shared = StoredOAuthSession(
+                accessToken: grant.accessToken,
+                refreshToken: renewableToken ?? "",
+                expiresAt: expiry,
+                lifetime: grant.expiresIn,
+                generation: nextGeneration
             )
+            do { try sharedStore.writeSession(shared) }
+            catch {
+                logger.error(
+                    "\(self.providerName, privacy: .public) shared OAuth session persistence failed: \(DiagnosticRedaction.redact(String(describing: error)), privacy: .public)"
+                )
+            }
         }
     }
 
@@ -323,8 +530,8 @@ final class TokenLifecycle: @unchecked Sendable {
         task?.cancel()
     }
 
-    private func resetLocked(keepingRefreshToken: Bool, keepingAccessToken: Bool) -> Task<Grant, Error>? {
-        var cancelled: Task<Grant, Error>?
+    private func resetLocked(keepingRefreshToken: Bool, keepingAccessToken: Bool) -> Task<RefreshStepResult, Error>? {
+        var cancelled: Task<RefreshStepResult, Error>?
         if keepingRefreshToken, let flight = inFlight {
             // The identity provider may already have rotated the credential this reset keeps.
             carriedFlights.insert(flight.id)
@@ -340,14 +547,17 @@ final class TokenLifecycle: @unchecked Sendable {
             storedTokenExpiry = nil
             storedTokenLifetime = 0
         }
-        if !keepingRefreshToken { storedRefreshToken = nil }
+        if !keepingRefreshToken {
+            storedRefreshToken = nil
+            storedGeneration = 0
+        }
         return cancelled
     }
 
     /// Cancels an in-flight grant without touching the session. A new authorization is about to
     /// replace it, and its rotated token must not land afterwards.
     func cancelInFlightGrant() {
-        let task = locked { () -> Task<Grant, Error>? in
+        let task = locked { () -> Task<RefreshStepResult, Error>? in
             let task = inFlight?.task
             inFlight = nil
             carriedFlights = []
