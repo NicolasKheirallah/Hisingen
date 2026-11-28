@@ -50,7 +50,7 @@ let package = Package(
         // treating a GitHub release asset as executable input in application code.
         .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.1"),
         .package(url: "https://github.com/grpc/grpc-swift-2.git", exact: "2.4.4"),
-        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.13.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.13.1"),
         .package(url: "https://github.com/apple/swift-async-algorithms.git", exact: "1.1.7"),
         .package(url: "https://github.com/apple/swift-http-types.git", exact: "1.8.0"),
         .package(url: "https://github.com/apple/swift-nio.git", exact: "2.105.0"),
