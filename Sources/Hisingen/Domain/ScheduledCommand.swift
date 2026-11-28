@@ -2,8 +2,8 @@ import Foundation
 
 /// One action the reader scheduled for a wall-clock time on chosen weekdays.
 ///
-/// `targetVIN` scopes the schedule to one vehicle; `nil` keeps legacy behavior of targeting the
-/// active vehicle when no specific VIN was chosen.
+/// `targetVIN` scopes the schedule to one vehicle. A legacy schedule can run without a choice
+/// when there is exactly one vehicle in the garage.
 struct ScheduledCommand: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     /// Wall-clock hour and minute in the Mac's current time zone.

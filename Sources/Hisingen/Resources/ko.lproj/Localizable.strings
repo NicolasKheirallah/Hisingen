@@ -2954,7 +2954,7 @@
 "Since Last Charge" = "마지막 충전 이후";
 "Specs" = "사양";
 "Spot-Price Optimised" = "현물 가격 기준 최적화";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "선택한 캘린더의 예정된 일정 전에 공조를 시작합니다. 이 명령은 현재 활성 차량을 대상으로 합니다.";
+"Start climate before timed events in calendars you choose." = "선택한 캘린더에서 시간이 지정된 일정 전에 공조를 시작합니다.";
 "Starts the engine." = "엔진을 시동합니다.";
 "Success" = "성공";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Polestar 계정에 성공적으로 연결되었습니다! 텔레메트리를 가져오는 중…";
@@ -4150,7 +4150,8 @@
 "Weekdays" = "평일";
 "Scheduled Actions" = "예약된 작업";
 "Add scheduled action" = "예약된 작업 추가";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "선택한 시간과 요일에, 그때 활성화된 차량에 대해 작업 하나를 실행합니다. 확인이 필요 없는 작업만 예약할 수 있습니다.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "선택한 요일과 시간에 동작 하나를 실행합니다. 확인이 필요 없는 동작만 예약할 수 있습니다.";
+"Choose a vehicle to run this automation." = "이 자동화를 실행할 차량을 선택하세요.";
 "No scheduled actions yet." = "아직 예약된 작업이 없습니다.";
 "Enable %@" = "%@ 활성화";
 "Arrival & Departure" = "도착 및 출발";

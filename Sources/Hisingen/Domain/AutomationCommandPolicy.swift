@@ -8,6 +8,14 @@ import Foundation
 /// `CommandCoordinator` already runs silently for `.automation` origins. Anything a person has
 /// to approve stays a tap in the Controls tab.
 enum AutomationCommandPolicy {
+    static func targetVIN(_ selectedVIN: String?, knownVINs: [String]) -> String? {
+        let available = Set(knownVINs.map(\.normalizedVIN).filter { !$0.isEmpty })
+        if let selected = selectedVIN?.normalizedVIN, !selected.isEmpty {
+            return available.contains(selected) ? selected : nil
+        }
+        return available.count == 1 ? available.first : nil
+    }
+
     /// Whether an unattended path may carry `command`. The check is on risk rather than an
     /// allowlist of cases, so a command a future provider adds at routine risk becomes
     /// schedulable without editing a table that would then disagree with the coordinator.

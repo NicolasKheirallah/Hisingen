@@ -275,14 +275,14 @@ struct SettingsView: View {
                 if let onNavigateToPlan {
                     NavigationRow(title: L10n.text("Open Plan Automations")) { onNavigateToPlan(.controlsRoutines) }
                 } else {
-                    CalendarPreconditioningSettingsCard(binder: binder)
+                    CalendarPreconditioningSettingsCard(binder: binder, fleet: fleet)
                     if preferences.smartChargingPlannerAvailable || preferences.plannerAutoStartEnabled {
                         Card { PlannerAutoStartControl(binder: binder) }
                     }
                 }
                 // Scheduled actions, location triggers and the fleet broadcast have no Plan-tab
                 // home; they are configured here whichever surface the reader is in.
-                AutomationSettingsCards(binder: binder, state: state)
+                AutomationSettingsCards(binder: binder, fleet: fleet, state: state)
             }
         case .notifications, .plannerAlerts:
             VStack(alignment: .leading, spacing: 8) {

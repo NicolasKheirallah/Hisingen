@@ -2954,7 +2954,7 @@
 "Since Last Charge" = "自上次充电以来";
 "Specs" = "规格";
 "Spot-Price Optimised" = "现货电价优化";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "在您所选日历的定时事件前开启空调。该指令针对当前使用的车辆。";
+"Start climate before timed events in calendars you choose." = "在选定日历中的定时日程开始前启动空调。";
 "Starts the engine." = "启动发动机。";
 "Success" = "成功";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "已成功连接到您的 Polestar 账户！正在获取遥测数据…";
@@ -4150,7 +4150,8 @@
 "Weekdays" = "工作日";
 "Scheduled Actions" = "计划操作";
 "Add scheduled action" = "添加计划操作";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "在你选择的时间和日期，对当时激活的车辆执行一项操作。只有无需确认的操作可以计划。";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "在你选择的时间和日期执行一项操作。只有无需确认的操作才能安排执行。";
+"Choose a vehicle to run this automation." = "请选择要运行此自动化的车辆。";
 "No scheduled actions yet." = "尚未有已计划的操作。";
 "Enable %@" = "启用 %@";
 "Arrival & Departure" = "到达与离开";

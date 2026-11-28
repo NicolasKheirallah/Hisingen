@@ -143,12 +143,14 @@ steals focus; drag it anywhere and the position is remembered.
 ### Calendar preconditioning
 
 Hisingen can start cabin climate a set number of minutes before timed events in the calendars
-you choose (Settings → Features). It reads events through macOS Calendar (EventKit); the
-events stay on your Mac and are never sent anywhere. It schedules a single timer for the next one,
-and re-checks after sleep and when the calendar changes. The climate command targets the active
-vehicle and passes the same capability and feature checks as the manual control; because it is a
-preconfigured automation with nobody at the Mac to answer a prompt, it does not raise the
-device-owner confirmation even when that is required for the manual controls.
+you choose. Open Automation on the Plan tab or from Settings → Automations. If your garage
+has multiple vehicles, choose which one to precondition. Hisingen pauses calendar preconditioning
+while a multi-vehicle garage has no target selected.
+
+Events stay on your Mac. Hisingen reads them through macOS Calendar (EventKit), sets a timer
+for the next event, and checks again after sleep or a calendar change. The climate command passes
+the same capability and feature checks as the manual control. It runs without the device-owner
+prompt so it can start while you are away from the Mac.
 
 ### Reminders
 

@@ -1,5 +1,3 @@
-- **Automation controllers scope commands and planner windows by target VIN.** Scheduled
-  commands, location triggers, calendar preconditioning, and the charging planner support
-  explicit target VINs while remaining backward-compatible with legacy unpinned settings, and
-  committed planner windows keep sleep prevention active and stop charging at window end even
-  if the menu bar switches to another car.
+- **Choose a vehicle for scheduled actions and calendar preconditioning.** Unassigned rules pause
+  in a multi-car garage. Location triggers act on the car that arrived or left. The planner
+  keeps its window and sends the stop command to the same car even when you switch vehicles.

@@ -9,11 +9,12 @@ import SwiftUI
 @MainActor
 struct AutomationSettingsCards: View {
     let binder: PreferenceBinder
+    let fleet: FleetSnapshot
     var state: VehicleState? = nil
 
     var body: some View {
         VStack(spacing: HisingenTheme.sectionSpacing) {
-            ScheduledActionsCard(binder: binder)
+            ScheduledActionsCard(binder: binder, fleet: fleet)
             LocationTriggersCard(binder: binder, locations: savedLocations)
             FleetBroadcastCard(binder: binder)
             RecurringReportCard(binder: binder)
@@ -25,11 +26,74 @@ struct AutomationSettingsCards: View {
     }
 }
 
+@MainActor
+struct AutomationVehiclePicker: View {
+    let fleet: FleetSnapshot
+    @Binding var targetVIN: String?
+    @Environment(\.preferencesStore) private var preferences
+
+    var body: some View {
+        let vins = availableVehicles
+        let resolved = AutomationCommandPolicy.targetVIN(targetVIN, knownVINs: vins)
+        if vins.count > 1 || (targetVIN != nil && resolved == nil) {
+            let titles = vins.map(vehicleTitle)
+            Picker(L10n.text("Vehicle"), selection: $targetVIN) {
+                if vins.count > 1 {
+                    Text(L10n.text("No vehicle selected")).tag(nil as String?)
+                }
+                if let targetVIN, resolved == nil {
+                    Text(L10n.text("Unavailable")).tag(Optional(targetVIN))
+                }
+                ForEach(Array(vins.enumerated()), id: \.element) { index, vin in
+                    let title = titles[index]
+                    let option = titles.filter { $0 == title }.count > 1
+                        ? L10n.format("%@ · %@", title, String(index + 1)) : title
+                    Text(option).tag(Optional(vin.normalizedVIN))
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .disabled(vins.isEmpty)
+
+            if resolved == nil, !vins.isEmpty {
+                Text(L10n.text("Choose a vehicle to run this automation."))
+                    .hisType(.micro)
+                    .foregroundStyle(.secondary)
+                    .hisCaptionLeading()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var availableVehicles: [String] {
+        var seen = Set<String>()
+        return fleet.vehicles(orderedBy: preferences.garageVehicleOrder).filter {
+            let vin = $0.normalizedVIN
+            return !vin.isEmpty && seen.insert(vin).inserted
+        }
+    }
+
+    private func vehicleTitle(_ vin: String) -> String {
+        if let state = fleet.snapshot(for: vin) {
+            return preferences.formattedVehicleTitle(
+                vin: vin, modelName: state.identity.modelName, modelYear: state.identity.modelYear,
+                registrationNo: state.identity.registrationNo, fallbackBrand: state.model.brand)
+        }
+        if let car = fleet.cars.first(where: { $0.vin == vin }) {
+            return car.displayTitle(preferences: preferences)
+        }
+        let brand = VehicleBrand.allCases.first { preferences.knownVINs(for: $0).contains(vin) }
+        return preferences.formattedVehicleTitle(
+            vin: vin, modelName: nil, modelYear: nil, registrationNo: nil, fallbackBrand: brand)
+    }
+}
+
 // MARK: - Scheduled actions
 
 @MainActor
 private struct ScheduledActionsCard: View {
     let binder: PreferenceBinder
+    let fleet: FleetSnapshot
 
     private var preferences: PreferencesStore { binder.preferences }
     private var schedules: [ScheduledCommand] { preferences.scheduledCommands }
@@ -53,7 +117,7 @@ private struct ScheduledActionsCard: View {
                     .help(L10n.text("Add scheduled action"))
                     .accessibilityLabel(L10n.text("Add scheduled action"))
                 }
-                Text(L10n.text("Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled."))
+                Text(L10n.text("Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled."))
                     .hisType(.micro)
                     .foregroundStyle(.secondary)
                     .hisCaptionLeading()
@@ -123,6 +187,13 @@ private struct ScheduledActionsCard: View {
                 weekdayChips(schedule: schedule, index: index)
                 Spacer(minLength: 0)
             }
+            AutomationVehiclePicker(
+                fleet: fleet,
+                targetVIN: Binding(
+                    get: { schedule.targetVIN },
+                    set: { vin in mutate(index) { $0.targetVIN = vin } }
+                )
+            )
         }
     }
 

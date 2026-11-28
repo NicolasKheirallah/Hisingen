@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct CalendarPreconditioningSettingsCard: View {
     let binder: PreferenceBinder
+    let fleet: FleetSnapshot
 
     /// One long-lived store for the whole card (EventKit prefers this over ad-hoc instances).
     @State private var eventStore = EKEventStore()
@@ -14,6 +15,10 @@ struct CalendarPreconditioningSettingsCard: View {
     @State private var previewTask: Task<Void, Never>?
 
     private var preferences: PreferencesStore { binder.preferences }
+
+    private var targetVIN: String? {
+        AutomationCommandPolicy.targetVIN(preferences.calendarPreconditioningTargetVIN, knownVINs: fleet.vehicles)
+    }
 
     private var enabledBinding: Binding<Bool> {
         Binding(
@@ -45,10 +50,22 @@ struct CalendarPreconditioningSettingsCard: View {
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                         .accessibilityLabel(L10n.text("Calendar preconditioning"))
                 }
-                Text(L10n.text("Start climate before timed events in calendars you choose. The command targets the currently active vehicle."))
+                Text(L10n.text("Start climate before timed events in calendars you choose."))
                     .hisType(.micro).foregroundStyle(.secondary)
                     .hisCaptionLeading()
                     .fixedSize(horizontal: false, vertical: true)
+
+                AutomationVehiclePicker(
+                    fleet: fleet,
+                    targetVIN: Binding(
+                        get: { preferences.calendarPreconditioningTargetVIN },
+                        set: { vin in
+                            preferences.calendarPreconditioningTargetVIN = vin
+                            binder.notify(.automation)
+                            binder.bump()
+                        }
+                    )
+                )
 
                 if preferences.requireBiometricsForRemoteControls {
                     Label(L10n.text("Because you require device-owner authentication for remote controls, calendar-triggered climate starts run without that prompt, because nobody is present to answer it when they fire."),
@@ -85,7 +102,7 @@ struct CalendarPreconditioningSettingsCard: View {
                             .labelsHidden().controlSize(.small).frame(width: 120)
                         }
 
-                        if preferences.calendarPreconditioningEnabled, let nextPreview {
+                        if preferences.calendarPreconditioningEnabled, targetVIN != nil, let nextPreview {
                             Label(
                                 L10n.format("Next: %@ at %@, climate starts %@",
                                             nextPreview.title, Format.shortTime(date: nextPreview.eventStart),
@@ -132,6 +149,7 @@ struct CalendarPreconditioningSettingsCard: View {
             .hisAnimation(Motion.cardChange, value: preferences.calendarPreconditioningEnabled)
         }
         .task { loadCalendars(); refreshPreview() }
+        .onChange(of: targetVIN) { _, _ in refreshPreview() }
     }
 
     private func calendarBinding(_ identifier: String) -> Binding<Bool> {
@@ -193,7 +211,7 @@ struct CalendarPreconditioningSettingsCard: View {
     /// per-toggle refreshes.
     private func refreshPreview() {
         previewTask?.cancel()
-        guard preferences.calendarPreconditioningEnabled else {
+        guard preferences.calendarPreconditioningEnabled, targetVIN != nil else {
             nextPreview = nil
             return
         }

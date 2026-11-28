@@ -2971,7 +2971,7 @@
 "Since Last Charge" = "Sedan senaste laddning";
 "Specs" = "Specifikationer";
 "Spot-Price Optimised" = "Optimerad efter spotpris";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Starta klimatet före tidsstyrda händelser i kalendrar du väljer. Kommandot gäller det fordon som är aktivt just nu.";
+"Start climate before timed events in calendars you choose." = "Starta klimatanläggningen före händelser med klockslag i dina valda kalendrar.";
 "Starts the engine." = "Startar motorn.";
 "Success" = "Klart";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Anslutningen till ditt Polestar-konto lyckades! Hämtar telemetri…";
@@ -4167,7 +4167,8 @@
 "Weekdays" = "Vardagar";
 "Scheduled Actions" = "Schemalagda åtgärder";
 "Add scheduled action" = "Lägg till schemalagd åtgärd";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Kör en åtgärd vid den tid och de dagar du väljer, mot den bil som är aktiv då. Bara åtgärder som inte kräver bekräftelse kan schemaläggas.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Kör en åtgärd vid den tid och de dagar du väljer. Bara åtgärder som inte kräver bekräftelse kan schemaläggas.";
+"Choose a vehicle to run this automation." = "Välj ett fordon för att köra automatiseringen.";
 "No scheduled actions yet." = "Inga schemalagda åtgärder ännu.";
 "Enable %@" = "Aktivera %@";
 "Arrival & Departure" = "Ankomst och avresa";

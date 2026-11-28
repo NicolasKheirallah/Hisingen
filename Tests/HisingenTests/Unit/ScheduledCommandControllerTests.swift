@@ -293,6 +293,19 @@ struct ScheduledCommandControllerTests {
     }
 
     @Test
+    func unassignedAutomationUsesOnlyAnUnambiguousVehicle() {
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: []) == nil)
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: ["VIN-A", " vin-a "]) == "VIN-A")
+        #expect(AutomationCommandPolicy.targetVIN(nil, knownVINs: ["VIN-A", "VIN-B"]) == nil)
+    }
+
+    @Test
+    func anAssignedAutomationKeepsItsTargetAcrossSelectionChanges() {
+        #expect(AutomationCommandPolicy.targetVIN("vin-a", knownVINs: ["VIN-B", "VIN-A"]) == "VIN-A")
+        #expect(AutomationCommandPolicy.targetVIN("VIN-A", knownVINs: ["VIN-B"]) == nil)
+    }
+
+    @Test
     func scheduleRoutesExplicitTargetVINToSender() async {
         let scoped = ScopedPreferences(label: "ScheduleTargetVIN")
         scoped.store.scheduledCommands = [

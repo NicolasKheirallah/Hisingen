@@ -222,10 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
             },
             // While Home Assistant runs a plan for the car, the vehicle-side scheduler waits.
             plannerOwnedByHomeAssistant: { [weak self] vin in self?.homeCharging.ownsPlan(for: vin) ?? false },
-            activeVINs: { [preferences] in
-                [preferences.vin, preferences.vin(for: .polestar), preferences.vin(for: .volvo)]
-                    .filter { !$0.isEmpty }
-            },
+            activeVINs: { [weak self] in self?.automationVehicleVINs ?? [] },
             startCharging: { [weak self] vin in
                 guard let self else {
                     return .deferred(reason: L10n.text("Hisingen is no longer running."))

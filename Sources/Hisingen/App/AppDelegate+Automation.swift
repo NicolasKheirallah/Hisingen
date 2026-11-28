@@ -1,23 +1,25 @@
 import Foundation
 
 extension AppDelegate {
-    func startCalendarClimate(targetVIN: String? = nil) async -> RemoteCommandDispatchOutcome {
+    var automationVehicleVINs: [String] {
+        VehicleBrand.allCases.flatMap { fleetStore.knownVINs(for: $0) }
+    }
+
+    func startCalendarClimate(targetVIN: String?) async -> RemoteCommandDispatchOutcome {
         // Don't attempt (and don't spend a "Command not sent" banner) when the user has
         // turned the remote-climate feature off. Capability/session gating still happens
         // inside `CommandCoordinator`.
         guard preferences.features.contains(.remoteClimate) else {
             return .refused(reason: RemoteCommandError.disabled.localizedDescription)
         }
-        let expectedVIN = targetVIN?.normalizedVIN
-        if let expectedVIN, !expectedVIN.isEmpty {
-            guard await vehicleSession.prepareVehicle(vin: expectedVIN) else {
-                return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
-            }
+        guard let vin = AutomationCommandPolicy.targetVIN(targetVIN, knownVINs: automationVehicleVINs),
+              await vehicleSession.prepareVehicle(vin: vin) else {
+            return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
         }
         return await commandCoordinator.perform(
             AutomationCommandPolicy.SavedClimate(preferences: preferences).startCommand,
             origin: .automation,
-            expectedVIN: (expectedVIN?.isEmpty == false) ? expectedVIN : nil)
+            expectedVIN: vin)
     }
 
     /// The planner's unattended start-charging path. Guarded on the remote-charging
@@ -62,8 +64,7 @@ extension AppDelegate {
     /// The one unattended send path: queue, cooldown, then the coordinator's own gating,
     /// authorization and provider execution.
     ///
-    /// `targetVIN` names a vehicle for the fleet broadcast; `nil` means the active one, which is
-    /// what a schedule and a location trigger act on.
+    /// A legacy schedule can use the garage's only vehicle. A trigger passes the VIN that moved.
     func sendAutomationCommand(_ template: RemoteCommand, to targetVIN: String?) async -> AutomationSendResult {
         let command = AutomationCommandPolicy.resolved(
             template, saved: AutomationCommandPolicy.SavedClimate(preferences: preferences))
@@ -72,18 +73,8 @@ extension AppDelegate {
         guard AutomationCommandPolicy.allows(command) else {
             return .failed(reason: RemoteCommandError.unsupported.localizedDescription)
         }
-        let vin: String
-        if let targetVIN, !targetVIN.isEmpty {
-            guard await vehicleSession.prepareVehicle(vin: targetVIN) else {
-                return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
-            }
-            vin = targetVIN.normalizedVIN
-        } else {
-            vin = (vehicleSession.latest?.identity.vin ?? preferences.vin).normalizedVIN
-        }
-        guard !vin.isEmpty else {
-            // Nothing was sent, so this is a retryable deferral: a schedule that fired before the
-            // snapshot landed can still go out inside its catch-up window.
+        guard let vin = AutomationCommandPolicy.targetVIN(targetVIN, knownVINs: automationVehicleVINs),
+              await vehicleSession.prepareVehicle(vin: vin) else {
             return .deferred(reason: L10n.text("The target vehicle could not be loaded."))
         }
         return await automationDispatcher.send(command, to: vin)

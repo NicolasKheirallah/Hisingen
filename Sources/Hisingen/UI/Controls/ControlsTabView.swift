@@ -29,6 +29,7 @@ struct ControlsTabView: View {
     var onNavigateToSettings: ((SettingsDestination) -> Void)? = nil
     var onNavigateToHistory: (() -> Void)? = nil
     var onSettingsChanged: ((SettingsChange) -> Void)? = nil
+    var fleet = FleetSnapshot()
 
     func draws(_ item: TabItemID) -> Bool { layout.draws(item) }
 
@@ -329,7 +330,7 @@ struct ControlsTabView: View {
                 .padding(.horizontal, HisingenTheme.cardPadding)
             if onSettingsChanged != nil {
                 if canSetCalendarPreconditioning {
-                    CalendarPreconditioningSettingsCard(binder: preferenceBinder)
+                    CalendarPreconditioningSettingsCard(binder: preferenceBinder, fleet: fleet)
                 }
                 if canSetPlannerAutoStart {
                     Card {

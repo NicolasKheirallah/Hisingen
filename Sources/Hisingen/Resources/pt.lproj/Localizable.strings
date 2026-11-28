@@ -2954,7 +2954,7 @@
 "Since Last Charge" = "Desde o último carregamento";
 "Specs" = "Especificações";
 "Spot-Price Optimised" = "Otimizado pelo preço spot";
-"Start climate before timed events in calendars you choose. The command targets the currently active vehicle." = "Iniciar a climatização antes de eventos agendados nos calendários que escolher. O comando é enviado para o veículo ativo de momento.";
+"Start climate before timed events in calendars you choose." = "Inicie a climatização antes dos eventos com hora marcada nos calendários que escolher.";
 "Starts the engine." = "Liga o motor.";
 "Success" = "Sucesso";
 "Successfully connected to your Polestar account! Fetching telemetry…" = "Ligação à sua conta Polestar concluída! A obter telemetria…";
@@ -4150,7 +4150,8 @@
 "Weekdays" = "Dias úteis";
 "Scheduled Actions" = "Ações agendadas";
 "Add scheduled action" = "Adicionar ação agendada";
-"Runs one action at the time and days you choose, against the vehicle that is active then. Only actions that need no confirmation can be scheduled." = "Executa uma ação à hora e nos dias escolhidos, no veículo ativo nesse momento. Só é possível agendar ações que não exijam confirmação.";
+"Runs one action at the time and days you choose. Only actions that need no confirmation can be scheduled." = "Executa uma ação à hora e nos dias que escolher. Só pode agendar ações que não precisem de confirmação.";
+"Choose a vehicle to run this automation." = "Escolha um veículo para executar esta automatização.";
 "No scheduled actions yet." = "Ainda não há ações agendadas.";
 "Enable %@" = "Ativar %@";
 "Arrival & Departure" = "Chegada e partida";
