@@ -43,8 +43,8 @@ enum ChargingSessionEnergySource: String, Codable, Equatable, Sendable {
     }
 }
 
-/// Where a charging session happened. Recorded sessions count as home until the reader
-/// changes them; a session entered by hand carries the place the reader picked.
+/// Where a charging session happened. DC and charges away from a known home location
+/// count as public. The reader can correct the place or pick it when entering a session.
 enum ChargingSessionPlace: String, Codable, Equatable, Hashable, CaseIterable, Sendable, Identifiable {
     case home
     case publicCharging = "public"

@@ -391,6 +391,13 @@ extension HistoryDashboardView {
     /// The charger's own energy priced at Tibber's rate with the grid fee when the charger measured
     /// the session; otherwise the estimate from the battery-side energy and the rate settings.
     func sessionCostFigure(_ session: HistoricalChargingSession, estimate: Double?) -> SessionCostFigure? {
+        if let cost = session.manualCost {
+            return SessionCostFigure(
+                label: L10n.text("Total Price"),
+                value: Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol),
+                note: L10n.text("Entered by hand")
+            )
+        }
         if let wallbox = session.wallbox {
             let symbol = wallbox.currency ?? session.currencySymbol ?? preferences.currencySymbol
             let note = wallbox.costAssumptions.isEmpty ? nil : wallbox.costAssumptions.joined(separator: ". ") + "."
@@ -550,8 +557,7 @@ extension HistoryDashboardView {
 
     func chargingSessionRow(_ session: HistoricalChargingSession, flagged: Bool) -> some View {
         let ratePolicy = preferences.electricityRatePolicy
-        // The charger's Tibber-priced total wins over the battery-side estimate when there is one.
-        let cost: Double? = session.wallbox?.cost ?? (ratePolicy.isAutomatic && session.spotEstimatedCost != nil
+        let cost: Double? = session.manualCost ?? session.wallbox?.cost ?? (ratePolicy.isAutomatic && session.spotEstimatedCost != nil
             ? session.resolvedCost(policy: ratePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh).amount
             : session.estimatedCost ?? session.tariffPricePerKwh.map { $0 * session.energyDeliveredKwh })
         let added = (session.endSoc ?? session.startSoc) - session.startSoc

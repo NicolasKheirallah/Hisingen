@@ -156,12 +156,12 @@ final class HistoryWorkspace {
     func updateChargingSession(
         id: String, vin: String, startedAt: Date, endedAt: Date, locationName: String?,
         place: ChargingSessionPlace, energyKwh: Double, totalCost: Double?,
-        pricePerKwh: Double?
+        pricePerKwh: Double?, priceChanged: Bool
     ) {
         database.charging.updateChargingSessionDetails(
             id: id, vin: vin, startedAt: startedAt, endedAt: endedAt,
             locationName: locationName, place: place, energyKwh: energyKwh,
-            totalCost: totalCost, pricePerKwh: pricePerKwh
+            totalCost: totalCost, pricePerKwh: pricePerKwh, priceChanged: priceChanged
         )
     }
 

@@ -91,10 +91,10 @@ extension HistoryDashboardView {
         sessionStartedAt = session.startedAt
         sessionEndedAt = session.endedAt ?? session.startedAt.addingTimeInterval(1_800)
         sessionLocationText = session.locationName ?? ""
-        sessionEnergyText = session.energyDeliveredKwh > 0
-            ? String(format: "%.2f", locale: L10n.displayLocale, session.energyDeliveredKwh) : ""
-        sessionTotalPriceText = session.estimatedCost.map { String(format: "%.2f", locale: L10n.displayLocale, $0) } ?? ""
-        sessionPricePerKwhText = session.tariffPricePerKwh.map { String(format: "%.4f", locale: L10n.displayLocale, $0) } ?? ""
+        let entry = chargingEntryText(for: session)
+        sessionEnergyText = entry.energy
+        sessionTotalPriceText = entry.total
+        sessionPricePerKwhText = entry.perKwh
         sessionPlace = session.place
         showChargingSessionSheet = true
     }
@@ -110,12 +110,18 @@ extension HistoryDashboardView {
         let location = sessionLocationText.trimmingCharacters(in: .whitespacesAndNewlines)
         let locationName = location.isEmpty ? nil : location
         if let session = editingChargingSession {
+            let entry = chargingEntryText(for: session)
+            let original = ManualChargingSessionValidation.validate(
+                energyText: entry.energy, totalPriceText: entry.total, pricePerKwhText: entry.perKwh
+            )
+            let priceChanged = validation.totalCost != original.totalCost
+                || validation.pricePerKwh != original.pricePerKwh
             history.updateChargingSession(
                 id: session.id, vin: state.identity.vin,
                 startedAt: sessionStartedAt, endedAt: sessionEndedAt,
                 locationName: locationName, place: sessionPlace,
-                energyKwh: validation.energyKwh,
-                totalCost: validation.totalCost, pricePerKwh: validation.pricePerKwh
+                energyKwh: validation.energyKwh == original.energyKwh ? session.energyDeliveredKwh : validation.energyKwh,
+                totalCost: validation.totalCost, pricePerKwh: validation.pricePerKwh, priceChanged: priceChanged
             )
         } else {
             history.addManualChargingSession(
@@ -129,5 +135,14 @@ extension HistoryDashboardView {
         showChargingSessionSheet = false
         editingChargingSession = nil
         bumpRefresh()
+    }
+
+    private func chargingEntryText(for session: HistoricalChargingSession) -> (energy: String, total: String, perKwh: String) {
+        let locale = L10n.displayLocale
+        return (
+            session.energyDeliveredKwh > 0 ? String(format: "%.2f", locale: locale, session.energyDeliveredKwh) : "",
+            session.estimatedCost.map { String(format: "%.2f", locale: locale, $0) } ?? "",
+            session.tariffPricePerKwh.map { String(format: "%.4f", locale: locale, $0) } ?? ""
+        )
     }
 }

@@ -74,7 +74,7 @@ struct ChargingSpotCostMigrationTests {
         let session = try #require(database.charging.recentChargingSessions(for: "OLD-VIN").first)
         #expect(session.spotEstimatedCost == nil, "pre-migration rows must read as uncosted")
 
-        database.charging.updateSpotEstimatedCost(id: "legacy-1", cost: 21.5)
+        #expect(database.charging.updateSpotEstimatedCost(for: session, cost: 21.5))
         #expect(abs((database.charging.recentChargingSessions(for: "OLD-VIN").first?.spotEstimatedCost ?? 0) - 21.5) < 0.001)
     }
 

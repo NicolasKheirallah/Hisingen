@@ -68,7 +68,8 @@ extension ChargingSessionLedger {
         place: ChargingSessionPlace,
         energyKwh: Double,
         totalCost: Double?,
-        pricePerKwh: Double?
+        pricePerKwh: Double?,
+        priceChanged: Bool = true
     ) {
         let perKwh = pricePerKwh ?? (energyKwh > 0 ? totalCost.map { $0 / energyKwh } : nil)
         let total = totalCost ?? perKwh.map { $0 * energyKwh }
@@ -76,11 +77,24 @@ extension ChargingSessionLedger {
         logOnFailure("session details update") {
             try sql.query(sql: """
                 UPDATE charging_sessions SET
-                    started_at = ?, ended_at = ?, location_name = ?, charging_place = ?,
-                    energy_delivered_kwh = ?, tariff_price_per_kwh = ?,
-                    estimated_cost = ?, spot_estimated_cost = NULL,
-                    cost_manually_edited = ?, last_observed_at = ?
-                WHERE id = ? AND vin = ? AND ended_at IS NOT NULL;
+                    started_at = ?1, ended_at = ?2, location_name = ?3, charging_place = ?4,
+                    energy_delivered_kwh = ?5,
+                    tariff_price_per_kwh = CASE WHEN ?9 THEN ?6 ELSE tariff_price_per_kwh END,
+                    estimated_cost = CASE
+                        WHEN ?9 THEN ?7
+                        WHEN cost_manually_edited = 0 AND energy_delivered_kwh > 0
+                            AND energy_delivered_kwh != ?5
+                        THEN estimated_cost * ?5 / energy_delivered_kwh
+                        ELSE estimated_cost
+                    END,
+                    spot_estimated_cost = CASE
+                        WHEN ?9 OR started_at != ?1 OR ended_at != ?2 OR charging_place != ?4
+                            OR energy_delivered_kwh IS NOT ?5
+                        THEN NULL ELSE spot_estimated_cost
+                    END,
+                    cost_manually_edited = CASE WHEN ?9 THEN ?8 ELSE cost_manually_edited END,
+                    last_observed_at = ?2
+                WHERE id = ?10 AND vin = ?11 AND ended_at IS NOT NULL;
                 """) { stmt in
                 try stmt.bindDate(startedAt, at: 1)
                 try stmt.bindDate(endedAt, at: 2)
@@ -90,7 +104,7 @@ extension ChargingSessionLedger {
                 try stmt.bindDouble(perKwh, at: 6)
                 try stmt.bindDouble(total, at: 7)
                 try stmt.bindInt64(manuallyEdited, at: 8)
-                try stmt.bindDate(endedAt, at: 9)
+                try stmt.bindInt64(priceChanged ? 1 : 0, at: 9)
                 try stmt.bindText(id, at: 10)
                 try stmt.bindText(vin, at: 11)
                 try stmt.executeUpdate()

@@ -20,6 +20,7 @@ import OSLog
 final class VehicleHistoryRecorder {
     private let database: VehicleDatabase
     private let preferences: PreferencesStore
+    private let homeChargingStore: HomeChargingStore
     private let writer: Writer
     private var parkedChargeLossDetector = ParkedChargeLossDetector()
 
@@ -30,6 +31,7 @@ final class VehicleHistoryRecorder {
     ) {
         self.database = database
         self.preferences = preferences
+        self.homeChargingStore = HomeChargingStore(defaults: preferences.d, keychain: preferences.keychain)
         self.writer = Writer(beforePersist: beforePersist)
     }
 
@@ -45,6 +47,7 @@ final class VehicleHistoryRecorder {
         var nightTariffStartHour: Int
         var nightTariffEndHour: Int
         var currencySymbol: String
+        var chargingPlace: ChargingSessionPlace
     }
 
     private struct RecordingRequest: Sendable {
@@ -179,7 +182,9 @@ final class VehicleHistoryRecorder {
             nightTariffPricePerKwh: preferences.nightElectricityPricePerKwh,
             nightTariffStartHour: preferences.nightTariffStartHour,
             nightTariffEndHour: preferences.nightTariffEndHour,
-            currencySymbol: preferences.currencySymbol
+            currencySymbol: preferences.currencySymbol,
+            chargingPlace: storeChargingHistory && state.energy.chargingState.isActivelyCharging
+                ? chargingPlace(for: state) : .home
         )
         writer.enqueue(RecordingRequest(
             state: state, inputs: inputs, database: database, generation: token
@@ -326,7 +331,7 @@ final class VehicleHistoryRecorder {
                 nightTariffEndHour: inputs.nightTariffEndHour,
                 currencySymbol: inputs.currencySymbol,
                 locationName: chargingLocationName(for: state, persistLocationHistory: inputs.persistLocationHistory),
-                place: chargingPlace(for: state)
+                place: inputs.chargingPlace
             ),
             recordingEnabled: inputs.storeChargingHistory
         )
@@ -368,12 +373,20 @@ final class VehicleHistoryRecorder {
         return String(format: "%.4f°, %.4f°", latitude, longitude)
     }
 
-    private nonisolated static func chargingPlace(for state: VehicleState) -> ChargingSessionPlace {
+    private func chargingPlace(for state: VehicleState) -> ChargingSessionPlace {
         if state.energy.type == .dc { return .publicCharging }
-        if state.energy.locations.contains(where: \.isSavedLocation), state.chargeLocationPresence == nil {
-            return .publicCharging
+        guard let latitude = state.location?.latitude, let longitude = state.location?.longitude,
+              latitude.isFinite, longitude.isFinite else { return .home }
+
+        let pairedLocationIDs = Set(homeChargingStore.pairings
+            .filter { $0.isPaired(toVehicle: state.identity.vin) }.compactMap(\.locationID))
+        let homeLocations = state.energy.locations.filter {
+            guard let latitude = $0.latitude, let longitude = $0.longitude else { return false }
+            return $0.isSavedLocation && pairedLocationIDs.contains($0.id) && latitude.isFinite && longitude.isFinite
         }
-        return .home
+        guard !homeLocations.isEmpty else { return .home }
+        return ChargeLocationPresence.resolve(location: state.location, locations: homeLocations, previous: nil) == nil
+            ? .publicCharging : .home
     }
 
     private nonisolated static func recordBatteryHealth(

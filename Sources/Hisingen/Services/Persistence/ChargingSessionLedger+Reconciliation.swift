@@ -148,8 +148,8 @@ extension ChargingSessionLedger {
 
     /// Recomputes the energy of finished sessions that an older build integrated over 70 to 90% of
     /// the time and stored as if it were all of it. A row changes only when the current calculation
-    /// prefers the charge-level estimate; the stored costs follow the energy, and the market-price
-    /// cost is cleared so the next backfill prices the corrected figure. Idempotent.
+    /// prefers the charge-level estimate. Automatic costs follow the corrected energy. Receipt
+    /// totals stay fixed and the next backfill can reprice sessions that use spot prices.
     func repairUndercountedIntegrations(for vin: String, usableCapacityKwh: Double?) {
         let rows = recentChargingSessions(for: vin, limit: 1_000).filter {
             $0.energySource == .observedPowerIntegration && $0.endedAt != nil
@@ -166,7 +166,10 @@ extension ChargingSessionLedger {
                 try sql.query(sql: """
                     UPDATE charging_sessions SET
                         energy_delivered_kwh = ?, energy_source = 'soc_capacity_estimate', confidence = ?,
-                        estimated_cost = estimated_cost * ?, spot_estimated_cost = NULL
+                        estimated_cost = CASE
+                            WHEN cost_manually_edited = 1 THEN estimated_cost ELSE estimated_cost * ?
+                        END,
+                        spot_estimated_cost = NULL
                     WHERE id = ? AND ended_at IS NOT NULL;
                     """) { stmt in
                     try stmt.bindDouble(summary.energyKwh, at: 1)

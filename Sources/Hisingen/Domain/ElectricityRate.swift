@@ -214,9 +214,6 @@ private func ownSessionCost(
     storedCost: Double?,
     tariffPricePerKwh: Double?
 ) -> Double? {
-    if isManuallyEdited, let manual = storedCost ?? tariffPricePerKwh.map({ $0 * energyKwh }) {
-        return manual
-    }
     if place == .home, !isManuallyEdited, policy.isAutomatic, let spotCost {
         return policy.retailCost(spotCost: spotCost, energyKwh: energyKwh)
     }
@@ -225,12 +222,17 @@ private func ownSessionCost(
 }
 
 extension HistoricalChargingSession {
+    var manualCost: Double? {
+        guard costManuallyEdited else { return nil }
+        return estimatedCost ?? tariffPricePerKwh.map { $0 * energyDeliveredKwh }
+    }
+
     /// The session's cost under the active policy. Automatic mode prices from the stored
     /// market cost for home sessions unless manually overridden; a session the spot series never
     /// covered keeps the fixed-rate figure, which `usedFallback` reports so totals can say how
     /// many sessions were not market-priced.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double) -> (amount: Double, usedFallback: Bool) {
-        if costManuallyEdited, let manual = estimatedCost ?? tariffPricePerKwh.map({ $0 * energyDeliveredKwh }) {
+        if let manual = manualCost {
             return (manual, false)
         }
         // The charger's metered cost is the wall-side figure the bill sees, so it outranks every
@@ -247,12 +249,15 @@ extension HistoricalChargingSession {
 }
 
 extension ChargingSession {
+    var manualCost: Double? {
+        guard costManuallyEdited else { return nil }
+        return cost ?? tariffPricePerKwh.map { $0 * kwhDelivered }
+    }
+
     /// Same contract as `HistoricalChargingSession.resolvedCost`, for the in-memory session
     /// the charging card and CSV export read. Returns nil only when no price is known at all.
     func resolvedCost(policy: ElectricityRatePolicy, fallbackPricePerKwh: Double?) -> Double? {
-        if costManuallyEdited, let manual = cost ?? tariffPricePerKwh.map({ $0 * kwhDelivered }) {
-            return manual
-        }
+        if let manual = manualCost { return manual }
         if let measured = wallbox?.cost { return measured }
         // Charger-only session whose cost could not be completed: no price rather than a zero.
         if wallbox != nil, !hasBatteryReading { return nil }

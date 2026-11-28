@@ -48,7 +48,13 @@ struct ChargingSessionRow: View {
                         KVRow(L10n.text("Battery"), "\(Format.percent(session.startBatteryPercentage)) → \(Format.percent(session.endBatteryPercentage))",
                               symbol: "battery.50percent")
                     }
-                    if let wallbox = wallboxPresentation, let costValue = wallbox.costValue {
+                    if let cost = session.manualCost {
+                        KVRow(
+                            L10n.text("Total Price"),
+                            Format.currency(cost, symbol: session.currencySymbol ?? preferences.currencySymbol),
+                            symbol: "creditcard", info: L10n.text("Entered by hand")
+                        )
+                    } else if let wallbox = wallboxPresentation, let costValue = wallbox.costValue {
                         KVRow(wallbox.costLabel, costValue, symbol: "creditcard", info: wallbox.costInfo)
                     }
                     if session.samples.isEmpty, showsBatteryEstimate {
@@ -62,7 +68,7 @@ struct ChargingSessionRow: View {
                     if let peak = session.peakPowerWatts, peak > 0 {
                         KVRow(L10n.text("Peak Power"), Format.kilowatts(watts: peak), symbol: "waveform.path.ecg")
                     }
-                    if session.wallbox?.cost == nil, showsBatteryEstimate,
+                    if session.manualCost == nil, session.wallbox?.cost == nil, showsBatteryEstimate,
                        let cost = session.resolvedCost(policy: preferences.electricityRatePolicy, fallbackPricePerKwh: preferences.electricityPricePerKwh) {
                         KVRow(L10n.text("Estimated Cost"), String(format: "%.2f %@", locale: L10n.displayLocale, cost, session.currencySymbol ?? preferences.currencySymbol), symbol: "creditcard")
                     }

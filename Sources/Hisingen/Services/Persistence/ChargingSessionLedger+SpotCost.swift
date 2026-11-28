@@ -1,6 +1,15 @@
 import Foundation
 
 extension ChargingSessionLedger {
+    private static let eligibleForSpotCost = """
+        charging_place = 'home' AND cost_manually_edited = 0
+        AND NOT EXISTS (
+            SELECT 1 FROM charging_samples s
+            WHERE s.session_id = charging_sessions.id
+              AND LOWER(s.charging_type) = 'dc'
+        )
+        """
+
     /// Prices a session against hourly (or quarterly) spot prices, splitting every sample
     /// interval at price-slot boundaries so a rate change inside one polling interval
     /// prices each piece at its own rate (trapezoidal power within the pieces). Requires
@@ -66,13 +75,7 @@ extension ChargingSessionLedger {
         FROM charging_sessions
         WHERE vin = ? AND ended_at IS NOT NULL
           AND spot_estimated_cost IS NULL AND energy_delivered_kwh > 0
-          AND charging_place = 'home'
-          AND cost_manually_edited = 0
-          AND NOT EXISTS (
-              SELECT 1 FROM charging_samples s
-              WHERE s.session_id = charging_sessions.id
-                AND LOWER(s.charging_type) = 'dc'
-          )
+          AND \(Self.eligibleForSpotCost)
         ORDER BY started_at DESC LIMIT ?;
         """
         return (try? sql.query(sql: query) { stmt in
@@ -81,14 +84,28 @@ extension ChargingSessionLedger {
         } process: { try Self.sessionRows($0) }) ?? []
     }
 
-    func updateSpotEstimatedCost(id: String, cost: Double) {
+    @discardableResult
+    func updateSpotEstimatedCost(for session: HistoricalChargingSession, cost: Double) -> Bool {
+        var updated = false
         logOnFailure("spot cost update") {
-            try sql.query(sql: "UPDATE charging_sessions SET spot_estimated_cost = ? WHERE id = ?;") { stmt in
+            updated = try sql.query(sql: """
+                UPDATE charging_sessions SET spot_estimated_cost = ?
+                WHERE id = ? AND started_at = ? AND ended_at = ? AND energy_delivered_kwh = ?
+                  AND spot_estimated_cost IS NULL AND \(Self.eligibleForSpotCost)
+                RETURNING id;
+                """) { stmt in
                 try stmt.bindDouble(cost, at: 1)
-                try stmt.bindText(id, at: 2)
+                try stmt.bindText(session.id, at: 2)
+                try stmt.bindDate(session.startedAt, at: 3)
+                try stmt.bindDate(session.endedAt, at: 4)
+                try stmt.bindDouble(session.energyDeliveredKwh, at: 5)
+            } process: { stmt in
+                guard try stmt.stepOrThrow() else { return false }
                 try stmt.executeUpdate()
-            } process: { _ in }
+                return true
+            }
         }
+        return updated
     }
 
     /// Computes spot costs for every uncosted completed session the price series fully
@@ -107,8 +124,7 @@ extension ChargingSessionLedger {
                 sessionStart: session.startedAt, sessionEnd: endedAt,
                 scaleToEnergyKwh: session.energyDeliveredKwh
             ) else { continue }
-            updateSpotEstimatedCost(id: session.id, cost: cost)
-            updated += 1
+            if updateSpotEstimatedCost(for: session, cost: cost) { updated += 1 }
         }
         return updated
     }
