@@ -42,7 +42,8 @@ struct ChargingPlannerCard: View {
     /// One localized sentence, not three concatenated fragments, so translators can reorder
     /// it. The zone code and the source name are data, not copy, and stay unlocalized.
     private var resolvedCurrencySymbol: String {
-        resolved?.currencySymbol(fallback: preferences.currencySymbol) ?? preferences.currencySymbol
+        guard basis != .fixed else { return preferences.currencySymbol }
+        return resolved?.currencySymbol(fallback: preferences.currencySymbol) ?? preferences.currencySymbol
     }
 
     private var attributionLine: String {
@@ -53,15 +54,24 @@ struct ChargingPlannerCard: View {
             guard let fetchedAt else { return basis }
             return L10n.format("%@ · fetched %@", basis, Format.shortTime(date: fetchedAt))
         }
+        if let resolved, resolved.rawMarketPoints != nil {
+            let source = L10n.format("%@ · %@", zone.rawValue, "elprisetjustnu.se")
+            let basis = preferences.electricityRatePolicy.basisDescription
+            var line = L10n.format("%@ · %@", basis, source)
+            if resolved.includesNetworkFee {
+                line = L10n.format("%@ · %@", line, L10n.text("Grid Tariff"))
+            }
+            if let fetchedAt {
+                line = L10n.format("%@ · fetched %@", line, Format.shortTime(date: fetchedAt))
+            }
+            return line
+        }
         let marketLine: String
         if let fetchedAt {
             marketLine = L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@",
                                      zone.rawValue, Format.shortTime(date: fetchedAt))
         } else {
             marketLine = L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se", zone.rawValue)
-        }
-        if resolved?.includesNetworkFee == true {
-            return L10n.format("%@ · %@", marketLine, L10n.text("Grid Tariff"))
         }
         return marketLine
     }
@@ -397,7 +407,8 @@ struct ChargingPlannerCard: View {
         let now = Date()
         let step = basis.granularity
         let planSeconds = max(step, ((neededEnergyKwh / plannerPowerKw) / step).rounded(.up) * step)
-        let dataComplete = horizon >= ElectricityPriceService.requiredCoverageEnd(after: now)
+        let calendar = resolved?.calendar ?? ElectricityPriceService.stockholmCalendar
+        let dataComplete = horizon >= ElectricityPriceService.requiredCoverageEnd(after: now, calendar: calendar)
         if dataComplete && horizon.timeIntervalSince(now) < planSeconds {
             let minutes = Int((planSeconds / 60).rounded())
             return minutes % 60 == 0

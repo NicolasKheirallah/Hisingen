@@ -364,6 +364,19 @@ struct TibberClientTests {
         #expect(points[1].end.timeIntervalSince(points[1].start) == 900)
         #expect(points[3].end.timeIntervalSince(points[3].start) == 900)
     }
+
+    @Test
+    func anOutageDoesNotSetThePriceCadence() {
+        let afterOutage = base.addingTimeInterval(4 * 3_600)
+        let collected: [Date: (price: Double, level: TibberPriceLevel?)] = [
+            base: (0.2, nil),
+            afterOutage: (0.4, nil),
+        ]
+        let points = TibberClient.points(from: collected, from: base, to: afterOutage.addingTimeInterval(3_600))
+
+        #expect(points.map(\.start) == [base, afterOutage])
+        #expect(points.map(\.end) == [base.addingTimeInterval(900), afterOutage.addingTimeInterval(900)])
+    }
 }
 
 // MARK: - Pricing a direct charger's sessions

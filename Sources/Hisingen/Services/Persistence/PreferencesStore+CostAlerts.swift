@@ -39,11 +39,33 @@ extension PreferencesStore {
         set { d.set(newValue, forKey: "notify_price_threshold") }
     }
 
-    /// The price level in the same currency the rest of the app shows. `0` means no level has
-    /// been entered, and no alert is posted until one is.
+    /// Keep the existing SEK setting when the reader connects or changes a Tibber home.
     var priceAlertThresholdSekPerKwh: Double {
         get { max(0, d.double(forKey: "notify_price_threshold_value")) }
         set { d.set(min(max(newValue, 0), 1_000), forKey: "notify_price_threshold_value") }
+    }
+
+    var priceAlertCurrency: String? {
+        let supplier = HomeChargingStore(defaults: d, keychain: keychain)
+        guard let home = supplier.tibberHome else { return "SEK" }
+        return home.priceCurrency
+    }
+
+    func priceAlertThresholdPerKwh(currency: String) -> Double {
+        if currency == "SEK" { return priceAlertThresholdSekPerKwh }
+        let levels = d.dictionary(forKey: "notify_price_threshold_by_currency") as? [String: Double]
+        return levels?[currency] ?? 0
+    }
+
+    func setPriceAlertThresholdPerKwh(_ value: Double, currency: String) {
+        if currency == "SEK" {
+            priceAlertThresholdSekPerKwh = value
+            return
+        }
+        let key = "notify_price_threshold_by_currency"
+        var levels = d.dictionary(forKey: key) as? [String: Double] ?? [:]
+        levels[currency] = min(max(value, 0), 1_000)
+        d.set(levels, forKey: key)
     }
 
     /// How long one price alert keeps the next one quiet. A quarter-hourly series can jump above

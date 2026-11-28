@@ -95,7 +95,9 @@ final class PriceAlertController {
               preferences.electricityPriceZone == zone else { return }
 
         let currentDate = now()
-        let threshold = preferences.priceAlertThresholdSekPerKwh
+        let currency = resolved.currency?.uppercased() ?? (resolved.isAllIn ? nil : "SEK")
+        guard let currency, currency == preferences.priceAlertCurrency else { return }
+        let threshold = preferences.priceAlertThresholdPerKwh(currency: currency)
         let alertCalendar = resolved.calendar
         let decision = PriceThresholdAlert.evaluate(
             prices: resolved.rawMarketPoints ?? resolved.points,

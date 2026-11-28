@@ -962,7 +962,7 @@ final class HomeChargingModel: ObservableObject {
         return PlannerPriceProvider.TibberSource(
             homeID: home.id,
             gridTariff: gridTariff,
-            currency: home.currency,
+            currency: home.priceCurrency,
             timeZoneIdentifier: home.timeZone,
             fetch: fetch
         )

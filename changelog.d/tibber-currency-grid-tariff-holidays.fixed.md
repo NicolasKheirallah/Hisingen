@@ -1,6 +1,4 @@
-- **Tibber pricing now supports non-SEK homes and full GridTariff holidays.** Enabled Tibber
-  planner feeds for all home currencies and non-Swedish NexBlue charger time zones, localized
-  planner and alert units, derived contiguous slot bounds from neighboring `startsAt` entries,
-  integrated `GridTariff` fees into spot planning, threshold alerts, and `.totalSpotPolicy` sessions
-  without double-applying VAT, and added May 1, Ascension Day, National Day, and Midsummer Eve to
-  `SwedishHolidays`.
+- **The Charging Planner and price alerts use the connected Tibber home's currency.** Alert levels
+  are saved by currency, and gaps in the feed stay unpriced. NexBlue timers use the charger's
+  time zone. Grid fees now count toward spot price plans, alerts, and charger session costs.
+  Vattenfall's holiday schedule also includes May 1, Ascension Day, National Day, and Midsummer Eve.

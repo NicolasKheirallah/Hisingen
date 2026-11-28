@@ -56,8 +56,7 @@ enum PriceThresholdAlert {
         let settled = policy.contract.settle(prices, calendar: calendar)
         let slots = settled.compactMap { point -> RateSlot? in
             guard point.sekPerKwh.isFinite, point.endDate > point.startDate else { return nil }
-            let fee = allIn ? 0 : gridTariff.averageFeePerKwh(from: point.startDate, to: point.endDate)
-            let price = allIn ? point.sekPerKwh : (policy.retailPrice(spotSekPerKwh: point.sekPerKwh) + fee)
+            let price = allIn ? point.sekPerKwh : policy.retailPrice(for: point, gridTariff: gridTariff)
             guard price.isFinite else { return nil }
             return RateSlot(start: point.startDate, end: point.endDate, price: price)
         }.sorted { $0.start == $1.start ? $0.end < $1.end : $0.start < $1.start }

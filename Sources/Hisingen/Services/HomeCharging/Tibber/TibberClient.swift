@@ -27,6 +27,14 @@ struct TibberHome: Codable, Equatable, Identifiable, Sendable {
 
     /// The spot-price zone Tibber reports for this home, when it is one Hisingen reads.
     var elspotZone: ElspotZone? { priceArea.flatMap { ElspotZone(rawValue: $0.uppercased()) } }
+
+    /// Homes saved before currency metadata was available can identify SEK by their Swedish market.
+    var priceCurrency: String? {
+        if let code = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !code.isEmpty {
+            return code
+        }
+        return elspotZone != nil || timeZone == "Europe/Stockholm" ? "SEK" : nil
+    }
 }
 
 /// One hour of whole-home consumption from the grid meter, as Tibber reports it.
@@ -191,7 +199,11 @@ struct TibberClient: Sendable {
     static func points(from collected: [Date: (price: Double, level: TibberPriceLevel?)], from: Date, to: Date) -> [HomePricePoint] {
         let sorted = collected.sorted { $0.key < $1.key }
         guard !sorted.isEmpty else { return [] }
-        let gaps = zip(sorted, sorted.dropFirst()).map { $1.key.timeIntervalSince($0.key) }.filter { $0 > 0 }.sorted()
+        let maximumAdjacentGap: TimeInterval = 2 * 3_600
+        let gaps = zip(sorted, sorted.dropFirst())
+            .map { $1.key.timeIntervalSince($0.key) }
+            .filter { $0 > 0 && $0 <= maximumAdjacentGap }
+            .sorted()
         var lastStep: TimeInterval = gaps.isEmpty ? 900 : gaps[gaps.count / 2]
         var points: [HomePricePoint] = []
         points.reserveCapacity(sorted.count)
@@ -199,7 +211,7 @@ struct TibberClient: Sendable {
             let step: TimeInterval
             if index + 1 < sorted.count {
                 let nextGap = sorted[index + 1].key.timeIntervalSince(entry.key)
-                if nextGap > 0, nextGap <= 2 * 3_600 {
+                if nextGap <= maximumAdjacentGap {
                     step = nextGap
                     lastStep = nextGap
                 } else {

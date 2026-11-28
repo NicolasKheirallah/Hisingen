@@ -22,6 +22,7 @@ struct PlannerPriceProviderTests {
 
     private actor Tibber {
         private(set) var calls = 0
+        private(set) var requestWindow: DateInterval?
         var failing = false
         let series: [HomePricePoint]
         init(series: [HomePricePoint]) { self.series = series }
@@ -30,6 +31,10 @@ struct PlannerPriceProviderTests {
             calls += 1
             if failing { throw DirectChargerError.unreachable }
             return series
+        }
+        func fetch(from: Date, to: Date) throws -> [HomePricePoint] {
+            requestWindow = DateInterval(start: from, end: to)
+            return try fetch()
         }
     }
 
@@ -195,6 +200,25 @@ struct PlannerPriceProviderTests {
     }
 
     @Test
+    func anInternationalTibberHomeNeverFallsBackToSwedishPrices() async {
+        let tibber = Tibber(series: [])
+        await tibber.setFailing(true)
+        let spot = Spot(series: Self.spotSeries(price: 0.50), fetched: Self.morning)
+        let provider = PlannerPriceProvider(spot: spot, now: { Self.morning })
+        provider.setTibberSource {
+            PlannerPriceProvider.TibberSource(
+                homeID: "home-eur", currency: "EUR", fetch: { _, _ in try await tibber.fetch() }
+            )
+        }
+
+        let result = await provider.resolve(zone: .se3)
+        #expect(result.currency == "EUR")
+        #expect(result.points.isEmpty)
+        #expect(result.tibberProblem != nil)
+        #expect(await spot.calls == 0)
+    }
+
+    @Test
     func aTibberSeriesThatEndsWithinTheHourIsNotUsed() async {
         let start = ElectricityPriceService.stockholmCalendar.startOfDay(for: Self.morning)
         let clock = Clock(Self.morning)
@@ -222,6 +246,35 @@ struct PlannerPriceProviderTests {
         _ = await provider.resolve(zone: .se3)
 
         #expect(await tibber.calls == 1)
+    }
+
+    @Test
+    func tibberFetchesAndEvaluatesCoverageInTheHomesCalendar() async throws {
+        let zone = try #require(TimeZone(identifier: "Europe/London"))
+        var calendar = ElectricityPriceService.stockholmCalendar
+        calendar.timeZone = zone
+        let start = calendar.startOfDay(for: Self.morning)
+        let end = try #require(calendar.date(byAdding: .day, value: 2, to: start))
+        let stockholmDay = Self.tibberSeries(price: 0.40, days: 1)
+        // The last price reaches Stockholm midnight. London still needs another hour.
+        let tibber = Tibber(series: stockholmDay)
+        let clock = Clock(Self.morning)
+        let provider = PlannerPriceProvider(
+            spot: Spot(series: Self.spotSeries(price: 0.50), fetched: Self.morning),
+            now: { clock.current }
+        )
+        provider.setTibberSource {
+            PlannerPriceProvider.TibberSource(
+                homeID: "home", currency: "GBP", timeZoneIdentifier: zone.identifier,
+                fetch: { from, to in try await tibber.fetch(from: from, to: to) }
+            )
+        }
+        #expect(await provider.resolve(zone: .se3).origin == .tibber)
+        #expect(await tibber.requestWindow == DateInterval(start: start, end: end))
+
+        clock.advance(PlannerPriceProvider.retryInterval + 60)
+        _ = await provider.resolve(zone: .se3)
+        #expect(await tibber.calls == 2)
     }
 
     @Test
@@ -331,11 +384,11 @@ struct PlannerPriceProviderTests {
         let spot = Spot(series: Self.spotSeries(price: 0.50), fetched: Self.morning)
         let provider = PlannerPriceProvider(spot: spot, now: { Self.morning })
         let tariff = GridTariff.vattenfall(.vattenfallTime)
-        provider.setGridTariffSource { tariff }
-
-        let market = await provider.resolve(zone: .se3)
         let policy = ElectricityRatePolicy(mode: .automatic, provider: .other, contract: .quarterHour,
                                            markupOrePerKwh: 10, otherChargesOrePerKwh: 0, includesVAT: true)
+        provider.setMarketPricingSource { .init(tariff: tariff, policy: policy) }
+
+        let market = await provider.resolve(zone: .se3)
         #expect(market.includesNetworkFee)
         #expect(market.gridTariff == tariff)
         // Morning at 10:00 in November is peak weekday -> 76.5 ore/kWh grid fee added once after retail VAT.
@@ -355,6 +408,32 @@ struct PlannerPriceProviderTests {
         #expect(eur.origin == .tibber)
         #expect(eur.currencySymbol(fallback: "kr") == "€")
         #expect(eur.calendar.timeZone.identifier == "Europe/Berlin")
+    }
+
+    @Test
+    func theCheapestSpotWindowUsesRetailVatAndGridFeesTogether() async throws {
+        let calendar = ElectricityPriceService.stockholmCalendar
+        let from = try #require(calendar.date(bySettingHour: 5, minute: 0, second: 0, of: Self.morning))
+        let peak = from.addingTimeInterval(3_600)
+        let raw = [
+            ElectricityPricePoint(startDate: from, endDate: peak, sekPerKwh: 1),
+            ElectricityPricePoint(startDate: peak, endDate: peak.addingTimeInterval(3_600), sekPerKwh: 0.60),
+        ]
+        let policy = ElectricityRatePolicy(mode: .automatic, provider: .other, contract: .hourly,
+                                           markupOrePerKwh: 0, otherChargesOrePerKwh: 0, includesVAT: true)
+        let provider = PlannerPriceProvider(spot: Spot(series: raw, fetched: from), now: { from })
+        provider.setMarketPricingSource { .init(tariff: .vattenfall(.vattenfallTime), policy: policy) }
+
+        let market = await provider.resolve(zone: .se3)
+        #expect(market.rawMarketPoints == raw)
+        #expect(await provider.marketPrices(for: .se3) == raw)
+
+        // The peak slot wins only after VAT is applied to the energy without taxing the fee again.
+        let plan = try #require(ChargingPlanner.cheapestWindow(
+            prices: market.points, now: from, energyKwh: 1, chargerPowerKw: 1, granularity: 3_600
+        ))
+        #expect(plan.start == peak)
+        #expect(abs(plan.averagePrice - (0.60 * 1.25 + 0.765)) < 1e-9)
     }
 }
 

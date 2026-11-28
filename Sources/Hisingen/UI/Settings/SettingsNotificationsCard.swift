@@ -201,8 +201,15 @@ struct SettingsNotificationsCard: View {
                     isOn: binder(\.notifyPriceThreshold, .notifications)
                 )
                 if prefs.notifyPriceThreshold {
-                    priceThresholdRows
-                        .transition(Self.dependentRowTransition)
+                    if let currency = prefs.priceAlertCurrency {
+                        priceThresholdRows(currency: currency)
+                            .transition(Self.dependentRowTransition)
+                    } else {
+                        Text(L10n.text("Prices unavailable right now"))
+                            .hisType(.caption)
+                            .foregroundStyle(HisingenTheme.inkMuted)
+                            .padding(.leading, 28)
+                    }
                 }
             }
         }
@@ -211,22 +218,30 @@ struct SettingsNotificationsCard: View {
     }
 
     @ViewBuilder
-    private var priceThresholdRows: some View {
+    private func priceThresholdRows(currency: String) -> some View {
+        let level = Binding(
+            get: { prefs.priceAlertThresholdPerKwh(currency: currency) },
+            set: { value in
+                prefs.setPriceAlertThresholdPerKwh(value, currency: currency)
+                binder.bump()
+                binder.notify(.notifications)
+            }
+        )
         HStack(spacing: 8) {
             Image(systemName: "slider.horizontal.3")
                 .hisType(.label)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            Text(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+            Text(L10n.format("Price level, %@/kWh", currency))
                 .hisType(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            TextField("", value: binder(\.priceAlertThresholdSekPerKwh, .notifications),
+            TextField("", value: level,
                       format: .number.precision(.fractionLength(2)))
                 .hisField()
                 .frame(width: 76)
                 .multilineTextAlignment(.trailing)
-                .accessibilityLabel(L10n.format("Price level, %@/kWh", prefs.currencySymbol))
+                .accessibilityLabel(L10n.format("Price level, %@/kWh", currency))
         }
         .padding(.leading, 12)
         .padding(.vertical, 2)
@@ -253,7 +268,7 @@ struct SettingsNotificationsCard: View {
         .padding(.leading, 12)
         .padding(.vertical, 2)
 
-        Text(prefs.priceAlertThresholdSekPerKwh > 0
+        Text(level.wrappedValue > 0
              ? L10n.text("Compared with the price you pay under Electricity settings. One alert per crossing, then quiet for the period above.")
              : L10n.text("Enter a price level to start alerts."))
             .hisType(.micro)

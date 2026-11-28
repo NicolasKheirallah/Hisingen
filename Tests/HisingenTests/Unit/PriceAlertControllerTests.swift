@@ -106,7 +106,7 @@ struct PriceAlertControllerTests {
     }
 
     @Test
-    func usesMarketGridTariffAndProviderCurrencyInAlerts() async {
+    func usesMarketGridTariffInAlerts() async {
         let scoped = ScopedPreferences(label: "PriceAlertGridCurrency")
         let store = scoped.store
         store.marketCountry = .sweden
@@ -134,7 +134,7 @@ struct PriceAlertControllerTests {
             includesNetworkFee: true,
             gridTariff: .vattenfall(.vattenfallTime),
             rawMarketPoints: points,
-            currency: "EUR",
+            currency: "SEK",
             timeZoneIdentifier: "Europe/Berlin"
         )
         let notifier = FakePriceAlertNotifier()
@@ -145,7 +145,37 @@ struct PriceAlertControllerTests {
         )
         await controller.evaluate()
         #expect(notifier.posts.count == 1)
-        #expect(notifier.posts.first?.body.contains("€") == true)
+        #expect(notifier.posts.first?.body.contains("kr") == true)
+    }
+
+    @Test(arguments: ["EUR", "NOK", "DKK"])
+    func tibberAlertsRequireALevelEnteredInTheHomesCurrency(currency: String) async {
+        let harness = PriceAlertHarness(currency: currency)
+        let homeStore = HomeChargingStore(defaults: harness.scoped.defaults, keychain: harness.scoped.keychain)
+        homeStore.tibberHome = TibberHome(id: "home", name: "Home", currency: currency)
+
+        #expect(harness.preferences.priceAlertCurrency == currency)
+        #expect(harness.preferences.priceAlertThresholdSekPerKwh == 1)
+        #expect(harness.preferences.priceAlertThresholdPerKwh(currency: currency) == 0)
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.isEmpty)
+
+        harness.preferences.setPriceAlertThresholdPerKwh(1.2, currency: currency)
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.count == 1)
+        #expect(harness.notifier.posts.first?.body.contains("1.20") == true)
+        #expect(harness.preferences.priceAlertThresholdSekPerKwh == 1)
+    }
+
+    @Test
+    func aSwedishFallbackDoesNotTriggerAnAlertForAnInternationalTibberHome() async {
+        let harness = PriceAlertHarness()
+        let homeStore = HomeChargingStore(defaults: harness.scoped.defaults, keychain: harness.scoped.keychain)
+        homeStore.tibberHome = TibberHome(id: "home", name: "Home", currency: "EUR")
+        harness.preferences.setPriceAlertThresholdPerKwh(1.2, currency: "EUR")
+
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.isEmpty)
     }
 }
 
@@ -159,7 +189,7 @@ private final class PriceAlertHarness {
 
     var preferences: PreferencesStore { scoped.store }
 
-    init(prices series: [ElectricityPricePoint]? = nil) {
+    init(prices series: [ElectricityPricePoint]? = nil, currency: String? = nil) {
         let scoped = ScopedPreferences(label: "PriceAlertController")
         let store = scoped.store
         store.marketCountry = .sweden
@@ -172,8 +202,8 @@ private final class PriceAlertHarness {
 
         let points = series ?? alertHourly([0.4, 0.5, 1.5, 1.5], from: 8)
         let source = FakePriceAlertSource(prices: PlannerPrices(
-            points: points, origin: .elpriser, fetchedAt: nil,
-            tibberConnected: false, tibberProblem: nil
+            points: points, origin: currency == nil ? .elpriser : .tibber, fetchedAt: nil,
+            tibberConnected: currency != nil, tibberProblem: nil, currency: currency
         ))
         let notifier = FakePriceAlertNotifier()
         self.scoped = scoped
