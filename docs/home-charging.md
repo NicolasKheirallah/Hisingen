@@ -416,7 +416,9 @@ your rate.
 **Settings, Notifications, Price Threshold Alert** notifies you when the electricity price rises
 above a level you set. The switch appears when the electricity rate is set to **Automatic** and a
 price source is available, as described under [What works where](#what-works-where). Enter the
-**Price level** per kWh and a **Quiet period**. The alert posts once when the current or next
+**Price level** per kWh in the currency shown and a **Quiet period**. Swedish spot prices use
+SEK. A connected Tibber home uses its own currency, so switching currencies can require
+entering a new price level. The alert posts once when the current or next
 hour's price crosses the level, then stays quiet for the quiet period, so a price that moves
 around the level does not fill the notification list. The level is compared with the price you
 pay under Electricity settings, after your rate policy. Hisingen posts nothing when the price

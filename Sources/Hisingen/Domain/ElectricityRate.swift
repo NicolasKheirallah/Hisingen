@@ -190,6 +190,11 @@ struct ElectricityRatePolicy: Equatable, Sendable {
         (spotSekPerKwh + addersSek) * vat
     }
 
+    func retailPrice(for spot: ElectricityPricePoint, gridTariff: GridTariff) -> Double {
+        retailPrice(spotSekPerKwh: spot.sekPerKwh)
+            + gridTariff.averageFeePerKwh(from: spot.startDate, to: spot.endDate)
+    }
+
     /// SEK for a session whose energy cost `spotCost` at raw spot prices.
     func retailCost(spotCost: Double, energyKwh: Double) -> Double {
         (spotCost + energyKwh * addersSek) * vat

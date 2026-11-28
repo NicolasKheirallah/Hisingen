@@ -41,6 +41,11 @@ struct ChargingPlannerCard: View {
 
     /// One localized sentence, not three concatenated fragments, so translators can reorder
     /// it. The zone code and the source name are data, not copy, and stay unlocalized.
+    private var resolvedCurrencySymbol: String {
+        guard basis != .fixed else { return preferences.currencySymbol }
+        return resolved?.currencySymbol(fallback: preferences.currencySymbol) ?? preferences.currencySymbol
+    }
+
     private var attributionLine: String {
         if resolved?.origin == .tibber {
             let basis = resolved?.includesNetworkFee == true
@@ -49,11 +54,26 @@ struct ChargingPlannerCard: View {
             guard let fetchedAt else { return basis }
             return L10n.format("%@ · fetched %@", basis, Format.shortTime(date: fetchedAt))
         }
-        if let fetchedAt {
-            return L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@",
-                               zone.rawValue, Format.shortTime(date: fetchedAt))
+        if let resolved, resolved.rawMarketPoints != nil {
+            let source = L10n.format("%@ · %@", zone.rawValue, "elprisetjustnu.se")
+            let basis = preferences.electricityRatePolicy.basisDescription
+            var line = L10n.format("%@ · %@", basis, source)
+            if resolved.includesNetworkFee {
+                line = L10n.format("%@ · %@", line, L10n.text("Grid Tariff"))
+            }
+            if let fetchedAt {
+                line = L10n.format("%@ · fetched %@", line, Format.shortTime(date: fetchedAt))
+            }
+            return line
         }
-        return L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se", zone.rawValue)
+        let marketLine: String
+        if let fetchedAt {
+            marketLine = L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se, fetched %@",
+                                     zone.rawValue, Format.shortTime(date: fetchedAt))
+        } else {
+            marketLine = L10n.format("Spot prices exclude taxes and grid fees · %@ · elprisetjustnu.se", zone.rawValue)
+        }
+        return marketLine
     }
 
     private var cardChangeAnimation: Animation? { reduceMotion ? nil : Motion.cardChange }
@@ -320,7 +340,7 @@ struct ChargingPlannerCard: View {
     }
 
     private func priceFigure(value: Double, label: String, level: TibberPriceLevel?) -> some View {
-        PlannerPriceFigure(value: value, label: label, level: level)
+        PlannerPriceFigure(value: value, label: label, level: level, currencySymbol: resolvedCurrencySymbol)
     }
 
     /// Which prices the plan below is built from. A fallback names itself in the warning colour, and
@@ -387,7 +407,8 @@ struct ChargingPlannerCard: View {
         let now = Date()
         let step = basis.granularity
         let planSeconds = max(step, ((neededEnergyKwh / plannerPowerKw) / step).rounded(.up) * step)
-        let dataComplete = horizon >= ElectricityPriceService.requiredCoverageEnd(after: now)
+        let calendar = resolved?.calendar ?? ElectricityPriceService.stockholmCalendar
+        let dataComplete = horizon >= ElectricityPriceService.requiredCoverageEnd(after: now, calendar: calendar)
         if dataComplete && horizon.timeIntervalSince(now) < planSeconds {
             let minutes = Int((planSeconds / 60).rounded())
             return minutes % 60 == 0
@@ -417,7 +438,7 @@ struct ChargingPlannerCard: View {
         let now = Date()
         guard let plan = self.plan else { return nil }
 
-        let calendar = ElectricityPriceService.stockholmCalendar
+        let calendar = resolved?.calendar ?? ElectricityPriceService.stockholmCalendar
         let startDay = calendar.startOfDay(for: plan.start)
         let today = calendar.startOfDay(for: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)
@@ -429,7 +450,7 @@ struct ChargingPlannerCard: View {
         } else {
             dayLabel = Format.shortDate(date: plan.start)
         }
-        let timeRange = "\(Format.shortTime(date: plan.start))–\(Format.shortTime(date: plan.end))"
+        let timeRange = "\(Format.shortTime(date: plan.start, timeZone: calendar.timeZone))–\(Format.shortTime(date: plan.end, timeZone: calendar.timeZone))"
 
         let minutes = Int((plan.hours * 60).rounded())
         let detailLine = minutes % 60 == 0
@@ -437,7 +458,7 @@ struct ChargingPlannerCard: View {
             : L10n.format("Charge %@ over %@ to reach %d%%", Format.energyKwh(plan.energyKwh), durationText(plan.hours), target)
 
         let savingsLine = plan.savings > 0.5
-            ? L10n.format("Saves %@", Format.currency(plan.savings, symbol: preferences.currencySymbol))
+            ? L10n.format("Saves %@", Format.currency(plan.savings, symbol: resolvedCurrencySymbol))
             : L10n.text("Charging now is cheapest")
 
         return PlannerModel(
@@ -460,6 +481,7 @@ struct PlannerPriceFigure: View {
     let value: Double
     let label: String
     var level: TibberPriceLevel?
+    var currencySymbol: String = "kr"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -472,7 +494,7 @@ struct PlannerPriceFigure: View {
                     .hisType(size: 22, relativeTo: .title)
                     .foregroundStyle(HisingenTheme.ink)
                     .hisTelemetryValue(text, reduceMotion: reduceMotion)
-                Text("kr/kWh")
+                Text(L10n.format("%@/kWh", currencySymbol))
                     .hisType(.label)
                     .foregroundStyle(HisingenTheme.inkMuted)
             }

@@ -290,4 +290,37 @@ struct HomeSessionPricingTests {
         coarse.intervals = []
         #expect(HomeSessionPricer.price(coarse, tibber: slots([0.4, 0.4, 0.4]), networkFeeOrePerKwh: 0, fallback: fallback).method == .totalTibberAverage)
     }
+
+    @Test("Automatic spot policy applies time-varying GridTariff across intervals without double VAT")
+    func spotPolicyWithGridTariffIntervals() throws {
+        let calendar = ElectricityPriceService.stockholmCalendar
+        let peakStart = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 21))!
+        let offPeakEnd = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 23))!
+        let candidate = HomeChargingSessionCandidate(
+            key: "k-tariff",
+            keyKind: .history,
+            chargerID: "NX1234567",
+            startedAt: peakStart,
+            endedAt: offPeakEnd,
+            energyKwh: 4.0,
+            energySource: "ha_session_energy_sensor",
+            measuredAt: offPeakEnd,
+            intervals: [
+                HomeEnergyInterval(start: peakStart, end: peakStart.addingTimeInterval(3_600), kwh: 2.0),
+                HomeEnergyInterval(start: peakStart.addingTimeInterval(3_600), end: offPeakEnd, kwh: 2.0),
+            ]
+        )
+        let spot = [
+            ElectricityPricePoint(startDate: peakStart, endDate: peakStart.addingTimeInterval(3_600), sekPerKwh: 0.40),
+            ElectricityPricePoint(startDate: peakStart.addingTimeInterval(3_600), endDate: offPeakEnd, sekPerKwh: 0.40),
+        ]
+        let policy = ElectricityRatePolicy(mode: .automatic, provider: .other, contract: .quarterHour,
+                                           markupOrePerKwh: 10, otherChargesOrePerKwh: 0, includesVAT: true)
+        let auto = HomeSessionPricer.Fallback(fixedPricePerKwh: 2, policy: policy, spotPrices: spot, currency: "kr")
+        let cost = HomeSessionPricer.price(candidate, tibber: [], gridTariff: .vattenfall(.vattenfallTime), fallback: auto)
+        #expect(cost.method == .totalSpotPolicy)
+        let retail = (0.40 + 0.10) * 1.25
+        let expected = 2.0 * (retail + 0.765) + 2.0 * (retail + 0.305)
+        #expect(near(cost.amount, expected))
+    }
 }

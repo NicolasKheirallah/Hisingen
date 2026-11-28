@@ -104,6 +104,79 @@ struct PriceAlertControllerTests {
         #expect(body.contains("1.50"))
         #expect(body.contains("1.00"))
     }
+
+    @Test
+    func usesMarketGridTariffInAlerts() async {
+        let scoped = ScopedPreferences(label: "PriceAlertGridCurrency")
+        let store = scoped.store
+        store.marketCountry = .sweden
+        store.features = FeatureSelection(enabled: [.notifications, .smartChargingPlanner])
+        store.electricityRateMode = .automatic
+        store.notifyPriceThreshold = true
+        store.priceAlertThresholdSekPerKwh = 1.0
+        store.electricityPriceZone = .se3
+        store.electricityIncludesVAT = false
+
+        var calendar = ElectricityPriceService.stockholmCalendar
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        // At 05:00 Vattenfall T4 is off-peak (0.40 + 0.305 = 0.705 < 1.0); at 06:00 peak begins
+        // (0.50 + 0.765 = 1.265 >= 1.0), triggering an alert only when the grid tariff is included.
+        let d5 = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 5))!
+        let d6 = d5.addingTimeInterval(3_600)
+        let d7 = d5.addingTimeInterval(7_200)
+        let points = [
+            ElectricityPricePoint(startDate: d5, endDate: d6, sekPerKwh: 0.40),
+            ElectricityPricePoint(startDate: d6, endDate: d7, sekPerKwh: 0.50),
+        ]
+        let resolved = PlannerPrices(
+            points: points, origin: .elpriser, fetchedAt: nil,
+            tibberConnected: false, tibberProblem: nil,
+            includesNetworkFee: true,
+            gridTariff: .vattenfall(.vattenfallTime),
+            rawMarketPoints: points,
+            currency: "SEK",
+            timeZoneIdentifier: "Europe/Berlin"
+        )
+        let notifier = FakePriceAlertNotifier()
+        let controller = PriceAlertController(
+            preferences: store, notifier: notifier,
+            priceSource: FakePriceAlertSource(prices: resolved),
+            now: { d6.addingTimeInterval(300) }
+        )
+        await controller.evaluate()
+        #expect(notifier.posts.count == 1)
+        #expect(notifier.posts.first?.body.contains("kr") == true)
+    }
+
+    @Test(arguments: ["EUR", "NOK", "DKK"])
+    func tibberAlertsRequireALevelEnteredInTheHomesCurrency(currency: String) async {
+        let harness = PriceAlertHarness(currency: currency)
+        let homeStore = HomeChargingStore(defaults: harness.scoped.defaults, keychain: harness.scoped.keychain)
+        homeStore.tibberHome = TibberHome(id: "home", name: "Home", currency: currency)
+
+        #expect(harness.preferences.priceAlertCurrency == currency)
+        #expect(harness.preferences.priceAlertThresholdSekPerKwh == 1)
+        #expect(harness.preferences.priceAlertThresholdPerKwh(currency: currency) == 0)
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.isEmpty)
+
+        harness.preferences.setPriceAlertThresholdPerKwh(1.2, currency: currency)
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.count == 1)
+        #expect(harness.notifier.posts.first?.body.contains("1.20") == true)
+        #expect(harness.preferences.priceAlertThresholdSekPerKwh == 1)
+    }
+
+    @Test
+    func aSwedishFallbackDoesNotTriggerAnAlertForAnInternationalTibberHome() async {
+        let harness = PriceAlertHarness()
+        let homeStore = HomeChargingStore(defaults: harness.scoped.defaults, keychain: harness.scoped.keychain)
+        homeStore.tibberHome = TibberHome(id: "home", name: "Home", currency: "EUR")
+        harness.preferences.setPriceAlertThresholdPerKwh(1.2, currency: "EUR")
+
+        await harness.controller.evaluate()
+        #expect(harness.notifier.posts.isEmpty)
+    }
 }
 
 @MainActor
@@ -116,7 +189,7 @@ private final class PriceAlertHarness {
 
     var preferences: PreferencesStore { scoped.store }
 
-    init(prices series: [ElectricityPricePoint]? = nil) {
+    init(prices series: [ElectricityPricePoint]? = nil, currency: String? = nil) {
         let scoped = ScopedPreferences(label: "PriceAlertController")
         let store = scoped.store
         store.marketCountry = .sweden
@@ -129,8 +202,8 @@ private final class PriceAlertHarness {
 
         let points = series ?? alertHourly([0.4, 0.5, 1.5, 1.5], from: 8)
         let source = FakePriceAlertSource(prices: PlannerPrices(
-            points: points, origin: .elpriser, fetchedAt: nil,
-            tibberConnected: false, tibberProblem: nil
+            points: points, origin: currency == nil ? .elpriser : .tibber, fetchedAt: nil,
+            tibberConnected: currency != nil, tibberProblem: nil, currency: currency
         ))
         let notifier = FakePriceAlertNotifier()
         self.scoped = scoped

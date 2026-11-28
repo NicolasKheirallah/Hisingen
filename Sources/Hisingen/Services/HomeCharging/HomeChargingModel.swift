@@ -89,7 +89,7 @@ final class HomeChargingModel: ObservableObject {
             await ElectricityPriceService.shared.cachedPoints(for: zone)
         }
         var timerPrices: @Sendable (ElspotZone) async -> [ElectricityPricePoint] = { zone in
-            await ElectricityPriceService.shared.prices(for: zone)
+            await PlannerPriceProvider.shared.prices(for: zone)
         }
         var observesWake = true
     }
@@ -955,11 +955,17 @@ final class HomeChargingModel: ObservableObject {
     }
 
     /// The connected Tibber home as the charging planner's price source, or `nil` when none is
-    /// connected or its prices are not in kronor (the planner is built for Swedish spot prices).
+    /// connected. Carries the home's currency and time zone so non-SEK Tibber homes stay active.
     func plannerTibberSource() -> PlannerPriceProvider.TibberSource? {
-        guard let home = store.tibberHome, home.currency == nil || home.currency == "SEK",
+        guard let home = store.tibberHome,
               let fetch = tibberPriceSource() else { return nil }
-        return PlannerPriceProvider.TibberSource(homeID: home.id, gridTariff: gridTariff, fetch: fetch)
+        return PlannerPriceProvider.TibberSource(
+            homeID: home.id,
+            gridTariff: gridTariff,
+            currency: home.priceCurrency,
+            timeZoneIdentifier: home.timeZone,
+            fetch: fetch
+        )
     }
 
     /// Tibber's prices across a past session with the grid fee added, the same way the session sync

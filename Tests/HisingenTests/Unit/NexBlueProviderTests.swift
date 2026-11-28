@@ -533,4 +533,16 @@ struct NexBlueProviderTests {
         #expect(restored.lastNexBlueImport == nil)
         #expect(try scoped.keychain.readChargerCredentials(vendor: "nexblue") == nil)
     }
+
+    @Test func scheduleAllowsNonSwedishChargersWithValidTimezone() async throws {
+        for (country, tz) in [("NO", "Europe/Oslo"), ("DE", "Europe/Berlin")] {
+            let transport = cloud()
+            let detail = root + "/chargers/" + serial
+            transport.route("GET", detail, .json(
+                #"{"role":0,"online":true,"device_operator_type":0,"place_data":{"country":"\#(country)","tz_id":"\#(tz)"}}"#))
+            transport.route("GET", detail + "/cmd/schedule", .json(#"{"schedule_mode":2,"charge_schedules":[]}"#))
+            let schedule = try await provider(transport).schedule(chargerID: serial)
+            #expect(schedule.timeZone.identifier == tz)
+        }
+    }
 }

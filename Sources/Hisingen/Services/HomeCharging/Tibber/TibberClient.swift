@@ -27,6 +27,14 @@ struct TibberHome: Codable, Equatable, Identifiable, Sendable {
 
     /// The spot-price zone Tibber reports for this home, when it is one Hisingen reads.
     var elspotZone: ElspotZone? { priceArea.flatMap { ElspotZone(rawValue: $0.uppercased()) } }
+
+    /// Homes saved before currency metadata was available can identify SEK by their Swedish market.
+    var priceCurrency: String? {
+        if let code = currency?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !code.isEmpty {
+            return code
+        }
+        return elspotZone != nil || timeZone == "Europe/Stockholm" ? "SEK" : nil
+    }
 }
 
 /// One hour of whole-home consumption from the grid meter, as Tibber reports it.
@@ -185,18 +193,39 @@ struct TibberClient: Sendable {
         }
     }
 
-    /// Each slot ends where the next begins; the slot length is the usual gap, a quarter-hour when
-    /// Tibber sends hourly prices spread over quarter-hour slots.
+    /// Each slot ends where the next chronological slot begins so mixed 15-minute and 60-minute
+    /// MTU schedules remain contiguous and disjoint; only sparse gaps (> 2 h) or the final slot
+    /// fall back to the local cadence.
     static func points(from collected: [Date: (price: Double, level: TibberPriceLevel?)], from: Date, to: Date) -> [HomePricePoint] {
         let sorted = collected.sorted { $0.key < $1.key }
         guard !sorted.isEmpty else { return [] }
-        let gaps = zip(sorted, sorted.dropFirst()).map { $1.key.timeIntervalSince($0.key) }.filter { $0 > 0 }.sorted()
-        let step = gaps.isEmpty ? 900 : gaps[gaps.count / 2]
-        return sorted.compactMap { start, price in
-            let end = start.addingTimeInterval(step)
-            guard end > from, start < to else { return nil }
-            return HomePricePoint(start: start, end: end, pricePerKwh: price.price, level: price.level)
+        let maximumAdjacentGap: TimeInterval = 2 * 3_600
+        let gaps = zip(sorted, sorted.dropFirst())
+            .map { $1.key.timeIntervalSince($0.key) }
+            .filter { $0 > 0 && $0 <= maximumAdjacentGap }
+            .sorted()
+        var lastStep: TimeInterval = gaps.isEmpty ? 900 : gaps[gaps.count / 2]
+        var points: [HomePricePoint] = []
+        points.reserveCapacity(sorted.count)
+        for (index, entry) in sorted.enumerated() {
+            let step: TimeInterval
+            if index + 1 < sorted.count {
+                let nextGap = sorted[index + 1].key.timeIntervalSince(entry.key)
+                if nextGap <= maximumAdjacentGap {
+                    step = nextGap
+                    lastStep = nextGap
+                } else {
+                    step = lastStep
+                }
+            } else {
+                step = lastStep
+            }
+            guard step > 0 else { continue }
+            let end = entry.key.addingTimeInterval(step)
+            guard end > from, entry.key < to else { continue }
+            points.append(HomePricePoint(start: entry.key, end: end, pricePerKwh: entry.value.price, level: entry.value.level))
         }
+        return points
     }
 
     // MARK: Consumption

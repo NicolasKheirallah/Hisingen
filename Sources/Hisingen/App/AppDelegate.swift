@@ -205,6 +205,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, RemoteCommandDispatchi
         plannerPrices.setTibberSource { [weak self] in
             await MainActor.run { self?.homeCharging.plannerTibberSource() }
         }
+        plannerPrices.setMarketPricingSource { [weak self] in
+            await MainActor.run {
+                guard let self else { return nil }
+                return PlannerPriceProvider.MarketPricing(
+                    tariff: self.homeCharging.gridTariff,
+                    policy: self.preferences.electricityRatePolicy
+                )
+            }
+        }
         chargingPlannerController = ChargingPlannerController(
             preferences: preferences,
             notifier: notifier,

@@ -345,6 +345,38 @@ struct TibberClientTests {
         let points = TibberClient.points(from: collected, from: base, to: base.addingTimeInterval(10_800))
         #expect(points.map { $0.end.timeIntervalSince($0.start) } == [3_600, 3_600, 3_600])
     }
+
+    @Test("Mixed 60-minute and 15-minute slots across a DST boundary remain contiguous without overlaps or gaps")
+    func mixedGranularityAndDstBounds() {
+        let utcMorning = Date(timeIntervalSince1970: 1_792_886_400) // 2026-10-25T00:00:00Z (DST fallback night in Europe/Stockholm)
+        let collected: [Date: (price: Double, level: TibberPriceLevel?)] = [
+            utcMorning: (1.0, .cheap),
+            utcMorning.addingTimeInterval(3_600): (2.0, .normal),
+            utcMorning.addingTimeInterval(4_500): (2.4, .expensive),
+            utcMorning.addingTimeInterval(5_400): (1.6, .normal),
+        ]
+        let points = TibberClient.points(from: collected, from: utcMorning, to: utcMorning.addingTimeInterval(7_200))
+        #expect(points.count == 4)
+        #expect(points[0].end == points[1].start)
+        #expect(points[1].end == points[2].start)
+        #expect(points[2].end == points[3].start)
+        #expect(points[0].end.timeIntervalSince(points[0].start) == 3_600)
+        #expect(points[1].end.timeIntervalSince(points[1].start) == 900)
+        #expect(points[3].end.timeIntervalSince(points[3].start) == 900)
+    }
+
+    @Test
+    func anOutageDoesNotSetThePriceCadence() {
+        let afterOutage = base.addingTimeInterval(4 * 3_600)
+        let collected: [Date: (price: Double, level: TibberPriceLevel?)] = [
+            base: (0.2, nil),
+            afterOutage: (0.4, nil),
+        ]
+        let points = TibberClient.points(from: collected, from: base, to: afterOutage.addingTimeInterval(3_600))
+
+        #expect(points.map(\.start) == [base, afterOutage])
+        #expect(points.map(\.end) == [base.addingTimeInterval(900), afterOutage.addingTimeInterval(900)])
+    }
 }
 
 // MARK: - Pricing a direct charger's sessions
@@ -502,5 +534,25 @@ struct TibberSessionPricingTests {
         guard case .success(let homes) = await harness.model.testTibber(token: "good") else { Issue.record("expected homes"); return }
         #expect(homes.count == 2)
         #expect(!harness.model.hasTibberToken)
+    }
+
+    @Test("Non-SEK Tibber homes provide planner sources with their own currency and time zone")
+    func nonSekPlannerTibberSource() throws {
+        let harness = try PricingHarness()
+        try harness.model.connectTibber(
+            token: "tibber-token",
+            home: TibberHome(id: "home-no", name: "Oslo", timeZone: "Europe/Oslo", currency: "NOK")
+        )
+        let nokSource = try #require(harness.model.plannerTibberSource())
+        #expect(nokSource.currency == "NOK")
+        #expect(nokSource.timeZoneIdentifier == "Europe/Oslo")
+
+        try harness.model.connectTibber(
+            token: "tibber-token",
+            home: TibberHome(id: "home-de", name: "Berlin", timeZone: "Europe/Berlin", currency: "EUR")
+        )
+        let eurSource = try #require(harness.model.plannerTibberSource())
+        #expect(eurSource.currency == "EUR")
+        #expect(eurSource.timeZoneIdentifier == "Europe/Berlin")
     }
 }
