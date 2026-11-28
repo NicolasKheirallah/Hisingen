@@ -71,21 +71,20 @@ struct RainAheadTests {
         #expect(!currentQuery.contains { $0.name == "minutely_15" })
     }
 
-    @Test("Each amount covers the quarter hour before its timestamp, read in the vehicle's zone")
+    @Test("Each amount covers the quarter hour before its Unix timestamp")
     func minutelyResponseParses() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        let sevenUTC = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 7)))
         let json: [String: Any] = [
             "utc_offset_seconds": 3_600,
             "minutely_15": [
-                "time": ["2026-11-23T08:15", "2026-11-23T08:30", "2026-11-23T08:45"],
+                "time": [15, 30, 45].map { sevenUTC.addingTimeInterval(Double($0 * 60)).timeIntervalSince1970 },
                 "precipitation": [0.0, NSNull(), 0.4],
             ],
         ]
         let intervals = try #require(OpenMeteoWeatherClient.minutelyPrecipitation(from: json))
         #expect(intervals.count == 2)
-        // 08:15 local at UTC+1 is 07:15 UTC, and the amount covers 07:00 to 07:15.
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
-        let sevenUTC = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 7)))
         #expect(intervals[0].start == sevenUTC)
         #expect(intervals[0].end == sevenUTC.addingTimeInterval(15 * 60))
         #expect(intervals[1].start == sevenUTC.addingTimeInterval(30 * 60))
@@ -96,7 +95,7 @@ struct RainAheadTests {
     func minutelyResponseWithoutUsableBlock() {
         #expect(OpenMeteoWeatherClient.minutelyPrecipitation(from: ["hourly": [:]]) == nil)
         #expect(OpenMeteoWeatherClient.minutelyPrecipitation(from: [
-            "minutely_15": ["time": ["2026-11-23T08:15"], "precipitation": [NSNull()]],
+            "minutely_15": ["time": [1_795_418_100], "precipitation": [NSNull()]],
         ]) == nil)
     }
 

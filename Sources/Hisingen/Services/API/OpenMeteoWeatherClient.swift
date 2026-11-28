@@ -69,24 +69,20 @@ struct OpenMeteoWeatherClient: Sendable {
             URLQueryItem(name: "minutely_15", value: "precipitation"),
             URLQueryItem(name: "forecast_minutely_15", value: "6"),
             URLQueryItem(name: "forecast_days", value: "2"),
-            // Local wall-clock times, so a 07:30 departure lines up with the forecast hour.
+            URLQueryItem(name: "timeformat", value: "unixtime"),
             URLQueryItem(name: "timezone", value: "auto")
         ]
         return components.url
     }
 
-    /// Parses the `hourly` block. Open-Meteo gives wall-clock strings in the location's zone and
-    /// reports that zone's offset, so the offset is subtracted to get an absolute instant.
+    /// Parses epoch seconds so the two occurrences of a repeated local hour stay distinct.
     /// Missing or null readings are skipped rather than read as zero. Wind and precipitation
     /// arrive as further arrays aligned to `time`; an array the response omits leaves those
     /// fields nil rather than dropping the hour.
     static func hourlyTemperatures(from json: [String: Any]) -> [HourlyTemperature]? {
         guard let hourly = json["hourly"] as? [String: Any],
-              let times = hourly["time"] as? [String],
+              let times = hourly["time"] as? [Any],
               let values = hourly["temperature_2m"] as? [Any] else { return nil }
-        let offsetSeconds = (json["utc_offset_seconds"] as? NSNumber)?.doubleValue ?? 0
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         let windSpeeds = hourly["wind_speed_10m"] as? [Any]
         let windGusts = hourly["wind_gusts_10m"] as? [Any]
         let precipitation = hourly["precipitation"] as? [Any]
@@ -97,9 +93,9 @@ struct OpenMeteoWeatherClient: Sendable {
         for (index, time) in times.enumerated() {
             guard index < values.count,
                   let celsius = (values[index] as? NSNumber)?.doubleValue,
-                  let wallClock = wallClockDate(time, calendar: calendar) else { continue }
+                  let timestamp = forecastTimestamp(time) else { continue }
             hours.append(HourlyTemperature(
-                time: wallClock.addingTimeInterval(-offsetSeconds),
+                time: timestamp,
                 temperatureCelsius: celsius,
                 windSpeedKmh: alignedHourlyValue(at: index, in: windSpeeds),
                 windGustsKmh: alignedHourlyValue(at: index, in: windGusts),
@@ -116,19 +112,16 @@ struct OpenMeteoWeatherClient: Sendable {
     /// rather than read as dry, and a block with no usable step is nil.
     static func minutelyPrecipitation(from json: [String: Any]) -> [PrecipitationInterval]? {
         guard let block = json["minutely_15"] as? [String: Any],
-              let times = block["time"] as? [String],
+              let times = block["time"] as? [Any],
               let values = block["precipitation"] as? [Any] else { return nil }
-        let offsetSeconds = (json["utc_offset_seconds"] as? NSNumber)?.doubleValue ?? 0
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         var intervals: [PrecipitationInterval] = []
         for (index, time) in times.enumerated() {
             guard index < values.count,
                   let millimetres = (values[index] as? NSNumber)?.doubleValue,
                   millimetres.isFinite, millimetres >= 0,
-                  let wallClock = wallClockDate(time, calendar: calendar) else { continue }
+                  let timestamp = forecastTimestamp(time) else { continue }
             intervals.append(PrecipitationInterval(
-                start: wallClock.addingTimeInterval(-offsetSeconds - PrecipitationInterval.length),
+                start: timestamp.addingTimeInterval(-PrecipitationInterval.length),
                 millimetres: millimetres))
         }
         return intervals.isEmpty ? nil : intervals
@@ -140,12 +133,9 @@ struct OpenMeteoWeatherClient: Sendable {
         return (values[index] as? NSNumber)?.doubleValue
     }
 
-    /// Reads `yyyy-MM-ddTHH:mm` as if it were UTC. The caller applies the real offset.
-    static func wallClockDate(_ text: String, calendar: Calendar) -> Date? {
-        let parts = text.split(whereSeparator: { $0 == "T" || $0 == "-" || $0 == ":" }).compactMap { Int($0) }
-        guard parts.count == 5 else { return nil }
-        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],
-                                                  hour: parts[3], minute: parts[4]))
+    private static func forecastTimestamp(_ value: Any) -> Date? {
+        guard let seconds = (value as? NSNumber)?.doubleValue, seconds.isFinite else { return nil }
+        return Date(timeIntervalSince1970: seconds)
     }
 
     /// Wind and precipitation ride the same requests as temperature: Open-Meteo's forecast
