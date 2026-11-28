@@ -15,6 +15,7 @@ struct DismissibleNoticeBanner: View {
     var tint: Color = HisingenTheme.accent
     /// Long-form explanation attached to the whole banner; nil leaves the banner unannotated.
     var containerHelp: String?
+    var action: (title: String, perform: () -> Void)?
     let onDismiss: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -33,22 +34,28 @@ struct DismissibleNoticeBanner: View {
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .hisType(.label, weight: .semibold)
-                ForEach(details, id: \.self) { detail in
-                    Text(detail)
-                        .hisType(.micro)
-                        .foregroundStyle(.secondary)
-                        .hisCaptionLeading()
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .hisType(.label, weight: .semibold)
+                    ForEach(details, id: \.self) { detail in
+                        Text(detail)
+                            .hisType(.micro)
+                            .foregroundStyle(.secondary)
+                            .hisCaptionLeading()
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let footnote {
+                        Text(footnote)
+                            .hisType(.micro)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                if let footnote {
-                    Text(footnote)
-                        .hisType(.micro)
-                        .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+                if let action {
+                    NavigationRow(title: action.title, action: action.perform)
+                        .padding(.top, 4)
                 }
             }
-            .accessibilityElement(children: .combine)
             Spacer()
             Button {
                 withAnimation(reduceMotion ? nil : Motion.cardChange) {

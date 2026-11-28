@@ -1,4 +1,2 @@
-- **Expired sessions keep cached telemetry visible behind the sign-in notice.** Re-authentication
-  prompts no longer fall straight into `WelcomeSignInView` when a cached vehicle snapshot exists on
-  disk, keeping the dashboard readable under the dismissible `signInNotice` banner while uncached
-  launches continue showing the onboarding sign-in view.
+- **Expired sessions keep cached vehicle readings visible.** Choose Sign In in the notice to open
+  account settings. With no cached readings, Hisingen opens the welcome sign-in screen.

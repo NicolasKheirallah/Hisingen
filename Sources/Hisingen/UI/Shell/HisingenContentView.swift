@@ -844,6 +844,7 @@ struct HisingenContentView: View {
             footnote: nil,
             tint: HisingenTheme.semanticWarning,
             containerHelp: L10n.text("Hisingen cannot refresh until the account is reconnected, so everything below is the last successful reading."),
+            action: (L10n.text("Sign In"), { navigateToSettings(.account) }),
             onDismiss: { dismissedSignInNotice = message }
         )
     }
