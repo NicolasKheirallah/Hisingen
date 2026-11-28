@@ -263,7 +263,7 @@ struct HisingenContentView: View {
                 settingsScreen
                     .id(preferences.vin.isEmpty ? activeVin : preferences.vin)
                     .transition(modeTransition)
-            } else if signInRequired {
+            } else if TabRouting.surfaceRoute(signInRequired: signInRequired, hasSnapshot: state != nil) == .welcomeSignIn {
                 WelcomeSignInView(error: error, onSettingsChanged: onSettingsChanged,
                                   accountConnection: accountConnection, onTestConnection: onTestConnection)
                     .transition(modeTransition)

@@ -50,4 +50,10 @@ struct TabRoutingTests {
         // Mid setup pass: the pass owns the panel, not Settings.
         #expect(!TabRouting.settingsDrawsAsTab(authenticated: true, hasSnapshot: true, setupMode: true))
     }
+
+    @Test func expiredSessionWithSnapshotKeepsDashboardVisibleWithSignInNotice() {
+        #expect(TabRouting.surfaceRoute(signInRequired: true, hasSnapshot: false) == .welcomeSignIn)
+        #expect(TabRouting.surfaceRoute(signInRequired: true, hasSnapshot: true) == .dashboard(showsSignInNotice: true))
+        #expect(TabRouting.surfaceRoute(signInRequired: false, hasSnapshot: true) == .dashboard(showsSignInNotice: false))
+    }
 }

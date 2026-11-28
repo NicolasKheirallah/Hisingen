@@ -35,7 +35,7 @@ enum DiagnosticRedaction {
         pattern: "(?i)(authorization\\s*:\\s*)bearer\\s+\\S+")
     /// A bare `Bearer <token>` run long enough to be a credential rather than a word.
     private static let bearerTokenExpression = try? NSRegularExpression(
-        pattern: "(?i)\\bbearer\\s+[A-Za-z0-9._~-]{16,}")
+        pattern: "(?i)\\b(bearer)\\s+[A-Za-z0-9._~-]{16,}")
 
     private static func redactVINShapedTokens(_ value: String) -> String {
         guard let expression = vinExpression else { return value }
@@ -284,7 +284,7 @@ enum DiagnosticLogExporter {
                     "successes": health.successes,
                     "failures": health.failures,
                     "lastSuccess": health.lastSuccess.map(formatter.string(from:)) as Any? ?? NSNull(),
-                    "lastError": health.lastError as Any? ?? NSNull(),
+                    "lastError": health.lastError.map { DiagnosticRedaction.redact($0) } as Any? ?? NSNull(),
                 ] as [String: Any])
             })
             report["garageScan"] = [
@@ -301,7 +301,7 @@ enum DiagnosticLogExporter {
         if let vdmsDiscovery {
             report["polestarVDMS"] = [
                 "blockedUntil": formatter.string(from: vdmsDiscovery.blockedUntil),
-                "reason": vdmsDiscovery.reason,
+                "reason": DiagnosticRedaction.redact(vdmsDiscovery.reason),
             ]
         }
         if !commandAudits.isEmpty {

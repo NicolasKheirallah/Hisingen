@@ -264,4 +264,55 @@ struct DiagnosticLogExporterTests {
         #expect(accountRows.first?["payload"] != nil)
         #expect(output["apiPayloadsTruncated"] as? Bool == true)
     }
+
+    @Test
+    func redactsBearerHeadersHealthLastErrorAndVdmsDiscoveryReason() throws {
+        let vin = "YV1XZEHR2R2371256"
+        let uuid = "123E4567-E89B-12D3-A456-426614174000"
+        let secret = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.payload123456"
+        #expect(DiagnosticRedaction.redact("Bearer \(secret)") == "Bearer <redacted>")
+
+        let garageScan = GarageScanDiagnostics(
+            brands: [
+                .volvo: GarageBrandDiagnostics(
+                    attempts: 1,
+                    failures: 1,
+                    lastError: "Token Bearer \(secret) failed for \(vin) (\(uuid))"
+                )
+            ]
+        )
+        let vdms = VDMSDiscoveryDiagnostics(
+            blockedUntil: Date(timeIntervalSince1970: 1_700_000_060),
+            reason: "Rejected \(vin) session \(uuid) with Bearer \(secret)"
+        )
+        let data = try DiagnosticLogExporter.makeReport(
+            meta: [:], unifiedLog: [], apiPartitions: [],
+            garageScan: garageScan, vdmsDiscovery: vdms
+        )
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(!text.contains(secret))
+        #expect(!text.contains(vin))
+        #expect(!text.contains(uuid))
+        #expect(text.contains("Bearer <redacted>"))
+    }
+
+    @Test
+    func oversizedJsonPayloadIsOmittedAsTooLargeInsteadOfTruncatedMidSyntax() async throws {
+        let log = APIDiagnosticLogStore()
+        let oversizedArray = Array(repeating: "abcdefghijklmnop", count: 20_000)
+        let body = try? JSONSerialization.data(withJSONObject: ["items": oversizedArray])
+        await log.record(
+            provider: .polestar,
+            request: nil,
+            operation: "large response",
+            statusCode: 200,
+            responseBytes: body?.count,
+            responseData: body,
+            startedAt: Date()
+        )
+        let partitions = await log.partitions()
+        let entry = try #require(partitions.first?.entries.first)
+        #expect(entry.responsePayloadJSON == nil)
+        #expect(entry.payloadOmissionReason == "tooLarge")
+    }
 }
