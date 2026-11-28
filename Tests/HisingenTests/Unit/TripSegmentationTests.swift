@@ -78,6 +78,44 @@ struct TripSegmentationTests {
         #expect(trips.last?.startedAt == start.addingTimeInterval(56 * 60))
     }
 
+    @Test func lockingSegmentSourcePreventsOdometerAndTripMeterDoubleCounting() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 1_000, automatic: 1.0),
+            reading(id: 2, minute: 5, odometer: 1_000, automatic: 1.4),
+            reading(id: 3, minute: 10, odometer: 1_001, automatic: 2.0)
+        ], vin: vin, limit: 10)
+
+        #expect(trips.count == 1)
+        #expect(abs((trips.first?.distanceKm ?? 0) - 1.0) < 0.001)
+    }
+
+    @Test func cumulativeAutomaticTripMeterSuppressesRollingAverageConsumption() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 5_000, automatic: 420.0, consumption: 18.2),
+            reading(id: 2, minute: 10, odometer: 5_005, automatic: 425.0, consumption: 18.4)
+        ], vin: vin, limit: 10)
+
+        let single = trips.first
+        #expect(single?.distanceKm == 5)
+        #expect(single?.averageConsumption == nil)
+    }
+
+    @Test func reconciledGapsPreserveOdometerDistanceAcrossSleepIntervals() {
+        let trips = TripSegmentation.trips(from: [
+            reading(id: 1, minute: 0, odometer: 1_000),
+            reading(id: 2, minute: 10, odometer: 1_010),
+            reading(id: 3, minute: 190, odometer: 1_045),
+            reading(id: 4, minute: 205, odometer: 1_055)
+        ], vin: vin, limit: 10, includeReconciledGaps: true)
+
+        #expect(trips.count == 3)
+        let totalDistance = trips.reduce(0.0) { $0 + $1.distanceKm }
+        #expect(totalDistance == 55)
+        let gapTrip = trips.first { $0.isReconciledGap }
+        #expect(gapTrip?.distanceKm == 35)
+        #expect(gapTrip?.averageConsumption == nil)
+    }
+
     private func reading(
         id: Int64, minute: Int, odometer: Double?,
         automatic: Double? = nil, consumption: Double? = 16, temperature: Double? = 20
