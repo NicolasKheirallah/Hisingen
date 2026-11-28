@@ -21,8 +21,34 @@ struct PlannerPrices: Equatable, Sendable {
     var tibberProblem: String?
     /// The reader's network fee is inside these prices.
     var includesNetworkFee: Bool = false
+    /// Active grid tariff applied to market prices (kept separate from retail markup/VAT).
+    var gridTariff: GridTariff = .none
+    /// Underlying untransformed market points when a grid tariff was added to `points`.
+    var rawMarketPoints: [ElectricityPricePoint]? = nil
+    /// ISO currency code advertised by the price source (e.g. "SEK", "NOK", "EUR").
+    var currency: String? = nil
+    /// IANA time zone identifier of the price source (e.g. "Europe/Stockholm", "Europe/Oslo").
+    var timeZoneIdentifier: String? = nil
 
     var isAllIn: Bool { origin == .tibber }
+
+    var calendar: Calendar {
+        var result = ElectricityPriceService.stockholmCalendar
+        if let timeZoneIdentifier, let timeZone = TimeZone(identifier: timeZoneIdentifier) {
+            result.timeZone = timeZone
+        }
+        return result
+    }
+
+    func currencySymbol(fallback: String) -> String {
+        switch currency?.uppercased() {
+        case "SEK", "NOK", "DKK": return "kr"
+        case "EUR": return "€"
+        case "GBP": return "£"
+        case let other? where !other.isEmpty: return other
+        default: return fallback
+        }
+    }
 
     /// Tibber's level for the slot that covers `date`. `nil` for market prices and for a slot Tibber did not rate.
     func level(at date: Date) -> TibberPriceLevel? {
@@ -43,11 +69,17 @@ struct PlannerPrices: Equatable, Sendable {
     var isFallback: Bool { tibberConnected && origin == .elpriser }
 
     /// What a kWh costs the user right now. An all-in price is used as it is, because the rate
-    /// policy's markup and VAT are already inside it; a market price gets the policy applied.
+    /// policy's markup and VAT are already inside it; a market price gets the policy applied and
+    /// any configured grid transfer fee added once without double-applying VAT.
     func currentRate(policy: ElectricityRatePolicy, at date: Date) -> Double? {
-        let settled = policy.contract.settle(points)
-        guard let price = ChargingPlanner.currentPrice(prices: settled, at: date) else { return nil }
-        return isAllIn ? price : policy.retailPrice(spotSekPerKwh: price)
+        let basePoints = isAllIn ? points : (rawMarketPoints ?? points)
+        let settled = policy.contract.settle(basePoints, calendar: calendar)
+        guard let slot = settled.first(where: { $0.startDate <= date && date < $0.endDate }) else {
+            return nil
+        }
+        if isAllIn { return slot.sekPerKwh }
+        return policy.retailPrice(spotSekPerKwh: slot.sekPerKwh)
+            + gridTariff.averageFeePerKwh(from: slot.startDate, to: slot.endDate)
     }
 }
 
@@ -71,6 +103,8 @@ actor PlannerPriceProvider: ChargingPlannerPriceSource {
         var networkFeeSekPerKwh: Double = 0
         /// The grid tariff, which wins over `networkFeeSekPerKwh` when set: the fee then follows the clock.
         var gridTariff: GridTariff?
+        var currency: String? = nil
+        var timeZoneIdentifier: String? = nil
         var fetch: TibberFetch
 
         var tariff: GridTariff { gridTariff ?? .flat(orePerKwh: max(0, networkFeeSekPerKwh) * 100) }
@@ -85,6 +119,7 @@ actor PlannerPriceProvider: ChargingPlannerPriceSource {
     private let logger = AppLog.logger("elpriser")
 
     private let tibberSource = OSAllocatedUnfairLock<@Sendable () async -> TibberSource?>(initialState: { nil })
+    private let gridTariffSource = OSAllocatedUnfairLock<@Sendable () async -> GridTariff?>(initialState: { nil })
     private var cachedHomeID: String?
     private var tibberCache: [ElectricityPricePoint] = []
     private var tibberFetchedAt: Date?
@@ -104,6 +139,12 @@ actor PlannerPriceProvider: ChargingPlannerPriceSource {
     /// Synchronous, so it is in place before the first planner pass can ask.
     nonisolated func setTibberSource(_ source: @escaping @Sendable () async -> TibberSource?) {
         tibberSource.withLock { $0 = source }
+    }
+
+    /// Provides the user's configured grid tariff when the fallback market series is active so
+    /// non-Tibber spot planning and alerts account for time-of-use distribution fees.
+    nonisolated func setGridTariffSource(_ source: @escaping @Sendable () async -> GridTariff?) {
+        gridTariffSource.withLock { $0 = source }
     }
 
     // MARK: - Public surface
@@ -131,7 +172,12 @@ actor PlannerPriceProvider: ChargingPlannerPriceSource {
                 }
                 : tibberCache
             return remember(PlannerPrices(points: points, origin: .tibber, fetchedAt: tibberFetchedAt,
-                                          tibberConnected: true, tibberProblem: nil, includesNetworkFee: tariff.hasFee))
+                                          tibberConnected: true, tibberProblem: nil,
+                                          includesNetworkFee: tariff.hasFee,
+                                          gridTariff: tariff,
+                                          rawMarketPoints: nil,
+                                          currency: source.currency,
+                                          timeZoneIdentifier: source.timeZoneIdentifier))
         }
         let reason = tibberProblem ?? L10n.text("Tibber has no prices for the coming hours yet.")
         return remember(await marketSeries(zone: zone, tibberConnected: true, problem: reason))
@@ -218,8 +264,30 @@ actor PlannerPriceProvider: ChargingPlannerPriceSource {
     // MARK: - Market fallback
 
     private func marketSeries(zone: ElspotZone, tibberConnected: Bool, problem: String? = nil) async -> PlannerPrices {
-        PlannerPrices(points: await spot.prices(for: zone), origin: .elpriser,
-                      fetchedAt: await spot.fetchedAt(for: zone), tibberConnected: tibberConnected, tibberProblem: problem)
+        let raw = await spot.prices(for: zone)
+        let tariff = (await gridTariffSource.withLock { $0 }()) ?? .none
+        let points: [ElectricityPricePoint] = tariff.hasFee
+            ? raw.map {
+                ElectricityPricePoint(
+                    startDate: $0.startDate,
+                    endDate: $0.endDate,
+                    sekPerKwh: $0.sekPerKwh + tariff.averageFeePerKwh(from: $0.startDate, to: $0.endDate),
+                    level: $0.level
+                )
+            }
+            : raw
+        return PlannerPrices(
+            points: points,
+            origin: .elpriser,
+            fetchedAt: await spot.fetchedAt(for: zone),
+            tibberConnected: tibberConnected,
+            tibberProblem: problem,
+            includesNetworkFee: tariff.hasFee,
+            gridTariff: tariff,
+            rawMarketPoints: tariff.hasFee ? raw : nil,
+            currency: "SEK",
+            timeZoneIdentifier: ElectricityPriceService.stockholmCalendar.timeZone.identifier
+        )
     }
 
     private func remember(_ prices: PlannerPrices) -> PlannerPrices {

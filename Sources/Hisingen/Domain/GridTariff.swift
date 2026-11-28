@@ -236,14 +236,19 @@ struct GridTariff: Codable, Equatable, Sendable {
 enum SwedishHolidays {
     static func isNamedHoliday(year: Int, month: Int, day: Int) -> Bool {
         switch (month, day) {
-        case (1, 1), (1, 6), (12, 24), (12, 25), (12, 26), (12, 31): return true
+        case (1, 1), (1, 6), (5, 1), (6, 6), (12, 24), (12, 25), (12, 26), (12, 31): return true
         default: break
+        }
+        let calendar = ElectricityPriceService.stockholmCalendar
+        if month == 6, (19...25).contains(day),
+           let date = calendar.date(from: DateComponents(year: year, month: 6, day: day, hour: 12)),
+           calendar.component(.weekday, from: date) == 6 {
+            return true
         }
         let easter = easterSunday(year: year)
         guard let sunday = easter else { return false }
-        // Good Friday is two days before Easter Sunday and Easter Monday the day after.
-        let calendar = ElectricityPriceService.stockholmCalendar
-        for offset in [-2, 1] {
+        // Good Friday (-2), Easter Monday (+1), and Ascension Day (+39).
+        for offset in [-2, 1, 39] {
             guard let date = calendar.date(byAdding: .day, value: offset, to: sunday) else { continue }
             let parts = calendar.dateComponents([.month, .day], from: date)
             if parts.month == month, parts.day == day { return true }

@@ -140,6 +140,27 @@ struct GridTariffTests {
         #expect(!SwedishHolidays.isNamedHoliday(year: 2026, month: 4, day: 5 + 7))
     }
 
+    @Test("May 1, Ascension Day, National Day, and Midsummer Eve are classified across 2025-2028")
+    func expandedHolidays() {
+        for year in 2025...2028 {
+            #expect(SwedishHolidays.isNamedHoliday(year: year, month: 5, day: 1))
+            #expect(SwedishHolidays.isNamedHoliday(year: year, month: 6, day: 6))
+            #expect(!SwedishHolidays.isNamedHoliday(year: year, month: 5, day: 2))
+        }
+        // Ascension Day (39 days after Easter) and Midsummer Eve (Friday June 19-25)
+        let expected: [(Int, Int, Int)] = [
+            (2025, 5, 29), (2025, 6, 20),
+            (2026, 5, 14), (2026, 6, 19),
+            (2027, 5, 6),  (2027, 6, 25),
+            (2028, 5, 25), (2028, 6, 23),
+        ]
+        for (year, month, day) in expected {
+            #expect(SwedishHolidays.isNamedHoliday(year: year, month: month, day: day))
+        }
+        // Vattenfall T4 treats May 1, etc. inside active winter/non-winter bounds consistently
+        #expect(!SwedishHolidays.isNamedHoliday(year: 2026, month: 6, day: 20))
+    }
+
     @Test("The clock is Swedish time, so the window moves with summer time")
     func summerTime() {
         // March 2026 is a high-load month. Summer time starts on Sunday the 29th.

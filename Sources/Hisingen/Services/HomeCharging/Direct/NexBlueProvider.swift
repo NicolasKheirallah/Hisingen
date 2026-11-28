@@ -345,7 +345,7 @@ struct NexBlueProvider: DirectChargerProvider {
         let detail = try Self.decode(ChargerDetail.self, from: detailData)
         guard detail.online else { throw DirectChargerError.chargerOffline }
         if let role = detail.role, role != 0 { throw DirectChargerError.forbidden }
-        guard detail.placeData.country == "SE", detail.deviceOperatorType != 3,
+        guard detail.deviceOperatorType != 3,
               let timeZone = TimeZone(identifier: detail.placeData.tzId) else { throw NexBlueTimerError.unsupported }
 
         let data = try await session.data("GET", path: Self.commandPath(chargerID, "schedule"))

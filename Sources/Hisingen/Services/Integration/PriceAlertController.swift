@@ -96,23 +96,25 @@ final class PriceAlertController {
 
         let currentDate = now()
         let threshold = preferences.priceAlertThresholdSekPerKwh
+        let alertCalendar = resolved.calendar
         let decision = PriceThresholdAlert.evaluate(
-            prices: resolved.points,
+            prices: resolved.rawMarketPoints ?? resolved.points,
             policy: preferences.electricityRatePolicy,
             allIn: resolved.isAllIn,
+            gridTariff: resolved.isAllIn ? .none : resolved.gridTariff,
             now: currentDate,
             threshold: threshold,
             quietPeriod: TimeInterval(preferences.priceAlertQuietMinutes * 60),
             lastAlertAt: preferences.priceAlertLastAlertedAt(for: zone),
             lastAlertedSlotStart: preferences.priceAlertLastSlotStart(for: zone),
-            calendar: ElectricityPriceService.stockholmCalendar
+            calendar: alertCalendar
         )
         guard case .alert(let crossing) = decision else {
             logger.debug("Price threshold: \(String(describing: decision), privacy: .public)")
             return
         }
 
-        let symbol = preferences.currencySymbol
+        let symbol = resolved.currencySymbol(fallback: preferences.currencySymbol)
         let level = Format.currency(threshold, symbol: symbol)
         let price = Format.currency(crossing.price, symbol: symbol)
         let body: String
@@ -123,7 +125,7 @@ final class PriceAlertController {
             body = L10n.format("The next hour costs %@/kWh from %@, above your %@/kWh level.",
                                price,
                                Format.shortTime(date: crossing.slotStart,
-                                                timeZone: ElectricityPriceService.stockholmCalendar.timeZone),
+                                                timeZone: alertCalendar.timeZone),
                                level)
         }
 

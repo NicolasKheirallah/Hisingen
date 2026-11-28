@@ -325,6 +325,37 @@ struct PlannerPriceProviderTests {
         #expect(allIn.currentRate(policy: policy, at: Self.morning) == 1.00)
         #expect(market.currentRate(policy: policy, at: Self.morning) == (1.00 + 0.10) * 1.25)
     }
+
+    @Test
+    func marketSeriesAppliesGridTariffWithoutDoubleVatAndPreservesCurrencyForNonSekTibber() async {
+        let spot = Spot(series: Self.spotSeries(price: 0.50), fetched: Self.morning)
+        let provider = PlannerPriceProvider(spot: spot, now: { Self.morning })
+        let tariff = GridTariff.vattenfall(.vattenfallTime)
+        provider.setGridTariffSource { tariff }
+
+        let market = await provider.resolve(zone: .se3)
+        let policy = ElectricityRatePolicy(mode: .automatic, provider: .other, contract: .quarterHour,
+                                           markupOrePerKwh: 10, otherChargesOrePerKwh: 0, includesVAT: true)
+        #expect(market.includesNetworkFee)
+        #expect(market.gridTariff == tariff)
+        // Morning at 10:00 in November is peak weekday -> 76.5 ore/kWh grid fee added once after retail VAT.
+        let rate = market.currentRate(policy: policy, at: Self.morning) ?? 0
+        #expect(abs(rate - ((0.50 + 0.10) * 1.25 + 0.765)) < 1e-9)
+
+        let tibber = Tibber(series: Self.tibberSeries(price: 0.25))
+        provider.setTibberSource {
+            PlannerPriceProvider.TibberSource(
+                homeID: "home-eur",
+                currency: "EUR",
+                timeZoneIdentifier: "Europe/Berlin",
+                fetch: { _, _ in try await tibber.fetch() }
+            )
+        }
+        let eur = await provider.resolve(zone: .se3)
+        #expect(eur.origin == .tibber)
+        #expect(eur.currencySymbol(fallback: "kr") == "€")
+        #expect(eur.calendar.timeZone.identifier == "Europe/Berlin")
+    }
 }
 
 private final class HomeBox: @unchecked Sendable {

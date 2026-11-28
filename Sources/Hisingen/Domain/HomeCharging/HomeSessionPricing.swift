@@ -100,36 +100,23 @@ enum HomeSessionPricer {
             assumptions.append("No variable network fee is set, so none is added")
         }
 
-        let slots = tibber.sorted { $0.start < $1.start }
+        let slots = normalizedDisjointSlots(tibber)
 
         if session.hasPriceableIntervals, !slots.isEmpty, let note = session.energyProfileNote { assumptions.append(note) }
         if session.hasPriceableIntervals, !slots.isEmpty {
-            var cost = 0.0
-            var priced = 0.0
-            var missing = max(0, session.energyKwh - session.intervalEnergyKwh)
-            for interval in session.intervals {
-                let duration = interval.end.timeIntervalSince(interval.start)
-                guard duration > 0 else { continue }
-                var coveredSeconds = 0.0
-                for slot in slots {
-                    let overlap = min(slot.end, interval.end).timeIntervalSince(max(slot.start, interval.start))
-                    guard overlap > 0 else { continue }
-                    let share = interval.kwh * overlap / duration
-                    let from = max(slot.start, interval.start)
-                    let fee = gridTariff.averageFeePerKwh(from: from, to: from.addingTimeInterval(overlap))
-                    cost += share * (slot.pricePerKwh + fee)
-                    priced += share
-                    coveredSeconds += overlap
-                }
-                if coveredSeconds < duration - 0.5 {
-                    missing += interval.kwh * (duration - coveredSeconds) / duration
-                }
-            }
-            let complete = missing < 0.005
-            if !complete { assumptions.append("Prices were missing for \(trimmed(missing, 2)) kWh, so no total is shown") }
+            let result = priceIntervals(
+                session.intervals,
+                totalEnergyKwh: session.energyKwh,
+                intervalEnergyKwh: session.intervalEnergyKwh,
+                slots: slots,
+                gridTariff: gridTariff,
+                energyRate: { $0.pricePerKwh }
+            )
+            let complete = result.missing < 0.005
+            if !complete { assumptions.append("Prices were missing for \(trimmed(result.missing, 2)) kWh, so no total is shown") }
             return HomeSessionCost(
-                method: .intervalTibber, amount: complete ? cost : nil, partialAmount: complete ? nil : cost,
-                pricedKwh: priced, missingKwh: missing, priceSource: tibberSource,
+                method: .intervalTibber, amount: complete ? result.cost : nil, partialAmount: complete ? nil : result.cost,
+                pricedKwh: result.priced, missingKwh: result.missing, priceSource: tibberSource,
                 assumptions: assumptions, currency: fallback.currency
             )
         }
@@ -149,17 +136,43 @@ enum HomeSessionPricer {
 
         if fallback.policy.isAutomatic {
             let settled = fallback.policy.contract.settle(fallback.spotPrices)
-            let spot = settled.map { HomePricePoint(start: $0.startDate, end: $0.endDate, pricePerKwh: $0.sekPerKwh) }
+            let spot = normalizedDisjointSlots(settled.map {
+                HomePricePoint(start: $0.startDate, end: $0.endDate, pricePerKwh: $0.sekPerKwh)
+            })
+            var spotAssumptions = [
+                "Spot prices exclude taxes and fees; the \(fallback.policy.provider.title) markup, other charges and VAT from the Hisingen rate settings are added"
+            ]
+            if gridTariff.isTimeVarying {
+                spotAssumptions.append("Grid transfer fee by the time of day added: \(trimmed(gridTariff.peakOrePerKwh)) öre/kWh in high-load time, \(trimmed(gridTariff.offPeakOrePerKwh)) öre/kWh otherwise")
+            } else if gridTariff.hasFee {
+                spotAssumptions.append("Variable network fee of \(trimmed(gridTariff.offPeakOrePerKwh)) öre/kWh added")
+            }
+            if session.hasPriceableIntervals, !spot.isEmpty {
+                let result = priceIntervals(
+                    session.intervals,
+                    totalEnergyKwh: session.energyKwh,
+                    intervalEnergyKwh: session.intervalEnergyKwh,
+                    slots: spot,
+                    gridTariff: gridTariff,
+                    energyRate: { fallback.policy.retailPrice(spotSekPerKwh: $0.pricePerKwh) }
+                )
+                if result.missing < 0.005 {
+                    if let note = session.energyProfileNote { spotAssumptions.append(note) }
+                    return HomeSessionCost(
+                        method: .totalSpotPolicy, amount: result.cost, partialAmount: nil,
+                        pricedKwh: result.priced, missingKwh: 0, priceSource: spotSource,
+                        assumptions: spotAssumptions, currency: fallback.currency
+                    )
+                }
+            }
             if let average = coveredAverage(spot, from: session.startedAt, to: session.endedAt) {
                 let retail = fallback.policy.retailPrice(spotSekPerKwh: average)
+                    + gridTariff.averageFeePerKwh(from: session.startedAt, to: session.endedAt)
+                spotAssumptions.append("Session total priced at the time-weighted average price over the session")
                 return HomeSessionCost(
                     method: .totalSpotPolicy, amount: session.energyKwh * retail, partialAmount: nil,
                     pricedKwh: session.energyKwh, missingKwh: 0, priceSource: spotSource,
-                    assumptions: [
-                        "Spot prices exclude taxes and fees; the \(fallback.policy.provider.title) markup, other charges and VAT from the Hisingen rate settings are added",
-                        "Session total priced at the time-weighted average price over the session"
-                    ],
-                    currency: fallback.currency
+                    assumptions: spotAssumptions, currency: fallback.currency
                 )
             }
         }
@@ -172,13 +185,62 @@ enum HomeSessionPricer {
         )
     }
 
+    private static func normalizedDisjointSlots(_ slots: [HomePricePoint]) -> [HomePricePoint] {
+        let ordered = slots.filter { $0.end > $0.start && $0.pricePerKwh.isFinite }
+            .sorted { $0.start == $1.start ? $0.end < $1.end : $0.start < $1.start }
+        var normalized: [HomePricePoint] = []
+        var cursor: Date?
+        for var slot in ordered {
+            if let cursor, slot.start < cursor {
+                slot.start = cursor
+            }
+            guard slot.end > slot.start else { continue }
+            cursor = slot.end
+            normalized.append(slot)
+        }
+        return normalized
+    }
+
+    private static func priceIntervals(
+        _ intervals: [HomeEnergyInterval],
+        totalEnergyKwh: Double,
+        intervalEnergyKwh: Double,
+        slots: [HomePricePoint],
+        gridTariff: GridTariff,
+        energyRate: (HomePricePoint) -> Double
+    ) -> (cost: Double, priced: Double, missing: Double) {
+        var cost = 0.0
+        var priced = 0.0
+        var missing = max(0, totalEnergyKwh - intervalEnergyKwh)
+        for interval in intervals {
+            let duration = interval.end.timeIntervalSince(interval.start)
+            guard duration > 0 else { continue }
+            var coveredSeconds = 0.0
+            for slot in slots {
+                let overlap = min(slot.end, interval.end).timeIntervalSince(max(slot.start, interval.start))
+                guard overlap > 0 else { continue }
+                let share = interval.kwh * overlap / duration
+                let from = max(slot.start, interval.start)
+                let fee = gridTariff.averageFeePerKwh(from: from, to: from.addingTimeInterval(overlap))
+                cost += share * (energyRate(slot) + fee)
+                priced += share
+                coveredSeconds += overlap
+            }
+            if coveredSeconds < duration - 0.5 {
+                missing += interval.kwh * (duration - coveredSeconds) / duration
+            }
+        }
+        return (cost, priced, missing)
+    }
+
     /// Time-weighted mean price across `[start, end]`, or `nil` unless the slots cover all of it.
     static func coveredAverage(_ slots: [HomePricePoint], from start: Date, to end: Date) -> Double? {
         let duration = end.timeIntervalSince(start)
         guard duration > 0 else { return nil }
+        let ordered = normalizedDisjointSlots(slots)
         var weighted = 0.0
         var covered = 0.0
-        for slot in slots {
+        for slot in ordered {
             let overlap = min(slot.end, end).timeIntervalSince(max(slot.start, start))
             guard overlap > 0 else { continue }
             weighted += overlap * slot.pricePerKwh
